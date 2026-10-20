@@ -4,7 +4,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube" };
 
   const PATH = {
     logo: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z",
@@ -16,6 +16,11 @@
     spark: "M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z",
     lists: "M3 5.5C3 4.12 4.12 3 5.5 3h13C19.88 3 21 4.12 21 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-13zM5.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-13zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h7v2H7v-2z",
     bookmark: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z",
+    subs: "M4 5.5C4 4.12 5.12 3 6.5 3h11C18.88 3 20 4.12 20 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 21 4 19.88 4 18.5v-13zM6.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h11c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-11zM10 8.2v7.6l6-3.8-6-3.8z",
+    grid: "M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z",
+    rows: "M4 5h16v3H4V5zm0 5.5h16v3H4v-3zM4 16h16v3H4v-3z",
+    thumb: "M2 9.5C2 8.12 3.12 7 4.5 7H8l1.2-1.6c.3-.4.8-.6 1.3-.6h3c.5 0 1 .2 1.3.6L16 7h3.5C20.88 7 22 8.12 22 9.5v7c0 1.38-1.12 2.5-2.5 2.5h-15C3.12 19 2 17.88 2 16.5v-7zm8.2 1.1 4.3 2.5-4.3 2.5v-5z",
+    thumbDown: "M22 14.5c0 1.38-1.12 2.5-2.5 2.5H16l-1.2 1.6c-.3.4-.8.6-1.3.6h-3c-.5 0-1-.2-1.3-.6L8 17H4.5C3.12 17 2 15.88 2 14.5v-7C2 6.12 3.12 5 4.5 5h15C20.88 5 22 6.12 22 7.5v7zM13.8 13.4 9.5 10.9v5l4.3-2.5z",
     bookmarkOn: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5z",
     more: "M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z",
     reply: "M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z",
@@ -52,7 +57,12 @@
     headerHidden: false,
     confirm: null,
     replies: {},
-    replyUi: {}
+    replyUi: {},
+    subsLayout: "grid",
+    commentSort: {},
+    threadsOpen: {},
+    playerAlt: {},
+    disliked: {}
   };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
@@ -235,7 +245,7 @@
 
   function sourceBadge(platform) {
     if (!platform || platform === "x") return "";
-    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : "rss";
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : "rss";
     return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
   }
 
@@ -244,6 +254,7 @@
     if (feed.platform === "x") return "https://x.com/" + feed.handle;
     if (feed.platform === "threads") return "https://www.threads.com/@" + feed.handle;
     if (feed.platform === "instagram") return "https://www.instagram.com/" + feed.handle + "/";
+    if (feed.platform === "youtube") return "https://www.youtube.com/@" + feed.handle;
     return feed.url || "#";
   }
 
@@ -332,8 +343,9 @@
       const alt = m.alt ? `<span class="alt-badge">ALT</span>` : "";
       const gif = m.type === "animated_gif" ? `<span class="gif-badge">GIF</span>` : "";
       const refresh = m.fallback ? ` data-refresh="${esc(m.fallback)}"` : "";
-      if (m.type === "photo" || !m.url || m.url === m.poster) {
-        return `<div class="tile"><img src="${esc(m.url || m.poster)}"${refresh} alt="${esc(m.alt || "")}" loading="lazy" referrerpolicy="no-referrer">${alt}</div>`;
+      if (m.type === "photo" || !m.url || m.url === m.poster || /youtube-nocookie\.com|\/embed\//.test(m.url)) {
+        const src = /youtube-nocookie\.com|\/embed\//.test(m.url || "") ? (m.poster || "") : (m.url || m.poster);
+        return `<div class="tile"><img src="${esc(src)}"${refresh} alt="${esc(m.alt || "")}" loading="lazy" referrerpolicy="no-referrer">${alt}</div>`;
       }
       const poster = m.poster ? ` poster="${esc(m.poster)}"` : "";
       const loop = m.type === "animated_gif" ? " autoplay muted loop playsinline" : "";
@@ -586,6 +598,12 @@
     const parts = path.split("/").filter(Boolean);
     if (!parts.length || parts[0] === "home") return { name: "home", tab: parts[1] === "following" ? "following" : parts[1] === "tab" ? "list:" + parts[2] : "foryou", query };
     if (parts[0] === "following") return { name: "home", tab: "following", query };
+    if (parts[0] === "subscriptions") return { name: "subscriptions", channel: query.get("c") || "", query };
+    if (parts[0] === "watch") {
+      const spec = parts.slice(1).join("/");
+      const cut = spec.indexOf(":");
+      if (cut > 0) return { name: "watch", platform: spec.slice(0, cut), id: spec.slice(cut + 1), query };
+    }
     if (parts[0] === "tab" && parts[1]) return { name: "home", tab: "list:" + parts[1], query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
@@ -596,7 +614,7 @@
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
-    } else if (["x", "threads", "instagram", "rss"].includes(parts[0])) {
+    } else if (["x", "threads", "instagram", "rss", "youtube"].includes(parts[0])) {
       platform = parts[0];
       handle = parts[1] || "";
       rest = parts.slice(2);
@@ -623,6 +641,7 @@
         ${navItem("#/feeds", "spark", "Feeds", name === "feeds")}
         ${navItem("#/lists", "lists", "Lists", name === "lists" || name === "list")}
         ${navItem("#/bookmarks", "bookmark", "Bookmarks", name === "bookmarks")}
+        ${navItem("#/subscriptions", "subs", "Subscriptions", name === "subscriptions")}
         ${navItem("#/settings", "more", "More", name === "settings")}
         <button class="post-btn" data-act="compose"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>
       </div>
@@ -879,6 +898,7 @@
       <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>You</b><div class="phandle">@reader</div></div></div>
       <a href="#/lists">${icon("lists")} Lists</a>
       <a href="#/bookmarks">${icon("bookmark")} Bookmarks</a>
+      <a href="#/subscriptions">${icon("subs")} Subscriptions</a>
       <a href="#/feeds">${icon("spark")} Feeds</a>
       <a href="#/settings">${icon("more")} Settings</a>
     </div></div>`;
@@ -930,9 +950,230 @@
   }
 
   function shell(main, route) {
-    const tall = route.name === "home" || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
+    const wide = route.name === "subscriptions" || route.name === "watch";
+    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
     const top = route.name === "explore" ? 124 : tall ? 106 : 53;
-    return `<div class="app">${nav(route)}<main class="center" style="--top:${top}px">${main}</main>${sidebar()}</div>${bottom(route)}${drawer()}${modal()}`;
+    return `<div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${modal()}`;
+  }
+
+  function watchHash(post) {
+    return "#/watch/" + (post.platform || "x") + ":" + (post.statusId || post.id);
+  }
+
+  function isVideoPost(post) {
+    if (!post || post.kind === "reply") return false;
+    if (post.platform === "youtube") return true;
+    return (post.media || []).some((item) => item && (item.type === "video" || item.type === "animated_gif"));
+  }
+
+  function followedPost(post) {
+    const ids = STATE.settings.follows;
+    return ids.includes(post.feedId) || ids.includes((post.platform || "x") + ":" + post.handle);
+  }
+
+  function feedOf(post) {
+    return feedById(post.feedId) || findFeed(post.platform, post.handle) || {
+      id: (post.platform || "x") + ":" + (post.handle || ""),
+      platform: post.platform,
+      handle: post.handle,
+      name: post.author || post.handle,
+      avatar: post.avatar
+    };
+  }
+
+  function clock(seconds) {
+    seconds = Math.floor(Number(seconds));
+    if (!isFinite(seconds) || seconds < 0) return "";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    const pad = (n) => (n < 10 ? "0" + n : String(n));
+    return h ? h + ":" + pad(m) + ":" + pad(s) : m + ":" + pad(s);
+  }
+
+  function videoMeta(post) {
+    const views = post.stats && post.stats.views != null ? formatCount(post.stats.views) + " views" : "";
+    const when = relTime(post.date);
+    return [views, when].filter(Boolean).join(" • ");
+  }
+
+  function dayBucket(iso) {
+    const date = new Date(iso || "");
+    if (isNaN(date.getTime())) return "Older";
+    const now = new Date();
+    const start = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+    const diff = Math.round((start(now) - start(date)) / 86400000);
+    if (diff <= 0) return "Today";
+    if (diff === 1) return "Yesterday";
+    if (diff < 7) return "This week";
+    if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) return "This month";
+    return "Older";
+  }
+
+  function platMark(platform) {
+    return `<span class="plat">${esc(PLATFORM[platform] || platform || "")}</span>`;
+  }
+
+  function ytCard(post, layout) {
+    const feed = feedOf(post);
+    const media = (post.media || [])[0] || {};
+    const duration = clock(media.duration);
+    const title = post.title || post.text || "";
+    return `<a class="yt-card${layout === "list" ? " row" : ""}" href="${esc(watchHash(post))}">
+      <div class="yt-thumb">${media.poster || (media.type === "photo" ? media.url : "") ? `<img src="${esc(media.poster || media.url)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<span class="plat">${esc(PLATFORM[post.platform] || "")}</span>${duration ? `<span class="yt-time">${esc(duration)}</span>` : ""}</div>
+      <div class="yt-meta">
+        ${avatar(post.avatar || feed.avatar, feed.name || post.author, "yt-ava")}
+        <div class="yt-copy">
+          <h3 class="yt-title">${esc(title)}</h3>
+          <div class="yt-by">${esc(feed.name || post.author || post.handle || "")}${badge(feed.verifiedType || post.verifiedType)}</div>
+          <div class="yt-sub">${esc(videoMeta(post))}</div>
+        </div>
+      </div>
+    </a>`;
+  }
+
+  function subsView(route) {
+    const layout = STATE.subsLayout === "list" ? "list" : "grid";
+    const toggles = `<div class="yt-toggle"><button class="${layout === "grid" ? "on" : ""}" data-act="subs-layout" data-layout="grid" aria-label="Grid">${icon("grid")}</button><button class="${layout === "list" ? "on" : ""}" data-act="subs-layout" data-layout="list" aria-label="List">${icon("rows")}</button></div>`;
+    const head = pageHead("Subscriptions", "", false, toggles);
+    const channels = feeds().filter((feed) => STATE.settings.follows.includes(feed.id) && (feed.platform === "youtube" || posts().some((post) => isVideoPost(post) && (post.feedId === feed.id || (post.platform + ":" + post.handle) === feed.id))));
+    const strip = `<div class="yt-strip"><a class="yt-ch${route.channel ? "" : " on"}" href="#/subscriptions"><span class="yt-all">All</span><span>All</span></a>${channels.map((feed) => `<a class="yt-ch${route.channel === feed.id ? " on" : ""}" href="#/subscriptions?c=${encodeURIComponent(feed.id)}">${avatar(feed.avatar, feed.name, "ch")}<span>${esc(feed.name || feed.handle)}</span></a>`).join("")}</div>`;
+    let list = posts().filter((post) => isVideoPost(post) && followedPost(post)).sort(byStamp);
+    if (route.channel) list = list.filter((post) => post.feedId === route.channel || (post.platform + ":" + post.handle) === route.channel);
+    if (!STATE.settings.follows.length) return head + strip + emptyBlock("No videos yet", "Follow accounts to see their videos here.");
+    if (!list.length) return head + strip + emptyBlock("No videos yet", "Videos from accounts you follow will show up here.");
+    const shorts = list.filter((post) => post.short);
+    const rest = list.filter((post) => !post.short);
+    const shelf = shorts.length ? `<section class="yt-sec shorts-sec"><h2>Shorts</h2><div class="shorts">${shorts.map((post) => {
+      const media = (post.media || [])[0] || {};
+      return `<a class="short-card" href="${esc(watchHash(post))}"><div class="yt-thumb">${media.poster ? `<img src="${esc(media.poster)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}${platMark(post.platform)}</div><h3 class="yt-title">${esc(post.title || post.text || "")}</h3></a>`;
+    }).join("")}</div></section>` : "";
+    const order = ["Today", "Yesterday", "This week", "This month", "Older"];
+    const groups = {};
+    rest.forEach((post) => {
+      const name = dayBucket(post.date);
+      (groups[name] || (groups[name] = [])).push(post);
+    });
+    const sections = order.filter((name) => groups[name] && groups[name].length).map((name) => `<section class="yt-sec"><h2>${name}</h2><div class="yt-grid">${groups[name].map((post) => ytCard(post, layout)).join("")}</div></section>`).join("");
+    return `<div class="subs ${layout}">${head}${strip}${shelf}${sections}</div>`;
+  }
+
+  function watchComments(post) {
+    const id = postKey(post);
+    const file = post.platform === "youtube" ? "yt_" + id : id;
+    const key = "watch:" + file;
+    if (STATE.replies[key]) return STATE.replies[key];
+    STATE.replies[key] = { loading: true, doc: null, missing: false };
+    fetch("comments/" + encodeURIComponent(file) + ".json", { cache: "no-cache" })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json();
+      })
+      .then((doc) => {
+        STATE.replies[key] = { loading: false, doc: doc, missing: false };
+        render();
+      })
+      .catch(() => {
+        STATE.replies[key] = { loading: false, doc: null, missing: true };
+        render();
+      });
+    return STATE.replies[key];
+  }
+
+  function ytComment(comment) {
+    const count = comment.stats && comment.stats.replies != null ? Number(comment.stats.replies) : (comment.replies || []).length;
+    const likes = comment.stats && comment.stats.likes ? formatCount(comment.stats.likes) : "";
+    const when = comment.date ? relTime(comment.date) : (comment.timeLabel || "");
+    const open = !!STATE.threadsOpen[comment.id];
+    const kids = comment.replies || [];
+    const toggle = count > 0 ? `<button class="yt-replies" type="button" data-act="yt-replies" data-id="${esc(comment.id)}">${open ? "Hide replies" : esc(formatCount(count) || String(count)) + " replies"}</button>` : "";
+    const nested = open ? `<div class="yt-kids">${kids.length ? kids.map(ytComment).join("") : `<div class="reply-empty">Replies aren’t available.</div>`}</div>` : "";
+    return `<div class="yt-c">
+      ${avatar(comment.avatar, comment.author || comment.handle)}
+      <div class="yt-c-main">
+        <div class="yt-c-name">${esc(comment.author || comment.handle || "")}${badge(comment.verifiedType)} <span>${esc(when)}</span></div>
+        <p>${esc(comment.text || "")}</p>
+        ${likes ? `<div class="yt-c-likes">${icon("thumb")}<span>${esc(likes)}</span></div>` : ""}
+        ${toggle}
+        ${nested}
+      </div>
+    </div>`;
+  }
+
+  function watchView(route) {
+    const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id));
+    if (!post) return pageHead("Watch", "", true) + emptyBlock("Video unavailable", "This video isn’t in the current snapshot.");
+    const feed = feedOf(post);
+    const media = (post.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || (post.media || [])[0] || {};
+    const id = postKey(post);
+    const alt = !!STATE.playerAlt[id];
+    const embed = post.platform === "youtube" && !alt;
+    let player;
+    if (embed) {
+      player = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(post.statusId || post.id)}?rel=0" title="${esc(post.title || post.text || "Video")}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
+    } else if (post.platform === "youtube" && media.stream) {
+      player = `<video src="${esc(media.stream)}" poster="${esc(media.poster || "")}" controls playsinline></video>`;
+    } else if (media.url && !/youtube-nocookie\.com|\/embed\//.test(media.url)) {
+      player = `<video src="${esc(media.url)}" poster="${esc(media.poster || "")}" controls playsinline></video>`;
+    } else if (media.poster) {
+      player = `<img src="${esc(media.poster)}" alt="">`;
+    } else {
+      player = "";
+    }
+    const switcher = post.platform === "youtube" && media.stream ? `<button class="text-btn" type="button" data-act="player-alt" data-id="${esc(id)}">${alt ? "YouTube player" : "Alternate player"}</button>` : "";
+    const subs = feed.platform === "youtube" && feed.followers != null ? formatCount(feed.followers) + " subscribers" : (feed.followers != null ? formatCount(feed.followers) + " followers" : "");
+    const liked = !!STATE.settings.likes[post.id];
+    const booked = !!STATE.settings.bookmarks[post.id];
+    const disliked = !!STATE.disliked[post.id];
+    const likeCount = post.stats && post.stats.likes != null ? formatCount(post.stats.likes) : "";
+    const dislikeCount = post.stats && post.stats.dislikes != null ? formatCount(post.stats.dislikes) : "";
+    const desc = post.description && post.description !== (post.title || post.text) ? post.description : "";
+    const openDesc = !!STATE.expanded["desc:" + id];
+    const bucket = watchComments(post);
+    const sort = STATE.commentSort[id] === "new" ? "new" : "top";
+    let comments = "";
+    if (bucket.loading) comments = `<div class="reply-empty">Loading comments…</div>`;
+    else if (bucket.missing || !bucket.doc) comments = `<div class="reply-empty">Comments aren’t available for this video.</div>`;
+    else {
+      const rows = sort === "new" && bucket.doc.newest && bucket.doc.newest.length ? bucket.doc.newest : (bucket.doc.replies || []).slice();
+      if (sort === "new" && !(bucket.doc.newest && bucket.doc.newest.length)) rows.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+      const total = bucket.doc.commentCount != null ? bucket.doc.commentCount : rows.length;
+      comments = (rows.length ? rows.map(ytComment).join("") : `<div class="reply-empty">No comments yet.</div>`);
+      comments = `<h3>${esc(formatCount(total) || "0")} Comments</h3><div class="sorts"><button class="${sort === "top" ? "on" : ""}" type="button" data-act="comment-sort" data-id="${esc(id)}" data-sort="top">Top</button><button class="${sort === "new" ? "on" : ""}" type="button" data-act="comment-sort" data-id="${esc(id)}" data-sort="new">Newest</button></div>${comments}`;
+    }
+    const up = posts().filter((item) => isVideoPost(item) && followedPost(item) && postKey(item) !== id).sort(byStamp).slice(0, 16);
+    const upHtml = up.length ? `<aside class="upnext"><h2>Up next</h2>${up.map((item) => {
+      const thumb = ((item.media || [])[0] || {}).poster || "";
+      return `<a class="up-row" href="${esc(watchHash(item))}"><div class="yt-thumb">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}${platMark(item.platform)}</div><div><h3 class="yt-title">${esc(item.title || item.text || "")}</h3><div class="yt-by">${esc(item.author || item.handle || "")}</div><div class="yt-sub">${esc(videoMeta(item))}</div></div></a>`;
+    }).join("")}</aside>` : `<aside class="upnext"><h2>Up next</h2><p class="yt-sub">No other videos from accounts you follow.</p></aside>`;
+    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Watch</h1></div></div>
+      <div class="watch">
+        <div class="watch-main">
+          <div class="player">${player}</div>
+          ${switcher}
+          <h1 class="watch-title">${esc(post.title || post.text || "")}</h1>
+          <div class="watch-chan">
+            <a href="${esc(profileHash(feed.platform, feed.handle))}">${avatar(post.avatar || feed.avatar, feed.name || post.author)}</a>
+            <div class="watch-who"><a class="name" href="${esc(profileHash(feed.platform, feed.handle))}">${esc(feed.name || post.author || "")}${badge(feed.verifiedType || post.verifiedType)}</a><div class="yt-sub">${esc(subs)}</div></div>
+            ${followButtonClean(feed.id, true)}
+          </div>
+          <div class="pills">
+            <div class="pill-group">
+              <button class="pill${liked ? " on" : ""}" type="button" data-act="like" data-id="${esc(post.id)}" aria-label="Like">${icon("thumb")}${likeCount ? `<span>${esc(likeCount)}</span>` : ""}</button>
+              <button class="pill${disliked ? " on" : ""}" type="button" data-act="dislike" data-id="${esc(post.id)}" aria-label="Dislike">${icon("thumbDown")}${dislikeCount ? `<span>${esc(dislikeCount)}</span>` : ""}</button>
+            </div>
+            <button class="pill" type="button" data-act="copy" data-url="${esc(post.url || watchHash(post))}">${icon("share")}<span>Share</span></button>
+            <button class="pill${booked ? " on" : ""}" type="button" data-act="bookmark" data-id="${esc(post.id)}">${icon(booked ? "bookmarkOn" : "bookmark")}<span>${booked ? "Saved" : "Save"}</span></button>
+          </div>
+          <div class="desc${openDesc || !desc ? "" : " clamped"}">
+            <div class="yt-sub">${esc(videoMeta(post))}</div>
+            <div class="desc-body">${linkify(desc || post.text || "", post.links, post.platform)}</div>
+            ${desc ? `<button class="text-btn" type="button" data-act="more" data-key="desc:${esc(id)}">${openDesc ? "Show less" : "Show more"}</button>` : ""}
+          </div>
+          <section class="watch-comments">${comments}</section>
+        </div>
+        ${upHtml}
+      </div>`;
   }
 
   function view(route) {
@@ -952,6 +1193,8 @@
     if (route.name === "lists") return listsView();
     if (route.name === "list") return listView(route);
     if (route.name === "bookmarks") return bookmarksView();
+    if (route.name === "subscriptions") return subsView(route);
+    if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "notifications") return notesView("Notifications", "Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
     if (route.name === "messages") return notesView("Messages", "Welcome to your inbox", "Private conversations aren’t part of this reader.");
@@ -1027,6 +1270,34 @@
       render();
       return;
     }
+    if (act === "subs-layout") {
+      STATE.subsLayout = el.dataset.layout === "list" ? "list" : "grid";
+      render();
+      return;
+    }
+    if (act === "player-alt") {
+      const id = el.dataset.id;
+      STATE.playerAlt[id] = !STATE.playerAlt[id];
+      render();
+      return;
+    }
+    if (act === "dislike") {
+      const id = el.dataset.id;
+      STATE.disliked[id] = !STATE.disliked[id];
+      render();
+      return;
+    }
+    if (act === "comment-sort") {
+      STATE.commentSort[el.dataset.id] = el.dataset.sort === "new" ? "new" : "top";
+      render();
+      return;
+    }
+    if (act === "yt-replies") {
+      const id = el.dataset.id;
+      STATE.threadsOpen[id] = !STATE.threadsOpen[id];
+      render();
+      return;
+    }
     if (act === "like" || act === "bookmark" || act === "repost") {
       const bucket = act === "like" ? "likes" : act === "bookmark" ? "bookmarks" : "reposts";
       const id = el.dataset.id;
@@ -1036,7 +1307,13 @@
       render();
       return;
     }
-    if (act === "more") { STATE.expanded[el.dataset.key] = true; render(); return; }
+    if (act === "more") {
+      const key = el.dataset.key;
+      if (String(key || "").indexOf("desc:") === 0) STATE.expanded[key] = !STATE.expanded[key];
+      else STATE.expanded[key] = true;
+      render();
+      return;
+    }
     if (act === "menu") { STATE.menu = STATE.menu === el.dataset.id ? null : el.dataset.id; render(); return; }
     if (act === "share") { STATE.menu = el.dataset.id; render(); return; }
     if (act === "copy") {
@@ -1240,7 +1517,7 @@
       else img.src = next;
       return;
     }
-    const tile = img.closest(".tile") || img.closest(".media");
+    const tile = img.closest(".tile") || img.closest(".media") || img.closest(".yt-thumb");
     if (tile) {
       tile.classList.add("broken");
       img.remove();

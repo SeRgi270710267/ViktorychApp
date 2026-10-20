@@ -347,7 +347,7 @@ def write_comments(post: dict, replies: list, source: str) -> None:
     print(f"[replies] {post.get('platform')}:{status_id} {len(replies)} via {source}")
 
 
-def refresh(posts: list, use_fixtures: bool) -> None:
+def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> None:
     seen = set()
     missed = {"instagram": 0, "threads": 0}
     for post in posts:
@@ -365,6 +365,13 @@ def refresh(posts: list, use_fixtures: bool) -> None:
                 found = fetch_instagram(post)
             elif platform == "threads":
                 found = fetch_threads(post)
+            elif platform == "youtube":
+                from yt_remote import refresh_comments
+
+                wanted = fresh_ids is None or status_id in fresh_ids
+                if wanted or not (ROOT / "comments" / f"yt_{status_id}.json").exists():
+                    refresh_comments(post, False)
+                continue
             elif post.get("commentRss"):
                 found = fetch_rss(post)
         if found is None:

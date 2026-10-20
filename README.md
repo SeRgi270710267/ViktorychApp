@@ -121,6 +121,7 @@ python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_
 | `rsshub_threads` | RSSHub `/threads/<user>` |
 | `rsshub_instagram` | RSSHub `/instagram/user/<user>` |
 | `generic_rss` | RSS or Atom: title, description, `content:encoded`, enclosures |
+| `youtube_rss` | YouTube’s official channel feed, `https://www.youtube.com/feeds/videos.xml?channel_id=<UC…>`. No API key. `@handle` is resolved once to `channelId` and stored in `feeds.config.json`. Durations and subscriber counts come from the Invidious API, then Piped if that host fails. Thumbnails stay on `i.ytimg.com`. The live feed is Canadian Prepper (`UCfgtuaUadGgOA-91geQ8Qog`). Marques Brownlee and Tesla exist only as files under `scripts/fixtures/` |
 
 Each adapter strips HTML while keeping line breaks, unescapes entities, drops trailing media links, and fills the same post and profile fields. The configured profile in `feeds.config.json` wins over a thinner profile parsed from a post.
 
@@ -153,8 +154,11 @@ Home, Following, and List timelines hide `kind: reply`, except a self-reply that
 | Threads | Logged-out `threads.net` / `threads.com` post HTML. Replies are read from embedded `direct_replies`, `reply_threads`, or `thread_items`, and `direct_reply_count` is written to `stats.replies`. Then RSSHub `/threads/post/<code>` when that route is up. `THREADS_COOKIE` is only used if those have no reply text. The cookie is never written to disk |
 | Instagram | Logged-out GraphQL, in order: `PolarisPostActionLoadPostQuery` (`doc_id` 8845758582119845), then the current post query `PolarisPostRootQuery` (`doc_id` 29336004576007686) with the shortcode. Then `https://www.instagram.com/p/<shortcode>/embed/captioned/`. Then public viewers (picuki, imginn, dumpor, anonyig). Then RSSHub `/instagram/comments/<shortcode>` and `/instagram/post/<shortcode>/comments` when RSSHub is up. `edge_media_to_parent_comment.count` or `comment_count` is written to `stats.replies`. `INSTAGRAM_COOKIE` (`sessionid`) calls `/api/v1/media/<id>/comments/` only after the public sources miss. The cookie is never written to disk |
 | Other RSS | `wfw:commentRss` is fetched and normalized. `slash:comments` is only the count on the post |
+| YouTube | Invidious `/api/v1/comments/<id>` (top comments, then one page of replies), then Piped `/comments/<id>`. Saved as `comments/yt_<id>.json`, about 100 top comments. The watch page loads that file when it opens. A missing file is “Comments aren’t available.” An empty list is “No comments yet.” |
 
 A failed fetch keeps the previous `comments/<id>.json`. Media inside X replies stays on `pbs.twimg.com` / `video.twimg.com`.
+
+Subscriptions (`#/subscriptions`) lists videos from accounts you follow: YouTube channels, plus video posts from X, Instagram, and Threads. A video opens `#/watch/<platform>:<id>`. YouTube plays from `youtube-nocookie.com`, with an alternate Invidious stream when one was stored. Other platforms use the video file. Comments load from `comments/` when you open the watch page.
 
 ## Adding an account
 

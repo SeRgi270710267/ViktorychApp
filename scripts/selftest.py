@@ -20,6 +20,8 @@ from adapters.ig_comments import parse_ig_comments, parse_ig_document  # noqa: E
 from adapters.rss_comments import parse_comment_rss  # noqa: E402
 from adapters.threads_replies import parse_threads_document, parse_threads_replies  # noqa: E402
 from adapters.x_api_v2 import parse as parse_x  # noqa: E402
+from adapters.youtube_rss import parse as parse_youtube  # noqa: E402
+from yt_remote import normalize_invidious_comment  # noqa: E402
 from adapters.x_replies import _cap, parse_fxtwitter_conversation, parse_nitter_replies  # noqa: E402
 from meta_media import cdn_expiry, extract_cdn_urls, media_groups, needs_refresh  # noqa: E402
 from x_guard import assert_not_x_api, auth_cookie_header  # noqa: E402
@@ -188,6 +190,21 @@ def main() -> None:
         (folder / "gone.json").write_text("{}", encoding="utf-8")
         removed = prune_comments({"posts": [{"id": "keep", "statusId": "keep"}]}, folder)
         check(removed == 1 and (folder / "keep.json").exists() and (folder / "yt_keep.json").exists() and not (folder / "gone.json").exists(), "stale comment files are pruned")
+
+    yt = parse_youtube((FIX / "youtube_mkbhd.xml").read_text(encoding="utf-8"), {"id": "youtube:mkbhd", "platform": "youtube", "handle": "mkbhd", "channelId": "UCBJycsmduvYEL83R_U4JriQ"})
+    first = yt["posts"][0]
+    check(len(yt["posts"]) == 2 and first["id"] == "scwlR0QHGOk" and first["title"].startswith("The NEW Tesla Roadster"), "youtube rss title and id")
+    check(first["stats"]["views"] == 11453176 and first["stats"]["likes"] == 181847, "youtube rss views and likes")
+    check(first["media"][0]["poster"] == "https://i.ytimg.com/vi/scwlR0QHGOk/hqdefault.jpg", "youtube thumbnail is hotlinked")
+    check("youtube-nocookie.com/embed/scwlR0QHGOk" in first["media"][0]["url"], "youtube embed url")
+    tesla = parse_youtube((FIX / "youtube_tesla.xml").read_text(encoding="utf-8"), {"id": "youtube:tesla", "platform": "youtube", "handle": "Tesla", "channelId": "UC5WjFrtBdufl6CZojX3D8dQ"})
+    check(tesla["posts"][0]["title"].startswith("Zero to sixty") and tesla["profiles"][0]["name"] == "Tesla", "tesla fixture parses offline")
+    comment = normalize_invidious_comment(
+        {"commentId": "abc", "author": "@ada", "content": "Nice", "likeCount": 5, "published": 1792272039, "verified": True, "replies": {"replyCount": 2, "continuation": "tok"}},
+        "scwlR0QHGOk",
+        "mkbhd",
+    )
+    check(comment["text"] == "Nice" and comment["stats"]["likes"] == 5 and comment["stats"]["replies"] == 2 and comment["date"].startswith("2026-"), "invidious comment shape")
     print("all adapter checks passed")
 
 

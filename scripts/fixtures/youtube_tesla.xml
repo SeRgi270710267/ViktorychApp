@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UC5WjFrtBdufl6CZojX3D8dQ"/>
+ <id>yt:channel:5WjFrtBdufl6CZojX3D8dQ</id>
+ <yt:channelId>5WjFrtBdufl6CZojX3D8dQ</yt:channelId>
+ <title>Tesla</title>
+ <link rel="alternate" href="https://www.youtube.com/channel/UC5WjFrtBdufl6CZojX3D8dQ"/>
+ <author>
+  <name>Tesla</name>
+  <uri>https://www.youtube.com/channel/UC5WjFrtBdufl6CZojX3D8dQ</uri>
+ </author>
+ <published>2006-12-08T05:50:26+00:00</published>
+ <entry>
+  <id>yt:video:BII3FrsTBlU</id>
+  <yt:videoId>BII3FrsTBlU</yt:videoId>
+  <yt:channelId>UC5WjFrtBdufl6CZojX3D8dQ</yt:channelId>
+  <title>Zero to sixty faster than you can read this</title>
+  <link rel="alternate" href="https://www.youtube.com/shorts/BII3FrsTBlU"/>
+  <author>
+   <name>Tesla</name>
+   <uri>https://www.youtube.com/channel/UC5WjFrtBdufl6CZojX3D8dQ</uri>
+  </author>
+  <published>2026-10-19T18:40:04+00:00</published>
+  <updated>2026-10-19T20:08:02+00:00</updated>
+  <media:group>
+   <media:title>Zero to sixty faster than you can read this</media:title>
+   <media:content url="https://www.youtube.com/v/BII3FrsTBlU?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i3.ytimg.com/vi/BII3FrsTBlU/hqdefault.jpg" width="480" height="360"/>
+   <media:description></media:description>
+   <media:community>
+    <media:starRating count="2296" average="5.00" min="1" max="5"/>
+    <media:statistics views="121452"/>
+   </media:community>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:Zg9Q56t7bdo</id>
+  <yt:videoId>Zg9Q56t7bdo</yt:videoId>
+  <yt:channelId>UC5WjFrtBdufl6CZojX3D8dQ</yt:channelId>
+  <title>The 0-60 | Roadster</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=Zg9Q56t7bdo"/>
+  <author>
+   <name>Tesla</name>
+   <uri>https://www.youtube.com/channel/UC5WjFrtBdufl6CZojX3D8dQ</uri>
+  </author>
+  <published>2026-10-16T05:51:07+00:00</published>
+  <updated>2026-10-20T12:59:09+00:00</updated>
+  <media:group>
+   <media:title>The 0-60 | Roadster</media:title>
+   <media:content url="https://www.youtube.com/v/Zg9Q56t7bdo?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i3.ytimg.com/vi/Zg9Q56t7bdo/hqdefault.jpg" width="480" height="360"/>
+   <media:description>The 3rd live demo during the Roadster event — 0-60 mph in 0.81 seconds. 
+
+0.67 seconds (w/ rollout subtracted)</media:description>
+   <media:community>
+    <media:starRating count="11519" average="5.00" min="1" max="5"/>
+    <media:statistics views="1298371"/>
+   </media:community>
+  </media:group>
+ </entry>
+</feed>

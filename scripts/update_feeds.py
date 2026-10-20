@@ -53,6 +53,7 @@ def expand(url: str, config: dict, feed: dict | None = None) -> str:
         .replace("{fxtwitterBase}", (config.get("fxtwitterBase") or "").rstrip("/"))
         .replace("{base}", (config.get("rsshubBase") or "").rstrip("/"))
         .replace("{handle}", feed.get("handle") or "")
+        .replace("{channelId}", feed.get("channelId") or "")
     )
 
 
@@ -318,6 +319,17 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         payload = None
         adapter = feed.get("adapter")
         errors = []
+        if not use_fixtures and feed.get("platform") == "youtube" and not feed.get("channelId"):
+            try:
+                from yt_remote import resolve_channel_id
+
+                channel_id = resolve_channel_id(feed.get("handle") or "")
+                if channel_id:
+                    feed["channelId"] = channel_id
+                    config["_channelIdsUpdated"] = True
+                    print(f"[youtube] {feed['id']}: channel {channel_id}")
+            except Exception as exc:
+                errors.append(f"channel id: {exc}")
         if use_fixtures and feed.get("fixture"):
             adapter = feed.get("fixtureAdapter") or adapter
             try:
@@ -367,12 +379,20 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
         posts = result.get("posts") or []
+        if adapter == "youtube_rss" and not use_fixtures:
+            try:
+                from yt_remote import enrich_youtube
+
+                enrich_youtube(posts, result.get("profiles") or [], feed)
+            except Exception as exc:
+                print(f"[youtube] {feed['id']}: enrich failed: {exc}", file=sys.stderr)
         limit = feed.get("limit")
         if limit:
             posts = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)[: int(limit)]
         for post in posts:
             post["feedId"] = feed["id"]
             post["platform"] = feed.get("platform") or post.get("platform")
+            post["_fresh"] = True
             fresh_ids.add((feed["id"], str(post.get("id") or "")))
         new_ids = {str(post.get("id") or "") for post in posts}
         for old in old_by_feed.get(feed["id"], []):
@@ -418,6 +438,13 @@ def main() -> None:
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
     doc = build(config, args.fixtures, args.download_media)
+    fresh_comment_ids = set()
+    for post in doc.get("posts") or []:
+        if post.pop("_fresh", False):
+            fresh_comment_ids.add(str(post.get("statusId") or post.get("id") or ""))
+    if config.pop("_channelIdsUpdated", False):
+        Path(args.config).write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"[youtube] stored channel ids in {args.config}")
     out = ROOT / config.get("output", "feeds.json")
     media_dir = ROOT / "media"
     removed = prune_media(media_dir, doc)
@@ -428,7 +455,7 @@ def main() -> None:
     try:
         from replies import refresh
 
-        refresh(doc["posts"], args.fixtures)
+        refresh(doc["posts"], args.fixtures, fresh_comment_ids)
         save_document(out, doc)
     except Exception as exc:  # a reply source failing must not wipe the feed
         print(f"[replies] {exc}", file=sys.stderr)

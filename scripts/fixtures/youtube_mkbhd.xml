@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <link rel="self" href="http://www.youtube.com/feeds/videos.xml?channel_id=UCBJycsmduvYEL83R_U4JriQ"/>
+ <id>yt:channel:BJycsmduvYEL83R_U4JriQ</id>
+ <yt:channelId>BJycsmduvYEL83R_U4JriQ</yt:channelId>
+ <title>Marques Brownlee</title>
+ <link rel="alternate" href="https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ"/>
+ <author>
+  <name>Marques Brownlee</name>
+  <uri>https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ</uri>
+ </author>
+ <published>2008-03-21T15:25:54+00:00</published>
+ <entry>
+  <id>yt:video:scwlR0QHGOk</id>
+  <yt:videoId>scwlR0QHGOk</yt:videoId>
+  <yt:channelId>UCBJycsmduvYEL83R_U4JriQ</yt:channelId>
+  <title>The NEW Tesla Roadster: My Honest Reaction</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=scwlR0QHGOk"/>
+  <author>
+   <name>Marques Brownlee</name>
+   <uri>https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ</uri>
+  </author>
+  <published>2026-10-17T02:09:23+00:00</published>
+  <updated>2026-10-20T19:30:47+00:00</updated>
+  <media:group>
+   <media:title>The NEW Tesla Roadster: My Honest Reaction</media:title>
+   <media:content url="https://www.youtube.com/v/scwlR0QHGOk?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i4.ytimg.com/vi/scwlR0QHGOk/hqdefault.jpg" width="480" height="360"/>
+   <media:description>Tesla doesn't do marketing. Until they do.
+
+Hagerty video: https://youtu.be/22rvpUecLts?si=z7reGi_rtH9mG3R3
+
+Auto Focus: http://youtube.com/AutoFocus
+
+MKBHD Merch: http://shop.MKBHD.com
+
+Playlist of MKBHD Intro music: https://goo.gl/B3AWV5
+
+~
+http://twitter.com/MKBHD
+http://instagram.com/MKBHD
+http://facebook.com/MKBHD</media:description>
+   <media:community>
+    <media:starRating count="181847" average="5.00" min="1" max="5"/>
+    <media:statistics views="11453176"/>
+   </media:community>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:QVv3mQzlrN0</id>
+  <yt:videoId>QVv3mQzlrN0</yt:videoId>
+  <yt:channelId>UCBJycsmduvYEL83R_U4JriQ</yt:channelId>
+  <title>Apple Homeview Impressions: Not Convinced!</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=QVv3mQzlrN0"/>
+  <author>
+   <name>Marques Brownlee</name>
+   <uri>https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ</uri>
+  </author>
+  <published>2026-10-13T22:42:38+00:00</published>
+  <updated>2026-10-19T18:05:12+00:00</updated>
+  <media:group>
+   <media:title>Apple Homeview Impressions: Not Convinced!</media:title>
+   <media:content url="https://www.youtube.com/v/QVv3mQzlrN0?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+   <media:thumbnail url="https://i2.ytimg.com/vi/QVv3mQzlrN0/hqdefault.jpg" width="480" height="360"/>
+   <media:description>New Smart home display from Apple. With plenty of quirks and features.
+
+The deskpad! http://shop.MKBHD.com
+
+Playlist of MKBHD Intro music: https://goo.gl/B3AWV5
+
+~
+http://twitter.com/MKBHD
+http://instagram.com/MKBHD
+http://facebook.com/MKBHD</media:description>
+   <media:community>
+    <media:starRating count="104593" average="5.00" min="1" max="5"/>
+    <media:statistics views="10420858"/>
+   </media:community>
+  </media:group>
+ </entry>
+</feed>
