@@ -221,7 +221,8 @@
   }
 
   function sourceBadge(platform) {
-    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "x" ? "logo" : "rss";
+    if (!platform || platform === "x") return "";
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : "rss";
     return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
   }
 

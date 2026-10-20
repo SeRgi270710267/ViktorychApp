@@ -276,9 +276,10 @@ img { max-width: 100%; }
 .time, .dot, .src, .more-btn { flex: none; }
 .more-btn { margin-left: auto; color: var(--muted); }
 .more-btn:hover { color: var(--blue); background: var(--blue-dim); }
-.vbadge { display: inline-flex; width: 18px; height: 18px; flex: none; }
-.vbadge svg { width: 18px; height: 18px; }
-.vbadge.blue { color: var(--blue); }
+.vbadge { display: inline-flex; width: 18px; height: 18px; flex: none; align-items: center; }
+.vbadge svg { width: 18px; height: 18px; fill: currentColor; display: block; }
+.vbadge path { fill-rule: evenodd; }
+.vbadge.blue { color: #1d9bf0; }
 .vbadge.business { color: #e2b719; }
 .vbadge.government { color: #8b98a5; }
 .src { display: inline-flex; color: var(--muted); width: 16px; height: 16px; }
