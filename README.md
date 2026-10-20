@@ -125,7 +125,7 @@ python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_
 
 Each adapter strips HTML while keeping line breaks, unescapes entities, drops trailing media links, and fills the same post and profile fields. The configured profile in `feeds.config.json` wins over a thinner profile parsed from a post.
 
-`--download-media` saves expiring images (Meta CDN, `twimg`, and similar) into `media/`. Video files are left remote; the poster is what the card shows until play.
+`--download-media` keeps X images hotlinked (`pbs.twimg.com`, `video.twimg.com`). It downloads only expiring Meta CDN images (Instagram and Threads), resizes them to at most 1080px, and recompresses to JPEG or WebP at about quality 80. Video files are never saved; the card keeps the remote file and a local poster. After the post cap, files in `media/` that the document no longer references are deleted. The command prints the total size of `media/`.
 
 ## GitHub Pages
 

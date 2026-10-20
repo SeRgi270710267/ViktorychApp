@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
+import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,51 +90,188 @@ def run_adapter(name: str, payload: str, feed: dict) -> dict:
     return ADAPTERS[name](payload, feed)
 
 
+# pbs.twimg.com and video.twimg.com stay hotlinked. Only Meta CDNs expire.
+META_HOSTS = ("cdninstagram.com", "fbcdn.net", "fbsbx.com", "cdnthreads.net", "threads.net")
+VIDEO_EXT = (".mp4", ".m3u8", ".mov", ".webm")
+
+
+def is_meta_cdn(url: str) -> bool:
+    host = urllib.parse.urlparse(url).netloc.lower()
+    return any(mark in host for mark in META_HOSTS)
+
+
+def is_video_url(url: str) -> bool:
+    path = urllib.parse.urlparse(url).path.lower().split("?")[0]
+    return path.endswith(VIDEO_EXT)
+
+
+def image_kind(data: bytes) -> str:
+    if data.startswith(b"\xff\xd8"):
+        return "jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"GIF87a") or data.startswith(b"GIF89a"):
+        return "gif"
+    if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return "webp"
+    return ""
+
+
+def _probe(path: Path) -> tuple[int, int]:
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(path)],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        w, h = (result.stdout.strip().split(",") + ["0", "0"])[:2]
+        return int(w or 0), int(h or 0)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return 0, 0
+
+
+def shrink_image(data: bytes, dest: Path, stem: str) -> Path | None:
+    """Write a <=1080px JPEG or WebP at roughly quality 80. Videos are refused."""
+    kind = image_kind(data)
+    if not kind:
+        return None
+    suffix = {"jpeg": ".jpg", "png": ".png", "gif": ".gif", "webp": ".webp"}[kind]
+    out_ext = ".webp" if kind == "webp" else ".jpg"
+    final = dest / f"{stem}{out_ext}"
+    # Already small enough: keep the file that is already on disk when it matches.
+    if final.exists() and final.stat().st_size > 32:
+        width, height = _probe(final)
+        if width and height and max(width, height) <= 1080 and final.stat().st_size <= 220_000:
+            return final
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(data)
+        src = Path(tmp.name)
+    try:
+        scale = "scale='min(1080,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease"
+        if out_ext == ".jpg":
+            cmd = ["ffmpeg", "-y", "-i", str(src), "-vf", scale, "-frames:v", "1", "-update", "1", "-q:v", "5", str(final)]
+        else:
+            cmd = ["ffmpeg", "-y", "-i", str(src), "-vf", scale, "-frames:v", "1", "-c:v", "libwebp", "-quality", "80", str(final)]
+        subprocess.run(cmd, check=True, capture_output=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        if not final.exists():
+            final.write_bytes(data)
+    finally:
+        src.unlink(missing_ok=True)
+    if not final.exists() or final.stat().st_size < 32 or image_kind(final.read_bytes()) == "":
+        return None
+    return final
+
+
 def download_media(posts, dest: Path, limit_bytes: int = 2_500_000) -> None:
     dest.mkdir(parents=True, exist_ok=True)
 
-    def fetch(url: str, hint: str) -> str:
-        if not url or url.startswith("media/") or url.startswith("data:"):
-            return url
-        # Meta CDN links and other hotlinked media expire; keep a local copy.
-        expiring = "oe=" in url or "cdninstagram.com" in url or "fbcdn.net" in url or "twimg.com" in url
-        if not expiring:
-            return url
-        name = media_basename(url, hint)
-        target = dest / name
-        if target.exists() and target.stat().st_size > 0:
-            return f"media/{name}"
-        if target.suffix == ".mp4":
-            return url
+    def fetch_bytes(url: str) -> bytes | None:
         try:
             request = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "image/*,*/*"})
             with urllib.request.urlopen(request, timeout=30) as response:
                 data = response.read(limit_bytes + 1)
-            if len(data) > limit_bytes or len(data) < 32:
-                return url
-            target.write_bytes(data)
-            return f"media/{name}"
         except (urllib.error.URLError, TimeoutError, OSError):
+            return None
+        if len(data) > limit_bytes or len(data) < 32 or not image_kind(data):
+            return None
+        return data
+
+    def localize(url: str, hint: str) -> str:
+        if not url or url.startswith("data:") or is_video_url(url):
             return url
+        if url.startswith("media/"):
+            path = dest.parent / url if not (dest / url.split("/", 1)[-1]).exists() else dest / url.split("/", 1)[-1]
+            if path.is_file():
+                shrunk = shrink_image(path.read_bytes(), dest, path.stem)
+                if shrunk is not None:
+                    if path.resolve() != shrunk.resolve() and path.exists():
+                        path.unlink()
+                    return f"media/{shrunk.name}"
+            return url
+        if not is_meta_cdn(url):
+            return url
+        name = media_basename(url, hint)
+        target = dest / name
+        data = target.read_bytes() if target.is_file() and target.stat().st_size > 32 else None
+        if data is None or not image_kind(data):
+            data = fetch_bytes(url)
+        if not data:
+            return f"media/{target.name}" if target.is_file() else url
+        shrunk = shrink_image(data, dest, Path(name).stem)
+        if shrunk is None:
+            return url
+        if target.exists() and target.resolve() != shrunk.resolve():
+            target.unlink()
+        return f"media/{shrunk.name}"
 
     for post in posts:
         hint = f"{post.get('platform') or 'post'}-{post.get('handle') or 'x'}"
-        if post.get("avatar"):
-            post["avatar"] = fetch(post["avatar"], hint + "-avatar")
+        for field in ("avatar", "banner"):
+            if post.get(field):
+                post[field] = localize(post[field], hint + "-" + field)
+        if post.get("repostedBy") and post["repostedBy"].get("avatar"):
+            post["repostedBy"]["avatar"] = localize(post["repostedBy"]["avatar"], hint + "-avatar")
         for index, item in enumerate(post.get("media") or []):
             if index >= 4:
                 break
-            if item.get("poster"):
-                item["poster"] = fetch(item["poster"], hint)
-            if item.get("type") == "photo" and item.get("url"):
-                item["url"] = fetch(item["url"], hint)
-            elif item.get("poster") and item.get("type") != "photo":
-                # keep remote mp4; poster is enough if the video URL expires
-                pass
+            remote_url = item.get("url") or ""
+            remote_poster = item.get("poster") or ""
+            if item.get("type") in ("video", "animated_gif") or is_video_url(remote_url):
+                if remote_poster:
+                    item["poster"] = localize(remote_poster, hint + "-poster")
+                continue
+            if remote_url:
+                item["url"] = localize(remote_url, hint)
+            if remote_poster and remote_poster == remote_url:
+                item["poster"] = item.get("url") or ""
+            elif remote_poster:
+                item["poster"] = localize(remote_poster, hint + "-poster")
         if post.get("quoted"):
             download_media([post["quoted"]], dest, limit_bytes)
         photos = [m.get("url") for m in post.get("media") or [] if m.get("type") == "photo" and m.get("url")]
         post["images"] = photos
+
+
+def referenced_media(doc: dict) -> set[str]:
+    found: set[str] = set()
+
+    def walk(value) -> None:
+        if isinstance(value, str):
+            if value.startswith("media/") and ".." not in value:
+                found.add(value.split("/", 1)[1])
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, list):
+            for item in value:
+                walk(item)
+
+    walk(doc)
+    return found
+
+
+def prune_media(dest: Path, doc: dict) -> int:
+    if not dest.is_dir():
+        return 0
+    keep = referenced_media(doc)
+    removed = 0
+    for path in dest.iterdir():
+        if not path.is_file():
+            continue
+        if path.suffix.lower() in VIDEO_EXT or path.name not in keep:
+            path.unlink()
+            removed += 1
+    return removed
+
+
+def media_bytes(dest: Path) -> tuple[int, int]:
+    if not dest.is_dir():
+        return 0, 0
+    files = [p for p in dest.iterdir() if p.is_file()]
+    return len(files), sum(p.stat().st_size for p in files)
 
 
 def build(config: dict, use_fixtures: bool, download: bool) -> dict:
@@ -242,8 +382,12 @@ def main() -> None:
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
     doc = build(config, args.fixtures, args.download_media)
     out = ROOT / config.get("output", "feeds.json")
+    media_dir = ROOT / "media"
+    removed = prune_media(media_dir, doc) if args.download_media else 0
     save_document(out, doc)
+    count, total = media_bytes(media_dir)
     print(f"wrote {out} ({len(doc['posts'])} posts, {len(doc['feeds'])} profiles)")
+    print(f"media {count} files, {total / 1024 / 1024:.2f} MB" + (f", pruned {removed}" if removed else ""))
 
 
 if __name__ == "__main__":
