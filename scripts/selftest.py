@@ -16,9 +16,9 @@ from adapters.generic_rss import parse as parse_generic  # noqa: E402
 from adapters.nitter_rss import parse as parse_nitter  # noqa: E402
 from adapters.rsshub_instagram import parse as parse_ig  # noqa: E402
 from adapters.rsshub_threads import parse as parse_threads  # noqa: E402
-from adapters.ig_comments import parse_ig_comments  # noqa: E402
+from adapters.ig_comments import parse_ig_comments, parse_ig_document  # noqa: E402
 from adapters.rss_comments import parse_comment_rss  # noqa: E402
-from adapters.threads_replies import parse_threads_replies  # noqa: E402
+from adapters.threads_replies import parse_threads_document, parse_threads_replies  # noqa: E402
 from adapters.x_api_v2 import parse as parse_x  # noqa: E402
 from adapters.x_replies import _cap, parse_fxtwitter_conversation, parse_nitter_replies  # noqa: E402
 from meta_media import cdn_expiry, extract_cdn_urls, media_groups, needs_refresh  # noqa: E402
@@ -126,6 +126,21 @@ def main() -> None:
     th_replies = parse_threads_replies((FIX / "replies" / "threads_replies.html").read_text(encoding="utf-8"), {"handle": "redacted_handle", "author": "redacted_handle", "statusId": "DeZtp"})
     check(len(th_replies) == 2 and th_replies[0]["stats"]["likes"] == 9, "threads replies sorted by likes")
     check(th_replies[0]["text"] == "Wow" and th_replies[0]["kind"] == "reply", "threads reply text")
+
+    parent = {"handle": "redacted_handle", "author": "Mark Zuckerberg", "statusId": "4006377606181159966", "url": "https://www.instagram.com/p/DeZgzTEggQe/"}
+    gql_rows, gql_count = parse_ig_document((FIX / "replies" / "ig_graphql.json").read_text(encoding="utf-8"), parent)
+    check(gql_count == 42 and len(gql_rows) == 2 and gql_rows[0]["text"] == "Nice melon", "graphql parent comments")
+    check(gql_rows[0]["verifiedType"] == "blue" and gql_rows[0]["stats"]["likes"] == 5, "graphql comment likes")
+    web_rows, web_count = parse_ig_document((FIX / "replies" / "ig_web_info.json").read_text(encoding="utf-8"), parent)
+    check(web_count == 7 and web_rows[0]["handle"] == "cy" and web_rows[0]["text"] == "First", "web info preview comments")
+    embed_rows, embed_count = parse_ig_document((FIX / "replies" / "ig_embed.html").read_text(encoding="utf-8"), parent)
+    check(embed_count == 42 and embed_rows[0]["handle"] == "ada" and embed_rows[0]["text"] == "Nice melon", "embed caption comments")
+    viewer_rows, _viewer_count = parse_ig_document((FIX / "replies" / "ig_viewer.html").read_text(encoding="utf-8"), parent)
+    check(len(viewer_rows) == 1 and viewer_rows[0]["handle"] == "bea" and viewer_rows[0]["text"] == "Hello there", "viewer html comments")
+
+    direct_rows, direct_count = parse_threads_document((FIX / "replies" / "threads_direct.html").read_text(encoding="utf-8"), {"handle": "redacted_handle", "author": "redacted_handle", "statusId": "DeZtp"})
+    check(direct_count == 4 and len(direct_rows) == 1 and direct_rows[0]["text"] == "Wow", "threads direct replies skip other posts")
+    check(direct_rows[0]["handle"] == "ada" and direct_rows[0]["replyingTo"]["id"] == "DeZtp", "threads direct reply target")
 
     rss_replies = parse_comment_rss((FIX / "replies" / "comments.xml").read_text(encoding="utf-8"), {"handle": "example", "author": "Example", "id": "g1", "platform": "rss"})
     check(len(rss_replies) == 2 and all(r["kind"] == "reply" for r in rss_replies), "comment rss replies")
