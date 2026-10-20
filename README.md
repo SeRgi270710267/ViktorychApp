@@ -2,7 +2,7 @@
 
 An X-style home for posts from X, Threads, Instagram, and other RSS sources. The page is a static site (`index.html`, `styles.css`, `app.js`) with no build step, so it can be served from GitHub Pages. A separate refresh job writes `feeds.json`. The browser only reads that file.
 
-The preview snapshot in this repo is real public posts converted by the adapters (about six to eight newest items per configured account), with a few images copied into `media/` so the page still renders after CDN links expire.
+The preview snapshot in this repo is real public posts converted by the adapters (about six to eight newest items per configured account). X images stay on `pbs.twimg.com`. Instagram and Threads images stay on the Meta CDN, with each URL's expiry stored next to it.
 
 ## Run it
 
@@ -89,7 +89,7 @@ One shape for every platform. The card layout does not change with the source. A
 | `sortDate` | Timeline order. Set when a repost should sort by the repost time |
 | `url` | Original post URL |
 | `links` | `[{expanded, display, anchorText}]` for real URLs. Media and quote `t.co` links are already removed |
-| `media` | `[{type, url, poster, width, height, alt}]`. `type` is `photo`, `video`, or `animated_gif` |
+| `media` | `[{type, url, poster, width, height, alt, expires, fallback}]`. `type` is `photo`, `video`, or `animated_gif`. `expires` is the Meta CDN `oe=` time. `fallback` is a second URL tried when the first image fails |
 | `images` | Photo URLs, a convenience copy of `media` |
 | `stats` | `{replies, reposts, quotes, likes, views, bookmarks}`. A missing stat is omitted, not zero. The icon still shows; the number is hidden when the stat is missing or zero |
 
@@ -107,25 +107,26 @@ Counts under 10,000 use commas. Larger counts use `1.2K`, `24K`, `6.1M`. Times u
 ```bash
 python3 scripts/update_feeds.py              # live sources
 python3 scripts/update_feeds.py --fixtures   # rebuild the preview from scripts/fixtures
-python3 scripts/update_feeds.py --download-media
 python3 scripts/selftest.py
 python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_handle --handle redacted_handle
 ```
 
-`update_feeds.py` dedupes on platform + id, sorts newest first, and keeps about 300 posts. If a source fails, that feed’s previous posts stay. Adapters live in `scripts/adapters/`:
+`update_feeds.py` dedupes on platform + id, sorts newest first, and keeps about 300 posts. If a source fails, that feed’s previous posts stay. A post that drops out of the latest RSS page stays in the file until the cap, so its media URL can be refreshed later. Adapters live in `scripts/adapters/`:
 
 | Adapter | Source |
 | --- | --- |
-| `x_api_v2` | X API v2 payload (`data`, `includes.tweets`, `includes.users`, `includes.media`). A tool header line and a trailing note are ignored |
-| `fxtwitter` | `api.fxtwitter.com` profile statuses |
-| `nitter_rss` | Nitter RSS (`RT by @…`, blockquote quotes) |
+| `x_api_v2` | Offline only. Parses a saved X API v2 payload (`data`, `includes.tweets`, `includes.users`, `includes.media`), including the fixture files. A tool header line and a trailing note are ignored. The sync refuses `api.x.com` and `api.twitter.com` and does not read `X_BEARER_TOKEN` |
+| `fxtwitter` | `api.fxtwitter.com` profile statuses. This is the live X source |
+| `nitter_rss` | Nitter RSS (`RT by @…`, blockquote quotes). Fallback when fxtwitter fails |
 | `rsshub_threads` | RSSHub `/threads/<user>` |
 | `rsshub_instagram` | RSSHub `/instagram/user/<user>` |
 | `generic_rss` | RSS or Atom: title, description, `content:encoded`, enclosures |
 
 Each adapter strips HTML while keeping line breaks, unescapes entities, drops trailing media links, and fills the same post and profile fields. The configured profile in `feeds.config.json` wins over a thinner profile parsed from a post.
 
-`--download-media` keeps X images hotlinked (`pbs.twimg.com`, `video.twimg.com`). It downloads only expiring Meta CDN images (Instagram and Threads), resizes them to at most 1080px, and recompresses to JPEG or WebP at about quality 80. Video files are never saved; the card keeps the remote file and a local poster. After the post cap, files in `media/` that the document no longer references are deleted. The command prints the total size of `media/`.
+X images stay hotlinked (`pbs.twimg.com`, `video.twimg.com`). Instagram and Threads images stay hotlinked too. A Meta CDN URL carries `oe=`, a hex unix timestamp about five days out, and that time is stored as `expires` on the media object (`posterExpires` when the poster is a different URL). Posts in the latest feed take their URLs from that feed. Older posts whose URLs expire within 36 hours are refreshed from `https://www.instagram.com/p/<code>/embed/` or the Threads post page. When the embed page has no image, Instagram falls through to its public oembed thumbnail and `https://www.instagram.com/p/<code>/media/?size=l`. If a Threads page has no image URL, the current URL stays. A second URL, when one comes back, is stored as `fallback`. The page tries that URL if the first image errors, then shows the gray media tile (`#333639`) with no broken-image icon. Avatars hotlink the same way. A file under `media/` is kept only when no CDN URL could be found. `--download-media` no longer copies files.
+
+Live X accounts use fxtwitter, then Nitter RSS (`nitter.meowing.monster`, `nitter.kareem.one`, `nitter.jaydenha.uk`). `TWITTER_AUTH_TOKEN`, if you set it, is sent only as an `auth_token` cookie on those Nitter requests and on RSSHub `/twitter` or `/x` routes. It is not sent anywhere else. `x_to_feed.py` only merges a JSON file you already have.
 
 ## Replies
 
@@ -148,7 +149,7 @@ Home, Following, and List timelines hide `kind: reply`, except a self-reply that
 
 | Platform | How replies are fetched |
 | --- | --- |
-| X | `https://api.fxtwitter.com/2/conversation/<statusId>` (`replies`, one page; cursor requests 404). If that fails, Nitter status HTML from `nitter.meowing.monster`, `nitter.kareem.one`, then `nitter.jaydenha.uk`. Those hosts currently answer with a bot check, so the HTML parser only runs when a page actually contains `tweet-content`. `api.fixupx.com` does not resolve. X API v2 search by `conversation_id` is not used here; no token is configured |
+| X | `https://api.fxtwitter.com/2/conversation/<statusId>` (`replies`, one page; cursor requests 404). If that fails, Nitter status HTML from `nitter.meowing.monster`, `nitter.kareem.one`, then `nitter.jaydenha.uk`. Those hosts currently answer with a bot check, so the HTML parser only runs when a page actually contains `tweet-content`. `api.fixupx.com` does not resolve. The paid X API is not called |
 | Threads | Public post HTML has reply counts only, no reply text. Set `THREADS_COOKIE` (a cookie header or a session id) to request the post page and read embedded `reply_threads`. The cookie is never written to disk. Without it, the post is skipped |
 | Instagram | Set `INSTAGRAM_COOKIE` to a `sessionid` value or a full cookie header. The adapter calls `https://www.instagram.com/api/v1/media/<id>/comments/` with `X-IG-App-ID`. Without the cookie, Instagram is skipped |
 | Other RSS | `wfw:commentRss` is fetched and normalized. `slash:comments` is only the count on the post |

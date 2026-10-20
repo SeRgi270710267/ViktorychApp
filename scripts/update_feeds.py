@@ -8,7 +8,8 @@ Usage:
 Network sources are tried in order. A failed source keeps the last good posts
 for that feed. --fixtures reads each feed's local fixture instead (used to
 rebuild the shipped preview). Placeholders {rsshubBase} and {fxtwitterBase}
-in source URLs are filled from the config.
+in source URLs are filled from the config. api.x.com and api.twitter.com are
+refused. x_api_v2 runs only against fixture files.
 """
 
 from __future__ import annotations
@@ -35,6 +36,8 @@ from adapters.common import (  # noqa: E402
     merge_profiles,
     save_document,
 )
+from meta_media import refresh_saved  # noqa: E402
+from x_guard import assert_not_x_api, auth_cookie_header, open_url  # noqa: E402
 
 UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
 
@@ -59,8 +62,11 @@ def read_source(url: str) -> str:
     path = Path(url)
     if not url.startswith("http://") and not url.startswith("https://") and path.exists():
         return path.read_text(encoding="utf-8")
-    request = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "*/*"})
-    with urllib.request.urlopen(request, timeout=40) as response:
+    assert_not_x_api(url)
+    headers = {"User-Agent": UA, "Accept": "*/*"}
+    headers.update(auth_cookie_header(url))
+    request = urllib.request.Request(url, headers=headers)
+    with open_url(request, timeout=40) as response:
         return response.read().decode("utf-8", "replace")
 
 
@@ -283,6 +289,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     profiles = [dict(f) for f in existing.get("feeds") or []]
     collected = []
     configured_ids = set()
+    fresh_ids: set[tuple[str, str]] = set()
 
     for feed in config.get("feeds") or []:
         configured_ids.add(feed["id"])
@@ -296,6 +303,10 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             except OSError as exc:
                 errors.append(str(exc))
         else:
+            if feed.get("adapter") == "x_api_v2":
+                print(f"[keep] {feed['id']}: x_api_v2 parses fixtures only and does not call the X API", file=sys.stderr)
+                collected.extend(old_by_feed.get(feed["id"], []))
+                continue
             for source in feed.get("source_urls") or []:
                 url = expand(source, config, feed)
                 if not url:
@@ -308,6 +319,9 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     errors.append(f"{url}: {exc}")
             if payload is None:
                 for fallback in feed.get("fallbacks") or []:
+                    if fallback.get("adapter") == "x_api_v2":
+                        print(f"[skip] {feed['id']}: x_api_v2 is not a live fallback", file=sys.stderr)
+                        continue
                     for source in fallback.get("source_urls") or []:
                         url = expand(source, config, feed)
                         if not url:
@@ -337,6 +351,11 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         for post in posts:
             post["feedId"] = feed["id"]
             post["platform"] = feed.get("platform") or post.get("platform")
+            fresh_ids.add((feed["id"], str(post.get("id") or "")))
+        new_ids = {str(post.get("id") or "") for post in posts}
+        for old in old_by_feed.get(feed["id"], []):
+            if str(old.get("id") or "") not in new_ids:
+                collected.append(old)
         collected.extend(posts)
         incoming = result.get("profiles") or []
         primary = None
@@ -359,12 +378,8 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             profile["configured"] = True
     posts = dedupe_posts(collected, cap=int(config.get("cap") or 300))
     if download:
-        download_media(posts, ROOT / "media")
-        for profile in profiles:
-            if profile.get("avatar"):
-                fake = {"platform": profile.get("platform"), "handle": profile.get("handle"), "avatar": profile["avatar"], "media": []}
-                download_media([fake], ROOT / "media")
-                profile["avatar"] = fake["avatar"]
+        print("[media] --download-media no longer copies Meta CDN files; URLs stay hotlinked", file=sys.stderr)
+    refresh_saved(posts, profiles, fresh_ids)
     return {
         "updated": now_iso(),
         "preview": True,
@@ -377,13 +392,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Merge source feeds into feeds.json")
     parser.add_argument("--config", default=str(ROOT / "feeds.config.json"))
     parser.add_argument("--fixtures", action="store_true", help="build the preview from scripts/fixtures")
-    parser.add_argument("--download-media", action="store_true", help="copy expiring media into media/")
+    parser.add_argument("--download-media", action="store_true", help="ignored; Meta CDN URLs stay hotlinked")
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
     doc = build(config, args.fixtures, args.download_media)
     out = ROOT / config.get("output", "feeds.json")
     media_dir = ROOT / "media"
-    removed = prune_media(media_dir, doc) if args.download_media else 0
+    removed = prune_media(media_dir, doc)
     save_document(out, doc)
     count, total = media_bytes(media_dir)
     print(f"wrote {out} ({len(doc['posts'])} posts, {len(doc['feeds'])} profiles)")

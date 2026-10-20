@@ -361,13 +361,11 @@ img { max-width: 100%; }
 }
 .gif-badge { left: auto; right: 8px; top: 8px; bottom: auto; }
 .tile.broken, .media.broken {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 140px;
-  color: var(--muted);
-  font-size: 13px;
+  background: var(--banner);
+  min-height: 180px;
 }
+.media.m1 .tile.broken { min-height: 240px; }
+.tile.broken img, .tile.broken video, .media.broken img, .media.broken video { display: none; }
 
 .quote {
   display: block;

@@ -331,12 +331,13 @@
     const tiles = list.map((m) => {
       const alt = m.alt ? `<span class="alt-badge">ALT</span>` : "";
       const gif = m.type === "animated_gif" ? `<span class="gif-badge">GIF</span>` : "";
+      const refresh = m.fallback ? ` data-refresh="${esc(m.fallback)}"` : "";
       if (m.type === "photo" || !m.url || m.url === m.poster) {
-        return `<div class="tile"><img src="${esc(m.url || m.poster)}" alt="${esc(m.alt || "")}" loading="lazy" referrerpolicy="no-referrer">${alt}</div>`;
+        return `<div class="tile"><img src="${esc(m.url || m.poster)}"${refresh} alt="${esc(m.alt || "")}" loading="lazy" referrerpolicy="no-referrer">${alt}</div>`;
       }
       const poster = m.poster ? ` poster="${esc(m.poster)}"` : "";
       const loop = m.type === "animated_gif" ? " autoplay muted loop playsinline" : "";
-      return `<div class="tile"><video src="${esc(m.url)}"${poster}${loop} playsinline preload="metadata"></video><button class="play" data-act="play" aria-label="Play">${icon("play")}</button>${gif}${alt}</div>`;
+      return `<div class="tile"><video src="${esc(m.url)}"${poster}${refresh}${loop} playsinline preload="metadata"></video><button class="play" data-act="play" aria-label="Play">${icon("play")}</button>${gif}${alt}</div>`;
     }).join("");
     return `<div class="media ${cls}">${tiles}</div>`;
   }
@@ -1222,7 +1223,7 @@
 
   document.addEventListener("error", (event) => {
     const img = event.target;
-    if (!img || img.tagName !== "IMG") return;
+    if (!img || (img.tagName !== "IMG" && img.tagName !== "VIDEO")) return;
     if (img.dataset.fallback === "avatar") {
       const span = document.createElement("span");
       span.className = img.className.replace("ava", "ava initials");
@@ -1231,10 +1232,18 @@
       img.replaceWith(span);
       return;
     }
+    const next = img.dataset.refresh || "";
+    if (next && img.dataset.tried !== "1") {
+      img.dataset.tried = "1";
+      img.removeAttribute("data-refresh");
+      if (img.tagName === "IMG") img.src = next;
+      else img.src = next;
+      return;
+    }
     const tile = img.closest(".tile") || img.closest(".media");
     if (tile) {
       tile.classList.add("broken");
-      tile.innerHTML = "Image unavailable";
+      img.remove();
     }
   }, true);
 

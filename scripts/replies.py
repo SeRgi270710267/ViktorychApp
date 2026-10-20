@@ -24,6 +24,7 @@ from adapters.ig_comments import parse_ig_comments  # noqa: E402
 from adapters.rss_comments import parse_comment_rss  # noqa: E402
 from adapters.threads_replies import parse_threads_replies  # noqa: E402
 from adapters.x_replies import parse_fxtwitter_conversation, parse_nitter_replies  # noqa: E402
+from x_guard import auth_cookie_header, open_url  # noqa: E402
 
 UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
 NITTER_HOSTS = (
@@ -36,10 +37,11 @@ FIXTURES = ROOT / "scripts" / "fixtures" / "replies"
 
 def _get(url: str, headers: dict | None = None) -> str:
     req_headers = {"User-Agent": UA, "Accept": "*/*"}
+    req_headers.update(auth_cookie_header(url))
     if headers:
         req_headers.update(headers)
     request = urllib.request.Request(url, headers=req_headers)
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with open_url(request, timeout=30) as response:
         return response.read().decode("utf-8", "replace")
 
 

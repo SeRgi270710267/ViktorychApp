@@ -1,4 +1,8 @@
-"""Normalize an X API v2 user-timeline payload (data + includes)."""
+"""Offline parser for a saved X API v2 user-timeline payload (data + includes).
+
+The sync never calls api.x.com or api.twitter.com. This module only reads a
+payload that is already on disk, such as scripts/fixtures/x_api_v2_*.json.
+"""
 
 from __future__ import annotations
 

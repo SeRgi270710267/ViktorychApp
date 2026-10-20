@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -19,6 +21,8 @@ from adapters.rss_comments import parse_comment_rss  # noqa: E402
 from adapters.threads_replies import parse_threads_replies  # noqa: E402
 from adapters.x_api_v2 import parse as parse_x  # noqa: E402
 from adapters.x_replies import _cap, parse_fxtwitter_conversation, parse_nitter_replies  # noqa: E402
+from meta_media import cdn_expiry, extract_cdn_urls, media_groups, needs_refresh  # noqa: E402
+from x_guard import assert_not_x_api, auth_cookie_header  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "scripts" / "fixtures"
@@ -130,6 +134,34 @@ def main() -> None:
     # loose JSON header tolerance
     wrapped = "tool header\n" + (FIX / "x_api_v2_finkd.json").read_text(encoding="utf-8") + "\nX reads left: 1\n"
     check(parse_json_loose(wrapped)["data"], "loose json skips header and trailer")
+
+    check(cdn_expiry("https://scontent.cdninstagram.com/v/a.jpg?oe=6ADDAAC5") == "2026-10-25T07:07:49Z", "oe hex is an expiry")
+    check(needs_refresh("media/local.jpg"), "local media needs a CDN url")
+    later = (datetime.now(timezone.utc) + timedelta(days=4)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    check(not needs_refresh("https://scontent.cdninstagram.com/v/a.jpg?oe=6ADDAAC5", later), "fresh CDN url waits")
+    html = '<img src="https://static.cdninstagram.com/rsrc.php/icon.png"><img src="https://scontent.cdninstagram.com/v/t51.1/pic.jpg?oe=6ADDAAC5&amp;_nc_cat=1">'
+    pulled = extract_cdn_urls(html)
+    check(len(pulled) == 1 and "pic.jpg" in pulled[0] and "&_nc_cat=1" in pulled[0], "embed html keeps the post image")
+    groups = media_groups(
+        [
+            "https://scontent.cdninstagram.com/v/t51.82787-19/ava.jpg?stp=dst-jpg_s150x150",
+            "https://scontent.cdninstagram.com/v/t51.1/pic.jpg?stp=dst-jpg_e35_p640x640",
+            "https://scontent.cdninstagram.com/v/t51.1/pic.jpg?stp=dst-jpg_e35_p1080x1080",
+        ]
+    )
+    check(len(groups) == 1 and "p1080" in groups[0][0] and "p640" in groups[0][1], "refresh prefers the larger rendition")
+    try:
+        assert_not_x_api("https://api.x.com/2/users/me")
+        check(False, "paid X API is refused")
+    except ValueError:
+        check(True, "paid X API is refused")
+    os.environ["TWITTER_AUTH_TOKEN"] = "abc123"
+    try:
+        check(auth_cookie_header("https://nitter.meowing.monster/redacted_handle/rss").get("Cookie") == "auth_token=abc123", "nitter gets the optional cookie")
+        check(auth_cookie_header("https://api.fxtwitter.com/2/profile/redacted_handle/statuses") == {}, "fxtwitter does not get the X cookie")
+        check(auth_cookie_header("https://www.instagram.com/p/abc/") == {}, "instagram does not get the X cookie")
+    finally:
+        os.environ.pop("TWITTER_AUTH_TOKEN", None)
     print("all adapter checks passed")
 
 
