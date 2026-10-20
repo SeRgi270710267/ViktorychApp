@@ -268,6 +268,31 @@ def enrich_youtube(posts: list, profiles: list, feed: dict) -> None:
             post.setdefault("stats", {})["likes"] = likes
 
 
+def carry_youtube_fields(posts: list, previous: list, saved_profile: dict | None) -> None:
+    """Keep avatar, verification, and duration when a later channel fetch misses them."""
+    old = {str(item.get("id") or ""): item for item in previous or []}
+    saved = saved_profile or {}
+    avatar = saved.get("avatar") or ""
+    verified = saved.get("verifiedType")
+    for post in posts:
+        prev = old.get(str(post.get("id") or ""), {})
+        if not post.get("avatar"):
+            post["avatar"] = prev.get("avatar") or avatar or ""
+        if not post.get("verifiedType"):
+            kept = prev.get("verifiedType") or verified
+            if kept:
+                post["verifiedType"] = kept
+        media = (post.get("media") or [None])[0]
+        old_media = (prev.get("media") or [None])[0]
+        if not isinstance(media, dict) or not isinstance(old_media, dict):
+            continue
+        if not media.get("duration") and old_media.get("duration"):
+            media["duration"] = old_media["duration"]
+            post["short"] = int(old_media["duration"]) <= 60
+        if not media.get("stream") and old_media.get("stream"):
+            media["stream"] = old_media["stream"]
+
+
 def normalize_invidious_comment(comment: dict, parent_id: str, handle: str) -> dict:
     info = comment.get("replies") or {}
     try:

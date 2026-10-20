@@ -557,7 +557,8 @@
     const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" href="${esc(profileHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(post.url || "")}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
-    const avaLink = `<a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(post.avatar, post.author || post.handle)}</a>`;
+    const face = authorFace(post);
+    const avaLink = `<a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(face.avatar, post.author || post.handle)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = mode === "reply" ? "" : ` data-open="${esc(statusHash(post))}"`;
     const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
@@ -568,7 +569,7 @@
         ${avaCol}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${esc(post.author || post.handle)}${badge(post.verifiedType)}</a>
+            <a class="name" href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
             <a class="handle" href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">@${esc(post.handle || "")}</a>
             <span class="dot">·</span>
             <a class="time" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
@@ -809,14 +810,15 @@
         <div class="status-time">${esc(fullTime(post.date))}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
         ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> Views</div>` : `<div class="status-views"></div>`}
         ${actionBar(post)}`;
+    const face = authorFace(post);
     const names = `<div>
-            <a class="name" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(post.verifiedType)}</a>
+            <a class="name" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>
             <a class="handle" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
           </div>
           <span style="margin-left:auto">${sourceBadge(post.platform)}</span>`;
     const article = threaded
-      ? `<article class="status has-thread"><div class="status-thread"><div class="ava-col"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(post.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
-      : `<article class="status"><div class="status-author"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(post.avatar, post.author)}</a>${names}</div>${body}</article>`;
+      ? `<article class="status has-thread"><div class="status-thread"><div class="ava-col"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
+      : `<article class="status"><div class="status-author"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
       ${article}
       ${composer(threaded)}
@@ -979,6 +981,14 @@
       handle: post.handle,
       name: post.author || post.handle,
       avatar: post.avatar
+    };
+  }
+
+  function authorFace(post) {
+    const feed = feedOf(post);
+    return {
+      avatar: post.avatar || feed.avatar || "",
+      verified: post.verifiedType || feed.verifiedType || ""
     };
   }
 

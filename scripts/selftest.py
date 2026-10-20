@@ -21,7 +21,7 @@ from adapters.rss_comments import parse_comment_rss  # noqa: E402
 from adapters.threads_replies import parse_threads_document, parse_threads_replies  # noqa: E402
 from adapters.x_api_v2 import parse as parse_x  # noqa: E402
 from adapters.youtube_rss import parse as parse_youtube  # noqa: E402
-from yt_remote import normalize_invidious_comment  # noqa: E402
+from yt_remote import carry_youtube_fields, normalize_invidious_comment  # noqa: E402
 from adapters.x_replies import _cap, parse_fxtwitter_conversation, parse_nitter_replies  # noqa: E402
 from meta_media import cdn_expiry, extract_cdn_urls, media_groups, needs_refresh  # noqa: E402
 from x_guard import assert_not_x_api, auth_cookie_header  # noqa: E402
@@ -205,6 +205,16 @@ def main() -> None:
         "mkbhd",
     )
     check(comment["text"] == "Nice" and comment["stats"]["likes"] == 5 and comment["stats"]["replies"] == 2 and comment["date"].startswith("2026-"), "invidious comment shape")
+    fresh = {"id": "vid", "avatar": "", "verifiedType": None, "media": [{"type": "video", "url": "https://www.youtube-nocookie.com/embed/vid"}]}
+    carry_youtube_fields(
+        [fresh],
+        [{"id": "vid", "avatar": "https://yt3.googleusercontent.com/a", "verifiedType": "blue", "media": [{"duration": 90, "stream": "https://example/stream"}]}],
+        {"avatar": "https://yt3.googleusercontent.com/saved", "verifiedType": "blue"},
+    )
+    check(fresh["avatar"].endswith("/a") and fresh["verifiedType"] == "blue" and fresh["media"][0]["duration"] == 90 and fresh["short"] is False, "youtube enrichment survives a missed channel fetch")
+    blank = {"id": "new", "avatar": "", "media": [{}]}
+    carry_youtube_fields([blank], [], {"avatar": "https://yt3.googleusercontent.com/saved", "verifiedType": "blue"})
+    check(blank["avatar"].endswith("/saved") and blank["verifiedType"] == "blue", "new youtube posts inherit the saved profile")
     print("all adapter checks passed")
 
 

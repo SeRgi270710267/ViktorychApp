@@ -380,12 +380,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             continue
         posts = result.get("posts") or []
         if adapter == "youtube_rss" and not use_fixtures:
-            try:
-                from yt_remote import enrich_youtube
+            from yt_remote import carry_youtube_fields, enrich_youtube
 
+            try:
                 enrich_youtube(posts, result.get("profiles") or [], feed)
             except Exception as exc:
                 print(f"[youtube] {feed['id']}: enrich failed: {exc}", file=sys.stderr)
+            saved = next((item for item in profiles if item.get("id") == feed.get("id")), {})
+            carry_youtube_fields(posts, old_by_feed.get(feed["id"], []), saved)
         limit = feed.get("limit")
         if limit:
             posts = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)[: int(limit)]
