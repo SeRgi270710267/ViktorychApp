@@ -1,4 +1,4 @@
-/* X-style reader. Timelines come from feeds.json plus monthly archive stubs. X replies, YouTube comments, and old-post details load live in the browser. */
+/* X-style reader. Timelines come from feeds.json plus monthly archive stubs on the data branch. X replies, YouTube comments, and old-post details load live in the browser. */
 (function () {
   const KEY = "rss-feeds-settings-v1";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -90,6 +90,9 @@
   let ARCHIVE_OBS = null;
   let archiveBusy = false;
   const HYDRATE_TTL = 24 * 60 * 60 * 1000;
+  const ARCHIVE_RAW = "https://raw.githubusercontent.com/owner-account/rss-feeds/data/archive/";
+  const ARCHIVE_CDN = "https://cdn.jsdelivr.net/gh/owner-account/rss-feeds@data/archive/";
+  const ARCHIVE_IA = "https://archive.org/download/sergi-rss-feeds-archive/archive/";
 
   function canonicalId(post) {
     const platform = (post && post.platform) || "";
@@ -1424,14 +1427,42 @@
     return (ARCHIVE.order || []).find((name) => !ARCHIVE.loaded[name]) || "";
   }
 
+  function utcMonth() {
+    const now = new Date();
+    return now.getUTCFullYear() + "-" + String(now.getUTCMonth() + 1).padStart(2, "0");
+  }
+
+  function archiveSources(file, fresh) {
+    const raw = ARCHIVE_RAW + file;
+    const cdn = ARCHIVE_CDN + file;
+    const ia = ARCHIVE_IA + file;
+    return fresh ? [raw, cdn, ia] : [cdn, raw, ia];
+  }
+
+  async function fetchArchive(file, fresh) {
+    const urls = archiveSources(file, fresh);
+    for (let i = 0; i < urls.length; i++) {
+      try {
+        const res = await fetch(urls[i], { cache: "no-cache", signal: AbortSignal.timeout(8000) });
+        if (!res.ok) continue;
+        return await res.json();
+      } catch (err) { /* try the next host */ }
+    }
+    return null;
+  }
+
   async function loadShard(name) {
     if (!name || ARCHIVE.loaded[name]) return;
+    if (!/^\d{4}-\d{2}$/.test(name) && name !== "undated") {
+      ARCHIVE.loaded[name] = "miss";
+      return;
+    }
     ARCHIVE.loaded[name] = "loading";
     try {
-      const res = await fetch("archive/" + encodeURIComponent(name) + ".json", { cache: "no-cache", signal: AbortSignal.timeout(8000) });
-      if (!res.ok) throw new Error(String(res.status));
-      const rows = await res.json();
-      (rows || []).forEach((row) => {
+      const fresh = name === utcMonth() || name === (ARCHIVE.order || [])[0];
+      const rows = await fetchArchive(name + ".json", fresh);
+      if (!Array.isArray(rows)) throw new Error("miss");
+      rows.forEach((row) => {
         const post = expandStub(row);
         if (!post) return;
         if (ARCHIVE.posts.some((item) => postIdentity(item) === postIdentity(post))) return;
@@ -1448,9 +1479,8 @@
     ARCHIVE.loaded = {};
     ARCHIVE.posts = [];
     try {
-      const res = await fetch("archive/index.json", { cache: "no-cache", signal: AbortSignal.timeout(8000) });
-      if (!res.ok) return;
-      const index = await res.json();
+      const index = await fetchArchive("index.json", true);
+      if (!index) return;
       ARCHIVE.order = (index.shards || []).filter((name) => /^\d{4}-\d{2}$/.test(name) || name === "undated");
       if (ARCHIVE.order.length) await loadShard(ARCHIVE.order[0]);
     } catch (err) { /* the timeline stays on feeds.json */ }

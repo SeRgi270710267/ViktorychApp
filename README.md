@@ -131,7 +131,7 @@ Live X accounts use fxtwitter, then Nitter RSS (`nitter.meowing.monster`, `nitte
 
 ## Storage
 
-The browser loads whatever a public CORS API will give it. The build stores only what the browser cannot fetch. A half-hour sync does not commit. The archive shards are the exception: they are committed at most once a day, and only if they changed.
+The browser loads whatever a public CORS API will give it. The build stores only what the browser cannot fetch. A half-hour sync does not commit. Archive stubs are published once a day on the orphan `data` branch, with a copy on the Internet Archive.
 
 | Data | Where it comes from | Stored in the site artifact? |
 | --- | --- | --- |
@@ -139,7 +139,7 @@ The browser loads whatever a public CORS API will give it. The build stores only
 | YouTube comments, durations, subscriber counts | Invidious, rotating hosts from `api.invidious.io`, then Piped | No. A `comments/yt_<id>.json` file is used only if the live calls fail |
 | Photos and video | Hotlinked, or loaded by the browser from a permanent URL or an embed | No binaries |
 | Timelines | Build: fxtwitter or Nitter for X, RSSHub for Instagram and Threads, YouTube’s RSS feed, other RSS | Yes, in `feeds.json`, about 300 posts |
-| Older posts | Append-only stubs in `archive/YYYY-MM.json` | Yes. Text only, about 200 bytes each. No media and no comments |
+| Older posts | Append-only stubs in `archive/YYYY-MM.json` on the `data` branch, copied daily to the Internet Archive | The half-hour artifact includes them. Text only, about 200 bytes each. No media and no comments |
 | Meta CDN URL refresh | Build, for posts still in `feeds.json`, because those URLs expire | Yes, as URLs on the post |
 | Threads and Instagram comments | Build. The browser cannot call those endpoints without a cookie | Yes, and only for posts under 7 days old. Not copied into the archive |
 
@@ -153,9 +153,11 @@ The seed built from the current `feeds.json` is 35 stubs. Each stub averages **2
 
 The 300 KB/year figure is the same stub at a busier pace: `1400 × 213 bytes ≈ 298 KB`, about four posts a day. At the volume in this seed, a year of shards is a few dozen kilobytes.
 
-Each sync downloads `archive/index.json` and every shard it names from the live site, appends stubs it has not seen, and publishes them again. A partial download leaves the local shards alone. The half-hour run does not commit.
+The browser reads the `data` branch. `archive/index.json`, the current UTC month, and the newest shard are requested from `https://raw.githubusercontent.com/owner-account/rss-feeds/data/archive/<file>` first, because jsDelivr keeps a branch name cached for about 12 hours. Older months start at `https://cdn.jsdelivr.net/gh/owner-account/rss-feeds@data/archive/<file>`. After that host, the page tries the other GitHub URL, then `https://archive.org/download/sergi-rss-feeds-archive/archive/<file>`. All three respond with `Access-Control-Allow-Origin: *`.
 
-Once a day, at 06:17 UTC, the workflow commits `archive/` to `main` if the files changed. That daily commit is safer than a `data` branch force-pushed as one squashed commit. A force-push replaces the only copy, so a push that is cut off, or a deleted branch, has nothing older to check out. The daily commit is append-only, a few kilobytes, and can be reverted. A push made with `GITHUB_TOKEN` does not start another run, so the backup does not deploy a second time. If the Pages deploy fails, the previous day’s commit is still in git. If the commit fails, the site already has the shards from the half-hour publish.
+Each sync merges a complete archive from the live site, then from the raw `data` branch, then from that Internet Archive item. Stubs already stored keep their first text. A partial download leaves the local files alone, and a source that omits a month leaves that month in place. The half-hour run copies `archive/` into the Pages artifact and does not push the `data` branch. A post that drops out of `feeds.json` between daily updates is in that artifact, and the next build merges it when the live site still has the file. The shards the browser reads change when the daily `data` push lands.
+
+Once a day, at 06:17 UTC, the workflow uploads the shards to the Internet Archive item `sergi-rss-feeds-archive` and force-pushes one squashed commit onto the orphan `data` branch. That branch contains only `archive/`. Squashing keeps it at a single commit so the history stays small. The Internet Archive item is the copy to download again if that commit is replaced. The upload runs when `IA_ACCESS_KEY` and `IA_SECRET_KEY` are both set. With either one missing, the step prints a skip line, exits 0, and the `data` branch is still updated. A push made with `GITHUB_TOKEN` does not start another run. Add the two keys under Settings → Secrets and variables → Actions. They are never written to the repo or printed in the log.
 
 When a stub scrolls into view, the browser fills it in and keeps a successful result in IndexedDB (`rss-feeds-live`, key `arch:`) for about 24 hours. A failed request is not stored as a deleted post.
 
@@ -251,6 +253,8 @@ The sync runs without any secrets. Add these only as repository Actions secrets 
 | `INSTAGRAM_COOKIE` | Last resort for Instagram comments, after the public sources miss. A `sessionid` value or a full cookie header |
 | `THREADS_COOKIE` | Last resort for Threads replies, after the public page and RSSHub miss |
 | `TWITTER_AUTH_TOKEN` | Optional `auth_token` cookie sent only to Nitter and to RSSHub `/twitter` or `/x` routes during the build |
+| `IA_ACCESS_KEY` | S3 access key for the daily upload to the Internet Archive item `sergi-rss-feeds-archive`. The upload is skipped when this or `IA_SECRET_KEY` is empty |
+| `IA_SECRET_KEY` | S3 secret key for that same item. The upload is skipped when this or `IA_ACCESS_KEY` is empty |
 
 The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the browser from fxtwitter, which needs no token. Do not put a bearer token in the page.
 
@@ -258,7 +262,7 @@ The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the
 
 `.github/workflows/sync.yml` runs every 30 minutes, on **Run workflow**, and on every push to `main`. The job starts RSSHub (`diygod/rsshub` on port 1200) and RSS-Bridge (`rssbridge/rss-bridge` on port 8080). It downloads the last published `feeds.json` (and Instagram/Threads comment files under 7 days old) so a failed source can keep the previous data. Instagram and Threads try the local RSSHub container, then the public RSSHub mirrors in `feeds.config.json`, then RSS-Bridge. X timelines try fxtwitter, then the Nitter mirrors. One failed source keeps that feed’s previous posts and does not fail the run.
 
-The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `.nojekyll`, `feeds.json`, `archive/*.json`, and any `comments/*.json` into `_site`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/` and `media/` are gitignored. `archive/` is not. `feeds.json` in the repository is only the seed used when the live site cannot be downloaded. At 06:17 UTC the workflow commits `archive/` when those files changed. See Archive above for why that is a normal commit on `main` and not a force-pushed `data` branch.
+The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `.nojekyll`, `feeds.json`, `archive/*.json`, and any `comments/*.json` into `_site`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/`, `media/`, and `archive/` are gitignored, so `main` keeps the code and the `feeds.json` seed. At 06:17 UTC the workflow uploads `archive/` to the Internet Archive when the keys are set, then force-pushes one squashed commit to the orphan `data` branch. See Archive above.
 
 ## GitHub Pages
 

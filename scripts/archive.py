@@ -121,11 +121,44 @@ def _order(names) -> list[str]:
     return months
 
 
-def merge_posts(archive: dict, posts) -> int:
+def _remember(archive: dict) -> dict:
     seen = {}
     for name, rows in archive["shards"].items():
         for row in rows:
             seen[(row.get("p"), str(row.get("id")))] = name
+    return seen
+
+
+def _sort_shards(archive: dict) -> None:
+    for rows in archive["shards"].values():
+        rows.sort(key=lambda row: (row.get("d") or "", row.get("id") or ""), reverse=True)
+
+
+def _stub_row(row: dict) -> dict | None:
+    if not isinstance(row, dict):
+        return None
+    platform = str(row.get("p") or "").strip().lower()
+    ident = str(row.get("id") or "").strip()
+    if not PLATFORM_NAME.match(platform) or not SAFE_ID.match(ident):
+        return None
+    handle = str(row.get("h") or "").lstrip("@").strip()
+    date = str(row.get("d") or "").strip()
+    kind = str(row.get("k") or "").strip().lower()
+    text = snippet(str(row.get("t") or ""))
+    stub = {"p": platform, "id": ident}
+    if handle:
+        stub["h"] = handle[:40]
+    if date:
+        stub["d"] = date[:40]
+    if kind and kind != "post":
+        stub["k"] = kind[:16]
+    if text:
+        stub["t"] = text
+    return stub
+
+
+def merge_posts(archive: dict, posts) -> int:
+    seen = _remember(archive)
     added = 0
     for post in posts or []:
         stub = stub_from_post(post)
@@ -138,8 +171,26 @@ def merge_posts(archive: dict, posts) -> int:
         archive["shards"].setdefault(name, []).append(stub)
         seen[key] = name
         added += 1
-    for rows in archive["shards"].values():
-        rows.sort(key=lambda row: (row.get("d") or "", row.get("id") or ""), reverse=True)
+    _sort_shards(archive)
+    return added
+
+
+def merge_stubs(archive: dict, stubs) -> int:
+    """Insert stub rows that are not already stored. The first text stays."""
+    seen = _remember(archive)
+    added = 0
+    for row in stubs or []:
+        stub = _stub_row(row)
+        if not stub:
+            continue
+        key = (stub["p"], stub["id"])
+        if key in seen:
+            continue
+        name = month_key(stub.get("d") or "")
+        archive["shards"].setdefault(name, []).append(stub)
+        seen[key] = name
+        added += 1
+    _sort_shards(archive)
     return added
 
 

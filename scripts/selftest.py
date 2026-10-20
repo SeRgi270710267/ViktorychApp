@@ -501,13 +501,26 @@ def main() -> None:
             if rel.endswith("index.json"):
                 return b'{"shards":["2026-09"]}\n'
             if rel.endswith("2026-09.json"):
-                return b'[{"p":"x","id":"only","t":"kept"}]\n'
+                return b'[{"p":"x","id":"only","d":"2026-09-01T00:00:00Z","t":"kept","media":"nope"}]\n'
             return None
 
-        check(pull_archive(root, fetch_ok) == "updated", "a complete archive download replaces the shards")
-        check(json.loads((root / "archive" / "2026-09.json").read_text(encoding="utf-8"))[0]["id"] == "only", "the downloaded shard is what gets stored")
-        check(not (root / "archive" / "2026-10.json").exists(), "a shard left off the new index is removed")
-        check(not (root / "archive" / "2026-08.json").exists(), "local-only shards are replaced by the complete download")
+        check(pull_archive(root, fetch_ok) == "updated", "a complete archive download merges the shards")
+        september = json.loads((root / "archive" / "2026-09.json").read_text(encoding="utf-8"))
+        check(september[0]["id"] == "only" and set(september[0]) <= {"p", "id", "h", "d", "k", "t"}, "the downloaded stub is stored without extra fields")
+        check((root / "archive" / "2026-10.json").is_file() and (root / "archive" / "2026-08.json").is_file(), "months missing from the remote stay")
+        kept_text = json.loads((root / "archive" / "2026-10.json").read_text(encoding="utf-8"))[0]["t"]
+
+        def fetch_more(rel):
+            if rel.endswith("index.json"):
+                return b'{"shards":["2026-10"]}\n'
+            if rel.endswith("2026-10.json"):
+                return b'[{"p":"instagram","id":"DeZgzTEggQe","d":"2026-10-12T16:56:29Z","t":"replaced","media":"nope"},{"p":"x","id":"20","d":"2026-10-02T00:00:00Z","t":"new","stats":{"likes":1}}]\n'
+            return None
+
+        check(pull_archive(root, fetch_more) == "updated", "a later complete archive adds stubs")
+        october = {row["id"]: row for row in json.loads((root / "archive" / "2026-10.json").read_text(encoding="utf-8"))}
+        check(october["DeZgzTEggQe"]["t"] == kept_text and october["20"]["t"] == "new" and "stats" not in october["20"], "an existing stub keeps its first text")
+        check(pull_archive(root, fetch_more) == "kept", "a complete archive with no new stubs leaves the files")
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp)
         doc = json.loads((ROOT / "feeds.json").read_text(encoding="utf-8"))
@@ -526,6 +539,20 @@ def main() -> None:
                 if len(row.get("t") or "") > 280:
                     long_text += 1
         check(bad_fields == 0 and long_text == 0, "every stub is text only and at most 280 characters")
+    import subprocess
+    env = os.environ.copy()
+    env.pop("IA_ACCESS_KEY", None)
+    env["IA_SECRET_KEY"] = "sentinel-secret-value"
+    skipped = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "ia_archive.py")],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    combined = skipped.stdout + skipped.stderr
+    check(skipped.returncode == 0 and "skipping the upload" in skipped.stdout, "missing Internet Archive keys skip the upload")
+    check("sentinel-secret-value" not in combined and "IA_SECRET_KEY" not in combined, "the skip path does not print a secret")
     print("all adapter checks passed")
 
 

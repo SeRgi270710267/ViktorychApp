@@ -2,9 +2,9 @@ name: Sync feeds
 
 on:
   schedule:
-    # Half-hour sync publishes shards. It does not commit them.
+    # Half-hour sync publishes the site. It does not push the data branch.
     - cron: "*/30 * * * *"
-    # Once a day, commit archive/ if it changed. github.event.schedule is the cron that fired.
+    # Once a day, upload shards and squash them onto the orphan data branch.
     - cron: "17 6 * * *"
   workflow_dispatch:
   push:
@@ -119,13 +119,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: archive-shards
-          path: archive
+          path: archive/*.json
+          if-no-files-found: error
           retention-days: 1
 
-  # A daily commit on main, only when archive/ changed. Safer than force-pushing
-  # one squashed commit on a data branch: that push is the only copy, so a
-  # corrupted or deleted branch cannot be restored. This commit can be reverted.
-  # GITHUB_TOKEN pushes do not start another run of this workflow.
+  # Once a day: copy the shards to the Internet Archive when the keys exist,
+  # then force-push one squashed commit to the orphan data branch. That branch
+  # holds only archive/. The half-hour job does not push it. A GITHUB_TOKEN
+  # push does not start another run of this workflow. main is not force-pushed.
   backup:
     needs: build
     if: github.event_name == 'schedule' && github.event.schedule == '17 6 * * *'
@@ -141,17 +142,44 @@ jobs:
           name: archive-shards
           path: archive
 
-      - name: Commit archive shards when they changed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Upload shards to the Internet Archive
+        continue-on-error: true
+        env:
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
         run: |
-          git add -- archive
-          if git diff --cached --quiet; then
-            echo "archive unchanged"
+          if [ -z "$IA_ACCESS_KEY" ] || [ -z "$IA_SECRET_KEY" ]; then
+            python3 scripts/ia_archive.py
             exit 0
+          fi
+          python3 -m pip install --disable-pip-version-check -q internetarchive
+          python3 scripts/ia_archive.py
+
+      - name: Publish the squashed data branch
+        run: |
+          if [ -f archive/archive/index.json ]; then
+            mv archive/archive/*.json archive/
+            rm -rf archive/archive
+          fi
+          if [ ! -f archive/index.json ]; then
+            echo "no archive index; not updating data"
+            exit 1
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Back up archive shards"
-          git push
+          git checkout --orphan data-publish
+          git rm -rf --cached .
+          git add -f archive
+          if git diff --cached --quiet; then
+            echo "archive empty; not updating data"
+            exit 1
+          fi
+          git commit -m "Archive stubs"
+          git push --force origin HEAD:data
 
   deploy:
     needs: build
