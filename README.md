@@ -83,7 +83,7 @@ One shape for every platform. The card layout does not change with the source. A
 | `author`, `handle`, `avatar`, `verifiedType` | The account shown on the card. For a repost this is the original author |
 | `repostedBy` | `{name, handle, avatar}` when `kind` is `repost` |
 | `quoted` | Embedded post: author, handle, text, date, media, verifiedType |
-| `replyingTo` | `{handle}` when this is a reply and the target is known |
+| `replyingTo` | `{name, handle, avatar, id}` when this is a reply and the target is known. `id` is the parent status id |
 | `text` | Plain text, line breaks kept. Long X notes are the full note text |
 | `date` | Display time of the original post |
 | `sortDate` | Timeline order. Set when a repost should sort by the repost time |
@@ -126,6 +126,34 @@ python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_
 Each adapter strips HTML while keeping line breaks, unescapes entities, drops trailing media links, and fills the same post and profile fields. The configured profile in `feeds.config.json` wins over a thinner profile parsed from a post.
 
 `--download-media` keeps X images hotlinked (`pbs.twimg.com`, `video.twimg.com`). It downloads only expiring Meta CDN images (Instagram and Threads), resizes them to at most 1080px, and recompresses to JPEG or WebP at about quality 80. Video files are never saved; the card keeps the remote file and a local poster. After the post cap, files in `media/` that the document no longer references are deleted. The command prints the total size of `media/`.
+
+## Replies
+
+Replies are not inlined on the home timeline. The reply count on a post opens `#/@handle/status/<id>` (or the platform equivalent). That page shows the post, a read-only reply row, then replies from `comments/<statusId>.json`. The file is loaded when the page opens. A missing file is an empty state (“Replies aren’t available for this post.”). An empty `replies` array is “No replies yet.” Counts and reply text are never invented.
+
+```json
+{
+  "postId": "2112600761762717997",
+  "platform": "x",
+  "source": "fxtwitter",
+  "replies": []
+}
+```
+
+Each reply uses the same post shape, with `kind` set to `reply` and `replyingTo` filled in. At most 50 replies are kept, highest `stats.likes` first (X’s Relevant order). The author’s own continuation stays directly under the post, with the vertical line between those avatars. On a long list the first few liked replies show, then **Show more replies**. Replies with no likes collapse behind **Show probable spam** when there are at least three of them.
+
+Home, Following, and List timelines hide `kind: reply`, except a self-reply that has another self-reply pointing at it. That post shows **Show this thread**. A profile’s **Replies** tab lists replies from that account.
+
+`update_feeds.py` refreshes comment files after it writes `feeds.json`. `--fixtures` reads `scripts/fixtures/replies/<statusId>.json` (fxtwitter conversation JSON) or `<statusId>.html` (Nitter status HTML) and does not call the network.
+
+| Platform | How replies are fetched |
+| --- | --- |
+| X | `https://api.fxtwitter.com/2/conversation/<statusId>` (`replies`, one page; cursor requests 404). If that fails, Nitter status HTML from `nitter.meowing.monster`, `nitter.kareem.one`, then `nitter.jaydenha.uk`. Those hosts currently answer with a bot check, so the HTML parser only runs when a page actually contains `tweet-content`. `api.fixupx.com` does not resolve. X API v2 search by `conversation_id` is not used here; no token is configured |
+| Threads | Public post HTML has reply counts only, no reply text. Set `THREADS_COOKIE` (a cookie header or a session id) to request the post page and read embedded `reply_threads`. The cookie is never written to disk. Without it, the post is skipped |
+| Instagram | Set `INSTAGRAM_COOKIE` to a `sessionid` value or a full cookie header. The adapter calls `https://www.instagram.com/api/v1/media/<id>/comments/` with `X-IG-App-ID`. Without the cookie, Instagram is skipped |
+| Other RSS | `wfw:commentRss` is fetched and normalized. `slash:comments` is only the count on the post |
+
+A failed fetch keeps the previous `comments/<id>.json`. Media inside X replies stays on `pbs.twimg.com` / `video.twimg.com`.
 
 ## GitHub Pages
 

@@ -5,15 +5,23 @@ from __future__ import annotations
 from .common import best_mp4, blank_profile, clean_text, post_shell, upgrade_avatar
 
 
+def _badge(kind):
+    if not kind or kind == "none":
+        return None
+    if kind == "individual":
+        return "blue"
+    return kind
+
+
 def _verified(author: dict | None):
     if not author:
         return None
     verification = author.get("verification")
-    if isinstance(verification, str) and verification not in ("", "none"):
-        return verification
+    if isinstance(verification, str):
+        return _badge(verification)
     if isinstance(verification, dict):
-        kind = verification.get("type") or verification.get("verified_type")
-        if kind and kind != "none":
+        kind = _badge(verification.get("type") or verification.get("verified_type"))
+        if kind:
             return kind
         if verification.get("verified") or verification.get("is_verified"):
             return "blue"
@@ -140,11 +148,15 @@ def _person(obj) -> dict | None:
         return _person(obj["author"])
     if not handle and not obj.get("name"):
         return None
-    return {
+    person = {
         "name": obj.get("name") or handle,
         "handle": handle,
         "avatar": upgrade_avatar(obj.get("avatar_url") or obj.get("avatar") or ""),
     }
+    status_id = obj.get("status") or obj.get("status_id")
+    if status_id:
+        person["id"] = str(status_id)
+    return person
 
 
 def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:

@@ -1,0 +1,27 @@
+{
+  "comments": [
+    {
+      "pk": "1789001",
+      "text": "Nice",
+      "created_at": 1760000000,
+      "comment_like_count": 5,
+      "user": {
+        "username": "ada",
+        "full_name": "Ada",
+        "profile_pic_url": "https://example.com/a.jpg",
+        "is_verified": true
+      }
+    },
+    {
+      "pk": "1789002",
+      "text": "Ok",
+      "created_at": 1760000100,
+      "comment_like_count": 1,
+      "user": {
+        "username": "bea",
+        "full_name": "Bea",
+        "is_verified": false
+      }
+    }
+  ]
+}

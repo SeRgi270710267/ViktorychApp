@@ -115,6 +115,14 @@ def parse(payload, feed: dict | None = None) -> dict:
             if extra["url"] not in seen:
                 media.append(extra)
                 seen.add(extra["url"])
+        comment_rss = ""
+        comment_count = None
+        for child in list(item):
+            name = local_name(child.tag)
+            if name == "commentRss":
+                comment_rss = (child.attrib.get("href") or child.attrib.get("url") or child.text or "").strip()
+            elif name == "comments" and (child.text or "").strip().isdigit():
+                comment_count = int(child.text.strip())
         quoted = None
         kind = "post"
         if parts["quotes"]:
@@ -145,6 +153,9 @@ def parse(payload, feed: dict | None = None) -> dict:
                 url=link,
                 media=media,
                 quoted=quoted,
+                stats={"replies": comment_count} if comment_count is not None else None,
             )
         )
+        if comment_rss:
+            posts[-1]["commentRss"] = comment_rss
     return {"posts": posts, "profiles": [profile]}

@@ -388,6 +388,12 @@ def main() -> None:
     count, total = media_bytes(media_dir)
     print(f"wrote {out} ({len(doc['posts'])} posts, {len(doc['feeds'])} profiles)")
     print(f"media {count} files, {total / 1024 / 1024:.2f} MB" + (f", pruned {removed}" if removed else ""))
+    try:
+        from replies import refresh
+
+        refresh(doc["posts"], args.fixtures)
+    except Exception as exc:  # a reply source failing must not wipe the feed
+        print(f"[replies] {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":

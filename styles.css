@@ -605,6 +605,106 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 .status-views { margin-top: 16px; padding: 16px 0 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 15px; }
 .status-views b { font-weight: 700; }
 .status .actions { margin-top: 4px; padding-bottom: 4px; }
+.status.has-thread { padding-bottom: 0; }
+.status-thread { display: flex; gap: 12px; align-items: stretch; }
+.status-main { flex: 1; min-width: 0; }
+.status.has-thread .status-author { align-items: flex-start; }
+
+.show-thread {
+  color: var(--blue);
+  font-size: 15px;
+  line-height: 20px;
+  display: inline-block;
+  margin-top: 2px;
+}
+.show-thread:hover { text-decoration: underline; }
+
+.composer {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.composer-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.composer-placeholder {
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 24px;
+  padding: 12px 0 4px;
+}
+.composer-bar { display: flex; justify-content: flex-end; }
+.reply-send {
+  background: var(--blue);
+  color: #fff;
+  border: 0;
+  border-radius: 9999px;
+  font-weight: 700;
+  height: 36px;
+  padding: 0 16px;
+  opacity: 0.5;
+}
+.reply-send:disabled { cursor: default; }
+.composer.bridge { position: relative; }
+.composer.bridge::before {
+  content: "";
+  position: absolute;
+  left: 35px;
+  top: -1px;
+  bottom: -13px;
+  width: 2px;
+  background: #333639;
+  z-index: 0;
+}
+.composer .ava { position: relative; z-index: 1; }
+
+.reply-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 32px 16px;
+  font-size: 15px;
+  line-height: 20px;
+}
+.reply-card { cursor: default; }
+.reply-card:hover { background: transparent; }
+.ava-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 40px;
+  flex: none;
+}
+.post.continues .post-row { align-items: stretch; }
+.thread-line {
+  width: 2px;
+  background: #333639;
+  flex: 1;
+  min-height: 12px;
+  margin-top: 4px;
+  border-radius: 1px;
+}
+.post.continues .thread-line {
+  position: absolute;
+  left: 35px;
+  top: 56px;
+  bottom: -13px;
+  margin: 0;
+  min-height: 0;
+  flex: none;
+}
+.more-replies {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--blue);
+  font-size: 15px;
+  line-height: 20px;
+  padding: 16px;
+  text-align: center;
+}
+.more-replies:hover { background: rgba(255, 255, 255, 0.03); }
+.more-replies.spam { color: var(--muted); }
 
 .empty, .error-box {
   padding: 40px 32px;

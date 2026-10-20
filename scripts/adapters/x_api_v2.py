@@ -128,16 +128,20 @@ def _text(tweet: dict, quoted_id: str | None):
 
 def _reply_target(tweet: dict, users: dict):
     refs = tweet.get("referenced_tweets") or []
-    replied = any(ref.get("type") == "replied_to" for ref in refs)
+    replied_id = next((str(ref.get("id")) for ref in refs if ref.get("type") == "replied_to" and ref.get("id")), "")
     uid = tweet.get("in_reply_to_user_id")
-    if not replied and not uid:
+    if not replied_id and not uid:
         return None
     if uid and uid in users:
-        return _brief(users[uid])
-    match = re.match(r"@([A-Za-z0-9_]{1,30})", tweet.get("text") or "")
-    if match:
-        return {"name": match.group(1), "handle": match.group(1), "avatar": ""}
-    return None
+        person = _brief(users[uid])
+    else:
+        match = re.match(r"@([A-Za-z0-9_]{1,30})", tweet.get("text") or "")
+        if not match:
+            return None
+        person = {"name": match.group(1), "handle": match.group(1), "avatar": ""}
+    if replied_id:
+        person["id"] = replied_id
+    return person
 
 
 def _convert(tweet: dict, ctx: dict, feed: dict, timeline: bool) -> dict:

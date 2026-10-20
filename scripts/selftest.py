@@ -14,7 +14,11 @@ from adapters.generic_rss import parse as parse_generic  # noqa: E402
 from adapters.nitter_rss import parse as parse_nitter  # noqa: E402
 from adapters.rsshub_instagram import parse as parse_ig  # noqa: E402
 from adapters.rsshub_threads import parse as parse_threads  # noqa: E402
+from adapters.ig_comments import parse_ig_comments  # noqa: E402
+from adapters.rss_comments import parse_comment_rss  # noqa: E402
+from adapters.threads_replies import parse_threads_replies  # noqa: E402
 from adapters.x_api_v2 import parse as parse_x  # noqa: E402
+from adapters.x_replies import _cap, parse_fxtwitter_conversation, parse_nitter_replies  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "scripts" / "fixtures"
@@ -50,6 +54,9 @@ def main() -> None:
     check(photo["media"] and photo["media"][0]["type"] == "photo", "redacted_handle photo media")
     check("t.co" not in photo["text"], "redacted_handle media t.co stripped")
     check(any(p["kind"] == "reply" and (p.get("replyingTo") or {}).get("handle") for p in redacted_handle["posts"]), "redacted_handle reply target")
+    self_reply = next(p for p in redacted_handle["posts"] if p["id"] == "2109689311088287773")
+    check((self_reply.get("replyingTo") or {}).get("handle") == "redacted_handle", "redacted_handle self reply handle")
+    check((self_reply.get("replyingTo") or {}).get("id") == "2109689309825794187", "redacted_handle self reply parent id")
 
     fx = parse_fx((FIX / "fxtwitter_sample.json").read_text(encoding="utf-8"), {"id": "x:testuser", "platform": "x", "handle": "testuser"})
     check(fx["posts"][0]["kind"] == "quote", "fxtwitter quote")
@@ -87,6 +94,38 @@ def main() -> None:
     check(any(m["url"].endswith("i.jpg") for m in post["media"]), "generic img")
     check(any(m["url"].endswith("clip.mp4") for m in post["media"]), "generic enclosure")
     check(post["kind"] == "quote", "generic blockquote")
+    check(post.get("commentRss") == "https://example.com/comments.xml", "generic commentRss")
+    check((post.get("stats") or {}).get("replies") == 2, "generic slash comments")
+
+    conv = parse_fxtwitter_conversation((FIX / "replies" / "2112600761762717997.json").read_text(encoding="utf-8"), "2112600761762717997")
+    likes = [((c.get("stats") or {}).get("likes") or 0) for c in conv]
+    check(len(conv) >= 10, "conversation has replies")
+    check(likes == sorted(likes, reverse=True), "conversation sorted by likes")
+    check(conv[0]["kind"] == "reply" and conv[0]["replyingTo"]["handle"] == "redacted_handle", "conversation reply target")
+    check(conv[0]["replyingTo"]["id"] == "2112600761762717997", "conversation reply parent id")
+    check(conv[0]["date"].startswith("2026-10-20T"), "conversation date is ISO")
+    check(conv[0]["verifiedType"] == "blue", "individual verification maps to blue")
+    check(all(c["id"] != "2112600761762717997" for c in conv), "conversation skips the parent")
+    capped = _cap([{"stats": {"likes": i}} for i in range(60)])
+    check(len(capped) == 50 and capped[0]["stats"]["likes"] == 59, "reply cap keeps the top 50 likes")
+
+    nit = parse_nitter_replies((FIX / "replies" / "nitter_sample.html").read_text(encoding="utf-8"), "2112600761762717997")
+    check(len(nit) == 2, "nitter replies")
+    check(nit[0]["handle"] == "yesknow" and "Bach" in nit[0]["text"], "nitter first reply")
+    check(nit[0]["stats"]["likes"] == 40 and nit[0]["kind"] == "reply", "nitter reply stats")
+
+    ig_replies = parse_ig_comments((FIX / "replies" / "ig_comments.json").read_text(encoding="utf-8"), {"handle": "redacted_handle", "author": "redacted_handle", "statusId": "1"})
+    check(len(ig_replies) == 2 and ig_replies[0]["stats"]["likes"] == 5, "instagram comments sorted by likes")
+    check(ig_replies[0]["verifiedType"] == "blue" and ig_replies[0]["kind"] == "reply", "instagram verified reply")
+    check(ig_replies[0]["replyingTo"]["handle"] == "redacted_handle", "instagram reply target")
+
+    th_replies = parse_threads_replies((FIX / "replies" / "threads_replies.html").read_text(encoding="utf-8"), {"handle": "redacted_handle", "author": "redacted_handle", "statusId": "DeZtp"})
+    check(len(th_replies) == 2 and th_replies[0]["stats"]["likes"] == 9, "threads replies sorted by likes")
+    check(th_replies[0]["text"] == "Wow" and th_replies[0]["kind"] == "reply", "threads reply text")
+
+    rss_replies = parse_comment_rss((FIX / "replies" / "comments.xml").read_text(encoding="utf-8"), {"handle": "example", "author": "Example", "id": "g1", "platform": "rss"})
+    check(len(rss_replies) == 2 and all(r["kind"] == "reply" for r in rss_replies), "comment rss replies")
+    check(rss_replies[0]["replyingTo"]["id"] == "g1" and rss_replies[0]["replyingTo"]["handle"] == "example", "comment rss target")
 
     # loose JSON header tolerance
     wrapped = "tool header\n" + (FIX / "x_api_v2_finkd.json").read_text(encoding="utf-8") + "\nX reads left: 1\n"

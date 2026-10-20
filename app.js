@@ -50,7 +50,9 @@
     menu: null,
     drawer: false,
     headerHidden: false,
-    confirm: null
+    confirm: null,
+    replies: {},
+    replyUi: {}
   };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
@@ -144,6 +146,17 @@
     if (direct) return direct;
     for (const post of all) {
       if (post.quoted && String(post.quoted.statusId || post.quoted.id) === String(id)) return asPost(post.quoted, post.quoted.platform || platform || "x");
+    }
+    const buckets = Object.keys(STATE.replies);
+    for (let i = 0; i < buckets.length; i++) {
+      const list = (STATE.replies[buckets[i]] && STATE.replies[buckets[i]].replies) || [];
+      for (let j = 0; j < list.length; j++) {
+        const reply = list[j];
+        if (String(reply.statusId || reply.id) !== String(id)) continue;
+        if (h && (reply.handle || "").toLowerCase() !== h) continue;
+        if (platform && reply.platform && reply.platform !== platform) continue;
+        return reply;
+      }
     }
     return null;
   }
@@ -353,8 +366,10 @@
       <button class="action ${cls}${cls === "like" && liked ? " on" : ""}${cls === "bookmark" && booked ? " on" : ""}${cls === "repost" && reposted ? " on" : ""}" data-act="${act}" data-id="${esc(id)}" aria-label="${esc(label)}">
         <span class="ic">${icon(path)}</span>${count ? `<span>${esc(count)}</span>` : ""}
       </button>`;
+    const replyCount = shownCount(stats.replies, 0);
+    const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="Replies"><span class="ic">${icon("reply")}</span>${replyCount ? `<span>${esc(replyCount)}</span>` : ""}</a>`;
     return `<div class="actions">
-      ${btn("reply", "open-status", "reply", "Reply", shownCount(stats.replies, 0))}
+      ${replyLink}
       ${btn("repost", "repost", "repost", "Repost", shownCount(stats.reposts, reposted ? 1 : 0))}
       ${btn("like", "like", liked ? "heartOn" : "heart", "Like", shownCount(stats.likes, liked ? 1 : 0))}
       ${btn("views", "open-status", "views", "Views", shownCount(stats.views, 0))}
@@ -382,15 +397,161 @@
     </div>`;
   }
 
-  function card(post, mode) {
+  function isSelfReply(post) {
+    const to = post.replyingTo && post.replyingTo.handle;
+    return post.kind === "reply" && to && to.toLowerCase() === (post.handle || "").toLowerCase();
+  }
+
+  function threadChildren(post) {
+    const id = String(post.statusId || post.id);
+    return posts().filter((other) => isSelfReply(other) && String((other.replyingTo || {}).id || "") === id);
+  }
+
+  function inTimeline(post) {
+    if (post.kind !== "reply") return true;
+    return isSelfReply(post) && threadChildren(post).length > 0;
+  }
+
+  function sameThread(parent, child) {
+    if (!parent || !child) return false;
+    if ((parent.handle || "").toLowerCase() !== (child.handle || "").toLowerCase()) return false;
+    const id = String((child.replyingTo || {}).id || "");
+    return !!id && (id === String(parent.statusId || parent.id) || id === String(parent.id));
+  }
+
+  function postKey(post) {
+    return String((post && (post.statusId || post.id)) || "");
+  }
+
+  function relevantReply(post, focus) {
+    const to = post.replyingTo;
+    if (!to || !to.handle) return false;
+    if (!focus) return true;
+    const fid = postKey(focus);
+    if (to.id && String(to.id) !== fid) return true;
+    if (!to.id && to.handle.toLowerCase() !== (focus.handle || "").toLowerCase()) return true;
+    return false;
+  }
+
+  function replyBucket(post) {
+    const id = postKey(post);
+    if (!id) return { loading: false, replies: [], missing: true };
+    const bucket = STATE.replies[id];
+    if (bucket) return bucket;
+    STATE.replies[id] = { loading: true, replies: [], missing: false };
+    fetch("comments/" + encodeURIComponent(id) + ".json", { cache: "no-cache" })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json();
+      })
+      .then((doc) => {
+        const replies = ((doc && doc.replies) || []).slice().sort((a, b) => ((b.stats && b.stats.likes) || 0) - ((a.stats && a.stats.likes) || 0));
+        STATE.replies[id] = { loading: false, replies: replies, missing: false };
+        render();
+      })
+      .catch(() => {
+        STATE.replies[id] = { loading: false, replies: [], missing: true };
+        render();
+      });
+    return STATE.replies[id];
+  }
+
+  function orderReplies(focus, shown) {
+    const used = new Set();
+    const lifted = [];
+    let cursor = focus;
+    for (let guard = 0; guard < 20; guard++) {
+      const next = shown.find((other) => !used.has(postKey(other)) && sameThread(cursor, other));
+      if (!next) break;
+      lifted.push(next);
+      used.add(postKey(next));
+      cursor = next;
+    }
+    const rest = shown.filter((other) => !used.has(postKey(other)));
+    const seen = new Set();
+    const clustered = [];
+    rest.forEach((post) => {
+      if (seen.has(postKey(post))) return;
+      clustered.push(post);
+      seen.add(postKey(post));
+      let current = post;
+      for (let guard = 0; guard < 20; guard++) {
+        const child = rest.find((other) => !seen.has(postKey(other)) && sameThread(current, other));
+        if (!child) break;
+        clustered.push(child);
+        seen.add(postKey(child));
+        current = child;
+      }
+    });
+    return lifted.concat(clustered);
+  }
+
+  function replySlice(post) {
+    const bucket = replyBucket(post);
+    if (bucket.loading) return { loading: true, shown: [], more: false, spam: false, missing: false };
+    const fetched = bucket.replies || [];
+    const have = new Set(fetched.map(postKey));
+    const extras = threadChildren(post).filter((child) => !have.has(postKey(child)));
+    const all = fetched.concat(extras).sort((a, b) => ((b.stats && b.stats.likes) || 0) - ((a.stats && a.stats.likes) || 0));
+    if (!all.length) return { loading: false, shown: [], more: false, spam: false, missing: !!bucket.missing };
+    const ui = STATE.replyUi[postKey(post)] || {};
+    let shown = all;
+    let more = false;
+    let spam = false;
+    if (all.length > 6) {
+      const liked = all.filter((reply) => ((reply.stats && reply.stats.likes) || 0) > 0);
+      const quiet = all.filter((reply) => !((reply.stats && reply.stats.likes) || 0));
+      shown = ui.more ? liked.slice() : liked.slice(0, 4);
+      if (ui.spam || quiet.length < 3) shown = shown.concat(quiet);
+      more = !ui.more && liked.length > 4;
+      spam = !ui.spam && quiet.length >= 3;
+    }
+    return { loading: false, shown: orderReplies(post, shown), more: more, spam: spam, missing: false };
+  }
+
+  function replyList(post) {
+    const slice = replySlice(post);
+    if (slice.loading) return `<div class="reply-empty">Loading replies…</div>`;
+    if (!slice.shown.length && !slice.more && !slice.spam) {
+      return `<div class="reply-empty">${slice.missing ? "Replies aren’t available for this post." : "No replies yet."}</div>`;
+    }
+    const id = postKey(post);
+    const html = slice.shown.map((reply, index) => card(reply, "reply", {
+      focus: post,
+      continues: index < slice.shown.length - 1 && sameThread(reply, slice.shown[index + 1])
+    })).join("");
+    const more = slice.more ? `<button class="more-replies" type="button" data-act="more-replies" data-id="${esc(id)}">Show more replies</button>` : "";
+    const spam = slice.spam ? `<button class="more-replies spam" type="button" data-act="spam-replies" data-id="${esc(id)}">Show probable spam</button>` : "";
+    return html + more + spam;
+  }
+
+  function composer(bridge) {
+    return `<div class="composer${bridge ? " bridge" : ""}">
+      <span class="ava initials">Y</span>
+      <div class="composer-main">
+        <div class="composer-placeholder">Post your reply</div>
+        <div class="composer-bar"><button class="reply-send" type="button" disabled>Reply</button></div>
+      </div>
+    </div>`;
+  }
+
+  function card(post, mode, opts) {
+    opts = opts || {};
     const hideRepost = mode === "author" || mode === "status";
     const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a href="${esc(profileHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
-    const reply = post.replyingTo && post.replyingTo.handle ? `<div class="replying">Replying to <a data-act="stop" href="${esc(profileHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
+    const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" href="${esc(profileHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(post.url || "")}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
-    return `<article class="post" data-open="${esc(statusHash(post))}">
+    const continues = !!opts.continues;
+    const avaLink = `<a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(post.avatar, post.author || post.handle)}</a>`;
+    const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
+    const open = mode === "reply" ? "" : ` data-open="${esc(statusHash(post))}"`;
+    const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
+      ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
+    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}"${open}>
       ${repost}
       <div class="post-row">
-        <a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(post.avatar, post.author || post.handle)}</a>
+        ${avaCol}
         <div class="post-main">
           <div class="byline">
             <a class="name" href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${esc(post.author || post.handle)}${badge(post.verifiedType)}</a>
@@ -404,6 +565,7 @@
           <div class="post-text">${textHtml(post, post.id, false)}</div>
           ${mediaHtml(post.media)}
           ${quoteCard(post.quoted)}
+          ${threadLink}
           ${actionBar(post)}
         </div>
       </div>
@@ -538,6 +700,7 @@
       const found = STATE.settings.lists.find((l) => l.id === tab.slice(5));
       list = found ? listMembersPosts(found) : [];
     }
+    list = list.filter(inTimeline);
     const body = list.length ? list.map((p) => card(p)).join("") : emptyBlock(
       tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
       tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
@@ -608,31 +771,35 @@
     ${list.length ? list.map((p) => {
       const byThis = p.repostedBy && (p.repostedBy.handle || "").toLowerCase() === (feed.handle || "").toLowerCase();
       return card(p, byThis ? "" : "author");
-    }).join("") : emptyBlock(tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : "No posts yet", "Posts from this account will show up here.")}`;
+    }).join("") : emptyBlock(tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : "No posts yet", tab === "replies" ? "Replies by this account will show up here." : "Posts from this account will show up here.")}`;
   }
 
   function statusView(route) {
     const post = findPost(route.platform, route.handle, route.id);
     if (!post) return pageHead("Post", "", true) + emptyBlock("Post unavailable", "This post isn’t in the current snapshot.");
     const stats = post.stats || {};
-    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
-      <article class="status">
-        <div class="status-author">
-          <a href="${esc(profileHash(post.platform, post.handle))}">${avatar(post.avatar, post.author)}</a>
-          <div>
-            <a class="name" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(post.verifiedType)}</a>
-            <a class="handle" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
-          </div>
-          <span style="margin-left:auto">${sourceBadge(post.platform)}</span>
-        </div>
-        ${post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a href="${esc(profileHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : ""}
+    const slice = replySlice(post);
+    const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
+    const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a href="${esc(profileHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const body = `${replyLine}
         <div class="status-text">${textHtml(post, post.id, true)}</div>
         ${mediaHtml(post.media)}
         ${quoteCard(post.quoted)}
         <div class="status-time">${esc(fullTime(post.date))}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
         ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> Views</div>` : `<div class="status-views"></div>`}
-        ${actionBar(post)}
-      </article>`;
+        ${actionBar(post)}`;
+    const names = `<div>
+            <a class="name" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(post.verifiedType)}</a>
+            <a class="handle" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
+          </div>
+          <span style="margin-left:auto">${sourceBadge(post.platform)}</span>`;
+    const article = threaded
+      ? `<article class="status has-thread"><div class="status-thread"><div class="ava-col"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(post.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
+      : `<article class="status"><div class="status-author"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(post.avatar, post.author)}</a>${names}</div>${body}</article>`;
+    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
+      ${article}
+      ${composer(threaded)}
+      ${replyList(post)}`;
   }
 
   function exploreView(route) {
@@ -672,7 +839,7 @@
   function listView(route) {
     const list = STATE.settings.lists.find((l) => l.id === route.id);
     if (!list) return pageHead("List", "", true) + emptyBlock("List not found", "It may have been deleted.");
-    const items = listMembersPosts(list);
+    const items = listMembersPosts(list).filter(inTimeline);
     return `<div class="topbar"><div class="page-head">
         <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
         <div class="head-text grow"><div class="pt-name">${esc(list.name)}</div><div class="pt-count">${(list.members || []).length} members</div></div>
@@ -882,6 +1049,15 @@
     if (act === "open-status") {
       const post = posts().find((p) => p.id === el.dataset.id);
       if (post) location.hash = statusHash(post);
+      return;
+    }
+    if (act === "more-replies" || act === "spam-replies") {
+      const id = el.dataset.id;
+      const ui = STATE.replyUi[id] || {};
+      if (act === "more-replies") ui.more = true;
+      else ui.spam = true;
+      STATE.replyUi[id] = ui;
+      render();
       return;
     }
     if (act === "play") {
