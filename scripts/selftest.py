@@ -177,6 +177,17 @@ def main() -> None:
         check(auth_cookie_header("https://www.instagram.com/p/abc/") == {}, "instagram does not get the X cookie")
     finally:
         os.environ.pop("TWITTER_AUTH_TOKEN", None)
+
+    import tempfile
+    from update_feeds import prune_comments
+
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp)
+        (folder / "keep.json").write_text("{}", encoding="utf-8")
+        (folder / "yt_keep.json").write_text("{}", encoding="utf-8")
+        (folder / "gone.json").write_text("{}", encoding="utf-8")
+        removed = prune_comments({"posts": [{"id": "keep", "statusId": "keep"}]}, folder)
+        check(removed == 1 and (folder / "keep.json").exists() and (folder / "yt_keep.json").exists() and not (folder / "gone.json").exists(), "stale comment files are pruned")
     print("all adapter checks passed")
 
 

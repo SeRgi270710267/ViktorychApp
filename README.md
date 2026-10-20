@@ -156,6 +156,54 @@ Home, Following, and List timelines hide `kind: reply`, except a self-reply that
 
 A failed fetch keeps the previous `comments/<id>.json`. Media inside X replies stays on `pbs.twimg.com` / `video.twimg.com`.
 
+## Adding an account
+
+Edit `feeds.config.json` and add an object under `feeds`. A push of that file runs the sync workflow.
+
+```json
+{
+  "id": "x:someone",
+  "platform": "x",
+  "handle": "someone",
+  "adapter": "fxtwitter",
+  "source_urls": ["{fxtwitterBase}/2/profile/someone/statuses"],
+  "fallbacks": [
+    {
+      "adapter": "nitter_rss",
+      "source_urls": [
+        "https://nitter.meowing.monster/{handle}/rss",
+        "https://nitter.kareem.one/{handle}/rss",
+        "https://nitter.jaydenha.uk/{handle}/rss"
+      ]
+    }
+  ],
+  "limit": 8,
+  "profile": { "name": "Someone", "url": "https://x.com/someone" }
+}
+```
+
+`id` is what Follow stores (`platform:handle`). `adapter` is one of the names in the table above. Instagram uses `rsshub_instagram` and `{rsshubBase}/instagram/user/{handle}`. Threads uses `rsshub_threads` and `{rsshubBase}/threads/{handle}`. Other sites use `generic_rss` and the feed URL. `limit` is how many new items to keep from each fetch. The configured `profile` fills in name, avatar, and bio when the feed is thin.
+
+The new account is followed in a fresh browser. An existing browser keeps its saved follow list until you follow the account from the Feeds page.
+
+## Optional secrets
+
+The sync runs without any secrets. Add these only as repository Actions secrets (Settings → Secrets and variables → Actions). They are passed to the job as environment variables when the secret exists, and the workflow never prints them.
+
+| Secret | Used for |
+| --- | --- |
+| `INSTAGRAM_COOKIE` | Last resort for Instagram comments, after the public sources miss. A `sessionid` value or a full cookie header |
+| `THREADS_COOKIE` | Last resort for Threads replies, after the public page and RSSHub miss |
+| `TWITTER_AUTH_TOKEN` | Optional `auth_token` cookie sent only to Nitter and to RSSHub `/twitter` or `/x` routes |
+
+The sync does not call `api.x.com` or `api.twitter.com` and does not read a bearer token.
+
+## GitHub Actions
+
+`.github/workflows/sync.yml` refreshes `feeds.json` and `comments/` every 30 minutes, on **Run workflow**, and whenever `feeds.config.json` changes. The job starts RSSHub (`diygod/rsshub` on port 1200) and RSS-Bridge (`rssbridge/rss-bridge` on port 8080). Instagram and Threads try the local RSSHub container, then the public RSSHub mirrors in `feeds.config.json`, then RSS-Bridge. X tries fxtwitter, then the Nitter mirrors. One failed source keeps that feed’s previous posts and does not fail the run.
+
+The job commits only when `feeds.json` or `comments/` changed. The author is `github-actions[bot]`. Files under `media/` are not committed, and comment files for posts that are no longer in `feeds.json` are deleted. Overlapping runs wait instead of running together. A push to `main` is what GitHub Pages (deploy from the `main` branch) rebuilds.
+
 ## GitHub Pages
 
-Serve the repository root. `.nojekyll` is present so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`, `media/…`), so the site works at `/` or under `/rss-feeds/`.
+Serve the repository root. `.nojekyll` is present so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`, `media/…`), so the site works at `/` or under `/rss-feeds/`. Deploy from the `main` branch. A push to that branch, including one from `github-actions[bot]`, starts a Pages build.

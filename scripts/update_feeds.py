@@ -273,6 +273,28 @@ def prune_media(dest: Path, doc: dict) -> int:
     return removed
 
 
+def prune_comments(doc: dict, comments_dir: Path | None = None) -> int:
+    """Drop comment files that no longer belong to a post in the document."""
+    comments_dir = comments_dir or (ROOT / "comments")
+    keep = set()
+    for post in doc.get("posts") or []:
+        for key in (post.get("id"), post.get("statusId")):
+            if not key:
+                continue
+            keep.add(str(key))
+            keep.add("yt_" + str(key))
+    if not comments_dir.is_dir():
+        return 0
+    removed = 0
+    for path in comments_dir.glob("*.json"):
+        if path.stem not in keep:
+            path.unlink()
+            removed += 1
+    if removed:
+        print(f"[comments] pruned {removed} old file{'s' if removed != 1 else ''}")
+    return removed
+
+
 def media_bytes(dest: Path) -> tuple[int, int]:
     if not dest.is_dir():
         return 0, 0
@@ -410,6 +432,7 @@ def main() -> None:
         save_document(out, doc)
     except Exception as exc:  # a reply source failing must not wipe the feed
         print(f"[replies] {exc}", file=sys.stderr)
+    prune_comments(doc)
 
 
 if __name__ == "__main__":

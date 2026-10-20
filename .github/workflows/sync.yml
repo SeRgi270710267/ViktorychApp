@@ -1,0 +1,78 @@
+name: Sync feeds
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - feeds.config.json
+
+concurrency:
+  group: feed-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    services:
+      rsshub:
+        image: diygod/rsshub
+        ports:
+          - 1200:1200
+      rssbridge:
+        image: rssbridge/rss-bridge
+        ports:
+          - 8080:80
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Wait for local feed services
+        run: |
+          python3 - <<'PY'
+          import socket, time
+          def open_port(port):
+              sock = socket.socket()
+              sock.settimeout(2)
+              try:
+                  sock.connect(("127.0.0.1", port))
+                  return True
+              except OSError:
+                  return False
+              finally:
+                  sock.close()
+          for label, port in (("rsshub", 1200), ("rss-bridge", 8080)):
+              ready = False
+              for _ in range(40):
+                  if open_port(port):
+                      ready = True
+                      break
+                  time.sleep(3)
+              print(f"{label} {'ready' if ready else 'not ready; later fallbacks will be tried'}")
+          PY
+
+      - name: Refresh feeds
+        env:
+          INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
+          THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}
+          TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
+        run: python3 scripts/update_feeds.py
+
+      - name: Commit feed data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- feeds.json comments
+          if git diff --cached --quiet; then
+            echo "No changes in feeds.json or comments/."
+            exit 0
+          fi
+          git commit -m "Update feeds and comments"
+          git push
