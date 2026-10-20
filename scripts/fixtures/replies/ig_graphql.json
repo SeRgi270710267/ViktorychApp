@@ -1,0 +1,30 @@
+{
+  "data": {
+    "xdt_shortcode_media": {
+      "shortcode": "DeZgzTEggQe",
+      "edge_media_to_parent_comment": {
+        "count": 42,
+        "edges": [
+          {
+            "node": {
+              "id": "c1",
+              "text": "Nice melon",
+              "created_at": 1760000000,
+              "owner": {"username": "ada", "is_verified": true, "profile_pic_url": "https://example.com/a.jpg"},
+              "edge_liked_by": {"count": 5}
+            }
+          },
+          {
+            "node": {
+              "id": "c2",
+              "text": "Ok",
+              "created_at": 1760000001,
+              "owner": {"username": "bea"},
+              "edge_liked_by": {"count": 1}
+            }
+          }
+        ]
+      }
+    }
+  }
+}

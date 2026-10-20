@@ -392,6 +392,7 @@ def main() -> None:
         from replies import refresh
 
         refresh(doc["posts"], args.fixtures)
+        save_document(out, doc)
     except Exception as exc:  # a reply source failing must not wipe the feed
         print(f"[replies] {exc}", file=sys.stderr)
 
