@@ -746,15 +746,24 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
   justify-content: center;
   padding: 5vh 16px;
 }
-.share-sheet {
-  width: min(320px, 100%);
+.share-back {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: transparent;
+}
+.share-pop {
+  position: fixed;
+  width: max-content;
+  min-width: 260px;
+  max-width: min(340px, calc(100vw - 24px));
   background: #000;
   border-radius: 16px;
   overflow: hidden;
   box-shadow: rgba(255, 255, 255, 0.2) 0 0 15px, rgba(255, 255, 255, 0.15) 0 0 3px 1px;
+  padding: 4px 0;
 }
-.share-sheet h2 { margin: 0; padding: 16px 16px 8px; font-size: 20px; line-height: 24px; }
-.share-sheet button, .share-sheet a {
+.share-pop button, .share-pop a {
   display: flex;
   width: 100%;
   align-items: center;
@@ -765,13 +774,35 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
   text-align: left;
   font-size: 15px;
   font-weight: 700;
-  padding: 14px 16px;
+  padding: 12px 16px;
+  min-height: 44px;
+  white-space: nowrap;
 }
-.share-sheet button:hover, .share-sheet a:hover { background: rgba(231, 233, 234, 0.1); }
-.share-sheet svg { width: 18px; height: 18px; fill: currentColor; }
+.share-pop button:hover, .share-pop a:hover { background: rgba(231, 233, 234, 0.1); }
+.share-pop svg { width: 18.75px; height: 18.75px; fill: currentColor; flex: none; }
+.share-grab { display: none; }
+.share-rule { height: 1px; background: var(--line); margin: 4px 0; }
 @media (max-width: 499px) {
-  .modal-back:has(.share-sheet) { align-items: flex-end; padding: 0; }
-  .share-sheet { width: 100%; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .share-back { background: rgba(91, 112, 131, 0.4); }
+  .share-pop {
+    top: auto !important;
+    left: 0 !important;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    border-radius: 16px 16px 0 0;
+    padding: 0 0 env(safe-area-inset-bottom);
+  }
+  .share-grab {
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: #3e4144;
+    margin: 8px auto 4px;
+  }
 }
 .modal {
   width: min(600px, 100%);

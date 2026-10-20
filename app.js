@@ -37,6 +37,7 @@
     pin: "M16 3H8v2l1 5-3 3v2h5v6l1 1 1-1v-6h5v-2l-3-3 1-5V3z",
     loc: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5 2.5 2.5 0 0 1 12 11.5z",
     link: "M10.6 13.4a1 1 0 0 1 0-1.4l3.4-3.4a2.5 2.5 0 0 1 3.5 3.5l-1.8 1.8-1.4-1.4 1.8-1.8a.5.5 0 0 0-.7-.7l-3.4 3.4a.5.5 0 0 0 0 .7l.2.2-1.4 1.4-.2-.3zm2.8-2.8 1.4 1.4-3.4 3.4a.5.5 0 0 1-.7-.7l1.3-1.3-1.4-1.4-1.3 1.3a2.5 2.5 0 0 0 3.5 3.5l3.4-3.4a2.5 2.5 0 0 0-3.5-3.5l-.3.3z",
+    external: "M10 6H5.5C4.12 6 3 7.12 3 8.5v10C3 19.88 4.12 21 5.5 21h10c1.38 0 2.5-1.12 2.5-2.5V14h-2v4.5c0 .28-.22.5-.5.5h-10a.5.5 0 0 1-.5-.5v-10c0-.28.22-.5.5-.5H10V6zm4 0V4h7v7h-2V7.41l-7.29 7.3-1.42-1.42L17.58 6H14z",
     cal: "M7 2h2v2h6V2h2v2h3v16H4V4h3V2zm13 6H4v10h16V8z",
     ig: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm5 4.2A4.8 4.8 0 1 0 16.8 12 4.8 4.8 0 0 0 12 7.2zm6.3-.8a1.15 1.15 0 1 0 1.15 1.15A1.15 1.15 0 0 0 18.3 6.4zM12 9.3A2.7 2.7 0 1 1 9.3 12 2.7 2.7 0 0 1 12 9.3z",
     threads: "M12.2 3C7.8 3 4.6 6.2 4.6 10.8c0 2.3.8 4.3 2.2 5.8l-1 3.2 3.3-1.2c.9.3 1.9.5 2.9.5 4.5 0 7.8-3.2 7.8-7.6C19.8 6.4 16.6 3 12.2 3zm0 2.2c3.2 0 5.4 2.3 5.4 5.5 0 1.5-.5 2.8-1.4 3.8-.3-2.3-1.8-4-4-4.6.8-.4 1.3-1.1 1.3-2 0-1.3-1.1-2.2-2.6-2.2-1.7 0-2.9 1.1-3.1 2.7H6.2c.3-2.6 2.6-4.6 5.9-4.6-.1 0 .1 0 .1 1.4zm-.4 4.2c1.6.2 2.8 1.3 3.1 3-.6.5-1.4.8-2.3.8-1.5 0-2.6-.8-3-2 .7-.3 1.4-.6 2.2-.8z",
@@ -63,7 +64,9 @@
     threadsOpen: {},
     playerAlt: {},
     disliked: {},
-    share: null
+    share: null,
+    shared: {},
+    sharedState: {}
   };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
@@ -120,6 +123,14 @@
     return `#/${encodeURIComponent(platform)}/${encodeURIComponent(handle)}/status/${encodeURIComponent(id)}`;
   }
 
+  function sitePermalink(hash) {
+    const url = new URL(location.href);
+    if (url.pathname.endsWith("/index.html")) url.pathname = url.pathname.slice(0, -"index.html".length);
+    url.search = "";
+    const clean = hash.startsWith("#") ? hash : "#" + hash;
+    return url.origin + url.pathname + clean;
+  }
+
   function findFeed(platform, handle) {
     const h = (handle || "").toLowerCase();
     return feeds().find((f) => f.platform === platform && (f.handle || "").toLowerCase() === h);
@@ -150,6 +161,8 @@
   }
 
   function findPost(platform, handle, id) {
+    const shared = STATE.shared[String(id)];
+    if (shared) return shared;
     const h = (handle || "").toLowerCase();
     const all = posts();
     const direct = all.find((p) => (p.platform === platform) && String(p.statusId || p.id) === String(id) && (!h || (p.handle || "").toLowerCase() === h))
@@ -555,7 +568,7 @@
     const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a href="${esc(profileHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
     const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" href="${esc(profileHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(post.url || "")}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(sitePermalink(statusHash(post)))}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const avaLink = `<a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(face.avatar, post.author || post.handle)}</a>`;
@@ -593,11 +606,13 @@
   }
 
   function parseRoute() {
-    let hash = decodeURIComponent(location.hash || "#/");
+    const hash = location.hash || "#/";
     const qAt = hash.indexOf("?");
     const query = qAt >= 0 ? new URLSearchParams(hash.slice(qAt + 1)) : new URLSearchParams();
     const path = (qAt >= 0 ? hash.slice(0, qAt) : hash).replace(/^#/, "") || "/";
-    const parts = path.split("/").filter(Boolean);
+    const parts = path.split("/").filter(Boolean).map((part) => {
+      try { return decodeURIComponent(part); } catch (err) { return part; }
+    });
     if (!parts.length || parts[0] === "home") return { name: "home", tab: parts[1] === "following" ? "following" : parts[1] === "tab" ? "list:" + parts[2] : "foryou", query };
     if (parts[0] === "following") return { name: "home", tab: "following", query };
     if (parts[0] === "subscriptions") return { name: "subscriptions", channel: query.get("c") || "", query };
@@ -779,6 +794,7 @@
       <div class="pava-row">
         ${avatar(feed.avatar, feed.name, "pava")}
         <div class="pactions">
+          <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(feed.id)}" aria-label="Share">${icon("share")}</button>
           ${followButtonClean(feed.id, true)}
           <a class="outline" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(feed))}">View on ${esc(PLATFORM[feed.platform] || "web")}</a>
         </div>
@@ -798,7 +814,17 @@
 
   function statusView(route) {
     const post = findPost(route.platform, route.handle, route.id);
-    if (!post) return pageHead("Post", "", true) + emptyBlock("Post unavailable", "This post isn’t in the current snapshot.");
+    if (!post) {
+      const key = String(route.id);
+      if (STATE.sharedState[key] !== "miss") {
+        if (STATE.sharedState[key] !== "loading") {
+          STATE.sharedState[key] = "loading";
+          loadSharedStatus(route);
+        }
+        return pageHead("Post", "", true) + `<div class="reply-empty">Loading…</div>`;
+      }
+      return pageHead("Post", "", true) + emptyBlock("Post unavailable", "This post isn’t in the current snapshot.");
+    }
     const stats = post.stats || {};
     const slice = replySlice(post);
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
@@ -1173,7 +1199,7 @@
               <button class="pill${liked ? " on" : ""}" type="button" data-act="like" data-id="${esc(post.id)}" aria-label="Like">${icon("thumb")}${likeCount ? `<span>${esc(likeCount)}</span>` : ""}</button>
               <button class="pill${disliked ? " on" : ""}" type="button" data-act="dislike" data-id="${esc(post.id)}" aria-label="Dislike">${icon("thumbDown")}${dislikeCount ? `<span>${esc(dislikeCount)}</span>` : ""}</button>
             </div>
-            <button class="pill" type="button" data-act="share" data-id="${esc(post.id)}">${icon("share")}<span>Share</span></button>
+            <button class="pill" type="button" data-act="share" data-kind="watch" data-id="${esc(post.id)}">${icon("share")}<span>Share</span></button>
             <button class="pill${booked ? " on" : ""}" type="button" data-act="bookmark" data-id="${esc(post.id)}">${icon(booked ? "bookmarkOn" : "bookmark")}<span>${booked ? "Saved" : "Save"}</span></button>
           </div>
           <div class="desc${openDesc || !desc ? "" : " clamped"}">
@@ -1187,19 +1213,121 @@
       </div>`;
   }
 
+  function findComment(items, id) {
+    const key = String(id);
+    for (const item of items || []) {
+      if (!item || typeof item !== "object") continue;
+      if (String(item.id) === key || String(item.statusId || "") === key) return item;
+      if (Array.isArray(item.replies)) {
+        const nested = findComment(item.replies, key);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  }
+
+  function commentRows(data) {
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== "object") return [];
+    return []
+      .concat(Array.isArray(data.comments) ? data.comments : [])
+      .concat(Array.isArray(data.replies) ? data.replies : [])
+      .concat(Array.isArray(data.newest) ? data.newest : []);
+  }
+
+  function findAnyPost(id) {
+    const key = String(id || "");
+    if (!key) return null;
+    if (STATE.shared[key]) return STATE.shared[key];
+    const direct = posts().find((item) => item.id === key || postKey(item) === key);
+    if (direct) return direct;
+    const buckets = Object.keys(STATE.replies);
+    for (let i = 0; i < buckets.length; i++) {
+      const bucket = STATE.replies[buckets[i]] || {};
+      const found = findComment(commentRows(bucket.doc).concat(bucket.replies || []), key);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function shareContext() {
+    const share = STATE.share;
+    if (!share) return null;
+    if (share.kind === "profile") {
+      const feed = feedById(share.id);
+      if (!feed) return null;
+      const original = externalProfile(feed);
+      return {
+        permalink: sitePermalink(profileHash(feed.platform, feed.handle)),
+        original: original && original !== "#" ? original : "",
+        title: feed.name || feed.handle || "",
+        text: feed.bio || feed.name || "",
+        platform: PLATFORM[feed.platform] || "web",
+        via: "Share profile via…"
+      };
+    }
+    const post = findAnyPost(share.id);
+    if (!post) return null;
+    const hash = share.kind === "watch" ? watchHash(post) : statusHash(post);
+    return {
+      permalink: sitePermalink(hash),
+      original: post.url || "",
+      title: post.title || post.author || "",
+      text: post.text || post.title || "",
+      platform: PLATFORM[post.platform] || "web",
+      via: "Share post via…"
+    };
+  }
+
+  function sharePlace(anchor, rows) {
+    const width = 320;
+    const height = rows * 48 + 16;
+    let left = anchor.left;
+    if (left + width > window.innerWidth - 12) left = window.innerWidth - width - 12;
+    if (left < 12) left = 12;
+    const spaceBelow = window.innerHeight - anchor.bottom;
+    const spaceAbove = anchor.top;
+    const top = spaceBelow >= height || spaceBelow >= spaceAbove ? anchor.bottom + 6 : Math.max(12, anchor.top - height - 6);
+    return `top:${Math.round(top)}px;left:${Math.round(left)}px`;
+  }
+
   function shareSheet() {
-    const id = STATE.share;
-    if (!id) return "";
-    const post = posts().find((item) => item.id === id || postKey(item) === id);
-    if (!post) return "";
-    const url = post.url || "";
-    const label = PLATFORM[post.platform] || "web";
-    return `<div class="modal-back" data-act="close-share"><div class="share-sheet" data-act="stop" role="dialog" aria-label="Share">
-      <h2>Share</h2>
-      <button type="button" data-act="copy" data-url="${esc(url)}">${icon("link")} Copy link</button>
-      <button type="button" data-act="native-share" data-url="${esc(url)}" data-title="${esc(post.title || post.text || "")}">${icon("share")} Share via…</button>
-      ${url ? `<a target="_blank" rel="noopener noreferrer" href="${esc(url)}">${icon("link")} View on ${esc(label)}</a>` : ""}
+    const ctx = shareContext();
+    if (!ctx || !STATE.share) return "";
+    const canNative = typeof navigator.share === "function";
+    const original = ctx.original && ctx.original !== ctx.permalink ? ctx.original : "";
+    const rows = 1 + (canNative ? 1 : 0) + (original ? 2 : 0);
+    const place = STATE.share.anchor ? sharePlace(STATE.share.anchor, rows) : "top:72px;left:16px";
+    const via = canNative ? `<button type="button" role="menuitem" data-act="native-share">${icon("share")} ${esc(ctx.via)}</button>` : "";
+    const extra = original ? `<div class="share-rule"></div>
+      <button type="button" role="menuitem" data-act="copy" data-copy="original" data-url="${esc(original)}">${icon("link")} Copy original link</button>
+      <a role="menuitem" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(original)}">${icon("external")} Open original on ${esc(ctx.platform)}</a>` : "";
+    return `<div class="share-back" data-act="close-share"><div class="share-pop" data-act="stop" role="menu" aria-label="Share" style="${place}">
+      <div class="share-grab" aria-hidden="true"></div>
+      <button type="button" role="menuitem" data-act="copy" data-copy="site" data-url="${esc(ctx.permalink)}">${icon("link")} Copy link</button>
+      ${via}
+      ${extra}
     </div></div>`;
+  }
+
+  function loadSharedStatus(route) {
+    const key = String(route.id);
+    fetch("comments/lookup.json", { cache: "no-cache" })
+      .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
+      .then((lookup) => {
+        const stem = lookup && lookup[key];
+        if (!stem) throw new Error("missing");
+        return fetch("comments/" + encodeURIComponent(stem) + ".json", { cache: "no-cache" })
+          .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
+          .then((data) => {
+            const found = findComment(commentRows(data), key);
+            if (!found) throw new Error("missing");
+            STATE.shared[key] = found;
+            STATE.sharedState[key] = "ok";
+          });
+      })
+      .catch(() => { STATE.sharedState[key] = "miss"; })
+      .then(() => render());
   }
 
   function view(route) {
@@ -1342,32 +1470,47 @@
     }
     if (act === "menu") { STATE.menu = STATE.menu === el.dataset.id ? null : el.dataset.id; render(); return; }
     if (act === "share") {
+      const kind = el.dataset.kind || "post";
+      const id = el.dataset.id;
+      const key = kind + ":" + id;
       STATE.menu = null;
-      STATE.share = STATE.share === el.dataset.id ? null : el.dataset.id;
+      if (STATE.share && STATE.share.key === key) {
+        STATE.share = null;
+        render();
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      STATE.share = { key: key, kind: kind, id: id, anchor: { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right } };
       render();
       return;
     }
     if (act === "close-share") { STATE.share = null; render(); return; }
     if (act === "native-share") {
-      const url = el.dataset.url || "";
-      const title = el.dataset.title || document.title;
+      const ctx = shareContext();
       const finish = () => { STATE.share = null; render(); };
-      if (navigator.share && url) {
-        navigator.share({ title: title, url: url }).then(finish).catch(finish);
+      if (ctx && typeof navigator.share === "function") {
+        navigator.share({ title: ctx.title, text: ctx.text, url: ctx.permalink }).then(finish).catch(finish);
         return;
       }
-      if (navigator.clipboard && url) navigator.clipboard.writeText(url).catch(() => {});
-      toast("Copied");
       finish();
       return;
     }
     if (act === "copy") {
-      const url = el.dataset.url || location.href;
-      if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {});
+      const ctx = shareContext();
+      const url = el.dataset.copy === "original" && ctx ? ctx.original : (el.dataset.url || (ctx ? ctx.permalink : location.href));
+      const write = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(url) : Promise.reject();
+      write.catch(() => {
+        const area = document.createElement("textarea");
+        area.value = url;
+        document.body.appendChild(area);
+        area.select();
+        try { document.execCommand("copy"); } catch (err) { /* ignore */ }
+        area.remove();
+      });
       STATE.menu = null;
       STATE.share = null;
       render();
-      toast("Copied");
+      toast("Copied to clipboard");
       return;
     }
     if (act === "open-status") {

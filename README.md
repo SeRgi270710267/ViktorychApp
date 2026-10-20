@@ -158,7 +158,7 @@ Home, Following, and List timelines hide `kind: reply`, except a self-reply that
 
 A failed fetch keeps the previous `comments/<id>.json`. Media inside X replies stays on `pbs.twimg.com` / `video.twimg.com`.
 
-Subscriptions (`#/subscriptions`) lists videos from accounts you follow: YouTube channels, plus video posts from X, Instagram, and Threads. A video opens `#/watch/<platform>:<id>`. YouTube plays from `youtube-nocookie.com`, with an alternate Invidious stream when one was stored. Other platforms use the video file. Comments load from `comments/` when you open the watch page. Share on a post or on the watch page opens a menu to copy the link, use the device share sheet, or open the original.
+Subscriptions (`#/subscriptions`) lists videos from accounts you follow: YouTube channels, plus video posts from X, Instagram, and Threads. A video opens `#/watch/<platform>:<id>`. YouTube plays from `youtube-nocookie.com`, with an alternate Invidious stream when one was stored. Other platforms use the video file. Comments load from `comments/` when you open the watch page. Share on a post, reply, profile, or the watch page opens X’s menu: a dropdown on a wide screen and a bottom sheet on a phone. Copy link and Share post via… use this site’s permalink (`#/@handle/status/id`, or the profile or watch route). Copy original link and Open original on the platform use the source URL. Share via… is hidden when the browser has no share sheet. Crawlers only see the generic preview in `index.html`, because each post is a hash route.
 
 ## Adding an account
 

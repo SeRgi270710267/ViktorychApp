@@ -288,12 +288,59 @@ def prune_comments(doc: dict, comments_dir: Path | None = None) -> int:
         return 0
     removed = 0
     for path in comments_dir.glob("*.json"):
+        if path.name == "lookup.json":
+            continue
         if path.stem not in keep:
             path.unlink()
             removed += 1
     if removed:
         print(f"[comments] pruned {removed} old file{'s' if removed != 1 else ''}")
     return removed
+
+
+def _comment_rows(data) -> list:
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        return []
+    rows = []
+    for key in ("comments", "replies", "newest"):
+        value = data.get(key)
+        if isinstance(value, list):
+            rows.extend(value)
+    return rows
+
+
+def write_comment_lookup(comments_dir: Path | None = None) -> int:
+    """Map a reply id to the comment file that contains it, for fresh permalinks."""
+    comments_dir = comments_dir or (ROOT / "comments")
+    lookup: dict[str, str] = {}
+    if comments_dir.is_dir():
+        def walk(items: list, stem: str) -> None:
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                key = str(item.get("statusId") or item.get("id") or "")
+                if key:
+                    lookup[key] = stem
+                nested = item.get("replies")
+                if isinstance(nested, list):
+                    walk(nested, stem)
+
+        for path in comments_dir.glob("*.json"):
+            if path.name == "lookup.json":
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            walk(_comment_rows(data), path.stem)
+    comments_dir.mkdir(parents=True, exist_ok=True)
+    (comments_dir / "lookup.json").write_text(
+        json.dumps(lookup, ensure_ascii=False, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    return len(lookup)
 
 
 def media_bytes(dest: Path) -> tuple[int, int]:
@@ -462,6 +509,8 @@ def main() -> None:
     except Exception as exc:  # a reply source failing must not wipe the feed
         print(f"[replies] {exc}", file=sys.stderr)
     prune_comments(doc)
+    indexed = write_comment_lookup()
+    print(f"[comments] lookup {indexed} replies")
 
 
 if __name__ == "__main__":

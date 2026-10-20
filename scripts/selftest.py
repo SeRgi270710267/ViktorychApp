@@ -180,16 +180,21 @@ def main() -> None:
     finally:
         os.environ.pop("TWITTER_AUTH_TOKEN", None)
 
+    import json as jsonlib
     import tempfile
-    from update_feeds import prune_comments
+    from update_feeds import prune_comments, write_comment_lookup
 
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
-        (folder / "keep.json").write_text("{}", encoding="utf-8")
+        (folder / "keep.json").write_text(jsonlib.dumps({"replies": [{"id": "r1", "replies": [{"statusId": "r2"}]}]}), encoding="utf-8")
         (folder / "yt_keep.json").write_text("{}", encoding="utf-8")
         (folder / "gone.json").write_text("{}", encoding="utf-8")
+        (folder / "lookup.json").write_text("{}", encoding="utf-8")
         removed = prune_comments({"posts": [{"id": "keep", "statusId": "keep"}]}, folder)
-        check(removed == 1 and (folder / "keep.json").exists() and (folder / "yt_keep.json").exists() and not (folder / "gone.json").exists(), "stale comment files are pruned")
+        check(removed == 1 and (folder / "keep.json").exists() and (folder / "yt_keep.json").exists() and (folder / "lookup.json").exists() and not (folder / "gone.json").exists(), "stale comment files are pruned")
+        count = write_comment_lookup(folder)
+        lookup = jsonlib.loads((folder / "lookup.json").read_text(encoding="utf-8"))
+        check(count == 2 and lookup.get("r1") == "keep" and lookup.get("r2") == "keep", "reply lookup points at the comment file")
 
     yt = parse_youtube((FIX / "youtube_mkbhd.xml").read_text(encoding="utf-8"), {"id": "youtube:mkbhd", "platform": "youtube", "handle": "mkbhd", "channelId": "UCBJycsmduvYEL83R_U4JriQ"})
     first = yt["posts"][0]
