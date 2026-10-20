@@ -367,16 +367,18 @@
     const platform = quoted.platform || "x";
     const href = quoted.url && !quoted.handle ? quoted.url : (quoted.handle ? statusHash(asPost(quoted, platform)) : (quoted.url || "#"));
     const external = href.startsWith("http");
-    return `<a class="quote" href="${esc(href)}" ${external ? 'target="_blank" rel="noopener noreferrer" data-act="stop"' : ""}>
+    const open = external ? ` data-href="${esc(href)}"` : ` data-open="${esc(href)}"`;
+    const key = "q:" + (quoted.statusId || quoted.id || "x");
+    return `<div class="quote"${open}>
       <div class="quote-head">
         ${avatar(quoted.avatar, quoted.author || quoted.handle)}
         <span class="name">${esc(quoted.author || quoted.handle || "Post")}${badge(quoted.verifiedType)}</span>
         ${quoted.handle ? `<span class="handle">@${esc(quoted.handle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
-      <div class="quote-text">${textHtml(quoted, (quoted.id || "q") + ":q", false)}</div>
+      ${quoted.text ? `<div class="quote-text">${textHtml(quoted, key, false)}</div>` : ""}
       ${mediaHtml(quoted.media)}
-    </a>`;
+    </div>`;
   }
 
   function card(post, mode) {
@@ -975,8 +977,10 @@
       return;
     }
     if (event.target.closest("a, button, video, input, textarea, label")) return;
-    const post = event.target.closest("[data-open]");
-    if (post) location.hash = post.dataset.open;
+    const post = event.target.closest("[data-href], [data-open]");
+    if (!post) return;
+    if (post.dataset.href) window.open(post.dataset.href, "_blank", "noopener,noreferrer");
+    else location.hash = post.dataset.open;
   });
 
   document.addEventListener("input", (event) => {

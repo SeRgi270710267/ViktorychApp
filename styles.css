@@ -374,11 +374,30 @@ img { max-width: 100%; }
   border-radius: 16px;
   overflow: hidden;
   padding: 12px;
+  cursor: pointer;
+  color: inherit;
 }
 .quote:hover { background: rgba(255, 255, 255, 0.03); }
-.quote-head { display: flex; align-items: center; gap: 4px; min-width: 0; margin-bottom: 2px; }
-.quote .ava, .quote .initials { width: 20px; height: 20px; font-size: 11px; }
-.quote .media { margin-top: 8px; }
+.quote-head { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.quote-head .name {
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.quote-head .handle {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.quote-head .dot, .quote-head .time { color: var(--muted); flex: none; }
+.quote-text { margin-top: 2px; }
+.quote .ava, .quote .ava img, .quote .initials { width: 20px; height: 20px; font-size: 11px; }
+.quote .media { margin-top: 12px; }
 
 .actions {
   display: flex;
