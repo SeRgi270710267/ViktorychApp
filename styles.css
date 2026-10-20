@@ -746,6 +746,33 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
   justify-content: center;
   padding: 5vh 16px;
 }
+.share-sheet {
+  width: min(320px, 100%);
+  background: #000;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: rgba(255, 255, 255, 0.2) 0 0 15px, rgba(255, 255, 255, 0.15) 0 0 3px 1px;
+}
+.share-sheet h2 { margin: 0; padding: 16px 16px 8px; font-size: 20px; line-height: 24px; }
+.share-sheet button, .share-sheet a {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 14px 16px;
+}
+.share-sheet button:hover, .share-sheet a:hover { background: rgba(231, 233, 234, 0.1); }
+.share-sheet svg { width: 18px; height: 18px; fill: currentColor; }
+@media (max-width: 499px) {
+  .modal-back:has(.share-sheet) { align-items: flex-end; padding: 0; }
+  .share-sheet { width: 100%; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+}
 .modal {
   width: min(600px, 100%);
   background: #000;

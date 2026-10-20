@@ -62,7 +62,8 @@
     commentSort: {},
     threadsOpen: {},
     playerAlt: {},
-    disliked: {}
+    disliked: {},
+    share: null
   };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
@@ -953,7 +954,7 @@
     const wide = route.name === "subscriptions" || route.name === "watch";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
     const top = route.name === "explore" ? 124 : tall ? 106 : 53;
-    return `<div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${modal()}`;
+    return `<div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}`;
   }
 
   function watchHash(post) {
@@ -1162,7 +1163,7 @@
               <button class="pill${liked ? " on" : ""}" type="button" data-act="like" data-id="${esc(post.id)}" aria-label="Like">${icon("thumb")}${likeCount ? `<span>${esc(likeCount)}</span>` : ""}</button>
               <button class="pill${disliked ? " on" : ""}" type="button" data-act="dislike" data-id="${esc(post.id)}" aria-label="Dislike">${icon("thumbDown")}${dislikeCount ? `<span>${esc(dislikeCount)}</span>` : ""}</button>
             </div>
-            <button class="pill" type="button" data-act="copy" data-url="${esc(post.url || watchHash(post))}">${icon("share")}<span>Share</span></button>
+            <button class="pill" type="button" data-act="share" data-id="${esc(post.id)}">${icon("share")}<span>Share</span></button>
             <button class="pill${booked ? " on" : ""}" type="button" data-act="bookmark" data-id="${esc(post.id)}">${icon(booked ? "bookmarkOn" : "bookmark")}<span>${booked ? "Saved" : "Save"}</span></button>
           </div>
           <div class="desc${openDesc || !desc ? "" : " clamped"}">
@@ -1174,6 +1175,21 @@
         </div>
         ${upHtml}
       </div>`;
+  }
+
+  function shareSheet() {
+    const id = STATE.share;
+    if (!id) return "";
+    const post = posts().find((item) => item.id === id || postKey(item) === id);
+    if (!post) return "";
+    const url = post.url || "";
+    const label = PLATFORM[post.platform] || "web";
+    return `<div class="modal-back" data-act="close-share"><div class="share-sheet" data-act="stop" role="dialog" aria-label="Share">
+      <h2>Share</h2>
+      <button type="button" data-act="copy" data-url="${esc(url)}">${icon("link")} Copy link</button>
+      <button type="button" data-act="native-share" data-url="${esc(url)}" data-title="${esc(post.title || post.text || "")}">${icon("share")} Share via…</button>
+      ${url ? `<a target="_blank" rel="noopener noreferrer" href="${esc(url)}">${icon("link")} View on ${esc(label)}</a>` : ""}
+    </div></div>`;
   }
 
   function view(route) {
@@ -1315,11 +1331,31 @@
       return;
     }
     if (act === "menu") { STATE.menu = STATE.menu === el.dataset.id ? null : el.dataset.id; render(); return; }
-    if (act === "share") { STATE.menu = el.dataset.id; render(); return; }
+    if (act === "share") {
+      STATE.menu = null;
+      STATE.share = STATE.share === el.dataset.id ? null : el.dataset.id;
+      render();
+      return;
+    }
+    if (act === "close-share") { STATE.share = null; render(); return; }
+    if (act === "native-share") {
+      const url = el.dataset.url || "";
+      const title = el.dataset.title || document.title;
+      const finish = () => { STATE.share = null; render(); };
+      if (navigator.share && url) {
+        navigator.share({ title: title, url: url }).then(finish).catch(finish);
+        return;
+      }
+      if (navigator.clipboard && url) navigator.clipboard.writeText(url).catch(() => {});
+      toast("Copied");
+      finish();
+      return;
+    }
     if (act === "copy") {
       const url = el.dataset.url || location.href;
       if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {});
       STATE.menu = null;
+      STATE.share = null;
       render();
       toast("Copied");
       return;
@@ -1489,10 +1525,11 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu)) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share)) {
       STATE.modal = null;
       STATE.drawer = false;
       STATE.menu = null;
+      STATE.share = null;
       STATE.confirm = null;
       render();
     }
@@ -1574,6 +1611,7 @@
     STATE.modal = null;
     STATE.drawer = false;
     STATE.menu = null;
+    STATE.share = null;
     STATE.headerHidden = false;
     render({ reset: true });
   });
