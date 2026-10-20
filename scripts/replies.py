@@ -18,6 +18,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,7 +27,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from adapters.ig_comments import parse_ig_comments, parse_ig_document  # noqa: E402
 from adapters.rss_comments import parse_comment_rss  # noqa: E402
 from adapters.threads_replies import parse_threads_document  # noqa: E402
-from adapters.x_replies import parse_fxtwitter_conversation, parse_nitter_replies  # noqa: E402
+from adapters.x_replies import (  # noqa: E402
+    comments_due,
+    conversation_reply_count,
+    extract_fxtwitter_replies,
+    fill_missing,
+    merge_replies,
+    parse_fxtwitter_conversation,
+    parse_nitter_replies,
+    parse_nitter_status,
+    rank_replies,
+    status_object,
+    _parent_handle,
+)
 from x_guard import assert_not_x_api, auth_cookie_header, open_url  # noqa: E402
 
 UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
@@ -164,13 +177,56 @@ def _rsshub_comments(post: dict, paths: tuple[str, ...]):
     return None
 
 
+def _lookup_x(post: dict):
+    """Fill a thin reply from fxtwitter, then a Nitter status page."""
+    status_id = str(post.get("id") or "")
+    handle = post.get("handle") or "i"
+    if not status_id:
+        return None
+    for url in (
+        f"https://api.fxtwitter.com/status/{status_id}",
+        f"https://api.fxtwitter.com/{handle}/status/{status_id}",
+    ):
+        body = _try(url)
+        if not body:
+            continue
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            continue
+        status = status_object(payload)
+        if status:
+            return status
+    for host in NITTER_HOSTS:
+        html = _try(f"{host}/{handle}/status/{status_id}", {"User-Agent": "Mozilla/5.0"})
+        if not html or "tweet-content" not in html:
+            continue
+        found = parse_nitter_status(html, status_id)
+        if found:
+            return found
+    return None
+
+
 def fetch_x(post: dict):
     status_id = str(post.get("statusId") or post.get("id") or "")
     handle = post.get("handle") or "i"
     try:
-        payload = _get(f"https://api.fxtwitter.com/2/conversation/{status_id}")
-        return parse_fxtwitter_conversation(payload, status_id), "fxtwitter", None
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        raw = _get(f"https://api.fxtwitter.com/2/conversation/{status_id}")
+        payload = json.loads(raw)
+        author = _parent_handle(payload) or handle
+        rows = extract_fxtwitter_replies(payload, status_id)
+        looked = {"n": 0}
+
+        def lookup(reply):
+            if looked["n"] >= 15:
+                return None
+            looked["n"] += 1
+            time.sleep(0.2)
+            return _lookup_x(reply)
+
+        rows = rank_replies(fill_missing(rows, status_id, lookup), author)
+        return rows, "fxtwitter", conversation_reply_count(payload)
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"[replies] fxtwitter {status_id}: {exc}", file=sys.stderr)
     for host in NITTER_HOSTS:
         html = _try(f"{host}/{handle}/status/{status_id}", {"User-Agent": "Mozilla/5.0"})
@@ -325,11 +381,40 @@ def from_fixture(post: dict):
     status_id = str(post.get("statusId") or post.get("id") or "")
     conversation = FIXTURES / f"{status_id}.json"
     if conversation.exists():
-        return parse_fxtwitter_conversation(conversation.read_text(encoding="utf-8"), status_id), "fixture", None
+        raw = conversation.read_text(encoding="utf-8")
+        replies = parse_fxtwitter_conversation(raw, status_id, post.get("handle") or "")
+        return replies, "fixture", conversation_reply_count(raw)
     nitter = FIXTURES / f"{status_id}.html"
     if nitter.exists():
         return parse_nitter_replies(nitter.read_text(encoding="utf-8"), status_id), "fixture-nitter", None
     return None
+
+
+def _comment_path(post: dict) -> Path:
+    status_id = str(post.get("statusId") or post.get("id") or "")
+    name = f"yt_{status_id}.json" if post.get("platform") == "youtube" else f"{status_id}.json"
+    return ROOT / "comments" / name
+
+
+def _stored_replies(path: Path) -> list:
+    if not path.exists():
+        return []
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    replies = doc.get("replies")
+    return replies if isinstance(replies, list) else []
+
+
+def _stored_fetched_at(path: Path) -> str:
+    if not path.exists():
+        return ""
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    return str(doc.get("fetchedAt") or "")
 
 
 def write_comments(post: dict, replies: list, source: str) -> None:
@@ -337,14 +422,18 @@ def write_comments(post: dict, replies: list, source: str) -> None:
     dest = ROOT / "comments"
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{status_id}.json"
+    merged = merge_replies(_stored_replies(path), replies)
+    if post.get("platform") == "x":
+        merged = rank_replies(merged, post.get("handle") or "")
     doc = {
         "postId": status_id,
         "platform": post.get("platform") or "",
         "source": source,
-        "replies": replies,
+        "fetchedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "replies": merged,
     }
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"[replies] {post.get('platform')}:{status_id} {len(replies)} via {source}")
+    print(f"[replies] {post.get('platform')}:{status_id} {len(merged)} via {source}")
 
 
 def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> None:
@@ -356,6 +445,9 @@ def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> No
         if not status_id or status_id in seen:
             continue
         seen.add(status_id)
+        path = _comment_path(post)
+        if not use_fixtures and not comments_due(post.get("date") or "", _stored_fetched_at(path)):
+            continue
         found = from_fixture(post) if use_fixtures else None
         if found is None and not use_fixtures:
             if platform == "x":
@@ -368,9 +460,7 @@ def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> No
             elif platform == "youtube":
                 from yt_remote import refresh_comments
 
-                wanted = fresh_ids is None or status_id in fresh_ids
-                if wanted or not (ROOT / "comments" / f"yt_{status_id}.json").exists():
-                    refresh_comments(post, False)
+                refresh_comments(post, False)
                 continue
             elif post.get("commentRss"):
                 found = fetch_rss(post)

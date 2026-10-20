@@ -460,6 +460,17 @@
     return false;
   }
 
+  function commentsCurrent(post, doc) {
+    if (!doc || !doc.fetchedAt) return false;
+    const fetched = Date.parse(doc.fetchedAt);
+    if (!isFinite(fetched)) return false;
+    const now = Date.now();
+    if (now - fetched > 36 * 60 * 60 * 1000) return false;
+    const posted = Date.parse((post && post.date) || "");
+    if (isFinite(posted) && now - posted > 30 * 24 * 60 * 60 * 1000) return false;
+    return true;
+  }
+
   function replyBucket(post) {
     const id = postKey(post);
     if (!id) return { loading: false, replies: [], missing: true };
@@ -472,8 +483,12 @@
         return res.json();
       })
       .then((doc) => {
-        const replies = ((doc && doc.replies) || []).slice().sort((a, b) => ((b.stats && b.stats.likes) || 0) - ((a.stats && a.stats.likes) || 0));
-        STATE.replies[id] = { loading: false, replies: replies, missing: false };
+        if (!commentsCurrent(post, doc)) {
+          STATE.replies[id] = { loading: false, replies: [], missing: true };
+          render();
+          return;
+        }
+        STATE.replies[id] = { loading: false, replies: ((doc && doc.replies) || []).slice(), missing: false };
         render();
       })
       .catch(() => {
@@ -519,21 +534,13 @@
     const fetched = bucket.replies || [];
     const have = new Set(fetched.map(postKey));
     const extras = threadChildren(post).filter((child) => !have.has(postKey(child)));
-    const all = fetched.concat(extras).sort((a, b) => ((b.stats && b.stats.likes) || 0) - ((a.stats && a.stats.likes) || 0));
+    const all = fetched.concat(extras);
     if (!all.length) return { loading: false, shown: [], more: false, spam: false, missing: !!bucket.missing };
     const ui = STATE.replyUi[postKey(post)] || {};
-    let shown = all;
-    let more = false;
-    let spam = false;
-    if (all.length > 6) {
-      const liked = all.filter((reply) => ((reply.stats && reply.stats.likes) || 0) > 0);
-      const quiet = all.filter((reply) => !((reply.stats && reply.stats.likes) || 0));
-      shown = ui.more ? liked.slice() : liked.slice(0, 4);
-      if (ui.spam || quiet.length < 3) shown = shown.concat(quiet);
-      more = !ui.more && liked.length > 4;
-      spam = !ui.spam && quiet.length >= 3;
-    }
-    return { loading: false, shown: orderReplies(post, shown), more: more, spam: spam, missing: false };
+    const clean = all.filter((reply) => !reply.spam);
+    const junk = all.filter((reply) => reply.spam);
+    const shown = ui.spam ? clean.concat(junk) : clean;
+    return { loading: false, shown: orderReplies(post, shown), more: false, spam: !ui.spam && junk.length > 0, missing: false };
   }
 
   function replyList(post) {

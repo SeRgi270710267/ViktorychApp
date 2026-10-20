@@ -22,7 +22,17 @@ from adapters.threads_replies import parse_threads_document, parse_threads_repli
 from adapters.x_api_v2 import parse as parse_x  # noqa: E402
 from adapters.youtube_rss import parse as parse_youtube  # noqa: E402
 from yt_remote import carry_youtube_fields, normalize_invidious_comment  # noqa: E402
-from adapters.x_replies import _cap, parse_fxtwitter_conversation, parse_nitter_replies  # noqa: E402
+from adapters.x_replies import (  # noqa: E402
+    _cap,
+    comments_due,
+    conversation_reply_count,
+    engagement,
+    fill_missing,
+    merge_replies,
+    parse_fxtwitter_conversation,
+    parse_nitter_replies,
+    parse_nitter_status,
+)
 from meta_media import cdn_expiry, extract_cdn_urls, media_groups, needs_refresh  # noqa: E402
 from x_guard import assert_not_x_api, auth_cookie_header  # noqa: E402
 
@@ -103,17 +113,104 @@ def main() -> None:
     check(post.get("commentRss") == "https://example.com/comments.xml", "generic commentRss")
     check((post.get("stats") or {}).get("replies") == 2, "generic slash comments")
 
-    conv = parse_fxtwitter_conversation((FIX / "replies" / "2112600761762717997.json").read_text(encoding="utf-8"), "2112600761762717997")
-    likes = [((c.get("stats") or {}).get("likes") or 0) for c in conv]
+    conv_raw = (FIX / "replies" / "2112600761762717997.json").read_text(encoding="utf-8")
+    conv = parse_fxtwitter_conversation(conv_raw, "2112600761762717997")
+    clean = [c for c in conv if not c.get("spam")]
+    scores = [engagement(c) for c in clean]
     check(len(conv) >= 10, "conversation has replies")
-    check(likes == sorted(likes, reverse=True), "conversation sorted by likes")
+    check(conversation_reply_count(conv_raw) == 3283 and len(conv) != 3283, "source reply count stays separate from the cap")
+    check(scores == sorted(scores, reverse=True), "relevant order is engagement")
+    check(conv[0]["handle"] == "yesknow", "highest engagement leads")
     check(conv[0]["kind"] == "reply" and conv[0]["replyingTo"]["handle"] == "redacted_handle", "conversation reply target")
     check(conv[0]["replyingTo"]["id"] == "2112600761762717997", "conversation reply parent id")
     check(conv[0]["date"].startswith("2026-10-20T"), "conversation date is ISO")
     check(conv[0]["verifiedType"] == "blue", "individual verification maps to blue")
+    check(conv[0].get("authorFollowers") == 14170, "reply keeps follower count for spam checks")
     check(all(c["id"] != "2112600761762717997" for c in conv), "conversation skips the parent")
     capped = _cap([{"stats": {"likes": i}} for i in range(60)])
-    check(len(capped) == 50 and capped[0]["stats"]["likes"] == 59, "reply cap keeps the top 50 likes")
+    check(len(capped) == 50 and capped[0]["stats"]["likes"] == 59, "reply cap keeps the top 50 by engagement")
+
+    parent = "PARENT"
+    sample = {
+        "code": 200,
+        "status": {"replies": 9, "author": {"screen_name": "redacted_handle"}},
+        "replies": [
+            {"id": "8", "text": "first", "author": {"screen_name": "redacted_handle", "followers": 100}, "replying_to": {"screen_name": "redacted_handle", "status": parent}, "likes": 1, "created_at": "Tue Oct 20 02:00:00 +0000 2026"},
+            {"id": "9", "text": "second", "author": {"screen_name": "redacted_handle", "followers": 100}, "replying_to": {"screen_name": "redacted_handle", "status": "8"}, "conversation_id": parent, "likes": 1, "created_at": "Tue Oct 20 03:00:00 +0000 2026"},
+            {"id": "1", "text": "plain reply", "author": {"screen_name": "ada", "followers": 40, "joined": "Tue Jun 02 20:12:29 +0000 2009", "verification": {"type": "individual"}}, "replying_to": {"screen_name": "redacted_handle", "status": parent}, "likes": 5, "replies": 0, "reposts": 0, "created_at": "Tue Oct 20 00:00:00 +0000 2026"},
+            {"id": "1", "text": "duplicate id loses", "author": {"screen_name": "ada"}, "replying_to": {"status": parent}, "likes": 1, "created_at": "Tue Oct 20 00:00:00 +0000 2026"},
+            {"id": "2", "text": "wrong thread", "author": {"screen_name": "bea"}, "replying_to": {"screen_name": "other", "status": "999"}, "likes": 100, "created_at": "Tue Oct 20 00:00:00 +0000 2026"},
+            {"id": "3", "text": "This post is unavailable.", "author": {}, "replying_to": {"status": parent}},
+            {"id": "4", "text": "Send a crypto giveaway airdrop now", "author": {"screen_name": "spammer", "followers": 1000, "joined": "Tue Jun 02 20:12:29 +0000 2009"}, "replying_to": {"status": parent}, "likes": 80, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
+            {"id": "5", "text": "https://evil.example/free", "author": {"screen_name": "linky", "followers": 100}, "replying_to": {"status": parent}, "likes": 2, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
+            {"id": "10", "text": "plain reply from another account here", "author": {"screen_name": "copy", "followers": 100}, "replying_to": {"status": parent}, "likes": 1, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
+            {"id": "11", "text": "plain reply from another account here", "author": {"screen_name": "copy2", "followers": 100}, "replying_to": {"status": parent}, "likes": 4, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
+            {"id": "12", "text": "hi", "author": {"screen_name": "BotUser12345", "followers": 500, "joined": "Tue Jun 02 20:12:29 +0000 2009"}, "replying_to": {"status": parent}, "likes": 3, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
+            {"id": "13", "text": "airdrop now please", "author": {"screen_name": "redacted_handle", "followers": 100}, "replying_to": {"status": parent}, "likes": 1, "created_at": "Tue Oct 20 04:00:00 +0000 2026"},
+            {"id": "6", "text": "", "author": {"screen_name": "gap"}, "replying_to": {"status": parent}},
+            {"id": "7", "text": "maybe", "author": {"screen_name": "neo", "followers": 3, "joined": "Mon Oct 19 00:00:00 +0000 2026"}, "created_at": "Tue Oct 20 00:00:00 +0000 2026", "likes": 4},
+            {"id": "14", "text": "low likes lots of replies", "author": {"screen_name": "talk", "followers": 100}, "replying_to": {"status": parent}, "likes": 10, "replies": 20, "reposts": 0, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
+            {"id": "15", "text": "more likes fewer replies", "author": {"screen_name": "quiet", "followers": 100}, "replying_to": {"status": parent}, "likes": 30, "replies": 0, "reposts": 0, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
+        ],
+    }
+    ranked = parse_fxtwitter_conversation(sample, parent)
+    ids = [row["id"] for row in ranked]
+    check(ids[:3] == ["8", "9", "13"], "self-thread stays first and is not spam")
+    check("2" not in ids and "3" not in ids and "7" not in ids, "mismatch, deleted, and unconfirmed replies drop")
+    check(ids.count("1") == 1 and next(row["text"] for row in ranked if row["id"] == "1") == "plain reply", "duplicate ids keep the first copy")
+    spam_ids = {row["id"] for row in ranked if row.get("spam")}
+    check(spam_ids >= {"4", "5", "10", "12"}, "giveaway, link-only, duplicate, and bot replies are spam")
+    check("11" not in spam_ids, "the highest duplicate stays in the relevant list")
+    talk_at = ids.index("14")
+    quiet_at = ids.index("15")
+    check(talk_at < quiet_at, "replies outweigh a higher like count")
+    filled = fill_missing(
+        [row for row in sample["replies"] if row["id"] in {"6", "7"}],
+        parent,
+        lambda reply: {
+            "id": reply["id"],
+            "text": "filled from status" if reply["id"] == "6" else "maybe",
+            "author": {"screen_name": reply["author"]["screen_name"], "followers": 3 if reply["id"] == "7" else 50, "joined": "Mon Oct 19 00:00:00 +0000 2026" if reply["id"] == "7" else "Tue Jun 02 20:12:29 +0000 2009"},
+            "replying_to": {"screen_name": "redacted_handle", "status": parent},
+            "created_at": "Tue Oct 20 00:00:00 +0000 2026",
+            "likes": 3,
+        },
+    )
+    by_id = {row["id"]: row for row in filled}
+    check(by_id["6"]["text"] == "filled from status" and by_id["6"]["replyingTo"]["id"] == parent, "fxtwitter status fills a missing reply")
+    check(by_id["7"].get("authorFollowers") == 3, "status lookup keeps a reply once the conversation matches")
+    nitter_html = """
+    <div class="timeline-item">
+      <a href="/gap/status/6"></a>
+      <a class="fullname" href="/gap">Gap</a>
+      <div class="replying-to">Replying to <a href="/redacted_handle/status/PARENT">@redacted_handle</a></div>
+      <div class="tweet-content media-body">filled from nitter</div>
+      <span class="tweet-date"><a title="Tue, 20 Oct 2026 18:00:00 +0000"></a></span>
+      <div class="icon-heart"></div> 3
+    </div>
+    """
+    nitter_status = parse_nitter_status(nitter_html, "6")
+    check(nitter_status["text"] == "filled from nitter" and nitter_status["replyingTo"]["id"] == parent, "nitter status page fills the reply target")
+    nitter_filled = fill_missing([{"id": "6", "text": "", "handle": "gap", "kind": "reply", "platform": "x"}], parent, lambda _reply: nitter_status)
+    check(nitter_filled and nitter_filled[0]["text"] == "filled from nitter", "nitter lookup is used when the reply is incomplete")
+    mismatched = fill_missing(
+        [{"id": "7", "text": "maybe", "handle": "neo", "platform": "x", "kind": "reply"}],
+        parent,
+        lambda _reply: {"id": "7", "text": "maybe", "author": {"screen_name": "neo"}, "replying_to": {"status": "999"}, "created_at": "Tue Oct 20 00:00:00 +0000 2026"},
+    )
+    check(mismatched == [], "a status lookup that points elsewhere is dropped")
+    merged = merge_replies(
+        [{"id": "1", "text": "old", "avatar": "keep", "stats": {"likes": 1}}],
+        [{"id": "1", "text": "new", "stats": {"likes": 9}}, {"id": "2", "text": "only"}],
+    )
+    check(merged[0]["stats"]["likes"] == 9 and merged[0]["text"] == "new" and merged[0]["avatar"] == "keep" and merged[1]["id"] == "2", "fresh likes win and missing fields stay")
+    moment = datetime(2026, 10, 20, tzinfo=timezone.utc)
+    check(comments_due("2026-10-19T00:00:00Z", "2026-10-19T23:00:00Z", moment), "posts under 7 days refresh every run")
+    check(not comments_due("2026-10-13T00:00:00Z", "2026-10-19T23:00:00Z", moment), "a 7 day post waits a day")
+    check(comments_due("2026-10-13T00:00:00Z", "2026-10-18T00:00:00Z", moment), "a 7 day post refreshes after a day")
+    check(comments_due("2026-09-20T00:00:00Z", "", moment), "a 30 day post with no fetch time is due")
+    check(not comments_due("2026-09-19T23:00:00Z", "", moment), "posts older than 30 days are left alone")
+    check(comments_due("", "2026-10-19T00:00:00Z", moment), "an undated post refreshes every run")
 
     nit = parse_nitter_replies((FIX / "replies" / "nitter_sample.html").read_text(encoding="utf-8"), "2112600761762717997")
     check(len(nit) == 2, "nitter replies")

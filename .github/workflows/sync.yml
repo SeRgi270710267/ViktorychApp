@@ -59,6 +59,7 @@ jobs:
           PY
 
       - name: Refresh feeds
+        # Comment files: posts under 7 days every run, posts 7–30 days old once a day.
         env:
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}

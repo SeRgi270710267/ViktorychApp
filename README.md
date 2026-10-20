@@ -138,19 +138,22 @@ Replies are not inlined on the home timeline. The reply count on a post opens `#
   "postId": "2112600761762717997",
   "platform": "x",
   "source": "fxtwitter",
+  "fetchedAt": "2026-10-20T18:00:00Z",
   "replies": []
 }
 ```
 
-Each reply uses the same post shape, with `kind` set to `reply` and `replyingTo` filled in. At most 50 replies are kept, highest `stats.likes` first (X’s Relevant order). The author’s own continuation stays directly under the post, with the vertical line between those avatars. On a long list the first few liked replies show, then **Show more replies**. Replies with no likes collapse behind **Show probable spam** when there are at least three of them.
+`fetchedAt` is when that file was last written. The page uses it only to hide a stale file. It is not shown in the interface.
+
+Each reply uses the same post shape, with `kind` set to `reply` and `replyingTo` filled in. X keeps about 50 replies in Relevant order: the author’s own self-thread first, with the vertical line between those avatars, then other replies by `likes + replies*2 + reposts`. A verified account is scored a bit higher. Giveaway, link-only, duplicate, and new-account bot replies are flagged and sit behind **Show probable spam**. The number on the post stays the source’s reply count, not the length of this list.
 
 Home, Following, and List timelines hide `kind: reply`, except a self-reply that has another self-reply pointing at it. That post shows **Show this thread**. A profile’s **Replies** tab lists replies from that account.
 
-`update_feeds.py` refreshes comment files after it writes `feeds.json`. `--fixtures` reads `scripts/fixtures/replies/<statusId>.json` (fxtwitter conversation JSON) or `<statusId>.html` (Nitter status HTML) and does not call the network.
+`update_feeds.py` refreshes comment files after it writes `feeds.json`. A post younger than 7 days is refreshed on every run. A post from 7 to 30 days old is refreshed once a day. Older posts are left as they are. A failed fetch keeps the previous file. On a successful fetch the new replies replace the file, and a reply id that was already stored keeps the new like count when a field is missing on the new copy. `--fixtures` reads `scripts/fixtures/replies/<statusId>.json` (fxtwitter conversation JSON) or `<statusId>.html` (Nitter status HTML) and does not call the network.
 
 | Platform | How replies are fetched |
 | --- | --- |
-| X | `https://api.fxtwitter.com/2/conversation/<statusId>` (`replies`, one page; cursor requests 404). If that fails, Nitter status HTML from `nitter.meowing.monster`, `nitter.kareem.one`, then `nitter.jaydenha.uk`. Those hosts currently answer with a bot check, so the HTML parser only runs when a page actually contains `tweet-content`. `api.fixupx.com` does not resolve. The paid X API is not called |
+| X | `https://api.fxtwitter.com/2/conversation/<statusId>` (`replies`, one page; cursor requests 404). A reply is kept only when `replying_to.status` or the conversation id is this post. Duplicate ids collapse. Deleted or unavailable replies are dropped. Missing text, handle, date, or target is filled from `https://api.fxtwitter.com/status/<id>`, then a Nitter status page if fxtwitter fails. The parent’s `status.replies` is written to `stats.replies`. If the conversation call fails, Nitter status HTML from `nitter.meowing.monster`, `nitter.kareem.one`, then `nitter.jaydenha.uk` is the fallback. Those hosts currently answer with a bot check, so the HTML parser only runs when a page actually contains `tweet-content`. `api.fixupx.com` does not resolve. The paid X API is not called |
 | Threads | Logged-out `threads.net` / `threads.com` post HTML. Replies are read from embedded `direct_replies`, `reply_threads`, or `thread_items`, and `direct_reply_count` is written to `stats.replies`. Then RSSHub `/threads/post/<code>` when that route is up. `THREADS_COOKIE` is only used if those have no reply text. The cookie is never written to disk |
 | Instagram | Logged-out GraphQL, in order: `PolarisPostActionLoadPostQuery` (`doc_id` 8845758582119845), then the current post query `PolarisPostRootQuery` (`doc_id` 29336004576007686) with the shortcode. Then `https://www.instagram.com/p/<shortcode>/embed/captioned/`. Then public viewers (picuki, imginn, dumpor, anonyig). Then RSSHub `/instagram/comments/<shortcode>` and `/instagram/post/<shortcode>/comments` when RSSHub is up. `edge_media_to_parent_comment.count` or `comment_count` is written to `stats.replies`. `INSTAGRAM_COOKIE` (`sessionid`) calls `/api/v1/media/<id>/comments/` only after the public sources miss. The cookie is never written to disk |
 | Other RSS | `wfw:commentRss` is fetched and normalized. `slash:comments` is only the count on the post |

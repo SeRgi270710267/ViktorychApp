@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from adapters.x_replies import merge_replies  # noqa: E402
 from x_guard import assert_not_x_api, open_url  # noqa: E402
 
 UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
@@ -468,8 +469,19 @@ def write_comment_document(post: dict, doc: dict) -> None:
     dest = ROOT / "comments"
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"yt_{video_id}.json"
-    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"[replies] youtube:{video_id} {len(doc.get('replies') or [])} via {doc.get('source')}")
+    stored = {}
+    if path.exists():
+        try:
+            stored = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            stored = {}
+    written = dict(doc)
+    written["replies"] = merge_replies(stored.get("replies") or [], doc.get("replies") or [])
+    if doc.get("newest"):
+        written["newest"] = merge_replies(stored.get("newest") or [], doc.get("newest") or [])
+    written["fetchedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    path.write_text(json.dumps(written, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"[replies] youtube:{video_id} {len(written.get('replies') or [])} via {written.get('source')}")
 
 
 def refresh_comments(post: dict, use_fixtures: bool) -> None:
