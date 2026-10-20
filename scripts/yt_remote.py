@@ -328,7 +328,7 @@ def normalize_invidious_comment(comment: dict, parent_id: str, handle: str) -> d
     return row
 
 
-def normalize_piped_comment(comment: dict, parent_id: str, handle: str) -> dict:
+def normalize_piped_comment(comment: dict, parent_id: str, handle: str, depth: int = 0) -> dict:
     author = (comment.get("author") or "").lstrip("@")
     try:
         likes = int(comment.get("likeCount") or 0)
@@ -357,6 +357,18 @@ def normalize_piped_comment(comment: dict, parent_id: str, handle: str) -> dict:
         row["timeLabel"] = comment.get("commentedTime")
     if comment.get("repliesPage"):
         row["_continuation"] = comment.get("repliesPage")
+    inline = comment.get("replies") if depth == 0 else None
+    if isinstance(inline, list) and inline:
+        kids = []
+        for child in inline[:20]:
+            if not isinstance(child, dict):
+                continue
+            text = child.get("commentText") or child.get("comment") or ""
+            if not str(text).strip():
+                continue
+            kids.append(normalize_piped_comment(child, row["id"], author, depth=1))
+        if kids:
+            row["replies"] = kids
     return row
 
 
@@ -379,22 +391,33 @@ def _page_invidious(video_id: str, sort: str, continuation: str = ""):
     return payload
 
 
+def _reply_count(row: dict) -> int:
+    try:
+        return int((row.get("stats") or {}).get("replies") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _fill_replies(rows: list, video_id: str, handle: str, budget: int) -> int:
-    for row in rows:
+    """One continuation page for the most-replied comments. No third level."""
+    ranked = [
+        row for row in rows
+        if _reply_count(row) > 0 and (row.get("_continuation") or "")
+    ]
+    ranked.sort(key=lambda row: (_reply_count(row), int((row.get("stats") or {}).get("likes") or 0)), reverse=True)
+    for row in ranked[:10]:
         if budget <= 0:
             break
         token = row.get("_continuation") or ""
-        if not token or not (row.get("stats") or {}).get("replies"):
-            continue
         payload = _page_invidious(video_id, "top", token)
         budget -= 1
         if not payload:
             continue
-        children = [
-            normalize_invidious_comment(child, video_id, handle)
-            for child in (payload.get("comments") or [])
-            if (child.get("content") or "").strip()
-        ]
+        children = []
+        for child in (payload.get("comments") or [])[:20]:
+            if not (child.get("content") or "").strip():
+                continue
+            children.append(normalize_invidious_comment(child, row.get("id") or "", row.get("handle") or handle))
         row["replies"] = children
     return budget
 
@@ -429,7 +452,7 @@ def fetch_comment_document(post: dict, limit: int = 100) -> dict | None:
         if not continuation or not batch:
             break
     if top:
-        _fill_replies(top[:8], video_id, handle, 8)
+        _fill_replies(top, video_id, handle, 10)
         fresh = _page_invidious(video_id, "new")
         if fresh:
             for comment in (fresh.get("comments") or [])[:limit]:
@@ -464,6 +487,40 @@ def fetch_comment_document(post: dict, limit: int = 100) -> dict | None:
     return doc
 
 
+def _safe_comment_id(value) -> str:
+    text = str(value or "")
+    if not text or text in {".", ".."} or "/" in text or "\\" in text:
+        return ""
+    return text
+
+
+def _write_thread_files(rows: list, source: str, fetched_at: str) -> None:
+    dest = ROOT / "comments"
+    dest.mkdir(parents=True, exist_ok=True)
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        kids = [kid for kid in (row.get("replies") or []) if isinstance(kid, dict)][:20]
+        cid = _safe_comment_id(row.get("statusId") or row.get("id") or "")
+        if not cid or not kids:
+            continue
+        path = dest / f"{cid}.json"
+        stored = []
+        if path.exists():
+            try:
+                stored = (json.loads(path.read_text(encoding="utf-8")).get("replies") or [])
+            except (OSError, json.JSONDecodeError):
+                stored = []
+        thread = {
+            "postId": cid,
+            "platform": "youtube",
+            "source": source,
+            "fetchedAt": fetched_at,
+            "replies": merge_replies(stored, kids),
+        }
+        path.write_text(json.dumps(thread, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def write_comment_document(post: dict, doc: dict) -> None:
     video_id = str(post.get("statusId") or post.get("id") or "")
     dest = ROOT / "comments"
@@ -481,6 +538,7 @@ def write_comment_document(post: dict, doc: dict) -> None:
         written["newest"] = merge_replies(stored.get("newest") or [], doc.get("newest") or [])
     written["fetchedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     path.write_text(json.dumps(written, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_thread_files(written.get("replies") or [], written.get("source") or "", written["fetchedAt"])
     print(f"[replies] youtube:{video_id} {len(written.get('replies') or [])} via {written.get('source')}")
 
 

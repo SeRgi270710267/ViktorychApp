@@ -45,7 +45,7 @@ def _reply_rows(payload) -> list:
     return rows if isinstance(rows, list) else []
 
 
-def _one_reply(post: dict, parent: dict) -> dict | None:
+def _one_reply(post: dict, parent: dict, depth: int = 0) -> dict | None:
     if not isinstance(post, dict):
         return None
     user = post.get("user") or {}
@@ -58,7 +58,16 @@ def _one_reply(post: dict, parent: dict) -> dict | None:
     parent_id = str(parent.get("statusId") or parent.get("id") or "")
     parent_handle = parent.get("handle") or ""
     likes = post.get("like_count")
-    return post_shell(
+    stats = {"likes": likes} if likes is not None else {}
+    info = post.get("text_post_app_info") if isinstance(post.get("text_post_app_info"), dict) else {}
+    for key in ("direct_reply_count", "reply_count"):
+        value = info.get(key)
+        if isinstance(value, int) and not isinstance(value, bool):
+            stats["replies"] = value
+            break
+    code = str(post.get("code") or "")
+    url = f"https://www.threads.net/t/{code}" if code else (parent.get("url") or "")
+    item = post_shell(
         id=sid,
         statusId=sid,
         platform="threads",
@@ -68,10 +77,27 @@ def _one_reply(post: dict, parent: dict) -> dict | None:
         avatar=user.get("profile_pic_url") or "",
         text=body or "",
         date=_iso(post.get("taken_at")),
-        url=parent.get("url") or "",
-        stats={"likes": likes} if likes is not None else {},
+        url=url,
+        stats=stats,
         replyingTo={"name": parent.get("author") or parent_handle, "handle": parent_handle, "id": parent_id} if parent_id or parent_handle else None,
     )
+    if depth == 0:
+        direct = info.get("direct_replies") or {}
+        edges = direct.get("edges") if isinstance(direct, dict) else None
+        kids = []
+        if isinstance(edges, list):
+            child_parent = {"statusId": sid, "id": sid, "handle": handle, "author": user.get("full_name") or handle, "url": url}
+            for edge in edges:
+                inner = edge.get("node") if isinstance(edge, dict) else None
+                if not isinstance(inner, dict):
+                    continue
+                for child_post in _posts_under(inner):
+                    kid = _one_reply(child_post, child_parent, depth=1)
+                    if kid and kid["id"] != sid:
+                        kids.append(kid)
+        if kids:
+            item["_children"] = kids[:20]
+    return item
 
 
 def _sort_cap(rows: list) -> list:

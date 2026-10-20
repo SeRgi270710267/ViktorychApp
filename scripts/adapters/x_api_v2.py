@@ -244,3 +244,35 @@ def parse(payload, feed: dict | None = None) -> dict:
         seen.add(user["username"])
         profiles.append(_profile(user))
     return {"posts": posts, "profiles": profiles}
+
+
+def parse_conversation_search(payload, parent_id: str) -> list:
+    """Turn a recent-search payload into reply posts for one status."""
+    if isinstance(payload, str):
+        from .common import parse_json_loose
+
+        payload = parse_json_loose(payload)
+    if not isinstance(payload, dict):
+        return []
+    parsed = parse(payload, {"id": "", "platform": "x", "handle": ""})
+    users = {user.get("id"): user for user in ((payload.get("includes") or {}).get("users") or []) if user.get("id")}
+    tweets = {str(tweet.get("id")): tweet for tweet in (payload.get("data") or []) if tweet.get("id")}
+    parent = str(parent_id or "")
+    out = []
+    for post in parsed.get("posts") or []:
+        if str(post.get("id") or "") == parent:
+            continue
+        tweet = tweets.get(str(post.get("id") or "")) or {}
+        conv = str(tweet.get("conversation_id") or "")
+        if conv:
+            post["conversationId"] = conv
+        author = users.get(tweet.get("author_id")) or {}
+        if author.get("created_at"):
+            post["authorJoined"] = author.get("created_at")
+        metrics = author.get("public_metrics") or {}
+        if metrics.get("followers_count") is not None:
+            post["authorFollowers"] = metrics.get("followers_count")
+        post["kind"] = "reply"
+        post["platform"] = "x"
+        out.append(post)
+    return out

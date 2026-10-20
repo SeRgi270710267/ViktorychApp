@@ -31,7 +31,10 @@ def _iso(value) -> str:
     return str(value)
 
 
-def parse_ig_comments(payload, parent: dict | None = None) -> list:
+NEST_CAP = 20
+
+
+def parse_ig_comments(payload, parent: dict | None = None, depth: int = 0) -> list:
     parent = parent or {}
     if isinstance(payload, str):
         payload = parse_json_loose(payload)
@@ -51,23 +54,34 @@ def parse_ig_comments(payload, parent: dict | None = None) -> list:
             continue
         likes = comment.get("comment_like_count")
         stats = {"likes": likes} if likes is not None else {}
-        out.append(
-            post_shell(
-                id=cid,
-                statusId=cid,
-                platform="instagram",
-                kind="reply",
-                author=user.get("full_name") or handle,
-                handle=handle,
-                avatar=user.get("profile_pic_url") or "",
-                verifiedType="blue" if user.get("is_verified") else None,
-                text=comment.get("text") or "",
-                date=_iso(comment.get("created_at")),
-                url=parent.get("url") or "",
-                stats=stats,
-                replyingTo={"name": parent.get("author") or parent_handle, "handle": parent_handle, "id": parent_id} if parent_handle or parent_id else None,
-            )
+        child_count = _count(comment.get("child_comment_count"))
+        if child_count is not None:
+            stats["replies"] = child_count
+        item = post_shell(
+            id=cid,
+            statusId=cid,
+            platform="instagram",
+            kind="reply",
+            author=user.get("full_name") or handle,
+            handle=handle,
+            avatar=user.get("profile_pic_url") or "",
+            verifiedType="blue" if user.get("is_verified") else None,
+            text=comment.get("text") or "",
+            date=_iso(comment.get("created_at")),
+            url=parent.get("url") or "",
+            stats=stats,
+            replyingTo={"name": parent.get("author") or parent_handle, "handle": parent_handle, "id": parent_id} if parent_handle or parent_id else None,
         )
+        raw_kids = comment.get("preview_child_comments") if depth == 0 else None
+        if isinstance(raw_kids, list) and raw_kids:
+            kids = parse_ig_comments(
+                {"comments": raw_kids},
+                {"statusId": cid, "id": cid, "handle": handle, "author": user.get("full_name") or handle, "url": parent.get("url") or ""},
+                depth=1,
+            )
+            if kids:
+                item["_children"] = kids[:NEST_CAP]
+        out.append(item)
     out.sort(key=lambda post: ((post.get("stats") or {}).get("likes") or 0), reverse=True)
     return out[:CAP]
 
@@ -88,7 +102,7 @@ def _edge_to_v1(node: dict) -> dict:
     liked = node.get("edge_liked_by") or {}
     if likes is None and isinstance(liked, dict):
         likes = liked.get("count")
-    return {
+    row = {
         "pk": node.get("pk") or node.get("id"),
         "text": node.get("text") or "",
         "created_at": node.get("created_at"),
@@ -100,6 +114,26 @@ def _edge_to_v1(node: dict) -> dict:
             "is_verified": bool(owner.get("is_verified") or owner.get("is_verified_user")),
         },
     }
+    threaded = node.get("edge_threaded_comments")
+    if isinstance(threaded, dict):
+        count = _count(threaded.get("count"))
+        if count is not None:
+            row["child_comment_count"] = count
+        kids = [
+            _edge_to_v1(item["node"])
+            for item in (threaded.get("edges") or [])
+            if isinstance(item, dict) and isinstance(item.get("node"), dict)
+        ]
+        if kids:
+            row["preview_child_comments"] = kids
+    preview = node.get("preview_child_comments")
+    if isinstance(preview, list) and preview and "preview_child_comments" not in row:
+        row["preview_child_comments"] = preview
+    if "child_comment_count" not in row:
+        count = _count(node.get("child_comment_count"))
+        if count is not None:
+            row["child_comment_count"] = count
+    return row
 
 
 def _media_comments(media: dict, parent: dict) -> tuple[list, int | None]:

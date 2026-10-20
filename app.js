@@ -66,7 +66,9 @@
     disliked: {},
     share: null,
     shared: {},
-    sharedState: {}
+    sharedState: {},
+    chain: {},
+    threadMore: {}
   };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
@@ -538,9 +540,60 @@
     if (!all.length) return { loading: false, shown: [], more: false, spam: false, missing: !!bucket.missing };
     const ui = STATE.replyUi[postKey(post)] || {};
     const clean = all.filter((reply) => !reply.spam);
-    const junk = all.filter((reply) => reply.spam);
-    const shown = ui.spam ? clean.concat(junk) : clean;
-    return { loading: false, shown: orderReplies(post, shown), more: false, spam: !ui.spam && junk.length > 0, missing: false };
+    const junk = all.filter((reply) => reply.spam && isDirect(post, reply));
+    const pool = ui.spam ? clean.concat(junk) : clean;
+    const shown = orderReplies(post, pool.filter((reply) => isDirect(post, reply)));
+    return { loading: false, shown: shown, pool: clean, more: false, spam: !ui.spam && junk.length > 0, missing: false };
+  }
+
+  function isDirect(focus, reply) {
+    const to = String((reply.replyingTo || {}).id || "");
+    if (!to) return true;
+    return to === postKey(focus) || to === String(focus.id || "");
+  }
+
+  function childPool(reply, siblings) {
+    const count = Number((reply.stats || {}).replies || 0);
+    if (!(count > 0)) return siblings;
+    const bucket = replyBucket(reply);
+    if (bucket.loading || bucket.missing || !(bucket.replies || []).length) return siblings;
+    const seen = new Set((bucket.replies || []).map(postKey));
+    const extra = (siblings || []).filter((item) => item && !seen.has(postKey(item)));
+    return bucket.replies.concat(extra);
+  }
+
+  function inlineChildren(reply, pool) {
+    const out = [];
+    const used = new Set();
+    let cursor = reply;
+    for (let guard = 0; guard < 3; guard++) {
+      const next = (pool || []).find((other) => other && !other.spam && !used.has(postKey(other)) && sameThread(cursor, other));
+      if (!next) break;
+      out.push(next);
+      used.add(postKey(next));
+      cursor = next;
+    }
+    return out;
+  }
+
+  function inlineOp(reply, pool, rootHandle) {
+    const root = String(rootHandle || "").toLowerCase();
+    const mine = String(reply.handle || "").toLowerCase();
+    if (!root || root === mine) return null;
+    const id = postKey(reply);
+    return (pool || []).find((other) => {
+      if (!other || other.spam) return false;
+      if (String(other.handle || "").toLowerCase() !== root) return false;
+      const to = String((other.replyingTo || {}).id || "");
+      return to === id || to === String(reply.id || "");
+    }) || null;
+  }
+
+  function repliesLink(reply, shown) {
+    const total = Number((reply.stats || {}).replies || 0);
+    if (!(total > shown)) return "";
+    const label = shown ? "Show more replies" : "Show replies";
+    return `<a class="show-replies" data-act="stop" href="${esc(statusHash(reply))}">${label}</a>`;
   }
 
   function replyList(post) {
@@ -550,10 +603,20 @@
       return `<div class="reply-empty">${slice.missing ? "Replies aren’t available for this post." : "No replies yet."}</div>`;
     }
     const id = postKey(post);
-    const html = slice.shown.map((reply, index) => card(reply, "reply", {
-      focus: post,
-      continues: index < slice.shown.length - 1 && sameThread(reply, slice.shown[index + 1])
-    })).join("");
+    const root = originalHandle(post);
+    const html = slice.shown.map((reply) => {
+      const pool = childPool(reply, slice.pool);
+      let inline = inlineChildren(reply, pool);
+      if (!inline.length) {
+        const op = inlineOp(reply, pool, root);
+        if (op) inline = [op];
+      }
+      const cards = [reply].concat(inline);
+      return cards.map((item, index) => card(item, "reply", {
+        focus: index === 0 ? post : cards[index - 1],
+        continues: index < cards.length - 1
+      })).join("") + repliesLink(reply, inline.length);
+    }).join("");
     const more = slice.more ? `<button class="more-replies" type="button" data-act="more-replies" data-id="${esc(id)}">Show more replies</button>` : "";
     const spam = slice.spam ? `<button class="more-replies spam" type="button" data-act="spam-replies" data-id="${esc(id)}">Show probable spam</button>` : "";
     return html + more + spam;
@@ -580,7 +643,7 @@
     const face = authorFace(post);
     const avaLink = `<a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(face.avatar, post.author || post.handle)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
-    const open = mode === "reply" ? "" : ` data-open="${esc(statusHash(post))}"`;
+    const open = ` data-open="${esc(statusHash(post))}"`;
     const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}"${open}>
@@ -833,6 +896,7 @@
       return pageHead("Post", "", true) + emptyBlock("Post unavailable", "This post isn’t in the current snapshot.");
     }
     const stats = post.stats || {};
+    const chain = ancestorChain(post);
     const slice = replySlice(post);
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
     const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a href="${esc(profileHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
@@ -849,10 +913,12 @@
             <a class="handle" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
           </div>
           <span style="margin-left:auto">${sourceBadge(post.platform)}</span>`;
+    const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
-      ? `<article class="status has-thread"><div class="status-thread"><div class="ava-col"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
-      : `<article class="status"><div class="status-author"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
+      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
+      : `<article class="status${parented}"><div class="status-author"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
+      ${ancestorBlock(post, chain)}
       ${article}
       ${composer(threaded)}
       ${replyList(post)}`;
@@ -1317,6 +1383,102 @@
     </div></div>`;
   }
 
+  function lookupAncestor(id) {
+    const key = String(id || "");
+    if (!key || findAnyPost(key) || STATE.chain[key]) return;
+    STATE.chain[key] = { loading: true, post: null, missing: false };
+    fetch("comments/lookup.json", { cache: "no-cache" })
+      .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
+      .then((lookup) => {
+        const stem = lookup && lookup[key];
+        if (!stem) throw new Error("missing");
+        return fetch("comments/" + encodeURIComponent(stem) + ".json", { cache: "no-cache" })
+          .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
+          .then((data) => {
+            const found = findComment(commentRows(data), key);
+            if (!found) throw new Error("missing");
+            STATE.chain[key] = { loading: false, post: found, missing: false };
+          });
+      })
+      .catch(() => { STATE.chain[key] = { loading: false, post: null, missing: true }; })
+      .then(() => render());
+  }
+
+  function ancestorOf(id) {
+    const known = findAnyPost(id);
+    if (known) return { post: known, loading: false, missing: false };
+    const slot = STATE.chain[String(id)];
+    if (!slot) {
+      lookupAncestor(id);
+      return { post: null, loading: true, missing: false };
+    }
+    return slot;
+  }
+
+  function ancestorChain(focus) {
+    const nodes = [];
+    let current = focus;
+    let loading = false;
+    const seen = new Set([postKey(focus), String((focus && focus.id) || "")]);
+    for (let guard = 0; guard < 12; guard++) {
+      const parentId = String((current.replyingTo || {}).id || "");
+      if (!parentId || seen.has(parentId)) break;
+      seen.add(parentId);
+      const slot = ancestorOf(parentId);
+      if (slot.loading) {
+        loading = true;
+        break;
+      }
+      if (!slot.post) break;
+      nodes.push(slot.post);
+      current = slot.post;
+    }
+    nodes.reverse();
+    return { nodes: nodes, loading: loading };
+  }
+
+  function originalHandle(focus) {
+    const chain = ancestorChain(focus);
+    if (chain.nodes.length && chain.nodes[0] && chain.nodes[0].handle) return chain.nodes[0].handle;
+    return (focus && focus.handle) || "";
+  }
+
+  function ancestorCard(post) {
+    const showReply = !!(post.replyingTo && post.replyingTo.handle);
+    const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" href="${esc(profileHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const face = authorFace(post);
+    return `<article class="ancestor" data-open="${esc(statusHash(post))}">
+      <div class="ava-col"><a data-act="stop" href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
+      <div class="ancestor-main">
+        <div class="byline">
+          <a class="name" data-act="stop" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
+          <a class="handle" data-act="stop" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
+          <span class="dot">·</span>
+          <a class="time" data-act="stop" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
+        </div>
+        ${reply}
+        <div class="post-text">${textHtml(post, "anc:" + postKey(post), false)}</div>
+        ${mediaHtml(post.media)}
+      </div>
+    </article>`;
+  }
+
+  function ancestorBlock(focus, chain) {
+    chain = chain || ancestorChain(focus);
+    if (!chain.nodes.length && !chain.loading) return "";
+    const id = postKey(focus);
+    let html = "";
+    if (chain.nodes.length > 3 && !STATE.threadMore[id]) {
+      html = ancestorCard(chain.nodes[0]) +
+        `<div class="ancestor-gap"><div class="ava-col"><div class="thread-line"></div></div><button class="ancestor-more" type="button" data-act="thread-more" data-id="${esc(id)}">Show more</button></div>` +
+        ancestorCard(chain.nodes[chain.nodes.length - 1]);
+    } else {
+      html = chain.nodes.map(ancestorCard).join("");
+    }
+    if (chain.loading) html += `<div class="ancestor-loading">Loading…</div>`;
+    return html;
+  }
+
   function loadSharedStatus(route) {
     const key = String(route.id);
     fetch("comments/lookup.json", { cache: "no-cache" })
@@ -1523,6 +1685,11 @@
     if (act === "open-status") {
       const post = posts().find((p) => p.id === el.dataset.id);
       if (post) location.hash = statusHash(post);
+      return;
+    }
+    if (act === "thread-more") {
+      STATE.threadMore[el.dataset.id] = true;
+      render();
       return;
     }
     if (act === "more-replies" || act === "spam-replies") {

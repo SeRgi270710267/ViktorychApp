@@ -20,10 +20,12 @@ from adapters.ig_comments import parse_ig_comments, parse_ig_document  # noqa: E
 from adapters.rss_comments import parse_comment_rss  # noqa: E402
 from adapters.threads_replies import parse_threads_document, parse_threads_replies  # noqa: E402
 from adapters.x_api_v2 import parse as parse_x  # noqa: E402
+from adapters.x_api_v2 import parse_conversation_search  # noqa: E402
 from adapters.youtube_rss import parse as parse_youtube  # noqa: E402
 from yt_remote import carry_youtube_fields, normalize_invidious_comment  # noqa: E402
 from adapters.x_replies import (  # noqa: E402
     _cap,
+    belongs,
     comments_due,
     conversation_reply_count,
     engagement,
@@ -32,9 +34,10 @@ from adapters.x_replies import (  # noqa: E402
     parse_fxtwitter_conversation,
     parse_nitter_replies,
     parse_nitter_status,
+    select_subthreads,
 )
 from meta_media import cdn_expiry, extract_cdn_urls, media_groups, needs_refresh  # noqa: E402
-from x_guard import assert_not_x_api, auth_cookie_header  # noqa: E402
+from x_guard import assert_not_x_api, auth_cookie_header, conversation_search  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "scripts" / "fixtures"
@@ -241,6 +244,86 @@ def main() -> None:
     check(direct_count == 4 and len(direct_rows) == 1 and direct_rows[0]["text"] == "Wow", "threads direct replies skip other posts")
     check(direct_rows[0]["handle"] == "ada" and direct_rows[0]["replyingTo"]["id"] == "DeZtp", "threads direct reply target")
 
+    nested_ig = {
+        "comments": [{
+            "pk": "p1",
+            "text": "Parent",
+            "comment_like_count": 3,
+            "child_comment_count": 4,
+            "user": {"username": "ada", "full_name": "Ada"},
+            "preview_child_comments": [
+                {"pk": "k1", "text": "Child", "comment_like_count": 1, "user": {"username": "bea"}},
+                {
+                    "pk": "k2",
+                    "text": "Next",
+                    "child_comment_count": 1,
+                    "user": {"username": "cy"},
+                    "preview_child_comments": [{"pk": "g1", "text": "Nope", "user": {"username": "dee"}}],
+                },
+            ],
+        }]
+    }
+    ig_nested = parse_ig_comments(nested_ig, {"handle": "redacted_handle", "statusId": "post", "url": "https://www.instagram.com/p/abc/"})
+    check(ig_nested[0]["stats"]["replies"] == 4 and len(ig_nested[0]["_children"]) == 2, "instagram stores one level of child comments")
+    check(ig_nested[0]["_children"][0]["replyingTo"]["id"] == "p1" and "_children" not in ig_nested[0]["_children"][1], "instagram children reply to the comment")
+    gql_nested, _gql_nested_count = parse_ig_document(
+        {"data": {"xdt_shortcode_media": {"edge_media_to_parent_comment": {"count": 1, "edges": [{"node": {
+            "id": "c1", "text": "Top", "owner": {"username": "ada"}, "edge_liked_by": {"count": 2},
+            "edge_threaded_comments": {"count": 2, "edges": [{"node": {"id": "c1a", "text": "Under", "owner": {"username": "bea"}, "edge_liked_by": {"count": 1}}}]},
+        }}]}}}},
+        {"handle": "redacted_handle", "statusId": "post"},
+    )
+    check(gql_nested[0]["stats"]["replies"] == 2 and gql_nested[0]["_children"][0]["text"] == "Under", "graphql threaded comments become children")
+
+    thread_nested = parse_threads_replies(
+        {"reply_threads": [{"post": {
+            "pk": "10", "code": "AbC", "like_count": 2, "caption": {"text": "Hi"}, "user": {"username": "ada"},
+            "text_post_app_info": {
+                "direct_reply_count": 3,
+                "direct_replies": {"edges": [{"node": {"post": {
+                    "pk": "11", "code": "XyZ", "caption": {"text": "Yo"}, "user": {"username": "bea"},
+                    "text_post_app_info": {"direct_reply_count": 1, "direct_replies": {"edges": [{"node": {"post": {
+                        "pk": "12", "caption": {"text": "Deep"}, "user": {"username": "cy"},
+                    }}}]}},
+                }}}]},
+            },
+        }}]},
+        {"handle": "redacted_handle", "statusId": "root"},
+    )
+    check(thread_nested[0]["stats"]["replies"] == 3 and thread_nested[0]["url"].endswith("/t/AbC"), "threads reply count and permalink")
+    check(len(thread_nested[0]["_children"]) == 1 and thread_nested[0]["_children"][0]["replyingTo"]["id"] == "10" and "_children" not in thread_nested[0]["_children"][0], "threads stores one level of replies")
+
+    engaged = [
+        {"id": str(i), "handle": "a", "text": "hello from " + str(i), "date": "2026-10-20T00:00:00Z", "stats": {"likes": i, "replies": 1 if i < 13 else 0}}
+        for i in range(1, 16)
+    ]
+    engaged.append({"id": "spam", "handle": "x", "text": "free btc airdrop now", "spam": True, "stats": {"likes": 500, "replies": 9}})
+    picked = select_subthreads(engaged, 10)
+    check(len(picked) == 10 and picked[0]["id"] == "12" and all(int((row.get("stats") or {}).get("replies") or 0) > 0 and not row.get("spam") for row in picked), "subthreads are the ten most engaged replies")
+
+    search_payload = {
+        "data": [
+            {"id": "parent", "text": "root", "author_id": "u1", "conversation_id": "parent", "created_at": "2026-10-20T00:00:00.000Z"},
+            {"id": "c1", "text": "direct", "author_id": "u2", "in_reply_to_user_id": "u1", "conversation_id": "parent", "created_at": "2026-10-20T00:01:00.000Z", "referenced_tweets": [{"type": "replied_to", "id": "parent"}], "public_metrics": {"like_count": 2, "reply_count": 1}},
+            {"id": "c2", "text": "elsewhere", "author_id": "u3", "conversation_id": "root", "created_at": "2026-10-20T00:02:00.000Z", "referenced_tweets": [{"type": "replied_to", "id": "elsewhere"}]},
+        ],
+        "includes": {"users": [
+            {"id": "u1", "name": "A", "username": "a", "created_at": "2020-01-01T00:00:00.000Z", "public_metrics": {"followers_count": 10}},
+            {"id": "u2", "name": "B", "username": "b", "public_metrics": {"followers_count": 3}},
+            {"id": "u3", "name": "C", "username": "c"},
+        ]},
+    }
+    searched = parse_conversation_search(search_payload, "parent")
+    kept = [row for row in searched if belongs(row, "parent") is True]
+    check("parent" not in {row["id"] for row in searched} and len(kept) == 1 and kept[0]["id"] == "c1", "conversation search keeps only a direct reply")
+    check(kept[0]["replyingTo"]["id"] == "parent" and kept[0]["conversationId"] == "parent" and kept[0]["authorFollowers"] == 3, "conversation search fills the reply target")
+    saved_bearer = os.environ.pop("X_BEARER_TOKEN", None)
+    try:
+        check(conversation_search("2112600761762717997") is None, "conversation search does nothing without a token")
+    finally:
+        if saved_bearer is not None:
+            os.environ["X_BEARER_TOKEN"] = saved_bearer
+
     rss_replies = parse_comment_rss((FIX / "replies" / "comments.xml").read_text(encoding="utf-8"), {"handle": "example", "author": "Example", "id": "g1", "platform": "rss"})
     check(len(rss_replies) == 2 and all(r["kind"] == "reply" for r in rss_replies), "comment rss replies")
     check(rss_replies[0]["replyingTo"]["id"] == "g1" and rss_replies[0]["replyingTo"]["handle"] == "example", "comment rss target")
@@ -284,14 +367,16 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
         (folder / "keep.json").write_text(jsonlib.dumps({"replies": [{"id": "r1", "replies": [{"statusId": "r2"}]}]}), encoding="utf-8")
+        (folder / "r1.json").write_text(jsonlib.dumps({"replies": [{"id": "r3"}]}), encoding="utf-8")
         (folder / "yt_keep.json").write_text("{}", encoding="utf-8")
         (folder / "gone.json").write_text("{}", encoding="utf-8")
+        (folder / "orphan.json").write_text("{}", encoding="utf-8")
         (folder / "lookup.json").write_text("{}", encoding="utf-8")
         removed = prune_comments({"posts": [{"id": "keep", "statusId": "keep"}]}, folder)
-        check(removed == 1 and (folder / "keep.json").exists() and (folder / "yt_keep.json").exists() and (folder / "lookup.json").exists() and not (folder / "gone.json").exists(), "stale comment files are pruned")
+        check(removed == 2 and (folder / "keep.json").exists() and (folder / "r1.json").exists() and (folder / "yt_keep.json").exists() and (folder / "lookup.json").exists() and not (folder / "gone.json").exists() and not (folder / "orphan.json").exists(), "stale comment files are pruned and nested replies stay")
         count = write_comment_lookup(folder)
         lookup = jsonlib.loads((folder / "lookup.json").read_text(encoding="utf-8"))
-        check(count == 2 and lookup.get("r1") == "keep" and lookup.get("r2") == "keep", "reply lookup points at the comment file")
+        check(count == 3 and lookup.get("r1") == "keep" and lookup.get("r2") == "keep" and lookup.get("r3") == "r1", "reply lookup points at the comment file")
 
     yt = parse_youtube((FIX / "youtube_mkbhd.xml").read_text(encoding="utf-8"), {"id": "youtube:mkbhd", "platform": "youtube", "handle": "mkbhd", "channelId": "UCBJycsmduvYEL83R_U4JriQ"})
     first = yt["posts"][0]
@@ -307,6 +392,25 @@ def main() -> None:
         "mkbhd",
     )
     check(comment["text"] == "Nice" and comment["stats"]["likes"] == 5 and comment["stats"]["replies"] == 2 and comment["date"].startswith("2026-"), "invidious comment shape")
+    import yt_remote as yt_remote_mod
+    calls = []
+
+    def fake_page(video_id, sort, continuation=""):
+        calls.append(continuation)
+        kids = [{"commentId": "kid-" + str(index), "author": "@bea", "content": "yo " + str(index), "likeCount": 1, "replies": {"replyCount": 4, "continuation": "deeper"}} for index in range(25)]
+        return {"comments": kids}
+
+    previous_page = yt_remote_mod._page_invidious
+    yt_remote_mod._page_invidious = fake_page
+    try:
+        quiet = normalize_invidious_comment({"commentId": "quiet", "author": "a", "content": "nope", "likeCount": 9, "replies": {"replyCount": 0}}, "video", "chan")
+        loud = normalize_invidious_comment({"commentId": "loud", "author": "@ada", "content": "yes", "likeCount": 1, "replies": {"replyCount": 8, "continuation": "loud-token"}}, "video", "chan")
+        mid = normalize_invidious_comment({"commentId": "mid", "author": "b", "content": "mid", "likeCount": 3, "replies": {"replyCount": 2, "continuation": "mid-token"}}, "video", "chan")
+        yt_remote_mod._fill_replies([quiet, mid, loud], "video", "chan", 1)
+        check(calls == ["loud-token"] and len(loud["replies"]) == 20 and loud["replies"][0]["replyingTo"]["id"] == "loud", "invidious fills the busiest thread and stops at 20")
+        check(loud["replies"][0]["replies"] == [] and not mid.get("replies"), "invidious does not fetch a third level")
+    finally:
+        yt_remote_mod._page_invidious = previous_page
     fresh = {"id": "vid", "avatar": "", "verifiedType": None, "media": [{"type": "video", "url": "https://www.youtube-nocookie.com/embed/vid"}]}
     carry_youtube_fields(
         [fresh],

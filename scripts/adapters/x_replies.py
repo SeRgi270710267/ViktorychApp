@@ -329,7 +329,7 @@ def _chain(posts: list) -> list:
     return out
 
 
-def rank_replies(replies: list, author_handle: str = "") -> list:
+def rank_replies(replies: list, author_handle: str = "", cap: int = CAP) -> list:
     author = (author_handle or "").lower()
     posts = []
     seen = set()
@@ -369,7 +369,7 @@ def rank_replies(replies: list, author_handle: str = "") -> list:
     others = [post for post in clean if post not in self_posts]
     others.sort(key=lambda post: (engagement(post), _num((post.get("stats") or {}).get("likes")), post.get("date") or ""), reverse=True)
     flagged.sort(key=engagement, reverse=True)
-    ordered = (_chain(self_posts) + others)[:CAP]
+    ordered = (_chain(self_posts) + others)[:cap]
     result = ordered + flagged[:SPAM_CAP]
     for post in result:
         post.pop("_rankId", None)
@@ -378,6 +378,21 @@ def rank_replies(replies: list, author_handle: str = "") -> list:
 
 def _cap(replies: list) -> list:
     return rank_replies(replies, "")
+
+
+def select_subthreads(replies: list, limit: int = 10) -> list:
+    """Replies that have their own replies, most engaged first."""
+    rows = []
+    for post in replies or []:
+        if not isinstance(post, dict) or post.get("spam"):
+            continue
+        if _num((post.get("stats") or {}).get("replies")) <= 0:
+            continue
+        if not (post.get("id") or post.get("statusId")):
+            continue
+        rows.append(post)
+    rows.sort(key=engagement, reverse=True)
+    return rows[:limit]
 
 
 def _fill_rank(post: dict, parent_id: str) -> int:
@@ -480,11 +495,11 @@ def merge_replies(previous: list, fresh: list) -> list:
     return out
 
 
-def parse_fxtwitter_conversation(payload, parent_id: str, author_handle: str = "") -> list:
+def parse_fxtwitter_conversation(payload, parent_id: str, author_handle: str = "", cap: int = CAP) -> list:
     data = _payload(payload)
     author = author_handle or _parent_handle(data)
     rows = [row for row in extract_fxtwitter_replies(data, parent_id) if belongs(row, parent_id) is True]
-    return rank_replies(rows, author)
+    return rank_replies(rows, author, cap)
 
 
 def _stat(part: str, icon: str):
@@ -543,7 +558,7 @@ def parse_nitter_status(html: str, status_id: str) -> dict | None:
     return None
 
 
-def parse_nitter_replies(html: str, parent_id: str) -> list:
+def parse_nitter_replies(html: str, parent_id: str, cap: int = CAP) -> list:
     """Pull reply tweets out of a Nitter status page.
 
     The page is already the parent status, so a reply that does not name another
@@ -568,4 +583,4 @@ def parse_nitter_replies(html: str, parent_id: str) -> list:
             if not (post.get("replyingTo") or {}).get("id"):
                 post["replyingTo"] = {"name": "", "handle": "", "avatar": "", "id": parent}
         out.append(post)
-    return rank_replies(out, author)
+    return rank_replies(out, author, cap)

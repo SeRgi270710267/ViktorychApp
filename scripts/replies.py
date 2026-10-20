@@ -27,7 +27,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from adapters.ig_comments import parse_ig_comments, parse_ig_document  # noqa: E402
 from adapters.rss_comments import parse_comment_rss  # noqa: E402
 from adapters.threads_replies import parse_threads_document  # noqa: E402
+from adapters.x_api_v2 import parse_conversation_search  # noqa: E402
 from adapters.x_replies import (  # noqa: E402
+    belongs,
     comments_due,
     conversation_reply_count,
     extract_fxtwitter_replies,
@@ -37,13 +39,15 @@ from adapters.x_replies import (  # noqa: E402
     parse_nitter_replies,
     parse_nitter_status,
     rank_replies,
+    select_subthreads,
     status_object,
     _parent_handle,
 )
-from x_guard import assert_not_x_api, auth_cookie_header, open_url  # noqa: E402
+from x_guard import assert_not_x_api, auth_cookie_header, conversation_search, open_url  # noqa: E402
 
 UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
 BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+NEST_CAP = 20
 NITTER_HOSTS = (
     "https://nitter.meowing.monster",
     "https://nitter.kareem.one",
@@ -207,7 +211,7 @@ def _lookup_x(post: dict):
     return None
 
 
-def fetch_x(post: dict):
+def fetch_x(post: dict, cap: int = 50):
     status_id = str(post.get("statusId") or post.get("id") or "")
     handle = post.get("handle") or "i"
     try:
@@ -224,7 +228,7 @@ def fetch_x(post: dict):
             time.sleep(0.2)
             return _lookup_x(reply)
 
-        rows = rank_replies(fill_missing(rows, status_id, lookup), author)
+        rows = rank_replies(fill_missing(rows, status_id, lookup), author, cap)
         return rows, "fxtwitter", conversation_reply_count(payload)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"[replies] fxtwitter {status_id}: {exc}", file=sys.stderr)
@@ -232,7 +236,20 @@ def fetch_x(post: dict):
         html = _try(f"{host}/{handle}/status/{status_id}", {"User-Agent": "Mozilla/5.0"})
         if not html or "tweet-content" not in html:
             continue
-        return parse_nitter_replies(html, status_id), host, None
+        return parse_nitter_replies(html, status_id, cap), host, None
+    raw = conversation_search(status_id)
+    if raw:
+        try:
+            rows = [
+                row
+                for row in parse_conversation_search(raw, status_id)
+                if str(row.get("id") or "") != status_id and belongs(row, status_id) is True
+            ]
+        except (ValueError, json.JSONDecodeError) as exc:
+            print(f"[replies] x search {status_id}: {exc}", file=sys.stderr)
+            rows = []
+        if rows:
+            return rank_replies(rows, handle, cap), "x-api-v2", None
     return None
 
 
@@ -322,9 +339,17 @@ def fetch_instagram(post: dict):
     return None
 
 
+def _threads_code(post: dict) -> str:
+    url = str(post.get("url") or "")
+    match = re.search(r"/(?:post|t)/([^/?#]+)", url)
+    if match and match.group(1):
+        return match.group(1)
+    return str(post.get("statusId") or post.get("id") or "")
+
+
 def fetch_threads(post: dict):
     handle = post.get("handle") or ""
-    code = str(post.get("statusId") or post.get("id") or "")
+    code = _threads_code(post)
     count = None
     count_source = ""
     urls = [
@@ -417,14 +442,34 @@ def _stored_fetched_at(path: Path) -> str:
     return str(doc.get("fetchedAt") or "")
 
 
-def write_comments(post: dict, replies: list, source: str) -> None:
-    status_id = str(post.get("statusId") or post.get("id") or "")
+def _safe_id(status_id: str) -> str:
+    text = str(status_id or "")
+    if not text or text in (".", "..") or "/" in text or "\\" in text:
+        return ""
+    return text
+
+
+def _detach_children(replies: list) -> list:
+    nested = []
+    for reply in replies or []:
+        if not isinstance(reply, dict):
+            continue
+        kids = reply.pop("_children", None)
+        if kids:
+            nested.append((reply, kids[:NEST_CAP]))
+    return nested
+
+
+def write_comments(post: dict, replies: list, source: str, cap: int | None = None) -> None:
+    status_id = _safe_id(post.get("statusId") or post.get("id") or "")
+    if not status_id:
+        return
     dest = ROOT / "comments"
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / f"{status_id}.json"
     merged = merge_replies(_stored_replies(path), replies)
-    if post.get("platform") == "x":
-        merged = rank_replies(merged, post.get("handle") or "")
+    if post.get("platform") == "x" or cap:
+        merged = rank_replies(merged, post.get("handle") or "", cap or 50)
     doc = {
         "postId": status_id,
         "platform": post.get("platform") or "",
@@ -434,6 +479,56 @@ def write_comments(post: dict, replies: list, source: str) -> None:
     }
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"[replies] {post.get('platform')}:{status_id} {len(merged)} via {source}")
+
+
+def _write_nested(parent: dict, nested: list, source: str) -> None:
+    for reply, kids in nested:
+        child = {
+            "id": reply.get("id"),
+            "statusId": reply.get("statusId") or reply.get("id"),
+            "platform": parent.get("platform") or reply.get("platform") or "",
+            "handle": reply.get("handle") or "",
+            "author": reply.get("author") or "",
+            "date": reply.get("date") or "",
+            "url": reply.get("url") or "",
+        }
+        write_comments(child, kids, source + ":nested", NEST_CAP)
+
+
+def _refresh_subthreads(parent: dict, replies: list, use_fixtures: bool, already: set) -> None:
+    """Second-level replies only. Deeper pages stay empty until a later fetch."""
+    platform = parent.get("platform") or ""
+    if platform not in ("x", "threads"):
+        return
+    for reply in select_subthreads(replies):
+        status_id = _safe_id(reply.get("statusId") or reply.get("id") or "")
+        if not status_id or status_id in already:
+            continue
+        child = {
+            "id": reply.get("id") or status_id,
+            "statusId": status_id,
+            "platform": platform,
+            "handle": reply.get("handle") or parent.get("handle") or "",
+            "author": reply.get("author") or "",
+            "date": reply.get("date") or "",
+            "url": reply.get("url") or "",
+        }
+        path = ROOT / "comments" / f"{status_id}.json"
+        if not use_fixtures and not comments_due(child.get("date") or "", _stored_fetched_at(path)):
+            continue
+        found = from_fixture(child) if use_fixtures else None
+        if found is None and not use_fixtures:
+            if platform == "x":
+                found = fetch_x(child, NEST_CAP)
+                time.sleep(0.3)
+            elif platform == "threads":
+                found = fetch_threads(child)
+        if not found:
+            continue
+        rows, source, count = found
+        if count is not None:
+            reply.setdefault("stats", {})["replies"] = count
+        write_comments(child, rows[:NEST_CAP], source, NEST_CAP)
 
 
 def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> None:
@@ -475,7 +570,10 @@ def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> No
                 stats["replies"] = count
                 print(f"[replies] {platform}:{status_id} count {count} via {source}")
         if replies or count == 0:
+            nested = _detach_children(replies)
             write_comments(post, replies, source)
+            _write_nested(post, nested, source)
+            _refresh_subthreads(post, replies, use_fixtures, {str(reply.get("id") or "") for reply, _kids in nested})
         elif count is not None:
             print(f"[replies] {platform}:{status_id} count only via {source}")
     if missed["instagram"]:

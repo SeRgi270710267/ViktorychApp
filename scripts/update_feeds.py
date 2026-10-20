@@ -274,8 +274,30 @@ def prune_media(dest: Path, doc: dict) -> int:
     return removed
 
 
+def _reply_ids(data) -> set:
+    found = set()
+
+    def walk(items) -> None:
+        if not isinstance(items, list):
+            return
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            for key in (item.get("id"), item.get("statusId")):
+                if key:
+                    found.add(str(key))
+            walk(item.get("replies"))
+
+    if isinstance(data, dict):
+        for key in ("comments", "replies", "newest"):
+            walk(data.get(key))
+    elif isinstance(data, list):
+        walk(data)
+    return found
+
+
 def prune_comments(doc: dict, comments_dir: Path | None = None) -> int:
-    """Drop comment files that no longer belong to a post in the document."""
+    """Drop comment files that no longer belong to a post or a stored reply."""
     comments_dir = comments_dir or (ROOT / "comments")
     keep = set()
     for post in doc.get("posts") or []:
@@ -286,6 +308,20 @@ def prune_comments(doc: dict, comments_dir: Path | None = None) -> int:
             keep.add("yt_" + str(key))
     if not comments_dir.is_dir():
         return 0
+    changed = True
+    while changed:
+        changed = False
+        for path in comments_dir.glob("*.json"):
+            if path.name == "lookup.json" or path.stem not in keep:
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            for reply_id in _reply_ids(data):
+                if reply_id not in keep:
+                    keep.add(reply_id)
+                    changed = True
     removed = 0
     for path in comments_dir.glob("*.json"):
         if path.name == "lookup.json":
