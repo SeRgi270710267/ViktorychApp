@@ -131,16 +131,42 @@ Live X accounts use fxtwitter, then Nitter RSS (`nitter.meowing.monster`, `nitte
 
 ## Storage
 
-The browser loads whatever a public CORS API will give it. The build stores only what the browser cannot fetch. Nothing from a sync is committed, so git history does not grow every half hour.
+The browser loads whatever a public CORS API will give it. The build stores only what the browser cannot fetch. A half-hour sync does not commit. The archive shards are the exception: they are committed at most once a day, and only if they changed.
 
 | Data | Where it comes from | Stored in the site artifact? |
 | --- | --- | --- |
 | X replies, nested replies, and fresh counts | `api.fxtwitter.com` `/2/conversation/<id>` and `/2/status/<id>`, from the browser, when a post page opens | No. A `comments/<id>.json` file is used only if that call fails |
 | YouTube comments, durations, subscriber counts | Invidious, rotating hosts from `api.invidious.io`, then Piped | No. A `comments/yt_<id>.json` file is used only if the live calls fail |
-| Photos and video | Hotlinked: `pbs.twimg.com`, `video.twimg.com`, Meta CDN, `i.ytimg.com` | No binaries |
+| Photos and video | Hotlinked, or loaded by the browser from a permanent URL or an embed | No binaries |
 | Timelines | Build: fxtwitter or Nitter for X, RSSHub for Instagram and Threads, YouTube’s RSS feed, other RSS | Yes, in `feeds.json`, about 300 posts |
-| Meta CDN URL refresh | Build, because those URLs expire | Yes, as URLs on the post |
-| Threads and Instagram comments | Build. The browser cannot call those endpoints without a cookie | Yes, and only for posts under 7 days old |
+| Older posts | Append-only stubs in `archive/YYYY-MM.json` | Yes. Text only, about 200 bytes each. No media and no comments |
+| Meta CDN URL refresh | Build, for posts still in `feeds.json`, because those URLs expire | Yes, as URLs on the post |
+| Threads and Instagram comments | Build. The browser cannot call those endpoints without a cookie | Yes, and only for posts under 7 days old. Not copied into the archive |
+
+## Archive
+
+Posts that fall out of the 300-post `feeds.json` window stay on the timeline as stubs. A stub is `p` (platform), `id`, `h` (handle), `d` (date), `k` (kind, omitted for a normal post), and `t` (text, whitespace collapsed, at most 280 characters). Nothing else is stored. `archive/index.json` lists the shard names newest first. The page loads that index and the newest shard with `feeds.json`. Older shards load when the bottom of Home, a profile, or a List scrolls into view.
+
+The seed built from the current `feeds.json` is 35 stubs. Each stub averages **213 bytes** (smallest 106, largest 388, because a 280-character snippet plus the keys can pass 300 bytes). Those 35 posts run from 10 Aug 2026 through 20 Oct 2026, 71 days, which is about 180 posts a year:
+
+`180 × 213 bytes ≈ 38 KB a year`
+
+The 300 KB/year figure is the same stub at a busier pace: `1400 × 213 bytes ≈ 298 KB`, about four posts a day. At the volume in this seed, a year of shards is a few dozen kilobytes.
+
+Each sync downloads `archive/index.json` and every shard it names from the live site, appends stubs it has not seen, and publishes them again. A partial download leaves the local shards alone. The half-hour run does not commit.
+
+Once a day, at 06:17 UTC, the workflow commits `archive/` to `main` if the files changed. That daily commit is safer than a `data` branch force-pushed as one squashed commit. A force-push replaces the only copy, so a push that is cut off, or a deleted branch, has nothing older to check out. The daily commit is append-only, a few kilobytes, and can be reverted. A push made with `GITHUB_TOKEN` does not start another run, so the backup does not deploy a second time. If the Pages deploy fails, the previous day’s commit is still in git. If the commit fails, the site already has the shards from the half-hour publish.
+
+When a stub scrolls into view, the browser fills it in and keeps a successful result in IndexedDB (`rss-feeds-live`, key `arch:`) for about 24 hours. A failed request is not stored as a deleted post.
+
+- **X.** `https://api.fxtwitter.com/2/status/<id>` allows every origin and returns the full text, media, counts, and quotes. A 404, or fxtwitter code 404 or 144, is the tombstone below. A network miss keeps the stored snippet.
+- **YouTube.** The card uses `https://i.ytimg.com/vi/<id>/hqdefault.jpg` immediately. That host sends `Cross-Origin-Resource-Policy: cross-origin`, so the image loads in an `<img>`. Title, duration, and view count come from Invidious or Piped when the card is on screen. Comments still load on the watch page.
+- **Instagram.** Checked in Chrome on 20 Oct 2026. `https://www.instagram.com/p/<shortcode>/media/?size=l` does redirect to a fresh `cdninstagram.com` JPEG, and curl can download it. The browser cannot show that image: the JPEG is sent with `Cross-Origin-Resource-Policy: same-origin`, so the `<img>` errors (`naturalWidth` 0) even with `referrerpolicy="no-referrer"`. The embed `https://www.instagram.com/p/<shortcode>/embed/` does load in an iframe from another origin. The photo inside that frame was 500×666 for `DeZgzTEggQe`. Archive cards use the embed, plus the stored caption and an Open original link. The embed covers video as well as photos.
+- **Threads.** There is no `/media` redirect. `https://www.threads.com/t/<code>/media` is 404, and `https://www.instagram.com/p/<threads code>/media/?size=l` is not that post. `https://graph.threads.net/oembed` allows every origin, but the HTML is a “View on Threads” blockquote plus `embed.js`, and inserting it in the page did not produce an image. The post page’s `og:image` is a signed CDN URL with an `oe=` expiry, and the page itself has no CORS header, so the browser cannot read it. `https://www.threads.net/t/<code>/embed` does load in an iframe: the photo post `DeZtp-TkQHh` rendered a 2160×3260 image and the caption, and a text-only post rendered the text. Archive cards use that embed, the stored snippet, and Open original. Newest Threads posts that are still in `feeds.json` keep the Meta CDN refresh. Those URLs are not copied into the archive. If the embed is blocked later, the snippet and the Open original link remain; the gray media tile (`#333639`) is what an image shows when its URL fails.
+
+Comments stay on demand. X and YouTube load them in the browser. Instagram and Threads are fetched during sync only while the post is under 7 days old, and those files are deleted after that. The archive does not keep them.
+
+A post the source says is gone uses X’s tombstone, including the sentence **This post is unavailable.** A network miss does not.
 
 Live responses sit in memory, then `sessionStorage`, then IndexedDB (`rss-feeds-live`) when that quota is full. The cache lasts about 12 minutes. `fetchedAt` is not shown.
 
@@ -232,7 +258,7 @@ The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the
 
 `.github/workflows/sync.yml` runs every 30 minutes, on **Run workflow**, and on every push to `main`. The job starts RSSHub (`diygod/rsshub` on port 1200) and RSS-Bridge (`rssbridge/rss-bridge` on port 8080). It downloads the last published `feeds.json` (and Instagram/Threads comment files under 7 days old) so a failed source can keep the previous data. Instagram and Threads try the local RSSHub container, then the public RSSHub mirrors in `feeds.config.json`, then RSS-Bridge. X timelines try fxtwitter, then the Nitter mirrors. One failed source keeps that feed’s previous posts and does not fail the run.
 
-The job does not commit. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `.nojekyll`, `feeds.json`, and any `comments/*.json` into `_site`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/` and `media/` are gitignored. `feeds.json` in the repository is only the seed used when the live site cannot be downloaded.
+The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `.nojekyll`, `feeds.json`, `archive/*.json`, and any `comments/*.json` into `_site`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/` and `media/` are gitignored. `archive/` is not. `feeds.json` in the repository is only the seed used when the live site cannot be downloaded. At 06:17 UTC the workflow commits `archive/` when those files changed. See Archive above for why that is a normal commit on `main` and not a force-pushed `data` branch.
 
 ## GitHub Pages
 

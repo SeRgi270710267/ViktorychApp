@@ -442,6 +442,90 @@ def main() -> None:
     blank = {"id": "new", "avatar": "", "media": [{}]}
     carry_youtube_fields([blank], [], {"avatar": "https://yt3.googleusercontent.com/saved", "verifiedType": "blue"})
     check(blank["avatar"].endswith("/saved") and blank["verifiedType"] == "blue", "new youtube posts inherit the saved profile")
+
+    import json
+    import tempfile
+
+    from archive import merge_archive, stub_from_post, summarize
+    from pull_snapshot import pull_archive
+
+    long_text = "word " * 80
+    post = {
+        "platform": "instagram",
+        "id": "4006377606181159966",
+        "handle": "redacted_handle",
+        "date": "2026-10-12T16:56:29Z",
+        "kind": "post",
+        "text": long_text,
+        "url": "https://www.instagram.com/p/DeZgzTEggQe/",
+        "media": [{"type": "photo", "url": "https://cdn.example/a.jpg"}],
+        "stats": {"likes": 5},
+        "avatar": "https://cdn.example/a.jpg",
+    }
+    stub = stub_from_post(post)
+    check(stub["id"] == "DeZgzTEggQe" and stub["p"] == "instagram", "instagram stub uses the shortcode")
+    check(len(stub["t"]) == 280 and "k" not in stub, "snippet is capped at 280 and plain posts omit kind")
+    encoded = json.dumps(stub, ensure_ascii=False, separators=(",", ":"))
+    check("cdn.example" not in encoded and "media" not in stub and "stats" not in stub, "stub stores no media or stats")
+    reply = stub_from_post(dict(post, platform="threads", id="DeZtp7KER52", url="https://www.threads.com/t/DeZtp7KER52", kind="reply", text="short"))
+    check(reply["id"] == "DeZtp7KER52" and reply["k"] == "reply" and len(reply["t"]) < 280, "threads stub keeps a reply kind")
+    undated = stub_from_post({"platform": "rss", "id": "item-1", "handle": "news", "text": "hi"})
+    check(undated and undated["id"] == "item-1" and "d" not in undated, "undated stub omits an empty date")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        added = merge_archive(root / "archive", [post, post])
+        check(added == 1, "the same id is not archived twice")
+        added = merge_archive(root / "archive", [dict(post, text="different text that must not replace the first snippet")])
+        check(added == 0, "an existing stub is not overwritten")
+        saved = json.loads((root / "archive" / "2026-10.json").read_text(encoding="utf-8"))
+        check(saved[0]["t"] == stub["t"] and saved[0]["id"] == "DeZgzTEggQe", "the first snippet stays in the month shard")
+        index = json.loads((root / "archive" / "index.json").read_text(encoding="utf-8"))
+        check(index["shards"] == ["2026-10"], "the shard is named for its month")
+        older = {"platform": "x", "id": "2112600761762717997", "handle": "redacted_handle", "date": "2026-08-02T00:00:00Z", "text": "old", "kind": "post"}
+        merge_archive(root / "archive", [older])
+        index = json.loads((root / "archive" / "index.json").read_text(encoding="utf-8"))
+        check(index["shards"] == ["2026-10", "2026-08"], "older months follow the newest shard")
+        before = (root / "archive" / "2026-10.json").read_bytes()
+
+        def fetch_partial(rel):
+            if rel.endswith("index.json"):
+                return b'{"shards":["2026-10","2026-09"]}\n'
+            if rel.endswith("2026-10.json"):
+                return b'[{"p":"x","id":"1"}]\n'
+            return None
+
+        check(pull_archive(root, fetch_partial) == "kept", "a partial archive download keeps the local shards")
+        check((root / "archive" / "2026-10.json").read_bytes() == before, "a partial download does not rewrite a shard")
+
+        def fetch_ok(rel):
+            if rel.endswith("index.json"):
+                return b'{"shards":["2026-09"]}\n'
+            if rel.endswith("2026-09.json"):
+                return b'[{"p":"x","id":"only","t":"kept"}]\n'
+            return None
+
+        check(pull_archive(root, fetch_ok) == "updated", "a complete archive download replaces the shards")
+        check(json.loads((root / "archive" / "2026-09.json").read_text(encoding="utf-8"))[0]["id"] == "only", "the downloaded shard is what gets stored")
+        check(not (root / "archive" / "2026-10.json").exists(), "a shard left off the new index is removed")
+        check(not (root / "archive" / "2026-08.json").exists(), "local-only shards are replaced by the complete download")
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp)
+        doc = json.loads((ROOT / "feeds.json").read_text(encoding="utf-8"))
+        added = merge_archive(dest, doc["posts"])
+        stats = summarize(dest)
+        check(added == stats["count"] and stats["count"] >= 20, "the seed archive has one stub per post id")
+        check(stats["max"] < 700 and stats["avg"] < 400, "seed stubs stay within a few hundred bytes")
+        bad_fields = 0
+        long_text = 0
+        for path in dest.glob("*.json"):
+            if path.name == "index.json":
+                continue
+            for row in json.loads(path.read_text(encoding="utf-8")):
+                if not set(row) <= {"p", "id", "h", "d", "k", "t"}:
+                    bad_fields += 1
+                if len(row.get("t") or "") > 280:
+                    long_text += 1
+        check(bad_fields == 0 and long_text == 0, "every stub is text only and at most 280 characters")
     print("all adapter checks passed")
 
 

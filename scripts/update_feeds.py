@@ -512,6 +512,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         "preview": True,
         "feeds": profiles,
         "posts": posts,
+        "_archive_posts": list(existing.get("posts") or []) + list(collected),
     }
 
 
@@ -523,6 +524,7 @@ def main() -> None:
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
     doc = build(config, args.fixtures, args.download_media)
+    archive_posts = doc.pop("_archive_posts", [])
     fresh_comment_ids = set()
     for post in doc.get("posts") or []:
         if post.pop("_fresh", False):
@@ -545,6 +547,15 @@ def main() -> None:
     prune_comments(doc)
     indexed = write_comment_lookup()
     print(f"[comments] lookup {indexed} replies")
+    if not args.fixtures:
+        from archive import merge_archive, summarize
+
+        added = merge_archive(ROOT / "archive", archive_posts)
+        stats = summarize(ROOT / "archive")
+        print(
+            f"[archive] +{added} stubs, {stats['count']} total, "
+            f"avg {stats['avg']:.0f} bytes"
+        )
 
 
 if __name__ == "__main__":

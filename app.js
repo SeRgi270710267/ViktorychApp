@@ -1,4 +1,4 @@
-/* X-style reader. Timelines come from feeds.json. X replies and YouTube comments load live in the browser. */
+/* X-style reader. Timelines come from feeds.json plus monthly archive stubs. X replies, YouTube comments, and old-post details load live in the browser. */
 (function () {
   const KEY = "rss-feeds-settings-v1";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -81,7 +81,86 @@
   }
 
   function feeds() { return (STATE.data && STATE.data.feeds) || []; }
-  function posts() { return (STATE.data && STATE.data.posts) || []; }
+
+  const ARCHIVE = { order: [], loaded: {}, posts: [] };
+  const HYDRATED = {};
+  const HYDRATE_MISS = {};
+  const HYDRATE_FLIGHT = {};
+  let HYDRATE_OBS = null;
+  let ARCHIVE_OBS = null;
+  let archiveBusy = false;
+  const HYDRATE_TTL = 24 * 60 * 60 * 1000;
+
+  function canonicalId(post) {
+    const platform = (post && post.platform) || "";
+    const raw = String((post && (post.statusId || post.id)) || "");
+    const url = String((post && post.url) || "");
+    if (platform === "instagram") {
+      const match = (url.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/) || raw.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/) || [])[1];
+      if (match) return match;
+    }
+    if (platform === "threads") {
+      const match = (url.match(/threads\.(?:com|net)\/(?:@[^/]+\/)?(?:post|t)\/([A-Za-z0-9_-]+)/) || raw.match(/threads\.(?:com|net)\/(?:@[^/]+\/)?(?:post|t)\/([A-Za-z0-9_-]+)/) || [])[1];
+      if (match) return match;
+    }
+    return raw;
+  }
+
+  function postIdentity(post) {
+    return ((post && post.platform) || "") + ":" + canonicalId(post);
+  }
+
+  function sourceUrl(platform, handle, id) {
+    if (platform === "x" && handle && id) return "https://x.com/" + handle + "/status/" + id;
+    if (platform === "instagram" && id) return "https://www.instagram.com/p/" + id + "/";
+    if (platform === "threads" && id) return "https://www.threads.net/t/" + id;
+    if (platform === "youtube" && id) return "https://www.youtube.com/watch?v=" + id;
+    return "";
+  }
+
+  function stubMedia(platform, id, pageUrl) {
+    if (platform === "youtube") {
+      const poster = "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg";
+      return [{ type: "photo", url: poster, poster: poster }];
+    }
+    if (platform === "instagram") {
+      return [{ type: "embed", url: "https://www.instagram.com/p/" + id + "/embed/", title: "Instagram", open: pageUrl }];
+    }
+    if (platform === "threads") {
+      return [{ type: "embed", url: "https://www.threads.net/t/" + id + "/embed", title: "Threads", open: pageUrl }];
+    }
+    return [];
+  }
+
+  function expandStub(row) {
+    if (!row || !row.p || !row.id) return null;
+    const platform = String(row.p);
+    const id = String(row.id);
+    const handle = String(row.h || "");
+    const url = sourceUrl(platform, handle, id);
+    return {
+      id: id,
+      statusId: id,
+      platform: platform,
+      handle: handle,
+      author: handle,
+      feedId: platform + ":" + handle,
+      kind: row.k || "post",
+      text: row.t || "",
+      date: row.d || "",
+      url: url,
+      media: stubMedia(platform, id, url),
+      stub: true
+    };
+  }
+
+  function posts() {
+    const full = (STATE.data && STATE.data.posts) || [];
+    const seen = {};
+    full.forEach((post) => { seen[postIdentity(post)] = true; });
+    const extra = ARCHIVE.posts.filter((post) => !seen[postIdentity(post)]).map((post) => HYDRATED[postIdentity(post)] || post);
+    return full.concat(extra);
+  }
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
@@ -171,6 +250,8 @@
     const direct = all.find((p) => (p.platform === platform) && String(p.statusId || p.id) === String(id) && (!h || (p.handle || "").toLowerCase() === h))
       || all.find((p) => String(p.id) === String(id) || String(p.statusId) === String(id));
     if (direct) return direct;
+    const byCode = all.find((p) => canonicalId(p) === String(id) && (!platform || p.platform === platform) && (!h || (p.handle || "").toLowerCase() === h));
+    if (byCode) return byCode;
     for (const post of all) {
       if (post.quoted && String(post.quoted.statusId || post.quoted.id) === String(id)) return asPost(post.quoted, post.quoted.platform || platform || "x");
     }
@@ -352,8 +433,16 @@
   }
 
   function mediaHtml(items) {
-    const list = (items || []).filter((m) => m && (m.url || m.poster)).slice(0, 4);
+    const list = (items || []).filter((m) => m && (m.url || m.poster || m.type === "embed" || m.type === "placeholder")).slice(0, 4);
     if (!list.length) return "";
+    if (list.length === 1 && list[0].type === "embed") {
+      const embed = list[0];
+      const open = embed.open ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(embed.open)}">Open original</a>` : "";
+      return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(embed.url)}" title="${esc(embed.title || "Post")}" loading="lazy"></iframe>${open}</div></div>`;
+    }
+    if (list.length === 1 && list[0].type === "placeholder") {
+      return `<div class="media m1"><div class="tile broken"><a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(list[0].url || "#")}">Open original</a></div></div>`;
+    }
     const n = list.length;
     const cls = n === 1 ? "m1" : n === 2 ? "m2" : n === 3 ? "m3" : "m4";
     const tiles = list.map((m) => {
@@ -1326,6 +1415,173 @@
     });
   }
 
+  function archiveSentinel() {
+    if (!(ARCHIVE.order || []).some((name) => !ARCHIVE.loaded[name])) return "";
+    return `<div id="archive-more" class="archive-more">Older posts</div>`;
+  }
+
+  function nextShardName() {
+    return (ARCHIVE.order || []).find((name) => !ARCHIVE.loaded[name]) || "";
+  }
+
+  async function loadShard(name) {
+    if (!name || ARCHIVE.loaded[name]) return;
+    ARCHIVE.loaded[name] = "loading";
+    try {
+      const res = await fetch("archive/" + encodeURIComponent(name) + ".json", { cache: "no-cache", signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(String(res.status));
+      const rows = await res.json();
+      (rows || []).forEach((row) => {
+        const post = expandStub(row);
+        if (!post) return;
+        if (ARCHIVE.posts.some((item) => postIdentity(item) === postIdentity(post))) return;
+        ARCHIVE.posts.push(post);
+      });
+      ARCHIVE.loaded[name] = "ok";
+    } catch (err) {
+      ARCHIVE.loaded[name] = "miss";
+    }
+  }
+
+  async function loadNewestShard() {
+    ARCHIVE.order = [];
+    ARCHIVE.loaded = {};
+    ARCHIVE.posts = [];
+    try {
+      const res = await fetch("archive/index.json", { cache: "no-cache", signal: AbortSignal.timeout(8000) });
+      if (!res.ok) return;
+      const index = await res.json();
+      ARCHIVE.order = (index.shards || []).filter((name) => /^\d{4}-\d{2}$/.test(name) || name === "undated");
+      if (ARCHIVE.order.length) await loadShard(ARCHIVE.order[0]);
+    } catch (err) { /* the timeline stays on feeds.json */ }
+  }
+
+  function loadNextShard() {
+    const name = nextShardName();
+    if (!name || archiveBusy) return;
+    archiveBusy = true;
+    loadShard(name).then(() => {
+      archiveBusy = false;
+      render();
+    });
+  }
+
+  function archiveCacheGet(key) {
+    return idbGet("arch:" + key).then((parsed) => {
+      if (!parsed || Date.now() - parsed.at >= HYDRATE_TTL) return null;
+      return parsed.value;
+    });
+  }
+
+  function archiveCacheSet(key, value) {
+    return idbSet("arch:" + key, { at: Date.now(), value: value });
+  }
+
+  function fxGone(data, status) {
+    if (status === 404) return true;
+    if (!data || typeof data !== "object") return false;
+    const code = data.code;
+    return code === 404 || code === 144 || code === "404" || code === "144";
+  }
+
+  function hydrateX(id) {
+    const key = String(id || "");
+    if (!/^\d{1,24}$/.test(key)) return Promise.resolve(null);
+    return fetch(FX + "/2/status/" + encodeURIComponent(key), { cache: "no-cache", signal: AbortSignal.timeout(8000) }).then(async (res) => {
+      let data = null;
+      try { data = await res.json(); } catch (err) { data = null; }
+      if (fxGone(data, res.status)) return { tombstone: true };
+      if (!res.ok) return null;
+      const status = fxStatusObject(data);
+      if (!status || fxUnavailable(status)) return null;
+      return fxFromStatus(status);
+    }).catch(() => null);
+  }
+
+  function hydrateYt(post) {
+    const id = post.id;
+    return rotate(ivBases(), "/api/v1/videos/" + encodeURIComponent(id), 3, "ivBase").then((video) => {
+      if (!video || typeof video !== "object") return null;
+      const error = String(video.error || "");
+      if (error && /unavailable|not found|private|removed/i.test(error)) return { tombstone: true };
+      const next = Object.assign({}, post, { stub: false });
+      if (video.title) next.text = video.title;
+      const views = Number(video.viewCount);
+      if (isFinite(views) && views > 0) next.stats = Object.assign({}, post.stats, { views: views });
+      const seconds = Number(video.lengthSeconds);
+      if (isFinite(seconds) && seconds >= 0) {
+        next.media = (next.media || []).map((item) => Object.assign({}, item));
+        if (next.media[0]) next.media[0].duration = seconds;
+      }
+      return next;
+    }).catch(() => null);
+  }
+
+  function applyHydrated(key, value, stub) {
+    if (!value) return;
+    if (value.tombstone) {
+      HYDRATED[key] = Object.assign({}, stub, { tombstone: true, text: "", media: [], stub: false });
+      return;
+    }
+    HYDRATED[key] = Object.assign({}, value, {
+      stub: false,
+      feedId: stub.feedId || value.feedId || "",
+      platform: stub.platform || value.platform
+    });
+  }
+
+  function hydrateKey(key) {
+    if (!key || HYDRATED[key] || HYDRATE_FLIGHT[key] || HYDRATE_MISS[key]) return;
+    const stub = ARCHIVE.posts.find((item) => postIdentity(item) === key);
+    if (!stub || !stub.stub) return;
+    if (stub.platform === "instagram" || stub.platform === "threads" || stub.platform === "rss") {
+      HYDRATE_MISS[key] = true;
+      return;
+    }
+    HYDRATE_FLIGHT[key] = true;
+    archiveCacheGet(key).then((cached) => {
+      if (cached) return cached;
+      const pending = stub.platform === "x" ? hydrateX(stub.id) : stub.platform === "youtube" ? hydrateYt(stub) : Promise.resolve(null);
+      return pending.then((value) => {
+        if (!value) return null;
+        return archiveCacheSet(key, value).then(() => value);
+      });
+    }).then((value) => {
+      delete HYDRATE_FLIGHT[key];
+      if (!value) {
+        HYDRATE_MISS[key] = true;
+        return;
+      }
+      applyHydrated(key, value, stub);
+      render();
+    }).catch(() => {
+      delete HYDRATE_FLIGHT[key];
+      HYDRATE_MISS[key] = true;
+    });
+  }
+
+  function watchHydration() {
+    if (typeof IntersectionObserver !== "function") return;
+    if (!HYDRATE_OBS) {
+      HYDRATE_OBS = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          hydrateKey(entry.target.getAttribute("data-hydrate"));
+        });
+      }, { rootMargin: "400px" });
+    }
+    HYDRATE_OBS.disconnect();
+    document.querySelectorAll("[data-hydrate]").forEach((el) => HYDRATE_OBS.observe(el));
+    if (!ARCHIVE_OBS) {
+      ARCHIVE_OBS = new IntersectionObserver((entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadNextShard();
+      }, { rootMargin: "600px" });
+    }
+    ARCHIVE_OBS.disconnect();
+    const sentinel = document.getElementById("archive-more");
+    if (sentinel) ARCHIVE_OBS.observe(sentinel);
+  }
+
   function ensureYtSubs(feed) {
     if (!feed || feed.platform !== "youtube" || !feed.channelId) return;
     const key = "subs:" + feed.channelId;
@@ -1470,7 +1726,27 @@
     </div>`;
   }
 
+  function tombstoneCard(post) {
+    const face = authorFace(post);
+    const when = post.date ? `<span class="dot">·</span><a class="time" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>` : "";
+    return `<article class="post tombstone">
+      <div class="post-row">
+        ${avatar(face.avatar, post.author || post.handle)}
+        <div class="post-main">
+          <div class="byline">
+            <a class="name" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || post.handle || "Post")}${badge(face.verified)}</a>
+            ${post.handle ? `<a class="handle" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle)}</a>` : ""}
+            ${when}
+            ${sourceBadge(post.platform)}
+          </div>
+          <div class="unavailable">This post is unavailable.</div>
+        </div>
+      </div>
+    </article>`;
+  }
+
   function card(post, mode, opts) {
+    if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
     const hideRepost = mode === "author" || mode === "status";
     const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a href="${esc(profileHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
@@ -1484,7 +1760,8 @@
     const open = ` data-open="${esc(statusHash(post))}"`;
     const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
-    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}"${open}>
+    const hydrate = post.stub ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
+    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}"${open}${hydrate}>
       ${repost}
       <div class="post-row">
         ${avaCol}
@@ -1650,7 +1927,7 @@
       tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
       tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
     );
-    return homeHeader(tab) + body;
+    return homeHeader(tab) + body + archiveSentinel();
   }
 
   function pageHead(title, extra, back, action) {
@@ -1718,11 +1995,18 @@
     ${list.length ? list.map((p) => {
       const byThis = p.repostedBy && (p.repostedBy.handle || "").toLowerCase() === (feed.handle || "").toLowerCase();
       return card(p, byThis ? "" : "author");
-    }).join("") : emptyBlock(tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : "No posts yet", tab === "replies" ? "Replies by this account will show up here." : "Posts from this account will show up here.")}`;
+    }).join("") : emptyBlock(tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : "No posts yet", tab === "replies" ? "Replies by this account will show up here." : "Posts from this account will show up here.")}` + archiveSentinel();
   }
 
   function statusView(route) {
-    const post = findPost(route.platform, route.handle, route.id);
+    let post = findPost(route.platform, route.handle, route.id);
+    if (!post && (route.platform === "instagram" || route.platform === "threads" || route.platform === "youtube")) {
+      post = expandStub({ p: route.platform, id: route.id, h: route.handle });
+      if (post) STATE.shared[String(route.id)] = post;
+    }
+    if (post && post.tombstone) {
+      return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>` + tombstoneCard(post);
+    }
     if (!post) {
       const key = String(route.id);
       if (STATE.sharedState[key] !== "miss") {
@@ -1813,7 +2097,7 @@
         <button class="outline" data-act="edit-list" data-id="${esc(list.id)}">Edit List</button></div>
         <button class="show-more" data-act="members" data-id="${esc(list.id)}">Manage members</button>
       </div>
-      ${items.length ? items.map((p) => card(p)).join("") : emptyBlock("No posts in this List", "Add members to see their posts here.")}`;
+      ${items.length ? items.map((p) => card(p)).join("") : emptyBlock("No posts in this List", "Add members to see their posts here.")}` + archiveSentinel();
   }
 
   function bookmarksView() {
@@ -2336,8 +2620,22 @@
 
   function loadSharedStatus(route) {
     const key = String(route.id);
-    const live = (route.platform || "x") === "x" ? fxStatusPost(key) : Promise.resolve(null);
+    const live = (route.platform || "x") === "x" ? hydrateX(key) : Promise.resolve(null);
     live.then((post) => {
+      if (post && post.tombstone) {
+        STATE.shared[key] = {
+          id: key,
+          statusId: key,
+          platform: "x",
+          handle: route.handle || "",
+          author: route.handle || "",
+          url: sourceUrl("x", route.handle || "", key),
+          tombstone: true,
+          text: ""
+        };
+        STATE.sharedState[key] = "ok";
+        return;
+      }
       if (post) {
         STATE.shared[key] = post;
         STATE.sharedState[key] = "ok";
@@ -2408,6 +2706,7 @@
     }
     document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden && window.innerWidth < 500));
     lastKey = location.hash;
+    watchHydration();
   }
 
   function toast(message) {
@@ -2814,6 +3113,7 @@
       const res = await fetch("feeds.json", { cache: "no-cache" });
       if (!res.ok) throw new Error(String(res.status));
       STATE.data = await res.json();
+      await loadNewestShard();
       STATE.loading = false;
       STATE.settings = loadSettings();
       saveSettings();

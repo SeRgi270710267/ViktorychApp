@@ -2,7 +2,10 @@ name: Sync feeds
 
 on:
   schedule:
+    # Half-hour sync publishes shards. It does not commit them.
     - cron: "*/30 * * * *"
+    # Once a day, commit archive/ if it changed. github.event.schedule is the cron that fired.
+    - cron: "17 6 * * *"
   workflow_dispatch:
   push:
     branches:
@@ -12,14 +15,21 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# The backup job needs contents: write. The build job narrows that back to read.
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
+  actions: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+      actions: write
     services:
       rsshub:
         image: diygod/rsshub
@@ -81,6 +91,10 @@ jobs:
             mkdir -p _site/comments
             find comments -name '*.json' -type f -exec cp {} _site/comments/ \;
           fi
+          if [ -d archive ]; then
+            mkdir -p _site/archive
+            find archive -name '*.json' -type f -exec cp {} _site/archive/ \;
+          fi
           python3 - <<'PY'
           import os
           import sys
@@ -100,9 +114,51 @@ jobs:
         with:
           path: _site
 
+      - name: Upload archive shards for the daily backup
+        if: github.event_name == 'schedule' && github.event.schedule == '17 6 * * *'
+        uses: actions/upload-artifact@v4
+        with:
+          name: archive-shards
+          path: archive
+          retention-days: 1
+
+  # A daily commit on main, only when archive/ changed. Safer than force-pushing
+  # one squashed commit on a data branch: that push is the only copy, so a
+  # corrupted or deleted branch cannot be restored. This commit can be reverted.
+  # GITHUB_TOKEN pushes do not start another run of this workflow.
+  backup:
+    needs: build
+    if: github.event_name == 'schedule' && github.event.schedule == '17 6 * * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: archive-shards
+          path: archive
+
+      - name: Commit archive shards when they changed
+        run: |
+          git add -- archive
+          if git diff --cached --quiet; then
+            echo "archive unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Back up archive shards"
+          git push
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
