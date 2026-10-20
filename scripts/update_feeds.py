@@ -84,6 +84,8 @@ def apply_override(profile: dict, feed: dict) -> dict:
     merged["name"] = merged.get("name") or feed.get("handle") or ""
     merged["title"] = merged.get("name")
     merged["configured"] = True
+    if feed.get("channelId") and not merged.get("channelId"):
+        merged["channelId"] = feed["channelId"]
     if not merged.get("url"):
         from adapters.common import profile_url
 
@@ -296,16 +298,18 @@ def _reply_ids(data) -> set:
     return found
 
 
-def prune_comments(doc: dict, comments_dir: Path | None = None) -> int:
-    """Drop comment files that no longer belong to a post or a stored reply."""
+def prune_comments(doc: dict, comments_dir: Path | None = None, now=None) -> int:
+    """Drop comment files that are not a stored Instagram, Threads, or RSS reply."""
+    from adapters.x_replies import comments_kept
+
     comments_dir = comments_dir or (ROOT / "comments")
     keep = set()
     for post in doc.get("posts") or []:
+        if not comments_kept(post, now):
+            continue
         for key in (post.get("id"), post.get("statusId")):
-            if not key:
-                continue
-            keep.add(str(key))
-            keep.add("yt_" + str(key))
+            if key:
+                keep.add(str(key))
     if not comments_dir.is_dir():
         return 0
     changed = True
@@ -463,12 +467,8 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             continue
         posts = result.get("posts") or []
         if adapter == "youtube_rss" and not use_fixtures:
-            from yt_remote import carry_youtube_fields, enrich_youtube
+            from yt_remote import carry_youtube_fields
 
-            try:
-                enrich_youtube(posts, result.get("profiles") or [], feed)
-            except Exception as exc:
-                print(f"[youtube] {feed['id']}: enrich failed: {exc}", file=sys.stderr)
             saved = next((item for item in profiles if item.get("id") == feed.get("id")), {})
             carry_youtube_fields(posts, old_by_feed.get(feed["id"], []), saved)
         limit = feed.get("limit")
@@ -527,9 +527,7 @@ def main() -> None:
     for post in doc.get("posts") or []:
         if post.pop("_fresh", False):
             fresh_comment_ids.add(str(post.get("statusId") or post.get("id") or ""))
-    if config.pop("_channelIdsUpdated", False):
-        Path(args.config).write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        print(f"[youtube] stored channel ids in {args.config}")
+    config.pop("_channelIdsUpdated", None)
     out = ROOT / config.get("output", "feeds.json")
     media_dir = ROOT / "media"
     removed = prune_media(media_dir, doc)

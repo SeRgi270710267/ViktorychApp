@@ -1,4 +1,4 @@
-/* X-style reader. Renders the normalized feeds.json schema only. */
+/* X-style reader. Timelines come from feeds.json. X replies and YouTube comments load live in the browser. */
 (function () {
   const KEY = "rss-feeds-settings-v1";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -68,7 +68,8 @@
     shared: {},
     sharedState: {},
     chain: {},
-    threadMore: {}
+    threadMore: {},
+    focusId: ""
   };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
@@ -462,6 +463,17 @@
     return false;
   }
 
+  const LIVE_TTL = 12 * 60 * 1000;
+  const FX = "https://api.fxtwitter.com";
+  const IV_SEEDS = ["https://invidious.f5.si", "https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://yt.artemislena.eu"];
+  const PIPED_SEEDS = ["https://pipedapi.kavin.rocks", "https://pipedapi.adminforge.de", "https://api.piped.private.coffee", "https://pipedapi.leptons.xyz"];
+  const LIVE = { mem: {}, flight: {}, dbp: null, iv: null, dead: {}, videosDown: false };
+  const TRIED = {};
+  const PREFETCHED = {};
+  const GIVEAWAY = /(crypto\s*giveaway|airdrop|double your|seed phrase|claim (?:your )?reward|free\s+(?:btc|eth|usdt|bitcoin|ethereum))/i;
+  const BOT_HANDLE = /^[A-Za-z]+\d{5,}$/;
+  const UNAVAILABLE = ["this post is unavailable", "this tweet is unavailable", "this post was deleted", "deleted by the post author", "account is suspended", "account has been suspended"];
+
   function commentsCurrent(post, doc) {
     if (!doc || !doc.fetchedAt) return false;
     const fetched = Date.parse(doc.fetchedAt);
@@ -473,31 +485,857 @@
     return true;
   }
 
+  function liveDb() {
+    if (LIVE.dbp) return LIVE.dbp;
+    LIVE.dbp = new Promise((resolve) => {
+      try {
+        if (!window.indexedDB) return resolve(null);
+        const req = indexedDB.open("rss-feeds-live", 1);
+        req.onupgradeneeded = () => { req.result.createObjectStore("cache"); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      } catch (err) {
+        resolve(null);
+      }
+    });
+    return LIVE.dbp;
+  }
+
+  function idbGet(key) {
+    return liveDb().then((db) => new Promise((resolve) => {
+      if (!db) return resolve(null);
+      try {
+        const query = db.transaction("cache", "readonly").objectStore("cache").get(key);
+        query.onsuccess = () => resolve(query.result || null);
+        query.onerror = () => resolve(null);
+      } catch (err) {
+        resolve(null);
+      }
+    }));
+  }
+
+  function idbSet(key, row) {
+    return liveDb().then((db) => new Promise((resolve) => {
+      if (!db) return resolve();
+      try {
+        const query = db.transaction("cache", "readwrite").objectStore("cache").put(row, key);
+        query.onsuccess = () => resolve();
+        query.onerror = () => resolve();
+      } catch (err) {
+        resolve();
+      }
+    }));
+  }
+
+  function cacheGet(key) {
+    const hit = LIVE.mem[key];
+    if (hit && Date.now() - hit.at < LIVE_TTL) return Promise.resolve(hit.value);
+    try {
+      const raw = sessionStorage.getItem("rss-live:" + key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Date.now() - parsed.at < LIVE_TTL) {
+          LIVE.mem[key] = parsed;
+          return Promise.resolve(parsed.value);
+        }
+      }
+    } catch (err) { /* quota or private mode */ }
+    return idbGet(key).then((parsed) => {
+      if (parsed && Date.now() - parsed.at < LIVE_TTL) {
+        LIVE.mem[key] = parsed;
+        return parsed.value;
+      }
+      return null;
+    });
+  }
+
+  function cacheSet(key, value) {
+    const row = { at: Date.now(), value: value };
+    LIVE.mem[key] = row;
+    try {
+      sessionStorage.setItem("rss-live:" + key, JSON.stringify(row));
+      return Promise.resolve();
+    } catch (err) {
+      return idbSet(key, row);
+    }
+  }
+
+  function once(key, fn) {
+    if (LIVE.flight[key]) return LIVE.flight[key];
+    const pending = Promise.resolve().then(fn).finally(() => { delete LIVE.flight[key]; });
+    LIVE.flight[key] = pending;
+    return pending;
+  }
+
+  function fetchJson(url) {
+    return fetch(url, { cache: "no-cache", signal: AbortSignal.timeout(8000) }).then((res) => {
+      if (!res.ok) {
+        const err = new Error(String(res.status));
+        err.status = res.status;
+        throw err;
+      }
+      return res.json();
+    });
+  }
+
+  function ivBases() {
+    if (LIVE.iv) return LIVE.iv;
+    LIVE.iv = fetchJson("https://api.invidious.io/instances.json").then((rows) => {
+      const found = [];
+      (rows || []).forEach((item) => {
+        if (!Array.isArray(item) || item.length < 2) return;
+        const meta = item[1] || {};
+        if (meta.type !== "https" || !meta.api) return;
+        const uri = String(meta.uri || "").replace(/\/$/, "");
+        if (uri.indexOf("https://") === 0) found.push(uri);
+      });
+      const out = IV_SEEDS.slice();
+      found.forEach((uri) => { if (out.indexOf(uri) < 0) out.push(uri); });
+      return out.slice(0, 8);
+    }).catch(() => IV_SEEDS.slice());
+    return LIVE.iv;
+  }
+
+  function rotate(basesPromise, path, limit, slot) {
+    return basesPromise.then((bases) => {
+      if (path.indexOf("/api/v1/videos/") === 0 && LIVE.videosDown) return null;
+      const prefer = slot && LIVE[slot];
+      const list = [];
+      if (prefer && !LIVE.dead[prefer]) list.push(prefer);
+      (bases || []).forEach((base) => {
+        if (list.length >= (limit || 4)) return;
+        if (list.indexOf(base) < 0 && !LIVE.dead[base]) list.push(base);
+      });
+      // A reply continuation only works on the instance that issued it.
+      const sticky = path.indexOf("continuation=") >= 0 && prefer;
+      let index = 0;
+      function next() {
+        if (index >= list.length) return Promise.resolve(null);
+        const base = list[index++];
+        return fetchJson(base.replace(/\/$/, "") + path).then((data) => {
+          if (slot) LIVE[slot] = base;
+          return data;
+        }).catch((err) => {
+          if (path.indexOf("/api/v1/videos/") === 0 && err && err.status >= 500) {
+            LIVE.videosDown = true;
+            return null;
+          }
+          if (sticky) return null;
+          if (!(err && err.status === 404)) LIVE.dead[base] = true;
+          return next();
+        });
+      }
+      return next();
+    });
+  }
+
+  function fxNum(value) {
+    const n = Number(value);
+    return isFinite(n) ? Math.trunc(n) : 0;
+  }
+
+  function isoDate(value) {
+    if (value == null || value === "") return "";
+    if (typeof value === "number" || /^\d{10,13}$/.test(String(value))) {
+      let n = Number(value);
+      if (n < 100000000000) n *= 1000;
+      return new Date(n).toISOString().replace(/\.\d{3}Z$/, "Z");
+    }
+    const text = String(value).trim();
+    if (text.length >= 20 && text[4] === "-" && text.indexOf("T") > 0) return text;
+    const parsed = Date.parse(text);
+    if (!isFinite(parsed)) return "";
+    return new Date(parsed).toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+
+  function upgradeAvatar(url) {
+    if (!url) return "";
+    return String(url).replace("_normal.", "_400x400.").replace("_bigger.", "_400x400.").replace("_mini.", "_400x400.");
+  }
+
+  function bestMp4(variants) {
+    let best = "";
+    let bestRate = -1;
+    (variants || []).forEach((variant) => {
+      if (!variant || typeof variant !== "object") return;
+      const url = variant.url || "";
+      const ctype = String(variant.content_type || variant.type || variant.container || "").toLowerCase();
+      const path = url.split("?")[0].toLowerCase();
+      if (path.indexOf(".m3u8") >= 0) return;
+      if (ctype.indexOf("mp4") < 0 && path.indexOf(".mp4") < 0) return;
+      let rate = Number(variant.bitrate || variant.bit_rate || 0);
+      if (!isFinite(rate)) rate = 0;
+      if (rate >= bestRate) {
+        bestRate = rate;
+        best = url;
+      }
+    });
+    return best;
+  }
+
+  function fxMedia(media) {
+    if (!media) return [];
+    let items = [];
+    if (Array.isArray(media)) items = media;
+    else if (typeof media === "object") {
+      items = media.all || [];
+      if (!items.length) items = (media.photos || []).concat(media.videos || []).concat(media.gifs || []);
+    }
+    const out = [];
+    items.forEach((item) => {
+      if (typeof item === "string") {
+        out.push({ type: "photo", url: item, poster: item, width: null, height: null, alt: "" });
+        return;
+      }
+      if (!item || typeof item !== "object") return;
+      let kind = String(item.type || "photo").toLowerCase();
+      if (kind === "gif" || kind === "animated_gif") kind = "animated_gif";
+      else if (kind !== "photo" && kind !== "video" && kind !== "animated_gif") kind = item.variants || item.formats ? "video" : "photo";
+      const mp4 = bestMp4(item.variants || item.formats || item.video_files || []);
+      const poster = item.thumbnail_url || item.poster || item.preview_image_url || "";
+      let url = item.url || "";
+      if (kind === "video" || kind === "animated_gif") url = mp4 || url || poster;
+      else {
+        url = url || poster;
+      }
+      if (!url) return;
+      out.push({ type: kind, url: url, poster: poster || (kind === "photo" ? url : ""), width: item.width || null, height: item.height || null, alt: item.alt || item.alt_text || "" });
+    });
+    return out;
+  }
+
+  function fxStats(status) {
+    const mapping = {
+      replies: ["replies", "reply_count"],
+      reposts: ["reposts", "retweets", "retweet_count"],
+      quotes: ["quotes", "quote_count"],
+      likes: ["likes", "like_count", "favourites"],
+      views: ["views", "view_count", "impression_count"],
+      bookmarks: ["bookmarks", "bookmark_count"]
+    };
+    const out = {};
+    if (!status || typeof status !== "object") return out;
+    Object.keys(mapping).forEach((dest) => {
+      mapping[dest].forEach((key) => {
+        if (out[dest] == null && status[key] != null && status[key] !== "") out[dest] = status[key];
+      });
+    });
+    return out;
+  }
+
+  function fxVerified(author) {
+    if (!author) return null;
+    const verification = author.verification;
+    let kind = "";
+    if (typeof verification === "string") kind = verification;
+    else if (verification && typeof verification === "object") {
+      kind = verification.type || verification.verified_type || "";
+      if (!kind && (verification.verified || verification.is_verified)) kind = "blue";
+    }
+    if (!kind && author.verified) kind = "blue";
+    if (!kind || kind === "none") return null;
+    return kind === "individual" ? "blue" : kind;
+  }
+
+  function fxPerson(obj) {
+    if (!obj || typeof obj !== "object") return null;
+    let handle = obj.screen_name || obj.handle || "";
+    if (!handle && obj.author) return fxPerson(obj.author);
+    if (!handle && !obj.name) return null;
+    const person = { name: obj.name || handle, handle: handle, avatar: upgradeAvatar(obj.avatar_url || obj.avatar || "") };
+    const statusId = obj.status || obj.status_id;
+    if (statusId) person.id = String(statusId);
+    return person;
+  }
+
+  function fxUnavailable(status) {
+    if (!status || typeof status !== "object") return true;
+    if (status.deleted || status.unavailable || status.tombstone) return true;
+    const type = String(status.type || "").toLowerCase();
+    if (type === "tombstone" || type === "deleted" || type === "unavailable") return true;
+    const text = String(status.text || status.full_text || "").trim().toLowerCase();
+    if (UNAVAILABLE.some((phrase) => text.indexOf(phrase) >= 0)) return true;
+    if ((status.author == null || status.author === "" || (typeof status.author === "object" && !Object.keys(status.author).length)) && !text) return true;
+    return false;
+  }
+
+  function fxConversationId(status) {
+    let conv = status.conversation_id || status.conversation_id_str || "";
+    const nested = status.conversation;
+    if (!conv && nested && typeof nested === "object") conv = nested.id || nested.status || "";
+    else if (!conv && typeof nested === "string") conv = nested;
+    return String(conv || "");
+  }
+
+  function fxFromStatus(status) {
+    if (!status || typeof status !== "object") return null;
+    const wrapped = status.tweet && typeof status.tweet === "object" ? status.tweet : status;
+    if (fxUnavailable(wrapped)) return null;
+    const author = wrapped.author || {};
+    const handle = author.screen_name || author.handle || "";
+    const statusId = String(wrapped.id || wrapped.id_str || "");
+    if (!statusId) return null;
+    const replying = typeof wrapped.replying_to === "string"
+      ? { name: wrapped.replying_to, handle: String(wrapped.replying_to).replace(/^@/, ""), avatar: "" }
+      : fxPerson(wrapped.replying_to || wrapped.replying_to_user || wrapped.in_reply_to);
+    const post = {
+      id: statusId,
+      statusId: statusId,
+      platform: "x",
+      feedId: "",
+      kind: replying ? "reply" : "post",
+      author: author.name || handle,
+      handle: handle,
+      avatar: upgradeAvatar(author.avatar_url || ""),
+      verifiedType: fxVerified(author),
+      text: String(wrapped.text || wrapped.full_text || "").trim(),
+      date: isoDate(wrapped.created_at || wrapped.created_timestamp || wrapped.date || ""),
+      url: wrapped.url || (handle ? "https://x.com/" + handle + "/status/" + statusId : ""),
+      media: fxMedia(wrapped.media),
+      stats: fxStats(wrapped),
+      replyingTo: replying
+    };
+    if (author.joined) post.authorJoined = isoDate(author.joined);
+    if (typeof author.followers === "number") post.authorFollowers = author.followers;
+    const conv = fxConversationId(wrapped);
+    if (conv) post.conversationId = conv;
+    if (replying && (wrapped.replying_to && (wrapped.replying_to.status || wrapped.replying_to.status_id))) {
+      post.replyingTo = Object.assign({}, replying, { id: String(wrapped.replying_to.status || wrapped.replying_to.status_id) });
+    }
+    return post;
+  }
+
+  function fxStatusObject(data) {
+    if (!data || typeof data !== "object") return null;
+    if (data.code != null && data.code !== 200 && data.code !== "200") return null;
+    if (data.tweet && typeof data.tweet === "object") return data.tweet;
+    if (data.status && typeof data.status === "object" && (data.status.id || data.status.id_str)) return data.status;
+    if (data.id && (data.text != null || data.author)) return data;
+    return null;
+  }
+
+  function fxBelongs(post, parentId) {
+    const parent = String(parentId || "");
+    if (!parent) return null;
+    const target = String((post.replyingTo || {}).id || "");
+    const conv = String(post.conversationId || "");
+    if (target === parent || conv === parent) return true;
+    if (target || conv) return false;
+    return null;
+  }
+
+  function fxExtract(data, parentId) {
+    const parent = String(parentId || "");
+    const out = [];
+    const seen = {};
+    (data.replies || []).forEach((status) => {
+      if (!status || typeof status !== "object" || fxUnavailable(status)) return;
+      const sid = String(status.id || status.id_str || "");
+      if (!sid || sid === parent || seen[sid]) return;
+      seen[sid] = true;
+      const post = fxFromStatus(status);
+      if (!post) return;
+      post.kind = "reply";
+      if (fxBelongs(post, parent) === false) return;
+      out.push(post);
+    });
+    return out;
+  }
+
+  function fxEngagement(post) {
+    const stats = post.stats || {};
+    let score = fxNum(stats.likes) + fxNum(stats.replies) * 2 + fxNum(stats.reposts);
+    if (post.verifiedType && post.verifiedType !== "none") score = Math.trunc(score * 1.5) + 1;
+    return score;
+  }
+
+  function fxNorm(text) {
+    return String(text || "").replace(/https?:\/\/\S+|t\.co\/\S+/gi, " ").replace(/@\w+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  }
+
+  function fxYoung(post) {
+    if (post.authorFollowers == null || fxNum(post.authorFollowers) >= 20) return false;
+    const joined = Date.parse(post.authorJoined || "");
+    const posted = Date.parse(post.date || "");
+    if (!isFinite(joined) || !isFinite(posted)) return false;
+    const gap = posted - joined;
+    return gap >= 0 && gap <= 21 * 86400000;
+  }
+
+  function fxSpamReason(post, author) {
+    if (author && String(post.handle || "").toLowerCase() === author) return "";
+    const text = post.text || "";
+    if (GIVEAWAY.test(text)) return "giveaway";
+    const leftover = text.replace(/https?:\/\/\S+|t\.co\/\S+/gi, " ").replace(/@\w+/g, " ").replace(/\s+/g, "");
+    if (/https?:\/\/\S+|t\.co\/\S+/i.test(text) && leftover.length < 8) return "link";
+    if (fxYoung(post)) return "new";
+    if (BOT_HANDLE.test(post.handle || "")) {
+      const compact = text.replace(/https?:\/\/\S+|t\.co\/\S+/gi, " ").replace(/@\w+/g, " ").replace(/\s+/g, "");
+      if (compact.length < 40 || /https?:\/\/\S+|t\.co\/\S+/i.test(text)) return "bot";
+    }
+    return "";
+  }
+
+  function fxChain(posts) {
+    const ids = {};
+    posts.forEach((post) => { ids[String(post.id || "")] = true; });
+    const byParent = {};
+    posts.forEach((post) => {
+      const target = String((post.replyingTo || {}).id || "");
+      (byParent[target] || (byParent[target] = [])).push(post);
+    });
+    Object.keys(byParent).forEach((key) => byParent[key].sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))));
+    const roots = posts.filter((post) => !ids[String((post.replyingTo || {}).id || "")]);
+    roots.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    const out = [];
+    const seen = {};
+    function walk(node) {
+      const sid = String(node.id || "");
+      if (seen[sid]) return;
+      seen[sid] = true;
+      out.push(node);
+      (byParent[sid] || []).forEach(walk);
+    }
+    roots.forEach(walk);
+    posts.forEach((post) => { if (!seen[String(post.id || "")]) out.push(post); });
+    return out;
+  }
+
+  function fxRank(replies, authorHandle, cap) {
+    const author = String(authorHandle || "").toLowerCase();
+    const posts = [];
+    const seen = {};
+    (replies || []).forEach((post, index) => {
+      if (!post || typeof post !== "object") return;
+      const item = Object.assign({}, post);
+      delete item.spam;
+      const sid = String(item.id || "");
+      if (sid) {
+        if (seen[sid]) return;
+        seen[sid] = true;
+      } else item._rankId = String(index);
+      posts.push(item);
+    });
+    const groups = {};
+    posts.forEach((post) => {
+      if (author && String(post.handle || "").toLowerCase() === author) return;
+      const key = fxNorm(post.text || "");
+      if (key.length < 20) return;
+      (groups[key] || (groups[key] = [])).push(post);
+    });
+    Object.keys(groups).forEach((key) => {
+      const group = groups[key];
+      if (group.length < 2) return;
+      group.sort((a, b) => fxEngagement(b) - fxEngagement(a));
+      group.slice(1).forEach((loser) => { loser.spam = true; });
+    });
+    posts.forEach((post) => { if (fxSpamReason(post, author)) post.spam = true; });
+    const clean = posts.filter((post) => !post.spam);
+    const flagged = posts.filter((post) => post.spam);
+    const selfPosts = clean.filter((post) => author && String(post.handle || "").toLowerCase() === author);
+    const others = clean.filter((post) => selfPosts.indexOf(post) < 0);
+    others.sort((a, b) => fxEngagement(b) - fxEngagement(a) || fxNum((b.stats || {}).likes) - fxNum((a.stats || {}).likes) || String(b.date || "").localeCompare(String(a.date || "")));
+    flagged.sort((a, b) => fxEngagement(b) - fxEngagement(a));
+    const result = fxChain(selfPosts).concat(others).slice(0, cap).concat(flagged.slice(0, 20));
+    result.forEach((post) => { delete post._rankId; });
+    return result;
+  }
+
+  function fxFillRank(post, parentId) {
+    if (fxBelongs(post, parentId) == null) return 0;
+    if (!(post.text || "").trim() && !(post.media || []).length) return 1;
+    if (!post.handle || !post.date) return 2;
+    if (!((post.replyingTo || {}).id) && !post.conversationId) return 2;
+    return 9;
+  }
+
+  function fxMergeLookup(post, extra, parentId) {
+    if (!extra) return null;
+    if (fxBelongs(extra, parentId) === false) return null;
+    const filled = Object.assign({}, post);
+    ["text", "handle", "author", "date", "avatar", "url", "verifiedType", "authorJoined", "authorFollowers", "conversationId"].forEach((key) => {
+      if (!filled[key] && extra[key]) filled[key] = extra[key];
+    });
+    if (!(filled.media || []).length && (extra.media || []).length) filled.media = extra.media;
+    if (!((filled.replyingTo || {}).id) && (extra.replyingTo || {}).id) filled.replyingTo = extra.replyingTo;
+    if (!filled.stats && extra.stats) filled.stats = extra.stats;
+    if (fxBelongs(filled, parentId) === true) return filled;
+    if (fxBelongs(extra, parentId) === true) {
+      if (extra.conversationId) filled.conversationId = extra.conversationId;
+      if ((extra.replyingTo || {}).id) filled.replyingTo = extra.replyingTo;
+    }
+    if (fxBelongs(filled, parentId) !== true) return null;
+    return filled;
+  }
+
+  function fxStatusPost(id) {
+    const key = String(id || "");
+    if (!key) return Promise.resolve(null);
+    return once("fxstatus:" + key, () => cacheGet("fx:status:" + key).then((hit) => {
+      if (hit) return hit;
+      return fetchJson(FX + "/2/status/" + encodeURIComponent(key)).then((data) => {
+        const status = fxStatusObject(data);
+        const post = status ? fxFromStatus(status) : null;
+        if (!post) throw new Error("empty");
+        return cacheSet("fx:status:" + key, post).then(() => post);
+      }).catch(() => null);
+    }));
+  }
+
+  function fxFill(rows, parentId) {
+    const ranked = rows.filter((post) => fxFillRank(post, parentId) < 9)
+      .sort((a, b) => fxFillRank(a, parentId) - fxFillRank(b, parentId))
+      .slice(0, 15);
+    return Promise.all(ranked.map((post) => fxStatusPost(postKey(post)).then((extra) => ({ id: postKey(post), extra: extra })))).then((found) => {
+      const byId = {};
+      found.forEach((item) => { if (item.extra) byId[item.id] = item.extra; });
+      const out = [];
+      const seen = {};
+      rows.forEach((post) => {
+        const sid = postKey(post);
+        if (!sid || seen[sid]) return;
+        seen[sid] = true;
+        let row = post;
+        if (byId[sid]) {
+          const merged = fxMergeLookup(post, byId[sid], parentId);
+          if (!merged) return;
+          row = merged;
+        }
+        if (fxBelongs(row, parentId) !== true) return;
+        out.push(row);
+      });
+      return out;
+    });
+  }
+
+  function loadXThread(post) {
+    const id = postKey(post);
+    if (!id) return Promise.resolve(null);
+    return once("fx:" + id, () => cacheGet("fx:conv:" + id).then((hit) => {
+      if (hit && hit.replies) return hit;
+      return fetchJson(FX + "/2/conversation/" + encodeURIComponent(id)).then((payload) => {
+        if (!payload || (payload.code != null && payload.code !== 200 && payload.code !== "200")) throw new Error("code");
+        const author = ((payload.status || {}).author || {}).screen_name || post.handle || "";
+        return fxFill(fxExtract(payload, id), id).then((filled) => {
+          const pack = { replies: fxRank(filled, author, 50), stats: fxStats(payload.status || {}) };
+          return cacheSet("fx:conv:" + id, pack).then(() => pack);
+        });
+      }).catch(() => null);
+    }));
+  }
+
+  function takeRanked(replies, cap) {
+    const clean = [];
+    const spam = [];
+    (replies || []).forEach((row) => { (row.spam ? spam : clean).push(row); });
+    return clean.slice(0, cap).concat(spam.slice(0, 20));
+  }
+
+  function selectSubthreads(replies) {
+    return (replies || []).filter((post) => post && !post.spam && fxNum((post.stats || {}).replies) > 0 && postKey(post))
+      .sort((a, b) => fxEngagement(b) - fxEngagement(a))
+      .slice(0, 10);
+  }
+
+  function applyLiveStats(id, stats) {
+    if (!stats) return;
+    const touch = (post) => {
+      if (!post || postKey(post) !== String(id)) return;
+      post.stats = Object.assign({}, post.stats || {});
+      ["replies", "reposts", "quotes", "likes", "views", "bookmarks"].forEach((key) => {
+        if (stats[key] != null && stats[key] !== "") post.stats[key] = stats[key];
+      });
+    };
+    posts().forEach(touch);
+    Object.keys(STATE.shared).forEach((key) => touch(STATE.shared[key]));
+    Object.keys(STATE.replies).forEach((key) => {
+      const bucket = STATE.replies[key] || {};
+      (bucket.replies || []).forEach(touch);
+      commentRows(bucket.doc).forEach(touch);
+    });
+  }
+
+  function snapshotDoc(file) {
+    return fetch("comments/" + encodeURIComponent(file) + ".json", { cache: "no-cache" }).then((res) => {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    });
+  }
+
   function replyBucket(post) {
     const id = postKey(post);
     if (!id) return { loading: false, replies: [], missing: true };
+    const want = String(STATE.focusId || "") === id ? 50 : 20;
     const bucket = STATE.replies[id];
-    if (bucket) return bucket;
-    STATE.replies[id] = { loading: true, replies: [], missing: false };
-    fetch("comments/" + encodeURIComponent(id) + ".json", { cache: "no-cache" })
-      .then((res) => {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.json();
-      })
-      .then((doc) => {
-        if (!commentsCurrent(post, doc)) {
-          STATE.replies[id] = { loading: false, replies: [], missing: true };
-          render();
+    if (bucket && (bucket.cap || 0) >= want) return bucket;
+    STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want };
+    const finish = (replies, missing, cap) => {
+      STATE.replies[id] = { loading: false, replies: replies || [], missing: !!missing, cap: cap || want };
+      render();
+    };
+    const snap = () => snapshotDoc(id).then((doc) => {
+      if (!commentsCurrent(post, doc)) {
+        finish([], true, want);
+        return;
+      }
+      finish(((doc && doc.replies) || []).slice(), false, want);
+    }).catch(() => finish([], true, want));
+    if ((post.platform || "") === "x") {
+      loadXThread(post).then((pack) => {
+        if (!pack) {
+          snap();
           return;
         }
-        STATE.replies[id] = { loading: false, replies: ((doc && doc.replies) || []).slice(), missing: false };
-        render();
-      })
-      .catch(() => {
-        STATE.replies[id] = { loading: false, replies: [], missing: true };
-        render();
+        applyLiveStats(id, pack.stats);
+        const capNow = String(STATE.focusId || "") === id ? 50 : 20;
+        const rows = takeRanked(pack.replies, capNow);
+        if (capNow === 50 && !PREFETCHED[id]) {
+          PREFETCHED[id] = true;
+          selectSubthreads(rows).forEach((reply) => {
+            const cid = postKey(reply);
+            if (cid && !(STATE.replies[cid] && (STATE.replies[cid].cap || 0) >= 20)) replyBucket(reply);
+          });
+        }
+        finish(rows, false, capNow);
       });
+      return STATE.replies[id];
+    }
+    snap();
     return STATE.replies[id];
+  }
+
+  function ivIso(value) {
+    const n = Number(value);
+    if (!isFinite(n) || n < 1000000000) return "";
+    return new Date(n * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+
+  function ivAvatar(comment) {
+    if (!comment) return "";
+    if (comment.authorThumbnail) return comment.authorThumbnail;
+    let best = "";
+    let width = -1;
+    (comment.authorThumbnails || []).forEach((thumb) => {
+      if (!thumb || !thumb.url) return;
+      const w = Number(thumb.width || 0);
+      if (w >= width) {
+        best = thumb.url;
+        width = w;
+      }
+    });
+    return best;
+  }
+
+  function ivComment(comment, parentId, handle) {
+    const info = comment.replies || {};
+    const author = String(comment.author || "").replace(/^@/, "");
+    const row = {
+      id: comment.commentId || "",
+      statusId: comment.commentId || "",
+      platform: "youtube",
+      kind: "reply",
+      author: author,
+      handle: author,
+      avatar: ivAvatar(comment),
+      verifiedType: comment.verified ? "blue" : null,
+      text: comment.content || "",
+      date: ivIso(comment.published),
+      stats: { likes: fxNum(comment.likeCount), replies: fxNum(info.replyCount) },
+      replies: [],
+      replyingTo: { id: parentId, handle: handle }
+    };
+    if (!row.date && comment.publishedText) row.timeLabel = comment.publishedText;
+    if (info.continuation) row._continuation = info.continuation;
+    return row;
+  }
+
+  function stripYt(rows) {
+    return (rows || []).map((row) => {
+      const item = Object.assign({}, row);
+      delete item._continuation;
+      item.replies = stripYt(item.replies || []);
+      return item;
+    });
+  }
+
+  function ivCommentPage(videoId, sort, continuation) {
+    let path = "/api/v1/comments/" + encodeURIComponent(videoId) + "?sort_by=" + encodeURIComponent(sort || "top");
+    if (continuation) path += "&continuation=" + encodeURIComponent(continuation);
+    return rotate(ivBases(), path, 4, "ivBase");
+  }
+
+  function fillIvReplies(rows, videoId) {
+    const ranked = rows.filter((row) => fxNum((row.stats || {}).replies) > 0 && row._continuation)
+      .sort((a, b) => fxNum((b.stats || {}).replies) - fxNum((a.stats || {}).replies) || fxNum((b.stats || {}).likes) - fxNum((a.stats || {}).likes))
+      .slice(0, 10);
+    let chain = Promise.resolve();
+    ranked.forEach((row) => {
+      chain = chain.then(() => ivCommentPage(videoId, "top", row._continuation).then((payload) => {
+        if (!payload) return;
+        const children = [];
+        (payload.comments || []).slice(0, 20).forEach((child) => {
+          if (!(child.content || "").trim()) return;
+          const kid = ivComment(child, row.id || "", row.handle || "");
+          delete kid._continuation;
+          children.push(kid);
+        });
+        row.replies = children;
+      }));
+    });
+    return chain;
+  }
+
+  function ivThread(id, handle) {
+    const top = [];
+    let count = null;
+    let continuation = "";
+    let pages = 0;
+    function pull() {
+      // One page, then reply threads. A later page must not run before those threads.
+      if (top.length >= 20 || pages >= 1) return Promise.resolve();
+      pages += 1;
+      return ivCommentPage(id, "top", continuation).then((payload) => {
+        if (!payload) return;
+        if (payload.commentCount != null && isFinite(Number(payload.commentCount))) count = Number(payload.commentCount);
+        const batch = payload.comments || [];
+        batch.forEach((comment) => {
+          if (String(comment.content || "").trim()) top.push(ivComment(comment, id, handle));
+        });
+        continuation = payload.continuation || "";
+        if (continuation && batch.length) return pull();
+      });
+    }
+    return pull().then(() => {
+      if (!top.length && count == null) return null;
+      return fillIvReplies(top, id).then(() => ivCommentPage(id, "new", "").then((fresh) => {
+        const newest = [];
+        ((fresh && fresh.comments) || []).slice(0, 60).forEach((comment) => {
+          if (String(comment.content || "").trim()) newest.push(ivComment(comment, id, handle));
+        });
+        const doc = { postId: "yt_" + id, platform: "youtube", source: "invidious", replies: stripYt(top) };
+        if (newest.length) doc.newest = stripYt(newest);
+        if (count != null) doc.commentCount = count;
+        return doc;
+      }));
+    });
+  }
+
+  function pipedComment(comment, parentId, handle, depth) {
+    const author = String(comment.author || "").replace(/^@/, "");
+    const row = {
+      id: comment.commentId || "",
+      statusId: comment.commentId || "",
+      platform: "youtube",
+      kind: "reply",
+      author: author,
+      handle: author,
+      avatar: comment.thumbnail || "",
+      verifiedType: null,
+      text: comment.commentText || comment.comment || "",
+      date: "",
+      stats: { likes: fxNum(comment.likeCount), replies: fxNum(comment.replyCount) },
+      replies: [],
+      replyingTo: { id: parentId, handle: handle }
+    };
+    if (comment.commentedTime) row.timeLabel = comment.commentedTime;
+    if (depth === 0 && Array.isArray(comment.replies)) {
+      const kids = [];
+      comment.replies.slice(0, 20).forEach((child) => {
+        if (!child || !String(child.commentText || child.comment || "").trim()) return;
+        kids.push(pipedComment(child, row.id, author, 1));
+      });
+      if (kids.length) row.replies = kids;
+    }
+    return row;
+  }
+
+  function pipedThread(id, handle) {
+    return rotate(Promise.resolve(PIPED_SEEDS.slice()), "/comments/" + encodeURIComponent(id), 4, "pipedBase").then((piped) => {
+      if (!piped) return null;
+      const top = [];
+      (piped.comments || []).slice(0, 60).forEach((comment) => {
+        if (String(comment.commentText || comment.comment || "").trim()) top.push(pipedComment(comment, id, handle, 0));
+      });
+      let count = null;
+      const raw = piped.commentCount != null ? piped.commentCount : piped.commentsCount;
+      if (raw != null && isFinite(Number(raw))) count = Number(raw);
+      if (!top.length && count == null) return null;
+      const doc = { postId: "yt_" + id, platform: "youtube", source: "piped", replies: top };
+      if (count != null) doc.commentCount = count;
+      return doc;
+    });
+  }
+
+  function loadYtComments(post) {
+    const id = postKey(post);
+    if (!id) return Promise.resolve(null);
+    return once("yt:" + id, () => cacheGet("yt:doc:" + id).then((hit) => {
+      if (hit) return hit;
+      return ivThread(id, post.handle || "").then((doc) => {
+        if (doc) return cacheSet("yt:doc:" + id, doc).then(() => doc);
+        return pipedThread(id, post.handle || "").then((piped) => piped ? cacheSet("yt:doc:" + id, piped).then(() => piped) : null);
+      });
+    })).catch(() => null);
+  }
+
+  function liveDuration(id) {
+    return cacheGet("yt:dur:" + id).then((hit) => {
+      if (hit != null) return hit;
+      return rotate(ivBases(), "/api/v1/videos/" + encodeURIComponent(id), 3, "ivBase").then((video) => {
+        if (video && video.lengthSeconds != null && Number(video.lengthSeconds) >= 0) return Number(video.lengthSeconds);
+        return rotate(Promise.resolve(PIPED_SEEDS.slice()), "/streams/" + encodeURIComponent(id), 3, "pipedBase").then((stream) => {
+          const n = stream && Number(stream.duration);
+          return isFinite(n) && n >= 0 ? n : null;
+        });
+      }).then((seconds) => {
+        if (seconds == null) return null;
+        return cacheSet("yt:dur:" + id, seconds).then(() => seconds);
+      });
+    }).catch(() => null);
+  }
+
+  function liveSubs(channelId) {
+    return cacheGet("yt:subs:" + channelId).then((hit) => {
+      if (hit != null) return hit;
+      return rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(channelId), 3, "ivBase").then((channel) => {
+        const count = channel && (channel.subCount != null ? channel.subCount : channel.subscriberCount);
+        if (count != null && Number(count) > 0) return Number(count);
+        return rotate(Promise.resolve(PIPED_SEEDS.slice()), "/channel/" + encodeURIComponent(channelId), 3, "pipedBase").then((piped) => {
+          const n = piped && Number(piped.subscriberCount);
+          return isFinite(n) && n > 0 ? n : null;
+        });
+      }).then((count) => {
+        if (count == null) return null;
+        return cacheSet("yt:subs:" + channelId, count).then(() => count);
+      });
+    }).catch(() => null);
+  }
+
+  function ensureYtMeta(post) {
+    if (!post || post.platform !== "youtube") return;
+    const id = postKey(post);
+    if (!id || TRIED["dur:" + id]) return;
+    TRIED["dur:" + id] = 1;
+    liveDuration(id).then((seconds) => {
+      if (seconds == null) return;
+      const media = (post.media || [])[0];
+      if (!media || media.duration === seconds) return;
+      media.duration = seconds;
+      post.short = seconds <= 60;
+      render();
+    });
+  }
+
+  function ensureYtSubs(feed) {
+    if (!feed || feed.platform !== "youtube" || !feed.channelId) return;
+    const key = "subs:" + feed.channelId;
+    if (TRIED[key]) return;
+    TRIED[key] = 1;
+    liveSubs(feed.channelId).then((count) => {
+      if (count == null || feed.followers === count) return;
+      feed.followers = count;
+      render();
+    });
   }
 
   function orderReplies(focus, shown) {
@@ -832,6 +1670,7 @@
       name: route.handle,
       configured: false
     };
+    if (feed.platform === "youtube") ensureYtSubs(feed);
     const tab = route.query.get("tab") || "posts";
     let list = postsFor(feed);
     if (tab === "replies") list = list.filter((p) => p.kind === "reply");
@@ -895,6 +1734,7 @@
       }
       return pageHead("Post", "", true) + emptyBlock("Post unavailable", "This post isn’t in the current snapshot.");
     }
+    STATE.focusId = postKey(post);
     const stats = post.stats || {};
     const chain = ancestorChain(post);
     const slice = replySlice(post);
@@ -1125,6 +1965,7 @@
   }
 
   function ytCard(post, layout) {
+    ensureYtMeta(post);
     const feed = feedOf(post);
     const media = (post.media || [])[0] || {};
     const duration = clock(media.duration);
@@ -1150,6 +1991,8 @@
     const strip = `<div class="yt-strip"><a class="yt-ch${route.channel ? "" : " on"}" href="#/subscriptions"><span class="yt-all">All</span><span>All</span></a>${channels.map((feed) => `<a class="yt-ch${route.channel === feed.id ? " on" : ""}" href="#/subscriptions?c=${encodeURIComponent(feed.id)}">${avatar(feed.avatar, feed.name, "ch")}<span>${esc(feed.name || feed.handle)}</span></a>`).join("")}</div>`;
     let list = posts().filter((post) => isVideoPost(post) && followedPost(post)).sort(byStamp);
     if (route.channel) list = list.filter((post) => post.feedId === route.channel || (post.platform + ":" + post.handle) === route.channel);
+    channels.forEach(ensureYtSubs);
+    list.forEach(ensureYtMeta);
     if (!STATE.settings.follows.length) return head + strip + emptyBlock("No videos yet", "Follow accounts to see their videos here.");
     if (!list.length) return head + strip + emptyBlock("No videos yet", "Videos from accounts you follow will show up here.");
     const shorts = list.filter((post) => post.short);
@@ -1174,19 +2017,25 @@
     const key = "watch:" + file;
     if (STATE.replies[key]) return STATE.replies[key];
     STATE.replies[key] = { loading: true, doc: null, missing: false };
-    fetch("comments/" + encodeURIComponent(file) + ".json", { cache: "no-cache" })
-      .then((res) => {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.json();
-      })
-      .then((doc) => {
+    const snap = () => snapshotDoc(file).then((doc) => {
+      STATE.replies[key] = { loading: false, doc: doc, missing: false };
+      render();
+    }).catch(() => {
+      STATE.replies[key] = { loading: false, doc: null, missing: true };
+      render();
+    });
+    if (post.platform === "youtube") {
+      loadYtComments(post).then((doc) => {
+        if (!doc) {
+          snap();
+          return;
+        }
         STATE.replies[key] = { loading: false, doc: doc, missing: false };
         render();
-      })
-      .catch(() => {
-        STATE.replies[key] = { loading: false, doc: null, missing: true };
-        render();
       });
+      return STATE.replies[key];
+    }
+    snap();
     return STATE.replies[key];
   }
 
@@ -1214,6 +2063,8 @@
     const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id));
     if (!post) return pageHead("Watch", "", true) + emptyBlock("Video unavailable", "This video isn’t in the current snapshot.");
     const feed = feedOf(post);
+    ensureYtMeta(post);
+    ensureYtSubs(feed);
     const media = (post.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || (post.media || [])[0] || {};
     const id = postKey(post);
     const alt = !!STATE.playerAlt[id];
@@ -1387,20 +2238,24 @@
     const key = String(id || "");
     if (!key || findAnyPost(key) || STATE.chain[key]) return;
     STATE.chain[key] = { loading: true, post: null, missing: false };
-    fetch("comments/lookup.json", { cache: "no-cache" })
-      .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
-      .then((lookup) => {
-        const stem = lookup && lookup[key];
-        if (!stem) throw new Error("missing");
-        return fetch("comments/" + encodeURIComponent(stem) + ".json", { cache: "no-cache" })
-          .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
-          .then((data) => {
+    const live = /^\d{8,}$/.test(key) ? fxStatusPost(key) : Promise.resolve(null);
+    live.then((post) => {
+      if (post) {
+        STATE.chain[key] = { loading: false, post: post, missing: false };
+        return;
+      }
+      return fetch("comments/lookup.json", { cache: "no-cache" })
+        .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
+        .then((lookup) => {
+          const stem = lookup && lookup[key];
+          if (!stem) throw new Error("missing");
+          return snapshotDoc(stem).then((data) => {
             const found = findComment(commentRows(data), key);
             if (!found) throw new Error("missing");
             STATE.chain[key] = { loading: false, post: found, missing: false };
           });
-      })
-      .catch(() => { STATE.chain[key] = { loading: false, post: null, missing: true }; })
+        });
+    }).catch(() => { STATE.chain[key] = { loading: false, post: null, missing: true }; })
       .then(() => render());
   }
 
@@ -1481,21 +2336,26 @@
 
   function loadSharedStatus(route) {
     const key = String(route.id);
-    fetch("comments/lookup.json", { cache: "no-cache" })
-      .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
-      .then((lookup) => {
-        const stem = lookup && lookup[key];
-        if (!stem) throw new Error("missing");
-        return fetch("comments/" + encodeURIComponent(stem) + ".json", { cache: "no-cache" })
-          .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
-          .then((data) => {
+    const live = (route.platform || "x") === "x" ? fxStatusPost(key) : Promise.resolve(null);
+    live.then((post) => {
+      if (post) {
+        STATE.shared[key] = post;
+        STATE.sharedState[key] = "ok";
+        return;
+      }
+      return fetch("comments/lookup.json", { cache: "no-cache" })
+        .then((res) => { if (!res.ok) throw new Error(String(res.status)); return res.json(); })
+        .then((lookup) => {
+          const stem = lookup && lookup[key];
+          if (!stem) throw new Error("missing");
+          return snapshotDoc(stem).then((data) => {
             const found = findComment(commentRows(data), key);
             if (!found) throw new Error("missing");
             STATE.shared[key] = found;
             STATE.sharedState[key] = "ok";
           });
-      })
-      .catch(() => { STATE.sharedState[key] = "miss"; })
+        });
+    }).catch(() => { STATE.sharedState[key] = "miss"; })
       .then(() => render());
   }
 
@@ -1527,6 +2387,7 @@
   let lastKey = "";
   function render(opts) {
     const route = parseRoute();
+    if (route.name !== "status") STATE.focusId = "";
     const reset = opts && opts.reset;
     const y = reset ? 0 : window.scrollY;
     const focus = document.activeElement;

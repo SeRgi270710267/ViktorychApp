@@ -92,6 +92,8 @@ def parse(payload, feed: dict | None = None) -> dict:
         name = child_text(author, "name")
     profile = blank_profile("youtube", handle or channel_id, name)
     profile["url"] = f"https://www.youtube.com/channel/{channel_id}" if channel_id else profile_url("youtube", handle)
+    if channel_id:
+        profile["channelId"] = channel_id
     posts = []
     for entry in children(root, "entry"):
         video_id = _video_id(entry)

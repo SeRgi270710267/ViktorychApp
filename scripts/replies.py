@@ -1,10 +1,11 @@
-"""Write comments/<postId>.json for posts in a feed document.
+"""Write comments/<postId>.json for posts the browser cannot fetch.
 
-X replies come from api.fxtwitter.com/2/conversation/<id>, then Nitter.
-Instagram tries the logged-out GraphQL post query, the captioned embed, public
-viewers, and RSSHub before INSTAGRAM_COOKIE. Threads tries the logged-out post
-page, then RSSHub, then THREADS_COOKIE. RSS uses wfw:commentRss. A failed
-fetch keeps the previous comment file. Nothing here invents a reply.
+X replies and YouTube comments are loaded in the browser, so this refresh
+skips those platforms. Instagram tries the logged-out GraphQL post query, the
+captioned embed, public viewers, and RSSHub before INSTAGRAM_COOKIE. Threads
+tries the logged-out post page, then RSSHub, then THREADS_COOKIE. RSS uses
+wfw:commentRss. Only posts under 7 days old are stored. A failed fetch keeps
+the previous comment file. Nothing here invents a reply.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from adapters.x_api_v2 import parse_conversation_search  # noqa: E402
 from adapters.x_replies import (  # noqa: E402
     belongs,
     comments_due,
+    comments_kept,
     conversation_reply_count,
     extract_fxtwitter_replies,
     fill_missing,
@@ -540,23 +542,16 @@ def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> No
         if not status_id or status_id in seen:
             continue
         seen.add(status_id)
-        path = _comment_path(post)
-        if not use_fixtures and not comments_due(post.get("date") or "", _stored_fetched_at(path)):
+        if platform in ("x", "youtube"):
+            continue
+        if not use_fixtures and not comments_kept(post):
             continue
         found = from_fixture(post) if use_fixtures else None
         if found is None and not use_fixtures:
-            if platform == "x":
-                found = fetch_x(post)
-                time.sleep(0.3)
-            elif platform == "instagram":
+            if platform == "instagram":
                 found = fetch_instagram(post)
             elif platform == "threads":
                 found = fetch_threads(post)
-            elif platform == "youtube":
-                from yt_remote import refresh_comments
-
-                refresh_comments(post, False)
-                continue
             elif post.get("commentRss"):
                 found = fetch_rss(post)
         if found is None:

@@ -82,6 +82,27 @@ def _payload(payload):
     return payload if isinstance(payload, dict) else {}
 
 
+def comments_kept(post: dict, now=None) -> bool:
+    """Instagram, Threads, and comment RSS younger than 7 days are stored.
+
+    X and YouTube are loaded in the browser. A post with no date is not stored.
+    """
+    if not isinstance(post, dict):
+        return False
+    platform = post.get("platform") or ""
+    if platform in ("x", "youtube"):
+        return False
+    if platform not in ("instagram", "threads") and not post.get("commentRss"):
+        return False
+    posted = _epoch(post.get("date") or "")
+    if posted is None:
+        return False
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return (moment - posted).total_seconds() < FRESH_SECONDS
+
+
 def comments_due(post_date: str, fetched_at: str | None, now=None) -> bool:
     """Posts under 7 days refresh every run. Posts 7–30 days old refresh once a day."""
     moment = now or datetime.now(timezone.utc)

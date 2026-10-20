@@ -27,6 +27,7 @@ from adapters.x_replies import (  # noqa: E402
     _cap,
     belongs,
     comments_due,
+    comments_kept,
     conversation_reply_count,
     engagement,
     fill_missing,
@@ -214,6 +215,14 @@ def main() -> None:
     check(comments_due("2026-09-20T00:00:00Z", "", moment), "a 30 day post with no fetch time is due")
     check(not comments_due("2026-09-19T23:00:00Z", "", moment), "posts older than 30 days are left alone")
     check(comments_due("", "2026-10-19T00:00:00Z", moment), "an undated post refreshes every run")
+    fresh_ig = {"platform": "instagram", "date": "2026-10-19T00:00:00Z"}
+    check(comments_kept(fresh_ig, moment), "instagram under 7 days is stored")
+    check(comments_kept({"platform": "threads", "date": "2026-10-18T00:00:00Z"}, moment), "threads under 7 days is stored")
+    check(not comments_kept({"platform": "instagram", "date": "2026-10-13T00:00:00Z"}, moment), "a 7 day instagram post is not stored")
+    check(not comments_kept({"platform": "x", "date": "2026-10-19T00:00:00Z"}, moment), "x replies are not stored")
+    check(not comments_kept({"platform": "youtube", "date": "2026-10-19T00:00:00Z"}, moment), "youtube comments are not stored")
+    check(not comments_kept({"platform": "instagram"}, moment), "an undated post is not stored")
+    check(comments_kept({"platform": "rss", "commentRss": "https://example.com/comments", "date": "2026-10-19T00:00:00Z"}, moment), "comment rss under 7 days is stored")
 
     nit = parse_nitter_replies((FIX / "replies" / "nitter_sample.html").read_text(encoding="utf-8"), "2112600761762717997")
     check(len(nit) == 2, "nitter replies")
@@ -369,11 +378,22 @@ def main() -> None:
         (folder / "keep.json").write_text(jsonlib.dumps({"replies": [{"id": "r1", "replies": [{"statusId": "r2"}]}]}), encoding="utf-8")
         (folder / "r1.json").write_text(jsonlib.dumps({"replies": [{"id": "r3"}]}), encoding="utf-8")
         (folder / "yt_keep.json").write_text("{}", encoding="utf-8")
+        (folder / "xpost.json").write_text("{}", encoding="utf-8")
         (folder / "gone.json").write_text("{}", encoding="utf-8")
         (folder / "orphan.json").write_text("{}", encoding="utf-8")
         (folder / "lookup.json").write_text("{}", encoding="utf-8")
-        removed = prune_comments({"posts": [{"id": "keep", "statusId": "keep"}]}, folder)
-        check(removed == 2 and (folder / "keep.json").exists() and (folder / "r1.json").exists() and (folder / "yt_keep.json").exists() and (folder / "lookup.json").exists() and not (folder / "gone.json").exists() and not (folder / "orphan.json").exists(), "stale comment files are pruned and nested replies stay")
+        removed = prune_comments(
+            {
+                "posts": [
+                    {"id": "keep", "statusId": "keep", "platform": "instagram", "date": "2026-10-19T00:00:00Z"},
+                    {"id": "xpost", "statusId": "xpost", "platform": "x", "date": "2026-10-19T00:00:00Z"},
+                    {"id": "old", "statusId": "gone", "platform": "threads", "date": "2026-09-01T00:00:00Z"},
+                ]
+            },
+            folder,
+            now=datetime(2026, 10, 20, tzinfo=timezone.utc),
+        )
+        check(removed == 4 and (folder / "keep.json").exists() and (folder / "r1.json").exists() and (folder / "lookup.json").exists() and not (folder / "yt_keep.json").exists() and not (folder / "xpost.json").exists() and not (folder / "gone.json").exists() and not (folder / "orphan.json").exists(), "stale comment files are pruned and nested replies stay")
         count = write_comment_lookup(folder)
         lookup = jsonlib.loads((folder / "lookup.json").read_text(encoding="utf-8"))
         check(count == 3 and lookup.get("r1") == "keep" and lookup.get("r2") == "keep" and lookup.get("r3") == "r1", "reply lookup points at the comment file")
@@ -381,6 +401,7 @@ def main() -> None:
     yt = parse_youtube((FIX / "youtube_mkbhd.xml").read_text(encoding="utf-8"), {"id": "youtube:mkbhd", "platform": "youtube", "handle": "mkbhd", "channelId": "UCBJycsmduvYEL83R_U4JriQ"})
     first = yt["posts"][0]
     check(len(yt["posts"]) == 2 and first["id"] == "scwlR0QHGOk" and first["title"].startswith("The NEW Tesla Roadster"), "youtube rss title and id")
+    check(yt["profiles"][0].get("channelId") == "UCBJycsmduvYEL83R_U4JriQ", "youtube profile keeps the channel id")
     check(first["stats"]["views"] == 11453176 and first["stats"]["likes"] == 181847, "youtube rss views and likes")
     check(first["media"][0]["poster"] == "https://i.ytimg.com/vi/scwlR0QHGOk/hqdefault.jpg", "youtube thumbnail is hotlinked")
     check("youtube-nocookie.com/embed/scwlR0QHGOk" in first["media"][0]["url"], "youtube embed url")

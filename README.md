@@ -1,6 +1,6 @@
 # rss-feeds
 
-An X-style home for posts from X, Threads, Instagram, and other RSS sources. The page is a static site (`index.html`, `styles.css`, `app.js`) with no build step, so it can be served from GitHub Pages. A separate refresh job writes `feeds.json`. The browser only reads that file.
+An X-style home for posts from X, Threads, Instagram, YouTube, and other RSS sources. The page is a static site (`index.html`, `styles.css`, `app.js`). GitHub Actions builds the timeline and publishes it. The repository keeps the code, the config, and a small `feeds.json` seed. X replies and YouTube comments load in the browser when a post opens.
 
 The preview snapshot in this repo is real public posts converted by the adapters (about six to eight newest items per configured account). X images stay on `pbs.twimg.com`. Instagram and Threads images stay on the Meta CDN, with each URL's expiry stored next to it.
 
@@ -115,13 +115,13 @@ python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_
 
 | Adapter | Source |
 | --- | --- |
-| `x_api_v2` | Offline for timelines. Parses a saved X API v2 payload (`data`, `includes.tweets`, `includes.users`, `includes.media`), including the fixture files. A tool header line and a trailing note are ignored. The sync refuses every `api.x.com` and `api.twitter.com` request except one: a recent search for `conversation_id:<status id>` when `X_BEARER_TOKEN` is set, used only after fxtwitter and Nitter miss while collecting replies |
+| `x_api_v2` | Offline for timelines. Parses a saved X API v2 payload (`data`, `includes.tweets`, `includes.users`, `includes.media`), including the fixture files. A tool header line and a trailing note are ignored. The build does not call `api.x.com` or `api.twitter.com` |
 | `fxtwitter` | `api.fxtwitter.com` profile statuses. This is the live X source |
 | `nitter_rss` | Nitter RSS (`RT by @…`, blockquote quotes). Fallback when fxtwitter fails |
 | `rsshub_threads` | RSSHub `/threads/<user>` |
 | `rsshub_instagram` | RSSHub `/instagram/user/<user>` |
 | `generic_rss` | RSS or Atom: title, description, `content:encoded`, enclosures |
-| `youtube_rss` | YouTube’s official channel feed, `https://www.youtube.com/feeds/videos.xml?channel_id=<UC…>`. No API key. `@handle` is resolved once to `channelId` and stored in `feeds.config.json`. Durations and subscriber counts come from the Invidious API, then Piped if that host fails. Thumbnails stay on `i.ytimg.com`. The live feed is Canadian Prepper (`UCfgtuaUadGgOA-91geQ8Qog`). Marques Brownlee and Tesla exist only as files under `scripts/fixtures/` |
+| `youtube_rss` | YouTube’s official channel feed, `https://www.youtube.com/feeds/videos.xml?channel_id=<UC…>`. No API key. That feed has no CORS header, so the build fetches it. `channelId` is copied onto the profile so the browser can ask for subscribers. Durations and subscriber counts are not fetched during the build. Thumbnails stay on `i.ytimg.com`. The live feed is Canadian Prepper (`UCfgtuaUadGgOA-91geQ8Qog`). Marques Brownlee and Tesla exist only as files under `scripts/fixtures/` |
 
 Each adapter strips HTML while keeping line breaks, unescapes entities, drops trailing media links, and fills the same post and profile fields. The configured profile in `feeds.config.json` wins over a thinner profile parsed from a post.
 
@@ -129,9 +129,28 @@ X images stay hotlinked (`pbs.twimg.com`, `video.twimg.com`). Instagram and Thre
 
 Live X accounts use fxtwitter, then Nitter RSS (`nitter.meowing.monster`, `nitter.kareem.one`, `nitter.jaydenha.uk`). `TWITTER_AUTH_TOKEN`, if you set it, is sent only as an `auth_token` cookie on those Nitter requests and on RSSHub `/twitter` or `/x` routes. It is not sent anywhere else. `x_to_feed.py` only merges a JSON file you already have.
 
+## Storage
+
+The browser loads whatever a public CORS API will give it. The build stores only what the browser cannot fetch. Nothing from a sync is committed, so git history does not grow every half hour.
+
+| Data | Where it comes from | Stored in the site artifact? |
+| --- | --- | --- |
+| X replies, nested replies, and fresh counts | `api.fxtwitter.com` `/2/conversation/<id>` and `/2/status/<id>`, from the browser, when a post page opens | No. A `comments/<id>.json` file is used only if that call fails |
+| YouTube comments, durations, subscriber counts | Invidious, rotating hosts from `api.invidious.io`, then Piped | No. A `comments/yt_<id>.json` file is used only if the live calls fail |
+| Photos and video | Hotlinked: `pbs.twimg.com`, `video.twimg.com`, Meta CDN, `i.ytimg.com` | No binaries |
+| Timelines | Build: fxtwitter or Nitter for X, RSSHub for Instagram and Threads, YouTube’s RSS feed, other RSS | Yes, in `feeds.json`, about 300 posts |
+| Meta CDN URL refresh | Build, because those URLs expire | Yes, as URLs on the post |
+| Threads and Instagram comments | Build. The browser cannot call those endpoints without a cookie | Yes, and only for posts under 7 days old |
+
+Live responses sit in memory, then `sessionStorage`, then IndexedDB (`rss-feeds-live`) when that quota is full. The cache lasts about 12 minutes. `fetchedAt` is not shown.
+
+X reply order matches the old stored list: the author’s self-thread first, then `likes + replies*2 + reposts`, with a bump for a verified account. Giveaway, link-only, duplicate, and new-account replies sit behind **Show probable spam**. The number on the post stays the source count. Opening a post also loads replies for about 10 of its busiest replies, about 20 each, and stops there. Opening one of those replies loads the next level the same way. A failed live call, with no snapshot, is “Replies aren’t available for this post.”
+
+YouTube comments keep the watch-page **N replies** control. The build does not fetch them.
+
 ## Replies
 
-Replies are not inlined on the home timeline. The reply count on a post opens `#/@handle/status/<id>` (or the platform equivalent). That page shows the post, a read-only reply row, then replies from `comments/<statusId>.json`. The file is loaded when the page opens. A missing file is an empty state (“Replies aren’t available for this post.”). An empty `replies` array is “No replies yet.” Counts and reply text are never invented.
+Replies are not inlined on the home timeline. The reply count on a post opens `#/@handle/status/<id>` (or the platform equivalent). That page shows the post, a read-only reply row, then replies. A missing thread is “Replies aren’t available for this post.” An empty list is “No replies yet.” Counts and reply text are never invented.
 
 ```json
 {
@@ -149,27 +168,27 @@ Each reply uses the same post shape, with `kind` set to `reply` and `replyingTo`
 
 Every reply is a post of its own. Clicking it opens `#/@handle/status/<replyId>` (or `#/<platform>/<handle>/status/<replyId>`). That page shows the posts above it, connected by the thread line, with **Replying to** on each one. A chain longer than three starts with the first post, **Show more**, and the post it is directly under. Replies to the focused post are listed below it. In that list, a direct reply from the same author, or one from the original poster, is shown under the reply with the thread line. **Show replies** opens that reply’s page when none of those are shown and the reply has replies. **Show more replies** does the same when some are already shown and more exist.
 
-Fetching replies to a post also fetches replies to its busiest replies: about 10 of those replies, and about 20 replies each. Each of those is stored as `comments/<replyId>.json`, so any status id loads the same way. Nothing deeper than that is fetched ahead of time. Opening a reply that was not stored shows “Replies aren’t available for this post.” The page does not invent replies to fill the gap. The same age window, matching rules, Relevant order, and spam rules apply to those files.
+For X, that second level is loaded in the browser for the post you are looking at. Threads and Instagram store one extra level next to the post when the build can see those replies. Opening a reply that neither the live call nor a stored file can fill shows “Replies aren’t available for this post.” The page does not invent replies.
 
 Home, Following, and List timelines hide `kind: reply`, except a self-reply that has another self-reply pointing at it. That post shows **Show this thread**. A profile’s **Replies** tab lists replies from that account.
 
-`update_feeds.py` refreshes comment files after it writes `feeds.json`. A post younger than 7 days is refreshed on every run. A post from 7 to 30 days old is refreshed once a day. Older posts are left as they are. A failed fetch keeps the previous file. On a successful fetch the new replies replace the file, and a reply id that was already stored keeps the new like count when a field is missing on the new copy. `--fixtures` reads `scripts/fixtures/replies/<statusId>.json` (fxtwitter conversation JSON) or `<statusId>.html` (Nitter status HTML) and does not call the network.
+The build writes comment files only for Instagram, Threads, and `commentRss` posts that have a date and are under 7 days old. Older files are deleted. X and YouTube comment files are deleted even when the post is still in `feeds.json`. A failed comment fetch keeps the file pulled from the last published site. On a successful fetch the new replies replace the file, and a reply id that was already stored keeps the new like count when a field is missing on the new copy. `--fixtures` reads `scripts/fixtures/replies/<statusId>.json` (fxtwitter conversation JSON) or `<statusId>.html` (Nitter status HTML) and does not call the network.
 
 | Platform | How replies are fetched |
 | --- | --- |
-| X | `https://api.fxtwitter.com/2/conversation/<statusId>` (`replies`, one page; cursor requests 404). A reply is kept only when `replying_to.status` or the conversation id is this post. Duplicate ids collapse. Deleted or unavailable replies are dropped. Missing text, handle, date, or target is filled from `https://api.fxtwitter.com/status/<id>`, then a Nitter status page if fxtwitter fails. The parent’s `status.replies` is written to `stats.replies`. If the conversation call fails, Nitter status HTML from `nitter.meowing.monster`, `nitter.kareem.one`, then `nitter.jaydenha.uk` is the fallback. Those hosts currently answer with a bot check, so the HTML parser only runs when a page actually contains `tweet-content`. `api.fixupx.com` does not resolve. Replies of a reply use that same order, then `https://api.twitter.com/2/tweets/search/recent?query=conversation_id:<id>` only when `X_BEARER_TOKEN` is set. The token is not sent anywhere else |
+| X | The browser calls `https://api.fxtwitter.com/2/conversation/<statusId>` (`replies`, one page). A reply is kept only when `replying_to.status` or the conversation id is this post. Replies to a reply are kept only when `replying_to.status` is that reply. Duplicate ids collapse. Deleted or unavailable replies are dropped. Missing text, handle, date, or target is filled from `https://api.fxtwitter.com/2/status/<id>`, up to about 15 lookups. The parent’s `status.replies` updates the count on the post. The browser does not call Nitter or `api.twitter.com`. If the live call fails, the page tries `comments/<id>.json` |
 | Threads | Logged-out `threads.net` / `threads.com` post HTML. Replies are read from embedded `direct_replies`, `reply_threads`, or `thread_items`, and `direct_reply_count` is written to `stats.replies`. A reply’s own `direct_replies` are stored under that reply’s id. When the page did not include them, the reply’s own Threads page is fetched for about 10 replies that have replies. Then RSSHub `/threads/post/<code>` when that route is up. `THREADS_COOKIE` is only used if those have no reply text. The cookie is never written to disk |
 | Instagram | Logged-out GraphQL, in order: `PolarisPostActionLoadPostQuery` (`doc_id` 8845758582119845), then the current post query `PolarisPostRootQuery` (`doc_id` 29336004576007686) with the shortcode. Then `https://www.instagram.com/p/<shortcode>/embed/captioned/`. Then public viewers (picuki, imginn, dumpor, anonyig). Then RSSHub `/instagram/comments/<shortcode>` and `/instagram/post/<shortcode>/comments` when RSSHub is up. `edge_media_to_parent_comment.count` or `comment_count` is written to `stats.replies`. Child replies come from `edge_threaded_comments` or `preview_child_comments` on that same payload and are stored under the comment id. There is no separate request per comment. `INSTAGRAM_COOKIE` (`sessionid`) calls `/api/v1/media/<id>/comments/` only after the public sources miss. The cookie is never written to disk |
 | Other RSS | `wfw:commentRss` is fetched and normalized. `slash:comments` is only the count on the post |
-| YouTube | Invidious `/api/v1/comments/<id>` (top comments, then one continuation page for about 10 comments that have replies, 20 replies each), then Piped `/comments/<id>`. Saved as `comments/yt_<id>.json`, about 100 top comments, with each filled thread also in `comments/<commentId>.json`. The watch page still expands a comment with its own “N replies” control. A missing file is “Comments aren’t available.” An empty list is “No comments yet.” |
+| YouTube | The browser calls Invidious `/api/v1/comments/<id>` (top, then one continuation for about 10 comments that have replies, 20 replies each, no third level). Hosts come from `https://api.invidious.io/instances.json` when that directory allows the page origin, otherwise a short built-in list starting with `https://invidious.f5.si`. Piped `/comments/<id>` is the fallback. Durations try Invidious `/api/v1/videos/<id>`, then Piped `/streams/<id>`. Subscriber counts try Invidious `/api/v1/channels/<channelId>`, then Piped `/channel/<channelId>`. The watch page still expands a comment with its own “N replies” control. A failed live call tries `comments/yt_<id>.json`. A missing thread is “Comments aren’t available.” An empty list is “No comments yet.” |
 
-A failed fetch keeps the previous `comments/<id>.json`. Media inside X replies stays on `pbs.twimg.com` / `video.twimg.com`.
+Media inside X replies stays on `pbs.twimg.com` / `video.twimg.com`.
 
-Subscriptions (`#/subscriptions`) lists videos from accounts you follow: YouTube channels, plus video posts from X, Instagram, and Threads. A video opens `#/watch/<platform>:<id>`. YouTube plays from `youtube-nocookie.com`, with an alternate Invidious stream when one was stored. Other platforms use the video file. Comments load from `comments/` when you open the watch page. Share on a post, reply, profile, or the watch page opens X’s menu: a dropdown on a wide screen and a bottom sheet on a phone. Copy link and Share post via… use this site’s permalink (`#/@handle/status/id`, or the profile or watch route). Copy original link and Open original on the platform use the source URL. Share via… is hidden when the browser has no share sheet. Crawlers only see the generic preview in `index.html`, because each post is a hash route.
+Subscriptions (`#/subscriptions`) lists videos from accounts you follow: YouTube channels, plus video posts from X, Instagram, and Threads. A video opens `#/watch/<platform>:<id>`. YouTube plays from `youtube-nocookie.com`. Other platforms use the video file. YouTube comments, durations, and subscriber counts load when you open the watch page. Share on a post, reply, profile, or the watch page opens X’s menu: a dropdown on a wide screen and a bottom sheet on a phone. Copy link and Share post via… use this site’s permalink (`#/@handle/status/id`, or the profile or watch route). Copy original link and Open original on the platform use the source URL. Share via… is hidden when the browser has no share sheet. Crawlers only see the generic preview in `index.html`, because each post is a hash route.
 
 ## Adding an account
 
-Edit `feeds.config.json` and add an object under `feeds`. A push of that file runs the sync workflow.
+Edit `feeds.config.json` and add an object under `feeds`. A push to `main` runs the sync workflow.
 
 ```json
 {
@@ -205,17 +224,16 @@ The sync runs without any secrets. Add these only as repository Actions secrets 
 | --- | --- |
 | `INSTAGRAM_COOKIE` | Last resort for Instagram comments, after the public sources miss. A `sessionid` value or a full cookie header |
 | `THREADS_COOKIE` | Last resort for Threads replies, after the public page and RSSHub miss |
-| `TWITTER_AUTH_TOKEN` | Optional `auth_token` cookie sent only to Nitter and to RSSHub `/twitter` or `/x` routes |
-| `X_BEARER_TOKEN` | Optional. Used only for `api.twitter.com/2/tweets/search/recent` with `query=conversation_id:<id>`, and only after fxtwitter and Nitter miss while collecting replies. It is not used for timelines or any other request |
+| `TWITTER_AUTH_TOKEN` | Optional `auth_token` cookie sent only to Nitter and to RSSHub `/twitter` or `/x` routes during the build |
 
-The sync refuses `api.x.com`. It calls `api.twitter.com` only for that one recent-search when `X_BEARER_TOKEN` is set.
+The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the browser from fxtwitter, which needs no token. Do not put a bearer token in the page.
 
 ## GitHub Actions
 
-`.github/workflows/sync.yml` refreshes `feeds.json` and `comments/` every 30 minutes, on **Run workflow**, and whenever `feeds.config.json` changes. The job starts RSSHub (`diygod/rsshub` on port 1200) and RSS-Bridge (`rssbridge/rss-bridge` on port 8080). Instagram and Threads try the local RSSHub container, then the public RSSHub mirrors in `feeds.config.json`, then RSS-Bridge. X tries fxtwitter, then the Nitter mirrors. One failed source keeps that feed’s previous posts and does not fail the run.
+`.github/workflows/sync.yml` runs every 30 minutes, on **Run workflow**, and on every push to `main`. The job starts RSSHub (`diygod/rsshub` on port 1200) and RSS-Bridge (`rssbridge/rss-bridge` on port 8080). It downloads the last published `feeds.json` (and Instagram/Threads comment files under 7 days old) so a failed source can keep the previous data. Instagram and Threads try the local RSSHub container, then the public RSSHub mirrors in `feeds.config.json`, then RSS-Bridge. X timelines try fxtwitter, then the Nitter mirrors. One failed source keeps that feed’s previous posts and does not fail the run.
 
-The job commits only when `feeds.json` or `comments/` changed. The author is `github-actions[bot]`. Files under `media/` are not committed. Comment files are deleted when they no longer belong to a post in `feeds.json` or to a reply stored with one of those posts. Overlapping runs wait instead of running together. A push to `main` is what GitHub Pages (deploy from the `main` branch) rebuilds.
+The job does not commit. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `.nojekyll`, `feeds.json`, and any `comments/*.json` into `_site`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/` and `media/` are gitignored. `feeds.json` in the repository is only the seed used when the live site cannot be downloaded.
 
 ## GitHub Pages
 
-Serve the repository root. `.nojekyll` is present so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`, `media/…`), so the site works at `/` or under `/rss-feeds/`. Deploy from the `main` branch. A push to that branch, including one from `github-actions[bot]`, starts a Pages build.
+Pages has to be built by GitHub Actions (Settings → Pages → Build and deployment → Source: GitHub Actions). A deploy-from-branch source will not pick up this workflow. `.nojekyll` is in the artifact so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`), so the site works at `/` or under `/rss-feeds/`.

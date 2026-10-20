@@ -5,18 +5,20 @@ on:
     - cron: "*/30 * * * *"
   workflow_dispatch:
   push:
-    paths:
-      - feeds.config.json
+    branches:
+      - main
 
 concurrency:
-  group: feed-sync
+  group: pages
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  sync:
+  build:
     runs-on: ubuntu-latest
     services:
       rsshub:
@@ -58,23 +60,53 @@ jobs:
               print(f"{label} {'ready' if ready else 'not ready; later fallbacks will be tried'}")
           PY
 
+      - name: Pull the last published snapshot
+        run: python3 scripts/pull_snapshot.py
+
       - name: Refresh feeds
-        # Comment files: posts under 7 days every run, posts 7–30 days old once a day.
+        # Timelines, Meta CDN refreshes, and Instagram/Threads comments under 7 days.
+        # X replies and YouTube comments are fetched in the browser.
         env:
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}
           TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
-          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
         run: python3 scripts/update_feeds.py
 
-      - name: Commit feed data
+      - name: Assemble the site and check its size
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -- feeds.json comments
-          if git diff --cached --quiet; then
-            echo "No changes in feeds.json or comments/."
-            exit 0
+          rm -rf _site
+          mkdir -p _site
+          cp index.html app.js styles.css favicon.svg .nojekyll feeds.json _site/
+          if [ -d comments ]; then
+            mkdir -p _site/comments
+            find comments -name '*.json' -type f -exec cp {} _site/comments/ \;
           fi
-          git commit -m "Update feeds and comments"
-          git push
+          python3 - <<'PY'
+          import os
+          import sys
+          total = 0
+          for dirpath, dirnames, files in os.walk("_site"):
+              dirnames[:] = [name for name in dirnames if name != ".git"]
+              for name in files:
+                  total += os.path.getsize(os.path.join(dirpath, name))
+          limit = 200 * 1024 * 1024
+          print(f"artifact size: {total} bytes ({total / 1024 / 1024:.2f} MB)")
+          if total > limit:
+              print(f"ERROR: built site is {total} bytes ({total / 1024 / 1024:.2f} MB), over the 200 MB limit ({limit} bytes).", file=sys.stderr)
+              sys.exit(1)
+          PY
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
