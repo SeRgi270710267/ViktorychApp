@@ -1,0 +1,910 @@
+{
+  "rsshubBase": "http://localhost:1200",
+  "fxtwitterBase": "https://api.fxtwitter.com",
+  "xProxy": true,
+  "xWorkers": 4,
+  "xMirrors": {
+    "rsshub": [
+      "{rsshubBase}/twitter/user/{handle}"
+    ]
+  },
+  "output": "feeds.json",
+  "cap": 300,
+  "autoAdd": {
+    "perRun": 3,
+    "total": 12,
+    "paceSeconds": 2
+  },
+  "removed": [],
+  "ia_public_sources": [
+    "fxtwitter",
+    "youtube_rss",
+    "youtube_community",
+    "telegram",
+    "rsshub_instagram",
+    "rsshub_threads"
+  ],
+  "ia_tiktok_allow": [],
+  "feeds": [
+    {
+      "id": "x:copperlane",
+      "platform": "x",
+      "handle": "copperlane",
+      "permanentId": "10000000",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/copperlane/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "fixture": "scripts/fixtures/x_api_v2_samplea.json",
+      "fixtureAdapter": "x_api_v2",
+      "limit": 6,
+      "profile": {
+        "name": "Elon Musk",
+        "avatar": "https://pbs.twimg.com/profile_images/2103567689515954176/aR-Kjpp4_400x400.jpg",
+        "verifiedType": "blue",
+        "followers": 241524071,
+        "following": 1419,
+        "postsCount": 110566,
+        "joined": "2009-06-02",
+        "bio": "http://Terafab.AI",
+        "website": "",
+        "url": "https://x.com/copperlane"
+      }
+    },
+    {
+      "id": "x:mosspoint",
+      "platform": "x",
+      "handle": "mosspoint",
+      "permanentId": "10000000",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/mosspoint/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "fixture": "scripts/fixtures/x_api_v2_mosspoint.json",
+      "fixtureAdapter": "x_api_v2",
+      "limit": 8,
+      "profile": {
+        "name": "Mark Zuckerberg",
+        "avatar": "https://pbs.twimg.com/profile_images/77846223/profile_400x400.jpg",
+        "verifiedType": "blue",
+        "followers": 2511399,
+        "following": 759,
+        "postsCount": 102,
+        "joined": "2009-02-01",
+        "bio": "",
+        "url": "https://x.com/mosspoint"
+      }
+    },
+    {
+      "id": "instagram:birchlane",
+      "platform": "instagram",
+      "handle": "birchlane",
+      "adapter": "rsshub_instagram",
+      "source_urls": [
+        "{rsshubBase}/instagram/user/{handle}",
+        "http://localhost:8080/?action=display&bridge=InstagramBridge&context=Username&u={handle}&format=Atom",
+        "https://rss-bridge.org/bridge01/?action=display&bridge=InstagramBridge&context=Username&u={handle}&format=Atom"
+      ],
+      "fixture": "scripts/fixtures/rsshub_instagram_birchlane.xml",
+      "fixtureAdapter": "rsshub_instagram",
+      "limit": 8,
+      "profile": {
+        "name": "Mark Zuckerberg",
+        "url": "https://www.instagram.com/birchlane/"
+      }
+    },
+    {
+      "id": "threads:birchlane",
+      "platform": "threads",
+      "handle": "birchlane",
+      "adapter": "rsshub_threads",
+      "source_urls": [
+        "{rsshubBase}/threads/{handle}",
+        "http://localhost:8080/?action=display&bridge=ThreadsBridge&context=Username&u={handle}&format=Atom",
+        "https://rss-bridge.org/bridge01/?action=display&bridge=ThreadsBridge&context=Username&u={handle}&format=Atom"
+      ],
+      "fixture": "scripts/fixtures/rsshub_threads_birchlane.xml",
+      "fixtureAdapter": "rsshub_threads",
+      "limit": 8,
+      "profile": {
+        "name": "Mark Zuckerberg",
+        "url": "https://www.threads.com/@birchlane"
+      }
+    },
+    {
+      "id": "youtube:northlamp",
+      "platform": "youtube",
+      "handle": "northlamp",
+      "permanentId": "UCsyntheticmaple00001000",
+      "channelId": "UCsyntheticmaple00001000",
+      "adapter": "youtube_rss",
+      "source_urls": [
+        "https://www.youtube.com/feeds/videos.xml?channel_id={channelId}"
+      ],
+      "limit": 8,
+      "profile": {
+        "name": "Canadian Prepper",
+        "url": "https://www.youtube.com/@northlamp"
+      }
+    },
+    {
+      "id": "vk:vk",
+      "platform": "vk",
+      "handle": "vk",
+      "permanentId": "-10000041",
+      "adapter": "vk",
+      "fixture": "scripts/fixtures/vk_wall_vk.json",
+      "fixtureAdapter": "vk",
+      "limit": 8,
+      "profile": {
+        "name": "ВКонтакте",
+        "url": "https://vk.com/vk"
+      }
+    },
+    {
+      "id": "telegram:laneharbor",
+      "platform": "telegram",
+      "handle": "laneharbor",
+      "adapter": "telegram",
+      "source_urls": [
+        "https://t.me/s/{handle}"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "telegram",
+          "source_urls": [
+            "{rsshubBase}/telegram/channel/{handle}"
+          ]
+        }
+      ],
+      "fixture": "scripts/fixtures/telegram_channel.html",
+      "fixtureAdapter": "telegram",
+      "limit": 8,
+      "profile": {
+        "name": "Telegram News",
+        "url": "https://t.me/laneharbor"
+      }
+    },
+    {
+      "id": "telegram:quietharbor",
+      "platform": "telegram",
+      "handle": "quietharbor",
+      "adapter": "telegram",
+      "source_urls": [
+        "https://t.me/s/{handle}"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "telegram",
+          "source_urls": [
+            "{rsshubBase}/telegram/channel/{handle}"
+          ]
+        }
+      ],
+      "limit": 8,
+      "profile": {
+        "name": "Harbor",
+        "url": "https://t.me/quietharbor"
+      }
+    },
+    {
+      "id": "x:X",
+      "platform": "x",
+      "handle": "X",
+      "permanentId": "783214",
+      "adapter": "fxtwitter",
+      "defaultFollow": false,
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/X/statuses"
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "X",
+        "avatar": "https://pbs.twimg.com/profile_images/1955359038532653056/OSHY3ewP_200x200.jpg",
+        "verifiedType": "organization",
+        "url": "https://x.com/X"
+      }
+    },
+    {
+      "id": "x:stonebrook",
+      "platform": "x",
+      "handle": "stonebrook",
+      "permanentId": "0100000000000000202",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "stonebrook",
+        "url": "https://x.com/stonebrook"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:cedarhill",
+        "handle": "cedarhill",
+        "name": "Canadian Prepper",
+        "platform": "x",
+        "at": "2026-10-21T21:07:04.000Z"
+      }
+    },
+    {
+      "id": "x:cloudmerlin",
+      "platform": "x",
+      "handle": "cloudmerlin",
+      "permanentId": "100000000",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "Shaun Maguire",
+        "url": "https://x.com/cloudmerlin",
+        "avatar": "https://pbs.twimg.com/profile_images/1942940317784719360/47aIqszK_200x200.jpg"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:copperlane",
+        "handle": "copperlane",
+        "name": "Elon Musk",
+        "platform": "x",
+        "at": "2026-10-21T23:53:58.000Z"
+      }
+    },
+    {
+      "id": "x:frostmeadow",
+      "platform": "x",
+      "handle": "frostmeadow",
+      "permanentId": "0100000000000000270",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "frostmeadow Le Pogam",
+        "url": "https://x.com/frostmeadow",
+        "avatar": "https://pbs.twimg.com/profile_images/2057241969403834368/PFPm3cxd_200x200.jpg"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:copperlane",
+        "handle": "copperlane",
+        "name": "Elon Musk",
+        "platform": "x",
+        "at": "2026-10-21T23:23:30.000Z"
+      }
+    },
+    {
+      "id": "x:pineharbor",
+      "platform": "x",
+      "handle": "pineharbor",
+      "permanentId": "0100000000000000168",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "World Source News",
+        "url": "https://x.com/pineharbor",
+        "avatar": "https://pbs.twimg.com/profile_images/1974268960091656192/Hm7EK8JV_200x200.jpg"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:cedarhill",
+        "handle": "cedarhill",
+        "name": "Canadian Prepper",
+        "platform": "x",
+        "at": "2026-10-22T01:08:37.000Z"
+      }
+    },
+    {
+      "id": "x:riverquill",
+      "platform": "x",
+      "handle": "riverquill",
+      "permanentId": "100000000",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "riverquill",
+        "url": "https://x.com/riverquill"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:copperlane",
+        "handle": "copperlane",
+        "name": "Elon Musk",
+        "platform": "x",
+        "at": "2026-10-21T21:40:06.000Z"
+      }
+    },
+    {
+      "id": "x:quietharbor",
+      "platform": "x",
+      "handle": "quietharbor",
+      "permanentId": "0100000000000000117",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "quietharbor",
+        "url": "https://x.com/quietharbor"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:cedarhill",
+        "handle": "cedarhill",
+        "name": "Canadian Prepper",
+        "platform": "x",
+        "at": "2026-10-21T20:45:43.000Z"
+      }
+    },
+    {
+      "id": "x:larkspur",
+      "platform": "x",
+      "handle": "larkspur",
+      "permanentId": "0100000000000000219",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "Mike Lee",
+        "url": "https://x.com/larkspur",
+        "avatar": "https://pbs.twimg.com/profile_images/2097379040512643072/TUWueQG8_200x200.jpg"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:copperlane",
+        "handle": "copperlane",
+        "name": "Elon Musk",
+        "platform": "x",
+        "at": "2026-10-22T03:58:17.000Z"
+      }
+    },
+    {
+      "id": "x:amberfield",
+      "platform": "x",
+      "handle": "amberfield",
+      "permanentId": "0100000000000000253",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "amberfield",
+        "url": "https://x.com/amberfield"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:cedarhill",
+        "handle": "cedarhill",
+        "name": "Canadian Prepper",
+        "platform": "x",
+        "at": "2026-10-21T22:13:22Z"
+      }
+    },
+    {
+      "id": "x:willowmint",
+      "platform": "x",
+      "handle": "willowmint",
+      "permanentId": "1000000000",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "Chip Roy",
+        "url": "https://x.com/willowmint",
+        "avatar": "https://pbs.twimg.com/profile_images/1854720178690412546/3Pb61yqG_200x200.jpg"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:copperlane",
+        "handle": "copperlane",
+        "name": "Elon Musk",
+        "platform": "x",
+        "at": "2026-10-22T04:46:32.000Z"
+      }
+    },
+    {
+      "id": "x:novabrook",
+      "platform": "x",
+      "handle": "novabrook",
+      "permanentId": "0100000000000000100",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "novabrook",
+        "url": "https://x.com/novabrook"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:copperlane",
+        "handle": "copperlane",
+        "name": "Elon Musk",
+        "platform": "x",
+        "at": "2026-10-22T04:22:25.000Z"
+      }
+    },
+    {
+      "id": "x:brighthollow",
+      "platform": "x",
+      "handle": "brighthollow",
+      "permanentId": "0100000000000000185",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "Brandon Gill",
+        "url": "https://x.com/brighthollow",
+        "avatar": "https://pbs.twimg.com/profile_images/2017690903096262656/l45MPM6a_200x200.jpg"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:copperlane",
+        "handle": "copperlane",
+        "name": "Elon Musk",
+        "platform": "x",
+        "at": "2026-10-22T00:24:25.000Z"
+      }
+    },
+    {
+      "id": "x:silverpond",
+      "platform": "x",
+      "handle": "silverpond",
+      "permanentId": "0100000000000000236",
+      "adapter": "fxtwitter",
+      "source_urls": [
+        "{fxtwitterBase}/2/profile/{handle}/statuses"
+      ],
+      "fallbacks": [
+        {
+          "adapter": "nitter_rss",
+          "source_urls": [
+            "https://nitter.meowing.monster/{handle}/rss",
+            "https://nitter.kareem.one/{handle}/rss",
+            "https://nitter.jaydenha.uk/{handle}/rss"
+          ]
+        }
+      ],
+      "limit": 4,
+      "profile": {
+        "name": "Conflict Radar",
+        "url": "https://x.com/silverpond",
+        "avatar": "https://pbs.twimg.com/profile_images/1924904909914206208/D9T1EW2k_200x200.jpg"
+      },
+      "origin": "repost",
+      "defaultFollow": false,
+      "addedFrom": {
+        "feedId": "x:cedarhill",
+        "handle": "cedarhill",
+        "name": "Canadian Prepper",
+        "platform": "x",
+        "at": "2026-10-21T18:07:04.000Z"
+      }
+    }
+  ],
+  "people": [
+    {
+      "id": "canadian-prepper",
+      "name": "Canadian Prepper",
+      "accounts": [
+        {
+          "platform": "youtube",
+          "handle": "northlamp",
+          "permanentId": "UCsyntheticmaple00001000",
+          "channelId": "UCsyntheticmaple00001000",
+          "source": "https://www.youtube.com/@northlamp/about"
+        },
+        {
+          "platform": "x",
+          "handle": "cedarhill",
+          "permanentId": "1000000042",
+          "source": "https://canadianpreparedness.com links to https://twitter.com/cedarhill"
+        },
+        {
+          "platform": "instagram",
+          "handle": "orbitfox",
+          "source": "https://www.youtube.com/@northlamp/about and https://canadianpreparedness.com"
+        }
+      ]
+    }
+  ],
+  "discord": [
+    {
+      "id": "100000000000000355",
+      "name": "Discord Town Hall",
+      "auth": "user",
+      "channels": [
+        {
+          "id": "0100000000000000372",
+          "name": "rules",
+          "category": "Information",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "100000000000000389",
+          "name": "support",
+          "category": "Information",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000406",
+          "name": "account-safety",
+          "category": "Information",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000423",
+          "name": "wellbeing-resources",
+          "category": "Information",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "100000000000000440",
+          "name": "product-updates",
+          "category": "Announcements",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "100000000000000457",
+          "name": "discord-updates",
+          "category": "Announcements",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000474",
+          "name": "collab-announcements",
+          "category": "Announcements",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000491",
+          "name": "drops-and-deals",
+          "category": "Announcements",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000508",
+          "name": "wellbeing-bulletin",
+          "category": "Announcements",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000525",
+          "name": "wfs-general",
+          "category": "Boosters & Feedback",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000542",
+          "name": "boosters-chat",
+          "category": "Boosters & Feedback",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000559",
+          "name": "boosters-apps",
+          "category": "Boosters & Feedback",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "100000000000000355",
+          "name": "general-chat",
+          "category": "Town Hall General",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300,
+          "pace": "busy"
+        },
+        {
+          "id": "0100000000000000576",
+          "name": "discord-discussion",
+          "category": "Town Hall General",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300,
+          "pace": "busy"
+        },
+        {
+          "id": "100000000000000593",
+          "name": "peer-help",
+          "category": "Town Hall General",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300,
+          "pace": "busy"
+        },
+        {
+          "id": "0100000000000000610",
+          "name": "profile-aesthetic",
+          "category": "Community Fun",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000627",
+          "name": "community-polls",
+          "category": "Community Fun",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000644",
+          "name": "fun-apps",
+          "category": "Community Fun",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        },
+        {
+          "id": "0100000000000000661",
+          "name": "giveaway-corner",
+          "category": "Community Fun",
+          "mode": "messages",
+          "limit": 50,
+          "window": 300
+        }
+      ]
+    }
+  ],
+  "spaces": [
+    {
+      "id": "superintelmusic",
+      "title": "ViktorychMusic",
+      "cover": "icons/space-host.jpg",
+      "host": {
+        "name": "Harbor",
+        "handle": "quietharbor",
+        "platform": "telegram",
+        "followId": "telegram:quietharbor",
+        "avatar": "icons/space-host.jpg"
+      },
+      "source": {
+        "type": "loop",
+        "loopUrl": "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/current.json",
+        "allow": [
+          "pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev",
+          "r2.dev"
+        ]
+      }
+    }
+  ],
+  "communities": {
+    "paceSeconds": 2,
+    "cacheSeconds": 900,
+    "rsshubBase": "https://rsshub.app",
+    "redlib": [
+      "https://redlib.fmhy.net",
+      "https://safereddit.com",
+      "https://redlib.catsarch.com",
+      "https://redlib.ducks.party"
+    ],
+    "embeds": [
+      "https://vxreddit.com",
+      "https://rxddit.com"
+    ],
+    "fallbacks": [
+      {
+        "adapter": "reddit_rss",
+        "source_urls": [
+          "https://www.reddit.com/r/{name}/.rss",
+          "https://www.reddit.com/r/{name}/new/.rss"
+        ]
+      },
+      {
+        "adapter": "rsshub_reddit",
+        "source_urls": [
+          "{rsshubBase}/reddit/subreddit/{name}?format=atom"
+        ]
+      },
+      {
+        "adapter": "rss_bridge",
+        "source_urls": [
+          "https://rss-bridge.org/bridge01/?action=display&bridge=RedditBridge&context=single&r={name}&d=new&format=Atom"
+        ]
+      },
+      {
+        "adapter": "redlib",
+        "source_urls": [
+          "{redlib}/r/{name}/rss"
+        ]
+      },
+      {
+        "adapter": "reddit_embed",
+        "source_urls": [
+          "{embed}/r/{name}"
+        ]
+      }
+    ],
+    "items": [
+      {
+        "name": "teslamotors"
+      }
+    ]
+  },
+  "catalogSeed": true
+}

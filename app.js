@@ -1,0 +1,1136 @@
+/* X-style reader. Renders the normalized feeds.json schema only. */
+(function () {
+  const KEY = "rss-feeds-settings-v1";
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS" };
+
+  const PATH = {
+    logo: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z",
+    home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
+    homeOn: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913H9.14a.93.93 0 0 0 .929-.913v-7.075h3.909v7.075c0 .502.417.913.928.913h5.653c.51 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.408-.758z",
+    search: "M10.25 3.75c-3.59 0-6.5 2.91-6.5 6.5s2.91 6.5 6.5 6.5c1.795 0 3.419-.726 4.596-1.904 1.178-1.177 1.904-2.801 1.904-4.596 0-3.59-2.91-6.5-6.5-6.5zm-8.5 6.5c0-4.694 3.806-8.5 8.5-8.5s8.5 3.806 8.5 8.5c0 1.986-.682 3.815-1.824 5.262l4.781 4.781-1.414 1.414-4.781-4.781c-1.447 1.142-3.276 1.824-5.262 1.824-4.694 0-8.5-3.806-8.5-8.5z",
+    bell: "M19.993 9.042C19.48 5.017 16.054 2 11.996 2s-7.49 3.021-7.999 7.051L2.866 18H7.1c.463 2.282 2.481 4 4.9 4s4.437-1.718 4.9-4h4.236l-1.143-8.958zM12 20c-1.306 0-2.417-.835-2.829-2h5.658c-.412 1.165-1.523 2-2.829 2zm-6.866-4l.847-6.698C6.364 6.272 8.941 4 11.996 4s5.627 2.268 6.013 5.295L18.864 16H5.134z",
+    mail: "M1.998 5.5c0-1.381 1.119-2.5 2.5-2.5h15c1.381 0 2.5 1.119 2.5 2.5v13c0 1.381-1.119 2.5-2.5 2.5h-15c-1.381 0-2.5-1.119-2.5-2.5v-13zm2.5-.5c-.276 0-.5.224-.5.5v2.764l8 3.638 8-3.636V5.5c0-.276-.224-.5-.5-.5h-15zm15.5 5.463l-8 3.636-8-3.638V18.5c0 .276.224.5.5.5h15c.276 0 .5-.224.5-.5v-8.037z",
+    spark: "M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z",
+    lists: "M3 5.5C3 4.12 4.12 3 5.5 3h13C19.88 3 21 4.12 21 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-13zM5.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-13zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h7v2H7v-2z",
+    bookmark: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z",
+    bookmarkOn: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5z",
+    more: "M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z",
+    reply: "M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z",
+    repost: "M4.5 3.88l4.432 4.14-1.364 1.46L5.5 7.55V16c0 1.1.896 2 2 2H13v2H7.5c-2.209 0-4-1.79-4-4V7.55L1.432 9.48.068 8.02 4.5 3.88zM16.5 6H11V4h5.5c2.209 0 4 1.79 4 4v8.45l2.068-1.93 1.364 1.46-4.432 4.14-4.432-4.14 1.364-1.46 2.068 1.93V8c0-1.1-.896-2-2-2z",
+    heart: "M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z",
+    heartOn: "M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z",
+    views: "M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10h2L6 21H4zm9.248 0v-7h2v7h-2z",
+    share: "M12 2.59l5.7 5.7-1.41 1.42L13 6.41V16h-2V6.41l-3.3 3.3-1.41-1.42L12 2.59zM21 15l-.02 3.51c0 1.38-1.12 2.49-2.5 2.49H5.5C4.11 21 3 19.88 3 18.5V15h2v3.5c0 .28.22.5.5.5h12.98c.28 0 .5-.22.5-.5L19 15h2z",
+    check: "M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.222 1.261.27 1.894.139.634-.13 1.22-.435 1.689-.882.445-.47.749-1.055.878-1.688.132-.633.084-1.29-.139-1.896.586-.274 1.084-.705 1.438-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z",
+    back: "M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z",
+    close: "M10.59 12 4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z",
+    plus: "M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z",
+    play: "M8 5v14l11-7z",
+    pin: "M16 3H8v2l1 5-3 3v2h5v6l1 1 1-1v-6h5v-2l-3-3 1-5V3z",
+    loc: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5 2.5 2.5 0 0 1 12 11.5z",
+    link: "M10.6 13.4a1 1 0 0 1 0-1.4l3.4-3.4a2.5 2.5 0 0 1 3.5 3.5l-1.8 1.8-1.4-1.4 1.8-1.8a.5.5 0 0 0-.7-.7l-3.4 3.4a.5.5 0 0 0 0 .7l.2.2-1.4 1.4-.2-.3zm2.8-2.8 1.4 1.4-3.4 3.4a.5.5 0 0 1-.7-.7l1.3-1.3-1.4-1.4-1.3 1.3a2.5 2.5 0 0 0 3.5 3.5l3.4-3.4a2.5 2.5 0 0 0-3.5-3.5l-.3.3z",
+    cal: "M7 2h2v2h6V2h2v2h3v16H4V4h3V2zm13 6H4v10h16V8z",
+    ig: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm5 4.2A4.8 4.8 0 1 0 16.8 12 4.8 4.8 0 0 0 12 7.2zm6.3-.8a1.15 1.15 0 1 0 1.15 1.15A1.15 1.15 0 0 0 18.3 6.4zM12 9.3A2.7 2.7 0 1 1 9.3 12 2.7 2.7 0 0 1 12 9.3z",
+    threads: "M12.2 3C7.8 3 4.6 6.2 4.6 10.8c0 2.3.8 4.3 2.2 5.8l-1 3.2 3.3-1.2c.9.3 1.9.5 2.9.5 4.5 0 7.8-3.2 7.8-7.6C19.8 6.4 16.6 3 12.2 3zm0 2.2c3.2 0 5.4 2.3 5.4 5.5 0 1.5-.5 2.8-1.4 3.8-.3-2.3-1.8-4-4-4.6.8-.4 1.3-1.1 1.3-2 0-1.3-1.1-2.2-2.6-2.2-1.7 0-2.9 1.1-3.1 2.7H6.2c.3-2.6 2.6-4.6 5.9-4.6-.1 0 .1 0 .1 1.4zm-.4 4.2c1.6.2 2.8 1.3 3.1 3-.6.5-1.4.8-2.3.8-1.5 0-2.6-.8-3-2 .7-.3 1.4-.6 2.2-.8z",
+    rss: "M6 17.5A1.5 1.5 0 1 1 4.5 16 1.5 1.5 0 0 1 6 17.5zM4 11a7 7 0 0 1 7 7h-2a5 5 0 0 0-5-5v-2zm0-4a11 11 0 0 1 11 11h-2A9 9 0 0 0 4 9V7z",
+    feather: "M22 3.2c-5.8 0-9.4 2.2-12 5.6C8.2 11.4 7.2 15 7 19h2.1c.2-2.6.8-4.8 2-6.2 1 .2 2.1.5 3.2.9l-2.1 3.1h2.2l1.5-2.2c1.7.4 3.4.7 5.2 1 .2-.7.4-1.4.5-2.1-.9-.2-1.7-.4-2.5-.6 2-1.5 3.8-3.5 5-5.9-.3 0-.6-.1-1-.1z"
+  };
+
+  const STATE = {
+    data: null,
+    error: null,
+    loading: true,
+    settings: null,
+    expanded: {},
+    modal: null,
+    draft: {},
+    menu: null,
+    drawer: false,
+    headerHidden: false,
+    confirm: null
+  };
+
+  const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
+
+  function esc(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function feeds() { return (STATE.data && STATE.data.feeds) || []; }
+  function posts() { return (STATE.data && STATE.data.posts) || []; }
+
+  function loadSettings() {
+    const configured = feeds().filter((f) => f.configured).map((f) => f.id);
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (!raw) {
+        return { version: 1, initialized: true, follows: configured, lists: [], likes: {}, bookmarks: {}, reposts: {} };
+      }
+      const parsed = JSON.parse(raw);
+      parsed.follows = Array.isArray(parsed.follows) ? parsed.follows : configured;
+      parsed.lists = Array.isArray(parsed.lists) ? parsed.lists : [];
+      parsed.likes = parsed.likes || {};
+      parsed.bookmarks = parsed.bookmarks || {};
+      parsed.reposts = parsed.reposts || {};
+      if (!parsed.initialized) {
+        parsed.follows = configured;
+        parsed.initialized = true;
+      }
+      return parsed;
+    } catch (err) {
+      return { version: 1, initialized: true, follows: configured, lists: [], likes: {}, bookmarks: {}, reposts: {} };
+    }
+  }
+
+  function saveSettings() {
+    localStorage.setItem(KEY, JSON.stringify(STATE.settings));
+  }
+
+  function isFollowed(id) { return STATE.settings.follows.includes(id); }
+  function feedById(id) { return feeds().find((f) => f.id === id); }
+
+  function profileHash(platform, handle) {
+    if (!handle) return "#/";
+    if ((platform || "x") === "x") return `#/@${encodeURIComponent(handle)}`;
+    return `#/${encodeURIComponent(platform)}/${encodeURIComponent(handle)}`;
+  }
+  function statusHash(post) {
+    const platform = post.platform || "x";
+    const handle = post.handle || "";
+    const id = post.statusId || post.id;
+    if (platform === "x") return `#/@${encodeURIComponent(handle)}/status/${encodeURIComponent(id)}`;
+    return `#/${encodeURIComponent(platform)}/${encodeURIComponent(handle)}/status/${encodeURIComponent(id)}`;
+  }
+
+  function findFeed(platform, handle) {
+    const h = (handle || "").toLowerCase();
+    return feeds().find((f) => f.platform === platform && (f.handle || "").toLowerCase() === h);
+  }
+
+  function sameAuthor(post, feed) {
+    return post && feed && post.platform === feed.platform && (post.handle || "").toLowerCase() === (feed.handle || "").toLowerCase();
+  }
+
+  function asPost(quoted, platform) {
+    return Object.assign({ platform: platform || "x", kind: "post", feedId: "" }, quoted);
+  }
+
+  function postsFor(feed) {
+    const out = [];
+    const seen = new Set();
+    function add(post) {
+      const key = (post.platform || "") + ":" + (post.statusId || post.id);
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push(post);
+    }
+    posts().forEach((post) => {
+      if (post.feedId === feed.id || sameAuthor(post, feed)) add(post);
+      if (post.quoted && sameAuthor(post.quoted, feed)) add(asPost(post.quoted, post.quoted.platform || "x"));
+    });
+    return out.sort(byStamp);
+  }
+
+  function findPost(platform, handle, id) {
+    const h = (handle || "").toLowerCase();
+    const all = posts();
+    const direct = all.find((p) => (p.platform === platform) && String(p.statusId || p.id) === String(id) && (!h || (p.handle || "").toLowerCase() === h))
+      || all.find((p) => String(p.id) === String(id) || String(p.statusId) === String(id));
+    if (direct) return direct;
+    for (const post of all) {
+      if (post.quoted && String(post.quoted.statusId || post.quoted.id) === String(id)) return asPost(post.quoted, post.quoted.platform || platform || "x");
+    }
+    return null;
+  }
+
+  function stamp(post) { return post.sortDate || post.date || ""; }
+  function byStamp(a, b) { return stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0; }
+
+  function formatCount(n) {
+    n = Number(n);
+    if (!isFinite(n)) return "";
+    const abs = Math.abs(n);
+    const trim = (v) => {
+      const s = (Math.round(v * 10) / 10).toFixed(1);
+      return s.endsWith(".0") ? s.slice(0, -2) : s;
+    };
+    if (abs < 10000) return Math.trunc(n).toLocaleString("en-US");
+    if (abs < 1e6) return trim(n / 1e3) + "K";
+    if (abs < 1e9) return trim(n / 1e6) + "M";
+    return trim(n / 1e9) + "B";
+  }
+
+  function shownCount(value, extra) {
+    if (value == null && !extra) return "";
+    const n = (value == null ? 0 : Number(value)) + (extra || 0);
+    if (!n) return "";
+    return formatCount(n);
+  }
+
+  function relTime(iso) {
+    const then = new Date(iso).getTime();
+    if (!then) return "";
+    const sec = Math.max(0, (Date.now() - then) / 1000);
+    if (sec < 60) return Math.max(1, Math.floor(sec)) + "s";
+    if (sec < 3600) return Math.floor(sec / 60) + "m";
+    if (sec < 86400) return Math.floor(sec / 3600) + "h";
+    const d = new Date(iso);
+    if (d.getFullYear() === new Date().getFullYear()) return MONTHS[d.getMonth()] + " " + d.getDate();
+    return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+  }
+
+  function fullTime(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    let h = d.getHours();
+    const am = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    const min = String(d.getMinutes()).padStart(2, "0");
+    return h + ":" + min + " " + am + " · " + MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+  }
+
+  function joinedLabel(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return "Joined " + MONTHS_LONG[d.getMonth()] + " " + d.getFullYear();
+  }
+
+  function initials(name) {
+    const t = (name || "?").trim();
+    return esc(t.slice(0, 1).toUpperCase() || "?");
+  }
+
+  function avatar(src, name, cls) {
+    const letter = initials(name);
+    const extra = cls ? " " + cls : "";
+    if (!src) return `<span class="ava initials${extra}">${letter}</span>`;
+    return `<img class="ava${extra}" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
+  }
+
+  function badge(type) {
+    if (!type || type === "none") return "";
+    const cls = type === "business" ? "business" : type === "government" ? "government" : "blue";
+    const label = cls === "business" ? "Verified business" : cls === "government" ? "Verified government" : "Verified";
+    return `<span class="vbadge ${cls}" title="${label}">${icon("check")}</span>`;
+  }
+
+  function sourceBadge(platform) {
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "x" ? "logo" : "rss";
+    return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
+  }
+
+  function externalProfile(feed) {
+    if (feed.url) return feed.url;
+    if (feed.platform === "x") return "https://x.com/" + feed.handle;
+    if (feed.platform === "threads") return "https://www.threads.com/@" + feed.handle;
+    if (feed.platform === "instagram") return "https://www.instagram.com/" + feed.handle + "/";
+    return feed.url || "#";
+  }
+
+  function mentionHref(user, platform) {
+    if (platform === "instagram") return "https://www.instagram.com/" + user + "/";
+    if (platform === "threads") return "https://www.threads.com/@" + user;
+    return "https://x.com/" + user;
+  }
+  function hashHref(tag, platform) {
+    const clean = encodeURIComponent(tag);
+    if (platform === "instagram") return "https://www.instagram.com/explore/tags/" + clean + "/";
+    if (platform === "threads") return "https://www.threads.com/search?q=" + encodeURIComponent("#" + tag);
+    return "https://x.com/hashtag/" + clean;
+  }
+
+  function linkify(text, links, platform) {
+    const src = String(text || "");
+    const known = (links || []).filter((l) => l && l.expanded);
+    let i = 0;
+    let html = "";
+    const anchorHits = known.filter((l) => l.anchorText && l.anchorText !== l.expanded);
+    while (i < src.length) {
+      const hit = known.find((l) => src.startsWith(l.expanded, i));
+      if (hit) {
+        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(hit.expanded)}">${esc(hit.display || hit.expanded)}</a>`;
+        i += hit.expanded.length;
+        continue;
+      }
+      const anchored = anchorHits.find((l) => l.anchorText && src.startsWith(l.anchorText, i));
+      if (anchored) {
+        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(anchored.expanded)}">${esc(anchored.anchorText)}</a>`;
+        i += anchored.anchorText.length;
+        continue;
+      }
+      if (src.startsWith("http://", i) || src.startsWith("https://", i)) {
+        const m = src.slice(i).match(/^https?:\/\/[^\s]+/);
+        if (m) {
+          let href = m[0].replace(/[),.;!?]+$/g, "");
+          const trail = m[0].slice(href.length);
+          const shown = href.replace(/^https?:\/\//, "");
+          const label = shown.length > 30 ? shown.slice(0, 27) + "…" : shown;
+          html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href)}">${esc(label)}</a>` + esc(trail);
+          i += m[0].length;
+          continue;
+        }
+      }
+      const mention = src.slice(i).match(/^@([A-Za-z0-9_]{1,30})/);
+      if (mention && (i === 0 || !/[A-Za-z0-9_]/.test(src[i - 1]))) {
+        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(mentionHref(mention[1], platform))}">@${esc(mention[1])}</a>`;
+        i += mention[0].length;
+        continue;
+      }
+      const hash = src.slice(i).match(/^#([A-Za-z0-9_]{1,50})/);
+      if (hash && (i === 0 || /\s/.test(src[i - 1]))) {
+        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(hashHref(hash[1], platform))}">#${esc(hash[1])}</a>`;
+        i += hash[0].length;
+        continue;
+      }
+      const cash = src.slice(i).match(/^\$([A-Za-z]{1,10})\b/);
+      if (cash) {
+        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="https://x.com/search?q=%24${esc(cash[1])}&src=cashtag_click">$${esc(cash[1])}</a>`;
+        i += cash[0].length;
+        continue;
+      }
+      html += esc(src[i]);
+      i += 1;
+    }
+    return html;
+  }
+
+  function textHtml(post, key, full) {
+    const text = post.text || "";
+    if (full || STATE.expanded[key] || text.length <= 280) return linkify(text, post.links, post.platform);
+    let cut = text.slice(0, 280);
+    const sp = cut.lastIndexOf(" ");
+    if (sp > 220) cut = cut.slice(0, sp);
+    return linkify(cut, post.links, post.platform) + ` <button class="show-more" data-act="more" data-key="${esc(key)}">Show more</button>`;
+  }
+
+  function mediaHtml(items) {
+    const list = (items || []).filter((m) => m && (m.url || m.poster)).slice(0, 4);
+    if (!list.length) return "";
+    const n = list.length;
+    const cls = n === 1 ? "m1" : n === 2 ? "m2" : n === 3 ? "m3" : "m4";
+    const tiles = list.map((m) => {
+      const alt = m.alt ? `<span class="alt-badge">ALT</span>` : "";
+      const gif = m.type === "animated_gif" ? `<span class="gif-badge">GIF</span>` : "";
+      if (m.type === "photo" || !m.url || m.url === m.poster) {
+        return `<div class="tile"><img src="${esc(m.url || m.poster)}" alt="${esc(m.alt || "")}" loading="lazy" referrerpolicy="no-referrer">${alt}</div>`;
+      }
+      const poster = m.poster ? ` poster="${esc(m.poster)}"` : "";
+      const loop = m.type === "animated_gif" ? " autoplay muted loop playsinline" : "";
+      return `<div class="tile"><video src="${esc(m.url)}"${poster}${loop} playsinline preload="metadata"></video><button class="play" data-act="play" aria-label="Play">${icon("play")}</button>${gif}${alt}</div>`;
+    }).join("");
+    return `<div class="media ${cls}">${tiles}</div>`;
+  }
+
+  function followButton(id, large) {
+    const on = isFollowed(id);
+    return `<button class="follow${on ? " following" : ""}${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}" aria-pressed="${on ? "true" : "false"}"><span class="f">Following</span><span class="u">Unfollow</span>${on ? "" : "Follow"}</button>`.replace(
+      on ? "" : `<span class="f">Following</span><span class="u">Unfollow</span>`,
+      ""
+    );
+  }
+
+  function followButtonClean(id, large) {
+    if (isFollowed(id)) {
+      return `<button class="follow following${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}"><span class="f">Following</span><span class="u">Unfollow</span></button>`;
+    }
+    return `<button class="follow${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}">Follow</button>`;
+  }
+
+  function actionBar(post) {
+    const id = post.id;
+    const stats = post.stats || {};
+    const liked = !!STATE.settings.likes[id];
+    const booked = !!STATE.settings.bookmarks[id];
+    const reposted = !!STATE.settings.reposts[id];
+    const btn = (cls, act, path, label, count) => `
+      <button class="action ${cls}${cls === "like" && liked ? " on" : ""}${cls === "bookmark" && booked ? " on" : ""}${cls === "repost" && reposted ? " on" : ""}" data-act="${act}" data-id="${esc(id)}" aria-label="${esc(label)}">
+        <span class="ic">${icon(path)}</span>${count ? `<span>${esc(count)}</span>` : ""}
+      </button>`;
+    return `<div class="actions">
+      ${btn("reply", "open-status", "reply", "Reply", shownCount(stats.replies, 0))}
+      ${btn("repost", "repost", "repost", "Repost", shownCount(stats.reposts, reposted ? 1 : 0))}
+      ${btn("like", "like", liked ? "heartOn" : "heart", "Like", shownCount(stats.likes, liked ? 1 : 0))}
+      ${btn("views", "open-status", "views", "Views", shownCount(stats.views, 0))}
+      ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", "Bookmark", "")}
+      ${btn("share", "share", "share", "Share", "")}
+    </div>`;
+  }
+
+  function quoteCard(quoted) {
+    if (!quoted) return "";
+    const platform = quoted.platform || "x";
+    const href = quoted.url && !quoted.handle ? quoted.url : (quoted.handle ? statusHash(asPost(quoted, platform)) : (quoted.url || "#"));
+    const external = href.startsWith("http");
+    return `<a class="quote" href="${esc(href)}" ${external ? 'target="_blank" rel="noopener noreferrer" data-act="stop"' : ""}>
+      <div class="quote-head">
+        ${avatar(quoted.avatar, quoted.author || quoted.handle)}
+        <span class="name">${esc(quoted.author || quoted.handle || "Post")}${badge(quoted.verifiedType)}</span>
+        ${quoted.handle ? `<span class="handle">@${esc(quoted.handle)}</span>` : ""}
+        ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
+      </div>
+      <div class="quote-text">${textHtml(quoted, (quoted.id || "q") + ":q", false)}</div>
+      ${mediaHtml(quoted.media)}
+    </a>`;
+  }
+
+  function card(post, mode) {
+    const hideRepost = mode === "author" || mode === "status";
+    const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a href="${esc(profileHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
+    const reply = post.replyingTo && post.replyingTo.handle ? `<div class="replying">Replying to <a data-act="stop" href="${esc(profileHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(post.url || "")}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
+    return `<article class="post" data-open="${esc(statusHash(post))}">
+      ${repost}
+      <div class="post-row">
+        <a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(post.avatar, post.author || post.handle)}</a>
+        <div class="post-main">
+          <div class="byline">
+            <a class="name" href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${esc(post.author || post.handle)}${badge(post.verifiedType)}</a>
+            <a class="handle" href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">@${esc(post.handle || "")}</a>
+            <span class="dot">·</span>
+            <a class="time" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
+            ${sourceBadge(post.platform)}
+            <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="More">${icon("more")}</button>
+          </div>
+          ${reply}
+          <div class="post-text">${textHtml(post, post.id, false)}</div>
+          ${mediaHtml(post.media)}
+          ${quoteCard(post.quoted)}
+          ${actionBar(post)}
+        </div>
+      </div>
+      ${menu}
+    </article>`;
+  }
+
+  function emptyBlock(title, body) {
+    return `<div class="empty"><h2>${esc(title)}</h2><p>${esc(body)}</p></div>`;
+  }
+
+  function parseRoute() {
+    let hash = decodeURIComponent(location.hash || "#/");
+    const qAt = hash.indexOf("?");
+    const query = qAt >= 0 ? new URLSearchParams(hash.slice(qAt + 1)) : new URLSearchParams();
+    const path = (qAt >= 0 ? hash.slice(0, qAt) : hash).replace(/^#/, "") || "/";
+    const parts = path.split("/").filter(Boolean);
+    if (!parts.length || parts[0] === "home") return { name: "home", tab: parts[1] === "following" ? "following" : parts[1] === "tab" ? "list:" + parts[2] : "foryou", query };
+    if (parts[0] === "following") return { name: "home", tab: "following", query };
+    if (parts[0] === "tab" && parts[1]) return { name: "home", tab: "list:" + parts[1], query };
+    const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings"];
+    if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
+    if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
+    let platform = "x";
+    let handle = "";
+    let rest = [];
+    if (parts[0].startsWith("@")) {
+      handle = parts[0].slice(1);
+      rest = parts.slice(1);
+    } else if (["x", "threads", "instagram", "rss"].includes(parts[0])) {
+      platform = parts[0];
+      handle = parts[1] || "";
+      rest = parts.slice(2);
+    } else {
+      return { name: "home", tab: "foryou", query };
+    }
+    if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
+    return { name: "profile", platform, handle, query };
+  }
+
+  function navItem(href, name, label, on) {
+    return `<a class="nav-item${on ? " on" : ""}" href="${href}">${icon(on && name === "home" ? "homeOn" : name)}<span class="nav-label">${label}</span></a>`;
+  }
+
+  function nav(route) {
+    const name = route.name;
+    return `<header class="nav">
+      <div class="nav-scroll">
+        <a class="logo" href="#/" aria-label="Home">${icon("logo")}</a>
+        ${navItem("#/", "home", "Home", name === "home")}
+        ${navItem("#/explore", "search", "Explore", name === "explore")}
+        ${navItem("#/notifications", "bell", "Notifications", name === "notifications")}
+        ${navItem("#/messages", "mail", "Messages", name === "messages")}
+        ${navItem("#/feeds", "spark", "Feeds", name === "feeds")}
+        ${navItem("#/lists", "lists", "Lists", name === "lists" || name === "list")}
+        ${navItem("#/bookmarks", "bookmark", "Bookmarks", name === "bookmarks")}
+        ${navItem("#/settings", "more", "More", name === "settings")}
+        <button class="post-btn" data-act="compose"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>
+      </div>
+      <button class="account-pill" data-act="drawer" aria-label="Account menu">
+        <span class="ava initials">Y</span>
+        <span class="account-meta"><b>You</b><span>@reader</span></span>
+        <span class="dots">${icon("more")}</span>
+      </button>
+    </header>`;
+  }
+
+  function followSuggestions() {
+    return feeds().filter((f) => f.id && !isFollowed(f.id)).sort((a, b) => (b.configured ? 1 : 0) - (a.configured ? 1 : 0));
+  }
+
+  function sidebar() {
+    const people = followSuggestions().slice(0, 3);
+    const rows = people.map((f) => `<div class="who-row">
+      <a class="who-main" href="${esc(profileHash(f.platform, f.handle))}" data-card="${esc(f.id)}">
+        ${avatar(f.avatar, f.name)}
+        <span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)} ${sourceBadge(f.platform)}</span></span>
+      </a>
+      ${followButtonClean(f.id)}
+    </div>`).join("");
+    return `<aside class="side">
+      <form class="side-search" data-act="search-form">
+        <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="Search" aria-label="Search"></label>
+      </form>
+      ${people.length ? `<section class="card"><h2>Who to follow</h2>${rows}<a class="show-more-row" href="#/feeds">Show more</a></section>` : ""}
+      <div class="fineprint"><span>Preview snapshot</span><a href="https://github.com/owner-account/rss-feeds">GitHub</a><span>Not affiliated with X</span></div>
+    </aside>`;
+  }
+
+  function bottom(route) {
+    const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}">${icon(name)}</a>`;
+    return `<nav class="bottom-nav" aria-label="Primary">
+      ${item("#/", route.name === "home" ? "homeOn" : "home", "Home", route.name === "home")}
+      ${item("#/explore", "search", "Search", route.name === "explore")}
+      ${item("#/feeds", "spark", "Feeds", route.name === "feeds")}
+      ${item("#/notifications", "bell", "Notifications", route.name === "notifications")}
+      ${item("#/messages", "mail", "Messages", route.name === "messages")}
+    </nav>
+    <button class="fab" data-act="compose" aria-label="Post">${icon("plus")}</button>`;
+  }
+
+  function homeHeader(tab) {
+    const lists = STATE.settings.lists.filter((l) => l.pinned);
+    const tabBtn = (id, label, on) => `<button class="tab${on ? " on" : ""}" data-act="htab" data-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}"><span>${esc(label)}</span></button>`;
+    return `<div class="topbar tall">
+      <div class="mhead">
+        <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
+        <a class="m-logo" href="#/" aria-label="Home">${icon("logo")}</a>
+        <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
+      </div>
+      <div class="tabs" role="tablist">
+        ${tabBtn("foryou", "For you", tab === "foryou")}
+        ${tabBtn("following", "Following", tab === "following")}
+        ${lists.map((l) => tabBtn("list:" + l.id, l.name, tab === "list:" + l.id)).join("")}
+      </div>
+    </div>`;
+  }
+
+  function listMembersPosts(list) {
+    const ids = new Set(list.members || []);
+    return posts().filter((p) => ids.has(p.feedId) || ids.has((p.platform || "x") + ":" + p.handle)).sort(byStamp);
+  }
+
+  function homeView(route) {
+    const tab = route.tab || "foryou";
+    let list = posts().slice().sort(byStamp);
+    if (tab === "following") {
+      const followed = new Set(STATE.settings.follows);
+      list = list.filter((p) => followed.has(p.feedId) || followed.has((p.platform || "x") + ":" + p.handle));
+    }
+    if (tab.startsWith("list:")) {
+      const found = STATE.settings.lists.find((l) => l.id === tab.slice(5));
+      list = found ? listMembersPosts(found) : [];
+    }
+    const body = list.length ? list.map((p) => card(p)).join("") : emptyBlock(
+      tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
+      tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
+    );
+    return homeHeader(tab) + body;
+  }
+
+  function pageHead(title, extra, back, action) {
+    return `<div class="topbar tall"><div class="mhead">
+        <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
+        <a class="m-logo" href="#/" aria-label="Home">${icon("logo")}</a>
+        <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
+      </div>
+      <div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>` : ""}<div class="head-text grow"><h1>${esc(title)}</h1>${extra || ""}</div>${action || ""}</div></div>`;
+  }
+
+  function profileView(route) {
+    const feed = findFeed(route.platform, route.handle) || {
+      id: route.platform + ":" + route.handle,
+      platform: route.platform,
+      handle: route.handle,
+      name: route.handle,
+      configured: false
+    };
+    const tab = route.query.get("tab") || "posts";
+    let list = postsFor(feed);
+    if (tab === "replies") list = list.filter((p) => p.kind === "reply");
+    else if (tab === "media") list = list.filter((p) => (p.media || []).length);
+    else list = list.filter((p) => p.kind !== "reply");
+    const count = feed.postsCount != null ? formatCount(feed.postsCount) : formatCount(postsFor(feed).length);
+    const banner = feed.banner ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : `<div class="pbanner"></div>`;
+    const meta = [
+      feed.location ? `<span>${icon("loc")}${esc(feed.location)}</span>` : "",
+      feed.website ? `<a href="${esc(feed.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(feed.website).replace(/^https?:\/\//, ""))}</a>` : "",
+      feed.joined ? `<span>${icon("cal")}${esc(joinedLabel(feed.joined))}</span>` : ""
+    ].join("");
+    const counts = (feed.following != null || feed.followers != null) ? `<div class="counts">
+      ${feed.following != null ? `<div><b>${esc(formatCount(feed.following))}</b> <span>Following</span></div>` : ""}
+      ${feed.followers != null ? `<div><b>${esc(formatCount(feed.followers))}</b> <span>Followers</span></div>` : ""}
+    </div>` : "";
+    const tabs = ["posts", "replies", "media"].map((id) => {
+      const label = id[0].toUpperCase() + id.slice(1);
+      const href = profileHash(feed.platform, feed.handle) + (id === "posts" ? "" : "?tab=" + id);
+      return `<a class="tab${tab === id ? " on" : ""}" href="${esc(href)}"><span>${label}</span></a>`;
+    }).join("");
+    return `<div class="topbar profile-bar">
+      <div class="page-head">
+        <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
+        <div class="head-text"><div class="pt-name">${esc(feed.name || feed.handle)}</div><div class="pt-count">${esc(count)} posts</div></div>
+      </div>
+    </div>
+    ${banner}
+    <div class="pinfo">
+      <div class="pava-row">
+        ${avatar(feed.avatar, feed.name, "pava")}
+        <div class="pactions">
+          ${followButtonClean(feed.id, true)}
+          <a class="outline" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(feed))}">View on ${esc(PLATFORM[feed.platform] || "web")}</a>
+        </div>
+      </div>
+      <h2 class="pname">${esc(feed.name || feed.handle)}${badge(feed.verifiedType)}</h2>
+      <div class="phandle">@${esc(feed.handle)}</div>
+      ${feed.bio ? `<div class="bio">${linkify(feed.bio, [], feed.platform)}</div>` : ""}
+      ${meta ? `<div class="pmeta">${meta}</div>` : ""}
+      ${counts}
+    </div>
+    <div class="tabs ptabs" role="tablist">${tabs}</div>
+    ${list.length ? list.map((p) => {
+      const byThis = p.repostedBy && (p.repostedBy.handle || "").toLowerCase() === (feed.handle || "").toLowerCase();
+      return card(p, byThis ? "" : "author");
+    }).join("") : emptyBlock(tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : "No posts yet", "Posts from this account will show up here.")}`;
+  }
+
+  function statusView(route) {
+    const post = findPost(route.platform, route.handle, route.id);
+    if (!post) return pageHead("Post", "", true) + emptyBlock("Post unavailable", "This post isn’t in the current snapshot.");
+    const stats = post.stats || {};
+    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
+      <article class="status">
+        <div class="status-author">
+          <a href="${esc(profileHash(post.platform, post.handle))}">${avatar(post.avatar, post.author)}</a>
+          <div>
+            <a class="name" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(post.verifiedType)}</a>
+            <a class="handle" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
+          </div>
+          <span style="margin-left:auto">${sourceBadge(post.platform)}</span>
+        </div>
+        ${post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a href="${esc(profileHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : ""}
+        <div class="status-text">${textHtml(post, post.id, true)}</div>
+        ${mediaHtml(post.media)}
+        ${quoteCard(post.quoted)}
+        <div class="status-time">${esc(fullTime(post.date))}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
+        ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> Views</div>` : `<div class="status-views"></div>`}
+        ${actionBar(post)}
+      </article>`;
+  }
+
+  function exploreView(route) {
+    const q = (route.query.get("q") || "").trim();
+    const lq = q.toLowerCase();
+    let body = emptyBlock("Search posts and accounts", "Try a name, @handle, or a word from a post.");
+    if (lq) {
+      const accounts = feeds().filter((f) => (f.name + " " + f.handle + " " + (f.bio || "")).toLowerCase().includes(lq));
+      const found = posts().filter((p) => (p.text + " " + p.author + " " + p.handle + " " + ((p.quoted && p.quoted.text) || "")).toLowerCase().includes(lq)).sort(byStamp);
+      const acct = accounts.length ? `<section class="card"><h2>Accounts</h2>${accounts.map(accountRow).join("")}</section>` : "";
+      body = acct + (found.length ? found.map((p) => card(p)).join("") : emptyBlock("No results", "Nothing matched “" + q + "”."));
+    }
+    return `<div class="topbar explore-bar"><div class="page-head"><h1>Explore</h1></div>
+      <form data-act="search-form" class="explore-form"><label class="search"><span>${icon("search")}</span><input id="explore-q" value="${esc(q)}" placeholder="Search" aria-label="Search"></label></form></div>${body}`;
+  }
+
+  function accountRow(f) {
+    return `<div class="acct-row"><a class="who-main" href="${esc(profileHash(f.platform, f.handle))}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span></span></a>${followButtonClean(f.id)}</div>`;
+  }
+
+  function feedsView() {
+    const list = feeds().slice().sort((a, b) => Number(b.configured) - Number(a.configured) || (a.name || "").localeCompare(b.name || ""));
+    return pageHead("Feeds") + (list.length ? `<div>${list.map(accountRow).join("")}</div>` : emptyBlock("No accounts", "Add sources in feeds.config.json."));
+  }
+
+  function listsView() {
+    const pinned = STATE.settings.lists.filter((l) => l.pinned);
+    const yours = STATE.settings.lists.filter((l) => !l.pinned);
+    const row = (l) => `<div class="list-row"><a class="list-main" href="#/lists/${esc(l.id)}"><span class="color-chip" style="background:${esc(l.bannerColor || COLORS[0])}"></span><span class="list-copy"><span class="name">${esc(l.name)}</span><span class="meta">${(l.members || []).length} members</span></span></a><button class="icon-btn pin${l.pinned ? " on" : ""}" data-act="pin" data-id="${esc(l.id)}" aria-label="${l.pinned ? "Unpin" : "Pin"} list">${icon("pin")}</button></div>`;
+    const section = (title, items) => items.length ? `<section class="list-section"><h2>${title}</h2>${items.map(row).join("")}</section>` : "";
+    const create = `<button class="icon-btn" data-act="new-list" aria-label="Create list">${icon("plus")}</button>`;
+    return pageHead("Lists", "", false, create) +
+      (STATE.settings.lists.length ? section("Pinned Lists", pinned) + (yours.length ? section("Your Lists", yours) : "") : emptyBlock("Save posts into Lists", "Create a List to group the accounts you follow.")) +
+      (!STATE.settings.lists.length ? `<div class="empty-action"><button class="save" data-act="new-list">Create a List</button></div>` : "");
+  }
+
+  function listView(route) {
+    const list = STATE.settings.lists.find((l) => l.id === route.id);
+    if (!list) return pageHead("List", "", true) + emptyBlock("List not found", "It may have been deleted.");
+    const items = listMembersPosts(list);
+    return `<div class="topbar"><div class="page-head">
+        <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
+        <div class="head-text grow"><div class="pt-name">${esc(list.name)}</div><div class="pt-count">${(list.members || []).length} members</div></div>
+        <button class="icon-btn pin${list.pinned ? " on" : ""}" data-act="pin" data-id="${esc(list.id)}" aria-label="Pin list">${icon("pin")}</button>
+      </div></div>
+      <div class="list-banner" style="background:${esc(list.bannerColor || COLORS[0])}"></div>
+      <div class="list-body">
+        <div class="list-tools"><div><h2>${esc(list.name)}</h2>${list.description ? `<div class="bio">${esc(list.description)}</div>` : ""}<div class="phandle">${(list.members || []).length} Members</div></div>
+        <button class="outline" data-act="edit-list" data-id="${esc(list.id)}">Edit List</button></div>
+        <button class="show-more" data-act="members" data-id="${esc(list.id)}">Manage members</button>
+      </div>
+      ${items.length ? items.map((p) => card(p)).join("") : emptyBlock("No posts in this List", "Add members to see their posts here.")}`;
+  }
+
+  function bookmarksView() {
+    const ids = STATE.settings.bookmarks;
+    const list = posts().filter((p) => ids[p.id]).sort(byStamp);
+    return pageHead("Bookmarks", `<div class="subhead">@reader</div>`) + (list.length ? list.map((p) => card(p)).join("") : emptyBlock("Save posts for later", "Bookmark posts to easily find them again in the future."));
+  }
+
+  function notesView(title, headline, body) {
+    return pageHead(title) + emptyBlock(headline, body);
+  }
+
+  function settingsView() {
+    return pageHead("Settings", "", true) + `<div class="modal-body">
+      <p class="phandle">Follows, Lists, likes, and bookmarks stay in this browser.</p>
+      <button class="primary" data-act="export">Export settings</button>
+      <label class="primary import-btn">Import settings<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
+    </div>`;
+  }
+
+  function drawer() {
+    if (!STATE.drawer) return "";
+    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
+      <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>You</b><div class="phandle">@reader</div></div></div>
+      <a href="#/lists">${icon("lists")} Lists</a>
+      <a href="#/bookmarks">${icon("bookmark")} Bookmarks</a>
+      <a href="#/feeds">${icon("spark")} Feeds</a>
+      <a href="#/settings">${icon("more")} Settings</a>
+    </div></div>`;
+  }
+
+  function modal() {
+    if (STATE.confirm) {
+      return `<div class="modal-back"><div class="modal" role="dialog" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
+        <div class="modal-body"><h2>Delete this List?</h2><p class="phandle">This can’t be undone.</p>
+        <button class="primary" data-act="confirm-delete" style="background:#f4212e">Delete</button>
+        <button class="outline" data-act="close-modal" style="margin-left:8px">Cancel</button></div></div></div>`;
+    }
+    if (!STATE.modal) return "";
+    if (STATE.modal === "compose") {
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" data-act="stop">
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><div class="grow"></div></div>
+        <div class="modal-body" style="display:flex;gap:12px">
+          <span class="ava initials">Y</span>
+          <div style="flex:1"><textarea id="compose-text" placeholder="What is happening?!" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none"></textarea>
+          <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post" disabled>Post</button></div>
+          <p class="phandle">This reader doesn’t publish. Posts come from your feeds.</p></div>
+        </div></div></div>`;
+    }
+    if (STATE.modal === "list") {
+      const d = STATE.draft;
+      return `<div class="modal-back"><div class="modal" role="dialog">
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>${d.id ? "Edit List" : "Create a new List"}</h2><button class="save" data-act="save-list" ${d.name && d.name.trim() ? "" : "disabled"}>Save</button></div>
+        <div class="modal-body">
+          <label class="field"><span>Name</span><input id="list-name" data-field="name" maxlength="50" value="${esc(d.name || "")}"></label>
+          <label class="field"><span>Description</span><textarea id="list-desc" data-field="description" maxlength="160">${esc(d.description || "")}</textarea></label>
+          <div class="field"><span>Banner</span><div class="swatches">${COLORS.map((c) => `<button class="swatch${d.bannerColor === c ? " on" : ""}" style="background:${c}" data-act="color" data-color="${c}" aria-label="Banner color"></button>`).join("")}</div></div>
+          ${d.id ? `<button class="danger" data-act="ask-delete">Delete List</button>` : ""}
+        </div></div></div>`;
+    }
+    if (STATE.modal === "members") {
+      const list = STATE.settings.lists.find((l) => l.id === STATE.draft.id);
+      if (!list) return "";
+      const q = (STATE.draft.q || "").toLowerCase();
+      const rows = feeds().filter((f) => !q || (f.name + " " + f.handle).toLowerCase().includes(q)).map((f) => {
+        const on = (list.members || []).includes(f.id);
+        return `<div class="acct-row">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}</span><span class="handle">@${esc(f.handle)}</span></span><button class="follow${on ? " following" : ""}" data-act="${on ? "member-remove" : "member-add"}" data-id="${esc(f.id)}">${on ? "<span class='f'>Member</span><span class='u'>Remove</span>" : "Add"}</button></div>`;
+      }).join("");
+      return `<div class="modal-back"><div class="modal" role="dialog">
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>Manage members</h2></div>
+        <div class="modal-body"><input id="member-q" class="member-search" data-field="q" placeholder="Search accounts" value="${esc(STATE.draft.q || "")}">${rows || emptyBlock("No accounts", "Accounts appear here after feeds.json loads.")}</div>
+      </div></div>`;
+    }
+    return "";
+  }
+
+  function shell(main, route) {
+    const tall = route.name === "home" || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
+    const top = route.name === "explore" ? 124 : tall ? 106 : 53;
+    return `<div class="app">${nav(route)}<main class="center" style="--top:${top}px">${main}</main>${sidebar()}</div>${bottom(route)}${drawer()}${modal()}`;
+  }
+
+  function view(route) {
+    if (STATE.loading) {
+      return `<div class="topbar"><div class="page-head"><h1>Home</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
+    }
+    if (STATE.error) {
+      return pageHead("Home") + `<div class="error-box"><h2>Couldn’t load posts</h2><p>feeds.json didn’t load. Check that the file is next to this page.</p><button class="retry" data-act="reload">Retry</button></div>`;
+    }
+    const params = new URLSearchParams(location.search);
+    if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock("No posts yet", "When the accounts you follow post, their updates will show up here.");
+    if (route.name === "home") return homeView(route);
+    if (route.name === "profile") return profileView(route);
+    if (route.name === "status") return statusView(route);
+    if (route.name === "explore") return exploreView(route);
+    if (route.name === "feeds") return feedsView();
+    if (route.name === "lists") return listsView();
+    if (route.name === "list") return listView(route);
+    if (route.name === "bookmarks") return bookmarksView();
+    if (route.name === "settings") return settingsView();
+    if (route.name === "notifications") return notesView("Notifications", "Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
+    if (route.name === "messages") return notesView("Messages", "Welcome to your inbox", "Private conversations aren’t part of this reader.");
+    return homeView({ tab: "foryou", query: new URLSearchParams() });
+  }
+
+  let lastKey = "";
+  function render(opts) {
+    const route = parseRoute();
+    const reset = opts && opts.reset;
+    const y = reset ? 0 : window.scrollY;
+    const focus = document.activeElement;
+    const focusId = focus && focus.id;
+    const caret = focus && typeof focus.selectionStart === "number" ? focus.selectionStart : null;
+    document.getElementById("app").innerHTML = shell(view(route), route);
+    document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
+    if (reset) window.scrollTo(0, 0);
+    else window.scrollTo(0, y);
+    if (focusId) {
+      const el = document.getElementById(focusId);
+      if (el) {
+        el.focus();
+        if (caret != null && el.setSelectionRange) {
+          try { el.setSelectionRange(caret, caret); } catch (err) { /* ignore */ }
+        }
+      }
+    }
+    document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden && window.innerWidth < 500));
+    lastKey = location.hash;
+  }
+
+  function toast(message) {
+    const el = document.getElementById("toast");
+    el.hidden = false;
+    el.textContent = message;
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { el.hidden = true; }, 1800);
+  }
+
+  function openListModal(list) {
+    STATE.draft = list ? { id: list.id, name: list.name, description: list.description || "", bannerColor: list.bannerColor || COLORS[0] } : { name: "", description: "", bannerColor: COLORS[0] };
+    STATE.modal = "list";
+    render();
+  }
+
+  function onAct(el) {
+    const act = el.dataset.act;
+    if (act === "stop") return;
+    if (act === "back") {
+      if (history.length > 1) history.back();
+      else location.hash = "#/";
+      return;
+    }
+    if (act === "reload") { boot(); return; }
+    if (act === "drawer") { STATE.drawer = true; render(); return; }
+    if (act === "close-drawer") { STATE.drawer = false; render(); return; }
+    if (act === "compose") { STATE.modal = "compose"; render(); return; }
+    if (act === "close-modal") { STATE.modal = null; STATE.confirm = null; render(); return; }
+    if (act === "compose-post") { STATE.modal = null; render(); toast("Posts come from your feeds"); return; }
+    if (act === "htab") {
+      const tab = el.dataset.tab;
+      if (tab === "foryou") location.hash = "#/";
+      else if (tab === "following") location.hash = "#/following";
+      else if (tab.startsWith("list:")) location.hash = "#/tab/" + tab.slice(5);
+      return;
+    }
+    if (act === "follow") {
+      const id = el.dataset.id;
+      const i = STATE.settings.follows.indexOf(id);
+      if (i >= 0) STATE.settings.follows.splice(i, 1);
+      else STATE.settings.follows.push(id);
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "like" || act === "bookmark" || act === "repost") {
+      const bucket = act === "like" ? "likes" : act === "bookmark" ? "bookmarks" : "reposts";
+      const id = el.dataset.id;
+      if (STATE.settings[bucket][id]) delete STATE.settings[bucket][id];
+      else STATE.settings[bucket][id] = true;
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "more") { STATE.expanded[el.dataset.key] = true; render(); return; }
+    if (act === "menu") { STATE.menu = STATE.menu === el.dataset.id ? null : el.dataset.id; render(); return; }
+    if (act === "share") { STATE.menu = el.dataset.id; render(); return; }
+    if (act === "copy") {
+      const url = el.dataset.url || location.href;
+      if (navigator.clipboard) navigator.clipboard.writeText(url).catch(() => {});
+      STATE.menu = null;
+      render();
+      toast("Copied");
+      return;
+    }
+    if (act === "open-status") {
+      const post = posts().find((p) => p.id === el.dataset.id);
+      if (post) location.hash = statusHash(post);
+      return;
+    }
+    if (act === "play") {
+      const video = el.parentElement && el.parentElement.querySelector("video");
+      if (video) {
+        video.controls = true;
+        video.play().catch(() => toast("Video unavailable"));
+        el.remove();
+      }
+      return;
+    }
+    if (act === "new-list") { openListModal(null); return; }
+    if (act === "edit-list") {
+      const list = STATE.settings.lists.find((l) => l.id === el.dataset.id);
+      if (list) openListModal(list);
+      return;
+    }
+    if (act === "color") { STATE.draft.bannerColor = el.dataset.color; render(); return; }
+    if (act === "save-list") {
+      const name = (STATE.draft.name || "").trim();
+      if (!name) return;
+      if (STATE.draft.id) {
+        const list = STATE.settings.lists.find((l) => l.id === STATE.draft.id);
+        if (list) {
+          list.name = name;
+          list.description = STATE.draft.description || "";
+          list.bannerColor = STATE.draft.bannerColor;
+        }
+      } else {
+        STATE.settings.lists.unshift({
+          id: "lst_" + Date.now().toString(36),
+          name,
+          description: STATE.draft.description || "",
+          bannerColor: STATE.draft.bannerColor || COLORS[0],
+          members: [],
+          pinned: false,
+          created: new Date().toISOString()
+        });
+      }
+      saveSettings();
+      STATE.modal = null;
+      render();
+      return;
+    }
+    if (act === "ask-delete") { STATE.confirm = STATE.draft.id; render(); return; }
+    if (act === "confirm-delete") {
+      STATE.settings.lists = STATE.settings.lists.filter((l) => l.id !== STATE.confirm);
+      saveSettings();
+      STATE.confirm = null;
+      STATE.modal = null;
+      location.hash = "#/lists";
+      return;
+    }
+    if (act === "pin") {
+      const list = STATE.settings.lists.find((l) => l.id === el.dataset.id);
+      if (list) list.pinned = !list.pinned;
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "members") {
+      STATE.draft = { id: el.dataset.id, q: "" };
+      STATE.modal = "members";
+      render();
+      return;
+    }
+    if (act === "member-add" || act === "member-remove") {
+      const list = STATE.settings.lists.find((l) => l.id === STATE.draft.id);
+      if (list) {
+        list.members = list.members || [];
+        if (act === "member-add" && !list.members.includes(el.dataset.id)) list.members.push(el.dataset.id);
+        if (act === "member-remove") list.members = list.members.filter((id) => id !== el.dataset.id);
+        saveSettings();
+      }
+      render();
+      return;
+    }
+    if (act === "export") {
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts }, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "rss-feeds-settings.json";
+      a.click();
+      return;
+    }
+  }
+
+  document.addEventListener("click", (event) => {
+    const actEl = event.target.closest("[data-act]");
+    if (actEl) {
+      if (actEl.dataset.act !== "stop" && actEl.tagName !== "A") event.preventDefault();
+      if (actEl.dataset.act !== "stop") event.stopPropagation();
+      onAct(actEl);
+      return;
+    }
+    if (event.target.closest("a, button, video, input, textarea, label")) return;
+    const post = event.target.closest("[data-open]");
+    if (post) location.hash = post.dataset.open;
+  });
+
+  document.addEventListener("input", (event) => {
+    const el = event.target;
+    if (el.id === "compose-text") {
+      const btn = document.getElementById("compose-post");
+      if (btn) btn.disabled = !el.value.trim();
+      return;
+    }
+    if (el.dataset && el.dataset.field) {
+      STATE.draft[el.dataset.field] = el.value;
+      if (el.dataset.field === "name") {
+        const save = document.querySelector("[data-act='save-list']");
+        if (save) save.disabled = !el.value.trim();
+      }
+      if (el.dataset.field === "q") render();
+    }
+  });
+
+  document.addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-act='search-form']");
+    if (!form) return;
+    event.preventDefault();
+    const input = form.querySelector("input");
+    const q = (input && input.value || "").trim();
+    location.hash = "#/explore" + (q ? "?q=" + encodeURIComponent(q) : "");
+  });
+
+  document.addEventListener("change", (event) => {
+    if (event.target.id !== "import-file" || !event.target.files[0]) return;
+    const file = event.target.files[0];
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result));
+        if (!data || !Array.isArray(data.follows) || !Array.isArray(data.lists)) throw new Error("bad");
+        STATE.settings.follows = data.follows;
+        STATE.settings.lists = data.lists;
+        STATE.settings.likes = data.likes || {};
+        STATE.settings.bookmarks = data.bookmarks || {};
+        STATE.settings.reposts = data.reposts || {};
+        STATE.settings.initialized = true;
+        saveSettings();
+        render();
+        toast("Settings imported");
+      } catch (err) {
+        toast("Couldn’t read that file");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu)) {
+      STATE.modal = null;
+      STATE.drawer = false;
+      STATE.menu = null;
+      STATE.confirm = null;
+      render();
+    }
+  });
+
+  document.addEventListener("error", (event) => {
+    const img = event.target;
+    if (!img || img.tagName !== "IMG") return;
+    if (img.dataset.fallback === "avatar") {
+      const span = document.createElement("span");
+      span.className = img.className.replace("ava", "ava initials");
+      if (!span.className.includes("initials")) span.className += " initials";
+      span.textContent = img.dataset.initials || "?";
+      img.replaceWith(span);
+      return;
+    }
+    const tile = img.closest(".tile") || img.closest(".media");
+    if (tile) {
+      tile.classList.add("broken");
+      tile.innerHTML = "Image unavailable";
+    }
+  }, true);
+
+  let lastY = 0;
+  window.addEventListener("scroll", () => {
+    if (window.innerWidth >= 500) {
+      STATE.headerHidden = false;
+      return;
+    }
+    const y = window.scrollY;
+    if (y > lastY + 8 && y > 70) STATE.headerHidden = true;
+    else if (y < lastY - 8 || y < 40) STATE.headerHidden = false;
+    lastY = y;
+    document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden));
+  }, { passive: true });
+
+  let hoverTimer = 0;
+  document.addEventListener("mouseover", (event) => {
+    const el = event.target.closest("[data-card]");
+    if (!el || window.innerWidth < 1000) return;
+    clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => showHover(el), 450);
+  });
+  document.addEventListener("mouseout", (event) => {
+    const from = event.target.closest("[data-card], .hcard");
+    const to = event.relatedTarget && event.relatedTarget.closest && event.relatedTarget.closest("[data-card], .hcard");
+    if (from && !to) {
+      clearTimeout(hoverTimer);
+      setTimeout(() => {
+        if (!document.querySelector(".hcard:hover") && !document.querySelector("[data-card]:hover")) {
+          document.getElementById("hover").innerHTML = "";
+        }
+      }, 200);
+    }
+  });
+
+  function showHover(el) {
+    const id = el.dataset.card || "";
+    const [platform, handle] = id.split(":");
+    const feed = feedById(id) || findFeed(platform, handle);
+    if (!feed) return;
+    const rect = el.getBoundingClientRect();
+    const box = document.getElementById("hover");
+    box.innerHTML = `<div class="hcard"><div class="hbanner" style="background:${feed.banner ? "url(" + encodeURI(feed.banner) + ") center/cover" : "#333639"}"></div><div class="hbody"><div class="pava-row">${avatar(feed.avatar, feed.name, "pava")}${followButtonClean(feed.id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(feed.name)}${badge(feed.verifiedType)}</div><div class="phandle">@${esc(feed.handle)}</div>${feed.bio ? `<div class="hbio">${esc(feed.bio)}</div>` : ""}${(feed.following != null || feed.followers != null) ? `<div class="counts">${feed.following != null ? `<div><b>${esc(formatCount(feed.following))}</b> <span>Following</span></div>` : ""}${feed.followers != null ? `<div><b>${esc(formatCount(feed.followers))}</b> <span>Followers</span></div>` : ""}</div>` : ""}</div></div>`;
+    const left = Math.min(rect.left, window.innerWidth - 320);
+    box.style.left = Math.max(8, left) + "px";
+    box.style.top = (rect.bottom + 8) + "px";
+  }
+
+  window.addEventListener("hashchange", () => {
+    STATE.modal = null;
+    STATE.drawer = false;
+    STATE.menu = null;
+    STATE.headerHidden = false;
+    render({ reset: true });
+  });
+
+  async function boot() {
+    STATE.loading = true;
+    STATE.error = null;
+    render();
+    const params = new URLSearchParams(location.search);
+    try {
+      if (params.get("error") === "1") throw new Error("forced");
+      const res = await fetch("feeds.json", { cache: "no-cache" });
+      if (!res.ok) throw new Error(String(res.status));
+      STATE.data = await res.json();
+      STATE.loading = false;
+      STATE.settings = loadSettings();
+      saveSettings();
+    } catch (err) {
+      STATE.loading = false;
+      STATE.error = err;
+      STATE.settings = loadSettings();
+    }
+    render({ reset: true });
+  }
+
+  boot();
+})();

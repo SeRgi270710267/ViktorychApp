@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Example Blog</title>
+    <link>https://example.com</link>
+    <description>Notes from the lab</description>
+    <item>
+      <title>Hello &amp; welcome</title>
+      <content:encoded>&lt;p&gt;A &lt;a href="https://example.com/post"&gt;link&lt;/a&gt; and more.&lt;/p&gt;&lt;img src="https://example.com/i.jpg"&gt;&lt;blockquote&gt;Quoted bit&lt;/blockquote&gt;</content:encoded>
+      <enclosure url="https://example.com/clip.mp4" type="video/mp4"/>
+      <media:content url="https://example.com/extra.jpg" medium="image"/>
+      <pubDate>Mon, 20 Oct 2026 10:00:00 GMT</pubDate>
+      <guid>g1</guid>
+      <link>https://example.com/hello</link>
+    </item>
+  </channel>
+</rss>

@@ -1,0 +1,74 @@
+{
+  "statuses": [
+    {
+      "id": "9001",
+      "text": "Hello from fxtwitter $TSLA https://example.com/story",
+      "created_at": "2026-10-20T12:00:00.000Z",
+      "replies": 2,
+      "reposts": 3,
+      "likes": 1200,
+      "views": 6100000,
+      "bookmarks": 4,
+      "quotes": 1,
+      "author": {
+        "name": "Test User",
+        "screen_name": "testuser",
+        "avatar_url": "https://example.com/a_normal.jpg",
+        "banner_url": "https://example.com/banner.jpg",
+        "description": "Bio here",
+        "followers": 10,
+        "following": 5,
+        "verification": {"verified": true, "type": "blue"}
+      },
+      "media": {"all": []},
+      "quote": {
+        "id": "9000",
+        "text": "Quoted line with a clip",
+        "created_at": "2026-10-19T12:00:00.000Z",
+        "url": "https://x.com/quoter/status/9000",
+        "author": {
+          "name": "Quote Author",
+          "screen_name": "quoter",
+          "avatar_url": "https://example.com/q.jpg",
+          "verification": {"type": "business"}
+        },
+        "media": {
+          "all": [
+            {
+              "type": "video",
+              "url": "https://example.com/fallback.mp4",
+              "thumbnail_url": "https://example.com/thumb.jpg",
+              "width": 1280,
+              "height": 720,
+              "variants": [
+                {"url": "https://example.com/low.mp4", "bitrate": 256000, "content_type": "video/mp4"},
+                {"url": "https://example.com/high.mp4", "bitrate": 2176000, "content_type": "video/mp4"}
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9002",
+      "text": "Original words",
+      "created_at": "2026-10-20T13:00:00.000Z",
+      "reposts": 8,
+      "likes": 9,
+      "author": {
+        "name": "Orig",
+        "screen_name": "orig",
+        "avatar_url": "https://example.com/o.jpg",
+        "verification": {"type": "government"}
+      },
+      "reposted_by": {"name": "Test User", "screen_name": "testuser", "avatar_url": "https://example.com/a.jpg"}
+    },
+    {
+      "id": "9003",
+      "text": "A reply",
+      "created_at": "2026-10-20T14:00:00.000Z",
+      "author": {"name": "Test User", "screen_name": "testuser", "avatar_url": "https://example.com/a.jpg"},
+      "replying_to": {"screen_name": "someone", "name": "Someone"}
+    }
+  ]
+}
