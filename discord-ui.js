@@ -935,7 +935,7 @@
     const pinned = hasId(prefs().pinnedChannels, ch.id);
     return '<div class="dmsgs-ch-row' + (muted ? " muted" : "") + (pinned ? " pinned" : "") + '">' +
       '<a class="dmsgs-ch' + (on ? " on" : "") + (unread ? " unread" : "") + '" data-ch="' + esc(ch.id) + '" data-name="' + esc(ch.name) + '" data-cat="' + esc(category || ch.category || "") + '" href="' + channelHref(ch.id) + '">' +
-      '<span class="dmsgs-hash" aria-hidden="true">#</span><span class="dmsgs-ch-name">' + esc(ch.name) + "</span>" +
+      '<span class="dmsgs-hash" aria-hidden="true">#</span><span class="dmsgs-ch-name" title="' + esc(ch.name) + '">' + esc(ch.name) + "</span>" +
       (pinned ? '<span class="dmsgs-pinmark" aria-label="Pinned">' + iconSvg("pin") + "</span>" : "") +
       (muted ? '<span class="dmsgs-bell" aria-label="Muted">' + iconSvg("mute") + "</span>" : "") +
       (unread ? '<span class="dmsgs-dot" aria-label="Unread"></span>' : "") +
@@ -953,7 +953,7 @@
     const pinnedHtml = pinned.map(function (ch) { return channelRow(ch, route, ch.category); }).join("");
     const groups = orderedCategories(rest).map(function (group) {
       const links = group.channels.map(function (ch) { return channelRow(ch, route, group.name); }).join("");
-      return (group.name ? '<h2 class="dmsgs-cat">' + esc(group.name) + "</h2>" : "") + links;
+      return (group.name ? '<h2 class="dmsgs-cat" title="' + esc(group.name) + '">' + esc(group.name) + "</h2>" : "") + links;
     }).join("");
     return '<div class="dmsgs-sub">' + pinnedHtml + groups + "</div>";
   }
@@ -975,7 +975,7 @@
       '<button type="button" class="dmsgs-srv-main" data-discord="toggle" data-server="' + esc(server.id) + '" aria-expanded="' + (open ? "true" : "false") + '">' +
       '<span class="dmsgs-chev" aria-hidden="true">' + iconSvg("chev") + "</span>" +
       '<span class="dmsgs-srv-ico">' + icon + "</span>" +
-      '<span class="dmsgs-srv-copy"><span class="dmsgs-srv-top"><b>' + esc(server.name) + "</b>" + (time ? "<time>" + esc(time) + "</time>" : "") + "</span>" +
+      '<span class="dmsgs-srv-copy"><span class="dmsgs-srv-top"><b title="' + esc(server.name) + '">' + esc(server.name) + "</b>" + (time ? "<time>" + esc(time) + "</time>" : "") + "</span>" +
       '<span class="dmsgs-srv-preview">' + esc(preview) + "</span></span>" +
       badge +
       "</button>" +
@@ -1009,7 +1009,7 @@
       return '<section class="dmsgs-conv"><header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a><div><b>Channel</b></div></header><div class="dmsgs-log"><div class="dmsgs-placeholder"><h2>This channel isn’t available</h2><p>It isn’t in the Discord list.</p></div></div></section>';
     }
     if (ch.mode !== "messages") {
-      return '<section class="dmsgs-conv"><header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a><span class="dmsgs-hash lg" aria-hidden="true">#</span><div><b>' + esc(ch.name) + "</b><span>" + esc(ch.category) + '</span></div></header><div class="dmsgs-log"><div class="dmsgs-placeholder"><h2>Posted on Home</h2><p>Announcement channels are published with the rest of the feed.</p></div></div></section>';
+      return '<section class="dmsgs-conv"><header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a><span class="dmsgs-hash lg" aria-hidden="true">#</span><div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(ch.category) + '">' + esc(ch.category) + '</span></div></header><div class="dmsgs-log"><div class="dmsgs-placeholder"><h2>Posted on Home</h2><p>Announcement channels are published with the rest of the feed.</p></div></div></section>';
     }
     const server = serverById(ch.serverId);
     const who = messagesFor(id)[0];
@@ -1017,8 +1017,9 @@
       ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>'
       : '<span class="dmsgs-head-face initials" aria-hidden="true">' + esc((ch.name || "?").slice(0, 1).toUpperCase()) + "</span>";
     const pinBtn = pinsBlocked(ch) ? "" : '<button type="button" class="dmsgs-iconbtn dmsgs-pins' + (state.pinsOpen === id ? " on" : "") + '" data-discord="pins" data-id="' + esc(id) + '" aria-label="Pinned messages" aria-expanded="' + (state.pinsOpen === id ? "true" : "false") + '">' + iconSvg("pin") + "</button>";
+    const place = (server && server.name) || ch.category || "Discord";
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a>' + face + '<div><b>' + esc(ch.name) + "</b><span>" + esc((server && server.name) || ch.category || "Discord") + "</span></div>" + pinBtn + "</header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a>' + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + esc(place) + "</span></div>" + pinBtn + "</header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
       pinPanelHtml(id) +
       '<button type="button" class="dmsgs-jump" hidden>Jump to present</button>' +
@@ -1093,7 +1094,8 @@
     }
     const open = id ? " has-channel" : "";
     return '<div class="dmsgs' + open + '" data-discord-root>' +
-      '<aside class="dmsgs-list">' + listHtml(route) + "</aside>" +
+      '<aside class="dmsgs-list" id="dmsgs-list">' + listHtml(route) +
+      '<div class="dmsgs-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize message list" aria-controls="dmsgs-list" aria-valuemin="300" aria-valuemax="440" aria-valuenow="440"></div></aside>' +
       conversationHtml(route) +
       menuHtml() +
       "</div>";
@@ -1482,6 +1484,13 @@
     syncFromHash();
   }
 
+  function bindSplit() {
+    if (typeof document === "undefined" || !root.FeedsSplit) return;
+    const split = document.querySelector(".dmsgs-split");
+    if (!split) return;
+    root.FeedsSplit.bind(split, root.FeedsSplit.messages, document.querySelector(".dmsgs"));
+  }
+
   function mount(route) {
     const messages = route && route.name === "messages";
     if (!messages) {
@@ -1500,6 +1509,7 @@
     }
     bindList();
     bindLog();
+    bindSplit();
     const list = listEl();
     if (list) {
       const y = state.listHold != null ? state.listHold : readScroll("list");

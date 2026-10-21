@@ -228,6 +228,11 @@ html[data-theme="default"] .m-logo { color: #000; }
   border-right: 1px solid var(--line);
   min-width: 0;
 }
+html.is-split-drag,
+html.is-split-drag * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
 .side {
   width: 350px;
   flex: 0 0 350px;

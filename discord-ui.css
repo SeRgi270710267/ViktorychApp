@@ -18,13 +18,44 @@
   font-family: var(--font);
 }
 .dmsgs-list {
-  width: 388px;
-  flex: 0 0 388px;
+  position: relative;
+  width: var(--dmsgs-list, 440px);
+  flex: 0 0 var(--dmsgs-list, 440px);
+  min-width: 300px;
+  max-width: 60%;
   display: flex;
   flex-direction: column;
   min-height: 0;
   border-right: 1px solid var(--line);
   background: var(--bg);
+}
+.dmsgs-split {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  z-index: 4;
+  width: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+.dmsgs-split:focus { outline: none; }
+.dmsgs-split::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+}
+.dmsgs-split:hover::before,
+.dmsgs-split.is-dragging::before,
+.dmsgs-split:focus-visible::before {
+  background: var(--blue);
 }
 .dmsgs-head {
   display: flex;
@@ -118,7 +149,15 @@
 }
 .dmsgs-srv-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 20px; }
 .dmsgs-srv-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.dmsgs-srv-top b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dmsgs-srv-top b {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .dmsgs-srv-top time { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 400; flex: none; }
 .dmsgs-srv-preview { color: var(--muted); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dmsgs-badge {
@@ -179,6 +218,9 @@
   font-size: 13px;
   line-height: 16px;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dmsgs-ch {
   display: flex;
@@ -197,7 +239,13 @@
 .dmsgs-ch.unread { color: var(--text); font-weight: 700; }
 .dmsgs-hash { width: 22px; flex: none; text-align: center; font-weight: 500; }
 .dmsgs-hash.lg { width: auto; font-size: 22px; color: var(--muted); }
-.dmsgs-ch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dmsgs-ch-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .dmsgs-dot {
   width: 8px;
   height: 8px;
@@ -371,6 +419,13 @@ a[href="#/messages"] .dmsgs-tab-badge {
 }
 .dmsgs-conv-head b { display: block; font-size: 17px; line-height: 20px; }
 .dmsgs-conv-head span { color: var(--muted); font-size: 13px; line-height: 16px; }
+.dmsgs-conv-title { min-width: 0; flex: 1; }
+.dmsgs-conv-title b,
+.dmsgs-conv-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .dmsgs-back {
   display: none;
   width: 34px;
@@ -614,7 +669,8 @@ a[href="#/messages"] .dmsgs-tab-badge {
 body:has(.dmsgs) .fab { display: none; }
 
 @media (max-width: 699px) {
-  .dmsgs-list { width: 100%; flex-basis: auto; border-right: 0; }
+  .dmsgs-list { width: 100%; flex-basis: auto; min-width: 0; max-width: none; border-right: 0; }
+  .dmsgs-split { display: none; }
   .dmsgs.has-channel .dmsgs-list { display: none; }
   .dmsgs:not(.has-channel) .dmsgs-conv { display: none; }
   .dmsgs-back { display: flex; }

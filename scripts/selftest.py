@@ -906,7 +906,7 @@ def main() -> None:
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
     check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel4-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "superintel4-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "superintel4-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
@@ -2379,7 +2379,12 @@ def discord_checks() -> None:
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
     check('"discord"' in config_text and "169256939211980800" in config_text and '"auth": "user"' in config_text and '"window": 300' in config_text and "general-chat" in config_text and "product-updates" in config_text, "Town Hall is a user-auth server with a rolling window")
     page = (ROOT / "index.html").read_text(encoding="utf-8")
-    check(page.index('src="discord-ui.js"') < page.index('src="app.js"') and 'href="discord-ui.css"' in page and "FeedsDiscord" in (ROOT / "app.js").read_text(encoding="utf-8"), "the page loads the Discord messages UI and app.js keeps a small hook")
+    check(page.index('src="split.js"') < page.index('src="discord-ui.js"') < page.index('src="app.js"') and 'href="discord-ui.css"' in page and "FeedsDiscord" in (ROOT / "app.js").read_text(encoding="utf-8"), "the page loads the Discord messages UI and app.js keeps a small hook")
+    split_js = (ROOT / "split.js").read_text(encoding="utf-8")
+    messages_css = (ROOT / "discord-ui.css").read_text(encoding="utf-8")
+    messages_ui = (ROOT / "discord-ui.js").read_text(encoding="utf-8")
+    publish = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
+    check("FeedsSplit" in split_js and "rss-feeds-splits-v1" in split_js and "requestAnimationFrame" in split_js and "function bind(" in split_js and 'role="separator"' in messages_ui and "FeedsSplit.bind" in messages_ui and "--dmsgs-list, 440px" in messages_css and "col-resize" in messages_css and "min-width: 300px" in messages_css and "max-width: 60%" in messages_css and ".dmsgs-split { display: none; }" in messages_css and "split.js" in workflow and '"split.js"' in publish, "the message list divider drags between 300px and 60 percent and remembers the width")
     ui_check = subprocess.run(
         ["node", "--input-type=module", "-e", r"""
 import fs from "fs";
@@ -2425,6 +2430,7 @@ const page = D.page({ name: "messages", channel: general, query: new URLSearchPa
 if (!page.includes("Read-only channel") || !page.includes("general-chat") || !page.includes("peer-help") || !page.includes("dmsg-embed") || !page.includes("dmsg-rx")) throw new Error("page");
 if (page.includes("<script>")) throw new Error("page xss");
 if (!page.includes("Discord Town Hall") || !page.includes('aria-expanded="false"') || page.includes("dmsgs-srv open")) throw new Error("collapsed server");
+if (!page.includes('role="separator"') || !page.includes('aria-label="Resize message list"') || !page.includes('title="Discord Town Hall"') || !page.includes('title="general-chat"') || !page.includes('title="Town Hall General"')) throw new Error("split titles");
 if (!page.includes("dmsgs-chev")) throw new Error("chevron");
 D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: ["169256939211980800"], pinnedChannels: ["889950993352110160"], mutedServers: [], mutedChannels: [] });
 const expanded = D.page({ name: "messages", channel: "169256939211980800", query: new URLSearchParams("fixture=1") });

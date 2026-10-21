@@ -26,6 +26,7 @@ SITE_FILES = (
     "index.html",
     "app.js",
     "styles.css",
+    "split.js",
     "discord-ui.js",
     "discord-ui.css",
     "translate.js",
