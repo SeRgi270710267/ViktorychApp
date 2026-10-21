@@ -38,6 +38,7 @@ SITE_FILES = (
     "spaces.js",
     "spaces.css",
     "favicon.svg",
+    "favicon.ico",
     "manifest.webmanifest",
     "sw.js",
     ".nojekyll",

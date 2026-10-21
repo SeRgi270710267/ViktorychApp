@@ -8,6 +8,7 @@ The spelling is S-I-n-t-e-l-A-p-p. The files are vectors, not a scaled photo.
 from __future__ import annotations
 
 import re
+import struct
 from pathlib import Path
 
 import cairosvg
@@ -24,6 +25,7 @@ BLACK_CANDIDATES = [
     Path("/usr/share/fonts/truetype/macos/Inter-Bold.ttf"),
 ]
 REGULAR = Path("/usr/share/fonts/truetype/macos/Inter-Regular.ttf")
+SUB_FONT = Path("/usr/share/fonts/truetype/macos/Inter-Bold.ttf")
 HEAVY = "SI"
 LIGHT = "ntelApp"
 HEAVY_SCALE = 1.1
@@ -237,6 +239,208 @@ def splash_svg(word: str, width: int, height: int) -> str:
     )
 
 
+def normalized_run(font_path: Path, text: str, scale: float = 1.0):
+    placed = shape(font_path, text)
+    commands, _cursor, box = run_path(font_path, placed, scale, 0)
+    path = round_path(translate_commands(commands, -box[0], -box[1]))
+    return path, box[2] - box[0], box[3] - box[1]
+
+
+def stack_block(si, sub, target_w: float, sub_width_ratio: float = 0.98, gap_ratio: float = 0.05):
+    _si_path, si_w, si_h = si
+    _sub_path, sub_w, sub_h = sub
+    si_scale = target_w / si_w
+    sub_target = target_w * sub_width_ratio
+    sub_scale = sub_target / sub_w
+    si_draw_h = si_h * si_scale
+    sub_draw_h = sub_h * sub_scale
+    gap = target_w * gap_ratio
+    total_h = si_draw_h + gap + sub_draw_h
+    sub_x = (target_w - sub_target) / 2
+    return si_scale, sub_scale, si_draw_h, gap, sub_x, sub_draw_h, target_w, total_h
+
+
+def largest_stack(si, sub, limit: float):
+    lo, hi = 1.0, limit
+    best = stack_block(si, sub, lo)
+    for _ in range(28):
+        mid = (lo + hi) / 2
+        metrics = stack_block(si, sub, mid)
+        if metrics[6] <= limit + 0.01 and metrics[7] <= limit + 0.01:
+            best = metrics
+            lo = mid
+        else:
+            hi = mid
+    return best
+
+
+def inside_round(x: float, y: float, size: int, radius: float, margin: float = 1.0) -> bool:
+    if x < margin or y < margin or x > size - margin or y > size - margin:
+        return False
+    if radius <= 0:
+        return True
+    if radius <= x <= size - radius or radius <= y <= size - radius:
+        return True
+    cx = radius if x < size / 2 else size - radius
+    cy = radius if y < size / 2 else size - radius
+    limit = max(0.0, radius - margin)
+    return (x - cx) ** 2 + (y - cy) ** 2 <= limit ** 2
+
+
+def stack_fits(metrics, size: int, radius: float) -> bool:
+    width, height = metrics[6], metrics[7]
+    # Keep a couple of pixels of white between the ink and the tile edge.
+    if width > size - 6 or height > size - 6:
+        return False
+    x0 = (size - width) / 2
+    y0 = (size - height) / 2
+    sub_w = width * 0.98
+    sx = (size - sub_w) / 2
+    points = (
+        (x0, y0),
+        (x0 + width, y0),
+        (x0, y0 + metrics[2]),
+        (x0 + width, y0 + metrics[2]),
+        (sx, y0 + height),
+        (sx + sub_w, y0 + height),
+    )
+    return all(inside_round(x, y, size, radius, 1.5) for x, y in points)
+
+
+def largest_stack_rounded(si, sub, size: int, radius: float):
+    lo, hi = 1.0, float(size)
+    best = stack_block(si, sub, lo)
+    for _ in range(28):
+        mid = (lo + hi) / 2
+        metrics = stack_block(si, sub, mid)
+        if stack_fits(metrics, size, radius):
+            best = metrics
+            lo = mid
+        else:
+            hi = mid
+    return best
+
+
+def largest_stack_circle(si, sub, size: int, ratio: float = 0.395):
+    """Fit the lockup inside the maskable safe circle (a bit inside 40%)."""
+    radius = ratio * size
+    lo, hi = 1.0, size * 0.8
+    best = stack_block(si, sub, lo)
+    for _ in range(28):
+        mid = (lo + hi) / 2
+        metrics = stack_block(si, sub, mid)
+        if (metrics[6] / 2) ** 2 + (metrics[7] / 2) ** 2 <= radius ** 2:
+            best = metrics
+            lo = mid
+        else:
+            hi = mid
+    return best
+
+
+def ink_groups(si, sub, metrics, fill: str) -> str:
+    si_scale, sub_scale, si_draw_h, gap, sub_x = metrics[:5]
+    return (
+        f'<g transform="scale({si_scale:.6f})"><path fill="{fill}" d="{si[0]}"/></g>'
+        f'<g transform="translate({sub_x:.2f} {si_draw_h + gap:.2f}) scale({sub_scale:.6f})">'
+        f'<path fill="{fill}" d="{sub[0]}"/></g>'
+    )
+
+
+def centered(group: str, block_w: float, block_h: float, size: int) -> str:
+    x = (size - block_w) / 2
+    y = (size - block_h) / 2
+    return f'<g transform="translate({x:.2f} {y:.2f})">{group}</g>'
+
+
+def icon_svg(size: int, kind: str, si, sub) -> str:
+    """Home-screen marks. kind is si, any, maskable, apple, or mono.
+
+    16 and 32 are the SI monogram. Larger tiles stack a big SI over ntelApp.
+    Maskable art stays inside the safe circle on a full-bleed white square.
+    Other installed tiles are white with slightly rounded corners.
+    """
+    if kind == "si":
+        target = size * (0.68 if size <= 16 else 0.74)
+        scale = target / si[1]
+        draw_h = si[2] * scale
+        group = f'<g transform="scale({scale:.6f})"><path fill="#000" d="{si[0]}"/></g>'
+        body = centered(group, target, draw_h, size)
+        radius = max(2, round(size * 0.18))
+        bg = f'<rect width="{size}" height="{size}" rx="{radius}" fill="#fff"/>'
+    elif kind == "maskable":
+        metrics = largest_stack_circle(si, sub, size)
+        body = centered(ink_groups(si, sub, metrics, "#000"), metrics[6], metrics[7], size)
+        bg = f'<rect width="{size}" height="{size}" fill="#fff"/>'
+    elif kind == "mono":
+        metrics = largest_stack_circle(si, sub, size)
+        body = centered(ink_groups(si, sub, metrics, "#000"), metrics[6], metrics[7], size)
+        bg = ""
+    elif kind == "apple":
+        # iOS masks the square. Transparent corners would come back black.
+        metrics = largest_stack(si, sub, size * 0.80)
+        body = centered(ink_groups(si, sub, metrics, "#000"), metrics[6], metrics[7], size)
+        bg = f'<rect width="{size}" height="{size}" fill="#fff"/>'
+    else:
+        radius = max(3, round(size * 0.12))
+        metrics = largest_stack_rounded(si, sub, size, radius)
+        body = centered(ink_groups(si, sub, metrics, "#000"), metrics[6], metrics[7], size)
+        bg = f'<rect width="{size}" height="{size}" rx="{radius}" fill="#fff"/>'
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
+        f"<!-- SIntelApp -->{bg}{body}</svg>"
+    )
+
+
+def favicon_document(si) -> str:
+    size = 32
+    target = size * 0.74
+    scale = target / si[1]
+    draw_h = si[2] * scale
+    group = f'<g transform="scale({scale:.6f})"><path fill="#000" d="{si[0]}"/></g>'
+    body = centered(group, target, draw_h, size)
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+        "<!-- SIntelApp -->"
+        '<rect width="32" height="32" rx="6" fill="#fff"/>'
+        f"{body}</svg>"
+    )
+
+
+def ico_bytes(pngs: list[tuple[int, bytes]]) -> bytes:
+    count = len(pngs)
+    offset = 6 + 16 * count
+    entries = []
+    blobs = []
+    for size, data in pngs:
+        dim = 0 if size >= 256 else size
+        entries.append(struct.pack("<BBBBHHII", dim, dim, 0, 0, 1, 32, len(data), offset))
+        offset += len(data)
+        blobs.append(data)
+    return struct.pack("<HHH", 0, 1, count) + b"".join(entries) + b"".join(blobs)
+
+
+def draw_app_icons() -> None:
+    """Installed icons only. Sidebar, header, and splash stay white on black."""
+    si = normalized_run(black_font(), "SI", HEAVY_SCALE)
+    sub = normalized_run(SUB_FONT, LIGHT, 1)
+    write(ROOT / "favicon.svg", favicon_document(si))
+    rasters = {
+        "icon-192.png": (icon_svg(192, "any", si, sub), 192),
+        "icon-512.png": (icon_svg(512, "any", si, sub), 512),
+        "icon-maskable-512.png": (icon_svg(512, "maskable", si, sub), 512),
+        "icon-monochrome-512.png": (icon_svg(512, "mono", si, sub), 512),
+        "apple-touch-icon.png": (icon_svg(180, "apple", si, sub), 180),
+    }
+    for name, (svg, size) in rasters.items():
+        write(ROOT / "icons" / name, png_from_svg(svg, size, size))
+        print(name)
+    frames = []
+    for size, kind in ((16, "si"), (32, "si"), (48, "any"), (256, "any")):
+        frames.append((size, png_from_svg(icon_svg(size, kind, si, sub), size, size)))
+        print("ico", size)
+    write(ROOT / "favicon.ico", ico_bytes(frames))
+
+
 def png_from_svg(svg: str, width: int, height: int) -> bytes:
     return cairosvg.svg2png(bytestring=svg.encode("utf-8"), output_width=width, output_height=height)
 
@@ -256,17 +460,7 @@ def main() -> None:
     ui_si = si.replace('fill="#fff"', 'fill="currentColor"', 1)
     write(ROOT / "logo" / "wordmark.svg", ui_full)
     write(ROOT / "logo" / "si.svg", ui_si)
-    write(ROOT / "favicon.svg", favicon_svg(si))
-    icons = {
-        "icon-192.png": (placed_mark(full, 192, 0.74, False), 192),
-        "icon-512.png": (placed_mark(full, 512, 0.74, False), 512),
-        "icon-maskable-512.png": (placed_mark(full, 512, 0.80, False), 512),
-        "icon-monochrome-512.png": (placed_mark(full, 512, 0.74, True), 512),
-        "apple-touch-icon.png": (placed_mark(full, 180, 0.72, False), 180),
-    }
-    for name, (svg, size) in icons.items():
-        write(ROOT / "icons" / name, png_from_svg(svg, size, size))
-        print(name)
+    draw_app_icons()
     for name, w, h in (("narrow", 1080, 1920), ("wide", 1920, 1080)):
         write(ROOT / "screenshots" / f"{name}.png", png_from_svg(splash_svg(full, w, h), w, h))
     splashes = [
@@ -290,7 +484,6 @@ def main() -> None:
         write(ROOT / "splash" / f"{name}.png", png_from_svg(splash_svg(full, w, h), w, h))
         print("splash", name)
     write(ROOT / "logo" / "preview.png", png_from_svg(splash_svg(full, 1400, 360), 1400, 360))
-    write(ROOT / "logo" / "favicon-32.png", png_from_svg(favicon_svg(si), 64, 64))
     write(ROOT / "logo" / "si-preview.png", png_from_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120" viewBox="0 0 240 120"><rect width="240" height="120" fill="#000"/>'
         f'<g transform="translate(20 20) scale({80 / view_of(si)[1]:.4f})"><path fill="#fff" d="{path_of(si)}"/></g></svg>',

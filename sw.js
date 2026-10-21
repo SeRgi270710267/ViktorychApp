@@ -1,5 +1,5 @@
-/* SuperintelApp service worker. Cache names are superintel5- plus the deploy SHA. */
-const VERSION = "superintel5-__SW_VERSION__";
+/* SuperintelApp service worker. Cache names are superintel6- plus the deploy SHA. */
+const VERSION = "superintel6-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
@@ -23,6 +23,7 @@ const SHELL_FILES = [
   "./spaces.js",
   "./spaces.css",
   "./favicon.svg",
+  "./favicon.ico",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -360,7 +361,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|favicon\.svg|favicon\.ico|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
 }
 
 function canonicalNotifyId(post) {
