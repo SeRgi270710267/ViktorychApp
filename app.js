@@ -4217,6 +4217,10 @@
       return { name: "user", platform: platform, handle: parts[2], query };
     }
     if (parts[0] === "p" && parts[1]) return { name: "person", id: parts[1], query };
+    if (parts[0] === "messages") {
+      const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
+      return { name: "messages", channel: channel, query };
+    }
     const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -5849,9 +5853,9 @@
   }
 
   function shell(main, route) {
-    const wide = route.name === "subscriptions" || route.name === "watch";
+    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
-    const top = route.name === "explore" ? 124 : tall ? 106 : 53;
+    const top = route.name === "messages" ? 0 : route.name === "explore" ? 124 : tall ? 106 : 53;
     return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}`;
   }
 
@@ -6609,6 +6613,7 @@
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
     if (route.name === "notifications") return notesView("Notifications", "Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
+    if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
     if (route.name === "messages") return notesView("Messages", "Welcome to your inbox", "Private conversations aren’t part of this reader.");
     if (route.name === "sources") return sourcesView();
     return homeView({ tab: "foryou", query: new URLSearchParams() });
@@ -6794,7 +6799,8 @@
       previewAnchor = y;
       const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
-      document.title = (personName || (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / Feeds";
+      const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
+      document.title = (discordTitle || personName || (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / Feeds";
       window.scrollTo(0, y);
       if (focusId) {
         const el = document.getElementById(focusId);
@@ -6820,6 +6826,7 @@
       resumePlayback();
       placeTabMenu();
       syncTabArrows();
+      if (window.FeedsDiscord && window.FeedsDiscord.mount) window.FeedsDiscord.mount(route);
     };
     const endRoute = () => {
       if (gen !== STATE.renderGen) return;
@@ -9084,6 +9091,10 @@
       statusHash: statusHash, watchHash: watchHash, render: render
     });
     window.FeedsPeople.start();
+  }
+  if (window.FeedsDiscord) {
+    window.FeedsDiscord.bind({ esc: esc, render: render });
+    window.FeedsDiscord.start();
   }
   boot();
 })();

@@ -294,7 +294,7 @@ Anything these reads return is published on this public site. Point them at chan
 ]
 ```
 
-`invite` is optional. It can be a code or a `discord.gg` URL. `limit` defaults to 30 for posts and 40 for messages, and is capped at 100. A channel `mode` is `posts` or `messages`. Any other mode is ignored. `"auth"` defaults to `"bot"`. `"user"` is the opt-in account mode. `discord/index.json` repeats that `auth` value on the server.
+`invite` is optional. It can be a code or a `discord.gg` URL. `limit` defaults to 30 for posts and 40 for messages, and is capped at 100. It is how many messages to ask for on a sync. `window` is how many rows a message file keeps. It defaults to `limit` and is capped at 500. A channel `mode` is `posts` or `messages`. Any other mode is ignored. `"auth"` defaults to `"bot"`. `"user"` is the opt-in account mode. `discord/index.json` repeats that `auth` value on the server. `category` is optional and is copied into the index so the Messages page can group channels.
 
 **posts.** Each message becomes one post in `feeds.json`, on the feed `discord:<guildId>`. The author name and avatar are the person who sent it. The id is `discord:<channelId>:<messageId>` and does not change. `date` is Discord’s `timestamp`, never `edited_timestamp` and never the time the sync ran. Replies and messages in a thread started from one of those messages are nested on `replies` (oldest first) and are not also separate timeline rows. A thread keeps its latest 20 messages, and at most 8 threads per channel are read.
 
@@ -306,7 +306,7 @@ The server header comes from the public widget and invite when the server expose
 
 ### What the page can render
 
-The shell (`app.js`, `styles.css`, `sw.js`) is unchanged. Posts use the same card as every other platform, plus the Discord fields below. A Messages page can read the index and one channel file. Suggested routes, when that UI is added: `#/discord/<guildId>` for the server, `#/messages` for the channel list, `#/messages/discord/<channelId>` for one transcript. Fetch `discord/index.json`, then the `file` path on each messages channel. Those paths are relative, like `feeds.json`.
+Posts use the same card as every other platform, plus the Discord fields below. The Messages page is `discord-ui.js` and `discord-ui.css`. `#/messages` is the channel list. `#/messages/discord/<channelId>` is one transcript. The page reads `feeds.config.json` for the channel list, then `discord/index.json` and the `file` path on each messages channel. Those paths are relative, like `feeds.json`. A `?fixture=1` query on the hash draws sample messages in the browser and does not write `discord/`. While the tab is in the foreground the page also listens to the public ntfy topic `superintelmusic-discord-th-7f3a91c2`. A message is applied only when its channel id is one of the configured channels, its media URLs are on `cdn.discordapp.com` or `media.discordapp.net`, and the payload is under the length cap. Anyone can publish to that topic, so anything else is ignored.
 
 A Discord post in `feeds.json`:
 
@@ -385,7 +385,7 @@ A Discord post in `feeds.json`:
 }
 ```
 
-`author` on a message is a key in `authors`. `reply` is the parent message id in this channel. `thread` is the starter message id when this row was read from a thread. Empty fields are omitted. The list is newest first, capped at the channel `limit`.
+`author` on a message is a key in `authors`. `reply` is the parent message id in this channel. `replyAuthor` and `replyText` are a short quote when Discord included the parent. `thread` is the starter message id when this row was read from a thread. `reactions` is `{emoji, count}` and, for a custom emoji, `id` and a `cdn.discordapp.com` URL. An author `color` is `#rrggbb` when Discord sent one. Empty fields are omitted. The list is newest first, capped at the channel `window`.
 
 ### Set up the bot
 
@@ -408,7 +408,7 @@ Discord’s Terms of Service and Developer Policy prohibit automating a user acc
 
 The token is the full session for that account. Anyone who has it can act as you. It must live only in the Actions secret `DISCORD_USER_TOKEN`. Do not commit it, paste it into `feeds.config.json`, or print it. The workflow masks it in the Actions log. A `token` or `userToken` field in the config is ignored.
 
-The sync only sends GET requests for the configured channels: channel messages, the channel itself, the guild (or the guild preview), and the public widget. It does not send messages, add reactions, join servers, accept invites, or change anything. With both secrets set, a channel the bot can see is read with the bot. The user token is used only for the rest. Requests are at least 1.5 seconds apart, pages are 25 messages, and each later sync continues from the stored snowflake instead of re-reading the whole channel. A 429 waits `Retry-After`. A second 429, a 401, a 403, a captcha, or an account-verification response stops Discord for that run. The log and `sourceHealth.discord` in `feeds.json` / `sync-report.json` say why, and the run does not try another Discord request.
+The sync only sends GET requests for the configured channels: channel messages, the channel itself, the guild (or the guild preview), and the public widget. It does not send messages, add reactions, join servers, accept invites, or change anything. With both secrets set, a channel the bot can see is read with the bot. The user token is used only for the rest. Requests are at least 1.5 seconds apart, pages are 25 messages, and each later sync continues from the stored snowflake instead of re-reading the whole channel. The first read, when nothing is stored yet, also walks `before` until `limit` messages are in hand. A 429 waits `Retry-After`. A second 429, a 401, a captcha, or an account-verification response stops Discord for that run. The log and `sourceHealth.discord` in `feeds.json` / `sync-report.json` say why, and the run does not try another Discord request. A 403 on one channel means that channel is not visible. It is skipped and the other channels are still read. If `DISCORD_USER_TOKEN` is missing, user-auth servers are skipped and the rest of the sync continues.
 
 1. Log into the spare account at [discord.com/app](https://discord.com/app) in a desktop browser.
 2. Open Developer Tools, then the Network tab, and reload. Click a request whose URL is under `https://discord.com/api/`.

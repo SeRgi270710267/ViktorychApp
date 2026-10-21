@@ -1,5 +1,5 @@
-/* Feeds service worker. Cache names are home-pill- plus the deploy SHA. */
-const VERSION = "home-pill-__SW_VERSION__";
+/* Feeds service worker. Cache names are discord-msg1- plus the deploy SHA. */
+const VERSION = "discord-msg1-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
@@ -17,6 +17,8 @@ const SHELL_FILES = [
   "./people.css",
   "./tv.js",
   "./tv.css",
+  "./discord-ui.js",
+  "./discord-ui.css",
   "./favicon.svg",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
@@ -74,6 +76,7 @@ async function takeOverClients() {
 
 function isData(url) {
   if (/\/archive\/[^/]+\.json$/.test(url.pathname)) return true;
+  if (url.origin === self.location.origin && /\/discord\/(?:index|state|messages\/\d{1,22})\.json$/.test(url.pathname)) return true;
   return url.origin === self.location.origin && /\/(?:feeds|people|suggestions)\.json$/.test(url.pathname);
 }
 
@@ -328,7 +331,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|discord-ui\.js|discord-ui\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
 }
 
 function canonicalNotifyId(post) {

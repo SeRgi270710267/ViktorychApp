@@ -9,8 +9,10 @@ token is written to the site, the config, or the log.
 User-token calls are read-only GETs: channel messages, one channel, one guild
 or its preview, and the public widget. They wait at least 1.5 seconds between
 requests, ask for a short page, and continue from the stored snowflake. A
-401, a 403, a captcha, or a verification challenge stops Discord for the run.
-Rate-limit headers and HTTP 429 Retry-After are waited out, not ignored.
+401, a captcha, or a verification challenge stops Discord for the run. A 403
+on one channel means that channel is not visible: it is skipped, and the
+other channels are still read. Rate-limit headers and HTTP 429 Retry-After
+are waited out, not ignored.
 
 Public ``widget.json`` and invite lookups fill the server header when the
 server exposes them. ``GET /guilds/{id}?with_counts=true`` fills an icon or
@@ -675,6 +677,47 @@ def build_profile(guild_id: str, display_name: str, widget, invite, guild) -> di
     return profile
 
 
+def _hex_color(value) -> str:
+    if isinstance(value, str):
+        text = value.strip()
+        if text.startswith("#"):
+            text = text[1:]
+        if re.fullmatch(r"[0-9A-Fa-f]{6}", text):
+            return "#" + text.lower()
+        return ""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return ""
+    if 0 <= value <= 0xFFFFFF:
+        return "#%06x" % value
+    return ""
+
+
+def _reactions(message: dict) -> list:
+    out = []
+    for reaction in (message or {}).get("reactions") or []:
+        if not isinstance(reaction, dict):
+            continue
+        emoji = reaction.get("emoji") if isinstance(reaction.get("emoji"), dict) else {}
+        name = str(emoji.get("name") or "")
+        if not name or len(name) > 64:
+            continue
+        try:
+            count = int(reaction.get("count") or 0)
+        except (TypeError, ValueError):
+            continue
+        if count <= 0:
+            continue
+        row = {"emoji": name, "count": count}
+        eid = snowflake(emoji.get("id"))
+        if eid:
+            row["id"] = eid
+            row["url"] = "https://cdn.discordapp.com/emojis/%s.%s" % (eid, "gif" if emoji.get("animated") else "png")
+        out.append(row)
+        if len(out) >= 20:
+            break
+    return out
+
+
 def stub_message(message: dict, channel: dict, channel_names: dict | None = None, thread_parent: str = ""):
     """One row for the Messages file. Author details live in the file's authors map."""
     if not _user_message(message):
@@ -705,6 +748,15 @@ def stub_message(message: dict, channel: dict, channel_names: dict | None = None
     parent = snowflake(reference.get("message_id"))
     if parent:
         row["reply"] = parent
+        referenced = message.get("referenced_message") if isinstance(message.get("referenced_message"), dict) else {}
+        ref_author = referenced.get("author") if isinstance(referenced.get("author"), dict) else {}
+        snippet, _, _ = render_content(referenced.get("content") or "", referenced, channel_names)
+        snippet = clean_text(snippet)[:180]
+        ref_name = display_name(ref_author) if ref_author else ""
+        if ref_name:
+            row["replyAuthor"] = ref_name
+        if snippet:
+            row["replyText"] = snippet
     if thread_parent:
         row["thread"] = thread_parent
     if links:
@@ -715,13 +767,21 @@ def stub_message(message: dict, channel: dict, channel_names: dict | None = None
         row["attachments"] = media
     if cards:
         row["cards"] = cards
+    reactions = _reactions(message)
+    if reactions:
+        row["reactions"] = reactions
     if author.get("bot"):
         row["bot"] = True
-    return row, author_id, {
+    author_row = {
         "name": display_name(author) or author.get("username") or author_id,
         "handle": author.get("username") or author_id,
         "avatar": avatar_url(author),
     }
+    member = message.get("member") if isinstance(message.get("member"), dict) else {}
+    color = _hex_color(member.get("color")) or _hex_color(author.get("color")) or _hex_color(author.get("accent_color"))
+    if color:
+        author_row["color"] = color
+    return row, author_id, author_row
 
 
 class Client:
@@ -750,10 +810,12 @@ class Client:
             self.page_size = max(1, min(int(page_size or 100), 100))
             self.max_attempts = MAX_ATTEMPTS
 
-    def channel_messages(self, channel_id: str, limit: int, after: str | None = None):
+    def channel_messages(self, channel_id: str, limit: int, after: str | None = None, before: str | None = None):
         params = {"limit": str(max(1, min(int(limit), 100)))}
         if after:
             params["after"] = str(after)
+        elif before:
+            params["before"] = str(before)
         data = self.get_json(f"/channels/{channel_id}/messages", params, auth=True)
         return data if isinstance(data, list) else None
 
@@ -783,7 +845,7 @@ class Client:
             block = account_block(status, body) if auth else ""
             if block in ("captcha", "verification"):
                 raise DiscordStop(block)
-            if self.auth_mode == "user" and block in ("unauthorized", "forbidden"):
+            if self.auth_mode == "user" and block == "unauthorized":
                 raise DiscordStop(block)
             if status == 401 and auth:
                 raise DiscordAuthError("Discord rejected the bot token")
@@ -873,7 +935,9 @@ class Client:
 def fetch_messages(client: Client, channel_id: str, cap: int, cursor: str | None = None):
     """The newest page, then ``after`` pages from the stored snowflake.
 
-    Returns None when Discord did not answer, so the previous file can stay.
+    With no cursor, ``before`` pages walk backward until ``cap`` messages are
+    in hand. That is the first history for a channel. Returns None when
+    Discord did not answer, so the previous file can stay.
     """
     cap = max(1, min(int(cap), 100))
     page_size = client.page_size
@@ -886,6 +950,7 @@ def fetch_messages(client: Client, channel_id: str, cap: int, cursor: str | None
             return None
         readable = True
         newest = None
+        oldest = None
         for message in batch:
             if not isinstance(message, dict):
                 continue
@@ -895,12 +960,34 @@ def fetch_messages(client: Client, channel_id: str, cap: int, cursor: str | None
             found[mid] = message
             if newest is None or int(mid) > int(newest):
                 newest = mid
-        return newest, len(batch)
+            if oldest is None or int(mid) < int(oldest):
+                oldest = mid
+        return newest, oldest, len(batch)
 
     have_cursor = bool(cursor and snowflake(cursor))
     # A user-token sync does not re-read the newest page once a cursor exists.
     if not (client.incremental and have_cursor):
-        take(client.channel_messages(channel_id, min(cap, page_size)))
+        first = min(cap, page_size)
+        got = take(client.channel_messages(channel_id, first))
+        if got and not have_cursor:
+            _newest, oldest, size = got
+            guard = 0
+            while oldest and len(found) < cap and size >= first and guard < PAGE_GUARD:
+                guard += 1
+                want = min(page_size, cap - len(found))
+                if want <= 0:
+                    break
+                before_id = oldest
+                before_count = len(found)
+                got = take(client.channel_messages(channel_id, want, before=oldest))
+                if got is None:
+                    break
+                _newest, oldest, size = got
+                if len(found) == before_count or not oldest or int(oldest) >= int(before_id):
+                    break
+                first = want
+                if size < want:
+                    break
     if have_cursor:
         after = str(cursor)
         gained = 0
@@ -912,7 +999,7 @@ def fetch_messages(client: Client, channel_id: str, cap: int, cursor: str | None
             got = take(batch)
             if got is None:
                 break
-            newest, size = got
+            newest, _oldest, size = got
             if newest is None or int(newest) <= int(after):
                 break
             fresh = 0
@@ -954,12 +1041,24 @@ def configured_servers(config: dict) -> list:
                 limit = int(channel.get("limit") or (30 if mode == "posts" else 40))
             except (TypeError, ValueError):
                 limit = 30
+            limit = max(1, min(limit, 100))
+            raw_window = channel.get("window")
+            if raw_window is None or raw_window == "":
+                window = limit
+            else:
+                try:
+                    window = int(raw_window)
+                except (TypeError, ValueError):
+                    window = limit
+                window = max(limit, min(window, 500))
             channels.append(
                 {
                     "id": cid,
                     "name": str(channel.get("name") or "").strip(),
+                    "category": str(channel.get("category") or "").strip(),
                     "mode": mode,
-                    "limit": max(1, min(limit, 100)),
+                    "limit": limit,
+                    "window": window,
                 }
             )
         if not channels:
@@ -1183,7 +1282,8 @@ def _sync_transcript(client, server, channel, names, messages, previous: dict):
         rows[row["id"]] = row
         if author_id:
             authors[author_id] = author
-    kept = sorted(rows.values(), key=lambda row: int(row["id"]), reverse=True)[: channel["limit"]]
+    keep = int(channel.get("window") or channel["limit"])
+    kept = sorted(rows.values(), key=lambda row: int(row["id"]), reverse=True)[:keep]
     used = {row.get("author") for row in kept}
     authors = {key: value for key, value in authors.items() if key in used and isinstance(value, dict)}
     return kept, authors
@@ -1260,8 +1360,9 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
     """Merge Discord posts into ``doc`` and write message files under ``root``.
 
     An empty ``discord`` list does nothing. A missing token keeps the previous
-    posts. A user-token 401, 403, captcha, or verification challenge stops the
-    run and records that on the sync health row.
+    posts. A user-token 401, captcha, or verification challenge stops the run
+    and records that on the sync health row. A 403 on one channel skips that
+    channel only.
     """
     doc.setdefault("posts", [])
     doc.setdefault("feeds", [])
@@ -1378,6 +1479,8 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
                 entry = {"id": channel["id"], "mode": channel["mode"]}
                 if channel["name"]:
                     entry["name"] = channel["name"]
+                if channel.get("category"):
+                    entry["category"] = channel["category"]
                 if channel["mode"] == "messages":
                     entry["file"] = f"discord/messages/{channel['id']}.json"
                 if reader is None:

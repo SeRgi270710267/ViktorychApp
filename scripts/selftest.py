@@ -826,9 +826,9 @@ def main() -> None:
     check(page.index('src="translate.js"') < page.index('src="app.js"') and 'href="translate.css"' in page, "the page loads the translator before the app")
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "home-pill-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "discord-msg1-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "home-pill-__SW_VERSION__" in worker, "the service worker precaches the TV shell and bumps its cache stamp")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "discord-msg1-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
@@ -1536,6 +1536,7 @@ if (!suggested.some((feed) => feed.handle === "nasa")) throw new Error("nasa mis
 def discord_checks() -> None:
     import io
     import contextlib
+    import subprocess
     import tempfile
 
     from adapters.discord import (
@@ -1863,6 +1864,21 @@ def discord_checks() -> None:
     check([item["id"] for item in paced_found] == ["102", "101"] and pace_slept == [1.5], "a user sync pages after the cursor and waits 1.5 seconds")
     check(Client(account_token, auth="user", transport=refuse_transport, sleep=lambda _seconds: None).page_size == 25, "a user client defaults to 25-message pages")
 
+    history_calls = []
+
+    def history(url, headers):
+        history_calls.append(url)
+        if "before=" in url:
+            older = [{"id": str(200 - i), "channel_id": "10", "content": "o", "timestamp": "2024-05-01T00:00:00Z", "author": {"id": "1", "username": "a"}} for i in range(25)]
+            return 200, {"X-RateLimit-Remaining": "1"}, json.dumps(older).encode()
+        newest = [{"id": str(300 - i), "channel_id": "10", "content": "n", "timestamp": "2024-05-01T00:00:01Z", "author": {"id": "1", "username": "a"}} for i in range(25)]
+        return 200, {"X-RateLimit-Remaining": "1"}, json.dumps(newest).encode()
+
+    history_client = Client(account_token, auth="user", transport=history, sleep=lambda _seconds: None, clock=lambda: 0)
+    history_found = fetch_messages(history_client, "10", 50, None)
+    check(len(history_found) == 50 and history_found[0]["id"] == "300", "the first history reads the last 50 messages")
+    check(any("limit=25" in url and "before=" not in url and "after=" not in url for url in history_calls) and any("before=276" in url for url in history_calls), "a full first page continues with before")
+
     waited = []
     attempts = {"n": 0}
 
@@ -1957,17 +1973,21 @@ def discord_checks() -> None:
 
         stop_calls = []
 
+        later_id = "200000000000000202"
+
         def stop_transport(url, headers):
             stop_calls.append(url)
             if "widget.json" in url:
-                check(headers.get("Authorization") is None, "a stopped run still does not send the token to the widget")
+                check(headers.get("Authorization") is None, "a channel skip still does not send the token to the widget")
                 return 200, {}, b'{"name":"Joined","presence_count":1}'
             if "/guilds/" in url:
                 return 200, {}, json.dumps({"id": user_guild, "name": "Joined"}).encode()
-            if blocked in url:
-                raise AssertionError("a later channel was requested after Discord refused the account")
             if hidden in url:
                 return 403, {}, b'{"message":"Missing Access","code":50001}'
+            if blocked in url and "/messages" in url:
+                return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([
+                    {"id": later_id, "channel_id": blocked, "type": 0, "content": "still here", "timestamp": "2024-05-02T00:00:00.000Z", "author": {"id": ada_id, "username": "ada", "global_name": "Ada Lovelace"}}
+                ]).encode()
             raise AssertionError(url)
 
         stop_config = {
@@ -1989,9 +2009,31 @@ def discord_checks() -> None:
         with contextlib.redirect_stdout(stop_log):
             stop_result = merge_discord(stop_doc, stop_config, both_root / "stop", stop_doc["posts"], token="", user_token=account_token, transport=stop_transport, sleep=lambda _seconds: None, clock=lambda: 0, remote=False, now=datetime(2030, 1, 2, tzinfo=timezone.utc))
         stop_text = stop_log.getvalue()
-        check(stop_result["stopped"] is True and stop_result["reason"] == "forbidden" and "will not retry" in stop_text and account_token not in stop_text, "a user-token 403 stops Discord for the run")
-        check(all(blocked not in url for url in stop_calls) and stop_doc["posts"][0]["text"] == "kept", "the stop leaves later channels unread and keeps the old post")
-        check("403" in stop_doc["sourceHealth"]["discord"]["detail"] and "will not retry" in stop_doc["sourceHealth"]["discord"]["detail"], "the stop is written into the sync health row")
+        check(stop_result.get("stopped") is not True and "will not retry" not in stop_text and account_token not in stop_text, "a channel 403 does not stop Discord")
+        check(any("/messages" in url and blocked in url for url in stop_calls) and any(item.get("text") == "still here" for item in stop_doc["posts"]), "the next channel is still read")
+        check(any(item.get("text") == "kept" for item in stop_doc["posts"]) and "not readable" in stop_text, "the locked channel is skipped and the old post stays")
+        check("will not retry" not in stop_doc["sourceHealth"]["discord"].get("detail", ""), "a skipped channel is not recorded as a sync stop")
+
+        unauth_calls = []
+
+        def unauthorized_transport(url, headers):
+            unauth_calls.append(url)
+            if "widget.json" in url:
+                return 200, {}, b"{}"
+            if "/guilds/" in url:
+                return 200, {}, json.dumps({"id": user_guild, "name": "Joined"}).encode()
+            if hidden in url:
+                return 401, {}, b'{"message":"401: Unauthorized","code":0}'
+            if blocked in url:
+                raise AssertionError("a later channel was requested after 401")
+            raise AssertionError(url)
+
+        unauth_doc = {"posts": [], "feeds": []}
+        unauth_log = io.StringIO()
+        with contextlib.redirect_stdout(unauth_log):
+            unauth_result = merge_discord(unauth_doc, stop_config, both_root / "unauth", [], token="", user_token=account_token, transport=unauthorized_transport, sleep=lambda _seconds: None, clock=lambda: 0, remote=False)
+        check(unauth_result.get("stopped") is True and unauth_result.get("reason") == "unauthorized" and "401" in unauth_doc["sourceHealth"]["discord"]["detail"] and account_token not in unauth_log.getvalue(), "a 401 stops Discord for the run")
+        check(all(blocked not in url for url in unauth_calls), "a 401 does not read later channels")
 
         def captcha_transport(url, headers):
             if "widget.json" in url:
@@ -2017,6 +2059,54 @@ def discord_checks() -> None:
             verify_result = merge_discord(verify_doc, stop_config, both_root / "verify", [], token="", user_token=account_token, transport=verify_transport, sleep=lambda _seconds: None, clock=lambda: 0, remote=False)
         check(verify_result["reason"] == "verification" and "verification" in verify_log.getvalue().lower(), "a verification challenge stops Discord")
 
+    window_guild = "300000000000000001"
+    window_channel = "300000000000000010"
+    window_new = "300000000000000104"
+
+    def window_transport(url, headers):
+        if url.endswith("/users/@me"):
+            return 200, {}, b'{"id":"9","username":"feedbot"}'
+        if "widget.json" in url or "/invites/" in url:
+            return 200, {}, b"{}"
+        if "/guilds/" in url:
+            return 200, {}, json.dumps({"id": window_guild, "name": "W"}).encode()
+        if "/messages" in url:
+            return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([
+                {"id": window_new, "channel_id": window_channel, "type": 0, "content": "d", "timestamp": "2024-05-01T00:00:04.000Z", "author": {"id": "1", "username": "a", "global_name": "A"}}
+            ]).encode()
+        return 404, {}, b"{}"
+
+    window_config = {
+        "cap": 50,
+        "discord": [
+            {
+                "id": window_guild,
+                "name": "W",
+                "channels": [{"id": window_channel, "name": "general", "category": "General", "mode": "messages", "limit": 2, "window": 4}],
+            }
+        ],
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        window_root = Path(tmp)
+        previous_path = window_root / "discord" / "messages" / (window_channel + ".json")
+        previous_path.parent.mkdir(parents=True)
+        previous_path.write_text(json.dumps({
+            "messages": [
+                {"id": "300000000000000101", "author": "1", "text": "a", "date": "2024-05-01T00:00:01.000Z"},
+                {"id": "300000000000000102", "author": "1", "text": "b", "date": "2024-05-01T00:00:02.000Z"},
+                {"id": "300000000000000103", "author": "1", "text": "c", "date": "2024-05-01T00:00:03.000Z"},
+            ],
+            "authors": {"1": {"name": "A", "handle": "a"}},
+        }), encoding="utf-8")
+        window_doc = {"posts": [], "feeds": []}
+        with contextlib.redirect_stdout(io.StringIO()):
+            merge_discord(window_doc, window_config, window_root, [], token=token, user_token="", transport=window_transport, remote=False, now=datetime(2030, 1, 1, tzinfo=timezone.utc))
+        window_file = json.loads(previous_path.read_text(encoding="utf-8"))
+        window_ids = [item["id"] for item in window_file["messages"]]
+        check(window_ids == ["300000000000000104", "300000000000000103", "300000000000000102", "300000000000000101"], "a transcript keeps the rolling window, not just the fetch limit")
+        window_index = json.loads((window_root / "discord" / "index.json").read_text(encoding="utf-8"))
+        check(window_index["servers"][0]["channels"][0]["category"] == "General", "the index keeps the channel category")
+
     source = (ROOT / "scripts" / "adapters" / "discord.py").read_text(encoding="utf-8")
     check('method="GET"' in source and "POST" not in source and "PUT" not in source and "PATCH" not in source and "DELETE" not in source, "the Discord client only issues GET requests")
 
@@ -2026,7 +2116,58 @@ def discord_checks() -> None:
     check("DISCORD_USER_TOKEN" in readme and "spare account" in readme and "banned" in readme and "password" in readme.lower() and "auth\": \"user\"" in readme, "the readme states the ban risk and how the user token is stored")
     check("DISCORD_BOT_TOKEN" in workflow and "DISCORD_USER_TOKEN" in workflow and "add-mask" in workflow and "discord/**/*.json" in readme, "the workflow receives both Discord secrets and masks the user token")
     check("merge_discord" in (ROOT / "scripts" / "update_feeds.py").read_text(encoding="utf-8"), "the feed sync calls Discord")
-    check('"discord"' in (ROOT / "feeds.config.json").read_text(encoding="utf-8"), "feeds.config.json has a discord list")
+    config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
+    check('"discord"' in config_text and "169256939211980800" in config_text and '"auth": "user"' in config_text and '"window": 300' in config_text and "general-chat" in config_text and "product-updates" in config_text, "Town Hall is a user-auth server with a rolling window")
+    page = (ROOT / "index.html").read_text(encoding="utf-8")
+    check(page.index('src="discord-ui.js"') < page.index('src="app.js"') and 'href="discord-ui.css"' in page and "FeedsDiscord" in (ROOT / "app.js").read_text(encoding="utf-8"), "the page loads the Discord messages UI and app.js keeps a small hook")
+    ui_check = subprocess.run(
+        ["node", "--input-type=module", "-e", r"""
+import fs from "fs";
+import vm from "vm";
+const context = { console, URLSearchParams, Date, Map, BigInt, Intl, JSON, Math, Number, Object, Array, String, isFinite, encodeURIComponent, decodeURIComponent };
+vm.createContext(context);
+vm.runInContext(fs.readFileSync("discord-ui.js", "utf8"), context);
+const D = context.FeedsDiscord;
+const html = D._format("**bold** <script>alert(1)</script> [x](javascript:alert(1)) https://discord.com/safety ||hide|| @Ada");
+if (html.includes("<script>") || html.includes('href="javascript:')) throw new Error("xss " + html);
+if (!html.includes("<strong>bold</strong>") || !html.includes("&lt;script&gt;") || !html.includes("dmsg-spoiler") || !html.includes("dmsg-mention") || !html.includes("https://discord.com/safety")) throw new Error("format " + html);
+const known = { "169256939211980800": true };
+if (D._validate({ v: 1, ch: "nope", m: { id: "1", content: "x", author: { id: "2", name: "A" } } }, known)) throw new Error("unknown channel");
+const img = D._validate({
+  v: 1,
+  ch: "169256939211980800",
+  m: {
+    id: "10",
+    content: "hi",
+    author: { id: "2", name: "A", avatar: "https://evil.example/a.png" },
+    att: [
+      { url: "https://evil.example/a.png", type: "image" },
+      { url: "javascript:alert(1)", type: "image" },
+      { url: "https://cdn.discordapp.com/attachments/1/2/a.png", type: "image", w: 10, h: 12 },
+      { url: "https://media.discordapp.net/attachments/1/2/b.png", type: "image" }
+    ]
+  }
+}, known);
+if (!img || img.m.att.length !== 2 || img.m.author.avatar) throw new Error("cdn " + JSON.stringify(img));
+if (D._validate({ v: 1, ch: "169256939211980800", m: { id: "11", content: "x".repeat(4001), author: { id: "2", name: "A" } } }, known)) throw new Error("cap");
+const posts = "889949624218042420";
+if (!D._accept({ v: 1, ch: posts, m: { id: "12", content: "announce", author: { id: "2", name: "A" } } })) throw new Error("posts channel");
+if (D._ids(posts).length) throw new Error("posts leaked into the inbox");
+const general = "169256939211980800";
+if (!D._accept({ v: 1, ch: general, m: { id: "10", content: "one", author: { id: "2", name: "Ada" } } })) throw new Error("accept");
+if (!D._accept({ v: 1, ch: general, m: { id: "10", content: "one again", author: { id: "2", name: "Ada" } } })) throw new Error("dup");
+if (D._ids(general).join(",") !== "10") throw new Error("dedupe " + D._ids(general).join(","));
+if (!D._accept({ v: 1, ch: general, del: "10" })) throw new Error("del");
+if (D._ids(general).length) throw new Error("deleted");
+const page = D.page({ name: "messages", channel: general, query: new URLSearchParams("fixture=1") });
+if (!page.includes("Read-only channel") || !page.includes("general-chat") || !page.includes("peer-help") || !page.includes("dmsg-embed") || !page.includes("dmsg-rx")) throw new Error("page");
+if (page.includes("<script>")) throw new Error("page xss");
+"""],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    check(ui_check.returncode == 0, "discord messages escape text, validate ntfy, and render the fixture: " + (ui_check.stderr or ui_check.stdout))
 
 
 if __name__ == "__main__":
