@@ -467,40 +467,69 @@ img { max-width: 100%; }
 .actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   margin-top: 4px;
-  max-width: 100%;
+  max-width: 425px;
   color: var(--muted);
+}
+.action-stats {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 4px;
+}
+.action-more {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-left: 12px;
 }
 .action {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   background: none;
   border: 0;
   color: inherit;
   font-size: 13px;
   line-height: 16px;
-  padding: 0;
-  min-width: 0;
+  padding: 8px 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  position: relative;
 }
+.action .count { font-size: 13px; line-height: 16px; }
 .action .ic {
-  width: 34.75px;
-  height: 34.75px;
-  border-radius: 9999px;
+  width: 18.75px;
+  height: 18.75px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-left: -8px;
+  position: relative;
+  flex: none;
+}
+.action .ic::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34.75px;
+  height: 34.75px;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 .action svg { width: 18.75px; height: 18.75px; fill: currentColor; }
 .action.reply:hover { color: var(--blue); }
-.action.reply:hover .ic { background: var(--blue-dim); }
+.action.reply:hover .ic::after { background: var(--blue-dim); }
 .action.repost:hover, .action.repost.on { color: var(--green); }
-.action.repost:hover .ic { background: var(--green-dim); }
+.action.repost:hover .ic::after { background: var(--green-dim); }
 .action.like:hover, .action.like.on { color: var(--pink); }
-.action.like:hover .ic { background: var(--pink-dim); }
+.action.like:hover .ic::after { background: var(--pink-dim); }
 .action.views:hover, .action.bookmark:hover, .action.share:hover { color: var(--blue); }
-.action.views:hover .ic, .action.bookmark:hover .ic, .action.share:hover .ic { background: var(--blue-dim); }
+.action.views:hover .ic::after, .action.bookmark:hover .ic::after, .action.share:hover .ic::after { background: var(--blue-dim); }
 .action.bookmark.on { color: var(--blue); }
 .menu {
   position: absolute;
@@ -1117,7 +1146,7 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
   .topbar.is-hidden { transform: translateY(calc(-100% + env(safe-area-inset-top))); }
   .topbar { padding-top: env(safe-area-inset-top); }
   .center { padding-top: calc(var(--top) + env(safe-area-inset-top)); overscroll-behavior: contain; }
-  .center { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .center { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
   .mhead {
     display: flex;
     align-items: center;
@@ -1185,7 +1214,6 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
   .pava.initials { font-size: 28px; }
   .ptabs { top: 53px; }
   .topbar.is-hidden ~ .ptabs, .profile-bar.is-hidden ~ .ptabs { top: 0; }
-  .actions { max-width: none; }
   .post { padding: 12px 16px 4px; }
   .modal-back { padding: 0; align-items: stretch; }
   .modal { width: 100%; max-height: none; height: 100%; border-radius: 0; }

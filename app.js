@@ -504,17 +504,21 @@
     const reposted = !!STATE.settings.reposts[id];
     const btn = (cls, act, path, label, count) => `
       <button class="action ${cls}${cls === "like" && liked ? " on" : ""}${cls === "bookmark" && booked ? " on" : ""}${cls === "repost" && reposted ? " on" : ""}" data-act="${act}" data-id="${esc(id)}" aria-label="${esc(label)}">
-        <span class="ic">${icon(path)}</span>${count ? `<span>${esc(count)}</span>` : ""}
+        <span class="ic">${icon(path)}</span>${count ? `<span class="count">${esc(count)}</span>` : ""}
       </button>`;
     const replyCount = shownCount(stats.replies, 0);
-    const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="Replies"><span class="ic">${icon("reply")}</span>${replyCount ? `<span>${esc(replyCount)}</span>` : ""}</a>`;
+    const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="Replies"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
     return `<div class="actions">
-      ${replyLink}
-      ${btn("repost", "repost", "repost", "Repost", shownCount(stats.reposts, reposted ? 1 : 0))}
-      ${btn("like", "like", liked ? "heartOn" : "heart", "Like", shownCount(stats.likes, liked ? 1 : 0))}
-      ${btn("views", "open-status", "views", "Views", shownCount(stats.views, 0))}
-      ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", "Bookmark", "")}
-      ${btn("share", "share", "share", "Share", "")}
+      <div class="action-stats">
+        ${replyLink}
+        ${btn("repost", "repost", "repost", "Repost", shownCount(stats.reposts, reposted ? 1 : 0))}
+        ${btn("like", "like", liked ? "heartOn" : "heart", "Like", shownCount(stats.likes, liked ? 1 : 0))}
+        ${btn("views", "open-status", "views", "Views", shownCount(stats.views, 0))}
+      </div>
+      <div class="action-more">
+        ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", "Bookmark", "")}
+        ${btn("share", "share", "share", "Share", "")}
+      </div>
     </div>`;
   }
 
