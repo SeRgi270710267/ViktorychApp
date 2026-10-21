@@ -678,6 +678,7 @@ def main() -> None:
     css = (ROOT / "styles.css").read_text(encoding="utf-8")
     actions = css[css.index(".pactions .outline"):css.index(".pactions .outline") + 280]
     check("flex-shrink: 100" in css and "white-space: nowrap" in actions, "the display name keeps its room and the profile link stays one line")
+    check("--fill:" in css and "--hover:" in css and ".watch-main { padding: 0; min-width: 0; }" in css and "function deadMediaUrl(" in app and "function collapseSameUrl(" in app and "Skip to content" in app and 'class="vh">Home' in app and 'aria-current="page"' in app and 'role="tab" aria-selected="' in app, "themes, watch width, dead posters, and control names stay in place")
     check('data-act="autoplay"' in app and "On cellular and Wi-Fi" in app and "Wi-Fi only" in app and 'autoplay: "all"' in app, "settings can keep autoplay on, limit it to Wi-Fi, or turn it off")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "saveData" in app and "threshold: [0, 0.5, 0.75, 1]" in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app, "one in-view video previews muted until the reader unmutes it")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")

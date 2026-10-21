@@ -183,12 +183,56 @@
     };
   }
 
+  function deadMediaUrl(url) {
+    return /instagram\.com\/(?:p|reel|tv)\/[^/?#]+\/media(?:\/|\?|$)/i.test(String(url || ""));
+  }
+
+  function samePostKey(post) {
+    const blob = String((post && (post.url || post.statusId || post.id)) || "");
+    const ig = blob.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/i);
+    if (ig) return "instagram:" + ig[1].toLowerCase();
+    const threads = blob.match(/threads\.(?:com|net)\/(?:@[^/]+\/post|t)\/([A-Za-z0-9_-]+)/i);
+    if (threads) return "threads:" + threads[1].toLowerCase();
+    return "";
+  }
+
+  function mediaScore(post) {
+    let score = 0;
+    ((post && post.media) || []).forEach((item) => {
+      if (!item) return;
+      const poster = String(item.poster || "");
+      const file = String(item.url || "");
+      if (poster && !deadMediaUrl(poster)) score += 4;
+      if (file && playableFile(file)) score += 4;
+      else if (file && !deadMediaUrl(file)) score += 2;
+    });
+    return score;
+  }
+
+  function collapseSameUrl(list) {
+    const best = {};
+    list.forEach((post) => {
+      const key = samePostKey(post);
+      if (!key) return;
+      const prev = best[key];
+      if (!prev || mediaScore(post) > mediaScore(prev)) best[key] = post;
+    });
+    return list.filter((post) => {
+      const key = samePostKey(post);
+      const winner = key && best[key];
+      if (!winner || winner === post) return true;
+      if ((winner.kind || "post") !== (post.kind || "post")) return true;
+      if ((winner.handle || "").toLowerCase() !== (post.handle || "").toLowerCase()) return true;
+      return mediaScore(winner) <= mediaScore(post);
+    });
+  }
+
   function posts() {
     const full = (STATE.data && STATE.data.posts) || [];
     const seen = {};
     full.forEach((post) => { seen[postIdentity(post)] = true; });
     const extra = ARCHIVE.posts.filter((post) => !seen[postIdentity(post)]).map((post) => HYDRATED[postIdentity(post)] || post);
-    return full.concat(extra);
+    return collapseSameUrl(full.concat(extra));
   }
 
   function loadSettings() {
@@ -624,6 +668,7 @@
     let poster = (media && media.poster) || "";
     if (!poster && media && media.url && !playableFile(media.url) && !yt) poster = media.url;
     if (!poster && yt) poster = "https://i.ytimg.com/vi/" + yt + "/hqdefault.jpg";
+    if (deadMediaUrl(poster)) poster = "";
     const dur = formatDur(media && media.duration);
     const gif = media && media.type === "animated_gif";
     const label = watchOn(yt ? "youtube" : platform);
@@ -3323,7 +3368,7 @@
     const eager = !!opts.eager;
     const dest = post.watch ? watchHash(post) : statusHash(post);
     const who = post.profileHandle || post.handle;
-    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${avatar(face.avatar, post.author || post.handle)}</a>`;
+    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author || post.handle)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
@@ -3403,7 +3448,7 @@
   }
 
   function navItem(href, name, label, on) {
-    return `<a class="nav-item${on ? " on" : ""}" href="${href}">${icon(on && name === "home" ? "homeOn" : name)}<span class="nav-label">${label}</span></a>`;
+    return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}>${icon(on && name === "home" ? "homeOn" : name)}<span class="nav-label">${label}</span></a>`;
   }
 
   function nav(route) {
@@ -3419,7 +3464,7 @@
         ${navItem("#/bookmarks", "bookmark", "Bookmarks", name === "bookmarks")}
         ${navItem("#/subscriptions", "subs", "Subscriptions", name === "subscriptions")}
         ${navItem("#/settings", "more", "More", name === "settings")}
-        <button class="post-btn" data-act="compose"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>
+        <button class="post-btn" data-act="compose" aria-label="Post"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>
       </div>
       <button class="account-pill" data-act="drawer" aria-label="Account menu">
         <span class="ava initials">Y</span>
@@ -3452,7 +3497,7 @@
   }
 
   function bottom(route) {
-    const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}">${icon(name)}</a>`;
+    const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}"${on ? ' aria-current="page"' : ""}>${icon(name)}</a>`;
     return `<nav class="bottom-nav" aria-label="Primary">
       ${item("#/", route.name === "home" ? "homeOn" : "home", "Home", route.name === "home")}
       ${item("#/explore", "search", "Search", route.name === "explore")}
@@ -3467,11 +3512,12 @@
     const lists = STATE.settings.lists.filter((l) => l.pinned);
     const tabBtn = (id, label, on) => `<button class="tab${on ? " on" : ""}" data-act="htab" data-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}"><span>${esc(label)}</span></button>`;
     return `<div class="topbar tall">
+      <h1 class="vh">Home</h1>
       <div class="mhead">
         <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
         <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
       </div>
-      <div class="tabs" role="tablist">
+      <div class="tabs" role="tablist" aria-label="Home timeline">
         ${tabBtn("foryou", "For you", tab === "foryou")}
         ${tabBtn("following", "Following", tab === "following")}
         ${lists.map((l) => tabBtn("list:" + l.id, l.name, tab === "list:" + l.id)).join("")}
@@ -4379,7 +4425,7 @@
     const count = profile.postsCount != null ? formatCount(profile.postsCount) + " posts" : "";
     const tabHtml = tabs.map((pair) => {
       const href = accountHash(profile.platform, profile.channelId || profile.handle) + (pair[0] === tabs[0][0] ? "" : "?tab=" + pair[0]);
-      return `<a class="tab${tab === pair[0] ? " on" : ""}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
+      return `<a class="tab${tab === pair[0] ? " on" : ""}" role="tab" aria-selected="${tab === pair[0] ? "true" : "false"}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
     }).join("");
     const note = needsSyncNote(profile) ? `<p class="pfollow-note">Follow saves this account on this device. Add it to feeds.config.json and sync before its posts join the home timeline.</p>` : "";
     const limited = row.limited ? `<p class="pfollow-note">Posts from this account can’t be loaded in the browser.</p>` : "";
@@ -4410,7 +4456,7 @@
           <a class="outline" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(profile))}" aria-label="${esc(openLabel(profile.platform))}">${esc(profileLinkLabel(profile.platform))}</a>
         </div>
       </div>
-      <h2 class="pname">${esc(profile.name || profile.handle)}${badge(profile.verifiedType)}</h2>
+      <h1 class="pname">${esc(profile.name || profile.handle)}${badge(profile.verifiedType)}</h1>
       ${shown ? `<div class="phandle">@${esc(shown)}</div>` : ""}
       ${profile.bio ? `<div class="bio">${linkify(profile.bio, [], profile.platform)}</div>` : ""}
       ${meta ? `<div class="pmeta">${meta}</div>` : ""}
@@ -4420,7 +4466,7 @@
       ${saved}
       ${note}
     </div>
-    ${tabs.length ? `<div class="tabs ptabs" role="tablist">${tabHtml}</div>` : ""}
+    ${tabs.length ? `<div class="tabs ptabs" role="tablist" aria-label="Profile">${tabHtml}</div>` : ""}
     ${body}${more}`;
   }
 
@@ -4457,7 +4503,7 @@
     const tabs = tabIds.map((pair) => {
       const id = pair[0];
       const href = profileHash(feed.platform, feed.handle) + (id === "posts" ? "" : "?tab=" + id);
-      return `<a class="tab${tab === id ? " on" : ""}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
+      return `<a class="tab${tab === id ? " on" : ""}" role="tab" aria-selected="${tab === id ? "true" : "false"}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
     }).join("");
     return `<div class="topbar profile-bar">
       <div class="page-head">
@@ -4475,13 +4521,13 @@
           <a class="outline" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(feed))}" aria-label="View on ${esc(PLATFORM[feed.platform] || "web")}">${esc(profileLinkLabel(feed.platform))}</a>
         </div>
       </div>
-      <h2 class="pname">${esc(feed.name || feed.handle)}${badge(feed.verifiedType)}</h2>
+      <h1 class="pname">${esc(feed.name || feed.handle)}${badge(feed.verifiedType)}</h1>
       <div class="phandle">@${esc(feed.handle)}</div>
       ${feed.bio ? `<div class="bio">${linkify(feed.bio, [], feed.platform)}</div>` : ""}
       ${meta ? `<div class="pmeta">${meta}</div>` : ""}
       ${counts}
     </div>
-    <div class="tabs ptabs" role="tablist">${tabs}</div>
+    <div class="tabs ptabs" role="tablist" aria-label="Profile">${tabs}</div>
     ${list.length ? list.map((p) => {
       const byThis = p.repostedBy && (p.repostedBy.handle || "").toLowerCase() === (feed.handle || "").toLowerCase();
       return card(p, byThis ? "" : "author");
@@ -4538,8 +4584,8 @@
           <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${post.handle ? followButtonClean((post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
-      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
-      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
+      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
+      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
       ${ancestorBlock(post, chain)}
       ${article}
@@ -4592,7 +4638,7 @@
       </div></div>
       <div class="list-banner" style="background:${esc(list.bannerColor || COLORS[0])}"></div>
       <div class="list-body">
-        <div class="list-tools"><div><h2>${esc(list.name)}</h2>${list.description ? `<div class="bio">${esc(list.description)}</div>` : ""}<div class="phandle">${(list.members || []).length} Members</div></div>
+        <div class="list-tools"><div><h1>${esc(list.name)}</h1>${list.description ? `<div class="bio">${esc(list.description)}</div>` : ""}<div class="phandle">${(list.members || []).length} Members</div></div>
         <button class="outline" data-act="edit-list" data-id="${esc(list.id)}">Edit List</button></div>
         <button class="show-more" data-act="members" data-id="${esc(list.id)}">Manage members</button>
       </div>
@@ -4728,7 +4774,7 @@
     const wide = route.name === "subscriptions" || route.name === "watch";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
     const top = route.name === "explore" ? 124 : tall ? 106 : 53;
-    return `<div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}`;
+    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}`;
   }
 
   function watchHash(post) {
@@ -4799,7 +4845,8 @@
 
   function subsThumb(post) {
     const media = (post.media || [])[0] || {};
-    const poster = media.poster || (media.type === "photo" ? media.url : "");
+    const rawPoster = media.poster || (media.type === "photo" ? media.url : "");
+    const poster = deadMediaUrl(rawPoster) ? "" : rawPoster;
     const duration = clock(media.duration);
     return `<div class="yt-thumb vplay" data-preview="subs" data-pid="${esc(post.id || "")}" data-mi="0">${poster ? `<img src="${esc(poster)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<span class="plat">${esc(PLATFORM[post.platform] || "")}</span>${duration ? `<span class="yt-time" data-full="${esc(duration)}">${esc(duration)}</span>` : ""}</div>`;
   }
@@ -4888,7 +4935,7 @@
     const nested = open ? `<div class="yt-kids">${kids.length ? kids.map(ytComment).join("") : `<div class="reply-empty">Replies aren’t available.</div>`}</div>` : "";
     const href = comment.channelId ? accountHash("youtube", comment.channelId) : "";
     const cardId = comment.channelId ? ` data-card="youtube:${esc(comment.channelId)}"` : "";
-    const face = href ? `<a href="${esc(href)}"${cardId}>${avatar(comment.avatar, comment.author || comment.handle)}</a>` : avatar(comment.avatar, comment.author || comment.handle);
+    const face = href ? `<a href="${esc(href)}"${cardId} aria-label="${esc(comment.author || comment.handle || "Profile")}">${avatar(comment.avatar, comment.author || comment.handle)}</a>` : avatar(comment.avatar, comment.author || comment.handle);
     const name = href ? `<a class="name" href="${esc(href)}"${cardId}>${esc(comment.author || comment.handle || "")}</a>` : esc(comment.author || comment.handle || "");
     return `<div class="yt-c">
       ${face}
@@ -4958,14 +5005,14 @@
       const thumb = ((item.media || [])[0] || {}).poster || "";
       return `<a class="up-row" href="${esc(watchHash(item))}"><div class="yt-thumb">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}${platMark(item.platform)}</div><div><h3 class="yt-title">${esc(item.title || item.text || "")}</h3><div class="yt-by">${esc(item.author || item.handle || "")}</div><div class="yt-sub">${esc(videoMeta(item))}</div></div></a>`;
     }).join("")}</aside>` : `<aside class="upnext"><h2>Up next</h2><p class="yt-sub">No other videos from accounts you follow.</p></aside>`;
-    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Watch</h1></div></div>
+    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><div class="pt-name grow">Watch</div></div></div>
       <div class="watch">
         <div class="watch-main">
           ${player}
           ${pip}
           <h1 class="watch-title">${esc(post.title || post.text || "")}</h1>
           <div class="watch-chan">
-            <a data-card="${esc(feed.platform + ":" + (feed.channelId || feed.handle))}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}">${avatar(post.avatar || feed.avatar, feed.name || post.author)}</a>
+            <a data-card="${esc(feed.platform + ":" + (feed.channelId || feed.handle))}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}" aria-label="${esc(feed.name || post.author || "Channel")}">${avatar(post.avatar || feed.avatar, feed.name || post.author)}</a>
             <div class="watch-who"><a class="name" data-card="${esc(feed.platform + ":" + (feed.channelId || feed.handle))}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}">${esc(feed.name || post.author || "")}${badge(feed.verifiedType || post.verifiedType)}</a><div class="yt-sub">${esc(subs)}</div></div>
             ${followButtonClean(feed.id, true)}
           </div>
@@ -5157,7 +5204,7 @@
     const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const face = authorFace(post);
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
-      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
+      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
         <div class="byline">
           <a class="name" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
@@ -5413,6 +5460,11 @@
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
+    if (act === "skip") {
+      const main = document.querySelector("main.center");
+      if (main) main.focus();
+      return;
+    }
     if (act === "htab" || act === "like" || act === "bookmark" || act === "follow" || act === "back" || act === "view") tapHaptic();
     if (act === "close-viewer") { closeViewer(); return; }
     if (act === "back") {
@@ -5825,7 +5877,7 @@
     const player = img.closest(".vplay");
     if (player) {
       if (img.tagName === "VIDEO") return;
-      if (img.classList.contains("vposter")) img.remove();
+      img.remove();
       return;
     }
     const next = img.dataset.refresh || "";
@@ -5910,7 +5962,7 @@
     if (!box || !profile) return;
     const handle = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
     const id = liveFollowId(profile);
-    box.innerHTML = `<div class="hcard"><div class="hbanner" style="background:${profile.banner ? "url(" + encodeURI(profile.banner) + ") center/cover" : "#333639"}"></div><div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava")}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${(profile.following != null || profile.followers != null) ? `<div class="counts">${profile.following != null ? `<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>` : ""}${profile.followers != null ? `<div><b>${esc(formatCount(profile.followers))}</b> <span>${profile.platform === "youtube" ? "Subscribers" : "Followers"}</span></div>` : ""}</div>` : ""}</div></div>`;
+    box.innerHTML = `<div class="hcard"><div class="hbanner" style="background:${profile.banner ? "url(" + encodeURI(profile.banner) + ") center/cover" : "var(--banner)"}"></div><div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava")}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${(profile.following != null || profile.followers != null) ? `<div class="counts">${profile.following != null ? `<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>` : ""}${profile.followers != null ? `<div><b>${esc(formatCount(profile.followers))}</b> <span>${profile.platform === "youtube" ? "Subscribers" : "Followers"}</span></div>` : ""}</div>` : ""}</div></div>`;
     const left = Math.min(rect.left, window.innerWidth - 320);
     box.style.left = Math.max(8, left) + "px";
     box.style.top = (rect.bottom + 8) + "px";
