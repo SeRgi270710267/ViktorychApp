@@ -2818,6 +2818,145 @@ def ia_backup_checks() -> None:
         sleep=lambda delay: None,
     )
     check(again["manifest"]["posts"]["x:20"] == manifest["posts"]["x:20"], "a second run keeps the manifest and does not upload again")
+    story_checks()
+
+
+def story_checks() -> None:
+    import subprocess
+
+    from stories import AUTH_DETAIL, StoryAuthError, collect, parse_story_document, publish, redact, session_header
+    from sync_health import problems
+
+    now = datetime(2026, 10, 21, 19, 0, tzinfo=timezone.utc)
+    payload = json.loads((FIX / "ig_stories.json").read_text(encoding="utf-8"))
+    account = parse_story_document(payload, "redacted_handle", now, {"id": "instagram:redacted_handle", "handle": "redacted_handle"})
+    check(len(account["items"]) == 2, "the instagram fixture keeps the two stories that have not expired")
+    check(account["items"][0]["id"] == "1002" and account["items"][0]["type"] == "video", "the older video is first")
+    check(account["items"][1]["id"] == "1001" and account["items"][1]["caption"] == "Morning" and account["items"][1]["url"].endswith("story.jpg"), "the photo keeps the larger image and its caption")
+    check(account["name"] == "Mark Zuckerberg" and account["avatar"] == "https://cdn.example/redacted_handle.jpg", "the reel supplies the name and avatar")
+    check("1003" not in json.dumps(account), "an expired story is dropped")
+    leaked = "sessionid=SECRETVALUE; ds_user_id=42"
+    check(redact("Cookie: " + leaked) == "Cookie: sessionid=redacted; ds_user_id=redacted", "a story error cannot carry the session")
+    header = session_header(leaked + "; extra=no")
+    check(header.startswith("sessionid=") and "extra=" not in header, "the request keeps the session cookies and drops the rest")
+
+    calls = []
+
+    def refuse(*_args):
+        calls.append("called")
+        raise AssertionError("unset session called the network")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp) / "stories.json"
+        dest.write_text('{"accounts":[{"id":"instagram:redacted_handle","items":[{"url":"https://cdn.example/old.jpg"}]}]}', encoding="utf-8")
+        health = publish(
+            {"feeds": [{"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle"}], "rsshubBase": "http://127.0.0.1:1200"},
+            dest,
+            now=now,
+            secret="",
+            transport=refuse,
+        )
+        saved = json.loads(dest.read_text(encoding="utf-8"))
+    check(health == [] and calls == [] and saved["accounts"] == [], "IG_SESSION unset writes no stories and does not call out")
+
+    previous = [
+        {
+            "id": "instagram:redacted_handle",
+            "platform": "instagram",
+            "handle": "redacted_handle",
+            "items": [
+                {"id": "9", "type": "photo", "url": "https://cdn.example/keep.jpg", "date": "2026-10-21T12:00:00Z", "expires": "2026-10-22T00:00:00Z"},
+                {"id": "8", "type": "photo", "url": "http://cdn.example/nope.jpg", "date": "2026-10-21T12:00:00Z", "expires": "2026-10-22T00:00:00Z"},
+                {"id": "7", "type": "photo", "url": "https://cdn.example/gone.jpg", "date": "2026-10-20T00:00:00Z", "expires": "2026-10-21T00:00:00Z"},
+            ],
+        },
+        {
+            "id": "vk:vk",
+            "platform": "vk",
+            "handle": "vk",
+            "items": [{"id": "1", "type": "photo", "url": "https://cdn.example/vk.jpg", "expires": "2026-10-22T00:00:00Z"}],
+        },
+    ]
+    seen_urls = []
+
+    def rejected(method, url, headers, body):
+        seen_urls.append(url)
+        cookie = (headers or {}).get("Cookie") or ""
+        check("SECRETVALUE" in cookie and (body is None or b"SECRETVALUE" not in body), "the session travels in the cookie header only")
+        raise StoryAuthError(AUTH_DETAIL)
+
+    feeds = [
+        {"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle"},
+        {"id": "instagram:nasa", "platform": "instagram", "handle": "nasa"},
+        {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram"},
+        {"id": "vk:vk", "platform": "vk", "handle": "vk"},
+    ]
+    accounts, health = collect(feeds, "sessionid=SECRETVALUE", now, previous, transport=rejected)
+    check(len(seen_urls) == 1, "a rejected session stops the remaining accounts")
+    check(health == [{"platform": "instagram", "ok": False, "detail": AUTH_DETAIL}], "a rejected session is one health failure")
+    check("SECRETVALUE" not in json.dumps(health), "the health row does not contain the session")
+    check([row["id"] for row in accounts] == ["instagram:redacted_handle"], "a failed fetch keeps that account and does not invent Telegram or VK")
+    check([item["id"] for item in accounts[0]["items"]] == ["9"], "only the unexpired https story is kept")
+
+    def empty_reel(method, url, headers, body):
+        if method == "GET":
+            return 200, url, '"profile_id":"5"', []
+        return 200, url, json.dumps({"data": {"xdt_api__v1__feed__reels_media": {"reels_media": []}}}), []
+
+    accounts, health = collect(feeds[:1], "sessionid=SECRETVALUE", now, previous, transport=empty_reel)
+    check(accounts == [] and health == [], "an empty reel clears the account and stays healthy")
+
+    rss = """<?xml version="1.0"?><rss><channel><item>
+      <link>https://www.instagram.com/stories/redacted_handle/55/</link>
+      <guid>55</guid>
+      <pubDate>Wed, 21 Oct 2026 18:00:00 GMT</pubDate>
+      <description>&lt;img src="https://cdn.example/from-rss.jpg"&gt; Morning</description>
+    </item></channel></rss>"""
+
+    def query_then_rss(method, url, headers, body):
+        if method == "GET" and "instagram.com" in url:
+            return 200, url, '"profile_id":"5"', []
+        if method == "POST":
+            return 200, url, '{"error":"nope"}', []
+        if "/instagram/stories/" in url:
+            return 200, url, rss, []
+        raise AssertionError(url)
+
+    accounts, health = collect(
+        [{"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle", "profile": {"name": "Mark"}}],
+        "sessionid=SECRETVALUE",
+        now,
+        [],
+        transport=query_then_rss,
+        rsshub="http://127.0.0.1:1200",
+    )
+    check(health == [] and accounts[0]["items"][0]["url"] == "https://cdn.example/from-rss.jpg", "a local stories route can fill in when the query has no reel")
+    check(accounts[0]["items"][0]["open"].endswith("/55/"), "the story link stays on instagram.com")
+
+    def login_wall(method, url, headers, body):
+        return 302, "https://www.instagram.com/accounts/login/", "checkpoint", []
+
+    accounts, health = collect(feeds[:1], "sessionid=SECRETVALUE", now, previous, transport=login_wall)
+    check(health and health[0]["ok"] is False and "SECRETVALUE" not in health[0]["detail"], "a login wall is a session failure and the cookie stays out of the detail")
+    check(accounts[0]["items"][0]["id"] == "9", "the login wall keeps the previous story")
+
+    moment = "2026-10-21T19:00:00Z"
+    check(any("IG_SESSION was rejected" in line for line in problems({"feeds": [], "stories": health}, moment)), "a rejected session is reported immediately")
+    check(problems({"feeds": [], "stories": []}, moment) == [], "no stories is healthy")
+    check(problems({"feeds": [], "stories": [{"platform": "instagram", "ok": True, "detail": ""}]}, moment) == [], "a successful story fetch adds no health line")
+
+    page = (ROOT / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    worker = (ROOT / "sw.js").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    styles = (ROOT / "stories.css").read_text(encoding="utf-8")
+    check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
+    check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
+    check("stories.js" in worker and "stories.css" in worker and "superintel6-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("IG_SESSION" in workflow and "::add-mask::${IG_SESSION}" in workflow and "stories.json" in workflow and "publish-stories" in workflow, "the sync masks the story session and publishes stories.json")
+    check("border-radius: 16px" in styles and "linear-gradient" in styles and "#stories" in styles, "story avatars are rounded squares and the viewer is full screen")
+    row = subprocess.run(["node", "scripts/stories_test.js"], cwd=ROOT, capture_output=True, text=True)
+    check(row.returncode == 0, "story tray ordering passed\n" + row.stdout + row.stderr)
 
 
 if __name__ == "__main__":

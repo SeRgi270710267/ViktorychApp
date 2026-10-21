@@ -141,9 +141,27 @@ def pull_ia_sidecars(root: Path) -> None:
         print(f"[snapshot] {name}")
 
 
+def pull_stories() -> None:
+    """Keep the last stories.json so a failed story fetch can leave unexpired items."""
+    for url in (SITE + "stories.json", raw_data() + "stories.json"):
+        body = _get(url)
+        if not body:
+            continue
+        try:
+            data = json.loads(body.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict) and isinstance(data.get("accounts"), list):
+            _write(ROOT / "stories.json", json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
+            print(f"[snapshot] stories.json {len(data['accounts'])} accounts")
+            return
+    print("[snapshot] stories.json unavailable; keeping the seed")
+
+
 def main() -> None:
     try:
         _pull_feeds()
+        pull_stories()
     finally:
         for label, base in ARCHIVE_SOURCES:
             result = pull_archive(ROOT, lambda rel, base=base: _get(base + rel))

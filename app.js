@@ -5052,6 +5052,7 @@
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="Manage tabs">${icon("sliders")}</button>
       </div>
+      ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${window.Spaces && window.Spaces.homeRow ? window.Spaces.homeRow() : ""}
     </div>`;
   }
@@ -7718,7 +7719,8 @@
     const explore = route.name === "explore";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
-    const top = (route.name === "messages" ? 0 : explore ? 0 : tall ? 106 : 53) + rowExtra;
+    const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
+    const top = (route.name === "messages" ? 0 : explore ? 0 : tall ? 106 : 53) + rowExtra + storyExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${mode}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}`;
   }
@@ -9136,7 +9138,7 @@
       onExploreAct(act, el);
       return;
     }
-    if (act === "htab" || act === "like" || act === "bookmark" || act === "follow" || act === "back" || act === "view") tapHaptic();
+    if (act === "htab" || act === "like" || act === "bookmark" || act === "follow" || act === "back" || act === "view" || act === "story") tapHaptic();
     if (act === "close-viewer") { closeViewer(); return; }
     if (act === "back") {
       if (STATE.viewer) { closeViewer(); return; }
@@ -9146,6 +9148,10 @@
     }
     if (act === "view") {
       openViewer(el.dataset.id, Number(el.dataset.mi) || 0);
+      return;
+    }
+    if (act === "story") {
+      if (window.Stories) window.Stories.open(el.dataset.id || "");
       return;
     }
     if (act === "reload") { boot(); return; }
@@ -11742,6 +11748,7 @@
         return;
       }
       if (event.touches.length !== 1) return;
+      if (event.target.closest && event.target.closest(".story-tray, #stories")) return;
       swipe = { x: event.touches[0].clientX, y: event.touches[0].clientY, viewer: false };
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {
@@ -11812,6 +11819,7 @@
     loadStatus();
     STATE.settings = loadSettings();
     applyTheme();
+    if (window.Stories) window.Stories.start();
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
     loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
     const snap = loadTimelineSnap();
@@ -11909,6 +11917,14 @@
       }
     });
     window.FeedsDiscord.start();
+  }
+  if (window.Stories) {
+    window.Stories.bind({
+      icon: icon,
+      render: render,
+      follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
+      dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
+    });
   }
   if (window.Spaces) {
     window.Spaces.bind({

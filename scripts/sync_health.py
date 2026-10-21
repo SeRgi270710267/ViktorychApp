@@ -51,8 +51,17 @@ def write_report(doc: dict, path: Path = REPORT) -> None:
             "emptySince": row.get("emptySince") or "",
             "detail": row.get("detail") or "",
         })
+    stories = []
+    for row in doc.get("storiesHealth") or []:
+        if not isinstance(row, dict):
+            continue
+        stories.append({
+            "platform": row.get("platform") or "",
+            "ok": bool(row.get("ok")),
+            "detail": (row.get("detail") or "")[:300],
+        })
     path.write_text(
-        json.dumps({"updated": doc.get("updated") or "", "feeds": feeds}, ensure_ascii=False, indent=2) + "\n",
+        json.dumps({"updated": doc.get("updated") or "", "feeds": feeds, "stories": stories}, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -97,6 +106,12 @@ def problems(report, now: str, build_result: str = "success", deploy_result: str
         if detail:
             line += " " + detail
         lines.append(line)
+    for row in report.get("stories") or []:
+        if not isinstance(row, dict) or row.get("ok") is not False:
+            continue
+        detail = (row.get("detail") or "Stories sync failed.").strip()
+        if detail:
+            lines.append(detail)
     return lines
 
 
