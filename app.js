@@ -2296,6 +2296,7 @@
   function rememberYt(id, doc, live) {
     if (live) doc.fetchedAt = new Date().toISOString();
     else if (!doc.fetchedAt && doc._at) doc.fetchedAt = new Date(doc._at).toISOString();
+    if (doc.commentCount != null && isFinite(Number(doc.commentCount))) applyLiveStats(id, { replies: Number(doc.commentCount) });
     STATE.ytDocs[id] = doc;
     return cacheSet("yt:doc:" + id, doc).then(() => doc);
   }
@@ -2315,7 +2316,7 @@
         delete row._continuation;
         top.push(row);
       });
-      const doc = { postId: "yt_" + id, platform: "youtube", source: "invidious", replies: top };
+      const doc = { postId: "ytpost_" + id, platform: "youtube", source: "invidious", replies: top };
       if (payload.commentCount != null && isFinite(Number(payload.commentCount))) {
         doc.commentCount = Number(payload.commentCount);
         applyLiveStats(id, { replies: doc.commentCount });
@@ -2328,6 +2329,10 @@
     return snapshotDoc("yt_" + id).then((doc) => ytUsable(doc) ? doc : null).catch(() => null);
   }
 
+  function ytPostStub(id) {
+    return snapshotDoc("ytpost_" + id).then((doc) => ytUsable(doc) ? doc : null).catch(() => null);
+  }
+
   function loadYtRoot(post) {
     const id = postKey(post);
     if (!id) return Promise.resolve(null);
@@ -2338,16 +2343,17 @@
     if (fresh) cacheDrop("yt:doc:" + id);
     return once((fresh ? "ytfresh:" : "yt:") + id, () => (fresh ? Promise.resolve(null) : cacheGet("yt:doc:" + id, COMMENT_TTL)).then((hit) => {
       if (hit) {
+        if (hit.commentCount != null && isFinite(Number(hit.commentCount))) applyLiveStats(id, { replies: Number(hit.commentCount) });
         STATE.ytDocs[id] = hit;
         return hit;
       }
       const live = community ? ivCommunityThread(post) : ivThread(id, post.handle || "");
+      const stored = community
+        ? ownPack("ytpost_" + id).then((own) => ytUsable(own) ? own : ytPostStub(id))
+        : ownPack("yt_" + id).then((own) => ytUsable(own) ? own : ytStub(id));
       return loadStatus().then(() => live.then((doc) => {
         if (ytUsable(doc)) return rememberYt(id, doc, true);
-        return ownPack("yt_" + id).then((own) => {
-          if (ytUsable(own)) return rememberYt(id, own, false);
-          return ytStub(id).then((stub) => stub ? rememberYt(id, stub, false) : null);
-        });
+        return stored.then((own) => own ? rememberYt(id, own, false) : null);
       }));
     })).catch(() => null);
   }
@@ -2392,6 +2398,13 @@
     };
   }
 
+  function ytDocName(id) {
+    if (ytVideoId(id)) return "yt_" + id;
+    const known = posts().find((item) => item && item.platform === "youtube" && postKey(item) === id);
+    if (known && known.kind !== "community") return "yt_" + id;
+    return "ytpost_" + id;
+  }
+
   function loadYtReplies(post) {
     const id = postKey(post);
     const cached = commentInDocs(id);
@@ -2406,7 +2419,7 @@
         STATE.ytDocs[vid] = doc;
         return packYtComment(liveHit, doc);
       }
-      const file = probed ? Promise.resolve(probed) : ownPack("yt_" + vid);
+      const file = probed ? Promise.resolve(probed) : ownPack(ytDocName(vid));
       return file.then((stored) => {
         const found = commentInDoc(stored, id);
         if (found) {
@@ -2417,7 +2430,7 @@
       });
     });
     if (parent && seeds[0] === parent) return finishSeed(parent, null);
-    return Promise.all(seeds.map((vid) => ownPack("yt_" + vid).then((doc) => ({ vid: vid, doc: doc })).catch(() => ({ vid: vid, doc: null })))).then((rows) => {
+    return Promise.all(seeds.map((vid) => ownPack(ytDocName(vid)).then((doc) => ({ vid: vid, doc: doc })).catch(() => ({ vid: vid, doc: null })))).then((rows) => {
       const hit = rows.find((row) => commentInDoc(row.doc, id));
       if (hit) return finishSeed(hit.vid, hit.doc);
       return snapshotDoc(id).then((stub) => ytUsable(stub) ? stub : null).catch(() => null);

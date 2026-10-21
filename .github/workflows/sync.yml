@@ -142,7 +142,8 @@ jobs:
 
       - name: Refresh feeds
         # Timelines, Meta CDN refreshes, and Instagram/Threads comments under 7 days.
-        # X replies and YouTube comments are fetched in the browser.
+        # X replies and YouTube video comments are fetched in the browser.
+        # Community post comments are written to fallback/ytpost_<id>.json here.
         env:
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}

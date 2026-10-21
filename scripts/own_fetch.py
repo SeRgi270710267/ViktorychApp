@@ -1,15 +1,19 @@
 """Fetch public post data without a third-party instance.
 
 X uses the public syndication embed (one post: text, author, likes, reply
-count). That payload has no reply bodies. YouTube comments come from the
-public watch page's innertube continuation: the token whose payload names
+count). That payload has no reply bodies. YouTube video comments come from
+the public watch page's innertube continuation: the token whose payload names
 the comments panel, then `youtubei/v1/next` on www.youtube.com and, if that
-returns no comments, on m.youtube.com. One extra comment page is loaded when
-the first page is short, and one reply page is loaded for a few threads.
-Instagram uses oembed (caption and author, no comment list). Threads uses
-the public mobile post page, which includes visible replies. Nothing here
-sends a cookie, calls the paid X API, solves a bot check, or retries a rate
-limit.
+returns no comments, on m.youtube.com. Community post comments come from the
+public post page (`youtube.com/post/<id>`, or the channel posts page when
+that page has no token). The continuation is the one next to the comments
+section, with or without `CONTINUATION_REQUEST_TYPE_BROWSE`, then
+`youtubei/v1/browse` (or `next` when the page names that). One extra comment
+page is loaded when the first page is short, and one reply page is loaded
+for a few threads. Instagram uses oembed (caption and author, no comment
+list). Threads uses the public mobile post page, which includes visible
+replies. Nothing here sends a cookie, calls the paid X API, solves a bot
+check, or retries a rate limit.
 """
 
 from __future__ import annotations
@@ -42,6 +46,8 @@ RECENT_DAYS = 14
 FILE_CAP = 8
 YT_CAP = 2
 REPLY_PAGES = 4
+COMMUNITY_CAP = 8
+COMMUNITY_FEED_CAP = 6
 YT_NEXT_HOSTS = ("https://www.youtube.com", "https://m.youtube.com")
 FALLBACK_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 _REL = re.compile(r"(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago", re.I)
@@ -224,6 +230,70 @@ def _comment_token(html: str) -> str:
     return _token_text(near.group(1)) if near else ""
 
 
+def _community_token(html: str) -> tuple[str, str]:
+    """The comment continuation published on a community post page.
+
+    The token sits on the comments section. Current pages name
+    ``CONTINUATION_REQUEST_TYPE_BROWSE`` and ``/youtubei/v1/browse``.
+    Older pages omit the request field. A token whose payload names the
+    comment section is accepted either way. The endpoint is ``browse``
+    unless that same window names ``/youtubei/v1/next``.
+    """
+    html = html or ""
+    index = html.find('"targetId":"comments-section"')
+    if index < 0:
+        index = html.find("comment-item-section")
+    if index >= 0:
+        window = html[max(0, index - 2500):index]
+        tokens = re.findall(r'"token":"([^"\\]+)"', window)
+        if tokens:
+            endpoint = "next" if "/youtubei/v1/next" in window and "/youtubei/v1/browse" not in window else "browse"
+            return _token_text(tokens[-1]), endpoint
+    paired = re.findall(
+        r'"continuationCommand":\{"token":"([^"\\]+)","request":"([^"]+)"',
+        html,
+    )
+    for token, request in paired:
+        if request != "CONTINUATION_REQUEST_TYPE_BROWSE":
+            continue
+        if b"comment" not in _token_bytes(token):
+            continue
+        return _token_text(token), "browse"
+    for token in re.findall(r'"continuationCommand":\{"token":"([^"\\]+)"\}', html):
+        if b"comment" not in _token_bytes(token):
+            continue
+        return _token_text(token), "browse"
+    return "", "browse"
+
+
+def _header_count(payload: dict | None) -> int | None:
+    """The comment total on the section header, not the length of this page."""
+    found: list[int] = []
+
+    def walk(node) -> None:
+        if found:
+            return
+        if isinstance(node, dict):
+            header = node.get("commentsHeaderRenderer")
+            if isinstance(header, dict):
+                count = _count(_yt_runs(header.get("commentsCount")))
+                if count is None:
+                    match = re.search(r"\d[\d,]*", _yt_runs(header.get("countText")))
+                    if match:
+                        count = _count(match.group(0).replace(",", ""))
+                if count is not None:
+                    found.append(count)
+                    return
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(payload or {})
+    return found[0] if found else None
+
+
 def extract_watch(html: str) -> dict:
     key = re.search(r'"INNERTUBE_API_KEY":"([^"]+)"', html or "")
     version = re.search(r'"INNERTUBE_CLIENT_VERSION":"([^"]+)"', html or "")
@@ -247,6 +317,18 @@ def _yt_runs(node) -> str:
     return ""
 
 
+def _comment_url(parent: dict) -> str:
+    explicit = str((parent or {}).get("url") or "")
+    if explicit:
+        return explicit
+    parent_id = str((parent or {}).get("statusId") or (parent or {}).get("id") or "")
+    if not parent_id:
+        return ""
+    if (parent or {}).get("kind") == "community":
+        return "https://www.youtube.com/post/" + parent_id
+    return "https://www.youtube.com/watch?v=" + parent_id
+
+
 def _comment_row(comment_id: str, text: str, handle: str, avatar: str, published, likes, reply_count, parent: dict, moment: datetime | None) -> dict:
     parent_id = str(parent.get("statusId") or parent.get("id") or "")
     parent_handle = parent.get("handle") or ""
@@ -266,7 +348,7 @@ def _comment_row(comment_id: str, text: str, handle: str, avatar: str, published
         avatar=avatar or "",
         text=text,
         date=when,
-        url="https://www.youtube.com/watch?v=" + parent_id if parent_id else "",
+        url=_comment_url(parent),
         stats=stats,
         replyingTo={"handle": parent_handle, "id": parent_id} if parent_id or parent_handle else None,
     )
@@ -479,9 +561,11 @@ def _reply_stat(row: dict) -> int:
         return 0
 
 
-def _innertube_next(host: str, key: str, version: str, token: str) -> dict | None:
+def _innertube_next(host: str, key: str, version: str, token: str, endpoint: str = "next") -> dict | None:
     if not token:
         return None
+    if endpoint not in ("next", "browse"):
+        endpoint = "next"
     agent = MOBILE if "m.youtube.com" in host else BROWSER
     body = json.dumps(
         {
@@ -489,7 +573,7 @@ def _innertube_next(host: str, key: str, version: str, token: str) -> dict | Non
             "continuation": token,
         }
     ).encode("utf-8")
-    url = host.rstrip("/") + "/youtubei/v1/next?key=" + urllib.parse.quote(key) + "&prettyPrint=false"
+    url = host.rstrip("/") + "/youtubei/v1/" + endpoint + "?key=" + urllib.parse.quote(key) + "&prettyPrint=false"
     try:
         status, raw = _read(
             url,
@@ -520,6 +604,8 @@ def _merge_rows(rows: list, extra: list) -> None:
 
 def _attach_reply_page(row: dict, payload: dict) -> None:
     parent = {"statusId": row.get("id") or "", "id": row.get("id") or "", "handle": row.get("handle") or ""}
+    if "/post/" in str(row.get("url") or ""):
+        parent["url"] = row["url"]
     kids = parse_innertube_comments(payload, parent, as_siblings=True)
     if not kids:
         kids = parse_thread_renderers(payload, parent)
@@ -568,7 +654,9 @@ def _shortcode(post: dict) -> str:
 
 def _safe_name(post: dict) -> str:
     status = str(post.get("statusId") or post.get("id") or "")
-    if post.get("platform") == "youtube" and post.get("kind") != "community":
+    if post.get("platform") == "youtube" and post.get("kind") == "community":
+        status = "ytpost_" + status
+    elif post.get("platform") == "youtube":
         status = "yt_" + status
     if not status or status in (".", "..") or "/" in status or "\\" in status:
         return ""
@@ -619,6 +707,31 @@ def select_recent(posts: list, moment: datetime | None = None, limit: int = FILE
         chosen_ids.add(str(post.get("id") or ""))
         chosen.append(post)
     return chosen[:limit]
+
+
+def select_community(posts: list, moment: datetime | None = None, limit: int = COMMUNITY_CAP) -> list:
+    """Community posts from the last 14 days.
+
+    When the feed has none that new, the newest few still in the feed are
+    used so the posts on the site have a comment file. The list stays small.
+    """
+    moment = moment or datetime.now(timezone.utc)
+    ranked = []
+    for post in posts or []:
+        if not isinstance(post, dict):
+            continue
+        if post.get("platform") != "youtube" or post.get("kind") != "community":
+            continue
+        age = _age_days(post, moment)
+        if age is None or age < 0:
+            continue
+        ranked.append((age, post))
+    ranked.sort(key=lambda item: item[0])
+    recent = [post for age, post in ranked if age <= RECENT_DAYS]
+    if recent:
+        return recent[:limit]
+    feed_cap = min(limit, COMMUNITY_FEED_CAP)
+    return [post for _age, post in ranked[:feed_cap]]
 
 
 def fetch_x_post(post_id: str) -> dict | None:
@@ -709,6 +822,113 @@ def fetch_youtube_comments(video_id: str, parent: dict | None = None) -> dict | 
     )
 
 
+def _read_html(url: str) -> str:
+    if not url:
+        return ""
+    try:
+        status, html = _read(
+            url,
+            {"User-Agent": BROWSER, "Accept-Language": "en-US,en;q=0.9", "Accept": "text/html"},
+            timeout=25,
+            limit=2_500_000,
+        )
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return ""
+    if status != 200 or "INNERTUBE_API_KEY" not in html:
+        return ""
+    return html
+
+
+def _comment_section(key: str, version: str, token: str, endpoint: str, parent: dict) -> tuple[dict | None, list, str, str]:
+    """Load the comment section. www, then m. Then the other endpoint the same way."""
+    first = endpoint if endpoint in ("browse", "next") else "browse"
+    endpoints = [first, "next" if first == "browse" else "browse"]
+    last = None
+    for ep in endpoints:
+        for host in YT_NEXT_HOSTS:
+            payload = _innertube_next(host, key, version, token, ep)
+            if payload is None:
+                continue
+            last = payload
+            replies = _comments_from(payload, parent)
+            if replies:
+                return payload, replies, host, ep
+    return last, [], "", first
+
+
+def _with_reply_pages(replies: list, payload: dict, parent: dict, host: str, key: str, version: str, endpoint: str) -> None:
+    tokens = reply_continuations(payload or {})
+    if len(replies) < REPLY_CAP:
+        page = next_page_token(payload or {})
+        more = _innertube_next(host, key, version, page, endpoint) if page else None
+        if more:
+            _merge_rows(replies, _comments_from(more, parent))
+            tokens.update(reply_continuations(more))
+    ranked = [row for row in replies if _reply_stat(row) > 0 and not row.get("replies") and tokens.get(str(row.get("id") or ""))]
+    ranked.sort(key=lambda row: (_reply_stat(row), int((row.get("stats") or {}).get("likes") or 0)), reverse=True)
+    for row in ranked[:REPLY_PAGES]:
+        child = _innertube_next(host, key, version, tokens[str(row.get("id") or "")], endpoint)
+        if child:
+            _attach_reply_page(row, child)
+
+
+def fetch_community_comments(post_id: str, parent: dict | None = None) -> dict | None:
+    post_id = str(post_id or "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,}", post_id):
+        return None
+    parent = dict(parent or {})
+    parent.setdefault("statusId", post_id)
+    parent.setdefault("id", post_id)
+    parent["kind"] = "community"
+    parent.setdefault("url", "https://www.youtube.com/post/" + post_id)
+    html = _read_html("https://www.youtube.com/post/" + urllib.parse.quote(post_id) + "?hl=en")
+    if not html or not _community_token(html)[0]:
+        handle = str(parent.get("handle") or "").lstrip("@")
+        channel = str(parent.get("channelId") or "")
+        alt = ""
+        if handle:
+            alt = "https://www.youtube.com/@" + urllib.parse.quote(handle) + "/posts?hl=en"
+        elif channel:
+            alt = "https://www.youtube.com/channel/" + urllib.parse.quote(channel) + "/posts?hl=en"
+        alt_html = _read_html(alt) if alt and post_id else ""
+        if alt_html and post_id in alt_html and _community_token(alt_html)[0]:
+            html = alt_html
+    if not html:
+        return None
+    watch = extract_watch(html)
+    key = watch["key"] or FALLBACK_KEY
+    token, endpoint = _community_token(html)
+    empty = {
+        "postId": "ytpost_" + post_id,
+        "platform": "youtube",
+        "source": "own:innertube",
+        "fetchedAt": now_iso(),
+        "replies": [],
+        "note": "post page had no public comment continuation" if not token else "innertube returned no community comments",
+    }
+    if not token:
+        return empty
+    payload, replies, host, used = _comment_section(key, watch["version"], token, endpoint, parent)
+    if not replies:
+        if payload is None:
+            return None
+        return trim_pack(empty)
+    _with_reply_pages(replies, payload, parent, host, key, watch["version"], used)
+    count = _header_count(payload)
+    pack = {
+        "postId": "ytpost_" + post_id,
+        "platform": "youtube",
+        "source": "own:innertube",
+        "fetchedAt": now_iso(),
+        "replies": replies,
+        "note": "innertube community comments",
+    }
+    if count is not None:
+        pack["commentCount"] = count
+        pack["stats"] = {"replies": count}
+    return trim_pack(pack)
+
+
 def fetch_instagram_oembed(post: dict) -> dict | None:
     code = _shortcode(post)
     if not code:
@@ -765,6 +985,8 @@ def fetch_for_post(post: dict) -> dict | None:
     platform = post.get("platform") or ""
     if platform == "x":
         return fetch_x_post(str(post.get("statusId") or post.get("id") or ""))
+    if platform == "youtube" and post.get("kind") == "community":
+        return fetch_community_comments(str(post.get("statusId") or post.get("id") or ""), post)
     if platform == "youtube":
         return fetch_youtube_comments(str(post.get("statusId") or post.get("id") or ""), post)
     if platform == "instagram":
@@ -793,7 +1015,7 @@ def apply_pack(post: dict, pack: dict) -> None:
 
 def write_fallbacks(posts: list, dest: Path | None = None, moment: datetime | None = None) -> int:
     dest = dest or (ROOT / "fallback")
-    chosen = select_recent(posts, moment)
+    chosen = select_recent(posts, moment) + select_community(posts, moment)
     if dest.exists():
         for old in dest.glob("*.json"):
             old.unlink()

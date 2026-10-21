@@ -664,7 +664,9 @@ def main() -> None:
     check("COMMENT_TTL" in app and "reply-sort" in app and "Updated " in app and 'tab("relevant", "Relevant")' in app and 'tab("recent", "Recent")' in app and 'tab("liked", "Liked")' in app and "replySortMode" in app, "opening a post can sort replies and show when they were fetched")
     yt_loader = app[app.index("function ytStub("):app.index("function liveDuration(")]
     reply_bucket = app[app.index("function replyBucket("):app.index("function ivIso(")]
-    check("ivThread(" in yt_loader and "ivCommunityThread(" in yt_loader and 'ownPack("yt_"' in yt_loader and 'snapshotDoc("yt_"' in yt_loader and "pipedThread(" not in yt_loader and "loadYtComments(post)" in reply_bucket, "youtube comments share one loader on every surface")
+    check("ivThread(" in yt_loader and "ivCommunityThread(" in yt_loader and 'ownPack("yt_"' in yt_loader and 'snapshotDoc("yt_"' in yt_loader and 'ownPack("ytpost_"' in yt_loader and 'snapshotDoc("ytpost_"' in yt_loader and "pipedThread(" not in yt_loader and "loadYtComments(post)" in reply_bucket, "youtube comments share one loader on every surface")
+    community_loader = app[app.index("function ivCommunityThread("):app.index("function ytStub(")]
+    check("ucid=" in community_loader and "commentCount" in community_loader, "community comments pass the channel id and keep the source count")
     check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
     check("status.json" in workflow and "fallback" in workflow, "the deploy publishes status and the own-fetcher files")
     check('name: "sources"' in app and "ownPack" in app and "fxDown" in app and "fallback/" in app and "settled" in app and "source-row" in (ROOT / "styles.css").read_text(encoding="utf-8"), "a hidden sources view fails over to our own files")
@@ -714,7 +716,11 @@ def main() -> None:
         parse_syndication,
         parse_thread_renderers,
         reply_continuations,
+        select_community,
         select_recent,
+        _community_token,
+        _header_count,
+        _safe_name,
     )
     from health import build_status
 
@@ -835,6 +841,31 @@ def main() -> None:
     )
     picked_ids = [post["id"] for post in picked]
     check(picked_ids[0] == "x1" and "ig" in picked_ids and "th" in picked_ids and "yt" in picked_ids and "old" not in picked_ids and "post" not in picked_ids, "fallback files stay on recent posts and skip community comments")
+    community_picked = select_community(
+        [
+            {"id": "oldc", "platform": "youtube", "kind": "community", "date": "2026-03-01T00:00:00Z"},
+            {"id": "newc", "platform": "youtube", "kind": "community", "date": "2026-10-20T00:00:00Z"},
+            {"id": "video", "platform": "youtube", "date": "2026-10-20T00:00:00Z"},
+        ],
+        moment,
+    )
+    check([post["id"] for post in community_picked] == ["newc"], "a community post from the last 14 days is fetched on its own")
+    stale_posts = [
+        {"id": "c%d" % index, "platform": "youtube", "kind": "community", "date": "2026-01-%02dT00:00:00Z" % (index + 1)}
+        for index in range(7)
+    ]
+    stale_ids = [post["id"] for post in select_community(stale_posts, moment)]
+    check(stale_ids == ["c6", "c5", "c4", "c3", "c2", "c1"] and "c0" not in stale_ids, "when nothing is recent, the newest community posts still in the feed are fetched")
+    check(_safe_name({"platform": "youtube", "kind": "community", "id": "Ugabc"}) == "ytpost_Ugabc.json" and _safe_name({"platform": "youtube", "id": "abcdefghijk"}) == "yt_abcdefghijk.json", "community comment files use the ytpost_ prefix")
+    with_request = '"continuationCommand":{"token":"4qmFabc%3D","request":"CONTINUATION_REQUEST_TYPE_BROWSE"},"apiUrl":"/youtubei/v1/browse","targetId":"comments-section"'
+    without_request = '"apiUrl":"/youtubei/v1/next","continuationCommand":{"token":"4qmFxyz"},"targetId":"comments-section"'
+    named = base64.urlsafe_b64encode(b"FEcomment_post_detail").decode().rstrip("=")
+    check(_community_token(with_request) == ("4qmFabc=", "browse"), "a community token with the browse request field is kept")
+    check(_community_token(without_request) == ("4qmFxyz", "next"), "a community token without the request field follows the page endpoint")
+    check(_community_token('"continuationCommand":{"token":"' + named + '"}')[0] == named, "a comment continuation is accepted when the section id is missing")
+    check(_community_token('"continuationCommand":{"token":"Egwatch","request":"CONTINUATION_REQUEST_TYPE_WATCH_NEXT"}') == ("", "browse"), "a watch-next token is not a community comment token")
+    check(_header_count({"panel": {"commentsHeaderRenderer": {"commentsCount": {"runs": [{"text": "70"}]}}}}) == 70, "the community comment total comes from the header")
+    check(_header_count({"commentsHeaderRenderer": {"countText": {"runs": [{"text": "1,204"}, {"text": " Comments"}]}}}) == 1204, "a comma count on the header is kept")
     status_doc = build_status(
         [
             {"id": "fxtwitter", "group": "X", "up": False, "detail": "down", "down": "fxtwitter"},
