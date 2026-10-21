@@ -3200,7 +3200,18 @@ html[data-theme="default"] .gresults-logo { color: #000; }
   background: radial-gradient(circle, var(--muted) 1.2px, transparent 1.6px) 0 0 / 6px 6px;
 }
 .tab-grip:active { cursor: grabbing; }
-.tab-pair.is-dragging, .note-tab.is-dragging, .tab-order-row.is-dragging, .tab-manage-row.is-dragging { opacity: 0.45; }
+.tab-order-row.is-dragging, .tab-manage-row.is-dragging { opacity: 0.45; }
+.notes-top .note-gear { border: 0; border-radius: 9999px; background: transparent; color: var(--text); }
+.notes-top .note-gear:hover { background: var(--hover); }
+.notes-top .note-gear svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .tab-dot {
   width: 8px;
   height: 8px;
@@ -3209,25 +3220,6 @@ html[data-theme="default"] .gresults-logo { color: #000; }
   flex: none;
   display: inline-block;
 }
-.tab-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 16px;
-  height: 16px;
-  margin-left: 6px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--blue);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 16px;
-  font-style: normal;
-  vertical-align: 1px;
-}
-.tab.tab-plus { flex: 0 0 auto; min-width: 48px; color: var(--text); }
-.tab.tab-plus svg { width: 18px; height: 18px; fill: currentColor; }
 .bell-split { height: 1px; background: var(--line); margin: 8px 0; }
 .tab-switch {
   display: flex;

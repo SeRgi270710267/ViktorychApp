@@ -5167,12 +5167,6 @@ const here = parseRoute();
       const expanded = STATE.tabMenu === id;
       return `<div class="tab-pair on">${tabBtn(id, label, true, face, noteId)}<button class="tab-caret" type="button" data-act="tab-options" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
     };
-    const catFace = (item) => {
-      const grip = `<span class="tab-grip" data-drag-tab="${esc(item.id)}" data-act="stop" aria-label="Drag to reorder"></span>`;
-      const dot = !item.emoji && item.color ? `<i class="tab-dot" style="background:${esc(item.color)}"></i>` : "";
-      return grip + dot;
-    };
-    const catName = (item) => (item.emoji ? item.emoji + " " : "") + item.name;
     return `<div class="topbar tall">
       <h1 class="vh">Home</h1>
       <div class="mhead">
@@ -5185,7 +5179,7 @@ const here = parseRoute();
         <div class="tabs" role="tablist" aria-label="Home timeline">
           ${tabWithMenu("foryou", "For you")}
           ${tabWithMenu("following", "Following")}
-          ${cats.map((item) => tabWithMenu("cat:" + item.id, catName(item), catFace(item), item.id)).join("")}
+          ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, "", item.id)).join("")}
           ${lists.map((l) => tabWithMenu("list:" + l.id, l.name)).join("")}
         </div>
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button>
@@ -7721,17 +7715,6 @@ const here = parseRoute();
     return notes.filter((note) => noteInTab(note, tab));
   }
 
-  function tabUnreadCount(tab) {
-    const notes = tab ? notesForTab(tab) : ((STATE.settings && STATE.settings.bellNotes) || []);
-    const read = tab ? (Number(tab.readAt) || 0) : (Number(STATE.settings && STATE.settings.bellRead) || 0);
-    return notes.filter((note) => (Number(note.at) || 0) > read).length;
-  }
-
-  function badgeHtml(count) {
-    if (!count) return "";
-    return `<i class="tab-count">${count > 99 ? "99+" : String(count)}</i>`;
-  }
-
   function tabMark(tab) {
     if (tab && tab.emoji) return esc(tab.emoji);
     if (tab && tab.color) return `<i class="tab-dot" style="background:${esc(tab.color)}"></i>`;
@@ -7755,7 +7738,11 @@ const here = parseRoute();
 
   function tabContextMenu() {
     const menu = STATE.tabContext;
-    if (!menu || !menu.id || !feedTabById(menu.id)) return "";
+    if (!menu || !menu.id) return "";
+    if (menu.id === "all") {
+      return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="All" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-new"><span class="bell-choice-ico">${icon("plus")}</span><span class="bell-choice-label">New tab</span></button><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">Manage tabs</span></button></div></div>`;
+    }
+    if (!feedTabById(menu.id)) return "";
     const tab = feedTabById(menu.id);
     return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${esc(tab.name)}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("pencil")}</span><span class="bell-choice-label">Edit tab</span></button><button class="bell-choice" type="button" data-act="feed-tab-ask-delete" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">Delete tab</span></button></div></div>`;
   }
@@ -7802,11 +7789,11 @@ const here = parseRoute();
     }
   }
 
-  function noteTabButton(id, label, on, face, badge) {
-    const grip = id === "all" ? "" : `<span class="tab-grip" data-drag-tab="${esc(id)}" data-act="stop" aria-label="Drag to reorder"></span>`;
-    const btn = `<button class="tab note-tab${on ? " on" : ""}" type="button" data-act="note-tab" data-tab="${esc(id)}" data-note-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}">${grip}${face || ""}<span>${esc(label)}${badge || ""}</span></button>`;
-    if (!on || id === "all") return btn;
-    return `<div class="tab-pair on">${btn}<button class="tab-caret" type="button" data-act="note-tab-menu" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-haspopup="menu">${icon("caret")}</button></div>`;
+  function noteTabButton(id, label, on) {
+    const btn = `<button class="tab${on ? " on" : ""}" data-act="note-tab" data-tab="${esc(id)}" data-note-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}"><span>${esc(label)}</span></button>`;
+    if (!on) return btn;
+    const expanded = !!(STATE.tabContext && STATE.tabContext.id === id);
+    return `<div class="tab-pair on">${btn}<button class="tab-caret" type="button" data-act="note-tab-menu" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
   }
 
   function noteRow(note) {
@@ -7822,13 +7809,10 @@ const here = parseRoute();
     const tabs = feedTabs().filter((tab) => tab.showNotes !== false);
     const current = active === "all" ? null : feedTabById(active);
     const notes = current ? notesForTab(current) : ((STATE.settings && STATE.settings.bellNotes) || []);
-    const buttons = noteTabButton("all", "All", active === "all", "", badgeHtml(active === "all" ? 0 : tabUnreadCount(null))) + tabs.map((tab) => {
-      const face = !tab.emoji && tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : "";
-      const name = (tab.emoji ? tab.emoji + " " : "") + tab.name;
-      return noteTabButton(tab.id, name, active === tab.id, face, badgeHtml(active === tab.id ? 0 : tabUnreadCount(tab)));
-    }).join("") + `<button class="tab tab-plus" type="button" data-act="feed-tab-new" aria-label="New tab"><span>${icon("plus")}</span></button>`;
+    const buttons = noteTabButton("all", "All", active === "all") + tabs.map((tab) => noteTabButton(tab.id, tab.name, active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="Scroll tabs left" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="Notification tabs">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button></div>`;
-    const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>Notifications</h1></div></div>${bar}</div>`;
+    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="Manage tabs">${menuIcon("gear")}</button>`;
+    const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>Notifications</h1></div>${gear}</div>${bar}</div>`;
     let body = "";
     if (!notes.length && active === "all") body = emptyBlock("Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
     else if (!notes.length) body = emptyBlock("Nothing in " + (current ? current.name : "this tab") + " yet", "New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All.");
@@ -7932,7 +7916,7 @@ const here = parseRoute();
   }
 
   function openNoteTabMenu(id, x, y) {
-    if (!id || id === "all" || !feedTabById(id)) return;
+    if (!id || (id !== "all" && !feedTabById(id))) return;
     STATE.tabContext = { id: id, left: x, top: y };
     STATE.tabAssign = null;
     STATE.menu = null;
@@ -8167,7 +8151,8 @@ if (STATE.histClear) {
           <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">Following</span><span class="handle">Always on Home</span></span></div>
           ${rows || `<p class="phandle">Pin a List to add it beside Following.</p>`}
           <h3>Custom tabs</h3>
-          ${feedTabs().map((tab) => `<div class="acct-row tab-manage-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="Drag to reorder"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="who-copy"><span class="name">${esc(tab.name)}</span><span class="handle">${tab.showHome === false ? "Hidden on Home" : "On Home"}${tab.showNotes === false ? " · Hidden in Notifications" : ""}</span></span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">Edit</button></div>`).join("") || `<p class="phandle">Create a tab from Notifications with +.</p>`}
+          <button class="outline" type="button" data-act="feed-tab-new" aria-label="New tab">New tab</button>
+          ${feedTabs().map((tab) => `<div class="acct-row tab-manage-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="Drag to reorder"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="who-copy"><span class="name">${esc(tab.name)}</span><span class="handle">${tab.showHome === false ? "Hidden on Home" : "On Home"}${tab.showNotes === false ? " · Hidden in Notifications" : ""}</span></span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">Edit</button></div>`).join("") || `<p class="phandle">Create a tab to group accounts on Home and in Notifications.</p>`}
         </div>
       </div></div>`;
     }
@@ -10463,8 +10448,8 @@ const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.foll
   let swallowTabDrag = false;
   document.addEventListener("pointerdown", (event) => {
     const grip = event.target.closest && event.target.closest("[data-drag-tab]");
-    if (!grip || event.button > 0) return;
-    const node = grip.closest(".tab-pair") || grip.closest(".tab-order-row, .tab-manage-row, .note-tab");
+    if (!grip || event.button > 0 || grip.closest(".tabs")) return;
+    const node = grip.closest(".tab-order-row, .tab-manage-row");
     if (!node) return;
     tabDrag = { pointer: event.pointerId, id: grip.dataset.dragTab, x: event.clientX, y: event.clientY, started: false, node: node };
     try { grip.setPointerCapture(event.pointerId); } catch (err) { /* the drag still follows the pointer */ }
