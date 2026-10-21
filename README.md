@@ -1,4 +1,4 @@
-# rss-feeds
+# SuperintelApp
 
 An X-style home for posts from X, Threads, Instagram, YouTube, VK, and other RSS sources. The page is a static site (`index.html`, `styles.css`, `app.js`). GitHub Actions builds the timeline and publishes it. The repository keeps the code, the config, and a small `feeds.json` seed. X replies and YouTube comments load in the browser when a post opens.
 
@@ -12,7 +12,7 @@ VK's official community (`vk.com/vk`) is a followed account. Sync calls `wall.ge
 python3 -m http.server 8080
 ```
 
-Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHub Pages. The installable app is scoped to `/rss-feeds/` (the GitHub Pages path). More and the mobile menu include Install app. `sw.js` caches the shell, refreshes `feeds.json` and archive shards in the background, and keeps bookmarked images for offline reading. Notifications stay off until that setting is tapped.
+Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHub Pages. The manifest `id`, `scope`, and `start_url` are relative (`./`), so the installable app is the directory that serves it. On GitHub Pages that directory is `/SuperintelApp/`. More and the mobile menu include Install app. `sw.js` is registered as `sw.js` with no extra scope, caches the shell, refreshes `feeds.json` and archive shards in the background, and keeps bookmarked images for offline reading. Notifications stay off until that setting is tapped.
 
 | Route | Page |
 | --- | --- |
@@ -163,7 +163,7 @@ The seed built from the current `feeds.json` is 35 stubs. Each stub averages **2
 
 The 300 KB/year figure is the same stub at a busier pace: `1400 × 213 bytes ≈ 298 KB`, about four posts a day. At the volume in this seed, a year of shards is a few dozen kilobytes.
 
-The browser reads the `data` branch. `archive/index.json`, the current UTC month, and the newest shard are requested from `https://raw.githubusercontent.com/owner-account/rss-feeds/data/archive/<file>` first, because jsDelivr keeps a branch name cached for about 12 hours. Older months start at `https://cdn.jsdelivr.net/gh/owner-account/rss-feeds@data/archive/<file>`. After that host, the page tries the other GitHub URL, then `https://archive.org/download/sergi-rss-feeds-archive/archive/<file>`. All three respond with `Access-Control-Allow-Origin: *`.
+The browser reads the `data` branch. On a `github.io` host it takes the repository name from the first path segment, so `archive/index.json`, the current UTC month, and the newest shard are requested from `https://raw.githubusercontent.com/<owner>/<repo>/data/archive/<file>` first, because jsDelivr keeps a branch name cached for about 12 hours. Older months start at `https://cdn.jsdelivr.net/gh/<owner>/<repo>@data/archive/<file>`. For this repository that is `owner-account/SuperintelApp`. After that host, the page tries the other GitHub URL, then `https://archive.org/download/sergi-rss-feeds-archive/archive/<file>`. All three respond with `Access-Control-Allow-Origin: *`. The Internet Archive item id stays `sergi-rss-feeds-archive` so the shards already stored there keep their address.
 
 Each sync merges a complete archive from the live site, then from the raw `data` branch, then from that Internet Archive item. Stubs already stored keep their first text. A partial download leaves the local files alone, and a source that omits a month leaves that month in place. The half-hour run copies `archive/` into the Pages artifact and does not push the `data` branch. A post that drops out of `feeds.json` between daily updates is in that artifact, and the next build merges it when the live site still has the file. The shards the browser reads change when the daily `data` push lands.
 
@@ -514,4 +514,4 @@ Periodic background sync is registered only after notifications are turned on, a
 
 ## GitHub Pages
 
-Pages has to be built by GitHub Actions (Settings → Pages → Build and deployment → Source: GitHub Actions). A deploy-from-branch source will not pick up this workflow. `.nojekyll` is in the artifact so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`), so the site works at `/` or under `/rss-feeds/`.
+Pages has to be built by GitHub Actions (Settings → Pages → Build and deployment → Source: GitHub Actions). A deploy-from-branch source will not pick up this workflow. `.nojekyll` is in the artifact so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`), so the site works at `/` or under the repository directory. The published path is `/SuperintelApp/`. `404.html` sends a missing file under that directory back to the matching hash route. Saved settings stay under `rss-feeds-settings-v1` and the other `rss-feeds-` keys so a path change does not drop them.

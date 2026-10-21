@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SuperintelApp</title>
+</head>
+<body>
+  <p><a id="go" href="/SuperintelApp/#/home">Open SuperintelApp</a></p>
+  <script>
+  (function () {
+    var path = location.pathname || "/";
+    var parts = path.split("/");
+    var at = -1;
+    var i;
+    for (i = 0; i < parts.length; i++) {
+      if (String(parts[i] || "").toLowerCase() === "superintelapp") { at = i; break; }
+    }
+    var root = "/SuperintelApp/";
+    if (at >= 0) {
+      parts[at] = "SuperintelApp";
+      root = parts.slice(0, at + 1).join("/") + "/";
+    }
+    var rest = at >= 0 ? parts.slice(at + 1).join("/") : "";
+    rest = rest.replace(/^\/+|\/+$/g, "");
+    var hash = location.hash || "";
+    if (!hash || hash === "#") {
+      var watch = /^s\/watch-([A-Za-z0-9_-]{11})\.html$/i.exec(rest);
+      var share = /^s\/([A-Za-z0-9]+)-([A-Za-z0-9._-]+)\.html$/i.exec(rest);
+      var profile = /^u\/([A-Za-z0-9]+)-([A-Za-z0-9._-]+)\.html$/i.exec(rest);
+      var pages = {
+        home: "#/home",
+        explore: "#/explore",
+        notifications: "#/notifications",
+        messages: "#/messages",
+        feeds: "#/feeds",
+        lists: "#/lists",
+        bookmarks: "#/bookmarks",
+        settings: "#/settings",
+        subscriptions: "#/subscriptions",
+        following: "#/following",
+        "index.html": "#/home"
+      };
+      var lower = rest.toLowerCase();
+      if (watch) hash = "#/watch/youtube:" + watch[1];
+      else if (share && share[1].toLowerCase() === "space") hash = "#/spaces/" + encodeURIComponent(share[2]);
+      else if (share) {
+        var platform = share[1].toLowerCase();
+        var ident = encodeURIComponent(share[2]);
+        hash = platform === "x" ? "#/@_/status/" + ident : "#/" + encodeURIComponent(platform) + "/_/status/" + ident;
+      } else if (profile) {
+        var who = profile[1].toLowerCase();
+        var handle = encodeURIComponent(profile[2]);
+        hash = who === "x" ? "#/@" + handle : "#/" + encodeURIComponent(who) + "/" + handle;
+      } else if (pages[lower]) hash = pages[lower];
+      else if (lower.indexOf("spaces/") === 0) hash = "#/spaces/" + encodeURIComponent(rest.slice("spaces/".length));
+      else hash = "#/home";
+    }
+    var search = /[?&]tv=1(?:&|$)/.test(location.search || "") ? "?tv=1" : "";
+    var next = root + hash + search;
+    var go = document.getElementById("go");
+    if (go) go.setAttribute("href", next);
+    location.replace(next);
+  })();
+  </script>
+</body>
+</html>

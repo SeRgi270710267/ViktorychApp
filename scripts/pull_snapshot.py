@@ -28,9 +28,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from adapters.common import post_is_bridge_error  # noqa: E402
 from adapters.x_replies import comments_kept  # noqa: E402
 from archive import load_archive, merge_stubs, purge_bridge_errors, save_archive  # noqa: E402
+from site_paths import pages_base, raw_data, user_agent  # noqa: E402
 
-SITE = "https://owner-account.github.io/rss-feeds/"
-DATA_ARCHIVE = "https://raw.githubusercontent.com/owner-account/rss-feeds/data/"
+SITE = pages_base()
+DATA_ARCHIVE = raw_data()
 IA_ARCHIVE = "https://archive.org/download/sergi-rss-feeds-archive/"
 IA_MANIFEST = "https://archive.org/download/superintelapp-manifest/"
 ARCHIVE_SOURCES = (
@@ -38,7 +39,7 @@ ARCHIVE_SOURCES = (
     ("data", DATA_ARCHIVE),
     ("ia", IA_ARCHIVE),
 )
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 
 
 def _get(url: str) -> bytes | None:

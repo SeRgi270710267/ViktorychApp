@@ -10,9 +10,16 @@ conversation id and nowhere else.
 from __future__ import annotations
 
 import os
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+_SCRIPTS = Path(__file__).resolve().parent
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+from site_paths import user_agent  # noqa: E402
 
 X_API_HOSTS = frozenset(
     {
@@ -87,7 +94,7 @@ def conversation_search(status_id: str, timeout: int = 20) -> str | None:
         raise ValueError(f"refusing {host}{path}")
     request = urllib.request.Request(
         url,
-        headers={"Authorization": f"Bearer {token}", "User-Agent": "rss-feeds-preview/1.0"},
+        headers={"Authorization": f"Bearer {token}", "User-Agent": user_agent()},
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:

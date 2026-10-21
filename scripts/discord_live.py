@@ -32,6 +32,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from site_paths import pages_base  # noqa: E402
 from adapters.discord import (  # noqa: E402
     MENTION_CHANNEL,
     MENTION_ROLE,
@@ -58,7 +59,6 @@ DEPLOY_EVERY = 600
 RUN_LIMIT = (5 * 60 + 40) * 60
 NTFY_LIMIT = 3800
 DEFAULT_TOPIC = "superintelmusic-discord-th-7f3a91c2"
-PAGES = "https://owner-account.github.io/SuperintelApp/"
 UA = "superintel-preview/1.0"
 
 STOP = {"now": False}
@@ -470,7 +470,7 @@ def header(client: Client, server: dict):
 def published_here(path: str):
     if not path or ".." in path or path.startswith("/"):
         return None
-    request = urllib.request.Request(PAGES + path, headers={"User-Agent": UA, "Accept": "application/json"})
+    request = urllib.request.Request(pages_base() + path, headers={"User-Agent": UA, "Accept": "application/json"})
     try:
         with urllib.request.urlopen(request, timeout=20) as response:
             if getattr(response, "status", 200) != 200:

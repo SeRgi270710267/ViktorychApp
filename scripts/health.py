@@ -26,9 +26,10 @@ from own_fetch import (  # noqa: E402
     fetch_x_post,
     fetch_youtube_comments,
 )
+from site_paths import user_agent  # noqa: E402
 from x_guard import assert_not_x_api, open_url  # noqa: E402
 
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 FX = "https://api.fxtwitter.com"
 IV_SEEDS = (
     "https://invidious.f5.si",

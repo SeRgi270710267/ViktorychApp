@@ -10,24 +10,43 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Feeds">
+  <meta name="application-name" content="SintelApp">
+  <meta name="apple-mobile-web-app-title" content="SintelApp">
   <meta name="referrer" content="no-referrer">
   <meta name="description" content="An X-style home for posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="Feeds">
+  <meta property="og:title" content="SuperintelApp">
   <meta property="og:description" content="Posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
-  <meta property="og:url" content="https://owner-account.github.io/rss-feeds/">
-  <meta property="og:site_name" content="Feeds">
-  <meta property="og:image" content="https://owner-account.github.io/rss-feeds/icons/icon-512.png">
+  <meta property="og:url" content="__SITE_BASE__">
+  <meta property="og:site_name" content="SuperintelApp">
+  <meta property="og:image" content="__SITE_BASE__icons/icon-512.png">
   <meta property="og:image:width" content="512">
   <meta property="og:image:height" content="512">
-  <meta property="og:image:alt" content="Feeds">
+  <meta property="og:image:alt" content="SuperintelApp">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Feeds">
+  <meta name="twitter:title" content="SuperintelApp">
   <meta name="twitter:description" content="Posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
-  <meta name="twitter:image" content="https://owner-account.github.io/rss-feeds/icons/icon-512.png">
-  <link rel="canonical" href="https://owner-account.github.io/rss-feeds/">
-  <title>Home / Feeds</title>
+  <meta name="twitter:image" content="__SITE_BASE__icons/icon-512.png">
+  <link rel="canonical" href="__SITE_BASE__">
+  <title>Home / SuperintelApp</title>
+  <script>
+    (function () {
+      var path = location.pathname || "/";
+      if (/\/index\.html$/i.test(path)) path = path.slice(0, -"index.html".length);
+      path = path.replace(/\/(?:s|u)\/[^/]+$/, "/");
+      if (path.slice(-1) !== "/") path += "/";
+      var base = location.origin + path;
+      var nodes = document.querySelectorAll("meta[content], link[href]");
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        ["content", "href"].forEach(function (attr) {
+          var value = el.getAttribute(attr);
+          if (!value || value.indexOf("__SITE_BASE__") < 0) return;
+          el.setAttribute(attr, value.split("__SITE_BASE__").join(base));
+        });
+      }
+    })();
+  </script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="favicon.svg">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">

@@ -47,9 +47,10 @@ from adapters.x_replies import (  # noqa: E402
     status_object,
     _parent_handle,
 )
+from site_paths import user_agent  # noqa: E402
 from x_guard import assert_not_x_api, auth_cookie_header, conversation_search, open_url  # noqa: E402
 
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 NEST_CAP = 20
 NITTER_HOSTS = (

@@ -1115,7 +1115,7 @@
     }
     if (route && route.name === "spaces") {
       const item = spaceModel(route.id);
-      if (item) document.title = item.title + " / Feeds";
+      if (item) document.title = item.title + " / SuperintelApp";
     }
   }
 

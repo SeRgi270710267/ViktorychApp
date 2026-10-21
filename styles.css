@@ -156,14 +156,20 @@ img { max-width: 100%; }
   border-radius: 9999px;
 }
 .logo {
-  width: 50px;
-  height: 50px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 2px;
+  justify-content: flex-start;
+  width: max-content;
+  max-width: 100%;
+  height: 50px;
+  margin: 2px 0 6px;
+  padding: 0 12px;
+  color: #fff;
 }
-.logo svg { width: 30px; height: 30px; fill: currentColor; }
+.logo .logo-full { display: block; height: 28px; width: auto; }
+.logo .logo-si { display: none; }
+html[data-theme="default"] .logo,
+html[data-theme="default"] .m-logo { color: #000; }
 .logo:hover, .nav-item:hover, .icon-btn:hover, .more-btn:hover, .m-ava:hover, .m-icon:hover {
   background: var(--hover);
 }
@@ -1666,6 +1672,9 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 @media (max-width: 1279px) and (min-width: 500px) {
   .nav { width: 88px; flex-basis: 88px; padding: 0 4px; align-items: center; }
   .nav-scroll { align-items: center; }
+  .logo { width: 50px; height: 50px; margin: 2px 0; padding: 0; justify-content: center; }
+  .logo .logo-full { display: none; }
+  .logo .logo-si { display: block; height: 26px; width: auto; }
   .nav-label, .account-meta, .post-label, .account-pill .dots { display: none; }
   .nav-item { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; }
   .post-btn { width: 50px; height: 50px; padding: 0; max-width: none; }
@@ -1715,11 +1724,15 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    height: 32px;
+    color: #fff;
+    text-decoration: none;
   }
+  .m-logo svg { display: block; height: 22px; width: auto; }
   .m-ava { width: 32px; height: 32px; padding: 0; }
   .m-ava .ava, .m-ava .initials { width: 32px; height: 32px; font-size: 14px; }
-  .m-logo { display: flex; }
-  .m-logo svg { width: 26px; height: 26px; fill: var(--text); }
   .bottom-nav {
     display: flex;
     position: fixed;

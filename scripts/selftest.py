@@ -7,6 +7,7 @@ import base64
 import html as html_lib
 import json
 import os
+import re
 import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -820,7 +821,32 @@ def main() -> None:
 
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
-    check(manifest["display"] == "standalone" and manifest["scope"] == "/rss-feeds/", "the manifest is a standalone app scoped to /rss-feeds/")
+    workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    check(manifest["display"] == "standalone" and manifest["scope"] == "./" and manifest["id"] == "./" and manifest["name"] == "SuperintelApp" and manifest["short_name"] == "SintelApp", "the install name is SuperintelApp, the icon label is SintelApp, and scope and id follow the manifest directory")
+    check("404.html" in workflow and "__SITE_BASE__" in workflow and "GITHUB_REPOSITORY" in workflow, "the deploy publishes the 404 fallback and stamps the Pages URL from the repository")
+    missing = ROOT / "404.html"
+    missing_text = missing.read_text(encoding="utf-8")
+    check("location.replace" in missing_text and "SuperintelApp" in missing_text and 'toLowerCase() === "superintelapp"' in missing_text, "a missing page under this site redirects to SuperintelApp")
+    from site_paths import pages_base, raw_data, cdn_data
+    saved_repo = os.environ.pop("GITHUB_REPOSITORY", None)
+    try:
+        check(pages_base() == "https://owner-account.github.io/SuperintelApp/" and raw_data().endswith("/SuperintelApp/data/") and "SuperintelApp@data/" in cdn_data(), "Pages, raw, and jsDelivr URLs default to SuperintelApp")
+        os.environ["GITHUB_REPOSITORY"] = "Example/Other"
+        check(pages_base() == "https://example.github.io/Other/", "a renamed repository follows GITHUB_REPOSITORY")
+    finally:
+        os.environ.pop("GITHUB_REPOSITORY", None)
+        if saved_repo:
+            os.environ["GITHUB_REPOSITORY"] = saved_repo
+    stale = []
+    old_repo = "rss-" + "feeds"
+    stale_re = re.compile(r"github\.io/" + old_repo + r"|owner-account/" + old_repo + r"|/" + old_repo + r"/")
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or "fixtures" in path.parts or path.suffix not in {".js", ".py", ".html", ".yml", ".md", ".webmanifest", ".css", ".json"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if stale_re.search(text):
+            stale.append(str(path.relative_to(ROOT)))
+    check(not stale, "old rss-feeds URLs are gone: " + ", ".join(stale))
     check(str(manifest["start_url"]).endswith("#/home"), "the manifest opens the home timeline")
     check("window-controls-overlay" in manifest["display_override"], "desktop installs can use the window controls overlay")
     purposes = {icon.get("purpose") for icon in manifest["icons"]}
@@ -840,7 +866,6 @@ def main() -> None:
     check("function creatorOf(" in app and "function repostBanner(" in app and "function countsAsUpload(" in app and "repostComment" in app, "video cards credit the original creator and keep a repost comment")
     check("parseSharedLink" in app and "startViewTransition" in app and "rss-feeds-timeline-v1" in app and "rss-feeds-bookmark-queue" in app and "setAppBadge" in app and 'decoding="async"' in app and "navigator.vibrate" in app, "share targets, view transitions, offline snapshots, badges, and haptics are wired")
     check("requestPermission" in app and app.index("requestPermission") > app.index("data-act=\"notify\""), "notification permission is requested from the settings control")
-    workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check("manifest.webmanifest" in workflow and "__SW_VERSION__" in workflow and "GITHUB_SHA" in workflow, "the deploy copies the app shell and stamps the service worker")
     check('ranking_mode: "recency"' in app, "fxtwitter conversations also request newest replies")
     check("COMMENT_TTL" in app and "reply-sort" in app and "Updated " in app and 'tab("relevant", "Relevant")' in app and 'tab("recent", "Recent")' in app and 'tab("liked", "Liked")' in app and "replySortMode" in app, "opening a post can sort replies and show when they were fetched")
@@ -878,16 +903,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "discord-servers1-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel3-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "discord-servers1-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "superintel3-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "discord-servers1-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel3-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
@@ -912,7 +937,7 @@ def main() -> None:
     check("bellButton" in (ROOT / "people.js").read_text(encoding="utf-8"), "unified profiles get the same notify bell")
     check("pinned.slice" not in app and "lists.slice(0," not in app, "pinned home tabs are not capped")
     check("function sharePostUrl(" in app and "function shareProfileUrl(" in app and "isn’t in the published snapshot" in app and 's/watch-"' in app and 's/" + (post.platform' in app and "function notePublished(" in app and "PUBLISHED.posts" in app, "share and copy use the static preview pages, and a live post outside the snapshot does not")
-    check('og:image" content="https://owner-account.github.io/rss-feeds/icons/icon-512.png"' in page and 'rel="canonical"' in page and 'og:site_name" content="Feeds"' in page, "the home page has Open Graph tags and the Feeds icon")
+    check('og:image" content="__SITE_BASE__icons/icon-512.png"' in page and 'rel="canonical" href="__SITE_BASE__"' in page and 'og:site_name" content="SuperintelApp"' in page and "<title>Home / SuperintelApp</title>" in page and 'apple-mobile-web-app-title" content="SintelApp"' in page and '" / SuperintelApp"' in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'class="logo-full"' in app and 'class="logo-si"' in app and "function githubRepo(" in app and "rss-feeds-settings-v1" in app, "the home page names SuperintelApp, the wordmark links home, and the repository URL is derived")
     check("function shellDocument(" in worker and "/\\/(?:s|u)\\/" in worker, "a share-page navigation does not replace the cached app shell")
     check("python3 scripts/share_pages.py --site _site" in workflow, "the deploy rebuilds share pages inside the artifact")
     with tempfile.TemporaryDirectory() as share_dir:
@@ -926,7 +951,7 @@ def main() -> None:
                 {"platform": "discord", "id": "discord:10:20", "statusId": "discord:10:20", "handle": "ada", "author": "Ada", "text": "hello", "url": "https://discord.com/channels/1/10/20"},
                 {"platform": "x", "id": "nitter", "statusId": "nitter", "handle": "ada", "author": "Ada", "text": "From nitter", "media": [{"type": "photo", "url": "http://nitter.example/pic/media%2Fabc.jpg"}]},
                 {"platform": "x", "id": "mp4", "statusId": "mp4", "handle": "ada", "author": "Ada", "text": "Clip", "media": [{"type": "video", "url": "http://video.twimg.com/amplify_video/1/vid/avc1/720x720/a.mp4", "poster": "https://pbs.twimg.com/amplify_video_thumb/1/img/a.jpg"}]},
-                {"platform": "x", "id": "cdn", "statusId": "cdn", "handle": "cdn", "author": "CDN", "text": "skip", "avatar": "https://cdn.jsdelivr.net/gh/owner-account/rss-feeds@data/archive/x.jpg", "media": [{"type": "photo", "url": "https://raw.githubusercontent.com/owner-account/rss-feeds/data/archive/x.jpg"}]},
+                {"platform": "x", "id": "cdn", "statusId": "cdn", "handle": "cdn", "author": "CDN", "text": "skip", "avatar": "https://cdn.jsdelivr.net/gh/owner-account/SuperintelApp@data/archive/x.jpg", "media": [{"type": "photo", "url": "https://raw.githubusercontent.com/owner-account/SuperintelApp/data/archive/x.jpg"}]},
             ],
         }), encoding="utf-8")
         archive = share_root / "archive"
@@ -939,7 +964,7 @@ def main() -> None:
         (share_root / "s" / "stale.html").write_text("old", encoding="utf-8")
         counts = build_share_pages(
             share_root,
-            "https://owner-account.github.io/rss-feeds/",
+            "https://owner-account.github.io/SuperintelApp/",
             thumb_probe=lambda url: "maxresdefault.jpg" in url,
         )
         post_html = (share_root / "s" / "x-100.html").read_text(encoding="utf-8")
@@ -954,7 +979,7 @@ def main() -> None:
         check('og:title" content="Ada (@ada) on Discord"' in discord_html and "#/discord/ada/status/discord%3A10%3A20" in discord_html, "an id with colons still gets a share page and opens that post")
         check(not (share_root / "s" / "stale.html").exists(), "rebuilding share pages removes pages from the previous deploy")
         check("Ada &lt;script&gt;" in post_html and "<script>alert" not in post_html and "A &lt;b&gt;post&lt;/b&gt;" in post_html, "share page text is escaped")
-        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and 'og:site_name" content="Feeds"' in post_html and 'name="theme-color" content="#000000"' in post_html and 'rel="canonical"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL")
+        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and 'og:site_name" content="SuperintelApp"' in post_html and 'name="theme-color" content="#000000"' in post_html and 'rel="canonical"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL")
         description = html_lib.unescape(post_html.split('og:description" content="', 1)[1].split('"', 1)[0])
         check("name=large" in post_html and 'og:image:width" content="2048"' in post_html and 'twitter:card" content="summary_large_image"' in post_html and description.endswith("…") and len(description) <= 200, "a wide image is preferred and the description stays near 200 characters")
         from share_pages import sized as size_share_image
@@ -978,7 +1003,7 @@ def main() -> None:
         small = choose_youtube_thumb("abcdefghijk", lambda url: False)
         check(wide["width"] == 1280 and wide["height"] == 720 and wide["url"].endswith("maxresdefault.jpg"), "a YouTube poster prefers the 1280px image")
         check(medium["width"] == 640 and "sddefault.jpg" in medium["url"] and small["width"] == 480 and small["url"].endswith("hqdefault.jpg"), "a missing wide poster falls back to a thumbnail that exists")
-        check("#/instagram/ada/status/https%3A%2F%2Fwww.instagram.com" in ig_html and "Open in Feeds" in ig_html, "an unsafe id still opens the post the app can find")
+        check("#/instagram/ada/status/https%3A%2F%2Fwww.instagram.com" in ig_html and "Open in SuperintelApp" in ig_html, "an unsafe id still opens the post the app can find")
         check("old &lt;i&gt;note&lt;/i&gt;" in stub_html and "should not replace" not in post_html, "a stub fills a missing post and does not replace a stored one")
         check('og:type" content="profile"' in profile_html and "Hello &amp; welcome" in profile_html and 'icons/og-card.png' not in profile_html, "a profile page uses the account and keeps its bio")
         check((share_root / "icons" / "og-card.png").is_file(), "the branded fallback card is written into the artifact")
@@ -1364,7 +1389,7 @@ def main() -> None:
     check(png_size(ROOT / "screenshots" / "wide.png") == (1920, 1080), "the wide screenshot is a desktop frame")
     check((ROOT / "scripts" / "pwa_assets.py").read_text(encoding="utf-8").find("M18.244") < 0, "the install mark is not the X logo")
     check("M18.244" not in (ROOT / "app.js").read_text(encoding="utf-8") and "M18.244" not in (ROOT / "favicon.svg").read_text(encoding="utf-8") and 'icon("logo")' not in (ROOT / "app.js").read_text(encoding="utf-8"), "the X logo is not in the app chrome or the favicon")
-    check("M12 2.2l1.7 5.4" in (ROOT / "favicon.svg").read_text(encoding="utf-8") and "function sourceBadge(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the favicon uses the Feeds icon and posts keep their source badges")
+    check("SIntelApp" in (ROOT / "favicon.svg").read_text(encoding="utf-8") and "M12 2.2l1.7 5.4" not in (ROOT / "favicon.svg").read_text(encoding="utf-8") and "function sourceBadge(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the favicon is the SI mark and posts keep their source badges")
 
     from adapters.common import html_to_parts, is_playable_video
     from video_media import _one, extract_video, probe
