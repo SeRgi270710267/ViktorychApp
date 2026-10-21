@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -612,6 +613,54 @@ def main() -> None:
     check('ranking_mode: "recency"' in app, "fxtwitter conversations also request newest replies")
     check("COMMENT_TTL" in app and "reply-sort" in app and "Updated " in app and 'tab("relevant", "Relevant")' in app and 'tab("recent", "Recent")' in app and 'tab("liked", "Liked")' in app and "replySortMode" in app, "opening a post can sort replies and show when they were fetched")
     check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
+    check("status.json" in workflow and "fallback" in workflow, "the deploy publishes status and the own-fetcher files")
+    check('name: "sources"' in app and "ownPack" in app and "fxDown" in app and "fallback/" in app and "settled" in app and "source-row" in (ROOT / "styles.css").read_text(encoding="utf-8"), "a hidden sources view fails over to our own files")
+    config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
+    community_src = (ROOT / "scripts" / "adapters" / "youtube_community.py").read_text(encoding="utf-8")
+    check("rsshub.rssforever.com" not in config_text and "rsshub.pseudoyu.com" not in config_text and "hub.slarker.me" not in config_text, "public RSSHub mirrors are not feed sources")
+    check("RSSHUB_MIRRORS" not in community_src and "rssforever" not in community_src, "community posts use the local RSSHub container")
+    ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    check("fallback/" in ignore and "status.json" in ignore, "generated fallback files stay out of git")
+
+    from datetime import datetime as dt
+    from own_fetch import extract_watch, parse_ig_oembed, parse_innertube_comments, parse_syndication, select_recent
+    from health import build_status
+
+    synd = parse_syndication(json.loads((FIX / "own" / "syndication.json").read_text(encoding="utf-8")))
+    check(synd["handle"] == "redacted_handle" and synd["stats"]["likes"] == 48280 and synd["stats"]["replies"] == 5558 and synd["replies"] == [] and "Bach" in synd["text"], "x syndication keeps the post and does not invent replies")
+    moment = dt(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
+    comments = parse_innertube_comments(json.loads((FIX / "own" / "innertube_comments.json").read_text(encoding="utf-8")), {"statusId": "xtrFOsncOeo", "handle": "redacted_handle"}, moment)
+    check(len(comments) == 1 and comments[0]["text"] == "This is a public comment." and comments[0]["stats"]["likes"] == 276 and comments[0]["date"] == "2026-10-20T21:00:00Z", "youtube innertube comments keep text, likes, and a real time")
+    check(comments[0]["replies"][0]["text"] == "A reply under it." and comments[0]["replies"][0]["date"] == "2026-10-21T11:57:00Z", "a youtube reply stays under its parent")
+    watch = extract_watch((FIX / "own" / "watch_snippet.html").read_text(encoding="utf-8"))
+    check(watch["key"] == "AIzaSyTESTKEY" and watch["token"] == "Eg0S_TEST_TOKEN" and watch["version"] == "2.20251021.00.00", "the watch page yields the public innertube key and comment token")
+    oembed = parse_ig_oembed(json.loads((FIX / "own" / "ig_oembed.json").read_text(encoding="utf-8")), "DeZgzTEggQe")
+    check("melon" in oembed["text"] and oembed["author"] == "redacted_handle" and oembed["replies"] == [] and oembed["media"][0]["url"].startswith("https://"), "instagram oembed keeps the caption and no comments")
+    wrapped, wrapped_count = parse_threads_document(json.loads((FIX / "own" / "threads_wrapper.json").read_text(encoding="utf-8")), {"handle": "redacted_handle", "statusId": "DeZtp"})
+    check(wrapped_count == 76 and len(wrapped) == 1 and wrapped[0]["text"] == "Visible reply" and wrapped[0]["stats"]["likes"] == 25 and wrapped[0]["handle"] == "ada", "threads mobile wrapper yields the visible reply")
+    picked = select_recent(
+        [
+            {"id": "x1", "platform": "x", "date": "2026-10-20T00:00:00Z"},
+            {"id": "x2", "platform": "x", "date": "2026-10-19T00:00:00Z"},
+            {"id": "ig", "platform": "instagram", "date": "2026-10-12T00:00:00Z"},
+            {"id": "th", "platform": "threads", "date": "2026-10-12T00:00:00Z"},
+            {"id": "yt", "platform": "youtube", "date": "2026-10-20T00:00:00Z"},
+            {"id": "old", "platform": "x", "date": "2026-09-01T00:00:00Z"},
+            {"id": "post", "platform": "youtube", "kind": "community", "date": "2026-10-20T00:00:00Z"},
+        ],
+        moment,
+    )
+    picked_ids = [post["id"] for post in picked]
+    check(picked_ids[0] == "x1" and "ig" in picked_ids and "th" in picked_ids and "yt" in picked_ids and "old" not in picked_ids and "post" not in picked_ids, "fallback files stay on recent posts and skip community comments")
+    status_doc = build_status(
+        [
+            {"id": "fxtwitter", "group": "X", "up": False, "detail": "down", "down": "fxtwitter"},
+            {"id": "invidious.f5.si", "group": "YouTube", "up": True, "detail": "invidious API", "down": "https://invidious.f5.si"},
+            {"id": "pipedapi.kavin.rocks", "group": "YouTube", "up": False, "detail": "down", "down": "https://pipedapi.kavin.rocks"},
+        ],
+        "2026-10-21T12:00:00Z",
+    )
+    check(status_doc["down"] == ["fxtwitter", "https://pipedapi.kavin.rocks"] and status_doc["sources"][1]["up"] is True, "status.json lists dead browser hosts and leaves live ones in rotation")
 
     def png_size(path: Path):
         data = path.read_bytes()

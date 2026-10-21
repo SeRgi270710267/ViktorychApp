@@ -159,6 +159,11 @@ jobs:
           cp splash/* _site/splash/
           cp screenshots/* _site/screenshots/
           if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s/__SW_VERSION__/${GITHUB_SHA}/" _site/sw.js; fi
+          if [ -f status.json ]; then cp status.json _site/status.json; fi
+          if [ -d fallback ]; then
+            mkdir -p _site/fallback
+            find fallback -name '*.json' -type f -exec cp {} _site/fallback/ \;
+          fi
           if [ -d comments ]; then
             mkdir -p _site/comments
             find comments -name '*.json' -type f -exec cp {} _site/comments/ \;

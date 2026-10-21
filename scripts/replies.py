@@ -2,10 +2,11 @@
 
 X replies and YouTube comments are loaded in the browser, so this refresh
 skips those platforms. Instagram tries the logged-out GraphQL post query, the
-captioned embed, public viewers, and RSSHub before INSTAGRAM_COOKIE. Threads
-tries the logged-out post page, then RSSHub, then THREADS_COOKIE. RSS uses
-wfw:commentRss. Only posts under 7 days old are stored. A failed fetch keeps
-the previous comment file. Nothing here invents a reply.
+captioned embed, and public viewers before INSTAGRAM_COOKIE. Threads tries
+the public mobile post page, then the local RSSHub post route, then
+THREADS_COOKIE. RSS uses wfw:commentRss. Only posts under 7 days old are
+stored. A failed fetch keeps the previous comment file. Nothing here invents
+a reply. Own-fetcher copies for the browser live in fallback/, not here.
 """
 
 from __future__ import annotations
@@ -319,10 +320,6 @@ def fetch_instagram(post: dict):
                 count, count_source = got, "viewer:" + host
             if replies:
                 return replies, "viewer:" + host, got if got is not None else count
-        rss = _rsshub_comments(post, (f"/instagram/comments/{code}", f"/instagram/post/{code}/comments"))
-        if rss:
-            replies, source = rss
-            return replies, source, count
     cookie = os.environ.get("INSTAGRAM_COOKIE") or ""
     if cookie:
         status_id = str(post.get("statusId") or post.get("id") or "")
@@ -349,22 +346,28 @@ def _threads_code(post: dict) -> str:
     return str(post.get("statusId") or post.get("id") or "")
 
 
+MOBILE = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
+
+
 def fetch_threads(post: dict):
     handle = post.get("handle") or ""
     code = _threads_code(post)
     count = None
     count_source = ""
+    # The public mobile page includes the reply tree. The desktop page often does not.
     urls = [
-        f"https://www.threads.net/@{handle}/post/{code}",
-        f"https://www.threads.net/t/{code}",
-        f"https://www.threads.com/@{handle}/post/{code}",
+        (f"https://www.threads.com/@{handle}/post/{code}", MOBILE),
+        (f"https://www.threads.net/@{handle}/post/{code}", MOBILE),
+        (f"https://www.threads.net/t/{code}", MOBILE),
+        (f"https://www.threads.com/@{handle}/post/{code}", BROWSER),
+        (f"https://www.threads.net/@{handle}/post/{code}", BROWSER),
     ]
     seen = set()
-    for url in urls:
-        if not code or url in seen:
+    for url, agent in urls:
+        if not code or (url, agent) in seen:
             continue
-        seen.add(url)
-        html = _try(url, {"User-Agent": BROWSER, "Accept": "text/html", "Accept-Language": "en-US,en;q=0.9"}, timeout=20)
+        seen.add((url, agent))
+        html = _try(url, {"User-Agent": agent, "Accept": "text/html", "Accept-Language": "en-US,en;q=0.9"}, timeout=20)
         if not html or code not in html:
             continue
         replies, got = parse_threads_document(html, post)
@@ -372,7 +375,7 @@ def fetch_threads(post: dict):
             count, count_source = got, "threads.net"
         if replies:
             return replies, "threads.net", got if got is not None else count
-    rss = _rsshub_comments(post, (f"/threads/post/{code}", f"/threads/{handle}/post/{code}"))
+    rss = _rsshub_comments(post, (f"/threads/{handle}/post/{code}",))
     if rss:
         replies, source = rss
         return replies, source, count

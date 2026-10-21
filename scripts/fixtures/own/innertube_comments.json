@@ -1,0 +1,36 @@
+{
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "payload": {
+            "commentEntityPayload": {
+              "properties": {
+                "commentId": "Ugztop",
+                "content": {"content": "This is a public comment."},
+                "publishedTime": "15 hours ago",
+                "replyLevel": 0
+              },
+              "author": {"displayName": "Ada", "channelId": "UC1"},
+              "toolbar": {"likeCountNotliked": "276", "replyCount": "1"}
+            }
+          }
+        },
+        {
+          "payload": {
+            "commentEntityPayload": {
+              "properties": {
+                "commentId": "Ugzchild",
+                "content": {"content": "A reply under it."},
+                "publishedTime": "3 minutes ago",
+                "replyLevel": 1
+              },
+              "author": {"displayName": "Bea", "channelId": "UC2"},
+              "toolbar": {"likeCountLiked": "4", "replyCount": "0"}
+            }
+          }
+        }
+      ]
+    }
+  }
+}

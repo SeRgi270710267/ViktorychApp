@@ -569,6 +569,20 @@ def main() -> None:
             f"[archive] +{added} stubs, {stats['count']} total, "
             f"avg {stats['avg']:.0f} bytes"
         )
+        try:
+            from own_fetch import write_fallbacks
+
+            count = write_fallbacks(doc["posts"])
+            save_document(out, doc)
+            print(f"[fallback] wrote {count}")
+        except Exception as exc:
+            print(f"[fallback] {exc}", file=sys.stderr)
+        try:
+            from health import write_status
+
+            write_status()
+        except Exception as exc:
+            print(f"[health] {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":

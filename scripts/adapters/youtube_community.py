@@ -4,7 +4,7 @@ YouTube has no official community RSS. Sources are tried in order and the
 first one that returns real posts wins:
 
 1. Invidious ``/api/v1/channels/<id>/community`` (rotating instances).
-2. RSSHub ``/youtube/community/<handle>`` (the sync container, then public mirrors).
+2. RSSHub ``/youtube/community/<handle>`` on the sync container.
 3. Piped, when a channel payload actually contains posts.
 4. The public ``/@handle/posts`` page, parsed from ``ytInitialData``.
 
@@ -30,11 +30,6 @@ from .common import blank_profile, child_text, clean_text, local_name, parse_xml
 UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
 POST_ID = re.compile(r"/post/([A-Za-z0-9_-]{10,80})")
 EXACT_COUNT = re.compile(r"^([\d,]{1,12})\s+(likes?|comments?|replies)\b", re.I)
-RSSHUB_MIRRORS = (
-    "https://rsshub.rssforever.com",
-    "https://rsshub.pseudoyu.com",
-    "https://hub.slarker.me",
-)
 
 
 def _abs(url: str) -> str:
@@ -599,9 +594,6 @@ def _rsshub_posts(feed: dict, config: dict) -> list:
     local = (config.get("rsshubBase") or "").rstrip("/")
     if local:
         bases.append(local)
-    for mirror in RSSHUB_MIRRORS:
-        if mirror not in bases:
-            bases.append(mirror)
     errors = []
     for base in bases:
         for slug in slugs:

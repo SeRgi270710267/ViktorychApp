@@ -1,0 +1,14 @@
+{
+  "__typename": "Tweet",
+  "id_str": "2112600761762717997",
+  "text": "Johann Sebastian Bach is the Shakespeare of music.",
+  "created_at": "2026-10-20T17:44:06.000Z",
+  "favorite_count": 48280,
+  "conversation_count": 5558,
+  "user": {
+    "id_str": "44196397",
+    "name": "Elon Musk",
+    "screen_name": "redacted_handle",
+    "profile_image_url_https": "https://pbs.twimg.com/profile_images/example_normal.jpg"
+  }
+}

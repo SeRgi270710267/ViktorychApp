@@ -586,7 +586,7 @@
   const FX = "https://api.fxtwitter.com";
   const IV_SEEDS = ["https://invidious.f5.si", "https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://yt.artemislena.eu"];
   const PIPED_SEEDS = ["https://pipedapi.kavin.rocks", "https://pipedapi.adminforge.de", "https://api.piped.private.coffee", "https://pipedapi.leptons.xyz"];
-  const LIVE = { mem: {}, flight: {}, dbp: null, iv: null, dead: {}, videosDown: false };
+  const LIVE = { mem: {}, flight: {}, dbp: null, iv: null, dead: {}, videosDown: false, fxDown: false, status: null, statusP: null, statusLoaded: false };
   const TRIED = {};
   const PREFETCHED = {};
   const GIVEAWAY = /(crypto\s*giveaway|airdrop|double your|seed phrase|claim (?:your )?reward|free\s+(?:btc|eth|usdt|bitcoin|ethereum))/i;
@@ -735,8 +735,42 @@
     return LIVE.iv;
   }
 
+  function loadStatus() {
+    if (LIVE.statusP) return LIVE.statusP;
+    LIVE.statusP = fetch("status.json", { cache: "no-cache" }).then((res) => {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    }).then((doc) => {
+      LIVE.status = doc && typeof doc === "object" ? doc : null;
+      ((LIVE.status && LIVE.status.down) || []).forEach((item) => {
+        if (!item) return;
+        if (item === "fxtwitter") LIVE.fxDown = true;
+        else LIVE.dead[item] = true;
+      });
+      LIVE.statusLoaded = true;
+      return LIVE.status;
+    }).catch(() => {
+      LIVE.statusLoaded = true;
+      return null;
+    });
+    return LIVE.statusP;
+  }
+
+  function ownPack(id) {
+    if (!id) return Promise.resolve(null);
+    return fetch("fallback/" + encodeURIComponent(id) + ".json", { cache: "no-cache" }).then((res) => {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    }).then((doc) => {
+      if (!doc || typeof doc !== "object") return null;
+      const stamped = Date.parse(doc.fetchedAt || "");
+      doc._at = isFinite(stamped) ? stamped : 0;
+      return doc;
+    }).catch(() => null);
+  }
+
   function rotate(basesPromise, path, limit, slot) {
-    return basesPromise.then((bases) => {
+    return loadStatus().then(() => basesPromise.then((bases) => {
       if (path.indexOf("/api/v1/videos/") === 0 && LIVE.videosDown) return null;
       const prefer = slot && LIVE[slot];
       const list = [];
@@ -765,7 +799,7 @@
         });
       }
       return next();
-    });
+    }));
   }
 
   function fxNum(value) {
@@ -1209,28 +1243,32 @@
     const key = "fx:conv:" + id;
     if (fresh) cacheDrop(key);
     return once((fresh ? "fxfresh:" : "fx:") + id, () => (fresh ? Promise.resolve(null) : cacheGet(key, COMMENT_TTL)).then((hit) => {
-      if (hit && hit.replies) {
+      if (hit && hit.replies && hit.replies.length) {
         if (!hit.fetchedAt) hit.fetchedAt = Date.now();
         return hit;
       }
-      return fxConversationPages(id).then((pages) => {
-        const usable = (pages || []).filter(fxUsable);
-        if (!usable.length) throw new Error("code");
-        const merged = [];
-        const seen = {};
-        usable.forEach((payload) => {
-          fxExtract(payload, id).forEach((row) => {
-            const sid = postKey(row);
-            if (!sid || seen[sid]) return;
-            seen[sid] = true;
-            merged.push(row);
+      return loadStatus().then(() => {
+        if (LIVE.fxDown) return null;
+        return fxConversationPages(id).then((pages) => {
+          const usable = (pages || []).filter(fxUsable);
+          if (!usable.length) return null;
+          const merged = [];
+          const seen = {};
+          usable.forEach((payload) => {
+            fxExtract(payload, id).forEach((row) => {
+              const sid = postKey(row);
+              if (!sid || seen[sid]) return;
+              seen[sid] = true;
+              merged.push(row);
+            });
           });
-        });
-        const primary = usable.find((payload) => payload.status) || usable[0];
-        const author = ((primary.status || {}).author || {}).screen_name || post.handle || "";
-        return fxFill(merged, id).then((filled) => {
-          const pack = { replies: fxRank(filled, author, 60), stats: fxStats(primary.status || {}), fetchedAt: Date.now() };
-          return cacheSet(key, pack).then(() => pack);
+          const primary = usable.find((payload) => payload.status) || usable[0];
+          const author = ((primary.status || {}).author || {}).screen_name || post.handle || "";
+          return fxFill(merged, id).then((filled) => {
+            const pack = { replies: fxRank(filled, author, 60), stats: fxStats(primary.status || {}), fetchedAt: Date.now() };
+            if (!pack.replies.length) return pack;
+            return cacheSet(key, pack).then(() => pack);
+          });
         });
       });
     }).catch(() => null));
@@ -1287,53 +1325,63 @@
     const bucket = STATE.replies[id];
     const cachedAt = bucket && bucket.fetchedAt;
     const stillFresh = cachedAt && Date.now() - cachedAt < COMMENT_TTL;
-    if (!fresh && bucket && !bucket.loading && (bucket.cap || 0) >= want && stillFresh) return bucket;
+    if (!fresh && bucket && !bucket.loading && (bucket.cap || 0) >= want && (stillFresh || bucket.settled)) return bucket;
     if (!fresh && bucket && bucket.loading) return bucket;
     const epoch = (STATE.replyEpoch[id] || 0) + 1;
     STATE.replyEpoch[id] = epoch;
     STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want, fetchedAt: fresh ? 0 : cachedAt || 0 };
     const finish = (replies, missing, cap, fetchedAt) => {
       if (STATE.replyEpoch[id] !== epoch) return;
-      STATE.replies[id] = { loading: false, replies: replies || [], missing: !!missing, cap: cap || want, fetchedAt: fetchedAt || Date.now() };
+      STATE.replies[id] = { loading: false, replies: replies || [], missing: !!missing, cap: cap || want, fetchedAt: fetchedAt || Date.now(), settled: true };
       render();
     };
-    const snap = () => snapshotDoc(id).then((doc) => {
+    const snap = (ownAt) => snapshotDoc(id).then((doc) => {
       if (!commentsCurrent(post, doc)) {
-        finish([], true, want, Date.now());
+        finish([], true, want, ownAt || Date.now());
         return;
       }
       const stamped = doc && doc.fetchedAt ? Date.parse(doc.fetchedAt) : Date.now();
       finish(((doc && doc.replies) || []).slice(), false, want, isFinite(stamped) ? stamped : Date.now());
-    }).catch(() => finish([], true, want, Date.now()));
+    }).catch(() => finish([], true, want, ownAt || Date.now()));
+    const ownThenSnap = () => ownPack(id).then((own) => {
+      if (STATE.replyEpoch[id] !== epoch) return;
+      if (own && own.stats) applyLiveStats(id, own.stats);
+      if (own && (own.replies || []).length) {
+        finish(own.replies.slice(0, want), false, want, own._at || Date.now());
+        return;
+      }
+      snap(own && own._at);
+    });
     if (post.kind === "community") {
-      loadCommunityComments(post).then((rows) => {
-        if (!rows) finish([], true, want, Date.now());
-        else finish(rows, false, want, Date.now());
+      loadCommunityComments(post).then((result) => {
+        if (!result || !(result.replies || []).length) finish([], true, want, (result && result.fetchedAt) || Date.now());
+        else finish(result.replies, false, want, result.fetchedAt || Date.now());
       }).catch(() => finish([], true, want, Date.now()));
       return STATE.replies[id];
     }
     if ((post.platform || "") === "x") {
       loadXThread(post, fresh || focused).then((pack) => {
         if (STATE.replyEpoch[id] !== epoch) return;
-        if (!pack) {
-          snap();
+        if (pack && (pack.replies || []).length) {
+          applyLiveStats(id, pack.stats);
+          const capNow = String(STATE.focusId || "") === id ? 60 : 20;
+          const rows = takeRanked(pack.replies, capNow);
+          if (capNow === 60 && !PREFETCHED[id]) {
+            PREFETCHED[id] = true;
+            selectSubthreads(rows).forEach((reply) => {
+              const cid = postKey(reply);
+              if (cid && !(STATE.replies[cid] && (STATE.replies[cid].cap || 0) >= 20)) replyBucket(reply);
+            });
+          }
+          finish(rows, false, capNow, pack.fetchedAt || Date.now());
           return;
         }
-        applyLiveStats(id, pack.stats);
-        const capNow = String(STATE.focusId || "") === id ? 60 : 20;
-        const rows = takeRanked(pack.replies, capNow);
-        if (capNow === 60 && !PREFETCHED[id]) {
-          PREFETCHED[id] = true;
-          selectSubthreads(rows).forEach((reply) => {
-            const cid = postKey(reply);
-            if (cid && !(STATE.replies[cid] && (STATE.replies[cid].cap || 0) >= 20)) replyBucket(reply);
-          });
-        }
-        finish(rows, false, capNow, pack.fetchedAt || Date.now());
+        if (pack && pack.stats) applyLiveStats(id, pack.stats);
+        ownThenSnap();
       });
       return STATE.replies[id];
     }
-    snap();
+    ownThenSnap();
     return STATE.replies[id];
   }
 
@@ -1600,19 +1648,24 @@
       if (continuation) path += "&continuation=" + encodeURIComponent(continuation);
       return rotate(ivBases(), path, 4, "ivBase");
     }
-    return page("").then((payload) => {
-      if (!payload || !Array.isArray(payload.comments)) return null;
-      if (payload.commentCount != null && isFinite(Number(payload.commentCount))) applyLiveStats(id, { replies: Number(payload.commentCount) });
-      const top = [];
-      payload.comments.forEach((comment) => {
-        if (!String(comment.content || "").trim()) return;
-        const row = ivComment(comment, id, post.handle || "");
-        row._community = true;
-        delete row._continuation;
-        top.push(row);
+    return loadStatus().then(() => page("").then((payload) => {
+      if (payload && Array.isArray(payload.comments)) {
+        if (payload.commentCount != null && isFinite(Number(payload.commentCount))) applyLiveStats(id, { replies: Number(payload.commentCount) });
+        const top = [];
+        payload.comments.forEach((comment) => {
+          if (!String(comment.content || "").trim()) return;
+          const row = ivComment(comment, id, post.handle || "");
+          row._community = true;
+          delete row._continuation;
+          top.push(row);
+        });
+        return { replies: top, fetchedAt: Date.now() };
+      }
+      return ownPack(id).then((own) => {
+        if (!own || !(own.replies || []).length) return null;
+        return { replies: own.replies, fetchedAt: own._at || Date.now() };
       });
-      return top;
-    });
+    }));
   }
 
   function loadYtComments(post) {
@@ -1623,17 +1676,20 @@
     if (fresh) cacheDrop("yt:doc:" + id);
     return once((fresh ? "ytfresh:" : "yt:") + id, () => (fresh ? Promise.resolve(null) : cacheGet("yt:doc:" + id, COMMENT_TTL)).then((hit) => {
       if (hit) return hit;
-      return ivThread(id, post.handle || "").then((doc) => {
-        if (doc) {
-          doc.fetchedAt = new Date().toISOString();
-          return cacheSet("yt:doc:" + id, doc).then(() => doc);
-        }
+      const remember = (doc) => {
+        doc.fetchedAt = new Date().toISOString();
+        return cacheSet("yt:doc:" + id, doc).then(() => doc);
+      };
+      return loadStatus().then(() => ivThread(id, post.handle || "").then((doc) => {
+        if (doc && ((doc.replies || []).length || doc.commentCount != null)) return remember(doc);
         return pipedThread(id, post.handle || "").then((piped) => {
-          if (!piped) return null;
-          piped.fetchedAt = new Date().toISOString();
-          return cacheSet("yt:doc:" + id, piped).then(() => piped);
+          if (piped && ((piped.replies || []).length || piped.commentCount != null)) return remember(piped);
+          return ownPack("yt_" + id).then((own) => {
+            if (!own || !(own.replies || []).length) return null;
+            return cacheSet("yt:doc:" + id, own).then(() => own);
+          });
         });
-      });
+      }));
     })).catch(() => null);
   }
 
@@ -2200,6 +2256,7 @@
       if (cut > 0) return { name: "watch", platform: spec.slice(0, cut), id: spec.slice(cut + 1), query };
     }
     if (parts[0] === "tab" && parts[1]) return { name: "home", tab: "list:" + parts[1], query };
+    if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -3153,6 +3210,21 @@
     </div>`;
   }
 
+  function sourcesView() {
+    const head = pageHead("Sources", "", true);
+    if (!LIVE.statusLoaded) {
+      loadStatus().then(() => render());
+      return head + `<div class="reply-empty">Checking sources…</div>`;
+    }
+    const doc = LIVE.status;
+    if (!doc || !(doc.sources || []).length) return head + emptyBlock("No status yet", "The sync publishes status.json with the site. This copy doesn’t have one.");
+    const rows = (doc.sources || []).map((row) => {
+      const up = !!row.up;
+      return `<div class="source-row"><span class="source-state ${up ? "up" : "down"}">${up ? "Up" : "Down"}</span><div><div class="source-name">${esc((row.group || "") + " · " + (row.id || ""))}</div><div class="source-detail">${esc(row.detail || "")}</div></div></div>`;
+    }).join("");
+    return head + `<p class="source-checked">${esc(freshLabel(doc.checkedAt))}</p>` + rows;
+  }
+
   function view(route) {
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>Home</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
@@ -3176,6 +3248,7 @@
     if (route.name === "incoming") return incomingView();
     if (route.name === "notifications") return notesView("Notifications", "Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
     if (route.name === "messages") return notesView("Messages", "Welcome to your inbox", "Private conversations aren’t part of this reader.");
+    if (route.name === "sources") return sourcesView();
     return homeView({ tab: "foryou", query: new URLSearchParams() });
   }
 
@@ -3970,6 +4043,7 @@
     registerSW();
     STATE.loading = true;
     STATE.error = null;
+    loadStatus();
     STATE.settings = loadSettings();
     applyTheme();
     render();

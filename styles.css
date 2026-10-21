@@ -780,6 +780,19 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
   line-height: 16px;
 }
 .reply-tabs { position: static; }
+.source-checked { color: var(--muted); font-size: 13px; padding: 12px 16px 0; }
+.source-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.source-state { width: 44px; flex: none; font-size: 13px; font-weight: 700; }
+.source-state.up { color: #00ba7c; }
+.source-state.down { color: #f4212e; }
+.source-name { font-weight: 700; }
+.source-detail { color: var(--muted); font-size: 13px; line-height: 18px; margin-top: 2px; }
 
 .reply-empty {
   color: var(--muted);

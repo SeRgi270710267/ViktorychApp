@@ -183,6 +183,7 @@ def _absorb(node: dict, info: dict, parent: dict, parent_id: str) -> tuple[list,
 
 def _collect(obj, parent: dict, parent_id: str):
     found = []
+    anon = []
     count = None
     matched = False
     first = None
@@ -199,13 +200,20 @@ def _collect(obj, parent: dict, parent_id: str):
             return
         info = node.get("text_post_app_info")
         if isinstance(info, dict) and (info.get("direct_replies") or "direct_reply_count" in info or "reply_count" in info):
-            code = str(node.get("code") or node.get("pk") or node.get("id") or "")
+            # `id` on this node is an internal media id, not the shortcode.
+            code = str(node.get("code") or node.get("pk") or "")
             if parent_id and code == parent_id:
                 matched = True
                 rows, got = _absorb(node, info, parent, parent_id)
                 found.extend(rows)
                 if got is not None:
                     count = got
+            elif not code:
+                # The mobile page hangs the reply edges on a media object that
+                # has no shortcode. A different node may match the post and
+                # only carry the reply count.
+                rows, _got = _absorb(node, info, parent, parent_id)
+                anon.extend(rows)
             elif first is None:
                 first = (node, info)
         items = node.get("thread_items")
@@ -230,7 +238,7 @@ def _collect(obj, parent: dict, parent_id: str):
                 visit(value, depth + 1)
 
     visit(obj)
-    return found, count, matched, first
+    return found, count, matched, first, anon
 
 
 def parse_threads_document(payload, parent: dict | None = None) -> tuple[list, int | None]:
@@ -247,11 +255,13 @@ def parse_threads_document(payload, parent: dict | None = None) -> tuple[list, i
             blobs.append({"reply_threads": rows})
     seen = set()
     replies = []
+    anon = []
     count = None
     matched = False
     fallback = None
     for blob in blobs:
-        got, got_count, blob_matched, first = _collect(blob, parent, parent_id)
+        got, got_count, blob_matched, first, extra = _collect(blob, parent, parent_id)
+        anon.extend(extra)
         if blob_matched:
             matched = True
             for item in got:
@@ -269,4 +279,9 @@ def parse_threads_document(payload, parent: dict | None = None) -> tuple[list, i
             if item["id"] not in seen:
                 replies.append(item)
         count = got_count
+    for item in anon:
+        if item["id"] in seen or item["id"] == parent_id:
+            continue
+        seen.add(item["id"])
+        replies.append(item)
     return _sort_cap(replies), count
