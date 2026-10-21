@@ -87,6 +87,8 @@
     groupMenu: null,
     tabMenu: null,
     bellMenu: null,
+    tabAssign: null,
+    tabContext: null,
     shared: {},
     sharedState: {},
     chain: {},
@@ -131,7 +133,8 @@
     reply: `<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>`,
     pencil: `<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>`,
     pin: `<path d="M12 17v5"/><path d="M9 4h6l-1 6 3 3H7l3-3-1-6z"/>`,
-    gear: `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>`
+    gear: `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>`,
+    bell: `<path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/>`
   };
   const menuIcon = (name) => `<svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true">${LINE[name] || ""}</svg>`;
 
@@ -572,15 +575,81 @@
         text: String(item.text || "").slice(0, 280),
         avatar: httpsUrl(item.avatar),
         image: httpsUrl(item.image),
-        hash: hash.charAt(0) === "#" && hash.length < 300 ? hash : "#/"
+        hash: hash.charAt(0) === "#" && hash.length < 300 ? hash : "#/",
+        feedId: String(item.feedId || "").slice(0, 120),
+        platform: String(item.platform || "").slice(0, 24),
+        ids: Array.isArray(item.ids) ? item.ids.map((id) => String(id || "").slice(0, 120)).filter(Boolean).slice(0, 12) : [],
+        handles: Array.isArray(item.handles) ? item.handles.map((id) => String(id || "").toLowerCase().slice(0, 120)).filter(Boolean).slice(0, 24) : []
       });
     });
     return out;
   }
 
+  function cleanEmoji(value) {
+    const text = String(value || "").replace(/[\u0000-\u001f<>]/g, "").trim();
+    return Array.from(text).slice(0, 4).join("");
+  }
+
+  function tabColor(value) {
+    const text = String(value || "").trim().toLowerCase();
+    return COLORS.indexOf(text) >= 0 ? text : "";
+  }
+
+  function cleanFeedTabs(list) {
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    const seen = {};
+    list.forEach((item) => {
+      if (!item || out.length >= 500) return;
+      const id = String(item.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+      const name = String(item.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      if (!id || !name || seen[id]) return;
+      seen[id] = true;
+      const members = [];
+      (Array.isArray(item.members) ? item.members : []).forEach((member) => {
+        const text = String(member || "").trim();
+        if (!text || text.length > 120 || members.indexOf(text) >= 0 || members.length >= 500) return;
+        members.push(text);
+      });
+      out.push({
+        id: id,
+        name: name,
+        emoji: cleanEmoji(item.emoji),
+        color: tabColor(item.color),
+        showHome: item.showHome !== false,
+        showNotes: item.showNotes !== false,
+        members: members,
+        readAt: Number(item.readAt) || 0,
+        sort: item.sort === "popular" ? "popular" : "recent"
+      });
+    });
+    return out;
+  }
+
+  function cleanLastNoteTab(value, tabs) {
+    const text = String(value || "");
+    if (!text || text === "all") return "all";
+    return (tabs || []).some((tab) => tab.id === text) ? text : "all";
+  }
+
+  function feedTabs() {
+    if (!STATE.settings) return [];
+    if (!Array.isArray(STATE.settings.feedTabs)) STATE.settings.feedTabs = [];
+    return STATE.settings.feedTabs;
+  }
+
+  function feedTabById(id) {
+    const wanted = String(id || "");
+    return feedTabs().find((tab) => tab.id === wanted) || null;
+  }
+
+  function newFeedTabId() {
+    return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false } });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all" });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -613,7 +682,9 @@
       parsed.bellNotes = cleanBellNotes(parsed.bellNotes);
       parsed.bellSeen = Array.isArray(parsed.bellSeen) ? parsed.bellSeen.map((id) => String(id)).slice(-500) : [];
       parsed.bellRead = Number(parsed.bellRead) || 0;
-      parsed.historyPause = cleanHistoryPause(parsed.historyPause);
+parsed.historyPause = cleanHistoryPause(parsed.historyPause);
+      parsed.feedTabs = cleanFeedTabs(parsed.feedTabs);
+      parsed.lastNoteTab = cleanLastNoteTab(parsed.lastNoteTab, parsed.feedTabs);
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
@@ -4695,9 +4766,9 @@
       : "";
     const shareLink = sharePostUrl(post, "post") || post.url || sitePermalink(statusHash(post));
     const shareNote = sharePostUrl(post, "post") ? "" : unpublishedNote("post", post.platform, !!post.url);
-    const here = parseRoute();
+const here = parseRoute();
     const histItem = here.name === "history" ? `<button data-act="hist-remove" data-id="${esc(post.id)}" data-tab="${esc(here.tab || "bookmarks")}">Remove from History</button>` : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>Copy link</button>${histItem}${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>Copy link</button><button data-act="add-to-tab" data-id="${esc(post.id)}">Add to tab…</button>${histItem}${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -4765,7 +4836,13 @@
     const parts = path.split("/").filter(Boolean).map((part) => {
       try { return decodeURIComponent(part); } catch (err) { return part; }
     });
-    if (!parts.length || parts[0] === "home") return { name: "home", tab: parts[1] === "following" ? "following" : parts[1] === "tab" ? "list:" + parts[2] : "foryou", query };
+    if (!parts.length || parts[0] === "home") {
+      let tab = "foryou";
+      if (parts[1] === "following") tab = "following";
+      else if (parts[1] === "tab") tab = "list:" + (parts[2] || "");
+      else if (parts[1] === "cat") tab = "cat:" + (parts[2] || "");
+      return { name: "home", tab: tab, query };
+    }
     if (parts[0] === "following") return { name: "home", tab: "following", query };
     if (parts[0] === "subscriptions") return { name: "subscriptions", channel: parts[1] || query.get("c") || "", query };
     if (parts[0] === "watch") {
@@ -4774,6 +4851,8 @@
       if (cut > 0) return { name: "watch", platform: spec.slice(0, cut), id: spec.slice(cut + 1), query };
     }
     if (parts[0] === "tab" && parts[1]) return { name: "home", tab: "list:" + parts[1], query };
+    if (parts[0] === "cat" && parts[1]) return { name: "home", tab: "cat:" + parts[1], query };
+    if (parts[0] === "notifications") return { name: "notifications", tab: parts[1] || "", query };
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     if (parts[0] === "u" && parts[1] && parts[2]) {
       const platform = parts[1] === "twitter" ? "x" : parts[1];
@@ -4953,6 +5032,7 @@
   function homePath(tab) {
     if (tab === "following") return "#/following";
     if (tab && tab.indexOf("list:") === 0) return "#/tab/" + encodeURIComponent(tab.slice(5));
+    if (tab && tab.indexOf("cat:") === 0) return "#/cat/" + encodeURIComponent(tab.slice(4));
     return "#/";
   }
 
@@ -4962,6 +5042,9 @@
     else if (tab && tab.indexOf("list:") === 0) {
       const list = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
       q.set("sort", listSortOf(list));
+    } else if (tab && tab.indexOf("cat:") === 0) {
+      const cat = feedTabById(tab.slice(4));
+      q.set("sort", cat && cat.sort === "popular" ? "popular" : "recent");
     } else {
       q.set("reposts", STATE.settings.forYouReposts === false ? "0" : "1");
       q.set("replies", STATE.settings.forYouReplies === false ? "0" : "1");
@@ -4975,14 +5058,17 @@
     if (!route || route.name !== "home" || !route.query) return;
     const tab = route.tab || "foryou";
     let changed = false;
-    if (tab === "following" || tab.indexOf("list:") === 0) {
+    if (tab === "following" || tab.indexOf("list:") === 0 || tab.indexOf("cat:") === 0) {
       const sort = route.query.get("sort");
       if (sort === "recent" || sort === "popular") {
         if (tab === "following") {
           if (STATE.settings.followingSort !== sort) { STATE.settings.followingSort = sort; changed = true; }
-        } else {
+        } else if (tab.indexOf("list:") === 0) {
           const list = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
           if (list && listSortOf(list) !== sort) { list.sort = sort; changed = true; }
+        } else {
+          const cat = feedTabById(tab.slice(4));
+          if (cat && (cat.sort === "popular" ? "popular" : "recent") !== sort) { cat.sort = sort; changed = true; }
         }
       }
     } else {
@@ -5005,7 +5091,25 @@
   function tabSort(tab) {
     if (tab === "following") return STATE.settings.followingSort === "popular" ? "popular" : "recent";
     if (tab && tab.indexOf("list:") === 0) return listSortOf((STATE.settings.lists || []).find((item) => item.id === tab.slice(5)));
+    if (tab && tab.indexOf("cat:") === 0) {
+      const cat = feedTabById(tab.slice(4));
+      return cat && cat.sort === "popular" ? "popular" : "recent";
+    }
     return "recent";
+  }
+
+  function profileMatch(post, ids) {
+    if (!post || !ids || !ids.length) return false;
+    const feedId = String(post.feedId || "");
+    const plain = (post.platform || "x") + ":" + (post.handle || "");
+    const channel = post.channelId ? (post.platform || "youtube") + ":" + post.channelId : "";
+    const lower = plain.toLowerCase();
+    return ids.some((item) => {
+      const text = String(item || "");
+      if (!text) return false;
+      const folded = text.toLowerCase();
+      return text === feedId || text === plain || text === channel || folded === lower || (channel && folded === channel.toLowerCase());
+    });
   }
 
   function homeMember(post, tab) {
@@ -5018,6 +5122,11 @@
       const ids = (found && found.members) || [];
       return ids.indexOf(post.feedId) >= 0 || ids.indexOf((post.platform || "x") + ":" + (post.handle || "")) >= 0;
     }
+    if (tab && tab.indexOf("cat:") === 0) {
+      const found = feedTabById(tab.slice(4));
+      if (!found || found.showHome === false) return false;
+      return profileMatch(post, found.members || []);
+    }
     if (tabView(tab) !== "reposts") {
       if (STATE.settings.forYouReposts === false && (post.kind === "repost" || post.repostedBy)) return false;
       if (STATE.settings.forYouReplies === false && post.kind === "reply") return false;
@@ -5028,6 +5137,7 @@
   function homeShows(post, route) {
     if (!post || !inTimeline(post) || hiddenPost(post)) return false;
     const tab = (route && route.tab) || "foryou";
+    if (tab.indexOf("cat:") === 0 && !feedTabById(tab.slice(4))) return false;
     if (!homeMember(post, tab)) return false;
     if (tabView(tab) === "reposts" && !isRepost(post)) return false;
     return true;
@@ -5035,12 +5145,19 @@
 
   function homeHeader(tab) {
     const lists = STATE.settings.lists.filter((l) => l.pinned);
-    const tabBtn = (id, label, on) => `<button class="tab${on ? " on" : ""}" data-act="htab" data-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}"><span>${esc(label)}</span></button>`;
-    const tabWithMenu = (id, label) => {
-      if (tab !== id) return tabBtn(id, label, false);
+    const cats = feedTabs().filter((item) => item.showHome !== false);
+    const tabBtn = (id, label, on, face, noteId) => `<button class="tab${on ? " on" : ""}" data-act="htab" data-tab="${esc(id)}"${noteId ? ` data-note-tab="${esc(noteId)}"` : ""} role="tab" aria-selected="${on ? "true" : "false"}">${face || ""}<span>${esc(label)}</span></button>`;
+    const tabWithMenu = (id, label, face, noteId) => {
+      if (tab !== id) return tabBtn(id, label, false, face, noteId);
       const expanded = STATE.tabMenu === id;
-      return `<div class="tab-pair on">${tabBtn(id, label, true)}<button class="tab-caret" type="button" data-act="tab-options" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
+      return `<div class="tab-pair on">${tabBtn(id, label, true, face, noteId)}<button class="tab-caret" type="button" data-act="tab-options" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
     };
+    const catFace = (item) => {
+      const grip = `<span class="tab-grip" data-drag-tab="${esc(item.id)}" data-act="stop" aria-label="Drag to reorder"></span>`;
+      const dot = !item.emoji && item.color ? `<i class="tab-dot" style="background:${esc(item.color)}"></i>` : "";
+      return grip + dot;
+    };
+    const catName = (item) => (item.emoji ? item.emoji + " " : "") + item.name;
     return `<div class="topbar tall">
       <h1 class="vh">Home</h1>
       <div class="mhead">
@@ -5053,6 +5170,7 @@
         <div class="tabs" role="tablist" aria-label="Home timeline">
           ${tabWithMenu("foryou", "For you")}
           ${tabWithMenu("following", "Following")}
+          ${cats.map((item) => tabWithMenu("cat:" + item.id, catName(item), catFace(item), item.id)).join("")}
           ${lists.map((l) => tabWithMenu("list:" + l.id, l.name)).join("")}
         </div>
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button>
@@ -5079,6 +5197,9 @@
     const listId = which.indexOf("list:") === 0 ? which.slice(5) : "";
     const list = listId ? (STATE.settings.lists || []).find((item) => item.id === listId && item.pinned) : null;
     if (listId && !list) return "";
+    const catId = which.indexOf("cat:") === 0 ? which.slice(4) : "";
+    const cat = catId ? feedTabById(catId) : null;
+    if (catId && (!cat || cat.showHome === false)) return "";
     let body = "";
     let label = "Home options";
     const viewItems = (tab) => {
@@ -5090,6 +5211,12 @@
       label = "For you options";
       const box = (key, text, on, glyph) => tabChoice("menuitemcheckbox", `data-act="foryou-toggle" data-key="${key}"`, text, on, glyph, "check");
       body = box("reposts", "Show reposts", STATE.settings.forYouReposts !== false, "repost") + box("replies", "Show replies", STATE.settings.forYouReplies !== false, "reply") + viewItems("foryou");
+    } else if (cat) {
+      label = cat.name + " options";
+      const sort = cat.sort === "popular" ? "popular" : "recent";
+      const sortItem = (id, text) => tabChoice("menuitemradio", `data-act="follow-sort" data-sort="${id}" data-cat="${esc(cat.id)}"`, text, sort === id, id === "popular" ? "rocket" : "clock", "radio");
+      const flag = (key, text, on, glyph) => tabChoice("menuitemcheckbox", `data-act="feed-tab-flag" data-key="${key}" data-id="${esc(cat.id)}"`, text, on, glyph, "check");
+      body = `<div class="tab-menu-label">Sort by</div>${sortItem("recent", "Recent")}${sortItem("popular", "Popular")}` + viewItems(which) + `<div class="tab-menu-gap"></div><div class="tab-menu-label">Tab</div>${tabChoice("menuitem", `data-act="feed-tab-edit" data-id="${esc(cat.id)}"`, "Edit tab", null, "pencil", "")}${flag("showHome", "Show on Home", cat.showHome !== false, "pin")}${flag("showNotes", "Show in Notifications", cat.showNotes !== false, "bell")}`;
     } else {
       label = list ? list.name + " options" : "Following options";
       const sort = list ? listSortOf(list) : (STATE.settings.followingSort === "popular" ? "popular" : "recent");
@@ -5110,7 +5237,7 @@
       const on = mode === id;
       return `<button class="bell-choice" type="button" role="menuitemradio" aria-checked="${on ? "true" : "false"}" data-act="bell-mode" data-mode="${id}" data-id="${esc(menu.id)}"><span class="bell-choice-ico">${bellGlyph(glyph)}</span><span class="bell-choice-label">${text}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
     };
-    return `<div class="bell-sheet" data-act="close-bell"><div class="menu bell-menu" data-act="stop" role="menu" aria-label="Notify"><div class="bell-grab" aria-hidden="true"></div>${choice("all", "All posts", "outline")}${choice("live", "Only posts with live video", "video")}${choice("off", "Off", "off")}<p class="bell-note">Without Web Push, alerts arrive when the app checks in the background (Android/Chrome installed app) or on next open (iOS).</p></div></div>`;
+    return `<div class="bell-sheet" data-act="close-bell"><div class="menu bell-menu" data-act="stop" role="menu" aria-label="Notify"><div class="bell-grab" aria-hidden="true"></div>${choice("all", "All posts", "outline")}${choice("live", "Only posts with live video", "video")}${choice("off", "Off", "off")}<div class="bell-split"></div>${feedTabChoices(menu.id)}<p class="bell-note">Without Web Push, alerts arrive when the app checks in the background (Android/Chrome installed app) or on next open (iOS).</p></div></div>`;
   }
 
   function listMembersPosts(list) {
@@ -5133,9 +5260,10 @@
       }
     }
     const repostsOnly = tabView(tab) === "reposts";
+    const catTab = tab.indexOf("cat:") === 0;
     const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
-      repostsOnly ? "No reposts yet" : tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
-      repostsOnly ? "Reposts and forwards on this tab show up here." : tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
+      repostsOnly ? "No reposts yet" : tab === "following" ? "Nothing to see here — yet" : catTab ? "No posts in this tab" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
+      repostsOnly ? "Reposts and forwards on this tab show up here." : tab === "following" ? "When you follow accounts, their posts show up here." : catTab ? "Posts from accounts in this tab show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
     );
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
     return homeHeader(tab) + spaceCard + body + archiveSentinel();
@@ -7523,24 +7651,319 @@
     return pageHead(title) + emptyBlock(headline, body);
   }
 
-  function notificationsView() {
+  function profileKeys(id) {
+    const targets = bellTargets(id);
+    const ids = (targets.ids || []).slice();
+    const text = String(id || "");
+    if (text && ids.indexOf(text) < 0) ids.unshift(text);
+    return ids.filter(Boolean);
+  }
+
+  function tabHasProfile(tab, id) {
+    if (!tab) return false;
+    const keys = profileKeys(id);
+    const members = tab.members || [];
+    return keys.some((key) => members.indexOf(key) >= 0 || members.some((member) => String(member).toLowerCase() === key.toLowerCase()));
+  }
+
+  function toggleMemberIds(members, id) {
+    const keys = profileKeys(id);
+    const list = (members || []).slice();
+    const on = keys.some((key) => list.indexOf(key) >= 0 || list.some((member) => String(member).toLowerCase() === key.toLowerCase()));
+    if (on) return list.filter((member) => keys.indexOf(member) < 0 && !keys.some((key) => key.toLowerCase() === String(member).toLowerCase()));
+    keys.forEach((key) => { if (list.indexOf(key) < 0 && list.length < 500) list.push(key); });
+    return list;
+  }
+
+  function noteInTab(note, tab) {
+    const members = (tab && tab.members) || [];
+    if (!note || !members.length) return false;
+    const keys = {};
+    const add = (value) => {
+      const text = String(value || "");
+      if (!text) return;
+      keys[text] = true;
+      keys[text.toLowerCase()] = true;
+    };
+    add(note.feedId);
+    (note.ids || []).forEach(add);
+    (note.handles || []).forEach(add);
+    const handle = String(note.handle || "").replace(/^@/, "").toLowerCase();
+    const platform = String(note.platform || "").toLowerCase();
+    if (handle && platform) add(platform + ":" + handle);
+    return members.some((member) => {
+      const text = String(member || "");
+      if (!text) return false;
+      if (keys[text] || keys[text.toLowerCase()]) return true;
+      if (!platform && handle && text.toLowerCase().endsWith(":" + handle)) return true;
+      return false;
+    });
+  }
+
+  function notesForTab(tab) {
     const notes = (STATE.settings && STATE.settings.bellNotes) || [];
-    if (notes.length) {
-      const newest = notes.reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
+    if (!tab) return notes;
+    return notes.filter((note) => noteInTab(note, tab));
+  }
+
+  function tabUnreadCount(tab) {
+    const notes = tab ? notesForTab(tab) : ((STATE.settings && STATE.settings.bellNotes) || []);
+    const read = tab ? (Number(tab.readAt) || 0) : (Number(STATE.settings && STATE.settings.bellRead) || 0);
+    return notes.filter((note) => (Number(note.at) || 0) > read).length;
+  }
+
+  function badgeHtml(count) {
+    if (!count) return "";
+    return `<i class="tab-count">${count > 99 ? "99+" : String(count)}</i>`;
+  }
+
+  function tabMark(tab) {
+    if (tab && tab.emoji) return esc(tab.emoji);
+    if (tab && tab.color) return `<i class="tab-dot" style="background:${esc(tab.color)}"></i>`;
+    return icon("lists");
+  }
+
+  function feedTabChoices(feedId) {
+    const id = String(feedId || "");
+    const rows = feedTabs().map((tab) => {
+      const on = tabHasProfile(tab, id);
+      return `<button class="bell-choice" type="button" role="menuitemcheckbox" aria-checked="${on ? "true" : "false"}" data-act="feed-tab-member" data-tab="${esc(tab.id)}" data-id="${esc(id)}"><span class="bell-choice-ico">${tabMark(tab)}</span><span class="bell-choice-label">${esc(tab.name)}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
+    }).join("");
+    return `<div class="tab-menu-label">Add to tab…</div>${rows}<button class="bell-choice" type="button" data-act="feed-tab-new" data-id="${esc(id)}"><span class="bell-choice-ico">${icon("plus")}</span><span class="bell-choice-label">New tab</span></button>`;
+  }
+
+  function tabAssignMenu() {
+    const menu = STATE.tabAssign;
+    if (!menu || !menu.id) return "";
+    return `<div class="bell-sheet" data-act="close-assign"><div class="menu bell-menu assign-menu" data-act="stop" role="menu" aria-label="Add to tab" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div>${feedTabChoices(menu.id)}</div></div>`;
+  }
+
+  function tabContextMenu() {
+    const menu = STATE.tabContext;
+    if (!menu || !menu.id || !feedTabById(menu.id)) return "";
+    const tab = feedTabById(menu.id);
+    return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${esc(tab.name)}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("pencil")}</span><span class="bell-choice-label">Edit tab</span></button><button class="bell-choice" type="button" data-act="feed-tab-ask-delete" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">Delete tab</span></button></div></div>`;
+  }
+
+  function settleNoteTab(route) {
+    const visible = feedTabs().filter((tab) => tab.showNotes !== false);
+    const asked = route && route.tab ? String(route.tab) : "";
+    let active = "all";
+    if (asked && asked !== "all" && visible.some((tab) => tab.id === asked)) active = asked;
+    else if (!asked) {
+      const last = STATE.settings.lastNoteTab;
+      if (last && last !== "all" && visible.some((tab) => tab.id === last)) active = last;
+    }
+    const want = active === "all" ? "#/notifications" : "#/notifications/" + encodeURIComponent(active);
+    const hash = location.hash || "#/";
+    const cut = hash.indexOf("?");
+    const path = cut >= 0 ? hash.slice(0, cut) : hash;
+    const query = cut >= 0 ? hash.slice(cut) : "";
+    if (path !== want) history.replaceState(null, "", want + query);
+    if (STATE.settings.lastNoteTab !== active) {
+      STATE.settings.lastNoteTab = active;
+      saveSettings();
+    }
+    return active;
+  }
+
+  function markNoteTabRead(active) {
+    if (!STATE.settings) return;
+    if (active === "all") {
+      const newest = ((STATE.settings.bellNotes) || []).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
       if (newest && (Number(STATE.settings.bellRead) || 0) < newest) {
         STATE.settings.bellRead = Date.now();
         saveSettings();
         updateBadge(0);
       }
+      return;
     }
-    if (!notes.length) return notesView("Notifications", "Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
-    const rows = notes.map((note) => {
-      const who = note.handle || note.name || "account";
-      const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
-      const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
-      return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">New post notifications for @${esc(who)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
-    }).join("");
-    return pageHead("Notifications") + `<div class="notes">${rows}</div>`;
+    const tab = feedTabById(active);
+    if (!tab) return;
+    const newest = notesForTab(tab).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
+    if (newest && (Number(tab.readAt) || 0) < newest) {
+      tab.readAt = Date.now();
+      saveSettings();
+    }
+  }
+
+  function noteTabButton(id, label, on, face, badge) {
+    const grip = id === "all" ? "" : `<span class="tab-grip" data-drag-tab="${esc(id)}" data-act="stop" aria-label="Drag to reorder"></span>`;
+    const btn = `<button class="tab note-tab${on ? " on" : ""}" type="button" data-act="note-tab" data-tab="${esc(id)}" data-note-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}">${grip}${face || ""}<span>${esc(label)}${badge || ""}</span></button>`;
+    if (!on || id === "all") return btn;
+    return `<div class="tab-pair on">${btn}<button class="tab-caret" type="button" data-act="note-tab-menu" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-haspopup="menu">${icon("caret")}</button></div>`;
+  }
+
+  function noteRow(note) {
+    const who = note.handle || note.name || "account";
+    const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
+    const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
+    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">New post notifications for @${esc(who)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
+  }
+
+  function notificationsView(route) {
+    const active = settleNoteTab(route || parseRoute());
+    markNoteTabRead(active);
+    const tabs = feedTabs().filter((tab) => tab.showNotes !== false);
+    const current = active === "all" ? null : feedTabById(active);
+    const notes = current ? notesForTab(current) : ((STATE.settings && STATE.settings.bellNotes) || []);
+    const buttons = noteTabButton("all", "All", active === "all", "", badgeHtml(active === "all" ? 0 : tabUnreadCount(null))) + tabs.map((tab) => {
+      const face = !tab.emoji && tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : "";
+      const name = (tab.emoji ? tab.emoji + " " : "") + tab.name;
+      return noteTabButton(tab.id, name, active === tab.id, face, badgeHtml(active === tab.id ? 0 : tabUnreadCount(tab)));
+    }).join("") + `<button class="tab tab-plus" type="button" data-act="feed-tab-new" aria-label="New tab"><span>${icon("plus")}</span></button>`;
+    const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="Scroll tabs left" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="Notification tabs">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button></div>`;
+    const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>Notifications</h1></div></div>${bar}</div>`;
+    let body = "";
+    if (!notes.length && active === "all") body = emptyBlock("Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
+    else if (!notes.length) body = emptyBlock("Nothing in " + (current ? current.name : "this tab") + " yet", "New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All.");
+    else body = `<div class="notes">${notes.map(noteRow).join("")}</div>`;
+    return head + body;
+  }
+
+  function openFeedTabEditor(id, presetFeed) {
+    const existing = id ? feedTabById(id) : null;
+    const preset = presetFeed ? profileKeys(presetFeed) : [];
+    STATE.draft = existing ? {
+      id: existing.id,
+      name: existing.name,
+      emoji: existing.emoji || "",
+      color: existing.color || "",
+      showHome: existing.showHome !== false,
+      showNotes: existing.showNotes !== false,
+      members: (existing.members || []).slice(),
+      q: ""
+    } : {
+      id: "",
+      name: "",
+      emoji: "",
+      color: "",
+      showHome: true,
+      showNotes: true,
+      members: preset,
+      q: ""
+    };
+    STATE.modal = "feed-tab";
+    STATE.bellMenu = null;
+    STATE.tabAssign = null;
+    STATE.tabContext = null;
+    STATE.tabMenu = null;
+    STATE.menu = null;
+    STATE.confirm = null;
+    render();
+    const name = document.getElementById("feed-tab-name");
+    if (name) name.focus();
+  }
+
+  function syncFeedTabDraft() {
+    if (STATE.modal !== "feed-tab" || !STATE.draft) return;
+    const name = document.getElementById("feed-tab-name");
+    const emoji = document.getElementById("feed-tab-emoji");
+    const q = document.getElementById("feed-tab-q");
+    if (name) STATE.draft.name = name.value;
+    if (emoji) STATE.draft.emoji = emoji.value;
+    if (q) STATE.draft.q = q.value;
+  }
+
+  function applyFeedTabOrder(ids) {
+    const tabs = feedTabs();
+    const map = {};
+    tabs.forEach((tab) => { map[tab.id] = tab; });
+    const next = [];
+    (ids || []).forEach((id) => {
+      if (map[id]) { next.push(map[id]); delete map[id]; }
+    });
+    tabs.forEach((tab) => { if (map[tab.id]) next.push(tab); });
+    STATE.settings.feedTabs = next;
+    saveSettings();
+  }
+
+  function saveFeedTabDraft() {
+    syncFeedTabDraft();
+    const draft = STATE.draft || {};
+    const name = String(draft.name || "").replace(/\s+/g, " ").trim();
+    if (!name) return;
+    const tabs = feedTabs();
+    let tab = draft.id ? tabs.find((item) => item.id === draft.id) : null;
+    if (!tab) {
+      if (tabs.length >= 500) {
+        toast("That’s as many tabs as this device can keep");
+        return;
+      }
+      tab = { id: newFeedTabId(), readAt: 0, members: [], sort: "recent" };
+      tabs.push(tab);
+    }
+    tab.name = name.slice(0, 40);
+    tab.emoji = cleanEmoji(draft.emoji);
+    tab.color = tabColor(draft.color);
+    tab.showHome = draft.showHome !== false;
+    tab.showNotes = draft.showNotes !== false;
+    tab.members = [];
+    (draft.members || []).forEach((member) => {
+      const text = String(member || "").trim();
+      if (text && text.length <= 120 && tab.members.indexOf(text) < 0 && tab.members.length < 500) tab.members.push(text);
+    });
+    STATE.settings.feedTabs = cleanFeedTabs(tabs);
+    STATE.modal = null;
+    const route = parseRoute();
+    if (tab.showNotes !== false && (route.name === "notifications" || !draft.id)) {
+      STATE.settings.lastNoteTab = tab.id;
+      saveSettings();
+      goHash("#/notifications/" + encodeURIComponent(tab.id));
+      return;
+    }
+    saveSettings();
+    render();
+  }
+
+  function openNoteTabMenu(id, x, y) {
+    if (!id || id === "all" || !feedTabById(id)) return;
+    STATE.tabContext = { id: id, left: x, top: y };
+    STATE.tabAssign = null;
+    STATE.menu = null;
+    render();
+  }
+
+  function openAssign(feedId, x, y) {
+    if (!feedId) {
+      toast("This post has no account to file");
+      return;
+    }
+    STATE.tabAssign = { id: feedId, left: x, top: y };
+    STATE.tabContext = null;
+    STATE.menu = null;
+    STATE.bellMenu = null;
+    render();
+  }
+
+  function openAssignFromPost(postId, x, y) {
+    const post = posts().find((item) => item && (item.id === postId || String(item.statusId || "") === String(postId)));
+    if (!post) return;
+    const feed = feedOf(post);
+    openAssign((feed && feed.id) || post.feedId || ((post.platform || "x") + ":" + (post.handle || "")), x, y);
+  }
+
+  function feedTabEditor() {
+    const draft = STATE.draft || { name: "", emoji: "", color: "", showHome: true, showNotes: true, members: [], q: "" };
+    const q = String(draft.q || "").trim().toLowerCase();
+    const memberSet = draft.members || [];
+    const inDraft = (feed) => tabHasProfile({ members: memberSet }, feed.id);
+    const memberRows = feeds().filter((feed) => inDraft(feed));
+    const found = q ? feeds().filter((feed) => {
+      if (inDraft(feed)) return false;
+      return ((feed.name || "") + " " + (feed.handle || "") + " " + (feed.platform || "")).toLowerCase().indexOf(q) >= 0;
+    }).slice(0, 40) : [];
+    const row = (feed, on) => `<div class="acct-row">${avatar(feed.avatar, feed.name)}<span class="who-copy"><span class="name">${esc(feed.name || feed.handle || "")}</span><span class="handle">@${esc(feed.handle || "")}</span></span><button class="follow${on ? " following" : ""}" type="button" data-act="feed-tab-pick" data-id="${esc(feed.id)}">${on ? "<span class='f'>Added</span><span class='u'>Remove</span>" : "Add"}</button></div>`;
+    const known = {};
+    memberRows.forEach((feed) => { known[feed.id] = true; });
+    const extra = memberSet.filter((id) => !known[id]).map((id) => {
+      const cut = id.indexOf(":");
+      return { id: id, name: cut > 0 ? id.slice(cut + 1) : id, handle: cut > 0 ? id.slice(cut + 1) : id, avatar: "" };
+    });
+    const switches = (key, label) => `<button class="tab-switch${draft[key] !== false ? " on" : ""}" type="button" role="switch" aria-checked="${draft[key] !== false ? "true" : "false"}" data-act="feed-tab-draft-flag" data-key="${key}"><span>${label}</span><i></i></button>`;
+    const swatches = `<button class="swatch swatch-none${draft.color ? "" : " on"}" type="button" data-act="feed-tab-color" data-color="" aria-label="No colour">None</button>` + COLORS.map((color) => `<button class="swatch${draft.color === color ? " on" : ""}" type="button" style="background:${color}" data-act="feed-tab-color" data-color="${color}" aria-label="Tab colour"></button>`).join("");
+    const order = feedTabs().length > 1 ? `<h3>Order</h3><p class="phandle">Drag the handle to reorder. The same order is used on Home.</p>${feedTabs().map((tab) => `<div class="tab-order-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="Drag to reorder"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="tab-order-name">${esc(tab.name)}</span></div>`).join("")}` : "";
+    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? "Edit tab" : "New tab"}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>${draft.id ? "Edit tab" : "New tab"}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>Save</button></div><div class="modal-body"><label class="field"><span>Name</span><input id="feed-tab-name" data-field="name" maxlength="40" value="${esc(draft.name || "")}"></label><label class="field"><span>Emoji</span><input id="feed-tab-emoji" data-field="emoji" maxlength="8" placeholder="Optional" value="${esc(draft.emoji || "")}"></label><div class="field"><span>Colour</span><div class="swatches">${swatches}</div></div>${switches("showHome", "Show on Home")}${switches("showNotes", "Show in Notifications")}<h3>Accounts</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="Search accounts" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">Search to add accounts. Profiles with no tab stay in All.</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">Delete tab</button>` : ""}</div></div></div>`;
   }
 
   function isStandalone() {
@@ -7559,7 +7982,7 @@
     const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${label}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     return pageHead("Settings", "", true) + `<div class="modal-body">
-      <p class="phandle">Follows, Lists, likes, bookmarks, and history stay in this browser.</p>
+<p class="phandle">Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser.</p>
       <h2>Appearance</h2>
       <div class="theme-row">
         ${themeBtn("auto", "Auto")}
@@ -7585,6 +8008,10 @@
       <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="@handle" aria-label="Mute an account" maxlength="80"></label><button class="follow" type="submit">Add</button></form>
       ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">Remove</button></div>`).join("")}
       <button class="primary" type="button" data-act="notify">${notifyOn ? "Notifications on" : "Notify me about new posts"}</button>
+      <h2>Custom tabs</h2>
+      <p class="phandle">Group accounts into tabs on Home and in Notifications.</p>
+      ${feedTabs().map((tab) => `<div class="tab-edit-row"><span>${tab.color && !tab.emoji ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}${esc((tab.emoji ? tab.emoji + " " : "") + tab.name)}</span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">Edit</button></div>`).join("")}
+      <button class="outline" type="button" data-act="feed-tab-new">New tab</button>
       <button class="primary" data-act="export">Export settings</button>
       <label class="primary import-btn">Import settings<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
       <h2>About</h2>
@@ -7618,13 +8045,21 @@
 
   function modal() {
     if (STATE.removeFeed) return removeFeedDialog();
-    if (STATE.histClear) {
+if (STATE.histClear) {
       const tab = STATE.histClear;
       const label = tab === "bookmarks" ? "bookmarks" : tab === "likes" ? "likes" : tab === "videos" ? "videos" : "articles";
       return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" style="max-width:320px;margin-top:20vh;padding:8px 0 16px" data-act="stop">
         <div class="modal-body"><h2>Clear all ${esc(label)}?</h2><p class="phandle">This removes them from this device only.</p>
         <button class="primary" data-act="hist-clear-go" style="background:#f4212e">Clear all</button>
         <button class="outline" data-act="close-modal" style="margin-left:8px">Cancel</button></div></div></div>`;
+    }
+    if (STATE.confirm && STATE.confirm.kind === "feed-tab") {
+      const tab = feedTabById(STATE.confirm.id);
+      const name = tab ? tab.name : "this tab";
+      return `<div class="modal-back"><div class="modal" role="dialog" aria-label="Delete tab" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
+        <div class="modal-body"><h2>Delete ${esc(name)}?</h2><p class="phandle">This can’t be undone. Accounts stay followed.</p>
+        <button class="primary" data-act="confirm-delete" style="background:#f4212e">Delete</button>
+        <button class="outline" data-act="close-confirm" style="margin-left:8px">Cancel</button></div></div></div>`;
     }
     if (STATE.confirm) {
       return `<div class="modal-back"><div class="modal" role="dialog" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
@@ -7705,6 +8140,7 @@
         </div>
       </div></div>`;
     }
+    if (STATE.modal === "feed-tab") return feedTabEditor();
     if (STATE.modal === "tabs") {
       const pinned = STATE.settings.lists.filter((list) => list.pinned);
       const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${(list.members || []).length} members</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="Move ${esc(list.name)} left"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="Move ${esc(list.name)} right"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">Unpin</button></div>`).join("");
@@ -7714,6 +8150,8 @@
           <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">For you</span><span class="handle">Always on Home</span></span></div>
           <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">Following</span><span class="handle">Always on Home</span></span></div>
           ${rows || `<p class="phandle">Pin a List to add it beside Following.</p>`}
+          <h3>Custom tabs</h3>
+          ${feedTabs().map((tab) => `<div class="acct-row tab-manage-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="Drag to reorder"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="who-copy"><span class="name">${esc(tab.name)}</span><span class="handle">${tab.showHome === false ? "Hidden on Home" : "On Home"}${tab.showNotes === false ? " · Hidden in Notifications" : ""}</span></span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">Edit</button></div>`).join("") || `<p class="phandle">Create a tab from Notifications with +.</p>`}
         </div>
       </div></div>`;
     }
@@ -7726,9 +8164,9 @@
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const top = (route.name === "messages" ? 0 : explore ? 0 : tall ? 106 : 53) + rowExtra + storyExtra;
+    const top = (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall ? 106 : 53) + rowExtra + storyExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
-    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${mode}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}`;
+    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${mode}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
 
   function watchHash(post) {
@@ -8793,7 +9231,7 @@
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
-    if (route.name === "notifications") return notificationsView();
+    if (route.name === "notifications") return notificationsView(route);
     if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
     if (route.name === "messages") return notesView("Messages", "Welcome to your inbox", "Private conversations aren’t part of this reader.");
     if (route.name === "sources") return sourcesView();
@@ -8804,6 +9242,7 @@
   function routeScrollKey() {
     const route = parseRoute();
     if (route.name === "home") return "home:" + (route.tab || "foryou");
+    if (route.name === "notifications") return "notifications:" + (route.tab || "all");
     if (route.name === "messages") return "#/messages";
     return location.hash || "#/";
   }
@@ -8844,7 +9283,7 @@
   function hrefSection(href) {
     const path = String(href || "").replace(/^#/, "").split("?")[0];
     const head = path.split("/").filter(Boolean)[0] || "home";
-    if (head === "home" || head === "following" || head === "tab") return "home";
+    if (head === "home" || head === "following" || head === "tab" || head === "cat") return "home";
     if (head === "list") return "lists";
     return navSection(head);
   }
@@ -8886,7 +9325,7 @@
   }
 
   function placeBellMenu() {
-    const menu = document.querySelector(".bell-menu");
+    const menu = document.querySelector(".bell-menu:not(.assign-menu):not(.tab-context)");
     const btn = document.querySelector('.notify-bell[aria-expanded="true"]');
     if (!menu) return;
     if (window.innerWidth < 500 || !btn) {
@@ -8902,6 +9341,24 @@
     if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - width);
     let top = item.bottom + 6;
     if (top + height > window.innerHeight - 8) top = Math.max(8, item.top - height - 6);
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+  }
+
+  function placeFloatMenu(selector) {
+    const menu = document.querySelector(selector);
+    if (!menu) return;
+    if (window.innerWidth < 500) {
+      menu.style.left = "";
+      menu.style.top = "";
+      return;
+    }
+    const width = menu.offsetWidth || 300;
+    const height = menu.offsetHeight || 240;
+    let left = Number(menu.dataset.x) || 8;
+    let top = Number(menu.dataset.y) || 8;
+    if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - width);
+    if (top + height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - height);
     menu.style.left = left + "px";
     menu.style.top = top + "px";
   }
@@ -9058,6 +9515,8 @@
       resumePlayback();
       placeTabMenu();
       placeBellMenu();
+      placeFloatMenu(".assign-menu");
+      placeFloatMenu(".tab-context");
       syncTabArrows();
       if (window.FeedsDiscord && window.FeedsDiscord.mount) window.FeedsDiscord.mount(route);
     };
@@ -9217,10 +9676,14 @@
     }
     if (act === "follow-sort") {
       const sort = el.dataset.sort === "popular" ? "popular" : "recent";
-      const tab = el.dataset.list ? "list:" + el.dataset.list : "following";
+      let tab = el.dataset.list ? "list:" + el.dataset.list : "following";
       if (el.dataset.list) {
         const list = (STATE.settings.lists || []).find((item) => item.id === el.dataset.list);
         if (list) list.sort = sort;
+      } else if (el.dataset.cat) {
+        const cat = feedTabById(el.dataset.cat);
+        if (cat) cat.sort = sort;
+        tab = "cat:" + el.dataset.cat;
       } else STATE.settings.followingSort = sort;
       STATE.tabMenu = null;
       saveSettings();
@@ -9501,6 +9964,108 @@
       setBellMode(id, mode, handle);
       return;
     }
+    if (act === "note-tab") {
+      const id = el.dataset.tab || "all";
+      STATE.settings.lastNoteTab = id === "all" ? "all" : id;
+      saveSettings();
+      STATE.tabContext = null;
+      goHash(id === "all" ? "#/notifications" : "#/notifications/" + encodeURIComponent(id));
+      return;
+    }
+    if (act === "note-tab-menu") {
+      const rect = el.getBoundingClientRect();
+      openNoteTabMenu(el.dataset.tab, rect.left, rect.bottom + 4);
+      return;
+    }
+    if (act === "close-assign") {
+      STATE.tabAssign = null;
+      render();
+      return;
+    }
+    if (act === "close-tab-context") {
+      STATE.tabContext = null;
+      render();
+      return;
+    }
+    if (act === "feed-tab-new") {
+      openFeedTabEditor("", el.dataset.id || "");
+      return;
+    }
+    if (act === "feed-tab-edit") {
+      openFeedTabEditor(el.dataset.id || "");
+      return;
+    }
+    if (act === "feed-tab-save") {
+      saveFeedTabDraft();
+      return;
+    }
+    if (act === "feed-tab-draft-flag") {
+      const key = el.dataset.key === "showNotes" ? "showNotes" : "showHome";
+      if (!STATE.draft) STATE.draft = {};
+      STATE.draft[key] = STATE.draft[key] === false;
+      render();
+      return;
+    }
+    if (act === "feed-tab-color") {
+      if (!STATE.draft) return;
+      STATE.draft.color = tabColor(el.dataset.color || "");
+      render();
+      return;
+    }
+    if (act === "feed-tab-pick") {
+      if (!STATE.draft) return;
+      STATE.draft.members = toggleMemberIds(STATE.draft.members, el.dataset.id || "");
+      render();
+      return;
+    }
+    if (act === "feed-tab-member") {
+      const tab = feedTabById(el.dataset.tab);
+      const id = el.dataset.id || "";
+      if (!tab || !id) return;
+      tab.members = toggleMemberIds(tab.members, id);
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "feed-tab-flag") {
+      const tab = feedTabById(el.dataset.id);
+      if (!tab) return;
+      const key = el.dataset.key === "showNotes" ? "showNotes" : "showHome";
+      tab[key] = tab[key] === false;
+      saveSettings();
+      const route = parseRoute();
+      if (key === "showHome" && tab.showHome === false && route.name === "home" && route.tab === "cat:" + tab.id) {
+        STATE.tabMenu = null;
+        goHash("#/following");
+        return;
+      }
+      if (key === "showNotes" && tab.showNotes === false && route.name === "notifications" && route.tab === tab.id) {
+        STATE.settings.lastNoteTab = "all";
+        saveSettings();
+        goHash("#/notifications");
+        return;
+      }
+      STATE.tabMenu = "cat:" + tab.id;
+      render();
+      return;
+    }
+    if (act === "feed-tab-ask-delete") {
+      STATE.tabContext = null;
+      STATE.tabMenu = null;
+      STATE.confirm = { kind: "feed-tab", id: el.dataset.id || "" };
+      render();
+      return;
+    }
+    if (act === "close-confirm") {
+      STATE.confirm = null;
+      render();
+      return;
+    }
+    if (act === "add-to-tab") {
+      const rect = el.getBoundingClientRect();
+      openAssignFromPost(el.dataset.id, rect.left, rect.bottom + 4);
+      return;
+    }
     if (act === "pip") {
       const tile = document.querySelector(".player.vplay") || document.querySelector(".player");
       const video = tile && tile.querySelector("video");
@@ -9643,8 +10208,27 @@
       render();
       return;
     }
-    if (act === "ask-delete") { STATE.confirm = STATE.draft.id; render(); return; }
+    if (act === "ask-delete") {
+      if (STATE.modal === "feed-tab" && STATE.draft && STATE.draft.id) STATE.confirm = { kind: "feed-tab", id: STATE.draft.id };
+      else STATE.confirm = STATE.draft.id;
+      render();
+      return;
+    }
     if (act === "confirm-delete") {
+      if (STATE.confirm && STATE.confirm.kind === "feed-tab") {
+        const id = STATE.confirm.id;
+        STATE.settings.feedTabs = feedTabs().filter((tab) => tab.id !== id);
+        if (STATE.settings.lastNoteTab === id) STATE.settings.lastNoteTab = "all";
+        STATE.confirm = null;
+        STATE.modal = null;
+        STATE.tabMenu = null;
+        saveSettings();
+        const route = parseRoute();
+        if (route.name === "notifications" && route.tab === id) goHash("#/notifications");
+        else if (route.name === "home" && route.tab === "cat:" + id) goHash("#/following");
+        else render();
+        return;
+      }
       STATE.settings.lists = STATE.settings.lists.filter((l) => l.id !== STATE.confirm);
       saveSettings();
       STATE.confirm = null;
@@ -9795,7 +10379,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause) }, null, 2)], { type: "application/json" });
+const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "superintelapp-settings.json";
@@ -9837,7 +10421,77 @@
   document.addEventListener("pointerup", endTabSheetDrag);
   document.addEventListener("pointercancel", endTabSheetDrag);
 
+  let tabDrag = null;
+  let swallowTabDrag = false;
+  document.addEventListener("pointerdown", (event) => {
+    const grip = event.target.closest && event.target.closest("[data-drag-tab]");
+    if (!grip || event.button > 0) return;
+    const node = grip.closest(".tab-pair") || grip.closest(".tab-order-row, .tab-manage-row, .note-tab");
+    if (!node) return;
+    tabDrag = { pointer: event.pointerId, id: grip.dataset.dragTab, x: event.clientX, y: event.clientY, started: false, node: node };
+    try { grip.setPointerCapture(event.pointerId); } catch (err) { /* the drag still follows the pointer */ }
+  }, true);
+  document.addEventListener("pointermove", (event) => {
+    if (!tabDrag || event.pointerId !== tabDrag.pointer) return;
+    const dx = event.clientX - tabDrag.x;
+    const dy = event.clientY - tabDrag.y;
+    if (!tabDrag.started) {
+      if (dx * dx + dy * dy < 36) return;
+      tabDrag.started = true;
+      tabDrag.node.classList.add("is-dragging");
+    }
+    const parent = tabDrag.node.parentNode;
+    if (!parent) return;
+    const horizontal = parent.classList.contains("tabs");
+    let target = null;
+    Array.prototype.forEach.call(parent.children, (el) => {
+      if (el === tabDrag.node) return;
+      const grip = el.matches && el.matches("[data-drag-tab]") ? el : (el.querySelector && el.querySelector("[data-drag-tab]"));
+      if (!grip) return;
+      const rect = el.getBoundingClientRect();
+      const point = horizontal ? event.clientX : event.clientY;
+      const start = horizontal ? rect.left : rect.top;
+      const end = horizontal ? rect.right : rect.bottom;
+      if (point >= start && point <= end) target = el;
+    });
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      const before = horizontal ? event.clientX < rect.left + rect.width / 2 : event.clientY < rect.top + rect.height / 2;
+      if (before) parent.insertBefore(tabDrag.node, target);
+      else if (target.nextSibling !== tabDrag.node) parent.insertBefore(tabDrag.node, target.nextSibling);
+    }
+    if (event.cancelable) event.preventDefault();
+  }, { passive: false });
+  const finishTabDrag = (event) => {
+    if (!tabDrag || (event && event.pointerId !== tabDrag.pointer)) return;
+    const drag = tabDrag;
+    tabDrag = null;
+    if (!drag.started) return;
+    swallowTabDrag = true;
+    setTimeout(() => { swallowTabDrag = false; }, 0);
+    syncFeedTabDraft();
+    const parent = drag.node.parentNode;
+    const ids = [];
+    if (parent) {
+      parent.querySelectorAll("[data-drag-tab]").forEach((grip) => {
+        const id = grip.dataset.dragTab;
+        if (id && ids.indexOf(id) < 0) ids.push(id);
+      });
+    }
+    applyFeedTabOrder(ids);
+    render();
+  };
+  document.addEventListener("pointerup", finishTabDrag);
+  document.addEventListener("pointercancel", finishTabDrag);
+
   document.addEventListener("click", (event) => {
+    if (swallowTabDrag || swallowNotePress) {
+      swallowTabDrag = false;
+      swallowNotePress = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (swallowTabSheet) {
       swallowTabSheet = false;
       event.preventDefault();
@@ -9868,13 +10522,64 @@
   let swallowGroupClick = false;
   document.addEventListener("contextmenu", (event) => {
     const target = groupTarget(event.target);
-    if (!target) return;
+    if (target) {
+      event.preventDefault();
+      if (groupPoint) swallowGroupClick = true;
+      clearTimeout(groupPress);
+      groupPoint = null;
+      openGroupMenu(target, event.clientX, event.clientY);
+      return;
+    }
+    const tab = event.target.closest && event.target.closest("[data-note-tab]");
+    if (tab && tab.dataset.noteTab && tab.dataset.noteTab !== "all") {
+      event.preventDefault();
+      openNoteTabMenu(tab.dataset.noteTab, event.clientX, event.clientY);
+      return;
+    }
+    const article = event.target.closest && event.target.closest("article.post[data-post]");
+    if (!article || (event.target.closest && event.target.closest("a, button, input, textarea, video, .menu"))) return;
     event.preventDefault();
-    if (groupPoint) swallowGroupClick = true;
-    clearTimeout(groupPress);
-    groupPoint = null;
-    openGroupMenu(target, event.clientX, event.clientY);
+    openAssignFromPost(article.dataset.post, event.clientX, event.clientY);
   });
+
+  let notePress = 0;
+  let notePoint = null;
+  let swallowNotePress = false;
+  document.addEventListener("touchstart", (event) => {
+    if (!event.touches || event.touches.length !== 1) return;
+    const node = event.target;
+    if (!node || !node.closest) return;
+    if (node.closest("[data-drag-tab], button.tab-caret, input, textarea, video, .menu")) return;
+    const tab = node.closest("[data-note-tab]");
+    const article = node.closest("article.post[data-post]");
+    if (article && node.closest("a, button, input, textarea, video")) return;
+    const tabId = tab && tab.dataset.noteTab && tab.dataset.noteTab !== "all" ? tab.dataset.noteTab : "";
+    if (!tabId && !article) return;
+    const touch = event.touches[0];
+    notePoint = { x: touch.clientX, y: touch.clientY, tab: tabId, post: article ? article.dataset.post : "" };
+    clearTimeout(notePress);
+    notePress = setTimeout(() => {
+      const point = notePoint;
+      notePoint = null;
+      if (!point) return;
+      swallowNotePress = true;
+      if (point.tab) openNoteTabMenu(point.tab, point.x, point.y);
+      else if (point.post) openAssignFromPost(point.post, point.x, point.y);
+    }, 480);
+  }, { passive: true });
+  document.addEventListener("touchmove", (event) => {
+    if (!notePoint || !event.touches || !event.touches.length) return;
+    const touch = event.touches[0];
+    const dx = touch.clientX - notePoint.x;
+    const dy = touch.clientY - notePoint.y;
+    if (dx * dx + dy * dy > 100) {
+      clearTimeout(notePress);
+      notePoint = null;
+    }
+  }, { passive: true });
+  const endNotePress = () => { clearTimeout(notePress); notePoint = null; };
+  document.addEventListener("touchend", endNotePress, { passive: true });
+  document.addEventListener("touchcancel", endNotePress, { passive: true });
   document.addEventListener("touchstart", (event) => {
     const target = groupTarget(event.target);
     if (!target || event.touches.length !== 1) return;
@@ -9961,7 +10666,7 @@
     if (el.dataset && el.dataset.field) {
       STATE.draft[el.dataset.field] = el.value;
       if (el.dataset.field === "name") {
-        const save = document.querySelector("[data-act='save-list'], [data-act='group-save']");
+        const save = document.querySelector("[data-act='save-list'], [data-act='group-save'], [data-act='feed-tab-save']");
         if (save) save.disabled = !el.value.trim();
       }
       if (el.dataset.field === "q" || el.dataset.field === "gq" || el.dataset.field === "icon") render();
@@ -10066,7 +10771,9 @@
         if (Array.isArray(data.bellNotes)) STATE.settings.bellNotes = cleanBellNotes(data.bellNotes);
         if (Array.isArray(data.bellSeen)) STATE.settings.bellSeen = data.bellSeen.map((id) => String(id)).slice(-500);
         if (data.bellRead) STATE.settings.bellRead = Number(data.bellRead) || 0;
-        if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.historyPause);
+if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.historyPause);
+        if (Array.isArray(data.feedTabs)) STATE.settings.feedTabs = cleanFeedTabs(data.feedTabs);
+        if (typeof data.lastNoteTab === "string") STATE.settings.lastNoteTab = cleanLastNoteTab(data.lastNoteTab, STATE.settings.feedTabs || []);
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();
@@ -10116,7 +10823,7 @@
       }
     }
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed)) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
       STATE.modal = null;
       STATE.drawer = false;
       STATE.menu = null;
@@ -10124,6 +10831,9 @@
       STATE.groupMenu = null;
       STATE.tabMenu = null;
       STATE.bellMenu = null;
+      STATE.tabAssign = null;
+      STATE.tabContext = null;
+      if (STATE.confirm && STATE.confirm.kind === "feed-tab") STATE.confirm = null;
       STATE.confirm = null;
       STATE.histClear = "";
       STATE.removeFeed = null;
@@ -10240,7 +10950,7 @@
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (motion.addEventListener) motion.addEventListener("change", () => schedulePreview());
   }
-  window.addEventListener("resize", () => { syncTabArrows(); placeTabMenu(); placeBellMenu(); });
+  window.addEventListener("resize", () => { syncTabArrows(); placeTabMenu(); placeBellMenu(); placeFloatMenu(".assign-menu"); placeFloatMenu(".tab-context"); });
   window.addEventListener("scroll", () => {
     if (window.innerWidth >= 500) {
       STATE.headerHidden = false;
@@ -10374,6 +11084,8 @@
     STATE.share = null;
     STATE.groupMenu = null;
     STATE.bellMenu = null;
+    STATE.tabAssign = null;
+    STATE.tabContext = null;
     STATE.headerHidden = false;
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
@@ -11350,7 +12062,11 @@
       text: text,
       avatar: httpsUrl(post.avatar),
       image: postImageUrl(post),
-      hash: statusHash(post)
+      hash: statusHash(post),
+      feedId: String(post.feedId || ((row && row.ids && row.ids[0]) || "")),
+      platform: post.platform || "x",
+      ids: (row && row.ids) || [],
+      handles: (row && row.handles) || []
     };
   }
 

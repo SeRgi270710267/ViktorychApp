@@ -1,5 +1,5 @@
-/* SuperintelApp service worker. Cache names are superintel6- plus the deploy SHA. */
-const VERSION = "superintel6-__SW_VERSION__";
+/* SuperintelApp service worker. Cache names are superintel7- plus the deploy SHA. */
+const VERSION = "superintel7-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
@@ -461,7 +461,11 @@ function noteFromPost(post, row) {
     text: text,
     avatar: /^https:\/\//.test(post.avatar || "") ? post.avatar : "",
     image: postImageUrl(post),
-    hash: statusHash(post)
+    hash: statusHash(post),
+    feedId: String(post.feedId || ""),
+    platform: post.platform || "x",
+    ids: (row && row.ids) || [],
+    handles: (row && row.handles) || []
   };
 }
 
