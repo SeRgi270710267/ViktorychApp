@@ -273,6 +273,9 @@ def _one(post: dict, item: dict) -> tuple[bool, dict | None]:
         reason = "expired"
     else:
         reason = "no video file"
+    if platform == "telegram" and item.get("poster"):
+        item["url"] = ""
+        return True, None
     found = {}
     if platform in ("instagram", "threads"):
         found = resolve_meta(post)

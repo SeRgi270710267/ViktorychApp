@@ -2090,3 +2090,61 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   .short-card { width: 45vw; }
   .watch-title { font-size: 18px; line-height: 26px; }
 }
+
+.post-text .tg-spoiler, .status-text .tg-spoiler, .tg-spoiler {
+  background: var(--muted);
+  color: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.tg-spoiler.open { background: transparent; color: inherit; }
+.tg-emoji { width: 1.15em; height: 1.15em; vertical-align: -0.15em; display: inline-block; }
+.post-text b, .status-text b { font-weight: 700; }
+.post-text i, .status-text i { font-style: italic; }
+.post-text u, .status-text u { text-decoration: underline; }
+.post-text s, .status-text s { text-decoration: line-through; }
+.post-text code, .status-text code, .post-text pre, .status-text pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+.post-text pre, .status-text pre {
+  white-space: pre-wrap;
+  margin: 4px 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--hover-soft);
+}
+.post-text blockquote, .status-text blockquote {
+  margin: 4px 0;
+  padding-left: 10px;
+  border-left: 3px solid var(--line);
+}
+.edited { color: var(--muted); font-size: 13px; }
+.file-card, .link-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+}
+.file-card { padding: 12px; }
+.file-kind { color: var(--muted); font-size: 13px; font-weight: 700; }
+.file-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-extra { color: var(--muted); font-size: 13px; margin-left: auto; }
+.link-card-img { width: 120px; height: 120px; object-fit: cover; flex: none; background: var(--hover-soft); }
+.link-card-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 12px 10px 0; }
+.link-card:not(:has(.link-card-img)) .link-card-copy { padding-left: 12px; }
+.link-site { color: var(--muted); font-size: 13px; }
+.link-title { font-weight: 700; }
+.link-desc { color: var(--muted); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tile.round { border-radius: 999px; aspect-ratio: 1; max-width: 280px; overflow: hidden; }
+.tile.round .vposter, .tile.round video { border-radius: 999px; object-fit: cover; }
+.pbanner.theme { background: var(--banner); }
+.tg-comments { border-top: 1px solid var(--line); }
+.tg-comments iframe { width: 100%; height: 480px; border: 0; background: var(--bg); }
+.poll-question { font-weight: 700; margin-bottom: 4px; }

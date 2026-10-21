@@ -777,6 +777,13 @@ def main() -> None:
     check(follow_req.normalize("https://vk.com/vk", "vk")["handle"] == "vk", "a vk profile URL is a handle")
     check(follow_req.normalize("https://www.threads.net/@redacted_handle", "threads")["handle"] == "redacted_handle", "a threads URL is a handle")
     check(follow_req.normalize("https://www.instagram.com/redacted_handle/", "instagram")["handle"] == "redacted_handle", "an instagram URL is a handle")
+    tg_link = follow_req.normalize("https://t.me/s/telegram", "")
+    check(tg_link["platform"] == "telegram" and tg_link["handle"] == "telegram" and tg_link["url"] == "https://t.me/telegram", "a t.me preview link is a Telegram channel")
+    tg_at = follow_req.normalize("telegram:@telegram", "telegram")
+    check(tg_at["handle"] == "telegram" and tg_at["url"] == "https://t.me/telegram", "telegram:@name is a Telegram follow")
+    tg_entry = follow_req.entry_for(tg_at)
+    check(tg_entry["adapter"] == "telegram" and tg_entry["source_urls"] == ["https://t.me/s/{handle}"] and tg_entry["fallbacks"][0]["source_urls"] == ["{rsshubBase}/telegram/channel/{handle}"], "a Telegram follow uses the public preview and RSSHub backup")
+    check(follow_req.check_url(tg_at) == "https://t.me/s/telegram", "Telegram is confirmed from the public preview")
     rss_spec = follow_req.normalize("https://example.com/feed.xml", "rss")
     check(rss_spec["platform"] == "rss" and rss_spec["url"] == "https://example.com/feed.xml", "an https feed is an rss follow")
     http_rejected = False
@@ -896,6 +903,41 @@ def main() -> None:
     check(vk_client == ("111", "publicsecretvalue1", "5.289"), "the public web bundle yields the anonymous client")
     check("6287487" not in (ROOT / "scripts" / "vk_remote.py").read_text(encoding="utf-8"), "vk client credentials are parsed from vk.com, not copied into the repo")
     check("loadVkSaved" in app and "Watch on VK" in app and "seenFeeds" in app and 'platform === "vk"' in app, "vk profiles use the synced wall and a new follow is picked up once")
+    from adapters.telegram import fetch_channel, parse as parse_telegram
+
+    tg_html = (FIX / "telegram_channel.html").read_text(encoding="utf-8")
+    tg_feed = {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram", "_probe": lambda url: ("bad" not in url, "ok")}
+    tg_doc = parse_telegram(tg_html, tg_feed)
+    check(len(tg_doc["posts"]) == 11, "telegram preview keeps every message type")
+    tg_by = {post["id"]: post for post in tg_doc["posts"]}
+    formatted = tg_by["10"]
+    check("<b>Bold</b>" in formatted["html"] and "<i>italic</i>" in formatted["html"] and "<u>" in formatted["html"] and "<s>" in formatted["html"] and "<code>" in formatted["html"] and "<pre>" in formatted["html"] and 'class="tg-spoiler"' in formatted["html"] and 'class="tg-emoji"' in formatted["html"] and "<script" not in formatted["html"], "telegram formatting stays as safe html")
+    check("secret words" in formatted["text"] and formatted["stats"]["views"] == 1590000 and formatted["edited"] is True and formatted["date"].startswith("2026-08-26T19:11:05"), "telegram keeps plain text, views, the edit flag, and the exact time")
+    check(len(tg_by["11"]["media"]) == 3 and all(item["type"] == "photo" for item in tg_by["11"]["media"]), "a telegram album is a multi-image grid")
+    check(tg_by["12"]["media"][0]["url"].endswith("good.mp4") and tg_by["12"]["media"][0]["type"] == "video" and not tg_by["12"]["media"][0].get("round"), "a probed telegram video keeps its mp4")
+    check(tg_by["13"]["media"][0]["type"] == "animated_gif" and tg_by["14"]["media"][0].get("round") is True, "telegram GIFs and round videos keep their shape")
+    bad_video = parse_telegram(tg_html.replace("good.mp4", "bad.mp4"), tg_feed)["posts"]
+    bad_row = next(post for post in bad_video if post["id"] == "12")
+    check(bad_row["media"][0]["url"] == "" and bad_row["media"][0]["poster"].endswith("poster.jpg"), "a telegram video that does not play falls back to its poster")
+    check(tg_by["15"]["media"][0]["type"] == "audio" and tg_by["16"]["media"][0]["type"] == "file" and tg_by["16"]["media"][0]["title"] == "notes.pdf", "telegram voice and documents become attachment cards")
+    check(tg_by["17"]["link"]["title"] == "Hello from the blog" and tg_by["17"]["link"]["image"].endswith("card.jpg") and not tg_by["17"]["media"], "a telegram link preview is a card, not another photo")
+    check(tg_by["18"]["poll"]["question"] == "Which build?" and tg_by["18"]["poll"]["choices"][1]["percent"] == 38, "a telegram poll keeps the question and the percents")
+    check(tg_by["19"]["forwardedFrom"]["name"] == "Pavel Durov" and tg_by["19"]["forwardedFrom"]["handle"] == "durov" and tg_by["19"]["kind"] == "post", "a telegram forward stays on the channel and names the source")
+    check(tg_by["20"]["replyParent"]["author"] == "Telegram News" and tg_by["20"]["replyingTo"]["id"] == "10" and tg_by["20"].get("discussion") is True and tg_by["20"]["kind"] == "post", "a telegram reply shows its parent and can open comments")
+    quiet = parse_telegram(tg_html + '\n<div id="feeds-discussion" data-on="0"></div>', tg_feed)
+    check(all(not post.get("discussion") for post in quiet["posts"]), "a channel without a discussion hides comments")
+    tg_profile = tg_doc["profiles"][0]
+    check(tg_profile["name"] == "Telegram News" and tg_profile["followers"] == 9270000 and tg_profile["verifiedType"] == "blue" and tg_profile["url"] == "https://t.me/telegram" and tg_profile["bannerColor"].startswith("linear-gradient"), "telegram profile keeps the title, subscribers, and theme banner")
+    rss_payload = '<?xml version="1.0"?><rss><channel><item><title>Telegram News</title><link>https://t.me/telegram/3</link><description>&lt;b&gt;Hello&lt;/b&gt;</description><pubDate>Wed, 26 Aug 2026 19:11:05 +0000</pubDate></item></channel></rss>'
+    rss_post = parse_telegram(rss_payload, tg_feed)["posts"][0]
+    check(rss_post["id"] == "3" and "Hello" in rss_post["text"] and "<b>Hello</b>" in rss_post["html"], "the RSSHub backup is parsed by the same adapter")
+    pages = {
+        "https://t.me/s/telegram": '<div class="tgme_widget_message" data-post="telegram/2"><div class="js-message_text">one</div></div><a data-before="2"></a>',
+        "https://t.me/s/telegram?before=2": '<div class="tgme_widget_message" data-post="telegram/1"><div class="js-message_text">two</div></div>',
+    }
+    backfill = fetch_channel("telegram", limit=2, backfill=True, get=lambda url: pages[url])
+    check('data-post="telegram/1"' in backfill and 'data-post="telegram/2"' in backfill, "the first follow walks ?before= until the window is full")
+    check('"id": "telegram:telegram"' in config_text and "loadTelegramSaved" in app and "Watch on Telegram" in app and 'act === "spoiler"' in app and ".tg-spoiler" in css and 'platform === "telegram"' in app and "t.me" in app and '["posts", "Posts"], ["media", "Media"]' in app, "telegram is configured and rendered with Posts and Media")
     check("RSSHUB_MIRRORS" not in community_src and "rssforever" not in community_src, "community posts use the local RSSHub container")
     ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     check("fallback/" in ignore and "status.json" in ignore, "generated fallback files stay out of git")
@@ -1164,7 +1206,8 @@ def main() -> None:
     extra = people.extra_feeds(site_config)
     extra_ids = {row["id"] for row in extra}
     check("x:redacted_handle" in extra_ids and "instagram:redacted_handle" in extra_ids and "youtube:redacted_handle" not in extra_ids, "sync follows linked accounts that are not already feeds")
-    check(people.extra_feeds({"feeds": [], "people": [{"id": "t", "name": "T", "accounts": [{"platform": "telegram", "handle": "prepperchannel"}]}]}) == [], "telegram is not followed until an adapter exists")
+    linked_telegram = people.extra_feeds({"feeds": [], "people": [{"id": "t", "name": "T", "accounts": [{"platform": "telegram", "handle": "prepperchannel"}]}]})
+    check(len(linked_telegram) == 1 and linked_telegram[0]["id"] == "telegram:prepperchannel" and linked_telegram[0]["adapter"] == "telegram" and linked_telegram[0]["source_urls"] == ["https://t.me/s/{handle}"], "a linked Telegram channel is followed once the adapter exists")
 
     cross_posts = [
         {"platform": "youtube", "handle": "redacted_handle", "id": "abcdefghijk", "url": "https://www.youtube.com/watch?v=abcdefghijk", "feedId": "youtube:redacted_handle"},

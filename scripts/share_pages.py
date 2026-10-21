@@ -34,6 +34,7 @@ PLATFORM = {
     "vk": "VK",
     "rss": "RSS",
     "discord": "Discord",
+    "telegram": "Telegram",
 }
 YT_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 THUMB_LADDER = (

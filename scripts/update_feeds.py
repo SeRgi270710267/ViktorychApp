@@ -447,6 +447,17 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     adapter = "vk"
                 except Exception as exc:
                     errors.append(f"vk: {exc}")
+            if payload is None and feed.get("adapter") == "telegram":
+                try:
+                    from adapters.telegram import fetch_channel
+
+                    handle = feed.get("handle") or ""
+                    prior = old_by_feed.get(feed["id"]) or []
+                    payload = fetch_channel(handle, int(feed.get("limit") or 8), backfill=not prior)
+                    adapter = "telegram"
+                    source_url = "https://t.me/s/" + handle
+                except Exception as exc:
+                    errors.append(f"telegram: {exc}")
             if feed.get("adapter") == "x_api_v2":
                 print(f"[keep] {feed['id']}: x_api_v2 parses fixtures only and does not call the X API", file=sys.stderr)
                 record_source(health, feed["id"], False, stamp, "x_api_v2 parses fixtures only")

@@ -1,5 +1,5 @@
-/* Feeds service worker. Cache names are translate- plus the deploy SHA. */
-const VERSION = "translate-__SW_VERSION__";
+/* Feeds service worker. Cache names are channels- plus the deploy SHA. */
+const VERSION = "channels-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;

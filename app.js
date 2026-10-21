@@ -4,7 +4,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram" };
 
   const PATH = {
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
@@ -44,6 +44,7 @@
     threads: "M12.2 3C7.8 3 4.6 6.2 4.6 10.8c0 2.3.8 4.3 2.2 5.8l-1 3.2 3.3-1.2c.9.3 1.9.5 2.9.5 4.5 0 7.8-3.2 7.8-7.6C19.8 6.4 16.6 3 12.2 3zm0 2.2c3.2 0 5.4 2.3 5.4 5.5 0 1.5-.5 2.8-1.4 3.8-.3-2.3-1.8-4-4-4.6.8-.4 1.3-1.1 1.3-2 0-1.3-1.1-2.2-2.6-2.2-1.7 0-2.9 1.1-3.1 2.7H6.2c.3-2.6 2.6-4.6 5.9-4.6-.1 0 .1 0 .1 1.4zm-.4 4.2c1.6.2 2.8 1.3 3.1 3-.6.5-1.4.8-2.3.8-1.5 0-2.6-.8-3-2 .7-.3 1.4-.6 2.2-.8z",
     rss: "M6 17.5A1.5 1.5 0 1 1 4.5 16 1.5 1.5 0 0 1 6 17.5zM4 11a7 7 0 0 1 7 7h-2a5 5 0 0 0-5-5v-2zm0-4a11 11 0 0 1 11 11h-2A9 9 0 0 0 4 9V7z",
     vk: "M3.2 6h3.1l2.7 6.6L11.7 6h3.1L10.4 15H7.6L3.2 6zm9.4 0H21v2.2h-5.2v1.6H20v2.1h-4.2v1.7H21V15h-8.4V6z",
+    tg: "M2.01 21 23 12 2.01 3 2 10l15 2-15 2z",
     feather: "M22 3.2c-5.8 0-9.4 2.2-12 5.6C8.2 11.4 7.2 15 7 19h2.1c.2-2.6.8-4.8 2-6.2 1 .2 2.1.5 3.2.9l-2.1 3.1h2.2l1.5-2.2c1.7.4 3.4.7 5.2 1 .2-.7.4-1.4.5-2.1-.9-.2-1.7-.4-2.5-.6 2-1.5 3.8-3.5 5-5.9-.3 0-.6-.1-1-.1z",
     pip: "M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v11c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 20 4 18.88 4 17.5v-11zM6.5 6A.5.5 0 0 0 6 6.5v11c0 .28.22.5.5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11zM10 12h8v6h-8v-6z",
     chevL: "M15.4 5.4 9.8 11l5.6 5.6-1.4 1.4L7 11l7-7z",
@@ -167,6 +168,7 @@
       return "https://www.youtube.com/watch?v=" + id;
     }
     if (platform === "vk" && id) return "https://vk.com/wall" + id;
+    if (platform === "telegram" && handle && id) return "https://t.me/" + handle + "/" + id;
     return "";
   }
 
@@ -413,7 +415,7 @@
   function parseAccountInput(raw) {
     const text = String(raw || "").trim();
     if (!text || text.length > 300) return null;
-    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss):(\S+)$/i);
+    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram):(\S+)$/i);
     if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
     if (/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}\/?$/i.test(text)) return { platform: "x", account: text };
     if (/^@?[A-Za-z0-9_]{1,15}$/.test(text)) return { platform: "x", account: text.replace(/^@/, "") };
@@ -421,6 +423,8 @@
     if (/instagram\.com\/[A-Za-z0-9._]+/i.test(text)) return { platform: "instagram", account: text };
     if (/(?:youtube\.com|youtu\.be)\//i.test(text)) return { platform: "youtube", account: text };
     if (/vk\.com\/[A-Za-z0-9_.]+/i.test(text)) return { platform: "vk", account: text };
+    if (/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:s\/)?[A-Za-z][A-Za-z0-9_]{4,31}(?:\/\d+)?\/?$/i.test(text)) return { platform: "telegram", account: text };
+    if (/^@?[A-Za-z][A-Za-z0-9_]{16,32}$/.test(text)) return { platform: "telegram", account: text.replace(/^@/, "") };
     if (/^https:\/\/\S+$/i.test(text)) return { platform: "rss", account: text };
     return null;
   }
@@ -723,7 +727,7 @@
 
   function sourceBadge(platform) {
     if (!platform || platform === "x") return "";
-    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : "rss";
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : "rss";
     return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
   }
 
@@ -734,23 +738,26 @@
     if (feed.platform === "instagram") return "https://www.instagram.com/" + feed.handle + "/";
     if (feed.platform === "youtube") return "https://www.youtube.com/@" + feed.handle;
     if (feed.platform === "vk") return "https://vk.com/" + feed.handle;
+    if (feed.platform === "telegram") return "https://t.me/" + feed.handle;
     return feed.url || "#";
   }
 
   function mentionHref(user, platform) {
     if (platform === "instagram") return "https://www.instagram.com/" + user + "/";
     if (platform === "threads") return "https://www.threads.com/@" + user;
+    if (platform === "telegram") return "https://t.me/" + user;
     return "https://x.com/" + user;
   }
-  function hashHref(tag, platform) {
+  function hashHref(tag, platform, handle) {
     const clean = encodeURIComponent(tag);
     if (platform === "instagram") return "https://www.instagram.com/explore/tags/" + clean + "/";
     if (platform === "threads") return "https://www.threads.com/search?q=" + encodeURIComponent("#" + tag);
     if (platform === "vk") return "https://vk.com/feed?section=search&q=" + encodeURIComponent("#" + tag);
+    if (platform === "telegram") return "https://t.me/s/" + encodeURIComponent(handle || "") + "?q=" + encodeURIComponent("#" + tag);
     return "https://x.com/hashtag/" + clean;
   }
 
-  function linkify(text, links, platform) {
+  function linkify(text, links, platform, handle) {
     const src = String(text || "");
     const known = (links || []).filter((l) => l && l.expanded);
     let i = 0;
@@ -787,9 +794,9 @@
         i += mention[0].length;
         continue;
       }
-      const hash = src.slice(i).match(platform === "vk" ? /^#([\p{L}\p{N}_]{1,50})/u : /^#([A-Za-z0-9_]{1,50})/);
+      const hash = src.slice(i).match(platform === "vk" || platform === "telegram" ? /^#([\p{L}\p{N}_]{1,50})/u : /^#([A-Za-z0-9_]{1,50})/);
       if (hash && (i === 0 || /\s/.test(src[i - 1]))) {
-        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(hashHref(hash[1], platform))}">#${esc(hash[1])}</a>`;
+        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(hashHref(hash[1], platform, handle))}">#${esc(hash[1])}</a>`;
         i += hash[0].length;
         continue;
       }
@@ -805,22 +812,30 @@
     return html;
   }
 
+  function safeRich(html) {
+    const raw = String(html || "");
+    if (!raw || /<\s*script\b|javascript:|onerror\s*=|onload\s*=/i.test(raw)) return "";
+    return raw;
+  }
+
   function textHtml(post, key, full) {
     if (window.FeedsTranslate) {
       const swapped = window.FeedsTranslate.textFor(key);
-      if (swapped != null) return linkify(swapped, post.links || [], post.platform);
+      if (swapped != null) return linkify(swapped, post.links || [], post.platform, post.handle);
     } else {
       const translated = STATE.translated[key];
       if (translated && !STATE.originalShown[key]) {
-        return linkify(translated, [], post.platform) + ` <button class="show-more" data-act="show-original" data-key="${esc(key)}">Show original</button>`;
+        return linkify(translated, [], post.platform, post.handle) + ` <button class="show-more" data-act="show-original" data-key="${esc(key)}">Show original</button>`;
       }
     }
     const text = post.text || "";
-    if (full || STATE.expanded[key] || text.length <= 280) return linkify(text, post.links, post.platform);
+    const rich = safeRich(post.html);
+    if (rich && (full || STATE.expanded[key] || text.length <= 280)) return rich;
+    if (full || STATE.expanded[key] || text.length <= 280) return linkify(text, post.links, post.platform, post.handle);
     let cut = text.slice(0, 280);
     const sp = cut.lastIndexOf(" ");
     if (sp > 220) cut = cut.slice(0, sp);
-    return linkify(cut, post.links, post.platform) + ` <button class="show-more" data-act="more" data-key="${esc(key)}">Show more</button>`;
+    return linkify(cut, post.links, post.platform, post.handle) + ` <button class="show-more" data-act="more" data-key="${esc(key)}">Show more</button>`;
   }
 
   function readerLanguage() {
@@ -865,7 +880,7 @@
   function bioBlock(entity) {
     if (!entity || !entity.bio) return "";
     const key = "bio:" + (entity.id || ((entity.platform || "x") + ":" + (entity.handle || "")));
-    return textBlock({ text: entity.bio, platform: entity.platform, links: [], kind: "bio", id: key }, key, true, "bio");
+    return textBlock({ text: entity.bio, platform: entity.platform, handle: entity.handle, links: [], kind: "bio", id: key }, key, true, "bio");
   }
 
   function scheduleDetect() {
@@ -975,6 +990,7 @@
     if (platform === "youtube") return "Watch on YouTube";
     if (platform === "x") return "Watch on X";
     if (platform === "vk") return "Watch on VK";
+    if (platform === "telegram") return "Watch on Telegram";
     return "Open original";
   }
 
@@ -1057,7 +1073,8 @@
     const chrome = mode === "feed" && !gif
       ? `<button class="vmute" type="button" data-act="mute" aria-label="Unmute" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden></span>`
       : "";
-    return `<div class="tile vplay"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}">
+    const round = media && media.round ? " round" : "";
+    return `<div class="tile vplay${round}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}">
       ${posterImg(post, media, "vposter")}
       ${dur ? `<span class="vdur">${esc(dur)}</span>` : ""}
       ${gif ? `<span class="gif-badge">GIF</span>` : ""}
@@ -1083,16 +1100,35 @@
     return "";
   }
 
+  function attachmentHtml(items) {
+    return (items || []).filter((item) => item && (item.type === "file" || item.type === "audio")).map((item) => {
+      const href = item.url || item.open || "#";
+      const kind = item.type === "audio" ? "Voice" : "File";
+      const extra = item.extra ? `<span class="file-extra">${esc(item.extra)}</span>` : "";
+      return `<a class="file-card" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href)}"><span class="file-kind">${kind}</span><span class="file-title">${esc(item.title || kind)}</span>${extra}</a>`;
+    }).join("");
+  }
+
+  function linkCard(link) {
+    if (!link || !link.url) return "";
+    const image = link.image ? `<img class="link-card-img" src="${esc(link.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
+    const site = link.site ? `<span class="link-site">${esc(link.site)}</span>` : "";
+    const title = `<span class="link-title">${esc(link.title || link.url)}</span>`;
+    const description = link.description ? `<span class="link-desc">${esc(link.description)}</span>` : "";
+    return `<a class="link-card" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
+  }
+
   function mediaHtml(items, eager, post) {
-    const list = (items || []).filter((m) => m && (m.url || m.poster || m.videoId || m.type === "embed" || m.type === "placeholder" || m.type === "video" || m.type === "animated_gif")).slice(0, 4);
-    if (!list.length) return "";
+    const files = attachmentHtml(items);
+    const list = (items || []).filter((m) => m && m.type !== "file" && m.type !== "audio" && (m.url || m.poster || m.videoId || m.type === "embed" || m.type === "placeholder" || m.type === "video" || m.type === "animated_gif")).slice(0, 4);
+    if (!list.length) return files;
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
       const open = embed.open ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(embed.open)}">Open original</a>` : "";
-      return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(embed.url)}" title="${esc(embed.title || "Post")}" loading="lazy"></iframe>${open}</div></div>`;
+      return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(embed.url)}" title="${esc(embed.title || "Post")}" loading="lazy"></iframe>${open}</div></div>` + files;
     }
     if (list.length === 1 && list[0].type === "placeholder") {
-      return `<div class="media m1"><div class="tile broken"><a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(list[0].url || "#")}">Open original</a></div></div>`;
+      return `<div class="media m1"><div class="tile broken"><a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(list[0].url || "#")}">Open original</a></div></div>` + files;
     }
     const n = list.length;
     const cls = n === 1 ? "m1" : n === 2 ? "m2" : n === 3 ? "m3" : "m4";
@@ -1108,7 +1144,7 @@
       const priority = first ? ` fetchpriority="high"` : "";
       return `<div class="tile" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"><img src="${esc(src)}"${imageSrcset(src)}${refresh} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
     }).join("");
-    return `<div class="media ${cls}">${tiles}</div>`;
+    return `<div class="media ${cls}">${tiles}</div>` + files;
   }
 
   function fetchTimed(url, ms) {
@@ -2997,6 +3033,11 @@
     if (!id) return { loading: false, replies: [], missing: true };
     const focused = String(STATE.focusId || "") === id;
     const want = focused ? 60 : 20;
+    if ((post.platform || "") === "telegram") {
+      const bucket = { loading: false, replies: [], missing: !post.discussion, cap: want, fetchedAt: Date.now(), settled: true };
+      STATE.replies[id] = bucket;
+      return bucket;
+    }
     if (post._community && post.kind !== "community") {
       return { loading: false, replies: Array.isArray(post.replies) ? post.replies : [], missing: false, cap: want };
     }
@@ -4013,7 +4054,8 @@
       return `<div class="poll-choice">${bar}<span class="poll-label">${esc(choice.text)}</span>${label}</div>`;
     }).join("");
     const votes = isFinite(total) && total >= 0 && poll.totalVotes != null ? `<div class="poll-total">${esc(formatCount(total))} votes</div>` : "";
-    return `<div class="poll">${rows}${votes}</div>`;
+    const question = poll.question ? `<div class="poll-question">${esc(poll.question)}</div>` : "";
+    return `<div class="poll">${question}${rows}${votes}</div>`;
   }
 
   function contextCard(parent) {
@@ -4029,14 +4071,28 @@
     </div>`;
   }
 
+  function forwardLine(post) {
+    const from = post && post.forwardedFrom;
+    if (!from) return "";
+    const name = String(from.name || "").trim();
+    const handle = String(from.handle || "").trim();
+    if (!name && !handle) return `<div class="repost-line">${icon("repost")}<span>Forwarded</span></div>`;
+    const label = name || ("@" + handle);
+    const who = handle
+      ? `<a data-act="stop" data-card="${esc("telegram:" + handle)}" href="${esc(accountHash("telegram", handle))}">${esc(label)}</a>`
+      : esc(label);
+    return `<div class="repost-line">${icon("repost")}<span>Forwarded from ${who}</span></div>`;
+  }
+
   function card(post, mode, opts) {
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
     const hideRepost = mode === "author" || mode === "status";
     const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a data-card="${esc("x:" + (post.repostedBy.handle || ""))}" href="${esc(accountHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
+    const forwarded = forwardLine(post);
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
     const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
-    const context = mode !== "status" && post.kind === "reply" && post.replyParent ? contextCard(post.replyParent) : "";
+    const context = mode !== "status" && post.replyParent && (post.kind === "reply" || post.platform === "telegram") ? contextCard(post.replyParent) : "";
     const repostFeed = feedOf(post);
     const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
       ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? "Turn on reposts" : "Turn off reposts"}</button>`
@@ -4058,6 +4114,7 @@
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-date="${esc(post.date || "")}"${open}${hydrate}>
       ${context}
       ${repost}
+      ${forwarded}
       <div class="post-row">
         ${avaCol}
         <div class="post-main">
@@ -4066,6 +4123,7 @@
             ${post.handle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(post.handle)}</a>` : ""}
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
+            ${post.edited ? `<span class="edited">Edited</span>` : ""}
             ${sourceBadge(post.platform)}
             <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="More">${icon("more")}</button>
           </div>
@@ -4073,6 +4131,7 @@
           ${textBlock(post, post.id, false)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
+          ${linkCard(post.link)}
           ${quoteCard(post.quoted)}
           ${threadLink}
           ${actionBar(post)}
@@ -4117,7 +4176,7 @@
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
-    } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord"].includes(parts[0])) {
+    } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord", "telegram"].includes(parts[0])) {
       platform = parts[0];
       handle = parts[1] || "";
       rest = parts.slice(2);
@@ -4957,6 +5016,28 @@
     return Promise.resolve();
   }
 
+  function loadTelegramSaved(row, handle) {
+    const feed = findFeed("telegram", handle);
+    const profile = limitedProfile("telegram", handle);
+    if (feed) {
+      ["name", "avatar", "banner", "bannerColor", "bio", "location", "website", "joined", "verifiedType", "url"].forEach((key) => {
+        if (feed[key]) profile[key] = feed[key];
+      });
+      if (feed.followers != null) profile.followers = feed.followers;
+      if (feed.following != null) profile.following = feed.following;
+      if (feed.postsCount != null) profile.postsCount = feed.postsCount;
+      profile.id = feed.id || profile.id;
+    }
+    row.profile = profile;
+    row.posts = [];
+    absorbSaved(row);
+    row.media = (row.posts || []).filter((post) => (post.media || []).some((item) => item && item.type !== "file" && item.type !== "audio" && (item.url || item.poster)));
+    row.limited = !(row.posts || []).length;
+    if ((row.posts || []).length) row.saved = false;
+    row.fetchedAt = Date.now();
+    return Promise.resolve();
+  }
+
   function loadVkSaved(row, handle) {
     const feed = findFeed("vk", handle);
     const profile = limitedProfile("vk", handle);
@@ -4986,6 +5067,7 @@
     const clean = String(handle || "").replace(/^@/, "");
     const job = platform === "youtube" ? loadYtChannel(clean).then((data) => (data && data.authorId ? ytProfileFromChannel(data, clean) : null))
       : platform === "vk" ? Promise.resolve(limitedProfile("vk", clean))
+      : platform === "telegram" ? Promise.resolve(limitedProfile("telegram", clean))
       : (platform === "instagram" || platform === "threads") ? Promise.resolve(limitedProfile(platform, clean))
       : fxHeader(clean);
     row.headerTask = job.then((profile) => {
@@ -5007,6 +5089,7 @@
     const clean = String(handle || "").replace(/^@/, "");
     const job = platform === "youtube" ? loadYtLive(row, clean)
       : platform === "vk" ? loadVkSaved(row, clean)
+      : platform === "telegram" ? loadTelegramSaved(row, clean)
       : (platform === "instagram" || platform === "threads") ? loadLimited(row, platform, clean)
       : loadXLive(row, clean);
     row.pageTask = job.then(() => {
@@ -5026,7 +5109,9 @@
   }
 
   function liveTabs(row) {
-    if (!row || row.limited) return [];
+    if (!row) return [];
+    if ((row.platform || "") === "telegram") return [["posts", "Posts"], ["media", "Media"]];
+    if (row.limited) return [];
     if ((row.platform || "") === "youtube") {
       const tabs = [];
       if ((row.videos || []).length || row.cursor.videos) tabs.push(["videos", "Videos"]);
@@ -5130,13 +5215,13 @@
     const bucket = tab ? liveBucket(row, tab) : "";
     const list = bucket ? (row[bucket] || []) : [];
     const shown = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
-    const banner = profile.banner ? `<img class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : `<div class="pbanner"></div>`;
+    const banner = profile.banner ? `<img class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : profile.bannerColor ? `<div class="pbanner theme" style="background:${esc(profile.bannerColor)}"></div>` : `<div class="pbanner"></div>`;
     const meta = [
       profile.location ? `<span>${icon("loc")}${esc(profile.location)}</span>` : "",
       profile.website ? `<a data-act="stop" href="${esc(profile.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(profile.website).replace(/^https?:\/\//, ""))}</a>` : "",
       profile.joined ? `<span>${icon("cal")}${esc(joinedLabel(profile.joined))}</span>` : ""
     ].join("");
-    const followerWord = profile.platform === "youtube" ? "Subscribers" : "Followers";
+    const followerWord = profile.platform === "youtube" || profile.platform === "telegram" ? "Subscribers" : "Followers";
     const counts = (profile.following != null || profile.followers != null) ? `<div class="counts">
       ${profile.following != null ? `<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>` : ""}
       ${profile.followers != null ? `<div><b>${esc(formatCount(profile.followers))}</b> <span>${followerWord}</span></div>` : ""}
@@ -5207,18 +5292,18 @@
     else if (tab === "media") list = list.filter((p) => (p.media || []).length);
     else list = list.filter((p) => p.kind !== "reply");
     const count = feed.postsCount != null ? formatCount(feed.postsCount) : formatCount(postsFor(feed).length);
-    const banner = feed.banner ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : `<div class="pbanner"></div>`;
+    const banner = feed.banner ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : feed.bannerColor ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : `<div class="pbanner"></div>`;
     const meta = [
       feed.location ? `<span>${icon("loc")}${esc(feed.location)}</span>` : "",
       feed.website ? `<a href="${esc(feed.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(feed.website).replace(/^https?:\/\//, ""))}</a>` : "",
       feed.joined ? `<span>${icon("cal")}${esc(joinedLabel(feed.joined))}</span>` : ""
     ].join("");
-    const followerWord = youtube ? "Subscribers" : "Followers";
+    const followerWord = youtube || feed.platform === "telegram" ? "Subscribers" : "Followers";
     const counts = (feed.following != null || feed.followers != null) ? `<div class="counts">
       ${feed.following != null ? `<div><b>${esc(formatCount(feed.following))}</b> <span>Following</span></div>` : ""}
       ${feed.followers != null ? `<div><b>${esc(formatCount(feed.followers))}</b> <span>${followerWord}</span></div>` : ""}
     </div>` : "";
-    const tabIds = youtube ? [["posts", "Posts"], ["videos", "Videos"], ["community", "Community"]] : [["posts", "Posts"], ["replies", "Replies"], ["media", "Media"]];
+    const tabIds = youtube ? [["posts", "Posts"], ["videos", "Videos"], ["community", "Community"]] : feed.platform === "telegram" ? [["posts", "Posts"], ["media", "Media"]] : [["posts", "Posts"], ["replies", "Replies"], ["media", "Media"]];
     const tabs = tabIds.map((pair) => {
       const id = pair[0];
       const href = profileHash(feed.platform, feed.handle) + (id === "posts" ? "" : "?tab=" + id);
@@ -5284,16 +5369,19 @@
     STATE.focusId = postKey(post);
     const stats = post.stats || {};
     const chain = ancestorChain(post);
-    const slice = replySlice(post);
+    const talk = telegramTalk(post);
+    const slice = talk == null ? replySlice(post) : { loading: false, shown: [] };
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
     const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
-    const body = `${replyLine}
+    const parentCard = post.platform === "telegram" && post.replyParent ? contextCard(post.replyParent) : "";
+    const body = `${parentCard}${forwardLine(post)}${replyLine}
         ${textBlock(post, post.id, true, "status-text")}
         ${hiddenPost(post) ? `<p class="phandle">Muted on this device.</p>` : ""}
         ${pollHtml(post)}
         ${mediaHtml(post.media, false, post)}
+        ${linkCard(post.link)}
         ${quoteCard(post.quoted)}
-        <div class="status-time">${esc(fullTime(post.date))}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
+        <div class="status-time">${esc(fullTime(post.date))}${post.edited ? " · Edited" : ""}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
         ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> Views</div>` : `<div class="status-views"></div>`}
         ${actionBar(post)}`;
     const face = authorFace(post);
@@ -5309,8 +5397,16 @@
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
       ${ancestorBlock(post, chain)}
       ${article}
-      ${composer(threaded)}
-      ${replyList(post)}`;
+      ${talk == null ? composer(threaded) + replyList(post) : talk}`;
+  }
+
+  function telegramTalk(post) {
+    if (!post || post.platform !== "telegram") return null;
+    if (!post.discussion) return "";
+    const handle = post.handle || "";
+    const id = post.statusId || post.id || "";
+    const src = "https://t.me/" + encodeURIComponent(handle) + "/" + encodeURIComponent(id) + "?embed=1&discussion=1";
+    return `<div class="tg-comments"><iframe src="${esc(src)}" title="Telegram comments" loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
   }
 
   function exploreView(route) {
@@ -5969,7 +6065,7 @@
           </div>
           <div class="desc${openDesc || !desc ? "" : " clamped"}">
             <div class="yt-sub">${esc(videoMeta(post))}</div>
-            <div class="desc-body">${linkify(desc || post.text || "", post.links, post.platform)}</div>
+            <div class="desc-body">${linkify(desc || post.text || "", post.links, post.platform, post.handle)}</div>
             ${desc ? `<button class="text-btn" type="button" data-act="more" data-key="desc:${esc(id)}">${openDesc ? "Show less" : "Show more"}</button>` : ""}
           </div>
           <section class="watch-comments">${comments}</section>
@@ -6470,6 +6566,7 @@
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
+    if (act === "spoiler") { el.classList.toggle("open"); return; }
     if (act === "skip") {
       const main = document.querySelector("main.center");
       if (main) main.focus();

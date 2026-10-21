@@ -1,5 +1,5 @@
 name: Follow request
-description: Add an X, Threads, Instagram, YouTube, VK, or RSS account to the synced feeds
+description: Add an X, Threads, Instagram, YouTube, VK, Telegram, or RSS account to the synced feeds
 title: "Follow request: "
 labels: []
 body:
@@ -21,6 +21,7 @@ body:
         - instagram
         - youtube
         - vk
+        - telegram
         - rss
     validations:
       required: true

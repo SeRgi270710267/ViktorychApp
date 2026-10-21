@@ -1,6 +1,6 @@
 """Per-source adapters that normalize posts into one X-shaped schema."""
 
-from . import fxtwitter, generic_rss, nitter_rss, rsshub_instagram, rsshub_threads, vk, x_api_v2, youtube_community, youtube_rss
+from . import fxtwitter, generic_rss, nitter_rss, rsshub_instagram, rsshub_threads, telegram, vk, x_api_v2, youtube_community, youtube_rss
 
 ADAPTERS = {
     "x_api_v2": x_api_v2.parse,
@@ -12,6 +12,7 @@ ADAPTERS = {
     "youtube_rss": youtube_rss.parse,
     "youtube_community": youtube_community.parse,
     "vk": vk.parse,
+    "telegram": telegram.parse,
 }
 
 __all__ = ["ADAPTERS"]
