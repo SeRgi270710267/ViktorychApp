@@ -1887,6 +1887,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .app.wide { max-width: 1750px; }
 .app.wide .center { width: auto; flex: 1 1 auto; max-width: none; border-right: 0; }
 .subs .page-head h1 { margin-right: auto; }
+.subs-feed { display: flow-root; min-width: 0; }
 .yt-toggle { display: flex; gap: 4px; margin-left: auto; }
 .yt-toggle button, .text-btn {
   border: 0;
@@ -1913,6 +1914,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   z-index: 4;
   background: var(--bg);
   scrollbar-width: none;
+  transition: top 0.2s ease;
 }
 .yt-chips::-webkit-scrollbar { display: none; }
 .yt-chip {
@@ -2055,6 +2057,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .remove-cancel:hover { background: var(--hover); }
 @media (max-width: 499px) {
   .yt-chips { top: calc(var(--top) + env(safe-area-inset-top)); }
+  .topbar.is-hidden ~ .yt-chips { top: env(safe-area-inset-top); }
   .modal-back:has(.group-sheet) { align-items: flex-end; padding: 0; }
   .modal.group-sheet { height: auto; max-height: 88vh; border-radius: 16px 16px 0 0; width: 100%; }
   .modal-back.remove-back { align-items: flex-end; justify-content: center; padding: 0; }
@@ -2081,6 +2084,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 }
 @media (prefers-reduced-motion: reduce) {
   .modal.remove-sheet { animation: none; }
+  .yt-chips { transition: none; }
 }
 @media (max-width: 499px) {
   .group-menu {
@@ -2490,6 +2494,8 @@ html.tv-on #new-posts { display: none; }
 
 .subs.grid .yt-grid {
   display: grid;
+  position: relative;
+  z-index: 0;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
   column-gap: 16px;
   row-gap: 0;

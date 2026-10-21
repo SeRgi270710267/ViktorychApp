@@ -1,5 +1,5 @@
-/* SuperintelApp service worker. Cache names are superintel7- plus the deploy SHA. */
-const VERSION = "superintel7-__SW_VERSION__";
+/* SuperintelApp service worker. Cache names are superintel8- plus the deploy SHA. */
+const VERSION = "superintel8-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
