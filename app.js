@@ -122,7 +122,9 @@
 
   function canonicalId(post) {
     const platform = (post && post.platform) || "";
-    const raw = String((post && (post.statusId || post.id)) || "");
+    const rawId = String((post && post.id) || "");
+    if (rawId.indexOf("repost:") === 0) return rawId;
+    let raw = String((post && (post.statusId || post.id)) || "");
     const url = String((post && post.url) || "");
     if (platform === "instagram") {
       const match = (url.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/) || raw.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/) || [])[1];
@@ -132,7 +134,17 @@
       const match = (url.match(/threads\.(?:com|net)\/(?:@[^/]+\/)?(?:post|t)\/([A-Za-z0-9_-]+)/) || raw.match(/threads\.(?:com|net)\/(?:@[^/]+\/)?(?:post|t)\/([A-Za-z0-9_-]+)/) || [])[1];
       if (match) return match;
     }
+    if (platform === "youtube" || raw.indexOf("yt:video:") === 0) {
+      if (raw.indexOf("yt:video:") === 0) raw = raw.split(":").pop();
+      const found = (raw + " " + url).match(/(?:[?&]v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
+      if (found) return found[1];
+      if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+    }
     return raw;
+  }
+
+  function canonicalPostId(post) {
+    return canonicalId(post);
   }
 
   function postIdentity(post) {
@@ -198,6 +210,11 @@
     if (ig) return "instagram:" + ig[1].toLowerCase();
     const threads = blob.match(/threads\.(?:com|net)\/(?:@[^/]+\/post|t)\/([A-Za-z0-9_-]+)/i);
     if (threads) return "threads:" + threads[1].toLowerCase();
+    const watch = blob.match(/(?:[?&]v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
+    if (watch) return "youtube:" + watch[1];
+    const prefixed = String((post && (post.statusId || post.id)) || "");
+    if (prefixed.indexOf("yt:video:") === 0) return "youtube:" + prefixed.split(":").pop();
+    if ((post && post.platform) === "youtube" && /^[A-Za-z0-9_-]{11}$/.test(prefixed)) return "youtube:" + prefixed;
     return "";
   }
 
@@ -2070,6 +2087,36 @@
     const parsed = Date.parse(text);
     if (!isFinite(parsed)) return "";
     return new Date(parsed).toISOString().replace(/\.\d{3}Z$/, "Z");
+  }
+
+  function relativeLabel(text) {
+    const label = String(text || "").trim().toLowerCase();
+    if (!label) return false;
+    if (label === "just now" || label === "now" || label === "yesterday") return true;
+    return /(?:(?:streamed|premiered)\s+)?(?:\d+\s+(?:second|minute|hour|day|week|month|year)s?|\d+\s*[smhdwy])\s+ago\b/i.test(label);
+  }
+
+  function timeMs(value) {
+    const n = Date.parse(value || "");
+    return isFinite(n) && n > Date.parse("2005-01-01T00:00:00Z") ? n : 0;
+  }
+
+  function earlierIso(left, right) {
+    const a = timeMs(left);
+    const b = timeMs(right);
+    if (a && b) return a <= b ? left : right;
+    if (a) return left || "";
+    if (b) return right || "";
+    return "";
+  }
+
+  function ivPublish(item) {
+    if (!item) return "";
+    const label = item.publishedText || "";
+    if (relativeLabel(label)) return "";
+    const iso = ivIso(item.published);
+    if (!label && iso && Math.abs(Date.now() - timeMs(iso)) < 120000) return "";
+    return iso;
   }
 
   function upgradeAvatar(url) {
@@ -4197,7 +4244,7 @@
       title: video.title || "",
       text: video.title || "",
       description: video.description || "",
-      date: ivIso(video.published),
+      date: ivPublish(video),
       url: "https://www.youtube.com/watch?v=" + id,
       media: [{ type: "video", url: "", poster: poster, duration: video.lengthSeconds }],
       stats: { views: video.viewCount }
@@ -4223,7 +4270,7 @@
       avatar: (profile && profile.avatar) || ivBest(item.authorThumbnails),
       verifiedType: profile && profile.verifiedType,
       text: item.content || "",
-      date: ivIso(item.published),
+      date: ivPublish(item),
       url: "https://www.youtube.com/post/" + id,
       media: (built && built.media) || [],
       stats: { likes: item.likeCount, replies: item.replyCount }
@@ -6501,12 +6548,16 @@
     return STATE.memoryPosts;
   }
 
+  function memoryKey(post) {
+    return (post && post.platform || "") + ":" + (canonicalPostId(post) || (post && post.id) || "");
+  }
+
   function rememberTimeline(items) {
     const have = {};
-    memoryPosts().forEach((post) => { have[(post.platform || "") + ":" + post.id] = true; });
+    memoryPosts().forEach((post) => { have[memoryKey(post)] = true; });
     (items || []).forEach((post) => {
       if (!post || !post.id) return;
-      const key = (post.platform || "") + ":" + post.id;
+      const key = memoryKey(post);
       if (have[key]) return;
       have[key] = true;
       memoryPosts().push(post);
@@ -6517,9 +6568,9 @@
     if (!doc) return doc;
     const posts = (doc.posts || []).slice();
     const have = {};
-    posts.forEach((post) => { have[(post.platform || "") + ":" + post.id] = true; });
+    posts.forEach((post) => { have[memoryKey(post)] = true; });
     memoryPosts().forEach((post) => {
-      const key = (post.platform || "") + ":" + post.id;
+      const key = memoryKey(post);
       if (have[key]) return;
       have[key] = true;
       posts.push(post);
@@ -6539,26 +6590,87 @@
 
   function takeFresh(feed, incoming) {
     const known = {};
-    let newest = "";
+    let newest = 0;
     posts().forEach((post) => {
       if (!belongsToFeed(post, feed)) return;
-      known[String(post.id)] = true;
-      const stamp = post.sortDate || post.date || "";
-      if (stamp > newest) newest = stamp;
+      known[canonicalPostId(post)] = true;
+      known[String(post.id || "")] = true;
+      const ms = timeMs(post.sortDate || post.date || "");
+      if (ms > newest) newest = ms;
     });
     const out = [];
-    let seenKnown = false;
     (incoming || []).forEach((post) => {
-      if (!post || !post.id || out.length >= 20) return;
+      if (!post || out.length >= 20) return;
+      const id = canonicalPostId(post);
+      if (!id) return;
       post.feedId = feed.id;
       if (!post.platform) post.platform = feed.platform;
+      if ((post.platform || "") === "youtube" && String(post.id || "").indexOf("repost:") !== 0) {
+        post.id = id;
+        post.statusId = id;
+      }
       if (post.kind === "repost" && post.repostedBy && !post.repostedBy.avatar && feed.avatar) post.repostedBy.avatar = feed.avatar;
       if (post.kind === "repost" && post.repostedBy && feed.name && post.repostedBy.name === post.repostedBy.handle) post.repostedBy.name = feed.name;
-      if (known[String(post.id)]) { seenKnown = true; return; }
-      const stamp = post.sortDate || post.date || "";
-      if (!seenKnown || (newest && stamp > newest)) out.push(post);
+      if (known[id] || known[String(post.id || "")]) return;
+      const ms = timeMs(post.sortDate || post.date || "");
+      if (!ms || (newest && ms <= newest)) return;
+      known[id] = true;
+      out.push(post);
     });
     return out;
+  }
+
+  function settlePublishTimes(feed, incoming) {
+    const byId = {};
+    posts().forEach((post) => {
+      if (!belongsToFeed(post, feed)) return;
+      const id = canonicalPostId(post);
+      if (id) byId[id] = post;
+    });
+    (incoming || []).forEach((post) => {
+      const known = byId[canonicalPostId(post)];
+      if (!known) return;
+      const next = earlierIso(known.date, post.date);
+      if (next && next !== known.date) known.date = next;
+    });
+  }
+
+  function lockDocDates(doc) {
+    if (!doc || !Array.isArray(doc.posts)) return doc;
+    const previous = {};
+    const consider = (post) => {
+      if (!post) return;
+      const id = canonicalPostId(post);
+      if (!id) return;
+      previous[id] = earlierIso(previous[id], post.date);
+    };
+    ((STATE.data && STATE.data.posts) || []).forEach(consider);
+    memoryPosts().forEach(consider);
+    doc.posts.forEach((post) => {
+      const id = canonicalPostId(post);
+      if ((post.platform || "") === "youtube" && id && String(post.id || "").indexOf("repost:") !== 0) {
+        post.id = id;
+        post.statusId = id;
+      }
+      if (id && previous[id]) post.date = earlierIso(previous[id], post.date);
+    });
+    return doc;
+  }
+
+  function seenPostIds() {
+    const ids = [];
+    const have = {};
+    const add = (id) => {
+      id = String(id || "");
+      if (!id || have[id] || ids.length >= 400) return;
+      have[id] = true;
+      ids.push(id);
+    };
+    posts().forEach((post) => {
+      add(canonicalPostId(post));
+      add(post && post.id);
+    });
+    return ids;
   }
 
   function mapLimit(items, limit, fn) {
@@ -6608,6 +6720,22 @@
     return urls;
   }
 
+  function xmlText(node, names) {
+    const all = node.getElementsByTagName("*");
+    const want = {};
+    names.forEach((name) => { want[name] = true; });
+    const found = {};
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      const tag = String(el.localName || el.tagName || "").toLowerCase();
+      if (want[tag] && found[tag] == null) found[tag] = (el.textContent || "").trim();
+    }
+    for (let i = 0; i < names.length; i++) {
+      if (found[names[i]]) return found[names[i]];
+    }
+    return "";
+  }
+
   function parseFeedXml(xml, feed) {
     if (!xml || typeof DOMParser === "undefined") return [];
     const doc = new DOMParser().parseFromString(xml, "text/xml");
@@ -6620,10 +6748,7 @@
       const title = ((node.getElementsByTagName("title")[0] && node.getElementsByTagName("title")[0].textContent) || "").trim();
       const linkNode = node.getElementsByTagName("link")[0];
       const link = (linkNode && (linkNode.getAttribute("href") || linkNode.textContent)) || "";
-      const published = (node.getElementsByTagName("pubDate")[0] && node.getElementsByTagName("pubDate")[0].textContent)
-        || (node.getElementsByTagName("updated")[0] && node.getElementsByTagName("updated")[0].textContent)
-        || (node.getElementsByTagName("published")[0] && node.getElementsByTagName("published")[0].textContent)
-        || "";
+      const published = xmlText(node, ["published", "pubdate", "updated"]);
       const summary = (node.getElementsByTagName("description")[0] && node.getElementsByTagName("description")[0].textContent)
         || (node.getElementsByTagName("summary")[0] && node.getElementsByTagName("summary")[0].textContent)
         || (node.getElementsByTagName("content")[0] && node.getElementsByTagName("content")[0].textContent)
@@ -6631,9 +6756,8 @@
       const holder = document.createElement("div");
       holder.innerHTML = summary;
       const text = (holder.textContent || "").replace(/\s+/g, " ").trim() || title;
-      const guid = (node.getElementsByTagName("guid")[0] && node.getElementsByTagName("guid")[0].textContent)
-        || (node.getElementsByTagName("id")[0] && node.getElementsByTagName("id")[0].textContent)
-        || link || title;
+      const videoId = xmlText(node, ["videoid"]);
+      const guid = xmlText(node, ["guid", "id"]) || link || title;
       if (!text && !title) continue;
       const post = {
         id: String(guid).slice(0, 180),
@@ -6651,6 +6775,13 @@
         media: [],
         stats: {}
       };
+      if ((feed.platform || "") === "youtube") {
+        const cid = canonicalPostId({ platform: "youtube", id: videoId || guid, url: link });
+        if (cid) {
+          post.id = cid;
+          post.statusId = cid;
+        }
+      }
       out.push(post);
     }
     return out;
@@ -6675,7 +6806,37 @@
     });
   }
 
-  function liveYoutube(feed) {
+  function mergeLiveYoutube(feed, incoming, rssRows) {
+    const rssDate = {};
+    (rssRows || []).forEach((post) => {
+      const id = canonicalPostId(post);
+      if (id && post.date) rssDate[id] = earlierIso(rssDate[id], post.date);
+    });
+    const stored = {};
+    posts().forEach((post) => {
+      if (!belongsToFeed(post, feed)) return;
+      const id = canonicalPostId(post);
+      if (id) stored[id] = earlierIso(stored[id], post.date);
+    });
+    const seen = {};
+    const out = [];
+    (incoming || []).concat(rssRows || []).forEach((post) => {
+      if (!post) return;
+      const id = canonicalPostId(post);
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      const copy = Object.assign({}, post);
+      copy.id = id;
+      copy.statusId = id;
+      copy.feedId = feed.id;
+      copy.platform = "youtube";
+      copy.date = earlierIso(stored[id], earlierIso(rssDate[id], copy.date || ""));
+      out.push(copy);
+    });
+    return out;
+  }
+
+  function liveYoutube(feed, config) {
     const id = feed.channelId || feed.handle;
     if (!id) return Promise.resolve([]);
     const profile = {
@@ -6685,7 +6846,7 @@
       avatar: feed.avatar || "",
       verifiedType: feed.verifiedType || ""
     };
-    return rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(id), 3, "ivBase").then((data) => {
+    const videosP = rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(id), 3, "ivBase").then((data) => {
       const authorId = (data && data.authorId) || feed.channelId || (/^UC[\w-]{10,}$/.test(id) ? id : "");
       const videos = ivVideoPosts({ videos: (data && (data.latestVideos || data.videos)) || [] }, profile);
       if (!authorId) return videos;
@@ -6694,6 +6855,7 @@
         return videos.concat(posts);
       }).catch(() => videos);
     }).catch(() => []);
+    return Promise.all([videosP, liveConfigured(feed, config)]).then((pair) => mergeLiveYoutube(feed, pair[0], pair[1]));
   }
 
   function liveConfigured(feed, config) {
@@ -6714,10 +6876,7 @@
     const platform = feed.platform || "";
     if (platform === "x") return liveX(feed);
     if (platform === "vk") return Promise.resolve([]);
-    if (platform === "youtube") return liveYoutube(feed).then((rows) => {
-      if (rows && rows.length) return rows;
-      return liveConfigured(feed, config);
-    });
+    if (platform === "youtube") return liveYoutube(feed, config);
     return liveConfigured(feed, config);
   }
 
@@ -6760,6 +6919,7 @@
         lists.forEach((list, index) => {
           const feed = selected[index];
           stampActivity(list || []);
+          settlePublishTimes(feed, list || []);
           incoming = incoming.concat(takeFresh(feed, list || []));
         });
         if (!incoming.length) return;
@@ -6789,11 +6949,14 @@
 
   async function refreshFeeds(apply) {
     try {
-      const doc = await fetchFeeds(true);
+      const doc = lockDocDates(await fetchFeeds(true));
       if (!doc || !Array.isArray(doc.posts)) return;
       const current = {};
-      ((STATE.data && STATE.data.posts) || []).forEach((post) => { current[post.id] = true; });
-      const added = doc.posts.filter((post) => !current[post.id]);
+      ((STATE.data && STATE.data.posts) || []).forEach((post) => {
+        current[canonicalPostId(post)] = true;
+        if (post.id) current[String(post.id)] = true;
+      });
+      const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !current[String(post.id || "")]);
       if (apply || !STATE.data) {
         STATE.data = withMemory(doc);
         STATE.error = null;
@@ -6806,7 +6969,7 @@
       STATE.pendingFeed = doc;
       showPill(added.concat(STATE.pendingLive || []));
       const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
-      const fresh = doc.posts.filter((post) => followedSince(post, since));
+      const fresh = added.filter((post) => followedSince(post, since));
       if (document.hidden) updateBadge(fresh.length || added.length);
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) {
         try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
@@ -7066,7 +7229,8 @@
     worker.postMessage({
       type: "state",
       seen: Number(localStorage.getItem("rss-feeds-seen-at") || 0),
-      follows: STATE.settings.follows || []
+      follows: STATE.settings.follows || [],
+      ids: seenPostIds()
     });
   }
 
@@ -7123,7 +7287,7 @@
       localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
       updateBadge(0);
       const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
-      if (worker) worker.postMessage({ type: "seen" });
+      if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
       render({ y: 0 });
     });
     let pullStart = 0;
@@ -7158,7 +7322,7 @@
         localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
         updateBadge(0);
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
-        if (worker) worker.postMessage({ type: "seen" });
+        if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
         refreshFeeds(false);
         refreshLiveTimeline(false);
         const route = parseRoute();
@@ -7295,7 +7459,7 @@
     const params = new URLSearchParams(location.search);
     try {
       if (params.get("error") === "1") throw new Error("forced");
-      STATE.data = await fetchFeeds(false);
+      STATE.data = lockDocDates(await fetchFeeds(false));
       saveTimelineSnap(STATE.data);
       STATE.settings = loadSettings();
       applyTheme();
@@ -7310,7 +7474,12 @@
       render({ reset: true });
       loadNewestShard().then(() => revealArchive());
       const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
-      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since));
+      const seenIds = {};
+      ((snap && snap.posts) || []).forEach((post) => {
+        seenIds[canonicalPostId(post)] = true;
+        if (post && post.id) seenIds[String(post.id)] = true;
+      });
+      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")]);
       const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
       if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted") {
         try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }

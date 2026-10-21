@@ -30,8 +30,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from adapters import ADAPTERS  # noqa: E402
 from adapters.common import (  # noqa: E402
+    canonical_status_id,
     dedupe_posts,
     load_document,
+    lock_publish_time,
     media_basename,
     merge_profiles,
     save_document,
@@ -485,11 +487,6 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
         posts = result.get("posts") or []
-        previous = {str(item.get("id") or ""): item for item in old_by_feed.get(feed["id"], [])}
-        for post in posts:
-            old = previous.get(str(post.get("id") or ""))
-            if old and old.get("sortDate") and post.get("kind") == "repost":
-                post["sortDate"] = old["sortDate"]
         if adapter == "fxtwitter" and not use_fixtures and source_url:
             reply_url = source_url + ("&" if "?" in source_url else "?") + "with_replies=1"
             try:
@@ -529,6 +526,17 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                 print(f"[ok] {feed['id']}: {len(extra)} community posts via {source}")
             else:
                 print(f"[keep] {feed['id']}: no community posts", file=sys.stderr)
+        stored = {}
+        for item in old_by_feed.get(feed["id"], []):
+            raw_id = str(item.get("id") or "")
+            if raw_id:
+                stored.setdefault(raw_id, item)
+            cid = canonical_status_id(item)
+            if cid:
+                stored.setdefault(cid, item)
+        for post in posts:
+            old = stored.get(canonical_status_id(post)) or stored.get(str(post.get("id") or ""))
+            lock_publish_time(old, post)
         for post in posts:
             post["feedId"] = feed["id"]
             post["platform"] = feed.get("platform") or post.get("platform")
@@ -538,10 +546,17 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             record_source(health, feed["id"], True, stamp)
         else:
             record_source(health, feed["id"], False, stamp, "empty")
-        new_ids = {str(post.get("id") or "") for post in posts}
+        new_ids = set()
+        for post in posts:
+            new_ids.add(str(post.get("id") or ""))
+            cid = canonical_status_id(post)
+            if cid:
+                new_ids.add(cid)
         for old in old_by_feed.get(feed["id"], []):
-            if str(old.get("id") or "") not in new_ids:
-                collected.append(old)
+            old_id = str(old.get("id") or "")
+            if old_id in new_ids or canonical_status_id(old) in new_ids:
+                continue
+            collected.append(old)
         collected.extend(posts)
         incoming = result.get("profiles") or []
         primary = None

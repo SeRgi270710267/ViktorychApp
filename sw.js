@@ -210,6 +210,7 @@ self.addEventListener("message", (event) => {
     event.waitUntil(idb().then(async (db) => {
       await idbSet(db, "seen-at", data.type === "seen" ? Date.now() : Number(data.seen || 0));
       if (Array.isArray(data.follows)) await idbSet(db, "follows", data.follows);
+      if (Array.isArray(data.ids)) await idbSet(db, "seen-ids", data.ids.slice(0, 400));
     }));
   }
 });
@@ -254,6 +255,19 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
+function canonicalNotifyId(post) {
+  if (!post) return "";
+  const rawId = String(post.id || "");
+  if (rawId.indexOf("repost:") === 0) return rawId;
+  let raw = String(post.statusId || post.id || "");
+  if ((post.platform || "") !== "youtube" && raw.indexOf("yt:video:") !== 0) return raw;
+  if (raw.indexOf("yt:video:") === 0) raw = raw.split(":").pop();
+  const match = (raw + " " + (post.url || "")).match(/(?:[?&]v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
+  if (match) return match[1];
+  if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+  return raw;
+}
+
 async function refreshAndNotify() {
   const feedUrl = new URL("feeds.json", self.registration.scope).href;
   const res = await fetch(feedUrl, { cache: "no-store" });
@@ -264,8 +278,11 @@ async function refreshAndNotify() {
   const db = await idb();
   const seen = Number(await idbGet(db, "seen-at") || 0);
   const follows = new Set(await idbGet(db, "follows") || []);
+  const seenIds = new Set(await idbGet(db, "seen-ids") || []);
   const fresh = (doc.posts || []).filter((post) => {
     if (!seen || (Date.parse(post.date || "") || 0) <= seen) return false;
+    const id = canonicalNotifyId(post);
+    if ((id && seenIds.has(id)) || (post.id && seenIds.has(String(post.id)))) return false;
     return follows.has(post.feedId) || follows.has((post.platform || "x") + ":" + (post.handle || ""));
   });
   const clients = await self.clients.matchAll({ type: "window" });

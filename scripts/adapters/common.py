@@ -396,6 +396,110 @@ def to_iso(value) -> str:
     return format_time(parsed) if parsed else ("" if value is None else str(value))
 
 
+_RELATIVE = re.compile(
+    r"(?:(?:streamed|premiered)\s+)?(?:\d+\s+(?:second|minute|hour|day|week|month|year)s?|\d+\s*[smhdwy])\s+ago\b",
+    re.I,
+)
+_YOUTUBE_ID = re.compile(r"(?:[?&]v=|youtu\.be/|shorts/|embed/)([A-Za-z0-9_-]{11})")
+_PUBLISH_EXACT = re.compile(r'"publishDate":"([^"]+)"')
+_PUBLISH_DAY = re.compile(r'"publishDate":\{"simpleText":"([^"]+)"\}')
+
+
+def relative_label(text: str) -> bool:
+    """True when a source only knows '2 days ago' or 'Streamed 1 week ago'."""
+    label = (text or "").strip().lower()
+    if not label:
+        return False
+    if label in ("just now", "now", "yesterday"):
+        return True
+    return _RELATIVE.search(label) is not None
+
+
+def trusted_time(value):
+    """An absolute timestamp. Epoch and empty values are not publish times."""
+    parsed = parse_time(value)
+    if parsed is None or parsed.year < 2005:
+        return None
+    return parsed
+
+
+def earlier_iso(left, right) -> str:
+    """The earlier real publish time. A missing side does not erase the other."""
+    a = trusted_time(left)
+    b = trusted_time(right)
+    if a and b:
+        return left if a <= b else right
+    if a:
+        return left or ""
+    if b:
+        return right or ""
+    return ""
+
+
+def canonical_status_id(post: dict) -> str:
+    """One id per video or post, whichever source spelled it."""
+    if not isinstance(post, dict):
+        return ""
+    raw = str(post.get("statusId") or post.get("id") or "")
+    if str(post.get("id") or "").startswith("repost:"):
+        return str(post.get("id"))
+    platform = post.get("platform") or ""
+    if platform != "youtube" and not raw.startswith("yt:video:"):
+        return raw
+    if raw.startswith("yt:video:"):
+        raw = raw.split(":", 2)[-1]
+    found = _YOUTUBE_ID.search(raw) or _YOUTUBE_ID.search(str(post.get("url") or ""))
+    if found:
+        return found.group(1)
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", raw):
+        return raw
+    return raw
+
+
+def calendar_date(text: str) -> str:
+    """A YouTube 'Oct 11, 2026' label as the start of that UTC day."""
+    label = (text or "").strip()
+    for fmt in ("%b %d, %Y", "%B %d, %Y"):
+        try:
+            parsed = datetime.strptime(label, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        return format_time(parsed)
+    return ""
+
+
+def publish_date_from_html(html: str) -> str:
+    """The absolute publishDate on a watch or community post page."""
+    exact = _PUBLISH_EXACT.search(html or "")
+    if exact:
+        parsed = trusted_time(exact.group(1))
+        if parsed:
+            return format_time(parsed)
+    day = _PUBLISH_DAY.search(html or "")
+    if day:
+        return calendar_date(day.group(1))
+    return ""
+
+
+def lock_publish_time(previous: dict | None, post: dict) -> None:
+    """Keep the earliest trusted publish time and one canonical id.
+
+    A later sync, a relative label turned into 'now', or a second source
+    must not move that time forward.
+    """
+    if not isinstance(post, dict):
+        return
+    old = previous or {}
+    if (post.get("platform") or "") == "youtube" and not str(post.get("id") or "").startswith("repost:"):
+        cid = canonical_status_id(post)
+        if cid:
+            post["id"] = cid
+            post["statusId"] = cid
+    post["date"] = earlier_iso(old.get("date") or "", post.get("date") or "")
+    if old.get("sortDate") and post.get("kind") == "repost":
+        post["sortDate"] = old["sortDate"]
+
+
 def stamp_activity(posts: list, now: datetime | None = None) -> None:
     """Order reposts by their place in a newest-first timeline.
 
@@ -532,18 +636,24 @@ def post_shell(**kwargs) -> dict:
 
 
 def dedupe_posts(posts, cap: int = 300):
-    posts = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)
-    seen = set()
-    out = []
-    for post in posts:
-        key = ((post.get("platform") or ""), str(post.get("id") or ""))
-        if not key[1] or key in seen:
+    """One row per canonical id. The earliest trusted publish time stays."""
+    ranked = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)
+    seen = {}
+    order = []
+    for post in ranked:
+        key_id = canonical_status_id(post) or str(post.get("id") or "")
+        key = ((post.get("platform") or ""), key_id)
+        if not key[1]:
             continue
-        seen.add(key)
-        out.append(post)
-        if len(out) >= cap:
-            break
-    return out
+        kept = seen.get(key)
+        if kept is None:
+            seen[key] = post
+            order.append(post)
+            continue
+        merged = earlier_iso(kept.get("date") or "", post.get("date") or "")
+        if merged:
+            kept["date"] = merged
+    return order[:cap]
 
 
 def load_document(path: Path) -> dict:

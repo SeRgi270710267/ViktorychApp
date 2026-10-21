@@ -463,7 +463,7 @@ def main() -> None:
     image_post = by_id["UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah"]
     check(image_post["kind"] == "community" and image_post["author"] == "Canadian Prepper" and image_post["stats"]["likes"] == 690 and image_post["stats"]["replies"] == 70, "community image post keeps likes and comments")
     check(image_post["media"][0]["url"].startswith("https://yt3.ggpht.com/") and "s2000" in image_post["media"][0]["url"] and image_post["avatar"].startswith("https://yt3.googleusercontent.com/"), "community images hotlink the largest thumbnail")
-    check(image_post["url"] == "https://www.youtube.com/post/UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah" and image_post["date"].endswith("Z"), "community post links to the post page")
+    check(image_post["url"] == "https://www.youtube.com/post/UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah" and image_post["date"] == "", "community post links to the post page and does not keep a relative time")
     multi = by_id["UgzdP2CVxI1IMXtXT9B4AaABCQ"]
     check(2 <= len(multi["media"]) <= 4 and all(item["type"] == "photo" and "yt3.ggpht.com" in item["url"] for item in multi["media"]), "community multi-image post keeps each photo")
     poll = next(post for post in community["posts"] if post.get("poll"))
@@ -1012,6 +1012,25 @@ def main() -> None:
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("Watch on Instagram" in app and "function youtubeSources" in app and "function startPlayback" in app and 'toast("Video unavailable")' not in app and "hls.min.js" in app, "the player rotates sources and does not toast video unavailable")
     check("latest_version" not in (ROOT / "scripts" / "yt_remote.py").read_text(encoding="utf-8"), "sync does not bake an invidious itag url")
+    from adapters.common import lock_publish_time, publish_date_from_html, relative_label
+
+    check(relative_label("0 seconds ago") and relative_label("1 day ago") and relative_label("Streamed 1 week ago") and relative_label("Premiered 3 hours ago") and relative_label("2d ago") and not relative_label("2026-10-11T00:00:00Z"), "relative publish labels are recognized")
+    restamped = {"id": "yt:video:Iuvm-HKIMg8", "platform": "youtube", "kind": "post", "date": "2026-10-21T13:35:36Z", "url": "https://www.youtube.com/watch?v=Iuvm-HKIMg8"}
+    lock_publish_time({"id": "Iuvm-HKIMg8", "date": "2026-10-11T00:00:00Z"}, restamped)
+    check(restamped["id"] == "Iuvm-HKIMg8" and restamped["statusId"] == "Iuvm-HKIMg8" and restamped["date"] == "2026-10-11T00:00:00Z", "a later sync cannot move a video's publish time forward")
+    community_row = {"id": "UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah", "platform": "youtube", "kind": "community", "date": "2026-03-15T17:37:27-07:00"}
+    lock_publish_time({"id": community_row["id"], "date": "2026-03-21T00:41:24Z"}, community_row)
+    kept = datetime.fromisoformat(community_row["date"])
+    if kept.tzinfo is None:
+        kept = kept.replace(tzinfo=timezone.utc)
+    check(kept < datetime.fromisoformat("2026-03-16T01:00:00+00:00"), "the earlier community publish time replaces a drifted sync stamp")
+    kept_x = {"id": "123", "platform": "x", "kind": "post", "date": ""}
+    lock_publish_time({"id": "123", "date": "2026-01-02T00:00:00Z"}, kept_x)
+    check(kept_x["date"] == "2026-01-02T00:00:00Z" and kept_x["id"] == "123", "an empty new date keeps the stored time")
+    exact = publish_date_from_html('{"publishDate":"2026-03-15T17:37:27.463301-07:00"}')
+    day = publish_date_from_html('{"publishDate":{"simpleText":"Oct 11, 2026"}}')
+    check(exact == "2026-03-16T00:37:27.000Z" and day == "2026-10-11T00:00:00.000Z", "watch and community pages yield the real publish date")
+    check("function canonicalPostId(" in app and "function relativeLabel(" in app and "seenPostIds" in app and "seen-ids" in worker and "def lock_publish_time(" in (ROOT / "scripts" / "adapters" / "common.py").read_text(encoding="utf-8"), "publish times stay on the original post and new posts are unseen ids")
     print("all adapter checks passed")
 
 

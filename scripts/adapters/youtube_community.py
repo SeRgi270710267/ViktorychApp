@@ -32,7 +32,16 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
-from .common import blank_profile, child_text, clean_text, local_name, parse_xml, post_shell
+from .common import (
+    blank_profile,
+    child_text,
+    clean_text,
+    local_name,
+    parse_xml,
+    post_shell,
+    publish_date_from_html,
+    relative_label,
+)
 
 UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
 POST_ID = re.compile(r"/post/([A-Za-z0-9_-]{10,80})")
@@ -297,13 +306,16 @@ def parse_invidious_posts(payload: dict, feed: dict) -> list:
             continue
         avatar, _, _ = _best_thumb(item.get("authorThumbnails"))
         seen.add(post_id)
+        label = str(item.get("publishedText") or "")
+        # Invidious turns "7 months ago" into a unix time at request time.
+        when = "" if relative_label(label) else _iso(item.get("published"))
         posts.append(
             _shell(
                 feed,
                 post_id,
                 item.get("author") or "",
                 text,
-                _iso(item.get("published")),
+                when,
                 avatar,
                 media,
                 _stats(_count(item.get("likeCount")), _count(item.get("replyCount"))),
@@ -782,6 +794,31 @@ def _page_posts(feed: dict) -> tuple[list, str]:
     return [], ""
 
 
+def _fill_dates(posts: list) -> None:
+    """Resolve a relative community label from the post page's publishDate.
+
+    A failed fetch leaves the date empty. The sync then keeps the stored
+    time instead of moving it forward.
+    """
+    attempts = 0
+    for post in posts or []:
+        if attempts >= 20:
+            break
+        if not isinstance(post, dict) or post.get("date") or post.get("kind") != "community":
+            continue
+        post_id = str(post.get("id") or "")
+        if not post_id or len(post_id) > 80 or "/" in post_id or "<" in post_id:
+            continue
+        attempts += 1
+        try:
+            html = _read("https://www.youtube.com/post/" + urllib.parse.quote(post_id), timeout=10)
+        except Exception:
+            continue
+        found = publish_date_from_html(html)
+        if found:
+            post["date"] = found
+
+
 def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
     """Return ``(posts, source)``. ``source`` is empty when every source failed."""
     config = config or {}
@@ -793,6 +830,7 @@ def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
             print(f"[youtube] invidious community: {exc}", file=sys.stderr)
             posts = []
         if posts:
+            _fill_dates(posts)
             return posts[:20], "invidious"
     try:
         posts = _rsshub_posts(feed, config)
@@ -800,6 +838,7 @@ def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
         print(f"[youtube] rsshub community: {exc}", file=sys.stderr)
         posts = []
     if posts:
+        _fill_dates(posts)
         return posts[:20], "rsshub"
     if channel_id:
         try:
@@ -808,6 +847,7 @@ def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
             print(f"[youtube] piped community: {exc}", file=sys.stderr)
             posts = []
         if posts:
+            _fill_dates(posts)
             return posts[:20], "piped"
     try:
         posts, source = _page_posts(feed)
@@ -815,5 +855,6 @@ def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
         print(f"[youtube] posts page: {exc}", file=sys.stderr)
         posts, source = [], ""
     if posts:
+        _fill_dates(posts)
         return posts[:20], source
     return [], ""
