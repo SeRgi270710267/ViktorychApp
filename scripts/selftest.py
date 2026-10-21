@@ -2128,7 +2128,7 @@ def discord_checks() -> None:
     check("DISCORD_BOT_TOKEN" in workflow and "DISCORD_USER_TOKEN" in workflow and "add-mask" in workflow and "discord/**/*.json" in readme, "the workflow receives both Discord secrets and masks the user token")
     check("merge_discord" in (ROOT / "scripts" / "update_feeds.py").read_text(encoding="utf-8"), "the feed sync calls Discord")
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
-    check('"discord"' in config_text and "169256939211980800" in config_text and '"auth": "user"' in config_text and '"window": 300' in config_text and "general-chat" in config_text and "product-updates" in config_text, "Town Hall is a user-auth server with a rolling window")
+    check('"discord"' in config_text and "169256939211980800" in config_text and '"auth": "user"' in config_text and '"window": 300' in config_text and "general-chat" in config_text and "product-updates" in config_text and "boosters-chat" in config_text and "boosters-apps" in config_text, "Town Hall is a user-auth server with a rolling window")
     page = (ROOT / "index.html").read_text(encoding="utf-8")
     check(page.index('src="discord-ui.js"') < page.index('src="app.js"') and 'href="discord-ui.css"' in page and "FeedsDiscord" in (ROOT / "app.js").read_text(encoding="utf-8"), "the page loads the Discord messages UI and app.js keeps a small hook")
     ui_check = subprocess.run(
