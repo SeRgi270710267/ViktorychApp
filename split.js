@@ -67,9 +67,18 @@
 
   function limits(spec, pane) {
     var min = spec.min || 300;
-    var max = Math.round(areaOf(spec, pane) * (spec.maxRatio || 0.6));
+    var max = spec.max ? Math.round(spec.max) : Math.round(areaOf(spec, pane) * (spec.maxRatio || 0.6));
     if (max < min) max = min;
     return { min: min, max: max };
+  }
+
+  function settle(spec, value, box) {
+    var n = clamp(value, box.min, box.max);
+    if (spec.snapBelow != null && n < spec.snapBelow) {
+      return clamp(spec.snapTo != null ? spec.snapTo : box.min, box.min, box.max);
+    }
+    if (spec.floor != null && n < spec.floor) n = spec.floor;
+    return clamp(n, box.min, box.max);
   }
 
   function paint(spec, px) {
@@ -80,8 +89,25 @@
   function apply(spec, pane, value) {
     var box = limits(spec, pane);
     var source = value == null ? (read(spec.id) || spec.fallback) : value;
-    var n = clamp(source, box.min, box.max);
+    var n = settle(spec, source, box);
     paint(spec, n);
+    if (typeof spec.onChange === "function") spec.onChange(n);
+    return n;
+  }
+
+  function set(spec, value) {
+    var pane = null;
+    var el = null;
+    bound.forEach(function (item) {
+      if (item.spec.id === spec.id && item.el.isConnected) {
+        pane = item.pane;
+        el = item.el;
+      }
+    });
+    var n = apply(spec, pane, value);
+    if (el) syncAria(el, spec, pane, n);
+    if (n === spec.fallback) clear(spec.id);
+    else write(spec.id, n);
     return n;
   }
 
@@ -156,6 +182,12 @@
     el.addEventListener("pointercancel", finish);
     el.addEventListener("dblclick", function (event) {
       event.preventDefault();
+      if (typeof spec.toggle === "function") {
+        var current = parseFloat(el.getAttribute("aria-valuenow"));
+        if (!isFinite(current)) current = spec.fallback;
+        commit(spec.toggle(current), true);
+        return;
+      }
       clear(spec.id);
       commit(spec.fallback, false);
     });
@@ -164,13 +196,20 @@
       var current = parseFloat(el.getAttribute("aria-valuenow"));
       if (!isFinite(current)) current = spec.fallback;
       var step = event.shiftKey ? 48 : 16;
+      var left = event.key === "ArrowLeft" || event.key === "ArrowUp";
+      var right = event.key === "ArrowRight" || event.key === "ArrowDown";
       var next = null;
-      if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = current - step;
-      else if (event.key === "ArrowRight" || event.key === "ArrowDown") next = current + step;
+      if (left) next = current - step;
+      else if (right) next = current + step;
       else if (event.key === "Home") next = box.min;
       else if (event.key === "End") next = box.max;
       else return;
+      if (spec.snapTo != null && spec.floor != null) {
+        if (left && current <= spec.floor) next = spec.snapTo;
+        else if (right && current <= spec.snapTo) next = spec.floor;
+      }
       event.preventDefault();
+      event.stopPropagation();
       commit(next, true);
     });
     bound.push(item);
@@ -195,14 +234,35 @@
     area: desktopArea
   });
 
+  var sidebar = register({
+    id: "sidebar",
+    cssVar: "--nav-w",
+    fallback: 275,
+    min: 88,
+    max: 275,
+    snapBelow: 200,
+    snapTo: 88,
+    floor: 248,
+    toggle: function (current) { return current > 88 ? 88 : 275; },
+    onChange: function (n) {
+      var rootEl = root.document && root.document.documentElement;
+      if (!rootEl) return;
+      var narrow = !!(root.matchMedia && root.matchMedia("(max-width: 1279px)").matches);
+      if (narrow || n < 200) rootEl.setAttribute("data-nav", "icons");
+      else rootEl.removeAttribute("data-nav");
+    }
+  });
+
   root.FeedsSplit = {
     read: read,
     write: write,
     clear: clear,
     clamp: clamp,
     apply: apply,
+    set: set,
     bind: bind,
     register: register,
-    messages: messages
+    messages: messages,
+    sidebar: sidebar
   };
 })(typeof window !== "undefined" ? window : globalThis);

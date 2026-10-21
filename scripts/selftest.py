@@ -2415,6 +2415,9 @@ def discord_checks() -> None:
     messages_ui = (ROOT / "discord-ui.js").read_text(encoding="utf-8")
     publish = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
     check("FeedsSplit" in split_js and "superintelapp-splits-v1" in split_js and '"rss-" + "feeds-splits-v1"' in split_js and "requestAnimationFrame" in split_js and "function bind(" in split_js and 'role="separator"' in messages_ui and "FeedsSplit.bind" in messages_ui and "--dmsgs-list, 440px" in messages_css and "col-resize" in messages_css and "min-width: 300px" in messages_css and "max-width: 60%" in messages_css and ".dmsgs-split { display: none; }" in messages_css and "split.js" in workflow and '"split.js"' in publish, "the message list divider drags between 300px and 60 percent and remembers the width")
+    styles = (ROOT / "styles.css").read_text(encoding="utf-8")
+    shell = (ROOT / "app.js").read_text(encoding="utf-8")
+    check('class="nav-split"' in shell and 'role="separator"' in shell and "sidebar: sidebar" in split_js and "snapBelow" in split_js and "Collapse sidebar" in shell and 'data-act="nav-collapse"' in shell and 'html[data-nav="icons"]' in styles and "--nav-w" in styles and "width: 88px" in styles and "History" in shell and ".nav-split { display: none; }" in styles and 'matchMedia("(max-width: 1279px)")' in split_js and 'matchMedia("(max-width: 1279px)")' in (ROOT / "index.html").read_text(encoding="utf-8"), "the sidebar divider drags between icons-only and full width and narrow windows still force the icon rail")
     ui_check = subprocess.run(
         ["node", "--input-type=module", "-e", r"""
 import fs from "fs";

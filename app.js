@@ -4932,6 +4932,7 @@ const here = parseRoute();
   function nav(route) {
     const name = route.name;
     return `<header class="nav">
+      <div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize sidebar" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>
       <div class="nav-scroll">
         ${brandLink()}
         ${navItem("#/", "home", "Home", name === "home")}
@@ -8004,7 +8005,8 @@ const here = parseRoute();
         ${themeBtn("dim", "Dim")}
         ${themeBtn("lightsout", "Lights out")}
       </div>
-      ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
+      ${window.FeedsTV ? window.FeedsTV.settingsHtml() : "<h2>Display</h2>"}
+      <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">Collapse sidebar</button></div>
       <h2>Accessibility</h2>
       <p class="phandle">Data · Autoplay videos</p>
       <div class="theme-row" role="group" aria-label="Autoplay videos">
@@ -9420,7 +9422,19 @@ if (STATE.histClear) {
     }
   }
 
+  function bindNavSplit() {
+    if (!window.FeedsSplit || !window.FeedsSplit.sidebar) return;
+    const split = document.querySelector(".nav-split");
+    const navEl = document.querySelector(".nav");
+    if (!split || !navEl) return;
+    window.FeedsSplit.bind(split, window.FeedsSplit.sidebar, navEl);
+  }
+
   function render(opts) {
+    if (document.documentElement.classList.contains("is-split-drag")) {
+      STATE.splitRender = opts || STATE.splitRender || {};
+      return;
+    }
     const bare = (location.hash || "#/").split("?")[0];
     if (bare === "#/bookmarks" || bare === "#/history") {
       history.replaceState(null, "", location.pathname + location.search + "#/history/bookmarks");
@@ -9533,6 +9547,7 @@ if (STATE.histClear) {
       placeFloatMenu(".tab-context");
       syncTabArrows();
       if (window.FeedsDiscord && window.FeedsDiscord.mount) window.FeedsDiscord.mount(route);
+      bindNavSplit();
     };
     const endRoute = () => {
       if (gen !== STATE.renderGen) return;
@@ -9926,6 +9941,15 @@ if (STATE.histClear) {
       STATE.settings.appearance = el.dataset.theme || "lightsout";
       saveSettings();
       applyTheme();
+      render();
+      return;
+    }
+    if (act === "nav-collapse") {
+      if (window.FeedsSplit && window.FeedsSplit.sidebar) {
+        const saved = window.FeedsSplit.read("sidebar");
+        const current = saved || 275;
+        window.FeedsSplit.set(window.FeedsSplit.sidebar, current < 200 ? 275 : 88);
+      }
       render();
       return;
     }
@@ -12630,6 +12654,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
     }
   }
+
+  function flushSplitRender() {
+    if (!STATE.splitRender) return;
+    if (document.documentElement.classList.contains("is-split-drag")) return;
+    const opts = STATE.splitRender;
+    STATE.splitRender = null;
+    render(opts);
+  }
+  document.addEventListener("pointerup", flushSplitRender);
+  document.addEventListener("pointercancel", flushSplitRender);
 
   if (window.FeedsTV && window.FeedsTV.attach) window.FeedsTV.attach();
   if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
