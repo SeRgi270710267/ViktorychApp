@@ -144,14 +144,20 @@ jobs:
         # Timelines, Meta CDN refreshes, and Instagram/Threads comments under 7 days.
         # X replies and YouTube video comments are fetched in the browser.
         # Community post comments are written to fallback/ytpost_<id>.json here.
-        # Discord is skipped when DISCORD_BOT_TOKEN is unset.
+        # Discord bot servers are skipped when DISCORD_BOT_TOKEN is unset.
+        # User-auth servers use DISCORD_USER_TOKEN. The value is masked before the sync runs.
         env:
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}
           TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
           VK_SERVICE_TOKEN: ${{ secrets.VK_SERVICE_TOKEN }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
-        run: python3 scripts/update_feeds.py
+          DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
+        run: |
+          if [ -n "${DISCORD_USER_TOKEN:-}" ]; then
+            echo "::add-mask::${DISCORD_USER_TOKEN}"
+          fi
+          python3 scripts/update_feeds.py
 
       - name: Assemble the site and check its size
         run: |

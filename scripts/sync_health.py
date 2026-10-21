@@ -36,6 +36,7 @@ def record_source(health: dict, feed_id: str, ok: bool, now: str, detail: str = 
 
 def prune_health(health: dict, feed_ids) -> dict:
     keep = set(feed_ids)
+    keep.add("discord")
     return {key: value for key, value in health.items() if key in keep}
 
 

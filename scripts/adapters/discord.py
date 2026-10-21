@@ -1,13 +1,15 @@
-"""Read Discord channels with a bot token and the official REST API.
+"""Read Discord channels the config lists.
 
-The token is the DISCORD_BOT_TOKEN environment variable. It is sent only as
-``Authorization: Bot …`` to discord.com, and it is never written to the site
-or the log. A user token is not accepted: this module never calls the API
-without the Bot prefix, and it never reads the logged-in web client.
+The default is a bot. ``DISCORD_BOT_TOKEN`` is sent only as
+``Authorization: Bot …`` to discord.com. A server with ``"auth": "user"``
+may instead use ``DISCORD_USER_TOKEN``, the token from that person's own
+Discord account. That token is sent as itself, with no ``Bot`` prefix. Neither
+token is written to the site, the config, or the log.
 
-Message history uses ``GET /channels/{id}/messages``. Results are newest
-first. ``after`` walks forward: each page is the next window after the
-snowflake, and the following request passes the newest id in that window.
+User-token calls are read-only GETs: channel messages, one channel, one guild
+or its preview, and the public widget. They wait at least 1.5 seconds between
+requests, ask for a short page, and continue from the stored snowflake. A
+401, a 403, a captcha, or a verification challenge stops Discord for the run.
 Rate-limit headers and HTTP 429 Retry-After are waited out, not ignored.
 
 Public ``widget.json`` and invite lookups fill the server header when the
@@ -32,12 +34,16 @@ from .common import clean_text, dedupe_posts, drop_empty, merge_profiles, post_s
 API = "https://discord.com/api/v10"
 SITE = "https://owner-account.github.io/rss-feeds/"
 USER_AGENT = "DiscordBot (https://github.com/owner-account/rss-feeds, 1.0)"
+BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 SITE_AGENT = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+USER_INTERVAL = 1.5
+USER_PAGE_SIZE = 25
 # VIEW_CHANNEL (1 << 10) and READ_MESSAGE_HISTORY (1 << 16). Nothing else.
 INVITE_PERMISSIONS = (1 << 10) | (1 << 16)
 SNOWFLAKE = re.compile(r"^\d{1,22}$")
 INVITE_CODE = re.compile(r"^[A-Za-z0-9-]{2,32}$")
 PUBLISHED = re.compile(r"discord/(?:index|state|messages/\d{1,22})\.json$")
+USER_GET = re.compile(r"^/api/v10/(?:channels/\d{1,22}(?:/messages)?|guilds/\d{1,22}(?:/preview)?)$")
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".m4v"}
 USER_MESSAGE = {0, 19, 20, 23}
@@ -62,6 +68,23 @@ INLINE_CODE = re.compile(r"`([^`\n]+)`")
 
 class DiscordAuthError(Exception):
     """The bot token was rejected. The token itself is not part of this error."""
+
+
+class DiscordStop(Exception):
+    """Discord refused the account. This run must not try another request."""
+
+    _TEXT = {
+        "unauthorized": "Discord returned 401 for the user token. Discord sync stopped for this run and will not retry.",
+        "forbidden": "Discord returned 403 for the user token. Discord sync stopped for this run and will not retry.",
+        "captcha": "Discord asked for a captcha. Discord sync stopped for this run and will not retry.",
+        "verification": "Discord asked for account verification. Discord sync stopped for this run and will not retry.",
+        "rate-limit": "Discord kept rate limiting after Retry-After. Discord sync stopped for this run and will not retry.",
+    }
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        self.text = self._TEXT.get(reason, "Discord refused the account. Discord sync stopped for this run and will not retry.")
+        super().__init__(self.text)
 
 
 class _NoRedirect(urllib.request.HTTPErrorProcessor):
@@ -101,11 +124,20 @@ def invite_code(value) -> str:
     return text if INVITE_CODE.match(text) else ""
 
 
+def known_secrets() -> list:
+    found = []
+    for name in ("DISCORD_BOT_TOKEN", "DISCORD_USER_TOKEN"):
+        value = (os.environ.get(name) or "").strip()
+        if value and value not in found:
+            found.append(value)
+    return found
+
+
 def public_error(exc: BaseException) -> str:
-    token = os.environ.get("DISCORD_BOT_TOKEN") or ""
     detail = str(exc)
-    if token and token in detail:
-        detail = detail.replace(token, "[redacted]")
+    for token in known_secrets():
+        if token in detail:
+            detail = detail.replace(token, "[redacted]")
     text = type(exc).__name__
     if detail and detail != text:
         text = text + ": " + detail[:180]
@@ -143,6 +175,42 @@ def _retry_seconds(headers, body) -> float:
         return float(payload.get("retry_after"))
     except (TypeError, ValueError, json.JSONDecodeError):
         return 1.0
+
+
+def account_block(status: int, body) -> str:
+    """Why this response stops a user-token run. Empty when the call can continue."""
+    if isinstance(body, (bytes, bytearray)):
+        text = body.decode("utf-8", "replace")
+    else:
+        text = str(body or "")
+    payload = {}
+    try:
+        parsed = json.loads(text) if text else {}
+        if isinstance(parsed, dict):
+            payload = parsed
+    except (TypeError, ValueError, json.JSONDecodeError):
+        payload = {}
+    lowered = text.lower()
+    try:
+        code = int(payload.get("code"))
+    except (TypeError, ValueError):
+        code = None
+    if code == 40002 or "verify your account" in lowered:
+        return "verification"
+    if any(key in payload for key in ("captcha_key", "captcha_sitekey", "captcha_rqdata", "captcha_rqtoken", "captcha_service")):
+        return "captcha"
+    if "captcha-required" in lowered:
+        return "captcha"
+    if status == 401:
+        return "unauthorized"
+    if status == 403:
+        return "forbidden"
+    return ""
+
+
+def user_get_allowed(url: str) -> bool:
+    path = urllib.parse.urlparse(url).path or ""
+    return bool(USER_GET.match(path))
 
 
 def _positive(value):
@@ -657,14 +725,30 @@ def stub_message(message: dict, channel: dict, channel_names: dict | None = None
 
 
 class Client:
-    """Official REST client. Authorization is always ``Bot``, never a user token."""
+    """REST client. A bot sends ``Bot``. A user token is sent as itself.
 
-    def __init__(self, token: str, transport=None, sleep=None, page_size: int = 100):
+    User calls stay on the read-only GET list and wait between requests.
+    """
+
+    def __init__(self, token: str, transport=None, sleep=None, page_size: int = 100, *, auth: str = "bot", min_interval: float | None = None, incremental: bool | None = None, clock=None):
         self.token = token
         self.transport = transport
         self.sleep = sleep or time.sleep
-        self.page_size = max(1, min(int(page_size or 100), 100))
+        self.clock = clock or time.monotonic
+        self.auth_mode = "user" if auth == "user" else "bot"
+        self._last_request = None
+        self._skip_pace = False
         self._opener = urllib.request.build_opener(_NoRedirect)
+        if self.auth_mode == "user":
+            self.min_interval = USER_INTERVAL if min_interval is None else float(min_interval)
+            self.incremental = True if incremental is None else bool(incremental)
+            self.page_size = max(1, min(int(page_size or USER_PAGE_SIZE), USER_PAGE_SIZE))
+            self.max_attempts = 2
+        else:
+            self.min_interval = 0.0 if min_interval is None else float(min_interval)
+            self.incremental = False if incremental is None else bool(incremental)
+            self.page_size = max(1, min(int(page_size or 100), 100))
+            self.max_attempts = MAX_ATTEMPTS
 
     def channel_messages(self, channel_id: str, limit: int, after: str | None = None):
         params = {"limit": str(max(1, min(int(limit), 100)))}
@@ -683,22 +767,39 @@ class Client:
         if host != "discord.com":
             print("[discord] refused a non-discord host")
             return None
-        for attempt in range(MAX_ATTEMPTS):
+        if self.auth_mode == "user" and auth and not user_get_allowed(url):
+            print("[discord] refused a request outside the read-only user list")
+            return None
+        for attempt in range(self.max_attempts):
             try:
                 status, headers, body = self._once(url, auth)
+            except DiscordStop:
+                raise
             except DiscordAuthError:
                 raise
             except Exception as exc:
                 print(f"[discord] {type(exc).__name__} talking to Discord")
                 return None
+            block = account_block(status, body) if auth else ""
+            if block in ("captcha", "verification"):
+                raise DiscordStop(block)
+            if self.auth_mode == "user" and block in ("unauthorized", "forbidden"):
+                raise DiscordStop(block)
             if status == 401 and auth:
                 raise DiscordAuthError("Discord rejected the bot token")
             if status == 429:
                 delay = _retry_seconds(headers, body)
                 if delay <= 0:
                     delay = 0.5
+                if self.auth_mode == "user":
+                    delay = max(delay, self.min_interval)
                 print(f"[discord] rate limit; waiting {delay}s")
                 self.sleep(delay)
+                self._skip_pace = True
+                if attempt + 1 >= self.max_attempts:
+                    if self.auth_mode == "user":
+                        raise DiscordStop("rate-limit")
+                    return None
                 continue
             if status == 200:
                 self._pause_if_empty(headers)
@@ -708,7 +809,7 @@ class Client:
                     return None
             if status in (301, 302, 303, 307, 308):
                 return None
-            if status in (500, 502, 503, 504) and attempt + 1 < MAX_ATTEMPTS:
+            if status in (500, 502, 503, 504) and attempt + 1 < self.max_attempts:
                 self.sleep(1)
                 continue
             return None
@@ -725,15 +826,34 @@ class Client:
         except (TypeError, ValueError):
             return
         if left <= 0 and delay > 0:
+            if self.auth_mode == "user":
+                delay = max(delay, self.min_interval)
             print(f"[discord] rate limit; waiting {delay}s")
             self.sleep(delay)
+            self._skip_pace = True
+
+    def _pace(self) -> None:
+        if self._skip_pace:
+            self._skip_pace = False
+            self._last_request = self.clock()
+            return
+        if self.min_interval <= 0:
+            return
+        now = self.clock()
+        if self._last_request is not None:
+            wait = self.min_interval - (now - self._last_request)
+            if wait > 0:
+                self.sleep(wait)
+                now = self.clock()
+        self._last_request = now
 
     def _once(self, url: str, auth: bool):
-        headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+        self._pace()
+        headers = {"User-Agent": BROWSER_UA if self.auth_mode == "user" else USER_AGENT, "Accept": "application/json"}
         if auth:
             if not self.token:
                 raise DiscordAuthError("Discord rejected the bot token")
-            headers["Authorization"] = "Bot " + self.token
+            headers["Authorization"] = self.token if self.auth_mode == "user" else "Bot " + self.token
         if self.transport:
             status, resp_headers, body = self.transport(url, headers)
             if isinstance(body, str):
@@ -777,8 +897,11 @@ def fetch_messages(client: Client, channel_id: str, cap: int, cursor: str | None
                 newest = mid
         return newest, len(batch)
 
-    take(client.channel_messages(channel_id, min(cap, page_size)))
-    if cursor and snowflake(cursor):
+    have_cursor = bool(cursor and snowflake(cursor))
+    # A user-token sync does not re-read the newest page once a cursor exists.
+    if not (client.incremental and have_cursor):
+        take(client.channel_messages(channel_id, min(cap, page_size)))
+    if have_cursor:
         after = str(cursor)
         gained = 0
         limit = min(page_size, 100)
@@ -841,11 +964,15 @@ def configured_servers(config: dict) -> list:
             )
         if not channels:
             continue
+        auth = str(row.get("auth") or "bot").strip().lower()
+        if auth != "user":
+            auth = "bot"
         servers.append(
             {
                 "id": guild,
                 "name": str(row.get("name") or "").strip(),
                 "invite": invite_code(row.get("invite") or ""),
+                "auth": auth,
                 "channels": channels,
             }
         )
@@ -860,11 +987,31 @@ def _load_json(path: Path):
     return data
 
 
-def _write_json(path: Path, payload, token: str) -> None:
-    safe = _redact(payload, token)
+def _secret_list(value) -> list:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        found = []
+        for item in value:
+            for secret in _secret_list(item):
+                if secret not in found:
+                    found.append(secret)
+        return found
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def _write_json(path: Path, payload, token) -> None:
+    secrets = []
+    for secret in _secret_list(token) + known_secrets():
+        if secret not in secrets:
+            secrets.append(secret)
+    safe = payload
+    for secret in secrets:
+        safe = _redact(safe, secret)
     text = json.dumps(safe, ensure_ascii=False, indent=2) + "\n"
-    if token and token in text:
-        raise RuntimeError("refusing to write Discord output that contains the bot token")
+    if any(secret in text for secret in secrets):
+        raise RuntimeError("refusing to write Discord output that contains a Discord token")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
@@ -1093,57 +1240,95 @@ def _iso_now(now) -> str:
     return now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, token: str | None = None, transport=None, sleep=None, page_size: int = 100, remote: bool = True, fetch_published=None, now=None) -> dict:
+def _note_health(doc: dict, ok: bool, detail: str, now) -> None:
+    health = doc.get("sourceHealth")
+    if not isinstance(health, dict):
+        health = {}
+        doc["sourceHealth"] = health
+    from sync_health import record_source
+
+    record_source(health, "discord", ok, _iso_now(now), detail)
+
+
+def _clear_health(doc: dict) -> None:
+    health = doc.get("sourceHealth")
+    if isinstance(health, dict):
+        health.pop("discord", None)
+
+
+def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, token: str | None = None, user_token: str | None = None, transport=None, sleep=None, page_size: int = 100, remote: bool = True, fetch_published=None, now=None, clock=None) -> dict:
     """Merge Discord posts into ``doc`` and write message files under ``root``.
 
-    An empty ``discord`` list does nothing. A missing or rejected token keeps
-    the previous posts and any Discord files already published.
+    An empty ``discord`` list does nothing. A missing token keeps the previous
+    posts. A user-token 401, 403, captcha, or verification challenge stops the
+    run and records that on the sync health row.
     """
     doc.setdefault("posts", [])
     doc.setdefault("feeds", [])
     servers = configured_servers(config)
     if not servers:
+        _clear_health(doc)
         return {"skipped": True, "reason": "unconfigured", "posts": [], "profiles": []}
     if token is None:
         token = os.environ.get("DISCORD_BOT_TOKEN") or ""
     token = token.strip()
+    if user_token is None:
+        user_token = os.environ.get("DISCORD_USER_TOKEN") or ""
+    user_token = user_token.strip()
+    secrets = [item for item in (token, user_token) if item]
+    needs_user = any(server["auth"] == "user" for server in servers)
     if fetch_published is None and remote:
         fetch_published = published_json
     if not remote:
         fetch_published = None
     cap = int(config.get("cap") or 300)
     feed_ids = {f"discord:{server['id']}" for server in servers}
-    if not token:
-        print("[discord] DISCORD_BOT_TOKEN is not set; skipping Discord")
+
+    def give_up(reason: str, line: str, note: str = "") -> dict:
+        print(line)
         try:
-            _mirror_published(root, fetch_published, "")
+            _mirror_published(root, fetch_published, secrets)
         except Exception as exc:
             print(public_error(exc))
         kept = _restore(doc, previous_posts, feed_ids, cap)
         if kept:
             print(f"[discord] kept {kept} posts")
-        return {"skipped": True, "reason": "no-token", "posts": [], "profiles": []}
+        if note:
+            _note_health(doc, False, note, now)
+        return {"skipped": True, "reason": reason, "posts": [], "profiles": []}
 
-    client = Client(token, transport=transport, sleep=sleep, page_size=page_size)
-    try:
-        me = client.get_json("/users/@me")
-    except DiscordAuthError:
-        print("[discord] Discord rejected the bot token; skipping Discord")
+    if not token and (not user_token or not needs_user):
+        if needs_user and not user_token:
+            print("[discord] DISCORD_USER_TOKEN is not set; skipping Discord")
+        return give_up("no-token", "[discord] DISCORD_BOT_TOKEN is not set; skipping Discord")
+
+    bot = None
+    if token:
+        bot = Client(token, transport=transport, sleep=sleep, page_size=page_size, clock=clock)
         try:
-            _mirror_published(root, fetch_published, token)
-        except Exception as exc:
-            print(public_error(exc))
-        _restore(doc, previous_posts, feed_ids, cap)
-        return {"skipped": True, "reason": "rejected", "posts": [], "profiles": []}
-    if not isinstance(me, dict) or not me.get("username"):
-        print("[discord] could not read the bot user; skipping Discord")
-        try:
-            _mirror_published(root, fetch_published, token)
-        except Exception as exc:
-            print(public_error(exc))
-        _restore(doc, previous_posts, feed_ids, cap)
-        return {"skipped": True, "reason": "unreachable", "posts": [], "profiles": []}
-    print("[discord] bot " + str(me.get("username")))
+            me = bot.get_json("/users/@me")
+        except DiscordAuthError:
+            bot = None
+            if not user_token or not needs_user:
+                return give_up(
+                    "rejected",
+                    "[discord] Discord rejected the bot token; skipping Discord",
+                    "Discord rejected the bot token. Discord sync stopped for this run and will not retry.",
+                )
+            print("[discord] Discord rejected the bot token; the bot will not be used")
+        else:
+            if not isinstance(me, dict) or not me.get("username"):
+                bot = None
+                if not user_token or not needs_user:
+                    return give_up("unreachable", "[discord] could not read the bot user; skipping Discord")
+                print("[discord] could not read the bot user; the bot will not be used")
+            else:
+                print("[discord] bot " + str(me.get("username")))
+    user = None
+    if user_token and needs_user:
+        user = Client(user_token, transport=transport, sleep=sleep, page_size=USER_PAGE_SIZE, auth="user", clock=clock)
+    elif needs_user:
+        print("[discord] DISCORD_USER_TOKEN is not set; user-auth servers will be skipped")
 
     state = _load_state(root)
     if not state["channels"] and fetch_published:
@@ -1158,102 +1343,171 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
     all_posts = []
     profiles = []
     index_servers = []
-    for server in servers:
-        names = _channel_names(server)
-        widget = client.get_json(f"https://discord.com/api/guilds/{server['id']}/widget.json", auth=False)
-        code = server["invite"] or invite_code((widget or {}).get("instant_invite") if isinstance(widget, dict) else "")
-        invite = client.get_json(f"/invites/{code}", {"with_counts": "true"}, auth=False) if code else None
-        guild = client.get_json(f"/guilds/{server['id']}", {"with_counts": "true"}, auth=True)
-        profile = build_profile(server["id"], server["name"], widget, invite, guild)
-        feed = {"id": profile["id"], "guildId": server["id"], "handle": server["id"]}
-        server_posts = []
-        index_channels = []
-        for channel in server["channels"]:
-            if not channel["name"]:
-                info = client.get_json(f"/channels/{channel['id']}")
-                if isinstance(info, dict) and info.get("name"):
-                    channel["name"] = str(info["name"])
+    try:
+        for server in servers:
+            names = _channel_names(server)
+            public = bot or user
+            if public is None:
+                print(f"[discord] server {server['id']}: no token for this server")
+                continue
+            widget = public.get_json(f"https://discord.com/api/guilds/{server['id']}/widget.json", auth=False)
+            code = server["invite"] or invite_code((widget or {}).get("instant_invite") if isinstance(widget, dict) else "")
+            invite = public.get_json(f"/invites/{code}", {"with_counts": "true"}, auth=False) if code else None
+            guild = _server_guild(server, bot, user)
+            profile = build_profile(server["id"], server["name"], widget, invite, guild)
+            feed = {"id": profile["id"], "guildId": server["id"], "handle": server["id"]}
+            server_posts = []
+            index_channels = []
+            for channel in server["channels"]:
+                previous_file = {}
+                if channel["mode"] == "messages":
+                    previous_file = _load_json(root / "discord" / "messages" / f"{channel['id']}.json") or {}
+                    if not previous_file and fetch_published:
+                        remote_file = fetch_published(f"discord/messages/{channel['id']}.json")
+                        if isinstance(remote_file, dict):
+                            previous_file = remote_file
+                reader, probed = _channel_reader(server, channel, bot, user)
+                if probed and not channel["name"] and probed.get("name"):
+                    channel["name"] = str(probed["name"])
                     names[channel["id"]] = channel["name"]
-            previous_file = {}
-            if channel["mode"] == "messages":
-                previous_file = _load_json(root / "discord" / "messages" / f"{channel['id']}.json") or {}
-                if not previous_file and fetch_published:
-                    remote_file = fetch_published(f"discord/messages/{channel['id']}.json")
-                    if isinstance(remote_file, dict):
-                        previous_file = remote_file
-            cursor = _cursor(
-                state,
-                channel["id"],
-                previous_file.get("messages") if isinstance(previous_file, dict) else [],
-                [post for post in flat_previous if post.get("feedId") == feed["id"]],
-            )
-            try:
-                messages = fetch_messages(client, channel["id"], channel["limit"], cursor or None)
-            except DiscordAuthError:
-                print("[discord] Discord rejected the bot token; skipping Discord")
-                _restore(doc, previous_posts, feed_ids, cap)
-                return {"skipped": True, "reason": "rejected", "posts": [], "profiles": []}
-            except Exception as exc:
-                print(public_error(exc))
-                messages = None
-            entry = {"id": channel["id"], "mode": channel["mode"]}
-            if channel["name"]:
-                entry["name"] = channel["name"]
-            if channel["mode"] == "messages":
-                entry["file"] = f"discord/messages/{channel['id']}.json"
-                if messages is None:
+                elif reader is not None and not channel["name"]:
+                    info = reader.get_json(f"/channels/{channel['id']}")
+                    if isinstance(info, dict) and info.get("name"):
+                        channel["name"] = str(info["name"])
+                        names[channel["id"]] = channel["name"]
+                entry = {"id": channel["id"], "mode": channel["mode"]}
+                if channel["name"]:
+                    entry["name"] = channel["name"]
+                if channel["mode"] == "messages":
+                    entry["file"] = f"discord/messages/{channel['id']}.json"
+                if reader is None:
                     if previous_file:
-                        _write_json(root / "discord" / "messages" / f"{channel['id']}.json", previous_file, token)
-                    print(f"[discord] channel {channel['id']}: not readable")
+                        _write_json(root / "discord" / "messages" / f"{channel['id']}.json", previous_file, secrets)
+                    if server["auth"] == "user" and user is None:
+                        print(f"[discord] channel {channel['id']}: DISCORD_USER_TOKEN is not set")
+                    else:
+                        print(f"[discord] channel {channel['id']}: not readable")
+                    index_channels.append(entry)
+                    continue
+                cursor = _cursor(
+                    state,
+                    channel["id"],
+                    previous_file.get("messages") if isinstance(previous_file, dict) else [],
+                    [post for post in flat_previous if post.get("feedId") == feed["id"]],
+                )
+                try:
+                    messages = fetch_messages(reader, channel["id"], channel["limit"], cursor or None)
+                except DiscordAuthError:
+                    print("[discord] Discord rejected the bot token; skipping Discord")
+                    _restore(doc, previous_posts, feed_ids, cap)
+                    _note_health(doc, False, "Discord rejected the bot token. Discord sync stopped for this run and will not retry.", now)
+                    return {"skipped": True, "reason": "rejected", "posts": [], "profiles": []}
+                except DiscordStop:
+                    raise
+                except Exception as exc:
+                    print(public_error(exc))
+                    messages = None
+                if channel["mode"] == "messages":
+                    if messages is None:
+                        if previous_file:
+                            _write_json(root / "discord" / "messages" / f"{channel['id']}.json", previous_file, secrets)
+                        print(f"[discord] channel {channel['id']}: not readable")
+                    else:
+                        kept, authors = _sync_transcript(reader, server, channel, names, messages, previous_file if isinstance(previous_file, dict) else {})
+                        payload = {
+                            "platform": "discord",
+                            "guildId": server["id"],
+                            "channelId": channel["id"],
+                            "name": channel["name"],
+                            "fetchedAt": _iso_now(now),
+                            "authors": authors,
+                            "messages": kept,
+                        }
+                        _write_json(root / "discord" / "messages" / f"{channel['id']}.json", payload, secrets)
+                        print(f"[discord] {server['name'] or server['id']} #{channel['name'] or channel['id']}: {len(kept)} messages")
+                        if messages:
+                            state["channels"][channel["id"]] = str(messages[0]["id"])
                 else:
-                    kept, authors = _sync_transcript(client, server, channel, names, messages, previous_file if isinstance(previous_file, dict) else {})
-                    payload = {
-                        "platform": "discord",
-                        "guildId": server["id"],
-                        "channelId": channel["id"],
-                        "name": channel["name"],
-                        "fetchedAt": _iso_now(now),
-                        "authors": authors,
-                        "messages": kept,
+                    if messages is None:
+                        print(f"[discord] channel {channel['id']}: not readable")
+                    else:
+                        built = _sync_posts(reader, server, channel, names, messages, feed)
+                        server_posts.extend(built)
+                        print(f"[discord] {server['name'] or server['id']} #{channel['name'] or channel['id']}: {len(built)} posts")
+                        if messages:
+                            state["channels"][channel["id"]] = str(max(int(message["id"]) for message in messages))
+                index_channels.append(entry)
+            if server_posts:
+                profile["postsCount"] = len(server_posts)
+            for secret in secrets:
+                server_posts = _redact(server_posts, secret)
+                profile = _redact(profile, secret)
+            profiles.append(profile)
+            all_posts.extend(server_posts)
+            index_servers.append(
+                drop_empty(
+                    {
+                        "id": server["id"],
+                        "name": profile.get("name") or server["name"] or server["id"],
+                        "handle": server["id"],
+                        "auth": server["auth"],
+                        "icon": profile.get("avatar") or "",
+                        "members": profile.get("followers"),
+                        "online": profile.get("online"),
+                        "invite": profile.get("url") if "discord.gg/" in (profile.get("url") or "") else "",
+                        "url": profile.get("url") or "",
+                        "channels": index_channels,
                     }
-                    _write_json(root / "discord" / "messages" / f"{channel['id']}.json", payload, token)
-                    print(f"[discord] {server['name'] or server['id']} #{channel['name'] or channel['id']}: {len(kept)} messages")
-                    if messages:
-                        state["channels"][channel["id"]] = str(messages[0]["id"])
-            else:
-                if messages is None:
-                    print(f"[discord] channel {channel['id']}: not readable")
-                else:
-                    built = _sync_posts(client, server, channel, names, messages, feed)
-                    server_posts.extend(built)
-                    print(f"[discord] {server['name'] or server['id']} #{channel['name'] or channel['id']}: {len(built)} posts")
-                    if messages:
-                        state["channels"][channel["id"]] = str(max(int(message["id"]) for message in messages))
-            index_channels.append(entry)
-        if server_posts:
-            count = len(server_posts)
-            if count:
-                profile["postsCount"] = count
-        profiles.append(profile)
-        all_posts.extend(server_posts)
-        index_servers.append(
-            drop_empty(
-                {
-                    "id": server["id"],
-                    "name": profile.get("name") or server["name"] or server["id"],
-                    "handle": server["id"],
-                    "icon": profile.get("avatar") or "",
-                    "members": profile.get("followers"),
-                    "online": profile.get("online"),
-                    "invite": profile.get("url") if "discord.gg/" in (profile.get("url") or "") else "",
-                    "url": profile.get("url") or "",
-                    "channels": index_channels,
-                }
+                )
             )
-        )
+    except DiscordStop as stopped:
+        print("[discord] " + stopped.text)
+        _note_health(doc, False, stopped.text, now)
+        _apply_posts(doc, all_posts, previous_posts or [], feed_ids, cap)
+        if profiles:
+            doc["feeds"] = merge_profiles(doc.get("feeds") or [], profiles)
+        try:
+            _mirror_published(root, fetch_published, secrets)
+        except Exception as exc:
+            print(public_error(exc))
+        return {"skipped": True, "reason": stopped.reason, "stopped": True, "posts": all_posts, "profiles": profiles}
     _apply_posts(doc, all_posts, previous_posts or [], feed_ids, cap)
     doc["feeds"] = merge_profiles(doc.get("feeds") or [], profiles)
     fetched = _iso_now(now)
-    _write_json(root / "discord" / "index.json", {"fetchedAt": fetched, "servers": index_servers}, token)
-    _write_json(root / "discord" / "state.json", state, token)
+    _write_json(root / "discord" / "index.json", {"fetchedAt": fetched, "servers": index_servers}, secrets)
+    _write_json(root / "discord" / "state.json", state, secrets)
+    _note_health(doc, True, "", now)
     return {"skipped": False, "reason": "", "posts": all_posts, "profiles": profiles}
+
+
+def _server_guild(server: dict, bot, user):
+    """Guild header. The bot result wins when the bot can see the server."""
+    params = {"with_counts": "true"}
+    path = f"/guilds/{server['id']}"
+    if server["auth"] != "user":
+        return bot.get_json(path, params, auth=True) if bot is not None else None
+    if bot is not None:
+        try:
+            guild = bot.get_json(path, params, auth=True)
+        except DiscordAuthError:
+            guild = None
+        if isinstance(guild, dict) and snowflake(guild.get("id")):
+            return guild
+    if user is None:
+        return None
+    return user.get_json(path, params, auth=True)
+
+
+def _channel_reader(server: dict, channel: dict, bot, user):
+    """The bot reads a user-auth channel when that bot can already see it."""
+    if server["auth"] != "user":
+        return bot, None
+    if bot is not None:
+        try:
+            probed = bot.get_json(f"/channels/{channel['id']}")
+        except DiscordAuthError:
+            probed = None
+        else:
+            if isinstance(probed, dict) and snowflake(probed.get("id")) == channel["id"]:
+                return bot, probed
+    return user, None

@@ -1374,15 +1374,23 @@ def discord_checks() -> None:
     check(media[0]["type"] == "photo" and media[0]["url"].endswith("pic.png") and "media.discordapp.net" not in media[0]["url"] and media[1]["type"] == "video" and file_links[0]["expanded"].endswith("notes.pdf"), "images and video stay on the CDN and other files are links")
 
     token = "super-secret-token"
+    user_secret = "user-secret-token"
     old_token = os.environ.get("DISCORD_BOT_TOKEN")
+    old_user = os.environ.get("DISCORD_USER_TOKEN")
     os.environ["DISCORD_BOT_TOKEN"] = token
+    os.environ["DISCORD_USER_TOKEN"] = user_secret
     try:
         check(token not in public_error(RuntimeError("bad " + token)) and "[redacted]" in public_error(RuntimeError("bad " + token)), "a Discord error does not repeat the bot token")
+        check(user_secret not in public_error(RuntimeError("bad " + user_secret)), "a Discord error does not repeat the user token")
     finally:
         if old_token is None:
             os.environ.pop("DISCORD_BOT_TOKEN", None)
         else:
             os.environ["DISCORD_BOT_TOKEN"] = old_token
+        if old_user is None:
+            os.environ.pop("DISCORD_USER_TOKEN", None)
+        else:
+            os.environ["DISCORD_USER_TOKEN"] = old_user
 
     guild = "100000000000000001"
     posts_channel = "100000000000000010"
@@ -1497,7 +1505,7 @@ def discord_checks() -> None:
         (root / "discord" / "state.json").write_text(json.dumps({"channels": {posts_channel: cursor}}), encoding="utf-8")
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            merge_discord(doc, config, root, previous, token=token, transport=transport, remote=False, now=datetime(2030, 1, 1, tzinfo=timezone.utc))
+            merge_discord(doc, config, root, previous, token=token, user_token="", transport=transport, remote=False, now=datetime(2030, 1, 1, tzinfo=timezone.utc))
         log = buf.getvalue()
         check(token not in log and "config-secret" not in log and "bot feedbot" in log, "the sync log names the bot and not the token")
         check("not readable" in log, "a channel the bot cannot view is skipped")
@@ -1535,7 +1543,7 @@ def discord_checks() -> None:
 
         quiet = io.StringIO()
         with contextlib.redirect_stdout(quiet):
-            merge_discord(skipped, config, root / "skip", earlier, token="", transport=explode, remote=False)
+            merge_discord(skipped, config, root / "skip", earlier, token="", user_token="", transport=explode, remote=False)
         check("DISCORD_BOT_TOKEN is not set" in quiet.getvalue() and skipped["posts"][0]["date"] == "2024-05-01T15:30:00.000Z", "a missing token skips Discord and keeps the old post")
 
         denied = {"posts": [], "feeds": []}
@@ -1546,7 +1554,7 @@ def discord_checks() -> None:
 
         denied_log = io.StringIO()
         with contextlib.redirect_stdout(denied_log):
-            merge_discord(denied, config, root / "denied", earlier, token=token, transport=reject, remote=False)
+            merge_discord(denied, config, root / "denied", earlier, token=token, user_token="", transport=reject, remote=False)
         check("rejected the bot token" in denied_log.getvalue() and token not in denied_log.getvalue() and denied["posts"][0]["id"].endswith(parent), "a rejected token skips Discord without printing it")
 
     slept = []
@@ -1602,10 +1610,210 @@ def discord_checks() -> None:
     check([item["id"] for item in walked] == ["104", "103", "102", "101"], "the second after cursor is the newest id on the page")
     check(any("after=100" in url for url in seen_urls) and any("after=102" in url for url in seen_urls) and not any("after=101" in url for url in seen_urls), "paging follows Discord's newest-id after cursor")
 
+    from adapters.discord import DiscordStop, user_get_allowed
+
+    user_guild = "200000000000000001"
+    visible = "200000000000000010"
+    hidden = "200000000000000011"
+    blocked = "200000000000000012"
+    bot_token = "bot-token-value"
+    account_token = "account-token-value"
+    check(user_get_allowed("https://discord.com/api/v10/channels/%s/messages" % visible), "user reads are limited to channel message gets")
+    check(not user_get_allowed("https://discord.com/api/v10/users/@me") and not user_get_allowed("https://discord.com/api/v10/channels/%s/messages/1/reactions" % visible), "user reads do not include the account or a reaction")
+
+    refused = {"n": 0}
+
+    def refuse_transport(url, headers):
+        refused["n"] += 1
+        raise AssertionError(url)
+
+    quiet_user = Client(account_token, auth="user", transport=refuse_transport, sleep=lambda _seconds: None, clock=lambda: 0)
+    refuse_log = io.StringIO()
+    with contextlib.redirect_stdout(refuse_log):
+        check(quiet_user.get_json("/users/@me") is None, "a user token does not call /users/@me")
+    check(refused["n"] == 0 and account_token not in refuse_log.getvalue(), "a refused user request is not sent and does not log the token")
+
+    pace_slept = []
+
+    def paced(url, headers):
+        check(headers.get("Authorization") == account_token and not headers.get("Authorization").startswith("Bot "), "paced reads send the user token without a Bot prefix")
+        check("Mozilla/5.0" in headers.get("User-Agent", "") and "DiscordBot" not in headers.get("User-Agent", ""), "user reads use a browser user agent")
+        for banned in ("X-Super-Properties", "X-Fingerprint", "Cookie"):
+            check(banned not in headers, "user reads do not add a client fingerprint")
+        check(account_token not in url, "the user token is not put in the URL")
+        if "after=100" in url:
+            return 200, {"X-RateLimit-Remaining": "1"}, json.dumps([{"id": "101", "channel_id": "10", "content": "a", "timestamp": "2024-05-01T00:00:01Z", "author": {"id": "1", "username": "a"}}]).encode()
+        if "after=101" in url:
+            return 200, {"X-RateLimit-Remaining": "1"}, json.dumps([{"id": "102", "channel_id": "10", "content": "b", "timestamp": "2024-05-01T00:00:02Z", "author": {"id": "1", "username": "a"}}]).encode()
+        raise AssertionError(url)
+
+    paced_client = Client(account_token, auth="user", transport=paced, sleep=pace_slept.append, clock=lambda: 0, page_size=1)
+    paced_found = fetch_messages(paced_client, "10", 2, "100")
+    check([item["id"] for item in paced_found] == ["102", "101"] and pace_slept == [1.5], "a user sync pages after the cursor and waits 1.5 seconds")
+    check(Client(account_token, auth="user", transport=refuse_transport, sleep=lambda _seconds: None).page_size == 25, "a user client defaults to 25-message pages")
+
+    waited = []
+    attempts = {"n": 0}
+
+    def once_limited(url, headers):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            return 429, {"Retry-After": "2"}, b'{"retry_after":2,"message":"You are being rate limited."}'
+        return 200, {"X-RateLimit-Remaining": "1"}, b"[]"
+
+    limited_user = Client(account_token, auth="user", transport=once_limited, sleep=waited.append, clock=lambda: 0)
+    check(limited_user.get_json("/channels/10/messages", {"limit": "25"}) == [] and waited == [2.0] and attempts["n"] == 2, "a user-token 429 waits Retry-After once and does not stack another pause")
+
+    storm = {"n": 0}
+    storm_slept = []
+
+    def always_limited(url, headers):
+        storm["n"] += 1
+        return 429, {"Retry-After": "2"}, b'{"retry_after":2}'
+
+    storm_user = Client(account_token, auth="user", transport=always_limited, sleep=storm_slept.append, clock=lambda: 0)
+    storm_error = None
+    try:
+        storm_user.get_json("/channels/10/messages")
+    except DiscordStop as exc:
+        storm_error = exc
+    check(storm_error is not None and storm_error.reason == "rate-limit" and storm["n"] == 2 and storm_slept == [2.0, 2.0], "a second 429 stops the user-token run")
+
+    ada_id = "100000000000000042"
+    user_message = {"id": "200000000000000200", "channel_id": visible, "type": 0, "content": "seen " + account_token, "timestamp": "2024-05-01T15:30:00.000Z", "author": {"id": ada_id, "username": "ada", "global_name": "Ada Lovelace", "avatar": "abc123"}}
+    hidden_message = {"id": "200000000000000201", "channel_id": hidden, "type": 0, "content": "from the account", "timestamp": "2024-05-01T16:00:00.000Z", "author": {"id": ada_id, "username": "ada", "global_name": "Ada Lovelace"}}
+    seen = []
+
+    def both_tokens(url, headers):
+        seen.append((url, headers.get("Authorization"), headers.get("User-Agent")))
+        auth = headers.get("Authorization")
+        if url.endswith("/users/@me"):
+            check(auth == "Bot " + bot_token, "the bot identity uses the bot token")
+            return 200, {"X-RateLimit-Remaining": "5"}, b'{"id":"9","username":"feedbot"}'
+        if "widget.json" in url or "/invites/" in url:
+            check(auth is None, "widget and invite lookups stay anonymous")
+            if "widget.json" in url:
+                return 200, {}, json.dumps({"id": user_guild, "name": "Joined", "presence_count": 4}).encode()
+            return 404, {}, b"{}"
+        if "/guilds/%s" % user_guild in url and auth == "Bot " + bot_token:
+            return 403, {}, b'{"message":"Missing Access","code":50001}'
+        if "/guilds/%s" % user_guild in url:
+            check(auth == account_token, "the guild header falls back to the user token")
+            return 200, {}, json.dumps({"id": user_guild, "name": "Joined", "approximate_member_count": 8}).encode()
+        if url.endswith("/channels/" + visible):
+            check(auth == "Bot " + bot_token, "the bot is asked whether it can see the channel")
+            return 200, {}, json.dumps({"id": visible, "name": "announcements"}).encode()
+        if "/channels/%s/messages" % visible in url:
+            check(auth == "Bot " + bot_token, "a channel the bot can see is not read with the user token")
+            return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([user_message]).encode()
+        if url.endswith("/channels/" + hidden):
+            check(auth == "Bot " + bot_token, "the hidden channel is probed with the bot first")
+            return 403, {}, b'{"message":"Missing Access","code":50001}'
+        if "/channels/%s/messages" % hidden in url:
+            check(auth == account_token and "Mozilla/5.0" in (headers.get("User-Agent") or ""), "the bot miss uses the user token and the browser user agent")
+            check("limit=25" in url and "after=" not in url, "the first user page is small and has no cursor yet")
+            return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([hidden_message]).encode()
+        raise AssertionError(url)
+
+    both_config = {
+        "cap": 50,
+        "discord": [
+            {
+                "id": user_guild,
+                "name": "Joined Server",
+                "auth": "user",
+                "userToken": account_token,
+                "channels": [
+                    {"id": visible, "name": "announcements", "mode": "posts"},
+                    {"id": hidden, "name": "general", "mode": "messages", "limit": 40},
+                ],
+            }
+        ],
+    }
+    both_doc = {"posts": [], "feeds": [], "sourceHealth": {"discord": {"ok": "", "emptySince": "2020-01-01T00:00:00Z", "detail": "old"}}}
+    with tempfile.TemporaryDirectory() as tmp:
+        both_root = Path(tmp)
+        both_log = io.StringIO()
+        with contextlib.redirect_stdout(both_log):
+            both_result = merge_discord(both_doc, both_config, both_root, [], token=bot_token, user_token=account_token, transport=both_tokens, sleep=lambda _seconds: None, clock=lambda: 0, remote=False, now=datetime(2030, 1, 1, tzinfo=timezone.utc))
+        both_text = both_log.getvalue()
+        check(both_result["skipped"] is False and account_token not in both_text and bot_token not in both_text, "both tokens can run without either secret being logged")
+        visible_post = next(item for item in both_doc["posts"] if item["id"].endswith(user_message["id"]))
+        check(visible_post["author"] == "Ada Lovelace" and visible_post["text"] == "seen [redacted]", "a user-auth channel the bot can see stays a bot post and redacts the token")
+        transcript = json.loads((both_root / "discord" / "messages" / (hidden + ".json")).read_text(encoding="utf-8"))
+        check(transcript["messages"][0]["text"] == "from the account" and account_token not in json.dumps(transcript), "the channel the bot cannot see is stored as a user-token transcript")
+        check(both_doc["sourceHealth"]["discord"].get("detail", "") == "" and both_doc["sourceHealth"]["discord"].get("emptySince", "") == "", "a finished Discord sync clears a previous stop")
+
+        stop_calls = []
+
+        def stop_transport(url, headers):
+            stop_calls.append(url)
+            if "widget.json" in url:
+                check(headers.get("Authorization") is None, "a stopped run still does not send the token to the widget")
+                return 200, {}, b'{"name":"Joined","presence_count":1}'
+            if "/guilds/" in url:
+                return 200, {}, json.dumps({"id": user_guild, "name": "Joined"}).encode()
+            if blocked in url:
+                raise AssertionError("a later channel was requested after Discord refused the account")
+            if hidden in url:
+                return 403, {}, b'{"message":"Missing Access","code":50001}'
+            raise AssertionError(url)
+
+        stop_config = {
+            "cap": 50,
+            "discord": [
+                {
+                    "id": user_guild,
+                    "name": "Joined Server",
+                    "auth": "user",
+                    "channels": [
+                        {"id": hidden, "name": "general", "mode": "posts"},
+                        {"id": blocked, "name": "later", "mode": "posts"},
+                    ],
+                }
+            ],
+        }
+        stop_doc = {"posts": [{"id": "discord:%s:%s" % (hidden, hidden_message["id"]), "platform": "discord", "feedId": "discord:" + user_guild, "date": "2024-05-01T15:30:00.000Z", "text": "kept"}], "feeds": []}
+        stop_log = io.StringIO()
+        with contextlib.redirect_stdout(stop_log):
+            stop_result = merge_discord(stop_doc, stop_config, both_root / "stop", stop_doc["posts"], token="", user_token=account_token, transport=stop_transport, sleep=lambda _seconds: None, clock=lambda: 0, remote=False, now=datetime(2030, 1, 2, tzinfo=timezone.utc))
+        stop_text = stop_log.getvalue()
+        check(stop_result["stopped"] is True and stop_result["reason"] == "forbidden" and "will not retry" in stop_text and account_token not in stop_text, "a user-token 403 stops Discord for the run")
+        check(all(blocked not in url for url in stop_calls) and stop_doc["posts"][0]["text"] == "kept", "the stop leaves later channels unread and keeps the old post")
+        check("403" in stop_doc["sourceHealth"]["discord"]["detail"] and "will not retry" in stop_doc["sourceHealth"]["discord"]["detail"], "the stop is written into the sync health row")
+
+        def captcha_transport(url, headers):
+            if "widget.json" in url:
+                return 200, {}, b"{}"
+            if "/guilds/" in url:
+                return 400, {}, b'{"captcha_key":["captcha-required"],"captcha_sitekey":"abc"}'
+            raise AssertionError(url)
+
+        captcha_doc = {"posts": [], "feeds": []}
+        captcha_log = io.StringIO()
+        with contextlib.redirect_stdout(captcha_log):
+            captcha_result = merge_discord(captcha_doc, stop_config, both_root / "captcha", [], token="", user_token=account_token, transport=captcha_transport, sleep=lambda _seconds: None, clock=lambda: 0, remote=False)
+        check(captcha_result["reason"] == "captcha" and "captcha" in captcha_log.getvalue().lower() and account_token not in captcha_log.getvalue(), "a captcha stops Discord without a retry")
+
+        def verify_transport(url, headers):
+            if "widget.json" in url:
+                return 200, {}, b"{}"
+            return 403, {}, b'{"message":"You need to verify your account in order to perform this action.","code":40002}'
+
+        verify_doc = {"posts": [], "feeds": []}
+        verify_log = io.StringIO()
+        with contextlib.redirect_stdout(verify_log):
+            verify_result = merge_discord(verify_doc, stop_config, both_root / "verify", [], token="", user_token=account_token, transport=verify_transport, sleep=lambda _seconds: None, clock=lambda: 0, remote=False)
+        check(verify_result["reason"] == "verification" and "verification" in verify_log.getvalue().lower(), "a verification challenge stops Discord")
+
+    source = (ROOT / "scripts" / "adapters" / "discord.py").read_text(encoding="utf-8")
+    check('method="GET"' in source and "POST" not in source and "PUT" not in source and "PATCH" not in source and "DELETE" not in source, "the Discord client only issues GET requests")
+
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check("DISCORD_BOT_TOKEN" in readme and "66560" in readme and "Message Content Intent" in readme and "widget.json" in readme and "Follow" in readme and "discord/messages/" in readme, "the readme documents the bot, the follow trick, and the files")
-    check("DISCORD_BOT_TOKEN" in workflow and "discord/**/*.json" in readme, "the workflow receives the bot secret and the site publishes Discord json")
+    check("DISCORD_USER_TOKEN" in readme and "spare account" in readme and "banned" in readme and "password" in readme.lower() and "auth\": \"user\"" in readme, "the readme states the ban risk and how the user token is stored")
+    check("DISCORD_BOT_TOKEN" in workflow and "DISCORD_USER_TOKEN" in workflow and "add-mask" in workflow and "discord/**/*.json" in readme, "the workflow receives both Discord secrets and masks the user token")
     check("merge_discord" in (ROOT / "scripts" / "update_feeds.py").read_text(encoding="utf-8"), "the feed sync calls Discord")
     check('"discord"' in (ROOT / "feeds.config.json").read_text(encoding="utf-8"), "feeds.config.json has a discord list")
 

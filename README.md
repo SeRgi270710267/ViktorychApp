@@ -264,9 +264,11 @@ Subscription groups are saved on this device immediately. **Save groups to the s
 
 ## Discord
 
-Discord is read with a bot you create, using Discord’s official HTTP API. The sync does not use a user token, does not log into the website, and does not bypass a block, a captcha, or a rate limit. The bot token lives only in the Actions secret `DISCORD_BOT_TOKEN`. It is sent as `Authorization: Bot …` to `discord.com` and is never written into the repo, the site, or the log. If that secret is missing, or Discord rejects it, the sync prints a skip line and continues. Previous Discord posts stay in `feeds.json`. Message files already on the site are copied forward when they can be downloaded.
+Discord is read from the channels listed in the config. The default is a bot you create, using Discord’s official HTTP API. The bot token lives only in the Actions secret `DISCORD_BOT_TOKEN`. It is sent as `Authorization: Bot …` to `discord.com` and is never written into the repo, the site, or the log. If that secret is missing, or Discord rejects it, bot servers are skipped and the rest of the sync continues. Previous Discord posts stay in `feeds.json`. Message files already on the site are copied forward when they can be downloaded.
 
-Anything the bot can read is published on this public site. Point it at channels you are willing to show.
+A server can opt in with `"auth": "user"`. That mode uses the separate secret `DISCORD_USER_TOKEN` and is described below. The sync does not bypass a block, a captcha, or a rate limit.
+
+Anything these reads return is published on this public site. Point them at channels you are willing to show.
 
 `feeds.config.json` has a `discord` list next to `feeds`. Ids are strings, because a snowflake is larger than a JavaScript number. An empty list syncs nothing.
 
@@ -280,11 +282,19 @@ Anything the bot can read is published on this public site. Point it at channels
       { "id": "234567890123456789", "name": "announcements", "mode": "posts", "limit": 30 },
       { "id": "345678901234567890", "name": "general", "mode": "messages", "limit": 40 }
     ]
+  },
+  {
+    "id": "456789012345678901",
+    "name": "A server my account joined",
+    "auth": "user",
+    "channels": [
+      { "id": "567890123456789012", "name": "general", "mode": "posts" }
+    ]
   }
 ]
 ```
 
-`invite` is optional. It can be a code or a `discord.gg` URL. `limit` defaults to 30 for posts and 40 for messages, and is capped at 100. A channel `mode` is `posts` or `messages`. Any other mode is ignored.
+`invite` is optional. It can be a code or a `discord.gg` URL. `limit` defaults to 30 for posts and 40 for messages, and is capped at 100. A channel `mode` is `posts` or `messages`. Any other mode is ignored. `"auth"` defaults to `"bot"`. `"user"` is the opt-in account mode. `discord/index.json` repeats that `auth` value on the server.
 
 **posts.** Each message becomes one post in `feeds.json`, on the feed `discord:<guildId>`. The author name and avatar are the person who sent it. The id is `discord:<channelId>:<messageId>` and does not change. `date` is Discord’s `timestamp`, never `edited_timestamp` and never the time the sync ran. Replies and messages in a thread started from one of those messages are nested on `replies` (oldest first) and are not also separate timeline rows. A thread keeps its latest 20 messages, and at most 8 threads per channel are read.
 
@@ -392,6 +402,22 @@ A Discord post in `feeds.json`:
 7. On GitHub, open **Settings → Secrets and variables → Actions** and create `DISCORD_BOT_TOKEN` with the bot token. Do not commit it, do not put it in `feeds.config.json`, and do not print it in a workflow command.
 8. Push the config. The next sync reads the channels. `--fixtures` does not call Discord.
 
+### Servers your own account has joined
+
+Discord’s Terms of Service and Developer Policy prohibit automating a user account. Discord can ban the account for it. This mode is off unless a server sets `"auth": "user"` and the secret below exists. Use a separate spare account, not the account you use every day.
+
+The token is the full session for that account. Anyone who has it can act as you. It must live only in the Actions secret `DISCORD_USER_TOKEN`. Do not commit it, paste it into `feeds.config.json`, or print it. The workflow masks it in the Actions log. A `token` or `userToken` field in the config is ignored.
+
+The sync only sends GET requests for the configured channels: channel messages, the channel itself, the guild (or the guild preview), and the public widget. It does not send messages, add reactions, join servers, accept invites, or change anything. With both secrets set, a channel the bot can see is read with the bot. The user token is used only for the rest. Requests are at least 1.5 seconds apart, pages are 25 messages, and each later sync continues from the stored snowflake instead of re-reading the whole channel. A 429 waits `Retry-After`. A second 429, a 401, a 403, a captcha, or an account-verification response stops Discord for that run. The log and `sourceHealth.discord` in `feeds.json` / `sync-report.json` say why, and the run does not try another Discord request.
+
+1. Log into the spare account at [discord.com/app](https://discord.com/app) in a desktop browser.
+2. Open Developer Tools, then the Network tab, and reload. Click a request whose URL is under `https://discord.com/api/`.
+3. In the request headers, copy the `Authorization` value. That whole value is the token. It does not start with `Bot `.
+4. On GitHub, open **Settings → Secrets and variables → Actions** and create `DISCORD_USER_TOKEN` with that value.
+5. On each server you want read this way, set `"auth": "user"` and list only the channel ids you want published. Push the config.
+
+Changing the account password resets the token. To revoke it: change the password, open **User Settings → Devices** and log out of the sessions, delete the `DISCORD_USER_TOKEN` secret, and remove `"auth": "user"` from the config.
+
 ### Announcement channels you do not run
 
 Discord will not give this bot the history of a server it has not joined, and joining someone else’s server is their decision. For a public announcement channel, use Discord’s own Follow:
@@ -403,7 +429,7 @@ Discord will not give this bot the history of a server it has not joined, and jo
 
 ### Server icon and member count
 
-In the server, open **Server Settings → Widget** (Engagement → Server Widget on current clients) and enable the widget. The sync then reads `https://discord.com/api/guilds/<guild id>/widget.json` with no token. That file has the server name, an invite, and the number of people online. The sync resolves the invite with `GET /invites/<code>?with_counts=true`, also with no token, for the icon and the member count. If the widget is off, the bot’s guild request still fills the icon and the member count while the bot is a member. Neither call is made when `DISCORD_BOT_TOKEN` is unset.
+In the server, open **Server Settings → Widget** (Engagement → Server Widget on current clients) and enable the widget. The sync then reads `https://discord.com/api/guilds/<guild id>/widget.json` with no token. That file has the server name, an invite, and the number of people online. The sync resolves the invite with `GET /invites/<code>?with_counts=true`, also with no token, for the icon and the member count. If the widget is off, the guild request still fills the icon and the member count while the bot or the account is a member. Those calls are skipped when Discord itself is skipped.
 
 ## Optional secrets
 
@@ -416,7 +442,8 @@ The sync runs without any secrets. Add these only as repository Actions secrets 
 | `TWITTER_AUTH_TOKEN` | Optional `auth_token` cookie sent only to Nitter and to RSSHub `/twitter` or `/x` routes during the build |
 | `IA_ACCESS_KEY` | S3 access key for the daily upload to the Internet Archive item `sergi-rss-feeds-archive`. The upload is skipped when this or `IA_SECRET_KEY` is empty |
 | `IA_SECRET_KEY` | S3 secret key for that same item. The upload is skipped when this or `IA_ACCESS_KEY` is empty |
-| `DISCORD_BOT_TOKEN` | Bot token for Discord channels listed under `discord` in `feeds.config.json`. The sync skips Discord when this is unset. Never a user token |
+| `DISCORD_BOT_TOKEN` | Bot token for Discord servers whose `auth` is `bot` (the default). The sync skips those servers when this is unset. Never a user token |
+| `DISCORD_USER_TOKEN` | Optional token from a spare Discord account, used only for servers with `"auth": "user"`. Masked in the Actions log. Discord’s terms say automating a user account can get that account banned. Changing the password resets it |
 
 The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the browser from fxtwitter, which needs no token. Do not put a bearer token in the page.
 
