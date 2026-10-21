@@ -210,6 +210,188 @@ def _video_media(attachment: dict) -> dict | None:
     }
 
 
+def _browse_owner(node) -> dict:
+    """Name, @handle, and channel id from a YouTube owner endpoint."""
+    if isinstance(node, str):
+        text = node.strip()
+        return {"name": text} if text else {}
+    if not isinstance(node, dict):
+        return {}
+    name = _yt_text(node).strip()
+    endpoint = node.get("navigationEndpoint") if isinstance(node.get("navigationEndpoint"), dict) else {}
+    runs = node.get("runs") if isinstance(node.get("runs"), list) else []
+    for run in runs:
+        if isinstance(run, dict) and isinstance(run.get("navigationEndpoint"), dict):
+            endpoint = run["navigationEndpoint"]
+            break
+    browse = endpoint.get("browseEndpoint") if isinstance(endpoint.get("browseEndpoint"), dict) else {}
+    channel = str(browse.get("browseId") or "").strip()
+    if not channel.startswith("UC"):
+        channel = ""
+    base = str(browse.get("canonicalBaseUrl") or "")
+    meta = endpoint.get("commandMetadata") if isinstance(endpoint.get("commandMetadata"), dict) else {}
+    web = meta.get("webCommandMetadata") if isinstance(meta.get("webCommandMetadata"), dict) else {}
+    url = str(web.get("url") or base)
+    handle = ""
+    if "/@" in url:
+        handle = url.split("/@", 1)[1].strip("/").split("/")[0]
+    owner = {}
+    if name:
+        owner["name"] = name
+    if handle:
+        owner["handle"] = urllib.parse.unquote(handle)
+    if channel:
+        owner["channelId"] = channel
+    return owner
+
+
+def _owner_from_attachment(attachment: dict) -> dict:
+    if not isinstance(attachment, dict):
+        return {}
+    if attachment.get("ownerText") or (isinstance(attachment.get("author"), dict)):
+        owner = _browse_owner(attachment.get("ownerText") or attachment.get("author"))
+    else:
+        owner = {}
+        name = str(attachment.get("author") or "").strip()
+        if name:
+            owner["name"] = name
+        channel = str(attachment.get("authorId") or "").strip()
+        if channel.startswith("UC"):
+            owner["channelId"] = channel
+    avatar, _, _ = _best_thumb(attachment.get("authorThumbnails"))
+    if avatar and not owner.get("avatar"):
+        owner["avatar"] = avatar
+    title = _yt_text(attachment.get("title")).strip()
+    if title:
+        owner["title"] = title
+    return owner
+
+
+def owner_from_oembed(data: dict) -> dict:
+    """Original creator fields from a YouTube oEmbed payload. No network."""
+    if not isinstance(data, dict):
+        return {}
+    name = str(data.get("author_name") or "").strip()
+    author_url = str(data.get("author_url") or "")
+    handle = ""
+    channel = ""
+    at = re.search(r"youtube\.com/@([^/?#]+)", author_url)
+    if at:
+        handle = urllib.parse.unquote(at.group(1))
+    uc = re.search(r"youtube\.com/channel/(UC[\w-]{10,})", author_url)
+    if uc:
+        channel = uc.group(1)
+    owner = {}
+    if name:
+        owner["name"] = name
+    if handle:
+        owner["handle"] = handle
+    if channel:
+        owner["channelId"] = channel
+    title = str(data.get("title") or "").strip()
+    if title:
+        owner["title"] = title
+    return owner
+
+
+def _oembed_owner(video_id: str) -> dict:
+    quoted = urllib.parse.quote(f"https://www.youtube.com/watch?v={video_id}", safe="")
+    try:
+        payload = _read("https://www.youtube.com/oembed?format=json&url=" + quoted, timeout=12)
+        data = json.loads(payload)
+    except Exception:
+        return {}
+    return owner_from_oembed(data if isinstance(data, dict) else {})
+
+
+def _same_channel(feed: dict, owner: dict, poster_name: str = "") -> bool:
+    feed_channel = str(feed.get("channelId") or "").strip()
+    channel = str(owner.get("channelId") or "").strip()
+    if channel and feed_channel:
+        return channel == feed_channel
+    handle = str(owner.get("handle") or "").lstrip("@").casefold()
+    feed_handle = str(feed.get("handle") or "").lstrip("@").casefold()
+    if handle and feed_handle and handle == feed_handle:
+        return True
+    name = str(owner.get("name") or "").strip().casefold()
+    names = {
+        str(poster_name or "").strip().casefold(),
+        str((feed.get("profile") or {}).get("name") or "").strip().casefold(),
+        feed_handle,
+    }
+    names.discard("")
+    return bool(name and name in names)
+
+
+def _comment_beside(text: str, video_id: str) -> str:
+    body = re.sub(
+        rf"https?://(?:www\.)?(?:youtube\.com/(?:watch\?v=|shorts/)|youtu\.be/){re.escape(video_id)}\S*",
+        " ",
+        text or "",
+        flags=re.I,
+    )
+    return clean_text(body)
+
+
+def _maybe_share(post: dict, feed: dict, owner: dict, video_id: str) -> dict:
+    """A community video by someone else is that creator's video, reposted."""
+    if not post or not video_id or not owner or not owner.get("name"):
+        return post
+    if _same_channel(feed, owner, post.get("author") or ""):
+        if owner.get("title") and not post.get("title"):
+            post["title"] = owner["title"]
+        return post
+    handle = str(feed.get("handle") or "").lstrip("@")
+    community_id = str(post.get("statusId") or post.get("id") or "")
+    comment = _comment_beside(post.get("text") or "", video_id)
+    title = str(owner.get("title") or "").strip()
+    if not title:
+        media = post.get("media") or []
+        title = str((media[0] or {}).get("alt") or "").strip() if media else ""
+    post["repostedBy"] = {
+        "name": post.get("author") or (feed.get("profile") or {}).get("name") or handle,
+        "handle": handle,
+        "avatar": post.get("avatar") or "",
+        "platform": "youtube",
+        "feedId": feed.get("id") or "",
+    }
+    if feed.get("channelId"):
+        post["repostedBy"]["channelId"] = feed["channelId"]
+    post["kind"] = "repost"
+    post["id"] = f"repost:{handle.lower()}:{community_id}"
+    post["author"] = owner.get("name") or ""
+    post["handle"] = owner.get("handle") or owner.get("channelId") or ""
+    post["avatar"] = owner.get("avatar") or ""
+    post["profileHandle"] = owner.get("channelId") or post["handle"]
+    if owner.get("channelId"):
+        post["channelId"] = owner["channelId"]
+    if title:
+        post["title"] = title
+        post["text"] = title
+    if comment and comment != title:
+        post["repostComment"] = comment
+    post["repostUrl"] = f"https://www.youtube.com/post/{community_id}"
+    post["statusId"] = video_id
+    post["url"] = f"https://www.youtube.com/watch?v={video_id}"
+    return post
+
+
+def resolve_missing_owners(posts, feed: dict) -> None:
+    """Fill a shared video's creator from oEmbed when the post payload omitted it."""
+    for post in posts or []:
+        if not isinstance(post, dict) or post.get("kind") != "community":
+            continue
+        video = next((item for item in (post.get("media") or []) if isinstance(item, dict) and item.get("type") == "video" and item.get("videoId")), None)
+        if not video:
+            continue
+        owner = _oembed_owner(str(video.get("videoId")))
+        if not owner.get("name"):
+            continue
+        if owner.get("title") and not video.get("alt"):
+            video["alt"] = owner["title"]
+        _maybe_share(post, feed, owner, str(video.get("videoId")))
+
+
 def _photos_from_groups(groups) -> list:
     photos = []
     for group in groups or []:
@@ -289,6 +471,8 @@ def parse_invidious_posts(payload: dict, feed: dict) -> list:
         media = []
         poll = None
         quoted = None
+        owner = {}
+        video_key = ""
         if kind == "image":
             media = _photos_from_groups([attachment.get("imageThumbnails")])
         elif kind == "multiImage":
@@ -299,6 +483,8 @@ def parse_invidious_posts(payload: dict, feed: dict) -> list:
             clip = _video_media(attachment)
             if clip:
                 media = [clip]
+                owner = _owner_from_attachment(attachment)
+                video_key = clip["videoId"]
         elif kind == "playlist":
             quoted = None
         text = item.get("content") or ""
@@ -310,17 +496,22 @@ def parse_invidious_posts(payload: dict, feed: dict) -> list:
         # Invidious turns "7 months ago" into a unix time at request time.
         when = "" if relative_label(label) else _iso(item.get("published"))
         posts.append(
-            _shell(
+            _maybe_share(
+                _shell(
+                    feed,
+                    post_id,
+                    item.get("author") or "",
+                    text,
+                    when,
+                    avatar,
+                    media,
+                    _stats(_count(item.get("likeCount")), _count(item.get("replyCount"))),
+                    poll,
+                    quoted,
+                ),
                 feed,
-                post_id,
-                item.get("author") or "",
-                text,
-                when,
-                avatar,
-                media,
-                _stats(_count(item.get("likeCount")), _count(item.get("replyCount"))),
-                poll,
-                quoted,
+                owner,
+                video_key,
             )
         )
     return posts
@@ -458,6 +649,8 @@ def parse_initial_posts(data: dict, feed: dict) -> list:
         media = []
         poll = None
         quoted = None
+        owner = {}
+        video_key = ""
         image = attachment.get("backstageImageRenderer")
         if isinstance(image, dict):
             media = _photos_from_groups([image])
@@ -472,28 +665,36 @@ def parse_initial_posts(data: dict, feed: dict) -> list:
                 {
                     "videoId": video.get("videoId"),
                     "title": video.get("title"),
-                    "author": video.get("ownerText") or video.get("author"),
                 }
             )
             if clip:
                 media = [clip]
+                owner = _owner_from_attachment(video)
+                if not owner.get("title"):
+                    owner["title"] = _yt_text(video.get("title")).strip()
+                video_key = clip["videoId"]
         text = _yt_text(item.get("contentText"))
         if not text and not media and not poll and not quoted:
             continue
         avatar, _, _ = _best_thumb((item.get("authorThumbnail") or {}).get("thumbnails"))
         seen.add(post_id)
         posts.append(
-            _shell(
+            _maybe_share(
+                _shell(
+                    feed,
+                    post_id,
+                    _yt_text(item.get("authorText")),
+                    text,
+                    "",
+                    avatar,
+                    media,
+                    _stats(_like_count(item), None),
+                    poll,
+                    quoted,
+                ),
                 feed,
-                post_id,
-                _yt_text(item.get("authorText")),
-                text,
-                "",
-                avatar,
-                media,
-                _stats(_like_count(item), None),
-                poll,
-                quoted,
+                owner,
+                video_key,
             )
         )
     return posts
@@ -819,6 +1020,12 @@ def _fill_dates(posts: list) -> None:
             post["date"] = found
 
 
+def _ready_community(posts: list, feed: dict, source: str) -> tuple[list, str]:
+    _fill_dates(posts)
+    resolve_missing_owners(posts, feed)
+    return posts[:20], source
+
+
 def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
     """Return ``(posts, source)``. ``source`` is empty when every source failed."""
     config = config or {}
@@ -830,16 +1037,14 @@ def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
             print(f"[youtube] invidious community: {exc}", file=sys.stderr)
             posts = []
         if posts:
-            _fill_dates(posts)
-            return posts[:20], "invidious"
+            return _ready_community(posts, feed, "invidious")
     try:
         posts = _rsshub_posts(feed, config)
     except Exception as exc:
         print(f"[youtube] rsshub community: {exc}", file=sys.stderr)
         posts = []
     if posts:
-        _fill_dates(posts)
-        return posts[:20], "rsshub"
+        return _ready_community(posts, feed, "rsshub")
     if channel_id:
         try:
             posts = _piped_posts(channel_id, feed)
@@ -847,14 +1052,12 @@ def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
             print(f"[youtube] piped community: {exc}", file=sys.stderr)
             posts = []
         if posts:
-            _fill_dates(posts)
-            return posts[:20], "piped"
+            return _ready_community(posts, feed, "piped")
     try:
         posts, source = _page_posts(feed)
     except Exception as exc:
         print(f"[youtube] posts page: {exc}", file=sys.stderr)
         posts, source = [], ""
     if posts:
-        _fill_dates(posts)
-        return posts[:20], source
+        return _ready_community(posts, feed, source)
     return [], ""

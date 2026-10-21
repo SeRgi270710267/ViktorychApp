@@ -155,7 +155,8 @@
   }
 
   function isVideo(post) {
-    if (!post || post.kind === "reply" || post.kind === "community" || isShort(post)) return false;
+    if (!post || post.kind === "reply" || post.kind === "community" || post.kind === "repost" || isShort(post)) return false;
+    if (post.repostedBy && (post.repostedBy.handle || post.repostedBy.name)) return false;
     if (post.platform === "youtube") return true;
     return (post.media || []).some((item) => item && (item.type === "video" || item.type === "animated_gif"));
   }

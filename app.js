@@ -209,13 +209,17 @@
     const handle = String(row.h || "");
     const community = row.k === "community";
     const url = community ? "https://www.youtube.com/post/" + id : sourceUrl(platform, handle, id);
-    return {
+    const author = String(row.a || handle);
+    const avatar = /^https:\/\//.test(String(row.av || "")) ? String(row.av) : "";
+    const channelId = /^UC[\w-]{10,}$/.test(String(row.c || "")) ? String(row.c) : "";
+    const reposter = String(row.rb || "").replace(/^@/, "");
+    const post = {
       id: id,
       statusId: id,
       platform: platform,
       handle: handle,
-      author: handle,
-      feedId: platform + ":" + handle,
+      author: author,
+      feedId: reposter ? platform + ":" + reposter : platform + ":" + handle,
       kind: row.k || "post",
       text: row.t || "",
       date: row.d || "",
@@ -223,6 +227,15 @@
       media: community ? [] : stubMedia(platform, id, url),
       stub: true
     };
+    if (avatar) post.avatar = avatar;
+    if (channelId) post.channelId = channelId;
+    if (reposter) {
+      post.repostedBy = { handle: reposter, name: String(row.rn || reposter), platform: platform };
+      if (!post.kind || post.kind === "post") post.kind = "repost";
+    }
+    if (row.rc) post.repostComment = String(row.rc);
+    if (platform === "youtube" && ytVideoId(id)) post.watch = true;
+    return post;
   }
 
   function deadMediaUrl(url) {
@@ -2393,6 +2406,7 @@
   const PIPED_SEEDS = ["https://pipedapi.kavin.rocks", "https://pipedapi.adminforge.de", "https://api.piped.private.coffee", "https://pipedapi.leptons.xyz"];
   const LIVE = { mem: {}, flight: {}, dbp: null, iv: null, dead: {}, videosDown: false, fxDown: false, status: null, statusP: null, statusLoaded: false };
   const TRIED = {};
+  const SUB_COUNTS = {};
   const PREFETCHED = {};
   const GIVEAWAY = /(crypto\s*giveaway|airdrop|double your|seed phrase|claim (?:your )?reward|free\s+(?:btc|eth|usdt|bitcoin|ethereum))/i;
   const BOT_HANDLE = /^[A-Za-z]+\d{5,}$/;
@@ -3495,13 +3509,18 @@
       }
     } else if (att.type === "video" && att.videoId) {
       const poster = "https://i.ytimg.com/vi/" + att.videoId + "/hqdefault.jpg";
-      media.push({
+      const clip = {
         type: "video",
         url: "https://www.youtube-nocookie.com/embed/" + att.videoId,
         poster: poster,
         videoId: att.videoId,
         alt: att.title || ""
-      });
+      };
+      if (att.author) clip.author = String(att.author);
+      if (att.authorId) clip.authorId = String(att.authorId);
+      const face = bestThumb(att.authorThumbnails);
+      if (face.url) clip.authorAvatar = face.url;
+      media.push(clip);
     }
     const next = Object.assign({}, seed, {
       stub: false,
@@ -3985,11 +4004,14 @@
 
   function ensureYtSubs(feed) {
     if (!feed || feed.platform !== "youtube" || !feed.channelId) return;
+    if (SUB_COUNTS[feed.channelId] != null) feed.followers = SUB_COUNTS[feed.channelId];
     const key = "subs:" + feed.channelId;
     if (TRIED[key]) return;
     TRIED[key] = 1;
     liveSubs(feed.channelId).then((count) => {
-      if (count == null || feed.followers === count) return;
+      if (count == null) return;
+      SUB_COUNTS[feed.channelId] = count;
+      if (feed.followers === count) return;
       feed.followers = count;
       render();
     });
@@ -4241,7 +4263,8 @@
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
     const hideRepost = mode === "author" || mode === "status";
-    const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a data-card="${esc("x:" + (post.repostedBy.handle || ""))}" href="${esc(accountHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : (!hideRepost && post.kind === "repost" ? `<div class="repost-line">${icon("repost")}<span>Reposted</span></div>` : "");
+    const repost = repostBanner(post, hideRepost ? "author" : "");
+    const sharedNote = repostQuote(post, hideRepost ? "author" : "");
     const forwarded = forwardLine(post);
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
     const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
@@ -4255,10 +4278,13 @@
     const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>Copy link</button>${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
+    const creator = isRepost(post) ? creatorOf(post) : null;
     const eager = !!opts.eager;
     const dest = post.watch ? watchHash(post) : statusHash(post);
-    const who = post.profileHandle || post.handle;
-    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author || post.handle)}</a>`;
+    const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
+    const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
+    const displayHandle = creator ? (post.handle || creator.handle || "") : (post.handle || "");
+    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || "Profile")}">${avatar(face.avatar, displayName)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
@@ -4267,13 +4293,14 @@
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
       ${context}
       ${repost}
+      ${sharedNote}
       ${forwarded}
       <div class="post-row">
         ${avaCol}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
-            ${post.handle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(post.handle)}</a>` : ""}
+            <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(displayName)}${badge(face.verified)}</a>
+            ${displayHandle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(displayHandle)}</a>` : ""}
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
             ${post.edited ? `<span class="edited">Edited</span>` : ""}
@@ -5023,25 +5050,40 @@
     const id = video && (video.videoId || video.id);
     if (!id) return null;
     const poster = ivBest(video.videoThumbnails) || video.thumbnail || "";
-    return {
-      id: id,
+    const ownerId = String(video.authorId || "");
+    const profileId = String((profile && profile.channelId) || "");
+    const shared = !!(ownerId && profileId && ownerId !== profileId);
+    const post = {
+      id: shared ? ("repost:" + String((profile && (profile.displayHandle || profile.handle)) || "channel").toLowerCase() + ":" + id) : id,
       statusId: id,
       platform: "youtube",
-      kind: "post",
+      kind: shared ? "repost" : "post",
       watch: true,
-      author: (profile && profile.name) || video.author || "",
-      handle: (profile && profile.displayHandle) || "",
-      profileHandle: (profile && (profile.channelId || profile.handle)) || "",
-      avatar: (profile && profile.avatar) || "",
-      verifiedType: profile && profile.verifiedType,
+      author: shared ? (video.author || "") : ((profile && profile.name) || video.author || ""),
+      handle: shared ? "" : ((profile && profile.displayHandle) || ""),
+      profileHandle: shared ? ownerId : ((profile && (profile.channelId || profile.handle)) || ""),
+      avatar: shared ? (ivBest(video.authorThumbnails) || "") : ((profile && profile.avatar) || ""),
+      verifiedType: shared ? "" : (profile && profile.verifiedType),
       title: video.title || "",
       text: video.title || "",
       description: video.description || "",
       date: ivPublish(video),
       url: "https://www.youtube.com/watch?v=" + id,
-      media: [{ type: "video", url: "", poster: poster, duration: video.lengthSeconds }],
+      media: [{ type: "video", url: "", poster: poster, duration: video.lengthSeconds, videoId: id }],
       stats: { views: video.viewCount }
     };
+    if (shared) {
+      post.channelId = ownerId;
+      post.repostedBy = {
+        name: (profile && profile.name) || "",
+        handle: (profile && profile.displayHandle) || "",
+        avatar: (profile && profile.avatar) || "",
+        platform: "youtube",
+        feedId: (profile && profile.id) || "",
+        channelId: profileId
+      };
+    }
+    return post;
   }
 
   function ivCommunityPost(item, profile) {
@@ -5069,6 +5111,22 @@
       stats: { likes: item.likeCount, replies: item.replyCount }
     };
     if (built && built.poll) post.poll = built.poll;
+    return claimCommunityVideo(post, profile);
+  }
+
+  function claimCommunityVideo(post, profile) {
+    const clip = ((post && post.media) || []).find((item) => item && item.type === "video" && item.videoId);
+    if (!clip || !clip.authorId) return post;
+    const profileId = String((profile && profile.channelId) || "");
+    if (profileId && clip.authorId === profileId) return post;
+    const owner = {
+      name: clip.author || "",
+      channelId: clip.authorId,
+      avatar: clip.authorAvatar || "",
+      title: clip.alt || ""
+    };
+    if (!owner.name) return post;
+    applyVideoOwner(post, owner);
     return post;
   }
 
@@ -5639,7 +5697,7 @@
     const youtube = feed.platform === "youtube";
     const tab = route.query.get("tab") || "posts";
     let list = postsFor(feed);
-    if (youtube && tab === "videos") list = list.filter(isVideoPost);
+    if (youtube && tab === "videos") list = list.filter((post) => isVideoPost(post) && !isRepost(post));
     else if (youtube && tab === "community") list = list.filter((p) => p.kind === "community");
     else if (tab === "replies") list = list.filter((p) => p.kind === "reply");
     else if (tab === "media") list = list.filter((p) => (p.media || []).length);
@@ -6062,11 +6120,206 @@
   }
 
   function authorFace(post) {
+    if (isRepost(post)) {
+      const creator = creatorOf(post);
+      return {
+        avatar: post.avatar || creator.avatar || "",
+        verified: post.verifiedType || creator.verifiedType || ""
+      };
+    }
     const feed = feedOf(post);
     return {
       avatar: post.avatar || feed.avatar || "",
       verified: post.verifiedType || feed.verifiedType || ""
     };
+  }
+
+  function creatorOf(post) {
+    if (!isRepost(post)) return feedOf(post);
+    const platform = post.platform || "x";
+    const handle = String(post.handle || "");
+    const channel = String(post.channelId || "");
+    const by = post.repostedBy || {};
+    const reposterId = by.feedId || ((by.platform || platform) + ":" + (by.handle || ""));
+    const known = (channel && feedById(platform + ":" + channel)) || findFeed(platform, handle) || (channel && findFeed(platform, channel)) || null;
+    if (known && known.id !== reposterId) return known;
+    return {
+      id: platform + ":" + (channel || handle),
+      platform: platform,
+      handle: handle,
+      channelId: channel,
+      name: post.author || handle,
+      avatar: post.avatar || "",
+      verifiedType: post.verifiedType || "",
+      followers: channel && SUB_COUNTS[channel] != null ? SUB_COUNTS[channel] : null
+    };
+  }
+
+  function repostBanner(post, mode) {
+    if (!post || mode === "author" || mode === "status" || !isRepost(post)) return "";
+    const by = post.repostedBy || {};
+    const name = String(by.name || by.handle || "").trim();
+    if (!name) return `<div class="repost-line">${icon("repost")}<span>Reposted</span></div>`;
+    const platform = by.platform || post.platform || "x";
+    const who = by.channelId || by.handle || "";
+    const label = esc(by.name || by.handle) + " reposted";
+    if (!who) return `<div class="repost-line">${icon("repost")}<span>${label}</span></div>`;
+    return `<div class="repost-line">${icon("repost")}<a data-act="stop" data-card="${esc(platform + ":" + who)}" href="${esc(accountHash(platform, who))}">${label}</a></div>`;
+  }
+
+  function repostQuote(post, mode) {
+    if (!post || mode === "author" || mode === "status" || !isRepost(post)) return "";
+    const text = String(post.repostComment || "").trim();
+    if (!text) return "";
+    const by = post.repostedBy || {};
+    const platform = by.platform || post.platform || "x";
+    const who = by.channelId || by.handle || "";
+    const href = post.repostUrl || (who ? accountHash(platform, who) : "");
+    const external = href.indexOf("http") === 0;
+    const open = href ? (external ? ` data-href="${esc(href)}"` : ` data-open="${esc(href)}"`) : "";
+    return `<div class="quote"${open}>
+      <div class="quote-head">
+        ${avatar(by.avatar, by.name || by.handle)}
+        <span class="name">${esc(by.name || by.handle || "Repost")}</span>
+        ${by.handle ? `<span class="handle">@${esc(by.handle)}</span>` : ""}
+      </div>
+      <div class="quote-text">${esc(text)}</div>
+    </div>`;
+  }
+
+  function countsAsUpload(post, feed) {
+    if (!isVideoPost(post) || isRepost(post) || !feed) return false;
+    return post.feedId === feed.id || ((post.platform || "") + ":" + (post.handle || "")) === feed.id || (post.channelId && ((post.platform || "youtube") + ":" + post.channelId) === feed.id);
+  }
+
+  function onChannel(post, channel) {
+    if (!channel) return true;
+    if (isRepost(post)) {
+      const by = post.repostedBy || {};
+      const reposterId = by.feedId || ((by.platform || post.platform || "x") + ":" + (by.handle || ""));
+      if (reposterId && reposterId === channel) return false;
+      const creator = creatorOf(post);
+      return creator.id === channel || ((post.platform || "") + ":" + (post.handle || "")) === channel || (post.channelId && ((post.platform || "youtube") + ":" + post.channelId) === channel);
+    }
+    return post.feedId === channel || ((post.platform || "") + ":" + (post.handle || "")) === channel;
+  }
+
+  function videoOwnerId(post) {
+    const media = ((post && post.media) || []).find((item) => item && item.type === "video" && ytVideoId(item.videoId));
+    if (media) return media.videoId;
+    const raw = String((post && (post.statusId || post.id)) || "");
+    if (post && post.platform === "youtube" && ytVideoId(raw) && post.kind !== "repost") return raw;
+    const found = String((post && post.url) || "").match(/(?:[?&]v=|youtu\.be\/|shorts\/|embed\/)([A-Za-z0-9_-]{11})/);
+    return found ? found[1] : "";
+  }
+
+  function sameCreator(post, owner) {
+    if (!post || !owner) return false;
+    const channel = String(owner.channelId || "");
+    const feed = feedOf(post);
+    const knownChannel = String(post.channelId || feed.channelId || "");
+    if (channel && knownChannel) return channel === knownChannel;
+    const handle = String(owner.handle || "").replace(/^@/, "").toLowerCase();
+    const names = [post.handle, feed.handle, post.author, feed.name].map((value) => String(value || "").replace(/^@/, "").toLowerCase()).filter(Boolean);
+    if (handle && names.indexOf(handle) >= 0) return true;
+    const name = String(owner.name || "").trim().toLowerCase();
+    return !!(name && (name === String(post.author || "").trim().toLowerCase() || name === String(feed.name || "").trim().toLowerCase()));
+  }
+
+  function applyVideoOwner(post, owner) {
+    if (!post || !owner || !owner.name) return false;
+    if (post.kind === "repost" && post.repostedBy) return false;
+    if (post.kind !== "community") return false;
+    const videoId = videoOwnerId(post);
+    if (!videoId) return false;
+    if (sameCreator(post, owner)) {
+      if (owner.title && !post.title) post.title = owner.title;
+      return false;
+    }
+    const feed = feedOf(post);
+    const handle = feed.handle || post.handle || "";
+    const communityId = String(post.statusId || post.id || "");
+    const comment = String(post.text || "").replace(new RegExp("https?://(?:www\\.)?(?:youtube\\.com/(?:watch\\?v=|shorts/)|youtu\\.be/)" + videoId + "\\S*", "ig"), " ").replace(/\s+/g, " ").trim();
+    const title = owner.title || (((post.media || [])[0] || {}).alt) || "";
+    post.repostedBy = {
+      name: post.author || feed.name || handle,
+      handle: handle,
+      avatar: post.avatar || feed.avatar || "",
+      platform: "youtube",
+      feedId: post.feedId || feed.id || "",
+      channelId: feed.channelId || ""
+    };
+    post.kind = "repost";
+    post.id = "repost:" + String(handle).toLowerCase() + ":" + communityId;
+    post.author = owner.name;
+    post.handle = owner.handle || owner.channelId || "";
+    post.avatar = owner.avatar || "";
+    post.profileHandle = owner.channelId || post.handle;
+    post.verifiedType = "";
+    if (owner.channelId) post.channelId = owner.channelId;
+    if (title) {
+      post.title = title;
+      post.text = title;
+    }
+    if (comment && comment !== title) post.repostComment = comment;
+    post.repostUrl = "https://www.youtube.com/post/" + communityId;
+    post.statusId = videoId;
+    post.url = "https://www.youtube.com/watch?v=" + videoId;
+    post.watch = true;
+    return true;
+  }
+
+  function oembedOwner(id) {
+    const url = "https://www.youtube.com/oembed?format=json&url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + id);
+    return fetchJson(url).then((data) => {
+      if (!data || !data.author_name) return null;
+      const authorUrl = String(data.author_url || "");
+      const at = authorUrl.match(/youtube\.com\/@([^/?#]+)/);
+      const uc = authorUrl.match(/youtube\.com\/channel\/(UC[\w-]{10,})/);
+      return {
+        name: String(data.author_name),
+        handle: at ? decodeURIComponent(at[1]) : "",
+        channelId: uc ? uc[1] : "",
+        title: data.title || "",
+        avatar: ""
+      };
+    }).catch(() => null);
+  }
+
+  function loadYtOwner(id) {
+    const ttl = 7 * 24 * 60 * 60 * 1000;
+    return cacheGet("yt:owner:" + id, ttl).then((hit) => {
+      if (hit && hit.name) return hit;
+      return rotate(ivBases(), "/api/v1/videos/" + encodeURIComponent(id), 3, "ivBase").then((video) => {
+        if (video && video.author) {
+          return {
+            name: video.author,
+            handle: "",
+            channelId: video.authorId || "",
+            title: video.title || "",
+            avatar: ivBest(video.authorThumbnails) || ""
+          };
+        }
+        return null;
+      }).catch(() => null).then((owner) => owner || oembedOwner(id)).then((owner) => {
+        if (!owner || !owner.name) return null;
+        return cacheSet("yt:owner:" + id, owner).then(() => owner);
+      });
+    });
+  }
+
+  function ensureVideoOwners() {
+    const list = ((STATE.data && STATE.data.posts) || []).filter((post) => post && post.platform === "youtube" && post.kind === "community" && videoOwnerId(post));
+    list.slice(0, 12).forEach((post) => {
+      const id = videoOwnerId(post);
+      const key = "own:" + (post.id || id);
+      if (TRIED[key]) return;
+      TRIED[key] = 1;
+      loadYtOwner(id).then((owner) => {
+        if (!applyVideoOwner(post, owner)) return;
+        render();
+      });
+    });
   }
 
   function clock(seconds) {
@@ -6110,23 +6363,33 @@
 
   function ytCard(post, layout) {
     ensureYtMeta(post);
-    const feed = feedOf(post);
+    const creator = creatorOf(post);
     const title = post.title || post.text || "";
-    return `<a class="yt-card${layout === "list" ? " row" : ""}" data-feed="${esc(feed.id || "")}" href="${esc(watchHash(post))}">
-      ${subsThumb(post)}
-      <div class="yt-meta">
-        ${avatar(post.avatar || feed.avatar, feed.name || post.author, "yt-ava")}
-        <div class="yt-copy">
-          <h3 class="yt-title">${esc(title)}</h3>
-          <div class="yt-by">${esc(feed.name || post.author || post.handle || "")}${badge(feed.verifiedType || post.verifiedType)}</div>
-          <div class="yt-sub">${esc(videoMeta(post))}</div>
+    const who = post.profileHandle || creator.channelId || creator.handle || post.handle || "";
+    const platform = creator.platform || post.platform || "x";
+    const profile = accountHash(platform, who);
+    const cardId = platform + ":" + who;
+    const dest = watchHash(post);
+    const name = creator.name || post.author || post.handle || "";
+    return `<div class="yt-item">
+      ${repostBanner(post)}
+      <div class="yt-card${layout === "list" ? " row" : ""}" data-feed="${esc(creator.id || "")}" data-open="${esc(dest)}">
+        <a class="yt-open" href="${esc(dest)}">${subsThumb(post)}</a>
+        <div class="yt-meta">
+          <a data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}" aria-label="${esc(name || "Channel")}">${avatar(creator.avatar || post.avatar, name, "yt-ava")}</a>
+          <div class="yt-copy">
+            <a class="yt-open" href="${esc(dest)}"><h3 class="yt-title">${esc(title)}</h3></a>
+            <div class="yt-by"><a data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}">${esc(name)}</a>${badge(creator.verifiedType || post.verifiedType)}</div>
+            <div class="yt-sub">${esc(videoMeta(post))}</div>
+          </div>
         </div>
       </div>
-    </a>`;
+      ${repostQuote(post)}
+    </div>`;
   }
 
   function videoFeeds() {
-    const rows = feeds().filter((feed) => feed && isFollowed(feed.id) && posts().some((post) => isVideoPost(post) && (post.feedId === feed.id || (post.platform + ":" + post.handle) === feed.id)));
+    const rows = feeds().filter((feed) => feed && isFollowed(feed.id) && posts().some((post) => countsAsUpload(post, feed)));
     rows.sort((a, b) => {
       const ay = a.platform === "youtube" ? 0 : 1;
       const by = b.platform === "youtube" ? 0 : 1;
@@ -6297,7 +6560,7 @@
     }).join("")}<button class="yt-chip yt-chip-add" type="button" data-act="group-new" aria-pressed="false" aria-label="New group">${icon("plus")}<span>New group</span></button></div>`;
     const strip = `<div class="yt-strip"><a class="yt-ch${!route.channel ? " on" : ""}" href="${esc(here)}"><span class="yt-all">All</span><span>All</span></a>${channels.map((feed) => `<a class="yt-ch${route.channel === feed.id ? " on" : ""}" data-feed="${esc(feed.id)}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}">${avatar(feed.avatar, feed.name, "ch")}<span>${esc(feed.name || feed.handle)}</span></a>`).join("")}</div>`;
     let list = posts().filter((post) => isVideoPost(post) && followedPost(post) && postInGroup(active, post)).sort(byStamp);
-    if (route.channel) list = list.filter((post) => post.feedId === route.channel || (post.platform + ":" + post.handle) === route.channel);
+    if (route.channel) list = list.filter((post) => onChannel(post, route.channel));
     channels.forEach(ensureYtSubs);
     list.forEach(ensureYtMeta);
     const save = STATE.settings.groupsOwn ? `<button class="group-save" type="button" data-act="group-publish">Save groups to the site</button>` : "";
@@ -6381,9 +6644,9 @@
   function watchView(route) {
     const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id)) || STATE.shared[String(route.id)];
     if (!post) return pageHead("Watch", "", true) + emptyBlock("Not in this snapshot", "This video isn’t in the current snapshot.");
-    const feed = feedOf(post);
+    const creator = creatorOf(post);
     ensureYtMeta(post);
-    ensureYtSubs(feed);
+    ensureYtSubs(creator);
     const media = (post.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || (post.media || [])[0] || {};
     const id = postKey(post);
     const clip = !!(media.type === "video" || media.type === "animated_gif" || youtubeId(post, media) || post.platform === "youtube");
@@ -6392,7 +6655,7 @@
       ? playerTile(post, media, mediaIndex).replace('class="tile vplay"', 'class="player vplay"')
       : ((media.poster || media.url) ? `<div class="player"><img src="${esc(media.poster || media.url)}" alt="" referrerpolicy="no-referrer"></div>` : "");
     const pip = clip && document.pictureInPictureEnabled ? `<button class="text-btn" type="button" data-act="pip">${icon("pip")} Picture in picture</button>` : "";
-    const subs = feed.platform === "youtube" && feed.followers != null ? formatCount(feed.followers) + " subscribers" : (feed.followers != null ? formatCount(feed.followers) + " followers" : "");
+    const subs = creator.platform === "youtube" && creator.followers != null ? formatCount(creator.followers) + " subscribers" : (creator.followers != null ? formatCount(creator.followers) + " followers" : "");
     const liked = !!STATE.settings.likes[post.id];
     const booked = !!STATE.settings.bookmarks[post.id];
     const disliked = !!STATE.disliked[post.id];
@@ -6439,11 +6702,12 @@
         <div class="watch-main">
           ${player}
           ${pip}
+          ${repostBanner(post)}
           <h1 class="watch-title">${esc(post.title || post.text || "")}</h1>
           <div class="watch-chan">
-            <a data-card="${esc(feed.platform + ":" + (feed.channelId || feed.handle))}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}" aria-label="${esc(feed.name || post.author || "Channel")}">${avatar(post.avatar || feed.avatar, feed.name || post.author)}</a>
-            <div class="watch-who"><a class="name" data-card="${esc(feed.platform + ":" + (feed.channelId || feed.handle))}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}">${esc(feed.name || post.author || "")}${badge(feed.verifiedType || post.verifiedType)}</a><div class="yt-sub">${esc(subs)}</div></div>
-            ${followButtonClean(feed.id, true)}
+            <a data-card="${esc((creator.platform || post.platform) + ":" + (creator.channelId || creator.handle))}" href="${esc(accountHash(creator.platform || post.platform, creator.channelId || creator.handle))}" aria-label="${esc(creator.name || post.author || "Channel")}">${avatar(creator.avatar || post.avatar, creator.name || post.author)}</a>
+            <div class="watch-who"><a class="name" data-card="${esc((creator.platform || post.platform) + ":" + (creator.channelId || creator.handle))}" href="${esc(accountHash(creator.platform || post.platform, creator.channelId || creator.handle))}">${esc(creator.name || post.author || "")}${badge(creator.verifiedType || post.verifiedType)}</a><div class="yt-sub">${esc(subs)}</div></div>
+            ${followButtonClean(creator.id, true)}
           </div>
           <div class="pills">
             <div class="pill-group">
@@ -6458,6 +6722,7 @@
             <div class="desc-body">${linkify(desc || post.text || "", post.links, post.platform, post.handle)}</div>
             ${desc ? `<button class="text-btn" type="button" data-act="more" data-key="desc:${esc(id)}">${openDesc ? "Show less" : "Show more"}</button>` : ""}
           </div>
+          ${repostQuote(post)}
           <section class="watch-comments">${comments}</section>
         </div>
         ${upHtml}
@@ -8674,7 +8939,8 @@
     STATE.pendingLive = [];
     showPill([]);
     render(scroll ? { y: 0 } : undefined);
-  }
+    ensureVideoOwners();
+      }
 
   let liveRefreshFlight = null;
   function refreshLiveTimeline(apply) {
@@ -8732,6 +8998,7 @@
         if (!(STATE.pendingLive || []).length) showPill([]);
         render();
         scanBellPosts(doc.posts);
+        ensureVideoOwners();
         return;
       }
       scanBellPosts(doc.posts);
@@ -9422,6 +9689,7 @@
       STATE.pendingLive = [];
       if (STATE.data) STATE.data = withMemory(STATE.data);
       showPill([]);
+      ensureVideoOwners();
       localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
       updateBadge(bellUnread());
       const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
@@ -9594,6 +9862,7 @@
       STATE.data = snap;
       STATE.loading = false;
       render({ reset: true });
+      ensureVideoOwners();
     } else {
       STATE.loading = true;
       render();
@@ -9606,6 +9875,7 @@
       notePublished(loaded);
       STATE.data = loaded;
       saveTimelineSnap(STATE.data);
+      ensureVideoOwners();
       STATE.settings = loadSettings();
       applyTheme();
       STATE.loading = false;

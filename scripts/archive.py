@@ -2,8 +2,9 @@
 """Append-only monthly stubs for posts that age out of feeds.json.
 
 A stub is platform, id, handle, date, kind, and at most 280 characters of
-text. Media, comments, avatars, and stats are not stored. Shards are named
-archive/YYYY-MM.json and listed newest-first in archive/index.json.
+text, plus the original creator's name, avatar, and channel when known.
+Post media and stats are not stored. Shards are named archive/YYYY-MM.json
+and listed newest-first in archive/index.json.
 """
 
 from __future__ import annotations
@@ -57,6 +58,40 @@ def month_key(date: str) -> str:
     return f"{match.group(1)}-{match.group(2)}"
 
 
+def _https(url, limit: int = 300) -> str:
+    text = str(url or "").strip()
+    if text.startswith("https://") and len(text) <= limit and " " not in text:
+        return text
+    return ""
+
+
+def _author_fields(source: dict) -> dict:
+    """Minimal original-creator fields. Media and stats stay out of the stub."""
+    if not isinstance(source, dict):
+        return {}
+    extra = {}
+    author = str(source.get("a") or source.get("author") or "").strip()
+    if author:
+        extra["a"] = author[:80]
+    avatar = _https(source.get("av") or source.get("avatar"))
+    if avatar:
+        extra["av"] = avatar
+    channel = str(source.get("c") or source.get("channelId") or "").strip()
+    if channel.startswith("UC") and len(channel) <= 40:
+        extra["c"] = channel
+    by = source.get("repostedBy") if isinstance(source.get("repostedBy"), dict) else None
+    reposter = str(source.get("rb") or (by or {}).get("handle") or "").lstrip("@").strip()
+    reposter_name = str(source.get("rn") or (by or {}).get("name") or "").strip()
+    if reposter:
+        extra["rb"] = reposter[:40]
+    if reposter_name:
+        extra["rn"] = reposter_name[:80]
+    comment = snippet(str(source.get("rc") if "rc" in source else source.get("repostComment") or ""))
+    if comment:
+        extra["rc"] = comment
+    return extra
+
+
 def stub_from_post(post: dict) -> dict | None:
     if not isinstance(post, dict) or post_is_bridge_error(post):
         return None
@@ -77,6 +112,7 @@ def stub_from_post(post: dict) -> dict | None:
         stub["k"] = kind[:16]
     if text:
         stub["t"] = text
+    stub.update(_author_fields(post))
     return stub
 
 
@@ -157,7 +193,25 @@ def _stub_row(row: dict) -> dict | None:
         stub["k"] = kind[:16]
     if text:
         stub["t"] = text
+    stub.update(_author_fields(row))
     return stub
+
+
+def _enrich_stub(archive: dict, seen: dict, stub: dict) -> None:
+    """Fill original-author fields on a stub that was stored before they existed.
+
+    The first text stays. Only empty author, avatar, channel, and reposter
+    fields are copied from a later copy of the same post.
+    """
+    name = seen.get((stub.get("p"), stub.get("id")))
+    rows = archive["shards"].get(name) or []
+    for row in rows:
+        if row.get("p") != stub.get("p") or str(row.get("id")) != str(stub.get("id")):
+            continue
+        for field in ("a", "av", "c", "rb", "rn", "rc"):
+            if stub.get(field) and not row.get(field):
+                row[field] = stub[field]
+        return
 
 
 def merge_posts(archive: dict, posts) -> int:
@@ -169,6 +223,7 @@ def merge_posts(archive: dict, posts) -> int:
             continue
         key = (stub["p"], stub["id"])
         if key in seen:
+            _enrich_stub(archive, seen, stub)
             continue
         name = month_key(stub.get("d") or "")
         archive["shards"].setdefault(name, []).append(stub)

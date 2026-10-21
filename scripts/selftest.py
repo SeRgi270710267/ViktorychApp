@@ -591,7 +591,7 @@ def main() -> None:
     check(first["media"][0]["poster"] == "https://i.ytimg.com/vi/scwlR0QHGOk/hqdefault.jpg", "youtube thumbnail is hotlinked")
     check("youtube-nocookie.com/embed/scwlR0QHGOk" in first["media"][0]["url"], "youtube embed url")
     from adapters.youtube_community import parse as parse_community
-    from adapters.youtube_community import parse_rss_posts
+    from adapters.youtube_community import owner_from_oembed, parse_invidious_posts, parse_rss_posts
 
     community_feed = {"id": "youtube:redacted_handle", "platform": "youtube", "handle": "redacted_handle", "channelId": "UCfgtuaUadGgOA-91geQ8Qog", "profile": {"name": "Canadian Prepper"}}
     community = parse_community((FIX / "youtube_community_invidious.json").read_text(encoding="utf-8"), community_feed)
@@ -606,6 +606,26 @@ def main() -> None:
     check(poll["poll"]["totalVotes"] > 0 and len(poll["poll"]["choices"]) >= 2 and all("percent" not in choice and "votes" not in choice for choice in poll["poll"]["choices"]), "community poll keeps choices and hides missing percents")
     shared = next(post for post in community["posts"] if any((item.get("type") == "video") for item in (post.get("media") or [])))
     check(shared["kind"] == "community" and shared["media"][0]["videoId"] == "ofnS1aDDF3Y" and shared["media"][0]["url"].startswith("https://www.youtube-nocookie.com/embed/") and shared["media"][0]["poster"].startswith("https://i.ytimg.com/vi/") and not shared.get("quoted"), "community video plays as media")
+    foreign = parse_invidious_posts(
+        {
+            "comments": [{
+                "commentId": "Ugforeignshare0001",
+                "author": "Canadian Prepper",
+                "content": "Watch this https://youtu.be/abcdefghijk",
+                "attachment": {
+                    "type": "video",
+                    "videoId": "abcdefghijk",
+                    "title": "Foreign title",
+                    "author": "Other Creator",
+                    "authorId": "UCothercreator0123456789",
+                },
+            }]
+        },
+        community_feed,
+    )[0]
+    check(foreign["kind"] == "repost" and foreign["author"] == "Other Creator" and foreign["repostedBy"]["handle"] == "redacted_handle" and foreign["statusId"] == "abcdefghijk" and str(foreign["id"]).startswith("repost:") and foreign.get("repostComment") == "Watch this" and foreign["profileHandle"] == "UCothercreator0123456789", "a shared community video keeps the reposter's comment and the original channel")
+    oembed = owner_from_oembed({"author_name": "DD Geopolitics", "author_url": "https://www.youtube.com/@DD_Geopolitics", "title": "Hormuz"})
+    check(oembed["name"] == "DD Geopolitics" and oembed["handle"] == "DD_Geopolitics" and oembed["title"] == "Hormuz" and "channelId" not in oembed, "oembed owner is parsed without a network call")
     page = parse_community((FIX / "youtube_community_initial.json").read_text(encoding="utf-8"), community_feed)
     scraped = page["posts"][0]
     check(scraped["id"] == image_post["id"] and scraped["stats"]["likes"] == 690 and scraped["media"][0]["url"].startswith("https://yt3.ggpht.com/") and scraped["date"] == "", "posts page fallback keeps the image and does not invent a time")
@@ -685,7 +705,7 @@ def main() -> None:
     check(stub["id"] == "DeZgzTEggQe" and stub["p"] == "instagram", "instagram stub uses the shortcode")
     check(len(stub["t"]) == 280 and "k" not in stub, "snippet is capped at 280 and plain posts omit kind")
     encoded = json.dumps(stub, ensure_ascii=False, separators=(",", ":"))
-    check("cdn.example" not in encoded and "media" not in stub and "stats" not in stub, "stub stores no media or stats")
+    check("media" not in stub and "stats" not in stub and stub.get("av") == "https://cdn.example/a.jpg" and "likes" not in encoded, "stub stores the author avatar and no media or stats")
     reply = stub_from_post(dict(post, platform="threads", id="DeZtp7KER52", url="https://www.threads.com/t/DeZtp7KER52", kind="reply", text="short"))
     check(reply["id"] == "DeZtp7KER52" and reply["k"] == "reply" and len(reply["t"]) < 280, "threads stub keeps a reply kind")
     undated = stub_from_post({"platform": "rss", "id": "item-1", "handle": "news", "text": "hi"})
@@ -698,6 +718,29 @@ def main() -> None:
         check(added == 0, "an existing stub is not overwritten")
         saved = json.loads((root / "archive" / "2026-10.json").read_text(encoding="utf-8"))
         check(saved[0]["t"] == stub["t"] and saved[0]["id"] == "DeZgzTEggQe", "the first snippet stays in the month shard")
+        share = {
+            "platform": "x",
+            "id": "2112908406873072074",
+            "statusId": "2112908406873072074",
+            "handle": "DD_Geopolitics",
+            "author": "DD Geopolitics",
+            "avatar": "https://pbs.twimg.com/profile_images/face.jpg",
+            "kind": "repost",
+            "text": "WATCH: University professors",
+            "date": "2026-10-21T12:00:00Z",
+            "repostedBy": {"handle": "redacted_handle", "name": "Canadian Prepper"},
+            "repostComment": "look at this",
+        }
+        share_stub = stub_from_post(share)
+        check(share_stub["h"] == "DD_Geopolitics" and share_stub["a"] == "DD Geopolitics" and share_stub["av"].startswith("https://") and share_stub["rb"] == "redacted_handle" and share_stub["rn"] == "Canadian Prepper" and share_stub["rc"] == "look at this" and share_stub["k"] == "repost", "a repost stub keeps the original creator and who reposted it")
+        thin = dict(share)
+        thin.pop("avatar")
+        thin.pop("repostComment")
+        check(merge_archive(root / "archive", [thin]) == 1, "a repost stub is archived")
+        merge_archive(root / "archive", [dict(share, text="a later caption that must not replace the first")])
+        month = json.loads((root / "archive" / "2026-10.json").read_text(encoding="utf-8"))
+        row = next(item for item in month if item["id"] == "2112908406873072074")
+        check(row["t"].startswith("WATCH:") and row.get("av", "").startswith("https://") and row.get("rc") == "look at this" and "later caption" not in row["t"], "archiving again fills the creator fields without replacing the text")
         index = json.loads((root / "archive" / "index.json").read_text(encoding="utf-8"))
         check(index["shards"] == ["2026-10"], "the shard is named for its month")
         older = {"platform": "x", "id": "2112600761762717997", "handle": "redacted_handle", "date": "2026-08-02T00:00:00Z", "text": "old", "kind": "post"}
@@ -727,7 +770,8 @@ def main() -> None:
         september = json.loads((root / "archive" / "2026-09.json").read_text(encoding="utf-8"))
         check(september[0]["id"] == "only" and set(september[0]) <= {"p", "id", "h", "d", "k", "t"}, "the downloaded stub is stored without extra fields")
         check((root / "archive" / "2026-10.json").is_file() and (root / "archive" / "2026-08.json").is_file(), "months missing from the remote stay")
-        kept_text = json.loads((root / "archive" / "2026-10.json").read_text(encoding="utf-8"))[0]["t"]
+        kept_rows = json.loads((root / "archive" / "2026-10.json").read_text(encoding="utf-8"))
+        kept_text = next(row["t"] for row in kept_rows if row["id"] == "DeZgzTEggQe")
 
         def fetch_more(rel):
             if rel.endswith("index.json"):
@@ -753,7 +797,7 @@ def main() -> None:
             if path.name == "index.json":
                 continue
             for row in json.loads(path.read_text(encoding="utf-8")):
-                if not set(row) <= {"p", "id", "h", "d", "k", "t"}:
+                if not set(row) <= {"p", "id", "h", "d", "k", "t", "a", "av", "c", "rb", "rn", "rc"}:
                     bad_fields += 1
                 if len(row.get("t") or "") > 280:
                     long_text += 1
@@ -792,6 +836,7 @@ def main() -> None:
     check("New version available" in page and 'id="update-go"' in page and 'id="viewer"' in page, "the shell has an update prompt and a media viewer")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("beforeinstallprompt" in app and "Install app" in app and "pictureInPicture" in app and "mediaSession" in app, "install, picture in picture, and media session are in the page")
+    check("function creatorOf(" in app and "function repostBanner(" in app and "function countsAsUpload(" in app and "repostComment" in app, "video cards credit the original creator and keep a repost comment")
     check("parseSharedLink" in app and "startViewTransition" in app and "rss-feeds-timeline-v1" in app and "rss-feeds-bookmark-queue" in app and "setAppBadge" in app and 'decoding="async"' in app and "navigator.vibrate" in app, "share targets, view transitions, offline snapshots, badges, and haptics are wired")
     check("requestPermission" in app and app.index("requestPermission") > app.index("data-act=\"notify\""), "notification permission is requested from the settings control")
     workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
@@ -1513,16 +1558,19 @@ const posts = [
   { id: "3", platform: "youtube", handle: "redacted_handle", kind: "community", date: "2026-10-19T00:00:00Z" },
   { id: "4", platform: "x", handle: "redacted_handle", kind: "reply", date: "2026-10-18T00:00:00Z" },
   { id: "5", platform: "x", handle: "someoneelse", kind: "post", date: "2026-10-22T00:00:00Z" },
-  { id: "6", platform: "instagram", handle: "redacted_handle", kind: "post", date: "2026-10-17T00:00:00Z", media: [{ type: "photo", url: "https://example.test/p.jpg" }] }
+  { id: "6", platform: "instagram", handle: "redacted_handle", kind: "post", date: "2026-10-17T00:00:00Z", media: [{ type: "photo", url: "https://example.test/p.jpg" }] },
+  { id: "7", platform: "x", handle: "DD_Geopolitics", feedId: "x:redacted_handle", kind: "repost", date: "2026-10-23T00:00:00Z", media: [{ type: "video", url: "https://example.test/r.mp4" }], author: "DD Geopolitics", repostedBy: { handle: "redacted_handle", name: "Canadian Prepper" } }
 ];
 const person = P.byId("canadian-prepper");
 const rows = P.postsFor(person, posts);
-if (rows.map((post) => post.id).join(",") !== "2,1,3,4,6") throw new Error("order " + rows.map((post) => post.id).join(","));
+if (rows.map((post) => post.id).join(",") !== "7,2,1,3,4,6") throw new Error("order " + rows.map((post) => post.id).join(","));
 const tabs = P.tabsFor(person, rows).map((pair) => pair[0]);
 ["posts", "videos", "shorts", "community", "replies", "media"].forEach((name) => {
   if (tabs.indexOf(name) < 0) throw new Error("missing " + name);
 });
 if (P.filterTab(rows, "videos").some((post) => post.id === "2")) throw new Error("short listed as a video");
+if (P.filterTab(rows, "videos").some((post) => post.id === "7")) throw new Error("repost listed as a video");
+if (!P.filterTab(rows, "posts").some((post) => post.id === "7")) throw new Error("repost missing from posts");
 if (!P.filterTab(rows, "videos").some((post) => post.id === "1")) throw new Error("x video missing");
 if (!P.filterTab(rows, "shorts").some((post) => post.id === "2")) throw new Error("short missing");
 if (P.filterTab(rows, "posts").some((post) => post.id === "4")) throw new Error("reply in posts");
