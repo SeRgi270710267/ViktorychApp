@@ -5717,6 +5717,7 @@
         ${themeBtn("dim", "Dim")}
         ${themeBtn("lightsout", "Lights out")}
       </div>
+      ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
       <h2>Accessibility</h2>
       <p class="phandle">Data · Autoplay videos</p>
       <div class="theme-row" role="group" aria-label="Autoplay videos">
@@ -9056,6 +9057,7 @@
     }
   }
 
+  if (window.FeedsTV && window.FeedsTV.attach) window.FeedsTV.attach();
   if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
   if (window.FeedsPeople) {
     window.FeedsPeople.bind({

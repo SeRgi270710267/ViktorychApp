@@ -1,5 +1,5 @@
-/* Feeds service worker. Cache names are bridge- plus the deploy SHA. */
-const VERSION = "bridge-__SW_VERSION__";
+/* Feeds service worker. Cache names are bridge-tv1- plus the deploy SHA. */
+const VERSION = "bridge-tv1-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
@@ -15,6 +15,8 @@ const SHELL_FILES = [
   "./translate.css",
   "./people.js",
   "./people.css",
+  "./tv.js",
+  "./tv.css",
   "./favicon.svg",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
@@ -326,7 +328,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
 }
 
 function canonicalNotifyId(post) {
