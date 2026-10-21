@@ -348,6 +348,8 @@
       : `<div class="pbanner"></div>`;
     const base = baseFeed(person);
     const follow = h.followButtonClean ? h.followButtonClean(base.id, true) : "";
+    const who = preferred(person) || base;
+    const bell = h.bellButton ? h.bellButton(base.id, who.handle || base.handle || "") : "";
     const shareId = base.id || ("person:" + person.id);
     const hrefFor = (id) => "#/p/" + encodeURIComponent(person.id) + (id === "posts" ? "" : "?tab=" + id);
     const tabHtml = tabs.map((pair) => `<a class="tab${tab === pair[0] ? " on" : ""}" role="tab" aria-selected="${tab === pair[0] ? "true" : "false"}" href="${esc(hrefFor(pair[0]))}"><span>${esc(pair[1])}</span></a>`).join("");
@@ -392,6 +394,7 @@
         ${avatar}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(shareId)}" aria-label="Share">${icon("share")}</button>
+          ${bell}
           ${follow}
         </div>
       </div>

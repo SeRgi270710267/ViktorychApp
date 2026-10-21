@@ -11,6 +11,8 @@
     homeOn: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913H9.14a.93.93 0 0 0 .929-.913v-7.075h3.909v7.075c0 .502.417.913.928.913h5.653c.51 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.408-.758z",
     search: "M10.25 3.75c-3.59 0-6.5 2.91-6.5 6.5s2.91 6.5 6.5 6.5c1.795 0 3.419-.726 4.596-1.904 1.178-1.177 1.904-2.801 1.904-4.596 0-3.59-2.91-6.5-6.5-6.5zm-8.5 6.5c0-4.694 3.806-8.5 8.5-8.5s8.5 3.806 8.5 8.5c0 1.986-.682 3.815-1.824 5.262l4.781 4.781-1.414 1.414-4.781-4.781c-1.447 1.142-3.276 1.824-5.262 1.824-4.694 0-8.5-3.806-8.5-8.5z",
     bell: "M19.993 9.042C19.48 5.017 16.054 2 11.996 2s-7.49 3.021-7.999 7.051L2.866 18H7.1c.463 2.282 2.481 4 4.9 4s4.437-1.718 4.9-4h4.236l-1.143-8.958zM12 20c-1.306 0-2.417-.835-2.829-2h5.658c-.412 1.165-1.523 2-2.829 2zm-6.866-4l.847-6.698C6.364 6.272 8.941 4 11.996 4s5.627 2.268 6.013 5.295L18.864 16H5.134z",
+    bellOn: "M19.993 9.042C19.48 5.017 16.054 2 11.996 2s-7.49 3.021-7.999 7.051L2.866 18H7.1c.463 2.282 2.481 4 4.9 4s4.437-1.718 4.9-4h4.236l-1.143-8.958z",
+    video: "M4 6.5C4 5.12 5.12 4 6.5 4h8c1.38 0 2.5 1.12 2.5 2.5v11c0 1.38-1.12 2.5-2.5 2.5h-8C5.12 20 4 18.88 4 17.5v-11zM15.2 8.4l4.3-2.2v11.6l-4.3-2.2V8.4z",
     mail: "M1.998 5.5c0-1.381 1.119-2.5 2.5-2.5h15c1.381 0 2.5 1.119 2.5 2.5v13c0 1.381-1.119 2.5-2.5 2.5h-15c-1.381 0-2.5-1.119-2.5-2.5v-13zm2.5-.5c-.276 0-.5.224-.5.5v2.764l8 3.638 8-3.636V5.5c0-.276-.224-.5-.5-.5h-15zm15.5 5.463l-8 3.636-8-3.638V18.5c0 .276.224.5.5.5h15c.276 0 .5-.224.5-.5v-8.037z",
     spark: "M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z",
     lists: "M3 5.5C3 4.12 4.12 3 5.5 3h13C19.88 3 21 4.12 21 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-13zM5.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-13zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h7v2H7v-2z",
@@ -77,6 +79,7 @@
     share: null,
     groupMenu: null,
     tabMenu: null,
+    bellMenu: null,
     shared: {},
     sharedState: {},
     chain: {},
@@ -278,9 +281,64 @@
     return collapseSameUrl(full.concat(extra)).filter((post) => !bridgeErrorPost(post));
   }
 
+  function httpsUrl(value) {
+    const text = String(value || "");
+    if (!/^https:\/\//.test(text) || text.length > 400) return "";
+    return text;
+  }
+
+  function cleanBells(raw) {
+    const out = {};
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+    Object.keys(raw).forEach((key) => {
+      if (!key || key.length > 120) return;
+      const row = raw[key];
+      if (!row || (row.mode !== "all" && row.mode !== "live")) return;
+      const ids = [];
+      (Array.isArray(row.ids) ? row.ids : [key]).forEach((item) => {
+        const text = String(item || "");
+        if (text && text.length < 120 && ids.indexOf(text) < 0 && ids.length < 12) ids.push(text);
+      });
+      const handles = [];
+      (Array.isArray(row.handles) ? row.handles : []).forEach((item) => {
+        const text = String(item || "").toLowerCase();
+        if (text && text.length < 120 && handles.indexOf(text) < 0 && handles.length < 24) handles.push(text);
+      });
+      out[key] = {
+        mode: row.mode,
+        since: Number(row.since) || 0,
+        ids: ids.length ? ids : [key],
+        handles: handles,
+        handle: String(row.handle || "").replace(/^@/, "").slice(0, 80),
+        name: String(row.name || "").slice(0, 80)
+      };
+    });
+    return out;
+  }
+
+  function cleanBellNotes(list) {
+    if (!Array.isArray(list)) return [];
+    const out = [];
+    list.forEach((item) => {
+      if (!item || !item.id || out.length >= 80) return;
+      const hash = String(item.hash || "#/");
+      out.push({
+        id: String(item.id).slice(0, 160),
+        at: Number(item.at) || 0,
+        handle: String(item.handle || "").replace(/^@/, "").slice(0, 80),
+        name: String(item.name || "").slice(0, 80),
+        text: String(item.text || "").slice(0, 280),
+        avatar: httpsUrl(item.avatar),
+        image: httpsUrl(item.image),
+        hash: hash.charAt(0) === "#" && hash.length < 300 ? hash : "#/"
+      });
+    });
+    return out;
+  }
+
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en" });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0 });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -309,6 +367,10 @@
       parsed.forYouReplies = parsed.forYouReplies !== false;
       parsed.tabViews = cleanTabViews(parsed.tabViews);
       parsed.translateTo = window.FeedsTranslate ? window.FeedsTranslate.normalize(parsed.translateTo) : (parsed.translateTo || "en");
+      parsed.bells = cleanBells(parsed.bells);
+      parsed.bellNotes = cleanBellNotes(parsed.bellNotes);
+      parsed.bellSeen = Array.isArray(parsed.bellSeen) ? parsed.bellSeen.map((id) => String(id)).slice(-500) : [];
+      parsed.bellRead = Number(parsed.bellRead) || 0;
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
@@ -2139,6 +2201,47 @@
       return `<a class="follow${large ? " lg" : ""}" data-act="follow-request" data-id="${esc(primary)}" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("follow", primary))}">Follow</a>`;
     }
     return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>Follow</button>`;
+  }
+
+  function bellGlyph(kind) {
+    if (kind === "plus") {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16.1 8.35c-.26-2.05-1.95-3.6-4-3.6s-3.74 1.55-4 3.6l-.72 5.25h2.05c.26 1.1 1.2 1.9 2.57 1.9s2.31-.8 2.57-1.9h2.05l-.72-5.25zM12.1 14.2c-.64 0-1.18-.4-1.4-1h2.8c-.22.6-.76 1-1.4 1zM8.55 12.4l.5-3.4c.22-1.15 1.25-2 2.55-2s2.33.85 2.55 2l.5 3.4H8.55z"/><path d="M17.15 14.6h-1.45v1.45H14.25v1.45h1.45V19h1.45v-1.5h1.45v-1.45h-1.45z"/></svg>`;
+    }
+    if (kind === "off") return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH.bell}"/><path d="M4.1 3.05 2.95 4.2 19.8 21.05l1.15-1.15z"/></svg>`;
+    if (kind === "on") return icon("bellOn");
+    if (kind === "video") return icon("video");
+    return icon("bell");
+  }
+
+  function accountFollowed(id) {
+    const ids = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(id) : [id];
+    return (ids.length ? ids : [id]).some((item) => isFollowed(item));
+  }
+
+  function bellRecord(id) {
+    const bells = (STATE.settings && STATE.settings.bells) || {};
+    if (bells[id]) return bells[id];
+    const wanted = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(id) : [id];
+    const keys = Object.keys(bells);
+    for (let i = 0; i < keys.length; i++) {
+      const row = bells[keys[i]];
+      if (!row) continue;
+      if (keys[i] === id) return row;
+      if ((row.ids || []).some((item) => item === id || wanted.indexOf(item) >= 0)) return row;
+    }
+    return null;
+  }
+
+  function bellOn(id) {
+    const row = bellRecord(id);
+    return !!(row && (row.mode === "all" || row.mode === "live"));
+  }
+
+  function bellButton(id, handle) {
+    if (!accountFollowed(id)) return "";
+    const on = bellOn(id);
+    const open = !!(STATE.bellMenu && STATE.bellMenu.id === id);
+    return `<button class="notify-bell${on ? " on" : ""}" type="button" data-act="bell" data-id="${esc(id)}" data-handle="${esc(String(handle || "").replace(/^@/, ""))}" title="Notify" aria-label="Notify" aria-haspopup="menu" aria-expanded="${open ? "true" : "false"}"><span class="bell-off">${bellGlyph("off-outline")}</span><span class="bell-add">${bellGlyph("plus")}</span><span class="bell-on">${bellGlyph("on")}</span></button>`;
   }
 
   function actionBar(post) {
@@ -4242,8 +4345,21 @@
     return { name: "profile", platform, handle, query };
   }
 
+  function bellUnread() {
+    const read = Number(STATE.settings && STATE.settings.bellRead) || 0;
+    return ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => (Number(note.at) || 0) > read).length;
+  }
+
+  function bellBadgeHtml() {
+    const count = bellUnread();
+    if (!count) return "";
+    return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
+  }
+
   function navItem(href, name, label, on) {
-    return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}>${icon(on && name === "home" ? "homeOn" : name)}<span class="nav-label">${label}</span></a>`;
+    const glyph = icon(on && name === "home" ? "homeOn" : name);
+    const badge = name === "bell" ? bellBadgeHtml() : "";
+    return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${label}</span></a>`;
   }
 
   function nav(route) {
@@ -4300,7 +4416,7 @@
   }
 
   function bottom(route) {
-    const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}"${on ? ' aria-current="page"' : ""}>${icon(name)}</a>`;
+    const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(name)}${name === "bell" ? bellBadgeHtml() : ""}</span></a>`;
     return `<nav class="bottom-nav" aria-label="Primary">
       ${item("#/", route.name === "home" ? "homeOn" : "home", "Home", route.name === "home")}
       ${item("#/explore", "search", "Search", route.name === "explore")}
@@ -4506,6 +4622,18 @@
     }
     const manage = `<div class="tab-menu-gap"></div>${tabChoice("menuitem", `data-act="manage-tabs"`, "Manage tabs", null, "gear", "")}`;
     return `<div class="tab-sheet" data-act="close-tab-menu"><div class="menu tab-menu" data-act="stop" role="menu" aria-label="${esc(label)}"><div class="tab-grab" aria-hidden="true"></div>${body}${manage}</div></div>`;
+  }
+
+  function bellMenu() {
+    const menu = STATE.bellMenu;
+    if (!menu || !menu.id) return "";
+    const row = bellRecord(menu.id);
+    const mode = row && (row.mode === "all" || row.mode === "live") ? row.mode : "off";
+    const choice = (id, text, glyph) => {
+      const on = mode === id;
+      return `<button class="bell-choice" type="button" role="menuitemradio" aria-checked="${on ? "true" : "false"}" data-act="bell-mode" data-mode="${id}" data-id="${esc(menu.id)}"><span class="bell-choice-ico">${bellGlyph(glyph)}</span><span class="bell-choice-label">${text}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
+    };
+    return `<div class="bell-sheet" data-act="close-bell"><div class="menu bell-menu" data-act="stop" role="menu" aria-label="Notify"><div class="bell-grab" aria-hidden="true"></div>${choice("all", "All posts", "outline")}${choice("live", "Only posts with live video", "video")}${choice("off", "Off", "off")}<p class="bell-note">Without Web Push, alerts arrive when the app checks in the background (Android/Chrome installed app) or on next open (iOS).</p></div></div>`;
   }
 
   function listMembersPosts(list) {
@@ -5469,6 +5597,7 @@
         ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(profile.avatar, profile.name, "pava"), profile.platform, profile.handle) : avatar(profile.avatar, profile.name, "pava")}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(profile.id || (profile.platform + ":" + profile.handle))}" aria-label="Share">${icon("share")}</button>
+          ${bellButton(liveFollowId(profile), profile.handle)}
           ${followButtonClean(liveFollowId(profile), true)}
           <a class="outline" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(profile))}" aria-label="${esc(openLabel(profile.platform))}">${esc(profileLinkLabel(profile.platform))}</a>
         </div>
@@ -5539,6 +5668,7 @@
         ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(feed.avatar, feed.name, "pava"), feed.platform, feed.handle) : avatar(feed.avatar, feed.name, "pava")}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(feed.id)}" aria-label="Share">${icon("share")}</button>
+          ${bellButton(feed.id, feed.handle)}
           ${followButtonClean(feed.id, true)}
           <a class="outline" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(feed))}" aria-label="View on ${esc(PLATFORM[feed.platform] || "web")}">${esc(profileLinkLabel(feed.platform))}</a>
         </div>
@@ -5703,6 +5833,26 @@
     return pageHead(title) + emptyBlock(headline, body);
   }
 
+  function notificationsView() {
+    const notes = (STATE.settings && STATE.settings.bellNotes) || [];
+    if (notes.length) {
+      const newest = notes.reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
+      if (newest && (Number(STATE.settings.bellRead) || 0) < newest) {
+        STATE.settings.bellRead = Date.now();
+        saveSettings();
+        updateBadge(0);
+      }
+    }
+    if (!notes.length) return notesView("Notifications", "Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
+    const rows = notes.map((note) => {
+      const who = note.handle || note.name || "account";
+      const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
+      const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
+      return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">New post notifications for @${esc(who)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
+    }).join("");
+    return pageHead("Notifications") + `<div class="notes">${rows}</div>`;
+  }
+
   function isStandalone() {
     return matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
   }
@@ -5863,7 +6013,7 @@
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const top = (route.name === "messages" ? 0 : route.name === "explore" ? 124 : tall ? 106 : 53) + rowExtra;
-    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}`;
+    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}`;
   }
 
   function watchHash(post) {
@@ -6620,7 +6770,7 @@
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
-    if (route.name === "notifications") return notesView("Notifications", "Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
+    if (route.name === "notifications") return notificationsView();
     if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
     if (route.name === "messages") return notesView("Messages", "Welcome to your inbox", "Private conversations aren’t part of this reader.");
     if (route.name === "sources") return sourcesView();
@@ -6708,6 +6858,27 @@
     if (left + width > limit) left = Math.max(8, limit - width);
     menu.style.left = Math.max(8, left) + "px";
     menu.style.top = (item.bottom + 4) + "px";
+  }
+
+  function placeBellMenu() {
+    const menu = document.querySelector(".bell-menu");
+    const btn = document.querySelector('.notify-bell[aria-expanded="true"]');
+    if (!menu) return;
+    if (window.innerWidth < 500 || !btn) {
+      menu.style.left = "";
+      menu.style.top = "";
+      return;
+    }
+    const item = btn.getBoundingClientRect();
+    const width = menu.offsetWidth || 300;
+    const height = menu.offsetHeight || 220;
+    let left = item.right - width;
+    if (left < 8) left = 8;
+    if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - width);
+    let top = item.bottom + 6;
+    if (top + height > window.innerHeight - 8) top = Math.max(8, item.top - height - 6);
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
   }
 
   let tabScrollLeft = null;
@@ -6834,6 +7005,7 @@
       bindPlayers();
       resumePlayback();
       placeTabMenu();
+      placeBellMenu();
       syncTabArrows();
       if (window.FeedsDiscord && window.FeedsDiscord.mount) window.FeedsDiscord.mount(route);
     };
@@ -7176,6 +7348,26 @@
       enableNotifications();
       return;
     }
+    if (act === "bell") {
+      const id = el.dataset.id || "";
+      if (STATE.bellMenu && STATE.bellMenu.id === id) STATE.bellMenu = null;
+      else STATE.bellMenu = { id: id, handle: String(el.dataset.handle || "").replace(/^@/, "") };
+      render();
+      return;
+    }
+    if (act === "close-bell") {
+      STATE.bellMenu = null;
+      render();
+      return;
+    }
+    if (act === "bell-mode") {
+      const id = el.dataset.id || (STATE.bellMenu && STATE.bellMenu.id) || "";
+      const handle = (STATE.bellMenu && STATE.bellMenu.handle) || el.dataset.handle || "";
+      const mode = el.dataset.mode || "off";
+      STATE.bellMenu = null;
+      setBellMode(id, mode, handle);
+      return;
+    }
     if (act === "pip") {
       const tile = document.querySelector(".player.vplay") || document.querySelector(".player");
       const video = tile && tile.querySelector("video");
@@ -7470,7 +7662,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")) }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0 }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -7692,6 +7884,10 @@
         if (data.forYouReplies === false || data.forYouReplies === true) STATE.settings.forYouReplies = data.forYouReplies;
         if (data.tabViews && typeof data.tabViews === "object") STATE.settings.tabViews = cleanTabViews(data.tabViews);
         if (data.translateTo && window.FeedsTranslate) STATE.settings.translateTo = window.FeedsTranslate.normalize(data.translateTo);
+        if (data.bells && typeof data.bells === "object") STATE.settings.bells = cleanBells(data.bells);
+        if (Array.isArray(data.bellNotes)) STATE.settings.bellNotes = cleanBellNotes(data.bellNotes);
+        if (Array.isArray(data.bellSeen)) STATE.settings.bellSeen = data.bellSeen.map((id) => String(id)).slice(-500);
+        if (data.bellRead) STATE.settings.bellRead = Number(data.bellRead) || 0;
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();
@@ -7706,13 +7902,14 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu)) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu)) {
       STATE.modal = null;
       STATE.drawer = false;
       STATE.menu = null;
       STATE.share = null;
       STATE.groupMenu = null;
       STATE.tabMenu = null;
+      STATE.bellMenu = null;
       STATE.confirm = null;
       render();
     }
@@ -7820,7 +8017,7 @@
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (motion.addEventListener) motion.addEventListener("change", () => schedulePreview());
   }
-  window.addEventListener("resize", () => { syncTabArrows(); placeTabMenu(); });
+  window.addEventListener("resize", () => { syncTabArrows(); placeTabMenu(); placeBellMenu(); });
   window.addEventListener("scroll", () => {
     if (window.innerWidth >= 500) {
       STATE.headerHidden = false;
@@ -7932,6 +8129,7 @@
     STATE.menu = null;
     STATE.share = null;
     STATE.groupMenu = null;
+    STATE.bellMenu = null;
     STATE.headerHidden = false;
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
@@ -8496,14 +8694,16 @@
         STATE.pendingFeed = null;
         if (!(STATE.pendingLive || []).length) showPill([]);
         render();
+        scanBellPosts(doc.posts);
         return;
       }
+      scanBellPosts(doc.posts);
       if (!added.length) return;
       STATE.pendingFeed = doc;
       showPill(added.concat(STATE.pendingLive || []));
       const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
-      const fresh = added.filter((post) => followedSince(post, since));
-      if (document.hidden) updateBadge(fresh.length || added.length);
+      const fresh = added.filter((post) => followedSince(post, since) && !coveredByBell(post));
+      if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) {
         try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
       }
@@ -8764,6 +8964,323 @@
     history.replaceState(null, "", location.pathname + hash);
   }
 
+  function postIsLiveVideo(post) {
+    if (!post) return false;
+    if (post.live || post.isLive || post.premiere) return true;
+    if (post.kind === "live" || post.kind === "premiere") return true;
+    const media = post.media || [];
+    for (let i = 0; i < media.length; i++) {
+      const item = media[i];
+      if (item && (item.live || item.premiere)) return true;
+    }
+    const blob = [post.url, post.title, post.text].join("\n");
+    if ((post.platform || "") !== "youtube") return false;
+    if (/\/live(\/|$|\?)/i.test(blob)) return true;
+    return /\bpremieres?\b|\blive stream\b|\blive now\b|\bis live\b/i.test(blob);
+  }
+
+  function bellTargets(id) {
+    const ids = [];
+    const handles = [];
+    const addId = (value) => {
+      const text = String(value || "");
+      if (text && ids.indexOf(text) < 0 && ids.length < 12) ids.push(text);
+    };
+    const addHandle = (platform, handle) => {
+      const key = ((platform || "x") + ":" + String(handle || "").replace(/^@/, "")).toLowerCase();
+      if (key.length > 2 && handles.indexOf(key) < 0 && handles.length < 24) handles.push(key);
+    };
+    const followed = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(id) : [id];
+    (followed.length ? followed : [id]).forEach(addId);
+    addId(id);
+    ids.slice().forEach((fid) => {
+      const feed = feedById(fid);
+      if (!feed) {
+        const cut = fid.indexOf(":");
+        if (cut > 0) addHandle(fid.slice(0, cut), fid.slice(cut + 1));
+        return;
+      }
+      addHandle(feed.platform, feed.handle);
+      if (feed.channelId) addHandle(feed.platform, feed.channelId);
+    });
+    let person = null;
+    if (window.FeedsPeople) {
+      person = window.FeedsPeople.byId(String(id).replace(/^person:/, ""));
+      if (!person && window.FeedsPeople.match) {
+        const feed = feedById(id);
+        if (feed) person = window.FeedsPeople.match(feed.platform, feed.handle);
+      }
+    }
+    if (person && person.accounts) {
+      person.accounts.forEach((account) => {
+        if (account.feedId) addId(account.feedId);
+        addHandle(account.platform, account.handle);
+        if (account.channelId) addHandle(account.platform, account.channelId);
+      });
+    }
+    return { ids: ids, handles: handles };
+  }
+
+  function bellKeyFor(id, targets) {
+    const bells = (STATE.settings && STATE.settings.bells) || {};
+    const keys = Object.keys(bells);
+    for (let i = 0; i < keys.length; i++) {
+      const row = bells[keys[i]] || {};
+      if (keys[i] === id || (row.ids || []).some((item) => (targets.ids || []).indexOf(item) >= 0)) return keys[i];
+    }
+    return (targets.ids && targets.ids[0]) || id;
+  }
+
+  function bellHandle(id) {
+    const feed = feedById(id) || liveProfileById(id);
+    if (feed && feed.handle) return String(feed.handle).replace(/^@/, "");
+    const cut = String(id).indexOf(":");
+    return cut > 0 ? id.slice(cut + 1) : String(id || "");
+  }
+
+  function bellName(id) {
+    const feed = feedById(id) || liveProfileById(id);
+    return (feed && (feed.name || feed.handle)) || bellHandle(id);
+  }
+
+  function bellMatches(post, row) {
+    if (!post || !row) return false;
+    const feedId = String(post.feedId || "");
+    if (feedId && (row.ids || []).indexOf(feedId) >= 0) return true;
+    const key = ((post.platform || "x") + ":" + (post.handle || "")).toLowerCase();
+    if ((row.handles || []).indexOf(key) >= 0) return true;
+    const plain = (post.platform || "x") + ":" + (post.handle || "");
+    return (row.ids || []).indexOf(plain) >= 0;
+  }
+
+  function bellStillFollowed(post, row) {
+    if (isFollowed(post.feedId) || isFollowed((post.platform || "x") + ":" + (post.handle || ""))) return true;
+    return (row.ids || []).some((item) => isFollowed(item));
+  }
+
+  function postImageUrl(post) {
+    const media = (post && post.media) || [];
+    let poster = "";
+    for (let i = 0; i < media.length; i++) {
+      const item = media[i];
+      if (!item) continue;
+      if (item.type === "photo" && httpsUrl(item.url)) return item.url;
+      if (!poster && httpsUrl(item.poster)) poster = item.poster;
+    }
+    return poster;
+  }
+
+  function bellNoteFrom(post, row) {
+    const text = String(post.text || post.title || "").replace(/\s+/g, " ").trim().slice(0, 180);
+    return {
+      id: String(canonicalPostId(post) || post.id || ""),
+      at: Date.now(),
+      handle: (row && row.handle) || post.handle || "",
+      name: post.author || (row && row.name) || post.handle || "",
+      text: text,
+      avatar: httpsUrl(post.avatar),
+      image: postImageUrl(post),
+      hash: statusHash(post)
+    };
+  }
+
+  function rememberLoadedPosts() {
+    const seen = {};
+    (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
+    posts().forEach((post) => {
+      const id = String(canonicalPostId(post) || (post && post.id) || "");
+      if (id) seen[id] = true;
+      if (post && post.id) seen[String(post.id)] = true;
+    });
+    STATE.settings.bellSeen = Object.keys(seen).slice(-500);
+  }
+
+  function paintBellBadge() {
+    const count = bellUnread();
+    updateBadge(count);
+    document.querySelectorAll(".nav-badge").forEach((el) => el.remove());
+    if (!count || parseRoute().name === "notifications") return;
+    const label = count > 20 ? "20+" : String(count);
+    document.querySelectorAll('a[href="#/notifications"]').forEach((link) => {
+      const host = link.querySelector(".nav-ico") || link;
+      if (host.querySelector(".nav-badge")) return;
+      const span = document.createElement("span");
+      span.className = "nav-badge";
+      span.textContent = label;
+      host.appendChild(span);
+    });
+  }
+
+  function commitBellNotes(list) {
+    const seen = {};
+    (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
+    const have = {};
+    (STATE.settings.bellNotes || []).forEach((note) => { if (note && note.id) have[String(note.id)] = true; });
+    const added = [];
+    (list || []).forEach((note) => {
+      if (!note || !note.id) return;
+      const id = String(note.id);
+      if (seen[id] || have[id]) return;
+      seen[id] = true;
+      have[id] = true;
+      added.push(note);
+    });
+    if (!added.length) return;
+    STATE.settings.bellSeen = Object.keys(seen).slice(-500);
+    STATE.settings.bellNotes = cleanBellNotes(added.concat(STATE.settings.bellNotes || []));
+    saveSettings();
+    if (parseRoute().name === "notifications") render();
+    else paintBellBadge();
+  }
+
+  function showLocalNotification(note) {
+    if (!note || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    try {
+      const item = new Notification(note.name || ("@" + (note.handle || "post")), {
+        body: note.text || "New post",
+        icon: note.avatar || "icons/icon-192.png",
+        tag: "bell-" + note.id
+      });
+      item.onclick = () => {
+        window.focus();
+        location.hash = note.hash || "#/";
+        item.close();
+      };
+    } catch (err) { /* the in-app list still has the post */ }
+  }
+
+  function showPageNotification(note) {
+    const payload = {
+      body: note.text || "New post",
+      icon: note.avatar || "icons/icon-192.png",
+      image: note.image || undefined,
+      tag: "bell-" + note.id,
+      data: { hash: note.hash || "#/" }
+    };
+    const title = note.name || ("@" + (note.handle || "post"));
+    const viaRegistration = () => {
+      if (!("serviceWorker" in navigator)) return Promise.reject();
+      return navigator.serviceWorker.ready.then((reg) => {
+        if (!reg || !reg.showNotification) return Promise.reject();
+        return reg.showNotification(title, payload);
+      });
+    };
+    const timed = new Promise((_, reject) => setTimeout(() => reject(new Error("notify")), 2000));
+    Promise.race([viaRegistration(), timed]).catch(() => showLocalNotification(note));
+  }
+
+  function deliverBellNotes(notes) {
+    const list = (notes || []).filter((note) => note && note.id);
+    if (!list.length) return;
+    const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!worker) {
+      commitBellNotes(list);
+      list.forEach(showPageNotification);
+      return;
+    }
+    worker.postMessage({ type: "bell-deliver", notes: list });
+  }
+
+  function pullBellQueue() {
+    const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (worker) worker.postMessage({ type: "bell-pull" });
+  }
+
+  function scanBellPosts(list) {
+    if (!STATE.settings) return;
+    const bells = STATE.settings.bells || {};
+    const keys = Object.keys(bells);
+    if (!keys.length) return;
+    const seen = {};
+    (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
+    const fresh = [];
+    (list || posts()).forEach((post) => {
+      if (!post || hiddenPost(post)) return;
+      const id = String(canonicalPostId(post) || post.id || "");
+      if (!id || seen[id] || seen[String(post.id || "")]) return;
+      const when = Date.parse(post.date || "") || 0;
+      if (!when) return;
+      let hit = null;
+      for (let i = 0; i < keys.length; i++) {
+        const row = bells[keys[i]];
+        if (!row || (row.mode !== "all" && row.mode !== "live")) continue;
+        if (!bellMatches(post, row) || !bellStillFollowed(post, row)) continue;
+        if (when < Number(row.since || 0)) continue;
+        if (row.mode === "live" && !postIsLiveVideo(post)) continue;
+        hit = row;
+        break;
+      }
+      if (!hit) return;
+      const note = bellNoteFrom(post, hit);
+      if (!note.id) return;
+      seen[note.id] = true;
+      fresh.push(note);
+    });
+    if (fresh.length) deliverBellNotes(fresh);
+  }
+
+  function coveredByBell(post) {
+    const bells = (STATE.settings && STATE.settings.bells) || {};
+    const keys = Object.keys(bells);
+    for (let i = 0; i < keys.length; i++) {
+      const row = bells[keys[i]];
+      if (!row || !bellMatches(post, row)) continue;
+      if (row.mode === "live" && !postIsLiveVideo(post)) continue;
+      if (row.mode === "all" || row.mode === "live") return true;
+    }
+    return false;
+  }
+
+  async function ensureNotifyPermission() {
+    if (typeof Notification === "undefined") return true;
+    let permission = Notification.permission;
+    if (permission !== "granted") {
+      try { permission = await Notification.requestPermission(); }
+      catch (err) { permission = "denied"; }
+    }
+    if (permission !== "granted") return false;
+    registerPeriodic();
+    return true;
+  }
+
+  async function setBellMode(id, mode, handle) {
+    if (!id || !STATE.settings) return;
+    if (!STATE.settings.bells || typeof STATE.settings.bells !== "object" || Array.isArray(STATE.settings.bells)) STATE.settings.bells = {};
+    const targets = bellTargets(id);
+    const key = bellKeyFor(id, targets);
+    const prev = STATE.settings.bells[key];
+    STATE.bellMenu = null;
+    if (mode !== "all" && mode !== "live") {
+      delete STATE.settings.bells[key];
+      saveSettings();
+      render();
+      return;
+    }
+    if (prev && prev.mode === mode) {
+      render();
+      return;
+    }
+    render();
+    const allowed = await ensureNotifyPermission();
+    if (!allowed) {
+      toast("Notifications stay off");
+      return;
+    }
+    STATE.settings.bells[key] = {
+      mode: mode,
+      since: Date.now(),
+      ids: targets.ids,
+      handles: targets.handles,
+      handle: String(handle || bellHandle(id)).replace(/^@/, ""),
+      name: bellName(id)
+    };
+    rememberLoadedPosts();
+    saveSettings();
+    registerPeriodic();
+    render();
+    toast("You'll get notified when @" + STATE.settings.bells[key].handle + " posts.");
+  }
+
   async function enableNotifications() {
     if (typeof Notification === "undefined") { toast("Notifications aren’t available"); return; }
     let permission = Notification.permission;
@@ -8790,7 +9307,13 @@
       type: "state",
       seen: Number(localStorage.getItem("rss-feeds-seen-at") || 0),
       follows: STATE.settings.follows || [],
-      ids: seenPostIds()
+      ids: seenPostIds(),
+      bells: cleanBells(STATE.settings.bells),
+      bellSeen: (STATE.settings.bellSeen || []).slice(-500),
+      mutedWords: STATE.settings.mutedWords || [],
+      mutedAccounts: STATE.settings.mutedAccounts || [],
+      repostOff: STATE.settings.repostOff || [],
+      notifyAll: !!STATE.settings.notify
     });
   }
 
@@ -8807,6 +9330,7 @@
       const data = event.data || {};
       if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
       if (data.type === "feeds-updated") refreshFeeds(false);
+      if (data.type === "bell-delivered" || data.type === "bell-queue") commitBellNotes(data.notes || []);
       if (data.type === "reload-when-idle" && STATE.swUpdate) showUpdate();
     });
   }
@@ -8862,7 +9386,7 @@
       if (STATE.data) STATE.data = withMemory(STATE.data);
       showPill([]);
       localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
-      updateBadge(0);
+      updateBadge(bellUnread());
       const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
       if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
       const route = parseRoute();
@@ -8899,9 +9423,10 @@
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
         localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
-        updateBadge(0);
+        updateBadge(bellUnread());
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
         if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
+        pullBellQueue();
         refreshFeeds(false);
         refreshLiveTimeline(false);
         const route = parseRoute();
@@ -9062,15 +9587,17 @@
         seenIds[canonicalPostId(post)] = true;
         if (post && post.id) seenIds[String(post.id)] = true;
       });
-      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")]);
+      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post));
       const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
       if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted") {
         try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
       }
       if (document.visibilityState === "visible") {
         localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
-        updateBadge(0);
-      } else if (fresh.length) updateBadge(fresh.length);
+        updateBadge(bellUnread());
+      } else if (fresh.length || bellUnread()) updateBadge(Math.max(fresh.length, bellUnread()));
+      scanBellPosts(STATE.data.posts);
+      if ("serviceWorker" in navigator) navigator.serviceWorker.ready.then(() => pullBellQueue()).catch(() => {});
       refreshLiveTimeline(false);
       if (!STATE.liveTimer) {
         STATE.liveTimer = setInterval(() => {
@@ -9095,7 +9622,7 @@
   if (window.FeedsPeople) {
     window.FeedsPeople.bind({
       esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
-      followButtonClean: followButtonClean, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
+      followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
       sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
       statusHash: statusHash, watchHash: watchHash, render: render
     });

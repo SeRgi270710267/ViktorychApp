@@ -261,6 +261,24 @@ self.addEventListener("message", (event) => {
       await idbSet(db, "seen-at", data.type === "seen" ? Date.now() : Number(data.seen || 0));
       if (Array.isArray(data.follows)) await idbSet(db, "follows", data.follows);
       if (Array.isArray(data.ids)) await idbSet(db, "seen-ids", data.ids.slice(0, 400));
+      if (data.bells && typeof data.bells === "object") await idbSet(db, "bells", data.bells);
+      if (Array.isArray(data.bellSeen)) await idbSet(db, "bell-seen", data.bellSeen.slice(-500));
+      if (Array.isArray(data.mutedWords)) await idbSet(db, "muted-words", data.mutedWords);
+      if (Array.isArray(data.mutedAccounts)) await idbSet(db, "muted-accounts", data.mutedAccounts);
+      if (Array.isArray(data.repostOff)) await idbSet(db, "repost-off", data.repostOff);
+      if (typeof data.notifyAll === "boolean") await idbSet(db, "notify-all", data.notifyAll);
+    }));
+  }
+  if (data.type === "bell-deliver") {
+    event.waitUntil(deliverBellNotes(data.notes || []).then((delivered) => {
+      if (event.source) event.source.postMessage({ type: "bell-delivered", notes: delivered });
+    }));
+  }
+  if (data.type === "bell-pull") {
+    event.waitUntil(idb().then(async (db) => {
+      const notes = (await idbGet(db, "bell-queue")) || [];
+      await idbSet(db, "bell-queue", []);
+      if (event.source) event.source.postMessage({ type: "bell-queue", notes: notes });
     }));
   }
 });
@@ -357,6 +375,161 @@ function canonicalNotifyId(post) {
   return raw;
 }
 
+function postIsLiveVideo(post) {
+  if (!post) return false;
+  if (post.live || post.isLive || post.premiere) return true;
+  if (post.kind === "live" || post.kind === "premiere") return true;
+  const media = post.media || [];
+  for (let i = 0; i < media.length; i++) {
+    const item = media[i];
+    if (item && (item.live || item.premiere)) return true;
+  }
+  const blob = [post.url, post.title, post.text].join("\n");
+  if ((post.platform || "") !== "youtube") return false;
+  if (/\/live(\/|$|\?)/i.test(blob)) return true;
+  return /\bpremieres?\b|\blive stream\b|\blive now\b|\bis live\b/i.test(blob);
+}
+
+function accountMuted(post, list) {
+  const handle = String((post && post.handle) || "").replace(/^@/, "").toLowerCase();
+  const id = String((post && post.feedId) || "").toLowerCase();
+  const prefixed = ((post && post.platform) || "x") + ":" + handle;
+  return (list || []).some((item) => {
+    const key = String(item || "").replace(/^@/, "").trim().toLowerCase();
+    return !!key && (key === handle || key === id || key === prefixed);
+  });
+}
+
+function textMuted(text, words) {
+  const sample = String(text || "").toLowerCase();
+  return (words || []).some((word) => {
+    const raw = String(word || "").trim().toLowerCase();
+    return !!raw && sample.indexOf(raw) >= 0;
+  });
+}
+
+function postMuted(post, words, accounts, repostOff) {
+  if (!post) return true;
+  if (accountMuted(post, accounts) || textMuted(post.text, words)) return true;
+  const by = post.repostedBy;
+  if (by && accountMuted({ handle: by.handle, platform: by.platform || post.platform, feedId: by.feedId || post.feedId }, repostOff)) return true;
+  return false;
+}
+
+function bellCovers(post, row) {
+  if (!post || !row || (row.mode !== "all" && row.mode !== "live")) return false;
+  const when = Date.parse(post.date || "") || 0;
+  if (!when || when < Number(row.since || 0)) return false;
+  if (row.mode === "live" && !postIsLiveVideo(post)) return false;
+  const feedId = String(post.feedId || "");
+  if (feedId && (row.ids || []).indexOf(feedId) >= 0) return true;
+  const handle = ((post.platform || "x") + ":" + (post.handle || "")).toLowerCase();
+  return (row.handles || []).indexOf(handle) >= 0;
+}
+
+function statusHash(post) {
+  const platform = post.platform || "x";
+  const handle = post.handle || "";
+  const id = post.statusId || post.id || "";
+  if (platform === "x") return "#/@" + encodeURIComponent(handle) + "/status/" + encodeURIComponent(id);
+  return "#/" + encodeURIComponent(platform) + "/" + encodeURIComponent(handle) + "/status/" + encodeURIComponent(id);
+}
+
+function postImageUrl(post) {
+  const media = (post && post.media) || [];
+  let poster = "";
+  for (let i = 0; i < media.length; i++) {
+    const item = media[i];
+    if (!item) continue;
+    if (item.type === "photo" && /^https:\/\//.test(item.url || "")) return item.url;
+    if (!poster && /^https:\/\//.test(item.poster || "")) poster = item.poster;
+  }
+  return poster;
+}
+
+function noteFromPost(post, row) {
+  const text = String(post.text || post.title || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  return {
+    id: canonicalNotifyId(post) || String(post.id || ""),
+    at: Date.now(),
+    handle: (row && row.handle) || post.handle || "",
+    name: post.author || (row && row.name) || post.handle || "",
+    text: text,
+    avatar: /^https:\/\//.test(post.avatar || "") ? post.avatar : "",
+    image: postImageUrl(post),
+    hash: statusHash(post)
+  };
+}
+
+let bellChain = Promise.resolve();
+
+function deliverBellNotes(notes) {
+  const run = bellChain.then(() => deliverBellNotesNow(notes));
+  bellChain = run.then(() => {}, () => {});
+  return run;
+}
+
+async function deliverBellNotesNow(notes) {
+  const list = (notes || []).filter((note) => note && note.id);
+  if (!list.length) return [];
+  const db = await idb();
+  const seen = new Set((await idbGet(db, "bell-seen")) || []);
+  const delivered = [];
+  for (const note of list) {
+    const id = String(note.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    delivered.push(note);
+    if (Notification.permission !== "granted") continue;
+    try {
+      await self.registration.showNotification(note.name || ("@" + (note.handle || "post")), {
+        body: note.text || "New post",
+        icon: note.avatar || "icons/icon-192.png",
+        image: note.image || undefined,
+        tag: "bell-" + id,
+        data: { hash: note.hash || "#/" }
+      });
+    } catch (err) { /* the page still keeps the in-app row */ }
+  }
+  await idbSet(db, "bell-seen", Array.from(seen).slice(-500));
+  if (!delivered.length) return [];
+  const clients = await self.clients.matchAll({ type: "window" });
+  const visible = clients.some((client) => client.visibilityState === "visible");
+  if (!visible) {
+    const queued = ((await idbGet(db, "bell-queue")) || []).concat(delivered).slice(-80);
+    await idbSet(db, "bell-queue", queued);
+    if (navigator.setAppBadge) {
+      try { await navigator.setAppBadge(queued.length); } catch (err) { /* badges are optional */ }
+    }
+  }
+  return delivered;
+}
+
+async function bellNotesFor(doc) {
+  const db = await idb();
+  const bells = (await idbGet(db, "bells")) || {};
+  const words = (await idbGet(db, "muted-words")) || [];
+  const accounts = (await idbGet(db, "muted-accounts")) || [];
+  const repostOff = (await idbGet(db, "repost-off")) || [];
+  const follows = new Set((await idbGet(db, "follows")) || []);
+  const keys = Object.keys(bells);
+  const notes = [];
+  (doc.posts || []).forEach((post) => {
+    if (!post || postMuted(post, words, accounts, repostOff)) return;
+    const followed = follows.has(post.feedId) || follows.has((post.platform || "x") + ":" + (post.handle || ""));
+    for (let i = 0; i < keys.length; i++) {
+      const row = bells[keys[i]];
+      if (!bellCovers(post, row)) continue;
+      const ids = row.ids || [];
+      if (!followed && !ids.some((item) => follows.has(item))) continue;
+      const note = noteFromPost(post, row);
+      if (note.id) notes.push(note);
+      break;
+    }
+  });
+  return notes;
+}
+
 async function refreshAndNotify() {
   const feedUrl = new URL("feeds.json", self.registration.scope).href;
   const res = await fetch(feedUrl, { cache: "no-store" });
@@ -368,15 +541,25 @@ async function refreshAndNotify() {
   const seen = Number(await idbGet(db, "seen-at") || 0);
   const follows = new Set(await idbGet(db, "follows") || []);
   const seenIds = new Set(await idbGet(db, "seen-ids") || []);
+  const bells = (await idbGet(db, "bells")) || {};
+  const bellKeys = Object.keys(bells);
+  const covered = (post) => bellKeys.some((key) => bellCovers(post, bells[key]));
   const fresh = (doc.posts || []).filter((post) => {
     if (!seen || (Date.parse(post.date || "") || 0) <= seen) return false;
     const id = canonicalNotifyId(post);
     if ((id && seenIds.has(id)) || (post.id && seenIds.has(String(post.id)))) return false;
+    if (covered(post)) return false;
     return follows.has(post.feedId) || follows.has((post.platform || "x") + ":" + (post.handle || ""));
   });
   const clients = await self.clients.matchAll({ type: "window" });
+  const visible = clients.some((client) => client.visibilityState === "visible");
   clients.forEach((client) => client.postMessage({ type: "feeds-updated" }));
-  if (!fresh.length) return;
+  if (!visible) {
+    const notes = await bellNotesFor(doc);
+    if (notes.length) await deliverBellNotes(notes);
+  }
+  const notifyAll = await idbGet(db, "notify-all");
+  if (!fresh.length || notifyAll !== true) return;
   if (navigator.setAppBadge) {
     try { await navigator.setAppBadge(fresh.length); } catch (err) { /* badges are optional */ }
   }
