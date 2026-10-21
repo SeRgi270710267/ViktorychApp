@@ -102,6 +102,11 @@ jobs:
         image: diygod/rsshub
         ports:
           - 1200:1200
+        env:
+          # Optional. Empty unless the repository secret is set. RSSHub uses it
+          # only for /instagram/stories. The value is masked and never printed.
+          INSTAGRAM_COOKIE: ${{ secrets.IG_SESSION }}
+          IG_COOKIE: ${{ secrets.IG_SESSION }}
       rssbridge:
         image: rssbridge/rss-bridge
         ports:
@@ -153,9 +158,17 @@ jobs:
           VK_SERVICE_TOKEN: ${{ secrets.VK_SERVICE_TOKEN }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
+          IG_SESSION: ${{ secrets.IG_SESSION }}
+          VK_USER_TOKEN: ${{ secrets.VK_USER_TOKEN }}
         run: |
           if [ -n "${DISCORD_USER_TOKEN:-}" ]; then
             echo "::add-mask::${DISCORD_USER_TOKEN}"
+          fi
+          if [ -n "${IG_SESSION:-}" ]; then
+            echo "::add-mask::${IG_SESSION}"
+          fi
+          if [ -n "${VK_USER_TOKEN:-}" ]; then
+            echo "::add-mask::${VK_USER_TOKEN}"
           fi
           python3 scripts/update_feeds.py
 
@@ -163,7 +176,7 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html app.js styles.css translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html app.js styles.css translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
           if [ -d live ]; then mkdir -p _site/live; cp live/*.json _site/live/; fi
           mkdir -p _site/icons _site/splash _site/screenshots
           cp icons/* _site/icons/
@@ -214,6 +227,14 @@ jobs:
         with:
           path: _site
 
+      - name: Upload stories.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: stories-json
+          path: stories.json
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Upload the sync report
         if: always()
         uses: actions/upload-artifact@v4
@@ -236,9 +257,56 @@ jobs:
   # then force-push one squashed commit to the orphan data branch. That branch
   # holds only archive/. The half-hour job does not push it. A GITHUB_TOKEN
   # push does not start another run of this workflow. main is not force-pushed.
-  backup:
+  # stories.json is not part of feeds.json. The half-hour job publishes it on
+  # Pages and, when the list changed, commits that one file on the data branch.
+  publish-stories:
     needs: build
-    if: github.event_name == 'schedule' && github.event.schedule == '17 6 * * *'
+    if: needs.gate.outputs.go == 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: stories-json
+          path: incoming
+
+      - name: Commit stories.json on the data branch
+        run: |
+          git fetch --depth=1 origin data || { echo "data branch is not available; stories stay on Pages"; exit 0; }
+          git checkout -B data origin/data
+          python3 - <<'PY'
+          import json, pathlib, sys
+          new = json.loads(pathlib.Path("incoming/stories.json").read_text(encoding="utf-8"))
+          old = {}
+          path = pathlib.Path("stories.json")
+          if path.exists():
+              try:
+                  old = json.loads(path.read_text(encoding="utf-8"))
+              except json.JSONDecodeError:
+                  old = {}
+          if (old.get("accounts") or []) == (new.get("accounts") or []):
+              print("stories unchanged")
+              sys.exit(0)
+          path.write_text(json.dumps(new, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          pathlib.Path("stories.changed").write_text("1", encoding="utf-8")
+          PY
+          if [ ! -f stories.changed ]; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add stories.json
+          git commit -m "Update stories"
+          git push origin HEAD:data
+
+  backup:
+    needs: [build, publish-stories]
+    if: always() && github.event_name == 'schedule' && github.event.schedule == '17 6 * * *' && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -250,6 +318,12 @@ jobs:
         with:
           name: archive-shards
           path: archive
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: stories-json
+          path: incoming-stories
 
       - uses: actions/setup-python@v5
         with:
@@ -275,7 +349,7 @@ jobs:
             rm -rf archive/archive
           fi
           git fetch -q --depth=1 origin data || true
-          git checkout origin/data -- archive/ia-manifest.json archive/ia-state.json 2>/dev/null || true
+          git checkout origin/data -- archive/ia-manifest.json archive/ia-state.json stories.json 2>/dev/null || true
           if [ ! -f archive/index.json ]; then
             echo "no archive index; not updating data"
             exit 1
@@ -284,7 +358,13 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan data-publish
           git rm -rf --cached .
+          if [ -f incoming-stories/stories.json ]; then
+            cp incoming-stories/stories.json stories.json
+          fi
           git add -f archive
+          if [ -f stories.json ]; then
+            git add -f stories.json
+          fi
           if git diff --cached --quiet; then
             echo "archive empty; not updating data"
             exit 1

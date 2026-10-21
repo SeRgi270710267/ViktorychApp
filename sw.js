@@ -22,6 +22,8 @@ const SHELL_FILES = [
   "./discord-ui.css",
   "./spaces.js",
   "./spaces.css",
+  "./stories.js",
+  "./stories.css",
   "./favicon.svg",
   "./favicon.ico",
   "./manifest.webmanifest",
@@ -81,7 +83,7 @@ async function takeOverClients() {
 function isData(url) {
   if (/\/archive\/[^/]+\.json$/.test(url.pathname)) return true;
   if (url.origin === self.location.origin && /\/discord\/(?:index|state|messages\/\d{1,22}|pins\/\d{1,22})\.json$/.test(url.pathname)) return true;
-  return url.origin === self.location.origin && /\/(?:feeds|people|suggestions)\.json$/.test(url.pathname);
+  return url.origin === self.location.origin && /\/(?:feeds|people|suggestions|stories)\.json$/.test(url.pathname);
 }
 
 function isMedia(url) {

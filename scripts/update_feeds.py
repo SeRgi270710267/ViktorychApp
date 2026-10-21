@@ -744,9 +744,22 @@ def main() -> None:
         publish(config, doc, fetch=not args.fixtures)
     except Exception as exc:
         print(f"[people] {exc}", file=sys.stderr)
+    stories_health = []
+    if not args.fixtures:
+        try:
+            from stories import publish as publish_stories
+
+            stories_health = publish_stories(config, ROOT / "stories.json")
+        except Exception as exc:
+            from stories import redact as redact_story
+
+            print("[stories] " + redact_story(str(exc)), file=sys.stderr)
+            stories_health = [{"platform": "instagram", "ok": False, "detail": "Stories sync failed."}]
+    doc["storiesHealth"] = stories_health
     from sync_health import write_report
 
     write_report(doc)
+    doc.pop("storiesHealth", None)
     count, total = media_bytes(media_dir)
     print(f"wrote {out} ({len(doc['posts'])} posts, {len(doc['feeds'])} profiles)")
     print(f"media {count} files, {total / 1024 / 1024:.2f} MB" + (f", pruned {removed}" if removed else ""))
