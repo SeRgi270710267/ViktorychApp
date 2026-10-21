@@ -1,0 +1,13 @@
+name: Subscription groups
+description: Publish the subscription groups from this browser into feeds.config.json
+title: "Subscription groups"
+labels: []
+body:
+  - type: textarea
+    id: groups
+    attributes:
+      label: Groups
+      description: JSON array of groups. The site replaces the groups field with this list.
+      placeholder: '[{"id":"grp_news","name":"News","icon":"","members":["youtube:SomeChannel"]}]'
+    validations:
+      required: true

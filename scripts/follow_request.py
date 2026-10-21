@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn a repo-owner follow or unfollow issue into a feeds.config.json edit.
+"""Turn a repo-owner follow, unfollow, or subscription-groups issue into a feeds.config.json edit.
 
 Anyone else is ignored. The workflow only starts this for the owner, and
 this script checks the actor again before it reads the issue or writes.
@@ -45,14 +45,7 @@ def allowed(actor: str, owner: str) -> bool:
     return bool(actor) and actor == owner
 
 
-def parse_issue(title: str, body: str) -> dict:
-    heading = (title or "").strip().lower()
-    if heading.startswith("unfollow request"):
-        kind = "unfollow"
-    elif heading.startswith("follow request"):
-        kind = "follow"
-    else:
-        raise Reject("this issue is not a follow request")
+def _fields(body: str) -> dict:
     fields = {}
     current = ""
     buf = []
@@ -66,6 +59,62 @@ def parse_issue(title: str, body: str) -> dict:
             buf.append(line)
     if current:
         fields[current] = "\n".join(buf).strip()
+    return fields
+
+
+def clean_groups(data, resolve=None) -> list:
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except json.JSONDecodeError as exc:
+            raise Reject("the groups field is not JSON") from exc
+    if not isinstance(data, list):
+        raise Reject("groups must be a list")
+    if len(data) > 40:
+        raise Reject("too many groups")
+    out = []
+    seen = set()
+    for item in data:
+        if not isinstance(item, dict):
+            raise Reject("each group must be an object")
+        gid = str(item.get("id") or "").strip()
+        name = re.sub(r"\s+", " ", str(item.get("name") or "")).strip()
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", gid):
+            raise Reject("a group id is missing")
+        if gid in seen:
+            raise Reject("duplicate group id")
+        seen.add(gid)
+        if not name or len(name) > 40:
+            raise Reject("a group needs a name")
+        icon = str(item.get("icon") or "").strip()
+        if icon:
+            if not icon.startswith("https://") or len(icon) > 300:
+                raise Reject("group icons must be public https images")
+            if not host_is_public(_host(icon), resolve):
+                raise Reject("group icons must be public https images")
+        members = item.get("members") or []
+        if not isinstance(members, list) or len(members) > 200:
+            raise Reject("a group has too many channels")
+        cleaned = []
+        for member in members:
+            text = str(member or "").strip()
+            if not text or len(text) > 80 or any(ch in text for ch in " \n\t<>"):
+                raise Reject("a group channel id is not usable")
+            if text not in cleaned:
+                cleaned.append(text)
+        out.append({"id": gid, "name": name, "icon": icon, "members": cleaned})
+    return out
+
+
+def parse_issue(title: str, body: str) -> dict:
+    heading = (title or "").strip().lower()
+    if heading.startswith("unfollow request"):
+        kind = "unfollow"
+    elif heading.startswith("follow request"):
+        kind = "follow"
+    else:
+        raise Reject("this issue is not a follow request")
+    fields = _fields(body)
     account = fields.get("account") or ""
     platform = (fields.get("platform") or "").strip().lower()
     if not account:
@@ -374,6 +423,11 @@ def default_fetch(url: str):
 def run(actor: str, owner: str, title: str, body: str, config: dict, fetch=None, resolve=None) -> tuple[str, dict]:
     if not allowed(actor, owner):
         return "", config
+    if (title or "").strip().lower().startswith("subscription groups"):
+        raw = _fields(body).get("groups") or (body or "").strip()
+        groups = clean_groups(raw, resolve)
+        config["groups"] = groups
+        return "Saved " + str(len(groups)) + " subscription groups.", config
     parsed = parse_issue(title, body)
     spec = normalize(parsed["account"], parsed["platform"])
     if parsed["kind"] == "follow":

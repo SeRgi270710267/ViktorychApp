@@ -69,6 +69,7 @@
     playerAlt: {},
     disliked: {},
     share: null,
+    groupMenu: null,
     shared: {},
     sharedState: {},
     chain: {},
@@ -259,7 +260,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [] });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "" });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -276,6 +277,9 @@
       parsed.mutedWords = Array.isArray(parsed.mutedWords) ? parsed.mutedWords : [];
       parsed.mutedAccounts = Array.isArray(parsed.mutedAccounts) ? parsed.mutedAccounts : [];
       parsed.repostOff = Array.isArray(parsed.repostOff) ? parsed.repostOff : [];
+      parsed.groups = Array.isArray(parsed.groups) ? cleanGroups(parsed.groups) : [];
+      parsed.groupsOwn = parsed.groupsOwn === true;
+      parsed.subsGroup = typeof parsed.subsGroup === "string" ? parsed.subsGroup : "";
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
@@ -307,6 +311,55 @@
 
   function isFollowed(id) { return STATE.settings.follows.includes(id); }
   function feedById(id) { return feeds().find((f) => f.id === id); }
+
+  function cleanGroups(list) {
+    const out = [];
+    const seen = {};
+    (list || []).forEach((item) => {
+      if (!item) return;
+      const id = String(item.id || "").trim();
+      const name = String(item.name || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(id) || !name || seen[id]) return;
+      seen[id] = true;
+      let icon = String(item.icon || "").trim();
+      if (!/^https:\/\//.test(icon) || icon.length > 300) icon = "";
+      const members = [];
+      (item.members || []).forEach((member) => {
+        const text = String(member || "").trim();
+        if (!text || text.length > 80 || /[\s<>]/.test(text) || members.indexOf(text) >= 0) return;
+        members.push(text);
+      });
+      out.push({ id: id, name: name, icon: icon, members: members.slice(0, 200) });
+    });
+    return out.slice(0, 40);
+  }
+
+  function groupsEqual(a, b) {
+    return JSON.stringify(cleanGroups(a)) === JSON.stringify(cleanGroups(b));
+  }
+
+  function absorbSiteGroups(config) {
+    if (!STATE.settings) return false;
+    const site = cleanGroups(config && config.groups);
+    if (!STATE.settings.groupsOwn) {
+      const changed = !groupsEqual(STATE.settings.groups, site);
+      STATE.settings.groups = site;
+      if (changed) saveSettings();
+      return changed;
+    }
+    if (groupsEqual(STATE.settings.groups, site)) {
+      STATE.settings.groupsOwn = false;
+      saveSettings();
+    }
+    return false;
+  }
+
+  function subsHash(groupId) {
+    const id = String(groupId || "");
+    const known = id && (STATE.settings.groups || []).some((group) => group.id === id);
+    if (!known) return "#/subscriptions";
+    return "#/subscriptions?group=" + encodeURIComponent(id);
+  }
 
   function profileHash(platform, handle) {
     if (!handle) return "#/";
@@ -373,6 +426,12 @@
     const parts = String(id || "").split(":");
     const known = catalogAccount(parts[0], parts.slice(1).join(":"));
     return known && known.configured ? known : null;
+  }
+
+  function groupsIssueUrl() {
+    const payload = JSON.stringify(cleanGroups(STATE.settings.groups));
+    const params = new URLSearchParams({ template: "groups.yml", title: "Subscription groups", groups: payload });
+    return "https://github.com/" + GITHUB_REPO + "/issues/new?" + params.toString();
   }
 
   function followIssueUrlForId(kind, id) {
@@ -3790,7 +3849,7 @@
         ${navItem("#/feeds", "spark", "Feeds", name === "feeds")}
         ${navItem("#/lists", "lists", "Lists", name === "lists" || name === "list")}
         ${navItem("#/bookmarks", "bookmark", "Bookmarks", name === "bookmarks")}
-        ${navItem("#/subscriptions", "subs", "Subscriptions", name === "subscriptions")}
+        ${navItem(subsHash(STATE.settings.subsGroup), "subs", "Subscriptions", name === "subscriptions")}
         ${navItem("#/settings", "more", "More", name === "settings")}
         <button class="post-btn" data-act="compose" aria-label="Post"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>
       </div>
@@ -5048,7 +5107,7 @@
       <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>You</b><div class="phandle">@reader</div></div></div>
       <a href="#/lists">${icon("lists")} Lists</a>
       <a href="#/bookmarks">${icon("bookmark")} Bookmarks</a>
-      <a href="#/subscriptions">${icon("subs")} Subscriptions</a>
+      <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} Subscriptions</a>
       <a href="#/feeds">${icon("spark")} Feeds</a>
       <a href="#/settings">${icon("more")} Settings</a>
       ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} Install app</button>`}
@@ -5107,6 +5166,34 @@
         <div class="modal-body"><input id="member-q" class="member-search" data-field="q" placeholder="Search accounts" value="${esc(STATE.draft.q || "")}">${rows || emptyBlock("No accounts", "Accounts appear here after feeds.json loads.")}</div>
       </div></div>`;
     }
+    if (STATE.modal === "group") {
+      const d = STATE.draft || { name: "", icon: "", members: [], gq: "" };
+      const q = String(d.gq || "").trim().toLowerCase();
+      const choices = groupChoices(d.members).filter((feed) => {
+        if (!q) return true;
+        const hay = ((feed.name || "") + " " + (feed.handle || "") + " " + (feed.platform || "")).toLowerCase();
+        return hay.indexOf(q) >= 0;
+      });
+      const rows = choices.map((feed) => {
+        const on = draftHas(d, feed);
+        return `<button class="group-pick${on ? " on" : ""}" type="button" data-act="group-toggle" data-id="${esc(feed.id)}" aria-pressed="${on ? "true" : "false"}">${avatar(feed.avatar, feed.name)}<span class="who-copy"><span class="name">${esc(feed.name || feed.handle || "")}</span><span class="handle">${esc((PLATFORM[feed.platform] || feed.platform || "") + (feed.handle ? " · @" + feed.handle : ""))}</span></span><span class="tick" aria-hidden="true"></span></button>`;
+      }).join("");
+      const face = groupFace({ icon: d.icon, members: d.members }, true);
+      const named = String(d.name || "").replace(/\s+/g, " ").trim();
+      return `<div class="modal-back" data-act="close-modal"><div class="modal group-sheet" role="dialog" aria-label="${d.id ? "Edit group" : "New group"}" data-act="stop">
+        <div class="share-grab" aria-hidden="true"></div>
+        <div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>${d.id ? "Edit group" : "New group"}</h2><button class="save" type="button" data-act="group-save"${named ? "" : " disabled"}>Save</button></div>
+        <div class="modal-body">
+          <div class="group-face">${face}</div>
+          <label class="field"><span>Name</span><input id="group-name" data-field="name" maxlength="40" value="${esc(d.name || "")}"></label>
+          <label class="field"><span>Icon</span><input id="group-icon" data-field="icon" maxlength="300" placeholder="https://" value="${esc(d.icon || "")}"></label>
+          <input id="group-q" class="member-search" data-field="gq" placeholder="Search channels" value="${esc(d.gq || "")}">
+          ${rows || emptyBlock("No channels", "Follow accounts that post videos, then pick them here.")}
+          ${d.id ? `<button class="danger" type="button" data-act="group-delete" data-group="${esc(d.id)}">Delete group</button>` : ""}
+          <button class="outline" type="button" data-act="group-publish">Save groups to the site</button>
+        </div>
+      </div></div>`;
+    }
     return "";
   }
 
@@ -5114,7 +5201,7 @@
     const wide = route.name === "subscriptions" || route.name === "watch";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
     const top = route.name === "explore" ? 124 : tall ? 106 : 53;
-    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}`;
+    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}`;
   }
 
   function watchHash(post) {
@@ -5193,7 +5280,7 @@
     ensureYtMeta(post);
     const feed = feedOf(post);
     const title = post.title || post.text || "";
-    return `<a class="yt-card${layout === "list" ? " row" : ""}" href="${esc(watchHash(post))}">
+    return `<a class="yt-card${layout === "list" ? " row" : ""}" data-feed="${esc(feed.id || "")}" href="${esc(watchHash(post))}">
       ${subsThumb(post)}
       <div class="yt-meta">
         ${avatar(post.avatar || feed.avatar, feed.name || post.author, "yt-ava")}
@@ -5206,31 +5293,204 @@
     </a>`;
   }
 
+  function videoFeeds() {
+    const rows = feeds().filter((feed) => feed && isFollowed(feed.id) && posts().some((post) => isVideoPost(post) && (post.feedId === feed.id || (post.platform + ":" + post.handle) === feed.id)));
+    rows.sort((a, b) => {
+      const ay = a.platform === "youtube" ? 0 : 1;
+      const by = b.platform === "youtube" ? 0 : 1;
+      if (ay !== by) return ay - by;
+      return String(a.name || a.handle || "").localeCompare(String(b.name || b.handle || ""));
+    });
+    return rows;
+  }
+
+  function memberOn(group, feed) {
+    if (!group || !feed) return false;
+    const members = group.members || [];
+    return members.indexOf(feed.id) >= 0 || members.indexOf((feed.platform || "x") + ":" + feed.handle) >= 0;
+  }
+
+  function postInGroup(group, post) {
+    if (!group) return true;
+    const members = group.members || [];
+    if (!members.length) return false;
+    const feed = feedOf(post);
+    return members.indexOf(post.feedId) >= 0 || members.indexOf((post.platform || "x") + ":" + (post.handle || "")) >= 0 || memberOn(group, feed);
+  }
+
+  function feedKeys(feed) {
+    if (!feed) return [];
+    const keys = [];
+    const add = (value) => {
+      const text = String(value || "");
+      if (text && keys.indexOf(text) < 0) keys.push(text);
+    };
+    add(feed.id);
+    add((feed.platform || "x") + ":" + (feed.handle || ""));
+    if (feed.channelId) add((feed.platform || "youtube") + ":" + feed.channelId);
+    return keys;
+  }
+
+  function draftHas(draft, feed) {
+    const members = (draft && draft.members) || [];
+    return feedKeys(feed).some((key) => members.indexOf(key) >= 0);
+  }
+
+  function groupChoices(members) {
+    const rows = videoFeeds().slice();
+    const seen = {};
+    rows.forEach((feed) => { seen[feed.id] = true; });
+    (members || []).forEach((id) => {
+      if (seen[id]) return;
+      const feed = feedById(id);
+      if (feed) {
+        if (seen[feed.id]) return;
+        seen[feed.id] = true;
+        rows.push(feed);
+        return;
+      }
+      const cut = String(id).indexOf(":");
+      seen[id] = true;
+      rows.push({
+        id: id,
+        platform: cut > 0 ? id.slice(0, cut) : "",
+        handle: cut > 0 ? id.slice(cut + 1) : id,
+        name: cut > 0 ? id.slice(cut + 1) : id,
+        avatar: ""
+      });
+    });
+    return rows;
+  }
+
+  function openGroupSheet(group, precheck) {
+    const members = group ? (group.members || []).slice() : [];
+    if (precheck && members.indexOf(precheck) < 0 && members.length < 200) members.push(precheck);
+    STATE.draft = {
+      id: group ? group.id : "",
+      name: group ? group.name : "",
+      icon: group ? (group.icon || "") : "",
+      members: members,
+      gq: ""
+    };
+    STATE.modal = "group";
+    STATE.groupMenu = null;
+    render();
+    const name = document.getElementById("group-name");
+    if (name) name.focus();
+  }
+
+  function goSubs(id) {
+    const next = subsHash(id);
+    if (location.hash === next) render();
+    else location.hash = next;
+  }
+
+  function groupTarget(node) {
+    if (!node || !node.closest) return null;
+    const chip = node.closest(".yt-chip[data-group]");
+    if (chip && chip.dataset.group) return { kind: "group", id: chip.dataset.group };
+    const card = node.closest(".yt-card[data-feed], .short-card[data-feed], .yt-ch[data-feed]");
+    if (card && card.dataset.feed) return { kind: "feed", id: card.dataset.feed };
+    return null;
+  }
+
+  function openGroupMenu(target, x, y) {
+    if (!target) return;
+    const margin = 8;
+    const width = 280;
+    const rows = target.kind === "group" ? 5 : (STATE.settings.groups || []).length + 2;
+    const height = Math.min(window.innerHeight - 16, 56 + rows * 48);
+    const left = Math.max(margin, Math.min(x, window.innerWidth - width - margin));
+    const top = Math.max(margin, Math.min(y, window.innerHeight - height - margin));
+    STATE.groupMenu = { kind: target.kind, id: target.id, left: left, top: top };
+    render();
+  }
+
+  function groupMenu() {
+    const menu = STATE.groupMenu;
+    if (!menu) return "";
+    if (menu.kind === "group") {
+      const groups = STATE.settings.groups || [];
+      const index = groups.findIndex((group) => group.id === menu.id);
+      if (index < 0) return "";
+      const group = groups[index];
+      return `<div class="group-menu" role="menu" aria-label="${esc(group.name)}" data-act="stop" style="left:${menu.left}px;top:${menu.top}px">
+        <div class="share-grab" aria-hidden="true"></div>
+        <button type="button" role="menuitem" data-act="group-edit" data-group="${esc(menu.id)}">Rename</button>
+        <button type="button" role="menuitem" data-act="group-edit" data-group="${esc(menu.id)}">Edit channels</button>
+        <button type="button" role="menuitem" data-act="group-move" data-group="${esc(menu.id)}" data-dir="-1"${index <= 0 ? " disabled" : ""}>Move left</button>
+        <button type="button" role="menuitem" data-act="group-move" data-group="${esc(menu.id)}" data-dir="1"${index >= groups.length - 1 ? " disabled" : ""}>Move right</button>
+        <button type="button" role="menuitem" data-act="group-delete" data-group="${esc(menu.id)}">Delete</button>
+      </div>`;
+    }
+    const groups = STATE.settings.groups || [];
+    const feed = feedById(menu.id) || { id: menu.id, platform: String(menu.id).split(":")[0], handle: String(menu.id).split(":").slice(1).join(":") };
+    const rows = groups.map((group) => {
+      const on = draftHas(group, feed);
+      return `<button type="button" role="menuitemcheckbox" aria-pressed="${on ? "true" : "false"}" data-act="group-add" data-group="${esc(group.id)}" data-feed="${esc(menu.id)}">${esc(group.name)}</button>`;
+    }).join("");
+    const empty = groups.length ? "" : `<div class="group-menu-empty">No groups yet</div>`;
+    return `<div class="group-menu" role="menu" aria-label="Add to group" data-act="stop" style="left:${menu.left}px;top:${menu.top}px">
+      <div class="share-grab" aria-hidden="true"></div>
+      <div class="group-menu-title">Add to group</div>
+      ${empty}${rows}
+      <button type="button" role="menuitem" data-act="group-new" data-feed="${esc(menu.id)}">New group</button>
+    </div>`;
+  }
+
+  function groupFace(group, large) {
+    if (!group) return "";
+    if (group.icon && /^https:\/\//.test(group.icon) && group.icon.length <= 300) return `<img class="chip-icon${large ? " lg" : ""}" src="${esc(group.icon)}" alt="" referrerpolicy="no-referrer">`;
+    const faces = (group.members || []).map((id) => feedById(id)).filter((feed) => feed && feed.avatar).slice(0, 4);
+    if (!faces.length) return "";
+    const cls = faces.length <= 1 ? "one" : faces.length === 2 ? "two" : "four";
+    return `<span class="collage ${cls}${large ? " lg" : ""}">${faces.map((feed) => `<img src="${esc(feed.avatar)}" alt="" referrerpolicy="no-referrer">`).join("")}</span>`;
+  }
+
   function subsView(route) {
     const layout = STATE.subsLayout === "list" ? "list" : "grid";
     const toggles = `<div class="yt-toggle"><button class="${layout === "grid" ? "on" : ""}" data-act="subs-layout" data-layout="grid" aria-label="Grid">${icon("grid")}</button><button class="${layout === "list" ? "on" : ""}" data-act="subs-layout" data-layout="list" aria-label="List">${icon("rows")}</button></div>`;
     const head = pageHead("Subscriptions", "", false, toggles);
-    const channels = feeds().filter((feed) => STATE.settings.follows.includes(feed.id) && (feed.platform === "youtube" || posts().some((post) => isVideoPost(post) && (post.feedId === feed.id || (post.platform + ":" + post.handle) === feed.id))));
-    const strip = `<div class="yt-strip"><a class="yt-ch${route.channel ? "" : " on"}" href="#/subscriptions"><span class="yt-all">All</span><span>All</span></a>${channels.map((feed) => `<a class="yt-ch${route.channel === feed.id ? " on" : ""}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}">${avatar(feed.avatar, feed.name, "ch")}<span>${esc(feed.name || feed.handle)}</span></a>`).join("")}</div>`;
-    let list = posts().filter((post) => isVideoPost(post) && followedPost(post)).sort(byStamp);
+    const picked = String((route.query && route.query.get("group")) || "");
+    const active = (STATE.settings.groups || []).find((group) => group.id === picked) || null;
+    const remembered = active ? active.id : "";
+    if (STATE.settings.subsGroup !== remembered) {
+      STATE.settings.subsGroup = remembered;
+      saveSettings();
+    }
+    const here = subsHash(remembered);
+    const channels = videoFeeds().filter((feed) => !active || memberOn(active, feed));
+    const chips = `<div class="yt-chips" aria-label="Subscription groups"><button class="yt-chip${!active ? " on" : ""}" type="button" data-act="subs-group" data-group="" aria-pressed="${!active ? "true" : "false"}">All</button>${(STATE.settings.groups || []).map((group) => {
+      const on = active && active.id === group.id;
+      return `<button class="yt-chip${on ? " on" : ""}" type="button" data-act="subs-group" data-group="${esc(group.id)}" aria-pressed="${on ? "true" : "false"}">${groupFace(group)}<span>${esc(group.name)}</span></button>`;
+    }).join("")}<button class="yt-chip yt-chip-add" type="button" data-act="group-new" aria-pressed="false" aria-label="New group">${icon("plus")}<span>New group</span></button></div>`;
+    const strip = `<div class="yt-strip"><a class="yt-ch${!route.channel ? " on" : ""}" href="${esc(here)}"><span class="yt-all">All</span><span>All</span></a>${channels.map((feed) => `<a class="yt-ch${route.channel === feed.id ? " on" : ""}" data-feed="${esc(feed.id)}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}">${avatar(feed.avatar, feed.name, "ch")}<span>${esc(feed.name || feed.handle)}</span></a>`).join("")}</div>`;
+    let list = posts().filter((post) => isVideoPost(post) && followedPost(post) && postInGroup(active, post)).sort(byStamp);
     if (route.channel) list = list.filter((post) => post.feedId === route.channel || (post.platform + ":" + post.handle) === route.channel);
     channels.forEach(ensureYtSubs);
     list.forEach(ensureYtMeta);
-    if (!STATE.settings.follows.length) return head + strip + emptyBlock("No videos yet", "Follow accounts to see their videos here.");
-    if (!list.length) return head + strip + emptyBlock("No videos yet", "Videos from accounts you follow will show up here.");
-    const shorts = list.filter((post) => post.short);
-    const rest = list.filter((post) => !post.short);
-    const shelf = shorts.length ? `<section class="yt-sec shorts-sec"><h2>Shorts</h2><div class="shorts">${shorts.map((post) => {
-      return `<a class="short-card" href="${esc(watchHash(post))}">${subsThumb(post)}<h3 class="yt-title">${esc(post.title || post.text || "")}</h3></a>`;
-    }).join("")}</div></section>` : "";
-    const order = ["Today", "Yesterday", "This week", "This month", "Older"];
-    const groups = {};
-    rest.forEach((post) => {
-      const name = dayBucket(post.date);
-      (groups[name] || (groups[name] = [])).push(post);
-    });
-    const sections = order.filter((name) => groups[name] && groups[name].length).map((name) => `<section class="yt-sec"><h2>${name}</h2><div class="yt-grid">${groups[name].map((post) => ytCard(post, layout)).join("")}</div></section>`).join("");
-    return `<div class="subs ${layout}">${head}${strip}${shelf}${sections}</div>`;
+    const save = STATE.settings.groupsOwn ? `<button class="group-save" type="button" data-act="group-publish">Save groups to the site</button>` : "";
+    let body = "";
+    if (!STATE.settings.follows.length) body = emptyBlock("No videos yet", "Follow accounts to see their videos here.");
+    else if (active && !(active.members || []).length) body = emptyBlock("No channels in this group", "Edit the group and pick channels.");
+    else if (!list.length) body = emptyBlock(active ? "No videos in this group" : "No videos yet", active ? "Videos from these channels will show up here." : "Videos from accounts you follow will show up here.");
+    else {
+      const shorts = list.filter((post) => post.short);
+      const rest = list.filter((post) => !post.short);
+      const shelf = shorts.length ? `<section class="yt-sec shorts-sec"><h2>Shorts</h2><div class="shorts">${shorts.map((post) => {
+        const feed = feedOf(post);
+        return `<a class="short-card" data-feed="${esc(feed.id || "")}" href="${esc(watchHash(post))}">${subsThumb(post)}<h3 class="yt-title">${esc(post.title || post.text || "")}</h3></a>`;
+      }).join("")}</div></section>` : "";
+      const order = ["Today", "Yesterday", "This week", "This month", "Older"];
+      const buckets = {};
+      rest.forEach((post) => {
+        const name = dayBucket(post.date);
+        (buckets[name] || (buckets[name] = [])).push(post);
+      });
+      const sections = order.filter((name) => buckets[name] && buckets[name].length).map((name) => `<section class="yt-sec"><h2>${name}</h2><div class="yt-grid">${buckets[name].map((post) => ytCard(post, layout)).join("")}</div></section>`).join("");
+      body = shelf + sections;
+    }
+    return `<div class="subs ${layout}">${head}${chips}${save}${strip}${body}</div>`;
   }
 
   function watchComments(post) {
@@ -6137,8 +6397,120 @@
       render();
       return;
     }
+    if (act === "subs-group") {
+      const id = el.dataset.group || "";
+      const known = !!(id && (STATE.settings.groups || []).some((group) => group.id === id));
+      STATE.settings.subsGroup = known ? id : "";
+      STATE.groupMenu = null;
+      saveSettings();
+      goSubs(known ? id : "");
+      return;
+    }
+    if (act === "group-new") {
+      openGroupSheet(null, el.dataset.feed || "");
+      return;
+    }
+    if (act === "group-edit") {
+      const group = (STATE.settings.groups || []).find((item) => item.id === el.dataset.group);
+      if (group) openGroupSheet(group);
+      return;
+    }
+    if (act === "group-toggle") {
+      const draft = STATE.draft;
+      if (!draft) return;
+      const id = el.dataset.id || "";
+      const feed = feedById(id) || { id: id, platform: id.split(":")[0], handle: id.split(":").slice(1).join(":") };
+      draft.members = draft.members || [];
+      if (draftHas(draft, feed)) draft.members = draft.members.filter((item) => feedKeys(feed).indexOf(item) < 0);
+      else if (draft.members.length < 200 && draft.members.indexOf(feed.id) < 0) draft.members.push(feed.id);
+      render();
+      return;
+    }
+    if (act === "group-save") {
+      const nameEl = document.getElementById("group-name");
+      const iconEl = document.getElementById("group-icon");
+      const name = String((nameEl && nameEl.value) || (STATE.draft && STATE.draft.name) || "").replace(/\s+/g, " ").trim().slice(0, 40);
+      if (!name) return;
+      const typed = String((iconEl && iconEl.value) || "").trim();
+      const icon = /^https:\/\//.test(typed) && typed.length <= 300 ? typed : "";
+      const members = ((STATE.draft && STATE.draft.members) || []).slice(0, 200);
+      const editing = STATE.draft && STATE.draft.id;
+      STATE.settings.groups = STATE.settings.groups || [];
+      if (!editing && STATE.settings.groups.length >= 40) {
+        toast("You can keep 40 groups");
+        return;
+      }
+      let id = editing || "";
+      if (editing) {
+        const group = STATE.settings.groups.find((item) => item.id === editing);
+        if (group) {
+          group.name = name;
+          group.icon = icon;
+          group.members = members;
+        }
+      } else {
+        id = "grp_" + Date.now().toString(36);
+        STATE.settings.groups.push({ id: id, name: name, icon: icon, members: members });
+      }
+      STATE.settings.groupsOwn = true;
+      STATE.settings.groups = cleanGroups(STATE.settings.groups);
+      saveSettings();
+      STATE.modal = null;
+      STATE.draft = null;
+      if (typed && !icon) toast("Icon needs an https URL");
+      if (editing) render();
+      else goSubs(id);
+      return;
+    }
+    if (act === "group-delete") {
+      const id = el.dataset.group || (STATE.draft && STATE.draft.id) || "";
+      STATE.settings.groups = (STATE.settings.groups || []).filter((group) => group.id !== id);
+      if (STATE.settings.subsGroup === id) STATE.settings.subsGroup = "";
+      STATE.settings.groupsOwn = true;
+      saveSettings();
+      STATE.modal = null;
+      STATE.groupMenu = null;
+      STATE.draft = null;
+      const encoded = encodeURIComponent(id);
+      if (id && location.hash.indexOf("group=") >= 0 && location.hash.indexOf(encoded) >= 0) location.hash = "#/subscriptions";
+      else render();
+      return;
+    }
+    if (act === "group-move") {
+      const groups = STATE.settings.groups || [];
+      const index = groups.findIndex((group) => group.id === el.dataset.group);
+      const dir = Number(el.dataset.dir) || 0;
+      const next = index + dir;
+      if (index < 0 || next < 0 || next >= groups.length) return;
+      const swap = groups[index];
+      groups[index] = groups[next];
+      groups[next] = swap;
+      STATE.settings.groupsOwn = true;
+      STATE.groupMenu = null;
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "group-add") {
+      const group = (STATE.settings.groups || []).find((item) => item.id === el.dataset.group);
+      const feedId = el.dataset.feed || "";
+      if (!group || !feedId) return;
+      const feed = feedById(feedId) || { id: feedId, platform: feedId.split(":")[0], handle: feedId.split(":").slice(1).join(":") };
+      group.members = group.members || [];
+      if (draftHas(group, feed)) group.members = group.members.filter((item) => feedKeys(feed).indexOf(item) < 0);
+      else if (group.members.indexOf(feed.id) < 0 && group.members.length < 200) group.members.push(feed.id);
+      STATE.settings.groupsOwn = true;
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "group-publish") {
+      window.open(groupsIssueUrl(), "_blank", "noopener,noreferrer");
+      toast("Submit the issue on GitHub. Groups stay on this device until that list is published.");
+      return;
+    }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [] }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "" }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -6162,6 +6534,57 @@
     else location.hash = post.dataset.open;
   });
 
+  let groupPress = 0;
+  let groupPoint = null;
+  let swallowGroupClick = false;
+  document.addEventListener("contextmenu", (event) => {
+    const target = groupTarget(event.target);
+    if (!target) return;
+    event.preventDefault();
+    if (groupPoint) swallowGroupClick = true;
+    clearTimeout(groupPress);
+    groupPoint = null;
+    openGroupMenu(target, event.clientX, event.clientY);
+  });
+  document.addEventListener("touchstart", (event) => {
+    const target = groupTarget(event.target);
+    if (!target || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    groupPoint = { x: touch.clientX, y: touch.clientY, target: target };
+    clearTimeout(groupPress);
+    groupPress = setTimeout(() => {
+      swallowGroupClick = true;
+      const point = groupPoint;
+      groupPoint = null;
+      if (point) openGroupMenu(point.target, point.x, point.y);
+    }, 500);
+  }, { passive: true });
+  document.addEventListener("touchmove", (event) => {
+    if (!groupPoint || !event.touches.length) return;
+    const touch = event.touches[0];
+    const dx = touch.clientX - groupPoint.x;
+    const dy = touch.clientY - groupPoint.y;
+    if (dx * dx + dy * dy > 100) {
+      clearTimeout(groupPress);
+      groupPoint = null;
+    }
+  }, { passive: true });
+  const endGroupPress = () => { clearTimeout(groupPress); groupPoint = null; };
+  document.addEventListener("touchend", endGroupPress, { passive: true });
+  document.addEventListener("touchcancel", endGroupPress, { passive: true });
+  document.addEventListener("click", (event) => {
+    if (swallowGroupClick) {
+      swallowGroupClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (STATE.groupMenu && !(event.target.closest && event.target.closest(".group-menu"))) {
+      STATE.groupMenu = null;
+      setTimeout(render, 0);
+    }
+  }, true);
+
   document.addEventListener("input", (event) => {
     const el = event.target;
     if (el.id === "compose-text") {
@@ -6172,10 +6595,10 @@
     if (el.dataset && el.dataset.field) {
       STATE.draft[el.dataset.field] = el.value;
       if (el.dataset.field === "name") {
-        const save = document.querySelector("[data-act='save-list']");
+        const save = document.querySelector("[data-act='save-list'], [data-act='group-save']");
         if (save) save.disabled = !el.value.trim();
       }
-      if (el.dataset.field === "q") render();
+      if (el.dataset.field === "q" || el.dataset.field === "gq" || el.dataset.field === "icon") render();
     }
   });
 
@@ -6245,6 +6668,11 @@
         if (Array.isArray(data.mutedWords)) STATE.settings.mutedWords = data.mutedWords;
         if (Array.isArray(data.mutedAccounts)) STATE.settings.mutedAccounts = data.mutedAccounts;
         if (Array.isArray(data.repostOff)) STATE.settings.repostOff = data.repostOff;
+        if (Array.isArray(data.groups)) {
+          STATE.settings.groups = cleanGroups(data.groups);
+          STATE.settings.groupsOwn = true;
+        }
+        if (typeof data.subsGroup === "string") STATE.settings.subsGroup = data.subsGroup;
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();
@@ -6259,11 +6687,12 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share)) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu)) {
       STATE.modal = null;
       STATE.drawer = false;
       STATE.menu = null;
       STATE.share = null;
+      STATE.groupMenu = null;
       STATE.confirm = null;
       render();
     }
@@ -6429,6 +6858,7 @@
     STATE.drawer = false;
     STATE.menu = null;
     STATE.share = null;
+    STATE.groupMenu = null;
     STATE.headerHidden = false;
     render({ y: SCROLLS[routeScrollKey()] || 0 });
     routing = false;
@@ -7446,6 +7876,7 @@
     loadStatus();
     STATE.settings = loadSettings();
     applyTheme();
+    loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
     const snap = loadTimelineSnap();
     if (snap) {
       STATE.data = snap;

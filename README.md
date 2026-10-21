@@ -255,6 +255,8 @@ The new account is followed in a fresh browser. An existing browser keeps its sa
 
 Follow on a profile that is not in this file, or Add account on the Feeds page, opens a prefilled GitHub issue (`Follow request` or `Unfollow request`). The workflow applies it only when `github.actor` is the repository owner: it checks the source, updates this file, closes the issue, and starts a sync. Issues from anyone else are ignored.
 
+Subscription groups are saved on this device immediately. **Save groups to the site** opens a prefilled issue titled `Subscription groups`. The same owner-only workflow writes the `groups` field in this file and starts a sync, so the groups show up on every device. Edits on this device win until the published list matches. Issues from anyone else are ignored.
+
 ## Optional secrets
 
 The sync runs without any secrets. Add these only as repository Actions secrets (Settings → Secrets and variables → Actions). They are passed to the job as environment variables when the secret exists, and the workflow never prints them.

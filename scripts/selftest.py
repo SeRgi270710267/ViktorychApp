@@ -684,7 +684,13 @@ def main() -> None:
     check("Translate post" in app and "Show original" in app and "function foreignScript(" in app and "translate.google.com" in app and "LanguageDetector" in app and "function translateNow(" in app and "STATE.translated" in app and "translated" not in app[app.index("function saveSettings("):app.index("function saveSettings(") + 800], "a foreign post translates in the browser or opens Google Translate, and the result is not saved")
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
     follows_workflow = (ROOT / ".github" / "workflows" / "follows.yml").read_text(encoding="utf-8")
-    check("github.actor == github.repository_owner" in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow, "follow issues from anyone but the owner are ignored")
+    check("github.actor == github.repository_owner" in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow, "follow and group issues from anyone but the owner are ignored")
+    check((ROOT / ".github" / "ISSUE_TEMPLATE" / "groups.yml").is_file(), "subscription group issue form exists")
+    check("feeds.config.json _site/" in workflow, "the deploy publishes feeds.config.json")
+    chips_css = css[css.index(".yt-chips"):css.index(".yt-chips") + 500]
+    check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
+    check("var(--fill)" in css[css.index(".yt-chip.on"):css.index(".yt-chip.on") + 160], "the selected subscription chip uses the inverted fill")
+    check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups to the site" in app, "subscription groups filter from the chip bar and can be published")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "follow-request.yml").is_file() and (ROOT / ".github" / "ISSUE_TEMPLATE" / "unfollow-request.yml").is_file(), "follow and unfollow issue forms exist")
     import follow_request as follow_req
 
@@ -745,6 +751,24 @@ def main() -> None:
     untouched = {"feeds": [{"id": "x:keep"}]}
     ignored, same_config = follow_req.run("someone", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
     check(ignored == "" and same_config["feeds"] == [{"id": "x:keep"}], "an issue from anyone else is ignored")
+    group_body = "### Groups\n\n" + json.dumps([{"id": "grp_news", "name": "News", "icon": "https://example.com/a.png", "members": ["youtube:Someone"]}])
+    saved, grouped = follow_req.run("owner-account", "owner-account", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
+    check(saved == "Saved 1 subscription groups." and grouped["feeds"] == [{"id": "x:keep"}] and grouped["groups"][0]["id"] == "grp_news" and grouped["groups"][0]["members"] == ["youtube:Someone"], "the owner can publish subscription groups without touching feeds")
+    stranger_groups, stranger_config = follow_req.run("someone", "owner-account", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
+    check(stranger_groups == "" and "groups" not in stranger_config, "a groups issue from anyone else is ignored")
+    private_icon = False
+    try:
+        follow_req.clean_groups([{"id": "grp_a", "name": "A", "icon": "https://local.test/a.png", "members": []}], lambda host: ["127.0.0.1"])
+    except follow_req.Reject:
+        private_icon = True
+    check(private_icon, "a private group icon is rejected")
+    script_icon = False
+    try:
+        follow_req.clean_groups([{"id": "grp_a", "name": "A", "icon": "javascript:alert(1)", "members": []}], public_resolve)
+    except follow_req.Reject:
+        script_icon = True
+    check(script_icon, "a javascript group icon is rejected")
+    check(follow_req.clean_groups("[]", public_resolve) == [], "an empty group list clears site groups")
     import sync_health
 
     clock = {}
