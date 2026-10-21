@@ -258,7 +258,8 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html app.js styles.css translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html app.js styles.css translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          if [ -f data/music.json ]; then mkdir -p _site/data; cp data/music.json _site/data/; fi
           if [ -d live ]; then mkdir -p _site/live; cp live/*.json _site/live/; fi
           mkdir -p _site/icons _site/splash _site/screenshots
           cp icons/* _site/icons/

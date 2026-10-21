@@ -37,6 +37,8 @@ SITE_FILES = (
     "tv.css",
     "spaces.js",
     "spaces.css",
+    "music.js",
+    "music.css",
     "favicon.svg",
     "favicon.ico",
     "manifest.webmanifest",
@@ -137,6 +139,10 @@ def _overlay(root: Path, dest: Path) -> None:
             shutil.copy2(src, dest / name)
     for name in COPY_DIRS:
         _copy_tree(root / name, dest / name)
+    music = root / "data" / "music.json"
+    if music.is_file():
+        (dest / "data").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(music, dest / "data" / "music.json")
     discord = root / "discord"
     if discord.is_dir():
         for path in discord.rglob("*.json"):
@@ -165,6 +171,10 @@ def _from_checkout(root: Path, dest: Path) -> None:
     status = root / "status.json"
     if status.is_file():
         shutil.copy2(status, dest / "status.json")
+    music = root / "data" / "music.json"
+    if music.is_file():
+        (dest / "data").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(music, dest / "data" / "music.json")
     subprocess.run([sys.executable, str(root / "scripts" / "share_pages.py"), "--site", str(dest)], check=False)
     worker = dest / "sw.js"
     if worker.is_file():

@@ -1,5 +1,5 @@
-/* SuperintelApp service worker. Cache names are superintel8- plus the deploy SHA. */
-const VERSION = "superintel8-__SW_VERSION__";
+/* SuperintelApp service worker. Cache names are superintel9- plus the deploy SHA. */
+const VERSION = "superintel9-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
@@ -24,6 +24,8 @@ const SHELL_FILES = [
   "./spaces.css",
   "./stories.js",
   "./stories.css",
+  "./music.js",
+  "./music.css",
   "./favicon.svg",
   "./favicon.ico",
   "./manifest.webmanifest",
@@ -82,6 +84,8 @@ async function takeOverClients() {
 
 function isData(url) {
   if (/\/archive\/[^/]+\.json$/.test(url.pathname)) return true;
+  // data/music.json is the SIntelMusic catalog
+  if (url.origin === self.location.origin && /\/data\/music\.json$/.test(url.pathname)) return true;
   if (url.origin === self.location.origin && /\/discord\/(?:index|state|messages\/\d{1,22}|pins\/\d{1,22})\.json$/.test(url.pathname)) return true;
   return url.origin === self.location.origin && /\/(?:feeds|people|suggestions|stories)\.json$/.test(url.pathname);
 }
