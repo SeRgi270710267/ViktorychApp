@@ -849,10 +849,18 @@
     return other >= 8 && other > latin;
   }
 
+  function translateTarget() {
+    const code = STATE.settings && STATE.settings.translateTo;
+    return String(code || "en").toLowerCase().slice(0, 2) || "en";
+  }
+
   function offerTranslate(key, text) {
     const sample = String(text || "").trim();
     if (sample.length < 8) return false;
     if (STATE.translated[key] && !STATE.originalShown[key]) return false;
+    /* Cyrillic (and other non-Latin scripts) stay offered when the target is
+       English even if the phone language is Russian or the detector is missing. */
+    if (foreignScript(sample) && translateTarget() === "en") return true;
     const known = STATE.lang[key];
     if (known === "yes") return true;
     if (known === "no") return false;
@@ -906,7 +914,7 @@
     try {
       if (!STATE.detector) STATE.detector = await LanguageDetector.create();
       let changed = false;
-      const target = readerLanguage();
+      const target = translateTarget();
       for (let i = 0; i < rows.length; i++) {
         if (STATE.langGen !== generation) return;
         const row = rows[i];
@@ -914,7 +922,8 @@
         const top = found && found[0];
         const code = top && top.detectedLanguage ? String(top.detectedLanguage).toLowerCase().slice(0, 2) : "";
         let decision = foreignScript(row.text) ? "yes" : "no";
-        if (top && top.confidence >= 0.6 && code) decision = code === target ? "no" : "yes";
+        if (foreignScript(row.text) && target === "en") decision = "yes";
+        else if (top && top.confidence >= 0.6 && code) decision = code === target ? "no" : "yes";
         const before = offerTranslate(row.key, row.text);
         STATE.lang[row.key] = decision;
         STATE.langWait[row.key] = false;
@@ -929,14 +938,15 @@
   async function translateNow(key) {
     if (window.FeedsTranslate) return window.FeedsTranslate.translate(key);
     const sample = String(STATE.translateText[key] || "").slice(0, 5000);
-    const target = readerLanguage();
+    const target = translateTarget();
     if (!sample) return;
     try {
       if (typeof Translator !== "undefined" && typeof LanguageDetector !== "undefined") {
         if (!STATE.detector) STATE.detector = await LanguageDetector.create();
         const found = await STATE.detector.detect(sample);
         const top = found && found[0];
-        const source = top && top.confidence >= 0.6 && top.detectedLanguage ? String(top.detectedLanguage).toLowerCase().slice(0, 2) : "";
+        let source = top && top.confidence >= 0.6 && top.detectedLanguage ? String(top.detectedLanguage).toLowerCase().slice(0, 2) : "";
+        if (foreignScript(sample) && target === "en" && (!source || source === "en")) source = "ru";
         if (source && source !== target) {
           const availability = await Translator.availability({ sourceLanguage: source, targetLanguage: target });
           if (availability && availability !== "unavailable") {
@@ -951,14 +961,9 @@
               return;
             }
           }
-        } else if (source && source === target) {
-          STATE.lang[key] = "no";
-          render();
-          return;
         }
       }
     } catch (err) { /* the browser translator is optional */ }
-    window.open("https://translate.google.com/?sl=auto&tl=" + encodeURIComponent(target) + "&text=" + encodeURIComponent(sample) + "&op=translate", "_blank", "noopener,noreferrer");
   }
 
   function formatDur(value) {
@@ -8309,7 +8314,8 @@
   function registerSW() {
     if (!("serviceWorker" in navigator) || swStarted) return;
     swStarted = true;
-    navigator.serviceWorker.register("sw.js").then(() => {
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
+      if (reg && reg.update) reg.update().catch(() => {});
       syncWorkerState();
       if (STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted") registerPeriodic();
     }).catch(() => {});
@@ -8343,8 +8349,9 @@
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         armServiceWorker();
         if (!hadController) { hadController = true; return; }
-        STATE.swUpdate = true;
-        showUpdate();
+        if (sessionStorage.getItem("rss-feeds-sw-reload") === "1") return;
+        sessionStorage.setItem("rss-feeds-sw-reload", "1");
+        location.reload();
       });
     }
     bindGestures();

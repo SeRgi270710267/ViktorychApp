@@ -214,6 +214,11 @@
     if (box.translated && box.translated[key] && !(box.originalShown && box.originalShown[key])) return false;
     if (box.translateFallback && box.translateFallback[key]) return false;
     const target = targetLang();
+    /* A script guess is authoritative. A missing detector, or one that
+       reports the phone's UI language, must not hide Cyrillic (or any
+       other non-target script). */
+    const guessed = guess(sample);
+    if (guessed) return guessed !== target;
     const known = box.lang && box.lang[key];
     if (known && known !== "yes" && known !== "no") return known !== target;
     if (known === "no") return false;
@@ -513,7 +518,9 @@
         if (top && top.confidence >= 0.5 && top.detectedLanguage) source = String(top.detectedLanguage).toLowerCase().split("-")[0];
       }
     }
-    if (!source) source = guess(sample);
+    const guessed = guess(sample);
+    if (guessed && guessed !== target && (!source || source === target)) source = guessed;
+    else if (!source) source = guessed;
     if (!source || source === target) return source === target ? { same: true, source: source } : null;
     if (source.length !== 2) return null;
     let availability = "unavailable";
@@ -600,7 +607,9 @@
         const code = top && top.confidence >= 0.6 && top.detectedLanguage ? String(top.detectedLanguage).toLowerCase().split("-")[0] : "";
         const before = offer(row.key, row.text);
         box.lang = box.lang || {};
-        if (code) box.lang[row.key] = code;
+        const guessed = guess(row.text);
+        if (guessed) box.lang[row.key] = guessed;
+        else if (code) box.lang[row.key] = code;
         if (box.langWait) box.langWait[row.key] = false;
         if (offer(row.key, row.text) !== before) changed = true;
       }

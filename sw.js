@@ -46,38 +46,26 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
-// Pages that are already open keep their old script after claim. A hidden
-// window, or a window that never answers, is reloaded so the next open runs
-// this version. A page that posts reload-armed reloads itself when idle.
+// The page that was open still has the previous app.js after claim. Reload
+// every window once, including a visible installed PWA, so translate.js loads
+// without a manual cache clear. reload-armed must not block that.
+// client.navigate is not awaited: waiting for it inside activate deadlocks
+// the navigation on this worker.
 async function takeOverClients() {
-  const started = Date.now();
-  const pass = async () => {
-    try {
-      const db = await idb();
-      const at = Number(await idbGet(db, "shell-reload-at") || 0);
-      if (at && Date.now() - at < 15000) return;
-    } catch (err) { /* a missed guard still reloads at most once per window */ }
-    const windows = await self.clients.matchAll({ type: "window" });
-    for (const client of windows) {
-      try { client.postMessage({ type: "reload-when-idle" }); } catch (err) { /* the page may already be closing */ }
-      const armed = armedClients.has(client.id);
-      const hidden = client.visibilityState === "hidden";
-      const stale = !armed && Date.now() - started > 4000;
-      if (armed || (!hidden && !stale)) continue;
-      if (!client.navigate) continue;
-      try {
-        const db = await idb();
-        await idbSet(db, "shell-reload-at", Date.now());
-        await client.navigate(client.url);
-      } catch (err) { /* navigate can fail for a closing window */ }
-      return;
-    }
-  };
-  await pass();
-  const timer = setInterval(() => {
-    if (Date.now() - started > 20000) { clearInterval(timer); return; }
-    pass().catch(() => {});
-  }, 500);
+  let at = 0;
+  try {
+    const db = await idb();
+    at = Number(await idbGet(db, "shell-reload-at") || 0);
+    if (at && Date.now() - at < 15000) return;
+    await idbSet(db, "shell-reload-at", Date.now());
+  } catch (err) { /* a missed guard still reloads at most once per window */ }
+  const windows = await self.clients.matchAll({ type: "window" });
+  for (const client of windows) {
+    try { client.postMessage({ type: "reload-when-idle" }); } catch (err) { /* the page may already be closing */ }
+    if (!client.navigate) continue;
+    client.navigate(client.url).catch(() => {});
+    return;
+  }
 }
 
 function isData(url) {
@@ -336,7 +324,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
 }
 
 function canonicalNotifyId(post) {

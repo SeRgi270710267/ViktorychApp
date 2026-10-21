@@ -685,7 +685,8 @@ def main() -> None:
     check('data-act="autoplay"' in app and "On cellular and Wi-Fi" in app and "Wi-Fi only" in app and 'autoplay: "all"' in app, "settings can keep autoplay on, limit it to Wi-Fi, or turn it off")
     check('meta[name="theme-color"]' in app and 'meta[name="color-scheme"]' in app and "apple-mobile-web-app-status-bar-style" in app and "black-translucent" in page and ".wco { display: none; background: var(--bg); }" in css, "the status bar matches the theme")
     check("follow-request.yml" in app and "unfollow-request.yml" in app and 'class="add-account"' in app and "form.add-account" in app and "function parseAccountInput(" in app and 'data-act="follow-request"' in app, "follow and unfollow open a prefilled issue")
-    check("Translate post" in app and "Show original" in app and "function foreignScript(" in app and "translate.google.com" in app and "LanguageDetector" in app and "function translateNow(" in app and "STATE.translated" in app and "FeedsTranslate" in app and "translated" not in app[app.index("function saveSettings("):app.index("function saveSettings(") + 800], "a foreign post translates in the browser or opens Google Translate, and the result is not saved")
+    translate_now = app[app.index("async function translateNow("):app.index("function formatDur(")]
+    check("Translate post" in app and "Show original" in app and "function foreignScript(" in app and "function translateTarget(" in app and "LanguageDetector" in app and "function translateNow(" in app and "STATE.translated" in app and "FeedsTranslate" in app and "translate.google.com" not in app and "window.open" not in translate_now and "translated" not in app[app.index("function saveSettings("):app.index("function saveSettings(") + 800], "a foreign post translates in place, the app does not open Google Translate, and the result is not saved")
     translate_js = (ROOT / "translate.js").read_text(encoding="utf-8")
     check("Translate post" in translate_js and "Translate reply" in translate_js and "Translate bio" in translate_js and "Show original" in translate_js and "Translated from " in translate_js and "LanguageDetector" in translate_js and "downloadable" in translate_js and "api.mymemory.translated.net" in translate_js and "lingva" in translate_js and "translate.google.com" in translate_js and "sessionStorage" in translate_js and "Open in Google Translate" in translate_js, "in-place translation keeps links and falls through free engines")
     check("corsproxy.io" not in translate_js and "allorigins" not in translate_js and "api.x.com" not in translate_js, "translation does not depend on an open proxy or the X API")
@@ -883,7 +884,7 @@ def main() -> None:
     workflow_text = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy]" in workflow_text, "the sync uploads a report and keeps one problem issue")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "saveData" in app and "are not Never" in app and "threshold: [0, 0.6, 1]" in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app and "function scheduleIdleReload(" in app and 'box.id = "autoplay-debug"' in app and "function xRefresh(" in app and "onReady" in app and "reload-armed" in app, "one in-view video previews muted, a miss is explained, and an update reloads when idle")
-    check('cache: "reload"' in worker and "skipWaiting" in worker and "clients.claim" in worker and "function isShell(" in worker and "reload-when-idle" in worker, "a new service worker activates and loads the shell from the network")
+    check('cache: "reload"' in worker and "skipWaiting" in worker and "clients.claim" in worker and "function isShell(" in worker and "reload-when-idle" in worker and "client.navigate" in worker and "translate.js" in worker and "translate.css" in worker, "a new service worker activates, reloads an open page, and loads translate.js from the network")
     check("function posterList(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.6" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 60 percent visible")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
@@ -1308,10 +1309,22 @@ const sample = "see https://vk.com/vk and @vk #вконтакте $BTC";
 const shielded = FT._shield(sample);
 if (!shielded.text.includes("[[0]]") || shielded.text.includes("https://")) throw new Error("shield " + shielded.text);
 if (FT._restore(shielded.text, shielded.kept) !== sample) throw new Error("restore");
-if (FT._offerText("This is a normal English sentence for the feed and you.", "en") !== false) throw new Error("english");
-if (FT._offerText("Новая запись в блоге про ленту и рекомендации.", "en") !== true) throw new Error("russian");
-if (FT._offerText("Новая запись в блоге про ленту и рекомендации.", "ru") !== false) throw new Error("same");
+const ru = "Новая запись в блоге про ленту и рекомендации.";
+const en = "This is a normal English sentence for the feed and you.";
+if (FT._offerText(en, "en") !== false) throw new Error("english");
+if (FT._offerText(ru, "en") !== true) throw new Error("russian");
+if (FT._offerText(ru, "ru") !== false) throw new Error("same");
+if (FT._guess(ru) !== "ru") throw new Error("guess");
 if (FT.normalize("EN-us") !== "en" || FT.normalize("nope") !== "en") throw new Error("normalize");
+const bind = (lang) => FT.bind({ state: { settings: { translateTo: "en" }, lang: lang, translated: {}, originalShown: {}, translateFallback: {} } });
+bind({ k: "no" });
+if (FT.offer("k", ru) !== true) throw new Error("lang no hid cyrillic");
+bind({ k: "en" });
+if (FT.offer("k", ru) !== true) throw new Error("detector en hid cyrillic");
+FT.bind({ state: { settings: { translateTo: "ru" }, lang: { k: "en" }, translated: {}, originalShown: {}, translateFallback: {} } });
+if (FT.offer("k", ru) !== false) throw new Error("russian target");
+bind({});
+if (FT.offer("k", en) !== false) throw new Error("english offer");
 """],
         cwd=ROOT,
         capture_output=True,
