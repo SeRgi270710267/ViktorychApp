@@ -1,4 +1,4 @@
-/* Feeds service worker. The shell cache name changes on each deploy. */
+/* Feeds service worker. Cache names are translate- plus the deploy SHA. */
 const VERSION = "translate-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
