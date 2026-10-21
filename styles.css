@@ -228,6 +228,7 @@ img { max-width: 100%; }
 .mhead { display: none; }
 .tabs-bar {
   display: flex;
+  flex-wrap: nowrap;
   align-items: stretch;
   height: 53px;
   position: relative;
@@ -235,12 +236,16 @@ img { max-width: 100%; }
 }
 .tabs {
   display: flex;
+  flex-wrap: nowrap;
   height: 53px;
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
   flex: 1;
   min-width: 0;
   border-bottom: 0;
+  white-space: nowrap;
 }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
@@ -257,10 +262,11 @@ img { max-width: 100%; }
   display: flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
 }
 .tab:hover { background: var(--hover); }
 .tab.on { color: var(--text); font-weight: 700; }
-.tab span { position: relative; line-height: 20px; }
+.tab span { position: relative; line-height: 20px; white-space: nowrap; }
 .tab.on span::after {
   content: "";
   position: absolute;
@@ -277,6 +283,7 @@ img { max-width: 100%; }
   min-width: 56px;
   height: 53px;
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
 }
@@ -342,17 +349,37 @@ img { max-width: 100%; }
 .tab-arrow.left { left: 6px; }
 .tab-arrow.right { right: 52px; }
 .tab-arrow[hidden] { display: none; }
-.tabs-bar > .menu.tab-menu {
-  top: 46px;
+.menu.tab-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
   right: auto;
+  z-index: 40;
   width: max-content;
   min-width: 220px;
-  max-width: calc(100% - 16px);
+  max-width: calc(100vw - 16px);
 }
 .tab-menu button { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .tab-menu svg { width: 18px; height: 18px; fill: var(--blue); flex: none; }
-.tab-manage-row { gap: 8px; }
+.tab-menu-gap { height: 1px; margin: 0; background: var(--line); }
+.tab-manage-row { gap: 8px; flex-wrap: nowrap; }
+.tab-manage-row .who-copy { flex: 1; }
+.tab-manage-row .icon-btn, .tab-manage-row .outline { flex: none; }
 .tab-manage-row .outline { height: 32px; padding: 0 12px; border-radius: 9999px; font-weight: 700; }
+@media (max-width: 499px) {
+  .tab-arrow { display: none !important; }
+  .menu.tab-menu {
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
 .page-head {
   display: flex;
   align-items: center;
