@@ -173,7 +173,7 @@
   const ARCHIVE_RAW = "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/archive/";
   const ARCHIVE_CDN = "https://cdn.jsdelivr.net/gh/" + GITHUB_REPO + "@data/archive/";
   const ARCHIVE_IA = "https://archive.org/download/sergi-rss-feeds-archive/archive/";
-  const IA = { ready: false, files: [], byUrl: {}, posts: {} };
+  const IA = { ready: false, files: [], byUrl: {}, posts: {}, shards: {} };
 
   function iaParts(url) {
     const match = String(url || "").match(/^https:\/\/(?:cors\.archive\.org\/cors|archive\.org\/(?:download|cors))\/([^/?#]+)\/([^?#]+)/i);
@@ -212,6 +212,12 @@
     IA.files = [];
     IA.byUrl = {};
     IA.posts = {};
+    IA.shards = {};
+    const shardMap = doc && doc.shards && typeof doc.shards === "object" ? doc.shards : {};
+    Object.keys(shardMap).forEach((key) => {
+      const value = String(shardMap[key] || "");
+      if (/^https:\/\/archive\.org\/download\/x[0-9a-f]{32}\//.test(value)) IA.shards[key] = value;
+    });
     if (!doc || Number(doc.v) !== 1 || !Array.isArray(doc.files)) {
       retryWaitingImages();
       return;
@@ -4156,8 +4162,8 @@
     const ia = ARCHIVE_IA + file;
     const extra = [];
     const month = String(file).match(/^(\d{4}-\d{2}|undated)\.json$/);
-    if (month) extra.push("https://archive.org/download/superintelapp-" + month[1] + "/" + file);
-    if (file === "index.json" || file === "ia-manifest.json") extra.push("https://archive.org/download/superintelapp-manifest/" + file);
+    if (month && IA.shards[month[1]]) extra.push(IA.shards[month[1]]);
+    if (IA.shards[file]) extra.push(IA.shards[file]);
     const primary = fresh ? [local, raw, cdn] : [local, cdn, raw];
     return primary.concat(extra).concat([ia]);
   }

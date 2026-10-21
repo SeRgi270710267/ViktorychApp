@@ -33,7 +33,6 @@ from site_paths import pages_base, raw_data, user_agent  # noqa: E402
 SITE = pages_base()
 DATA_ARCHIVE = raw_data()
 IA_ARCHIVE = "https://archive.org/download/sergi-rss-feeds-archive/"
-IA_MANIFEST = "https://archive.org/download/superintelapp-manifest/"
 ARCHIVE_SOURCES = (
     ("pages", SITE),
     ("data", DATA_ARCHIVE),
@@ -127,8 +126,6 @@ def pull_ia_sidecars(root: Path) -> None:
             body = _get(base + "archive/" + name)
             if body:
                 break
-        if not body:
-            body = _get(IA_MANIFEST + name)
         parsed = None
         if body:
             try:

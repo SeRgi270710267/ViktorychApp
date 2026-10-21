@@ -201,7 +201,7 @@ jobs:
           fi
           if [ -d archive ]; then
             mkdir -p _site/archive
-            find archive -name '*.json' -type f -exec cp {} _site/archive/ \;
+            find archive -name '*.json' ! -name 'ia-state.json' -type f -exec cp {} _site/archive/ \;
           fi
           if [ -d discord ]; then
             mkdir -p _site/discord

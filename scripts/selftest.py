@@ -2604,8 +2604,11 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
 
 
 def ia_backup_checks() -> None:
+    import hashlib
+    import re
     import subprocess
     import threading
+    import urllib.parse
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     import ia_backup
@@ -2615,11 +2618,11 @@ def ia_backup_checks() -> None:
     sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("rss-feeds" not in source and "rss-feeds" not in workflow, "the new backup does not hard-code the old site path")
-    check("superintelapp-" in source and "Authorization" in source and "LOW" in source, "backup items are named superintelapp and use LOW auth")
+    check("token_hex" in source and "x-archive-meta-noindex" in source and "Authorization" in source and "LOW" in source, "backup items are random, unlisted, and use LOW auth")
     check("group: ia-backup" in workflow and "workflow_dispatch" in workflow and 'cron: "47 7 * * *"' in workflow, "the backup workflow is scheduled, manual, and in its own group")
     check("group: pages" not in workflow and "echo \"$IA_" not in workflow and "echo $IA_" not in workflow, "the backup workflow does not take the pages lock or print the keys")
     check("ia-manifest.json" in sync and "ia-state.json" in sync, "the daily data push keeps the media manifest")
-    check('new URL("archive/"' in app and "function installIaManifest(" in app and "superintelapp-" in app and "cors.archive.org/cors/" in app and "function applyIaPreview(" in app, "the page loads archive media from a relative manifest and archive.org")
+    check('new URL("archive/"' in app and "function installIaManifest(" in app and "archive.org/download/superintelapp-" not in app and "superintelapp-manifest" not in app and "cors.archive.org/cors/" in app and "function applyIaPreview(" in app and "IA.shards" in app, "the page loads archive media from a relative manifest and archive.org")
     preview = app[app.index("function applyIaPreview("):app.index("function applyIaPreview(") + 700]
     check("127.0.0.1" in preview and "localhost" in preview and "ia-deleted" in preview, "the deleted-post preview stays on localhost")
     check(ia_backup.public_media_url("https://pbs.twimg.com/media/abc.jpg"), "public X images are eligible")
@@ -2681,8 +2684,8 @@ def ia_backup_checks() -> None:
             length = int(self.headers.get("Content-Length") or 0)
             body = self.rfile.read(length)
             decision = "ok"
-            if "/superintelapp-img-" in self.path:
-                seen = sum(1 for row in calls if row[0] == "PUT" and "/superintelapp-img-" in row[1])
+            if self.headers.get("Content-Type") == "image/jpeg":
+                seen = sum(1 for row in calls if row[0] == "PUT" and len(row) > 7 and row[7] == "image/jpeg")
                 if seen == 0:
                     decision = "slowdown"
                 elif self.headers.get("x-archive-meta-collection"):
@@ -2695,6 +2698,12 @@ def ia_backup_checks() -> None:
                 self.headers.get("x-archive-meta-collection"),
                 decision,
                 body,
+                self.headers.get("Content-Type"),
+                self.headers.get("x-archive-meta-noindex"),
+                self.headers.get("x-archive-meta-title"),
+                self.headers.get("x-archive-meta-description"),
+                self.headers.get("x-archive-meta-creator"),
+                self.headers.get("x-archive-meta-subject"),
             ))
             if decision == "slowdown":
                 payload = b"<Error><Code>SlowDown</Code></Error>"
@@ -2774,15 +2783,19 @@ def ia_backup_checks() -> None:
     check("test-secret-value" not in joined and "test-access" not in joined, "upload notes do not print the keys")
     check(not any(path.endswith("/discord.jpg") for _method, path, _auth in gets), "Discord media is not downloaded")
     check(b"discord secret words" not in bodies, "Discord message text is not uploaded")
-    check(any(row[1].endswith("/superintelapp-2026-10/2026-10.json") and row[3] == "data" for row in puts), "the month shard is its own data item")
-    img = [row for row in puts if "/superintelapp-img-" in row[1]]
-    check([row[5] for row in img] == ["slowdown", "collection", "ok"], "image uploads back off on SlowDown and retry without a rejected collection")
+    hidden_name = re.compile(r"/x[0-9a-f]{32}/[0-9a-f]{20}\.")
+    check(puts and all(hidden_name.search(row[1]) for row in puts), "item and file names are unguessable")
+    check(all(row[3] == "data" and row[8] == "true" and row[9] == "files" and row[10] == "files" and not row[4] and not row[11] and not row[12] for row in puts), "uploads are unlisted data with a generic title and no owner tag")
+    check(not any("superintelapp" in row[1] or row[1].endswith("/2026-10.json") for row in puts), "uploads do not use the old item or month names")
+    img = [row for row in puts if row[7] == "image/jpeg"]
+    check([row[5] for row in img] == ["slowdown", "ok"], "image uploads back off on SlowDown and then succeed")
     check(any(delay >= 0.01 for delay in sleeps), "SlowDown waits before the next attempt")
     check(img[-1][4] is None and img[-1][6] == jpeg, "the retried image upload has no collection and the file bytes")
     manifest = result["manifest"]
     saved = manifest["files"]
     check("x:20" in manifest["posts"] and len(manifest["posts"]["x:20"]) == 2, "the manifest maps the post to its avatar and photo")
-    check(all(item["a"].startswith("https://archive.org/download/superintelapp-img-2026-10/") for item in saved), "manifest URLs are archive.org download links")
+    check(all(re.match(r"https://archive.org/download/x[0-9a-f]{32}/[0-9a-f]{20}\.jpg$", item["a"]) for item in saved), "manifest URLs are archive.org download links")
+    check(manifest["items"].get("stub:2026-10") and ia_backup.valid_item_id(manifest["items"]["stub:2026-10"]) and manifest["shards"]["2026-10"].endswith(".json"), "the manifest maps the month to a random item")
     check(len({item["a"] for item in saved}) == 1, "identical bytes are stored once")
     check(result["failures"] == 0, "the mocked backup finishes the files it attempted")
 
@@ -2818,6 +2831,137 @@ def ia_backup_checks() -> None:
         sleep=lambda delay: None,
     )
     check(again["manifest"]["posts"]["x:20"] == manifest["posts"]["x:20"], "a second run keeps the manifest and does not upload again")
+    check(again["manifest"]["items"] == manifest["items"], "a second run keeps the same random item ids")
+
+    jpeg_old = b"\xff\xd8\xff\xd9"
+    old_digest = hashlib.sha256(jpeg_old).hexdigest()
+    old_name = old_digest[:20] + ".jpg"
+    saved_files = {}
+    deleted = []
+    patches = []
+
+    class Resp:
+        def __init__(self, status, body):
+            self.status = status
+            self._body = body
+
+        def read(self):
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def migrate_open(request, timeout=None):
+        method = request.get_method()
+        url = request.full_url
+        path = urllib.parse.urlparse(url).path
+        if method == "PUT":
+            length = int(request.headers.get("Content-Length") or 0)
+            saved_files[path] = request.data
+            return Resp(200, b"")
+        if method == "DELETE":
+            deleted.append(path)
+            return Resp(204, b"")
+        if method == "POST":
+            patches.append(request.data.decode("utf-8"))
+            return Resp(200, b'{"success":true}')
+        if path == "/metadata/superintelapp-img-2026-10":
+            body = json.dumps({
+                "metadata": {"identifier": "superintelapp-img-2026-10", "title": "superintelapp-img-2026-10", "creator": "owner-account", "description": "Public backup", "collection": "opensource_media"},
+                "files": [{"name": old_name}, {"name": "superintelapp-img-2026-10_meta.xml"}],
+            }).encode()
+            return Resp(200, body)
+        if path == "/download/superintelapp-img-2026-10/" + old_name:
+            return Resp(200, jpeg_old)
+        if path.startswith("/download/x") and path.endswith("/" + old_name):
+            item = path.split("/")[2]
+            stored = saved_files.get("/" + item + "/" + old_name)
+            if stored == jpeg_old:
+                return Resp(200, stored)
+            return Resp(404, b"")
+        if path == "/archive/ia-manifest.json":
+            return Resp(200, json.dumps({"v": 1, "items": {}}).encode())
+        if path.startswith("/metadata/x"):
+            return Resp(200, json.dumps({"metadata": {}, "files": []}).encode())
+        return Resp(404, b"")
+
+    migrated_state = {
+        "v": 1,
+        "shards": {},
+        "byHash": {old_digest: {"a": "https://archive.org/download/superintelapp-img-2026-10/" + old_name, "k": "photo"}},
+        "byUrl": {"https://cdn.example/a.jpg": old_digest},
+        "posts": {"x:7": [{"u": "https://cdn.example/a.jpg", "k": "photo"}]},
+    }
+    host = "http://127.0.0.1"
+    moved = ia_backup.migrate_copies(
+        {
+            "access": "test-access",
+            "secret": "test-secret-value",
+            "endpoint": host,
+            "download_base": host + "/download",
+            "metadata_base": host + "/metadata",
+            "old_items": ["superintelapp-img-2026-10"],
+            "pace": 0,
+            "backoff": 0,
+            "urlopen": migrate_open,
+            "opener": type("Opener", (), {"open": staticmethod(migrate_open)})(),
+        },
+        migrated_state,
+        sleep=lambda delay: None,
+    )
+    new_url = migrated_state["byHash"][old_digest]["a"]
+    check(moved["failures"] == 0 and ia_backup.valid_item_id(new_url.split("/")[4]) and new_url.endswith("/" + old_name), "an old file is copied onto a random item and checked")
+    check("test-secret-value" not in " ".join(moved["notes"]), "copy notes do not print the keys")
+    kept = ia_backup.retire_old(
+        {
+            "access": "test-access",
+            "secret": "test-secret-value",
+            "endpoint": host,
+            "metadata_base": host + "/metadata",
+            "pages_origin": host,
+            "old_items": ["superintelapp-img-2026-10"],
+            "pace": 0,
+            "urlopen": migrate_open,
+            "opener": type("Opener", (), {"open": staticmethod(migrate_open)})(),
+        },
+        migrated_state,
+        sleep=lambda delay: None,
+    )
+    check(kept["deleted"] == 0 and not deleted, "old files stay until the site manifest uses the new copies")
+
+    def live_open(request, timeout=None):
+        path = urllib.parse.urlparse(request.full_url).path
+        if path == "/archive/ia-manifest.json":
+            return Resp(200, json.dumps({
+                "v": 1,
+                "items": migrated_state["items"],
+                "files": [{"u": "https://cdn.example/a.jpg", "a": migrated_state["byHash"][old_digest]["a"], "k": "photo"}],
+                "shards": {},
+            }).encode())
+        return migrate_open(request, timeout)
+
+    retired = ia_backup.retire_old(
+        {
+            "access": "test-access",
+            "secret": "test-secret-value",
+            "endpoint": host,
+            "metadata_base": host + "/metadata",
+            "pages_origin": host,
+            "old_items": ["superintelapp-img-2026-10"],
+            "pace": 0,
+            "urlopen": live_open,
+            "opener": type("Opener", (), {"open": staticmethod(live_open)})(),
+        },
+        migrated_state,
+        sleep=lambda delay: None,
+    )
+    check(retired["deleted"] >= 1 and any(path.endswith("/" + old_name) for path in deleted), "old files are deleted only after the new copy and the site manifest check out")
+    check(any("noindex" in patch and "title" in patch for patch in patches), "retired items are marked noindex and lose their title")
+    check(not any("test-secret-value" in patch or "test-secret-value" in " ".join(retired["notes"]) for patch in patches), "metadata writes do not print the keys")
+
     story_checks()
 
 
