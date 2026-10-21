@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .article import article_from_status
 from .common import best_mp4, blank_profile, clean_text, is_playable_video, post_shell, stamp_activity, to_iso, upgrade_avatar, video_fields
 
 
@@ -222,6 +223,7 @@ def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:
         repostedBy=None if nested else reposted,
         replyingTo=None if nested else replying,
         quoted=None if nested else quoted,
+        article=article_from_status(status),
     )
 
 

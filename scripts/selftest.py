@@ -16,7 +16,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from adapters.common import parse_json_loose  # noqa: E402
-from adapters.fxtwitter import parse as parse_fx  # noqa: E402
+from adapters.article import article_from_status, normalize_article  # noqa: E402
+from adapters.fxtwitter import convert_status, parse as parse_fx  # noqa: E402
 from adapters.generic_rss import parse as parse_generic  # noqa: E402
 from adapters.nitter_rss import parse as parse_nitter  # noqa: E402
 from adapters.rsshub_instagram import parse as parse_ig  # noqa: E402
@@ -89,6 +90,17 @@ def main() -> None:
     check(fx["posts"][0]["quoted"]["media"][0]["url"].endswith("high.mp4"), "fxtwitter picks highest mp4")
     check(fx["posts"][0]["stats"]["views"] == 6100000, "fxtwitter stats")
     check(fx["posts"][1]["kind"] == "repost" and fx["posts"][1]["handle"] == "orig", "fxtwitter repost author")
+    article_post = convert_status(parse_json_loose((FIX / "x_article_status.json").read_text(encoding="utf-8"))["tweet"], {"id": "x:X", "platform": "x", "handle": "X"})
+    article = article_post.get("article") or {}
+    check(article.get("title", "").startswith("this week on X"), "fxtwitter article keeps the title")
+    check(article.get("cover", "").startswith("https://pbs.twimg.com/"), "fxtwitter article keeps the cover")
+    check(any(block.get("type") == "h2" and "New Year" in block.get("text", "") for block in article.get("blocks") or []), "fxtwitter article keeps headings")
+    check(any(block.get("type") == "embed" and block.get("tweetId") for block in article.get("blocks") or []), "fxtwitter article keeps embedded posts")
+    check(any(block.get("styles") for block in article.get("blocks") or []), "fxtwitter article keeps bold ranges")
+    preview_only = normalize_article({"id": "99", "title": "Preview only", "preview_text": "A short look.", "cover_media": {"media_info": {"original_img_url": "https://pbs.twimg.com/media/cover.jpg"}}, "content": {"blocks": [], "entityMap": []}})
+    check(preview_only and preview_only["title"] == "Preview only" and not preview_only.get("blocks") and preview_only["cover"].endswith("cover.jpg"), "an article list payload stays a preview")
+    linked = article_from_status({"entities": {"urls": [{"expanded_url": "https://x.com/i/article/555", "title": "From a card", "description": "Card preview"}]}})
+    check(linked and linked["id"] == "555" and linked["title"] == "From a card" and not linked.get("blocks"), "an article link card becomes a preview")
     moment = datetime(2026, 10, 21, 6, 40, tzinfo=timezone.utc)
     live = parse_fx(
         {
@@ -904,16 +916,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel4-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel5-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "superintel4-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "superintel5-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel4-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel5-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")

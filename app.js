@@ -56,6 +56,7 @@
     chevR: "M8.6 5.4 14.2 11 8.6 16.6l1.4 1.4 7-7-7-7z",
     caret: "M7 9.2 12 14.2 17 9.2l1.2 1.2L12 16.6 5.8 10.4z",
     tick: "M9.2 16.2 4.5 11.5l1.4-1.4 3.3 3.3 7.9-7.9 1.4 1.4z",
+    article: "M6 3.5C6 2.67 6.67 2 7.5 2h6.3L18 6.2V20.5c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-17zM13 3.5V7h3.5L13 3.5zM8.5 11h7v1.6h-7V11zm0 3.4h7v1.6h-7v-1.6zm0 3.4h4.5V19H8.5v-1.2z",
     sliders: "M3 6h8v2H3V6zm12 0h6v2h-6V6zM3 11h4v2H3v-2zm8 0h10v2H11v-2zM3 16h10v2H3v-2zm14 0h4v2h-4v-2zM9 4h2v6H9V4zm6 5h2v6h-2V9zM11 14h2v6h-2v-6z"
   };
 
@@ -107,13 +108,19 @@
     originalShown: {},
     translateText: {},
     lang: {},
-    langWait: {}
+    langWait: {},
+    histQ: "",
+    histPlat: "",
+    histClear: "",
+    history: null
   };
   let previewAnchor = 0;
   const SCROLLS = {};
   const THEME_COLORS = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
 
-  const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
+  const icon = (name) => name === "clock"
+    ? `<svg class="clock" viewBox="0 0 24 24" aria-hidden="true">${LINE.clock}</svg>`
+    : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name] || ""}"/></svg>`;
   const LINE = {
     clock: `<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l2.8 1.7"/>`,
     rocket: `<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>`,
@@ -565,7 +572,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0 });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false } });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -598,6 +605,7 @@
       parsed.bellNotes = cleanBellNotes(parsed.bellNotes);
       parsed.bellSeen = Array.isArray(parsed.bellSeen) ? parsed.bellSeen.map((id) => String(id)).slice(-500) : [];
       parsed.bellRead = Number(parsed.bellRead) || 0;
+      parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
@@ -1460,8 +1468,11 @@
       ? `<button class="vmute" type="button" data-act="mute" aria-label="Unmute" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden></span>`
       : "";
     const round = media && media.round ? " round" : "";
+    const progress = !gif && post ? videoProgress(post) : 0;
+    const bar = progress > 0.02 ? `<span class="vprog" style="width:${Math.round(progress * 100)}%"></span>` : "";
     return `<div class="tile vplay${round}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}">
       ${posterImg(post, media, "vposter")}
+      ${bar}
       ${dur ? `<span class="vdur">${esc(dur)}</span>` : ""}
       ${gif ? `<span class="gif-badge">GIF</span>` : ""}
       <button class="play" type="button" data-act="play" aria-label="Play">${icon("play")}</button>
@@ -1499,9 +1510,9 @@
     const seen = {};
     const rows = [];
     const add = (link) => {
-      if (!link || !link.url || seen[link.url]) return;
+      if (!link || !link.url || seen[link.url] || isArticleLink(link, post)) return;
       seen[link.url] = true;
-      const html = linkCard(link);
+      const html = linkCard(link, post);
       if (html) rows.push(html);
     };
     add(post && post.link);
@@ -1536,7 +1547,8 @@
     const site = link.site ? `<span class="link-site">${esc(link.site)}</span>` : "";
     const title = `<span class="link-title">${esc(link.title || link.url)}</span>`;
     const description = link.description ? `<span class="link-desc">${esc(link.description)}</span>` : "";
-    return `<a class="link-card" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
+    const id = arguments[1] && arguments[1].id ? ` data-id="${esc(arguments[1].id)}"` : "";
+    return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(link.url)}">${image}<span class="link-card-copy">${site}${title}${description}</span></a>`;
   }
 
   function mediaHtml(items, eager, post) {
@@ -1845,6 +1857,10 @@
           send("mute", []);
           send("playVideo", []);
         }
+        if (!opts.preview && Number(opts.resume) > 3 && !el._ytSeeked) {
+          el._ytSeeked = true;
+          send("seekTo", [Number(opts.resume), true]);
+        }
       };
       el._nudge = nudge;
       frame.addEventListener("load", () => {
@@ -1918,6 +1934,10 @@
       if (left && opts.preview) { left.hidden = false; left.textContent = label; }
       const badge = el.querySelector(".yt-time");
       if (badge && el.dataset.preview === "subs") badge.textContent = label;
+      if (!opts.loop && !(media && media.type === "animated_gif") && video.currentTime >= 3) {
+        const dur = isFinite(video.duration) ? video.duration : 0;
+        noteVideo(post, { position: video.currentTime, duration: dur, progress: dur > 0 ? video.currentTime / dur : 0, touch: false });
+      }
     });
     el.appendChild(video);
     el.classList.add("is-playing");
@@ -2097,6 +2117,12 @@
     }
     const post = playPost(el) || {};
     const media = playMedia(el, post) || {};
+    if (!previewing && !(Number(opts.resume) > 0.3) && post.id) {
+      const saved = histFind("videos", post.id);
+      const pos = saved ? Number(saved.position) || 0 : 0;
+      const dur = saved ? Number(saved.duration) || 0 : 0;
+      if (pos > 3 && !(dur > 8 && pos > dur - 8)) opts.resume = pos;
+    }
     const yt = youtubeId(post, media);
     el.dataset.want = "1";
     const gen = (el._gen || 0) + 1;
@@ -2506,6 +2532,7 @@
     const time = video && isFinite(video.currentTime) ? video.currentTime : 0;
     const src = video ? (video.currentSrc || video.src || "") : "";
     const yt = youtubeId(post, media);
+    noteVideo(post, { position: time, touch: true });
     if (yt || post.watch || (post.platform === "youtube" && post.kind !== "community")) {
       STATE.handoff = true;
       STATE.playing = {
@@ -2614,10 +2641,13 @@
   function quoteCard(quoted) {
     if (!quoted) return "";
     const platform = quoted.platform || "x";
-    const href = quoted.url && !quoted.handle ? quoted.url : (quoted.handle ? statusHash(asPost(quoted, platform)) : (quoted.url || "#"));
-    const external = href.startsWith("http");
+    const asQuoted = asPost(quoted, platform);
+    const art = articleOf(asQuoted);
+    const href = art ? articleHash(asQuoted) : (quoted.url && !quoted.handle ? quoted.url : (quoted.handle ? statusHash(asQuoted) : (quoted.url || "#")));
+    const external = !art && href.startsWith("http");
     const open = external ? ` data-href="${esc(href)}"` : ` data-open="${esc(href)}"`;
     const key = "q:" + (quoted.statusId || quoted.id || "x");
+    const shown = displayPost(asQuoted);
     return `<div class="quote"${open}>
       <div class="quote-head">
         ${avatar(quoted.avatar, quoted.author || quoted.handle)}
@@ -2625,7 +2655,8 @@
         ${quoted.handle ? `<span class="handle">@${esc(quoted.handle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
-      ${quoted.text ? textBlock(quoted, key, false, "quote-text") : ""}
+      ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
+      ${articleCardHtml(asQuoted)}
       ${mediaHtml(quoted.media, false, quoted)}
     </div>`;
   }
@@ -3179,6 +3210,8 @@
     if (author.joined) post.authorJoined = isoDate(author.joined);
     if (typeof author.followers === "number") post.authorFollowers = author.followers;
     const conv = fxConversationId(wrapped);
+    const article = articleFromStatus(wrapped);
+    if (article) post.article = article;
     if (conv) post.conversationId = conv;
     const parentStatus = (wrapped.replying_to && (wrapped.replying_to.status || wrapped.replying_to.status_id)) || wrapped.replying_to_status || wrapped.in_reply_to_status_id;
     if (replying && parentStatus) post.replyingTo = Object.assign({}, replying, { id: String(parentStatus) });
@@ -3364,7 +3397,7 @@
     if (!extra) return null;
     if (fxBelongs(extra, parentId) === false) return null;
     const filled = Object.assign({}, post);
-    ["text", "handle", "author", "date", "avatar", "url", "verifiedType", "authorJoined", "authorFollowers", "conversationId"].forEach((key) => {
+    ["text", "handle", "author", "date", "avatar", "url", "verifiedType", "authorJoined", "authorFollowers", "conversationId", "article"].forEach((key) => {
       if (!filled[key] && extra[key]) filled[key] = extra[key];
     });
     if (!(filled.media || []).length && (extra.media || []).length) filled.media = extra.media;
@@ -4654,12 +4687,16 @@
       : "";
     const shareLink = sharePostUrl(post, "post") || post.url || sitePermalink(statusHash(post));
     const shareNote = sharePostUrl(post, "post") ? "" : unpublishedNote("post", post.platform, !!post.url);
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>Copy link</button>${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
+    const here = parseRoute();
+    const histItem = here.name === "history" ? `<button data-act="hist-remove" data-id="${esc(post.id)}" data-tab="${esc(here.tab || "bookmarks")}">Remove from History</button>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>Copy link</button>${histItem}${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
     const eager = !!opts.eager;
-    const dest = post.watch ? watchHash(post) : statusHash(post);
+    watchArticle(post);
+    const shown = displayPost(post);
+    const dest = articleOf(post) ? articleHash(post) : (post.watch ? watchHash(post) : statusHash(post));
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
     const displayHandle = creator ? (post.handle || creator.handle || "") : (post.handle || "");
@@ -4689,7 +4726,8 @@
           </div>
           ${reply}
           ${discordMeta(post)}
-          ${textBlock(post, post.id, false)}
+          ${shown.text ? textBlock(shown, post.id, false) : ""}
+          ${articleCardHtml(post)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
           ${postCards(post)}
@@ -4739,7 +4777,13 @@
       return { name: "messages", channel: channel, query };
     }
     if (parts[0] === "spaces" && parts[1]) return { name: "spaces", id: parts[1], query };
-    const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings", "incoming"];
+    if (parts[0] === "history") {
+      const tab = parts[1] === "likes" || parts[1] === "videos" || parts[1] === "articles" ? parts[1] : "bookmarks";
+      return { name: "history", tab: tab, query };
+    }
+    if (parts[0] === "article" && parts[1]) return { name: "article", id: parts.slice(1).join("/"), query };
+    if (parts[0] === "bookmarks" && parts.length === 1) return { name: "history", tab: "bookmarks", query };
+    const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
     let platform = "x";
@@ -4791,7 +4835,7 @@
         ${navItem("#/messages", "mail", "Messages", name === "messages")}
         ${navItem("#/feeds", "spark", "Feeds", name === "feeds")}
         ${navItem("#/lists", "lists", "Lists", name === "lists" || name === "list")}
-        ${navItem("#/bookmarks", "bookmark", "Bookmarks", name === "bookmarks")}
+        ${navItem("#/history", "clock", "History", name === "history")}
         ${navItem(subsHash(STATE.settings.subsGroup), "subs", "Subscriptions", name === "subscriptions")}
         ${navItem("#/settings", "more", "More", name === "settings")}
         <button class="post-btn" data-act="compose" aria-label="Post"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>
@@ -6155,6 +6199,10 @@
     if (post) {
       creditCarried(post);
       rememberOpened(post);
+      if (countsAsArticle(post) && STATE.notedStatus !== post.id) {
+        STATE.notedStatus = post.id;
+        noteArticle(post, {});
+      }
     }
     if (!post) {
       const key = String(route.id);
@@ -6180,6 +6228,7 @@
         ${hiddenPost(post) ? `<p class="phandle">Muted on this device.</p>` : ""}
         ${pollHtml(post)}
         ${discordMeta(post)}
+        ${articleCardHtml(post)}
         ${mediaHtml(post.media, false, post)}
         ${postCards(post)}
         ${quoteCard(post.quoted)}
@@ -6218,7 +6267,7 @@
     let body = emptyBlock("Search posts and accounts", "Try a name, @handle, or a word from a post.");
     if (lq) {
       const accounts = shownFeeds(feeds()).filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && (f.name + " " + f.handle + " " + (f.aliases || "") + " " + (f.bio || "")).toLowerCase().includes(lq));
-      const found = posts().filter((p) => !hiddenPost(p) && (p.text + " " + p.author + " " + p.handle + " " + ((p.quoted && p.quoted.text) || "")).toLowerCase().includes(lq)).sort(byStamp);
+      const found = posts().filter((p) => !hiddenPost(p) && (p.text + " " + p.author + " " + p.handle + " " + ((p.article && ((p.article.title || "") + " " + (p.article.preview || ""))) || "") + " " + ((p.quoted && p.quoted.text) || "") + " " + ((p.quoted && p.quoted.article && p.quoted.article.title) || "")).toLowerCase().includes(lq)).sort(byStamp);
       const acct = accounts.length ? `<section class="card"><h2>Accounts</h2>${accounts.map(accountRow).join("")}</section>` : "";
       body = acct + (found.length ? found.map((p) => card(p)).join("") : emptyBlock("No results", "Nothing matched “" + q + "”."));
     }
@@ -6280,6 +6329,785 @@
     return fromFeed.concat(extra).sort(byStamp);
   }
 
+  const HIST_KEY = "rss-feeds-history-v1";
+  const HIST_CAP = 2000;
+  const HIST_TABS = ["bookmarks", "likes", "videos", "articles"];
+
+  function cleanHistoryPause(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    return { videos: src.videos === true, articles: src.articles === true };
+  }
+
+  function historyPaused(tab) {
+    const pause = (STATE.settings && STATE.settings.historyPause) || {};
+    return tab === "videos" ? !!pause.videos : tab === "articles" ? !!pause.articles : false;
+  }
+
+  function histEnsure() {
+    if (!STATE.history) STATE.history = { bookmarks: [], likes: [], videos: [], articles: [] };
+    return STATE.history;
+  }
+
+  function histFind(tab, id) {
+    const key = String(id || "");
+    return (histEnsure()[tab] || []).find((row) => row && row.id === key) || null;
+  }
+
+  function histDb() {
+    if (STATE.histDb) return Promise.resolve(STATE.histDb);
+    if (STATE.histDbWait) return STATE.histDbWait;
+    STATE.histDbWait = new Promise((resolve) => {
+      if (!window.indexedDB) { resolve(null); return; }
+      let req;
+      try { req = indexedDB.open("superintel-history", 1); }
+      catch (err) { resolve(null); return; }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("entries")) db.createObjectStore("entries", { keyPath: "key" });
+      };
+      req.onsuccess = () => { STATE.histDb = req.result; resolve(req.result); };
+      req.onerror = () => resolve(null);
+    });
+    return STATE.histDbWait;
+  }
+
+  function histPut(entry) {
+    if (!entry || !entry.key) return;
+    histDb().then((db) => {
+      if (!db) return;
+      try { db.transaction("entries", "readwrite").objectStore("entries").put(entry); }
+      catch (err) { /* the mirror in localStorage still has the row */ }
+    });
+  }
+
+  function histDrop(key) {
+    if (!key) return;
+    histDb().then((db) => {
+      if (!db) return;
+      try { db.transaction("entries", "readwrite").objectStore("entries").delete(key); }
+      catch (err) { /* ignore */ }
+    });
+  }
+
+  function histMirror() {
+    const slim = {};
+    HIST_TABS.forEach((tab) => {
+      slim[tab] = (histEnsure()[tab] || []).slice(0, HIST_CAP).map((row) => {
+        const copy = Object.assign({}, row);
+        if (copy.post && copy.post.article && Array.isArray(copy.post.article.blocks) && copy.post.article.blocks.length > 30) {
+          const article = Object.assign({}, copy.post.article, { blocks: copy.post.article.blocks.slice(0, 30) });
+          copy.post = Object.assign({}, copy.post, { article: article });
+        }
+        return copy;
+      });
+    });
+    try { localStorage.setItem(HIST_KEY, JSON.stringify(slim)); }
+    catch (err) {
+      HIST_TABS.forEach((tab) => {
+        slim[tab] = (slim[tab] || []).slice(0, 80).map((row) => {
+          if (row.post && row.post.article) {
+            const article = Object.assign({}, row.post.article);
+            delete article.blocks;
+            row = Object.assign({}, row, { post: Object.assign({}, row.post, { article: article }) });
+          }
+          return row;
+        });
+      });
+      try { localStorage.setItem(HIST_KEY, JSON.stringify(slim)); } catch (err2) { /* quota */ }
+    }
+  }
+
+  function flushHist() {
+    const pending = STATE.histPending || {};
+    STATE.histPending = {};
+    Object.keys(pending).forEach((key) => histPut(pending[key]));
+    histMirror();
+  }
+
+  function queueHist(entry, soon) {
+    STATE.histPending = STATE.histPending || {};
+    STATE.histPending[entry.key] = entry;
+    clearTimeout(STATE.histTimer);
+    STATE.histTimer = setTimeout(flushHist, soon ? 40 : 700);
+  }
+
+  function readHistLocal() {
+    try {
+      const doc = JSON.parse(localStorage.getItem(HIST_KEY) || "{}");
+      const rows = [];
+      HIST_TABS.forEach((tab) => ((doc && doc[tab]) || []).forEach((row) => rows.push(row)));
+      return rows;
+    } catch (err) { return []; }
+  }
+
+  function histLoad() {
+    if (STATE.histLoading) return STATE.histLoading;
+    STATE.histLoading = histDb().then((db) => new Promise((resolve) => {
+      const finish = (rows) => {
+        const bag = { bookmarks: [], likes: [], videos: [], articles: [] };
+        (rows || []).forEach((row) => {
+          if (!row || !bag[row.tab] || !row.id) return;
+          bag[row.tab].push(row);
+        });
+        const pending = STATE.history;
+        if (pending) {
+          HIST_TABS.forEach((tab) => {
+            (pending[tab] || []).forEach((row) => {
+              const idx = bag[tab].findIndex((item) => item.id === row.id);
+              if (idx < 0) bag[tab].unshift(row);
+              else if ((row.at || 0) >= (bag[tab][idx].at || 0)) bag[tab][idx] = row;
+            });
+          });
+        }
+        HIST_TABS.forEach((tab) => {
+          bag[tab].sort((a, b) => (b.at || 0) - (a.at || 0));
+          bag[tab] = bag[tab].slice(0, HIST_CAP);
+        });
+        STATE.history = bag;
+        resolve(bag);
+      };
+      if (!db) { finish(readHistLocal()); return; }
+      let req;
+      try { req = db.transaction("entries", "readonly").objectStore("entries").getAll(); }
+      catch (err) { finish(readHistLocal()); return; }
+      req.onsuccess = () => finish(req.result && req.result.length ? req.result : readHistLocal());
+      req.onerror = () => finish(readHistLocal());
+    })).then(() => histMirror());
+    return STATE.histLoading;
+  }
+
+  function slimArticle(article) {
+    if (!article || typeof article !== "object") return null;
+    const out = {
+      id: String(article.id || ""),
+      title: String(article.title || ""),
+      preview: String(article.preview || "").slice(0, 700),
+      cover: String(article.cover || ""),
+      url: String(article.url || "")
+    };
+    if (Array.isArray(article.blocks) && article.blocks.length) {
+      out.blocks = article.blocks.slice(0, 80).map((block) => {
+        if (!block || typeof block !== "object") return null;
+        const row = { type: String(block.type || "paragraph") };
+        if (block.text) row.text = String(block.text).slice(0, 2000);
+        if (block.url) row.url = String(block.url);
+        if (block.tweetId) row.tweetId = String(block.tweetId);
+        if (block.poster) row.poster = String(block.poster);
+        if (block.alt) row.alt = String(block.alt);
+        if (block.title && block.type !== "paragraph") row.title = String(block.title);
+        if (Array.isArray(block.styles) && block.styles.length) row.styles = block.styles.slice(0, 20);
+        if (Array.isArray(block.links) && block.links.length) row.links = block.links.slice(0, 20);
+        return row;
+      }).filter(Boolean);
+    }
+    if (!out.title && !out.cover && !out.preview && !(out.blocks || []).length) return null;
+    return out;
+  }
+
+  function histUpsert(tab, post, extra) {
+    extra = extra || {};
+    if ((tab === "videos" || tab === "articles") && historyPaused(tab)) return;
+    const id = String((post && post.id) || extra.id || "");
+    if (!id || !HIST_TABS.includes(tab)) return;
+    if (extra.touch === false) {
+      const prev = histFind(tab, id);
+      if (prev) {
+        const pos = extra.position != null ? Number(extra.position) : Number(prev.position) || 0;
+        const scroll = extra.scroll != null ? Number(extra.scroll) : Number(prev.scroll) || 0;
+        const progress = extra.progress != null ? Number(extra.progress) : Number(prev.progress) || 0;
+        if (Math.abs((Number(prev.position) || 0) - pos) < 1.5 && Math.abs((Number(prev.scroll) || 0) - scroll) < 0.012 && Math.abs((Number(prev.progress) || 0) - progress) < 0.02) return;
+      }
+    }
+    const prev = histFind(tab, id);
+    const slim = post ? slimPost(post) : (prev && prev.post) || null;
+    if (slim && post && post.article) slim.article = slimArticle(post.article);
+    if (slim && post && post.link && post.link.url) {
+      slim.link = { url: post.link.url || "", title: post.link.title || "", description: post.link.description || "", image: post.link.image || "", site: post.link.site || "" };
+    }
+    const entry = {
+      key: tab + ":" + id,
+      tab: tab,
+      id: id,
+      at: extra.touch === false && prev ? (prev.at || Date.now()) : Date.now(),
+      platform: (post && post.platform) || (prev && prev.platform) || (slim && slim.platform) || "",
+      progress: extra.progress != null ? Number(extra.progress) || 0 : (prev && prev.progress) || 0,
+      position: extra.position != null ? Number(extra.position) || 0 : (prev && prev.position) || 0,
+      duration: extra.duration != null ? Number(extra.duration) || 0 : (prev && prev.duration) || 0,
+      scroll: extra.scroll != null ? Number(extra.scroll) || 0 : (prev && prev.scroll) || 0,
+      post: slim || (prev && prev.post) || null
+    };
+    if (extra.at != null) entry.at = extra.at;
+    const list = (histEnsure()[tab] || []).filter((row) => row && row.id !== id);
+    list.unshift(entry);
+    list.sort((a, b) => (b.at || 0) - (a.at || 0));
+    while (list.length > HIST_CAP) {
+      const gone = list.pop();
+      if (gone) histDrop(gone.key);
+    }
+    STATE.history[tab] = list;
+    queueHist(entry, extra.touch !== false);
+  }
+
+  function histRemove(tab, id) {
+    const key = String(id || "");
+    STATE.history = histEnsure();
+    (STATE.history[tab] || []).forEach((row) => {
+      if (!row || row.id !== key) return;
+      histDrop(row.key);
+      if (STATE.histPending) delete STATE.histPending[row.key];
+    });
+    STATE.history[tab] = (STATE.history[tab] || []).filter((row) => row && row.id !== key);
+    histMirror();
+  }
+
+  function wipeHistory(tab) {
+    if (HIST_TABS.indexOf(tab) < 0) return;
+    if (tab === "bookmarks") {
+      STATE.settings.bookmarks = {};
+      STATE.settings.savedPosts = {};
+      saveSettings();
+    } else if (tab === "likes") {
+      STATE.settings.likes = {};
+      saveSettings();
+    }
+    (histEnsure()[tab] || []).forEach((row) => {
+      if (!row || !row.key) return;
+      histDrop(row.key);
+      if (STATE.histPending) delete STATE.histPending[row.key];
+    });
+    STATE.history[tab] = [];
+    histMirror();
+  }
+
+  function histSyncSaves() {
+    const run = () => {
+      ["likes", "bookmarks"].forEach((bucket) => {
+        const map = (STATE.settings && STATE.settings[bucket]) || {};
+        Object.keys(map).forEach((id) => {
+          if (!map[id] || histFind(bucket, id)) return;
+          const post = findAnyPost(id) || ((STATE.settings.savedPosts || {})[id]) || null;
+          const at = typeof map[id] === "number" ? map[id] : 1;
+          histUpsert(bucket, post, { id: id, at: at, touch: false });
+        });
+      });
+    };
+    if (STATE.histLoading) return STATE.histLoading.then(run);
+    run();
+    return Promise.resolve();
+  }
+
+  function noteVideo(post, extra) {
+    if (!post || !post.id || historyPaused("videos")) return;
+    const media = post.media || [];
+    const gifOnly = media.length > 0 && media.every((item) => item && item.type === "animated_gif") && !media.some((item) => youtubeId(post, item));
+    if (gifOnly) return;
+    const video = (post.platform === "youtube" && post.kind !== "community") || post.watch || media.some((item) => item && item.type === "video") || media.some((item) => youtubeId(post, item));
+    if (!video) return;
+    histUpsert("videos", post, extra || {});
+  }
+
+  function videoProgress(post) {
+    if (!post || !post.id) return 0;
+    const row = histFind("videos", post.id);
+    if (!row) return 0;
+    if (row.duration > 1 && row.position > 0) return Math.max(0, Math.min(1, row.position / row.duration));
+    return Math.max(0, Math.min(1, Number(row.progress) || 0));
+  }
+
+  function noteArticle(post, extra) {
+    if (!post || !post.id || historyPaused("articles")) return;
+    histUpsert("articles", post, extra || {});
+  }
+
+  function countsAsArticle(post) {
+    if (!post) return false;
+    if (articleOf(post)) return true;
+    if (post.platform === "rss") return true;
+    const text = String(post.text || post.title || post.description || "");
+    return text.length >= 480;
+  }
+
+  function articleUrlIn(text) {
+    const match = String(text || "").match(/https?:\/\/(?:www\.)?(?:x|twitter)\.com\/(?:i\/article\/|(?:[A-Za-z0-9_]{1,30})\/article\/)([A-Za-z0-9]+)/i);
+    return match ? { id: match[1], url: match[0] } : null;
+  }
+
+  function articleOf(post) {
+    const art = post && post.article;
+    if (!art || typeof art !== "object") return null;
+    if (art.title || art.cover || art.preview || (art.blocks || []).length) return art;
+    return null;
+  }
+
+  function articleHash(post) {
+    const art = articleOf(post) || {};
+    const id = art.id || (post && (post.statusId || post.id)) || "";
+    return "#/article/" + encodeURIComponent(id);
+  }
+
+  function displayPost(post) {
+    if (!articleOf(post)) return post;
+    const text = String(post.text || "").replace(/https?:\/\/(?:www\.)?(?:x|twitter)\.com\/(?:i\/article\/[A-Za-z0-9]+|(?:[A-Za-z0-9_]{1,30})\/article\/[A-Za-z0-9]+)\S*/gi, " ").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    if (text === String(post.text || "").trim()) return post;
+    return Object.assign({}, post, { text: text });
+  }
+
+  function isArticleLink(link, post) {
+    if (!articleOf(post)) return false;
+    const url = String((link && link.url) || "");
+    return !!articleUrlIn(url);
+  }
+
+  function articleCardHtml(post) {
+    const art = articleOf(post);
+    if (!art || !post) return "";
+    const cover = art.cover ? `<img class="xa-cover" src="${esc(art.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
+    const title = art.title ? `<div class="xa-title">${esc(art.title)}</div>` : "";
+    const preview = art.preview ? `<div class="xa-preview">${esc(art.preview)}</div>` : "";
+    return `<a class="xa" href="${esc(articleHash(post))}" data-act="open-article" data-id="${esc(post.id)}">${cover}<div class="xa-copy">${title}${preview}<span class="xa-label">${icon("article")}<span>Article</span></span></div></a>`;
+  }
+
+  function watchArticle(post) {
+    if (!post || articleOf(post)) return;
+    const blob = [post.text, post.url, post.link && post.link.url].concat((post.links || []).map((item) => (item && (item.url || item.expanded_url)) || ""), (post.cards || []).map((item) => (item && item.url) || "")).join(" ");
+    if (!articleUrlIn(blob)) return;
+    const sid = String(post.statusId || post.id || "");
+    if (!/^\d{6,}$/.test(sid)) return;
+    STATE.articleTried = STATE.articleTried || {};
+    if (STATE.articleTried[sid] || (STATE.articleFlight || 0) >= 2) return;
+    STATE.articleTried[sid] = true;
+    STATE.articleFlight = (STATE.articleFlight || 0) + 1;
+    pullArticle(sid).then((art) => {
+      STATE.articleFlight = Math.max(0, (STATE.articleFlight || 1) - 1);
+      if (!art) return;
+      post.article = art;
+      render();
+    }).catch(() => { STATE.articleFlight = Math.max(0, (STATE.articleFlight || 1) - 1); });
+  }
+
+  function pullArticle(id) {
+    return fetchJson(FX + "/2/status/" + encodeURIComponent(id)).then((data) => {
+      const status = fxStatusObject(data) || data;
+      return articleFromStatus(status);
+    }).catch(() => null);
+  }
+
+  function normalizeArticle(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    if (raw.preview != null && raw.preview_text == null && raw.content == null && raw.cover_media == null) {
+      const title = String(raw.title || "").trim();
+      const preview = String(raw.preview || "").trim();
+      const cover = String(raw.cover || "").trim();
+      const blocks = Array.isArray(raw.blocks) ? raw.blocks : [];
+      if (!title && !preview && !cover && !blocks.length) return null;
+      const out = { id: String(raw.id || ""), title: title, preview: preview, cover: cover, url: String(raw.url || "") };
+      if (blocks.length) out.blocks = blocks;
+      return out;
+    }
+    const title = String(raw.title || "").trim();
+    const preview = String(raw.preview_text || raw.preview || raw.description || "").trim();
+    const articleId = String(raw.id || raw.rest_id || raw.article_id || "").trim();
+    let cover = "";
+    if (typeof raw.cover_url === "string") cover = raw.cover_url;
+    else if (typeof raw.image === "string") cover = raw.image;
+    const media = raw.cover_media || raw.cover || {};
+    if (!cover && typeof media === "string") cover = media;
+    if (!cover && media && typeof media === "object") {
+      const info = media.media_info || media.mediaInfo || {};
+      cover = info.original_img_url || info.url || media.url || media.media_url_https || "";
+    }
+    const url = String(raw.url || "") || (articleId ? "https://x.com/i/article/" + articleId : "");
+    const blocks = articleBlocks(raw);
+    if (!title && !preview && !cover && !blocks.length) return null;
+    const out = { id: articleId, title: title, preview: preview, cover: String(cover || ""), url: url };
+    if (blocks.length) out.blocks = blocks;
+    return out;
+  }
+
+  function articleEntityMap(content) {
+    const raw = content && content.entityMap;
+    const pairs = [];
+    if (Array.isArray(raw)) raw.forEach((item) => { if (item && item.key != null) pairs.push([item.key, item.value]); });
+    else if (raw && typeof raw === "object") Object.keys(raw).forEach((key) => pairs.push([key, raw[key]]));
+    const out = {};
+    pairs.forEach((pair) => {
+      const value = pair[1];
+      if (!value || typeof value !== "object") return;
+      const data = value.data && typeof value.data === "object" ? value.data : {};
+      const entry = { type: String(value.type || "") };
+      const tweet = data.tweetId || data.tweet_id || "";
+      if (tweet) entry.tweetId = String(tweet);
+      const media = data.media && typeof data.media === "object" ? data.media : {};
+      const info = media.media_info && typeof media.media_info === "object" ? media.media_info : data;
+      let url = "";
+      [info, data, media].forEach((src) => {
+        if (!src || typeof src !== "object" || url) return;
+        url = src.original_img_url || src.media_url_https || src.url || "";
+      });
+      if (url) entry.url = String(url);
+      const poster = info && (info.preview_image_url || info.thumbnail_url) || "";
+      if (poster) entry.poster = String(poster);
+      if (data.title || data.name) entry.title = String(data.title || data.name);
+      out[String(pair[0])] = entry;
+    });
+    return out;
+  }
+
+  function articleBlocks(raw) {
+    const content = raw.content || raw.content_state || {};
+    if (!content || typeof content !== "object" || !Array.isArray(content.blocks)) return [];
+    const entities = articleEntityMap(content);
+    const map = { unstyled: "paragraph", "header-one": "h1", "header-two": "h2", "header-three": "h3", blockquote: "quote", "unordered-list-item": "ul", "ordered-list-item": "ol", atomic: "atomic" };
+    const resolved = [];
+    content.blocks.slice(0, 400).forEach((block) => {
+      if (!block || typeof block !== "object") return;
+      const kind = map[String(block.type || "unstyled")] || "paragraph";
+      const text = String(block.text || "");
+      if (kind === "atomic") {
+        let ent = null;
+        (block.entityRanges || []).some((ref) => {
+          ent = entities[String(ref && ref.key)];
+          return !!ent;
+        });
+        if (!ent) return;
+        const etype = String(ent.type || "").toUpperCase();
+        if (etype === "TWEET" && ent.tweetId) resolved.push({ type: "embed", tweetId: ent.tweetId });
+        else if (ent.url && (etype.indexOf("VIDEO") >= 0 || etype === "ANIMATED_GIF")) {
+          const row = { type: "video", url: ent.url };
+          if (ent.poster) row.poster = ent.poster;
+          resolved.push(row);
+        } else if (ent.url && (etype === "IMAGE" || etype === "MEDIA" || etype === "PHOTO")) resolved.push({ type: "image", url: ent.url, alt: ent.title || "" });
+        else if (ent.url) resolved.push({ type: "link", url: ent.url, title: ent.title || ent.url });
+        return;
+      }
+      const row = { type: kind, text: text };
+      const styles = [];
+      (block.inlineStyleRanges || []).slice(0, 40).forEach((style) => {
+        const start = Number(style && style.offset) || 0;
+        const length = Number(style && style.length) || 0;
+        const name = String((style && style.style) || "");
+        if (length > 0 && name) styles.push({ start: start, end: start + length, style: name });
+      });
+      if (styles.length) row.styles = styles;
+      const links = [];
+      const data = block.data && typeof block.data === "object" ? block.data : {};
+      [["urls", ""], ["mentions", "https://x.com/"], ["hashtags", "https://x.com/hashtag/"]].forEach((bucket) => {
+        (data[bucket[0]] || []).slice(0, 20).forEach((span) => {
+          const label = String((span && span.text) || "");
+          const start = Number(span && span.fromIndex) || 0;
+          const end = Number(span && span.toIndex) || 0;
+          if (!label || end <= start) return;
+          const href = bucket[0] === "urls" ? label : bucket[1] + label.replace(/^[#@]/, "");
+          links.push({ start: start, end: end, url: href });
+        });
+      });
+      if (links.length) row.links = links;
+      if (!text.trim() && !links.length) return;
+      resolved.push(row);
+    });
+    return resolved;
+  }
+
+  function articleFromUrls(entities) {
+    const urls = entities && Array.isArray(entities.urls) ? entities.urls : (Array.isArray(entities) ? entities : []);
+    for (let i = 0; i < urls.length; i++) {
+      const entry = urls[i];
+      if (!entry || typeof entry !== "object") continue;
+      const expanded = entry.expanded_url || entry.unwound_url || entry.url || "";
+      const found = articleUrlIn(expanded);
+      if (!found) continue;
+      let cover = "";
+      const images = entry.images || entry.image || [];
+      if (Array.isArray(images) && images[0]) cover = typeof images[0] === "string" ? images[0] : (images[0].url || "");
+      else if (typeof images === "string") cover = images;
+      return normalizeArticle({ id: found.id, title: entry.title || "", preview_text: entry.description || "", url: expanded, cover_url: cover });
+    }
+    return null;
+  }
+
+  function articleFromStatus(status) {
+    if (!status || typeof status !== "object") return null;
+    if (status.article && typeof status.article === "object") {
+      const found = normalizeArticle(status.article);
+      if (found) return found;
+    }
+    return articleFromUrls(status.entities);
+  }
+
+  function inlineRich(block) {
+    const text = String((block && block.text) || "");
+    const points = [0, text.length];
+    (block.styles || []).forEach((span) => { points.push(Number(span.start) || 0, Number(span.end) || 0); });
+    (block.links || []).forEach((span) => { points.push(Number(span.start) || 0, Number(span.end) || 0); });
+    const cuts = points.filter((n, i, all) => n >= 0 && n <= text.length && all.indexOf(n) === i).sort((a, b) => a - b);
+    let out = "";
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const a = cuts[i];
+      const b = cuts[i + 1];
+      let chunk = esc(text.slice(a, b));
+      if (!chunk) continue;
+      (block.styles || []).forEach((span) => {
+        if (span.start > a || span.end < b) return;
+        if (span.style === "Bold") chunk = "<strong>" + chunk + "</strong>";
+        else if (span.style === "Italic") chunk = "<em>" + chunk + "</em>";
+        else if (span.style === "Strikethrough") chunk = "<s>" + chunk + "</s>";
+      });
+      const link = (block.links || []).find((span) => span.start <= a && span.end >= b);
+      if (link && link.url) chunk = `<a href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">${chunk}</a>`;
+      out += chunk;
+    }
+    return out || esc(text);
+  }
+
+  function readingMinutes(art) {
+    let words = 0;
+    ((art && art.blocks) || []).forEach((block) => {
+      words += String((block && block.text) || "").split(/\s+/).filter(Boolean).length;
+    });
+    if (!words) words = String((art && art.preview) || "").split(/\s+/).filter(Boolean).length;
+    return Math.max(1, Math.round(words / 220) || 1);
+  }
+
+  function articleBlockHtml(block) {
+    if (!block) return "";
+    if (block.type === "h1" || block.type === "h2") return `<h2 class="xa-h">${inlineRich(block)}</h2>`;
+    if (block.type === "h3") return `<h3 class="xa-h">${inlineRich(block)}</h3>`;
+    if (block.type === "quote") return `<blockquote>${inlineRich(block)}</blockquote>`;
+    if (block.type === "image" && block.url) return `<img class="xa-img" src="${esc(block.url)}" alt="${esc(block.alt || "")}" loading="lazy" referrerpolicy="no-referrer">`;
+    if (block.type === "video" && block.url) return `<video class="xa-video" controls playsinline ${block.poster ? `poster="${esc(block.poster)}"` : ""} src="${esc(block.url)}"></video>`;
+    if (block.type === "link" && block.url) return `<a class="xa-link" href="${esc(block.url)}" target="_blank" rel="noopener noreferrer">${esc(block.title || block.url)}</a>`;
+    if (block.type === "embed" && block.tweetId) {
+      const known = findAnyPost(block.tweetId);
+      if (known) return `<div class="xa-embed">${quoteCard(known)}</div>`;
+      if ((STATE.embedBudget || 0) < 6) {
+        STATE.embedBudget = (STATE.embedBudget || 0) + 1;
+        hydrateEmbed(block.tweetId);
+      }
+      return `<a class="xa-embed-link" href="#/x/i/status/${encodeURIComponent(block.tweetId)}">View post</a>`;
+    }
+    if (block.type === "ul" || block.type === "ol") return "";
+    return `<p>${inlineRich(block)}</p>`;
+  }
+
+  function articleBodyHtml(art) {
+    const blocks = (art && art.blocks) || [];
+    if (!blocks.length) {
+      const preview = art && art.preview ? `<div class="xa-fallback">${esc(art.preview)}</div>` : "";
+      const href = (art && art.url) || "";
+      const btn = href ? `<a class="xa-full" target="_blank" rel="noopener noreferrer" href="${esc(href)}">Read full article on X</a>` : "";
+      return preview + btn;
+    }
+    let html = "";
+    let i = 0;
+    while (i < blocks.length) {
+      const block = blocks[i];
+      if (block && (block.type === "ul" || block.type === "ol")) {
+        const tag = block.type;
+        let items = "";
+        while (i < blocks.length && blocks[i] && blocks[i].type === tag) {
+          items += `<li>${inlineRich(blocks[i])}</li>`;
+          i += 1;
+        }
+        html += `<${tag}>${items}</${tag}>`;
+        continue;
+      }
+      html += articleBlockHtml(block);
+      i += 1;
+    }
+    if (art.url) html += `<p class="xa-view"><a target="_blank" rel="noopener noreferrer" href="${esc(art.url)}">View on X</a></p>`;
+    return html;
+  }
+
+  function hydrateEmbed(id) {
+    const key = String(id || "");
+    if (!key) return;
+    STATE.embedPosts = STATE.embedPosts || {};
+    if (STATE.embedPosts[key] || findAnyPost(key)) return;
+    STATE.embedPosts[key] = "loading";
+    fxStatusPost(key).then((post) => {
+      STATE.embedPosts[key] = post || "miss";
+      if (post) STATE.shared[String(post.statusId || post.id)] = post;
+      if (parseRoute().name === "article") render();
+    }).catch(() => { STATE.embedPosts[key] = "miss"; });
+  }
+
+  function ensureArticleBody(post) {
+    const art = articleOf(post);
+    if (!art || (art.blocks || []).length) return;
+    const sid = String((post && (post.statusId || post.id)) || "");
+    if (!/^\d{6,}$/.test(sid)) return;
+    STATE.articleBodyTried = STATE.articleBodyTried || {};
+    if (STATE.articleBodyTried[sid]) return;
+    STATE.articleBodyTried[sid] = true;
+    pullArticle(sid).then((next) => {
+      if (!next || !(next.blocks || []).length) return;
+      post.article = next;
+      const live = posts().find((item) => item && (item.id === post.id || String(item.statusId || "") === sid));
+      if (live && live !== post) live.article = next;
+      if (parseRoute().name === "article") render();
+    }).catch(() => {});
+  }
+
+  function findArticle(id) {
+    const key = String(id || "");
+    const pool = posts().slice();
+    Object.keys(STATE.shared || {}).forEach((name) => { if (STATE.shared[name]) pool.push(STATE.shared[name]); });
+    (histEnsure().articles || []).forEach((row) => { if (row && row.post) pool.push(row.post); });
+    Object.keys((STATE.settings && STATE.settings.savedPosts) || {}).forEach((name) => {
+      const saved = STATE.settings.savedPosts[name];
+      if (saved) pool.push(saved);
+    });
+    return pool.find((post) => {
+      if (!post) return false;
+      const art = post.article || {};
+      return String(art.id || "") === key || String(post.id || "") === key || String(post.statusId || "") === key;
+    }) || null;
+  }
+
+  function articleScroll(id) {
+    const post = findArticle(id);
+    if (!post) return 0;
+    const row = histFind("articles", post.id);
+    return row ? Number(row.scroll) || 0 : 0;
+  }
+
+  function articleHead() {
+    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Article</h1></div></div>`;
+  }
+
+  function articleDate(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+  }
+
+  function articleView(route) {
+    const post = findArticle(route.id);
+    if (!post || !articleOf(post)) {
+      return articleHead() + emptyBlock("Article isn’t available", "This article isn’t in the current snapshot.");
+    }
+    ensureArticleBody(post);
+    if (STATE.notedArticle !== post.id) {
+      STATE.notedArticle = post.id;
+      noteArticle(post, {});
+    }
+    const art = articleOf(post);
+    const minutes = readingMinutes(art);
+    const face = authorFace(post);
+    const who = post.handle || "";
+    const followId = (post.platform === "discord" && post.guildId) ? "discord:" + post.guildId : (post.platform || "x") + ":" + who;
+    const cover = art.cover ? `<img class="xa-cover-lg" src="${esc(art.cover)}" alt="" referrerpolicy="no-referrer">` : "";
+    const when = articleDate(post.date);
+    return `${articleHead()}<article class="xa-page">
+      ${cover}
+      <h1 class="xa-title-lg">${esc(art.title || "Article")}</h1>
+      <div class="xa-author">
+        <a href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}" aria-label="${esc(post.author || who || "Profile")}">${avatar(face.avatar || post.avatar, post.author)}</a>
+        <div class="who">
+          <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}">${esc(post.author || who)}${badge(face.verified || post.verifiedType)}</a>
+          ${who ? `<a class="handle" href="${esc(accountHash(post.platform, who))}">@${esc(who)}</a>` : ""}
+        </div>
+        ${who ? followButtonClean(followId) : ""}
+      </div>
+      <div class="xa-date">${esc(when)}${when ? " · " : ""}${minutes} min read</div>
+      ${actionBar(post)}
+      <div class="xa-body">${articleBodyHtml(art)}</div>
+    </article>`;
+  }
+
+  function histPost(row) {
+    const live = findAnyPost(row.id);
+    const snap = row.post;
+    if (live && snap && snap.article && !articleOf(live)) return Object.assign({}, live, { article: snap.article });
+    return live || snap;
+  }
+
+  function histHay(row) {
+    const post = (row && row.post) || {};
+    const art = post.article || {};
+    return [post.author, post.handle, post.text, post.title, art.title, art.preview, row.platform, PLATFORM[row.platform] || ""].join(" ").toLowerCase();
+  }
+
+  function histRows(tab) {
+    const q = String(STATE.histQ || "").trim().toLowerCase();
+    const plat = STATE.histPlat || "";
+    const present = {};
+    (histEnsure()[tab] || []).forEach((row) => { if (row && row.platform) present[row.platform] = true; });
+    return (histEnsure()[tab] || []).filter((row) => {
+      if (!row || !histPost(row)) return false;
+      if (plat && present[plat] && row.platform !== plat) return false;
+      if (q && histHay(row).indexOf(q) < 0) return false;
+      return true;
+    }).slice(0, HIST_CAP);
+  }
+
+  function histDay(at) {
+    const ms = Number(at) || 0;
+    if (ms < 100000) return "Earlier";
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    if (ms >= start) return "Today";
+    if (ms >= start - 86400000) return "Yesterday";
+    return "Earlier";
+  }
+
+  function histList(rows) {
+    let html = "";
+    let day = "";
+    rows.forEach((row) => {
+      const label = histDay(row.at);
+      if (label !== day) {
+        day = label;
+        html += `<div class="hist-day">${esc(label)}</div>`;
+      }
+      const post = histPost(row);
+      if (post) html += card(post);
+    });
+    return html;
+  }
+
+  function histEmpty(tab, searching) {
+    if (searching) return emptyBlock("No results", "Nothing in this tab matches your search.");
+    if (tab === "likes") return emptyBlock("You don’t have any likes yet", "Tap the heart on any post to show it some love. When you do, it’ll show up here.");
+    if (tab === "videos") return emptyBlock("No videos yet", "Videos you watch show up here, so you can pick up where you left off.");
+    if (tab === "articles") return emptyBlock("No articles yet", "Articles and long posts you open show up here.");
+    return emptyBlock("Save posts for later", "Bookmark posts to easily find them again in the future.");
+  }
+
+  function histChips(tab) {
+    const present = {};
+    (histEnsure()[tab] || []).forEach((row) => { if (row && row.platform) present[row.platform] = true; });
+    const order = ["x", "youtube", "threads", "instagram", "vk", "rss", "discord", "telegram"].filter((name) => present[name]);
+    if (!order.length) return "";
+    const plat = order.indexOf(STATE.histPlat) >= 0 ? STATE.histPlat : "";
+    const chips = [`<button class="hist-chip${!plat ? " on" : ""}" type="button" data-act="hist-chip" data-plat="">All</button>`];
+    order.forEach((name) => {
+      chips.push(`<button class="hist-chip${plat === name ? " on" : ""}" type="button" data-act="hist-chip" data-plat="${name}">${esc(PLATFORM[name] || name)}</button>`);
+    });
+    return `<div class="hist-chips" aria-label="Platforms">${chips.join("")}</div>`;
+  }
+
+  function historyView(route) {
+    const tab = ["likes", "videos", "articles"].indexOf(route.tab) >= 0 ? route.tab : "bookmarks";
+    const q = STATE.histQ || "";
+    const rows = histRows(tab);
+    const tabs = [["bookmarks", "Bookmarks"], ["likes", "Likes"], ["videos", "Videos"], ["articles", "Articles"]].map((item) => {
+      return `<a class="tab${tab === item[0] ? " on" : ""}" href="#/history/${item[0]}"><span>${item[1]}</span></a>`;
+    }).join("");
+    const pause = tab === "videos" || tab === "articles"
+      ? `<button class="outline hist-pause${historyPaused(tab) ? " on" : ""}" type="button" data-act="hist-pause" data-tab="${tab}">${historyPaused(tab) ? "Resume history" : "Pause history"}</button>`
+      : "";
+    const note = tab === "likes" ? `<p class="hist-note">Your likes are private. Only you can see them.</p>` : "";
+    const body = rows.length ? histList(rows) : histEmpty(tab, !!String(q).trim() || !!(STATE.histPlat));
+    return `<div class="topbar tall hist-bar"><div class="page-head"><button class="icon-btn hist-back" type="button" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">History</h1></div><div class="tabs" role="tablist" aria-label="History">${tabs}</div></div>
+      <form class="hist-search"><label class="search"><span>${icon("search")}</span><input id="hist-q" type="search" value="${esc(q)}" placeholder="Search History" aria-label="Search History"></label></form>
+      ${histChips(tab)}
+      <div class="hist-tools">${pause}<button class="outline hist-clear" type="button" data-act="hist-clear" data-tab="${tab}">Clear all</button></div>
+      ${note}
+      ${body}`;
+  }
+
+
   function bookmarksView() {
     const list = bookmarkedPosts();
     return pageHead("Bookmarks", `<div class="subhead">@reader</div>`) + (list.length ? list.map((p) => card(p)).join("") : emptyBlock("Save posts for later", "Bookmark posts to easily find them again in the future."));
@@ -6325,7 +7153,7 @@
     const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${label}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     return pageHead("Settings", "", true) + `<div class="modal-body">
-      <p class="phandle">Follows, Lists, likes, and bookmarks stay in this browser.</p>
+      <p class="phandle">Follows, Lists, likes, bookmarks, and history stay in this browser.</p>
       <h2>Appearance</h2>
       <div class="theme-row">
         ${themeBtn("auto", "Auto")}
@@ -6363,7 +7191,7 @@
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>You</b><div class="phandle">@reader</div></div></div>
       <a href="#/lists">${icon("lists")} Lists</a>
-      <a href="#/bookmarks">${icon("bookmark")} Bookmarks</a>
+      <a href="#/history">${icon("clock")} History</a>
       <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} Subscriptions</a>
       <a href="#/feeds">${icon("spark")} Feeds</a>
       <a href="#/settings">${icon("more")} Settings</a>
@@ -6384,6 +7212,14 @@
 
   function modal() {
     if (STATE.removeFeed) return removeFeedDialog();
+    if (STATE.histClear) {
+      const tab = STATE.histClear;
+      const label = tab === "bookmarks" ? "bookmarks" : tab === "likes" ? "likes" : tab === "videos" ? "videos" : "articles";
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" style="max-width:320px;margin-top:20vh;padding:8px 0 16px" data-act="stop">
+        <div class="modal-body"><h2>Clear all ${esc(label)}?</h2><p class="phandle">This removes them from this device only.</p>
+        <button class="primary" data-act="hist-clear-go" style="background:#f4212e">Clear all</button>
+        <button class="outline" data-act="close-modal" style="margin-left:8px">Cancel</button></div></div></div>`;
+    }
     if (STATE.confirm) {
       return `<div class="modal-back"><div class="modal" role="dialog" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
         <div class="modal-body"><h2>Delete this List?</h2><p class="phandle">This can’t be undone.</p>
@@ -6480,7 +7316,7 @@
 
   function shell(main, route) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const top = (route.name === "messages" ? 0 : route.name === "explore" ? 124 : tall ? 106 : 53) + rowExtra;
     return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}`;
@@ -7137,6 +7973,10 @@
     ensureYtSubs(creator);
     const media = (post.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || (post.media || [])[0] || {};
     const id = postKey(post);
+    if (STATE.notedWatch !== id) {
+      STATE.notedWatch = id;
+      noteVideo(post, { touch: true });
+    }
     const clip = !!(media.type === "video" || media.type === "animated_gif" || youtubeId(post, media) || post.platform === "youtube");
     const mediaIndex = Math.max(0, (post.media || []).indexOf(media));
     const player = clip
@@ -7538,7 +8378,8 @@
     if (route.name === "feeds") return feedsView();
     if (route.name === "lists") return listsView();
     if (route.name === "list") return listView(route);
-    if (route.name === "bookmarks") return bookmarksView();
+    if (route.name === "history" || route.name === "bookmarks") return historyView(route.name === "history" ? route : { name: "history", tab: "bookmarks", query: route.query });
+    if (route.name === "article") return articleView(route);
     if (route.name === "subscriptions") return subsView(route);
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
@@ -7586,7 +8427,8 @@
 
   function navSection(name) {
     if (name === "list") return "lists";
-    if (name === "home" || name === "explore" || name === "notifications" || name === "messages" || name === "feeds" || name === "lists" || name === "bookmarks" || name === "settings" || name === "subscriptions") return name;
+    if (name === "bookmarks") return "history";
+    if (name === "home" || name === "explore" || name === "notifications" || name === "messages" || name === "feeds" || name === "lists" || name === "history" || name === "settings" || name === "subscriptions") return name;
     return "";
   }
 
@@ -7699,6 +8541,10 @@
   }
 
   function render(opts) {
+    const bare = (location.hash || "#/").split("?")[0];
+    if (bare === "#/bookmarks" || bare === "#/history") {
+      history.replaceState(null, "", location.pathname + location.search + "#/history/bookmarks");
+    }
     const gen = (STATE.renderGen = (STATE.renderGen || 0) + 1);
     const route = parseRoute();
     syncHomeFromQuery(route);
@@ -7706,6 +8552,18 @@
     if (!(route.name === "home" && STATE.tabMenu === currentTab)) STATE.tabMenu = null;
     const nextKey = routeScrollKey();
     const routeChanged = !!STATE.scrollKey && STATE.scrollKey !== nextKey;
+    if (route.name !== "watch") STATE.notedWatch = "";
+    if (route.name !== "status") STATE.notedStatus = "";
+    if (route.name !== "article") STATE.notedArticle = "";
+    if (route.name === "article") {
+      if (STATE.embedFor !== String(route.id || "")) {
+        STATE.embedFor = String(route.id || "");
+        STATE.embedBudget = 0;
+      }
+    } else if (STATE.embedFor) {
+      STATE.embedFor = "";
+      STATE.embedBudget = 0;
+    }
     if (route.name === "status") {
       const sid = String(route.id || "");
       if (STATE.openReply !== sid) {
@@ -7749,6 +8607,13 @@
       else if (STATE.holdY != null) y = STATE.holdY;
       else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
       document.getElementById("app").innerHTML = shell(view(route), route);
+      if (route.name === "article" && STATE.scrollKey !== nextKey) {
+        const saved = articleScroll(route.id);
+        if (saved > 0.02) {
+          const max = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+          y = Math.round(saved * max);
+        }
+      }
       previewAnchor = y;
       const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
@@ -7879,7 +8744,7 @@
     if (act === "drawer") { STATE.drawer = true; render(); return; }
     if (act === "close-drawer") { STATE.drawer = false; render(); return; }
     if (act === "compose") { STATE.modal = "compose"; render(); return; }
-    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.confirm = null; STATE.removeFeed = null; render(); return; }
+    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; render(); return; }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
       const feed = feedById(id);
@@ -8076,14 +8941,70 @@
       if (STATE.settings[bucket][id]) {
         delete STATE.settings[bucket][id];
         if (act === "bookmark" && STATE.settings.savedPosts) delete STATE.settings.savedPosts[id];
+        if (act === "like") histRemove("likes", id);
+        if (act === "bookmark") histRemove("bookmarks", id);
       } else {
-        STATE.settings[bucket][id] = true;
+        STATE.settings[bucket][id] = Date.now();
+        const likedPost = findAnyPost(id);
         if (act === "bookmark") {
           rememberBookmark(id);
+          histUpsert("bookmarks", likedPost || findAnyPost(id), { id: id });
           if (!navigator.onLine) toast("Saved. Images download when you’re back online.");
         }
+        if (act === "like") histUpsert("likes", likedPost, { id: id });
       }
       saveSettings();
+      render();
+      return;
+    }
+    if (act === "open-article") {
+      const post = findAnyPost(el.dataset.id);
+      if (post) noteArticle(post, {});
+      return;
+    }
+    if (act === "open-link") {
+      const post = findAnyPost(el.dataset.id);
+      if (post) noteArticle(post, {});
+      return;
+    }
+    if (act === "hist-pause") {
+      const tab = el.dataset.tab;
+      STATE.settings.historyPause = cleanHistoryPause(STATE.settings.historyPause);
+      if (tab === "videos") STATE.settings.historyPause.videos = !STATE.settings.historyPause.videos;
+      if (tab === "articles") STATE.settings.historyPause.articles = !STATE.settings.historyPause.articles;
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "hist-chip") {
+      STATE.histPlat = el.dataset.plat || "";
+      render();
+      return;
+    }
+    if (act === "hist-clear") {
+      STATE.histClear = el.dataset.tab || "bookmarks";
+      render();
+      return;
+    }
+    if (act === "hist-clear-go") {
+      wipeHistory(STATE.histClear || "bookmarks");
+      STATE.histClear = "";
+      render();
+      return;
+    }
+    if (act === "hist-remove") {
+      const tab = el.dataset.tab || "bookmarks";
+      const id = el.dataset.id || "";
+      if (tab === "bookmarks") {
+        delete STATE.settings.bookmarks[id];
+        if (STATE.settings.savedPosts) delete STATE.settings.savedPosts[id];
+        saveSettings();
+      } else if (tab === "likes") {
+        delete STATE.settings.likes[id];
+        saveSettings();
+      }
+      histRemove(tab, id);
+      STATE.menu = null;
       render();
       return;
     }
@@ -8454,7 +9375,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0 }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause) }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "superintelapp-settings.json";
@@ -8586,6 +9507,11 @@
       if (btn) btn.disabled = !el.value.trim();
       return;
     }
+    if (el.id === "hist-q") {
+      STATE.histQ = el.value;
+      render();
+      return;
+    }
     if (el.dataset && el.dataset.field) {
       STATE.draft[el.dataset.field] = el.value;
       if (el.dataset.field === "name") {
@@ -8597,6 +9523,13 @@
   });
 
   document.addEventListener("submit", (event) => {
+    if (event.target.closest && event.target.closest("form.hist-search")) {
+      event.preventDefault();
+      const input = event.target.querySelector("#hist-q");
+      STATE.histQ = input ? input.value : STATE.histQ;
+      render();
+      return;
+    }
     const muteForm = event.target.closest("form.mute-form");
     if (muteForm) {
       event.preventDefault();
@@ -8683,6 +9616,7 @@
         if (Array.isArray(data.bellNotes)) STATE.settings.bellNotes = cleanBellNotes(data.bellNotes);
         if (Array.isArray(data.bellSeen)) STATE.settings.bellSeen = data.bellSeen.map((id) => String(id)).slice(-500);
         if (data.bellRead) STATE.settings.bellRead = Number(data.bellRead) || 0;
+        if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.historyPause);
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();
@@ -8706,6 +9640,7 @@
       STATE.tabMenu = null;
       STATE.bellMenu = null;
       STATE.confirm = null;
+      STATE.histClear = "";
       STATE.removeFeed = null;
       render();
     }
@@ -8768,6 +9703,18 @@
       const stateNum = Number(state);
       if (!isFinite(stateNum)) return;
       const current = info && typeof info === "object" ? Number(info.currentTime || 0) : 0;
+      if (current >= 3) {
+        const post = playPost(tile);
+        if (post) noteVideo(post, { position: current, touch: false });
+      }
+      if (stateNum === 1 && !tile._ytClock) {
+        tile._ytClock = setInterval(() => {
+          if (!tile.isConnected) { clearInterval(tile._ytClock); tile._ytClock = 0; return; }
+          try {
+            frame.contentWindow.postMessage(JSON.stringify({ event: "command", func: "getCurrentTime", args: [], id: frame.id, channel: "widget" }), "*");
+          } catch (err) { /* the embed may have moved */ }
+        }, 2000);
+      }
       if (stateNum === 1 || current > 0.15) {
         notePlay(tile, stateNum === 1 ? "youtube-playing" : "youtube-time");
         markShown(tile);
@@ -8881,6 +9828,16 @@
     if (pageY() <= 4) STATE.snapTop = false;
     if (routing || scrollFreeze || !STATE.scrollKey) return;
     SCROLLS[STATE.scrollKey] = window.scrollY;
+    const route = parseRoute();
+    if (route.name !== "article") return;
+    clearTimeout(STATE.articleScrollTimer);
+    STATE.articleScrollTimer = setTimeout(() => {
+      const post = findArticle(route.id);
+      if (!post) return;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const ratio = max > 80 ? Math.max(0, Math.min(1, pageY() / max)) : 0;
+      noteArticle(post, { scroll: ratio, touch: false });
+    }, 400);
   }, { passive: true });
   document.addEventListener("click", (event) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -8965,7 +9922,7 @@
   function slimPost(post) {
     if (!post) return null;
     const media = (post.media || []).slice(0, 4).map((item) => ({ type: item.type, url: item.url || "", poster: item.poster || "", alt: item.alt || "" }));
-    return {
+    const row = {
       id: post.id,
       statusId: post.statusId || post.id,
       platform: post.platform,
@@ -8981,6 +9938,10 @@
       media: media,
       stats: post.stats || {}
     };
+    const article = slimArticle(post.article);
+    if (article) row.article = article;
+    if (post.link && post.link.url) row.link = { url: post.link.url, title: post.link.title || "", description: post.link.description || "", image: post.link.image || "", site: post.link.site || "" };
+    return row;
   }
 
   function rememberBookmark(id) {
@@ -10378,6 +11339,7 @@
     loadStatus();
     STATE.settings = loadSettings();
     applyTheme();
+    histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
     loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
     const snap = loadTimelineSnap();
     if (snap) {
@@ -10404,6 +11366,7 @@
       applyTheme();
       STATE.loading = false;
       saveSettings();
+      Promise.resolve(STATE.histLoading).then(() => histSyncSaves());
       if (STATE.incoming && (location.hash === "#/incoming" || location.hash === "#/" || location.hash === "")) {
         const shared = parseSharedLink([STATE.incoming.url, STATE.incoming.text, STATE.incoming.title].filter(Boolean).join(" "));
         if (shared) {

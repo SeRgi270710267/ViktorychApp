@@ -1,0 +1,113 @@
+{
+  "code": 200,
+  "tweet": {
+    "url": "https://x.com/X/status/2007184284944322584",
+    "id": "2007184284944322584",
+    "text": "",
+    "author": {
+      "screen_name": "X",
+      "name": "X",
+      "avatar_url": "https://pbs.twimg.com/profile_images/1955359038532653056/OSHY3ewP_200x200.jpg",
+      "verification": {
+        "type": "organization",
+        "verified": true
+      }
+    },
+    "replies": 945,
+    "retweets": 340,
+    "likes": 1528,
+    "bookmarks": 143,
+    "quotes": 72,
+    "views": 993165,
+    "created_at": "Fri Jan 02 20:16:39 +0000 2026",
+    "article": {
+      "id": "2007138660165009408",
+      "title": "this week on X: new week, new year, same me ",
+      "preview_text": "january 2, 2026\nthe latest news & updates across X, from what we’ve shipped to what everyone’s talking about this week\nhappy New Year from X\n \n \n \n \n \n \nproduct & eng\ncoming soon for creators\n \nthe",
+      "cover_media": {
+        "media_info": {
+          "original_img_url": "https://pbs.twimg.com/media/G9rKDGFXUAAPHJZ.jpg",
+          "original_img_width": 1600,
+          "original_img_height": 640
+        }
+      },
+      "content": {
+        "blocks": [
+          {
+            "data": {},
+            "entityRanges": [],
+            "inlineStyleRanges": [
+              {
+                "length": 15,
+                "offset": 0,
+                "style": "Bold"
+              }
+            ],
+            "key": "7bbst",
+            "text": "january 2, 2026",
+            "type": "unstyled"
+          },
+          {
+            "data": {},
+            "entityRanges": [],
+            "inlineStyleRanges": [],
+            "key": "c5sld",
+            "text": "the latest news & updates across X, from what we’ve shipped to what everyone’s talking about this week",
+            "type": "unstyled"
+          },
+          {
+            "data": {},
+            "entityRanges": [],
+            "inlineStyleRanges": [],
+            "key": "dlj4h",
+            "text": "happy New Year from X",
+            "type": "header-two"
+          },
+          {
+            "data": {},
+            "entityRanges": [
+              {
+                "key": 0,
+                "length": 1,
+                "offset": 0
+              }
+            ],
+            "inlineStyleRanges": [],
+            "key": "76qn8",
+            "text": " ",
+            "type": "atomic"
+          },
+          {
+            "data": {},
+            "entityRanges": [],
+            "inlineStyleRanges": [],
+            "key": "8vkl4",
+            "text": "product & eng",
+            "type": "header-two"
+          },
+          {
+            "data": {},
+            "entityRanges": [],
+            "inlineStyleRanges": [],
+            "key": "9g1uc",
+            "text": "coming soon for creators",
+            "type": "unstyled"
+          }
+        ],
+        "entityMap": [
+          {
+            "key": "0",
+            "value": {
+              "data": {
+                "entityKey": "990b8673-01f6-42c3-adae-cd43cda4a915",
+                "tweetId": "2006547012154700211"
+              },
+              "mutability": "Immutable",
+              "type": "TWEET"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

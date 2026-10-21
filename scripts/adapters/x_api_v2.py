@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 
+from .article import article_from_status
 from .common import (
     best_mp4,
     blank_profile,
@@ -215,6 +216,7 @@ def _convert(tweet: dict, ctx: dict, feed: dict, timeline: bool) -> dict:
         repostedBy=reposted_by,
         replyingTo=replying,
         quoted=quoted,
+        article=article_from_status(tweet),
     )
 
 

@@ -425,6 +425,51 @@ def page_html(page: dict) -> str:
         avatar = f'<img class="avatar" src="{esc(page["avatar"])}" alt="">'
     route = json.dumps(page["hash"]).replace("<", "\\u003c")
     text = page.get("body") or ""
+    if page.get("layout") == "article":
+        cover = f'<img class="cover" src="{esc(page["cover"])}" alt="">' if page.get("cover") else ""
+        full = ""
+        if page.get("full_url") and not page.get("has_body"):
+            full = f'<a class="open" href="{esc(page["full_url"])}">Read full article on X</a>'
+        minutes = f'<p class="mins">{esc(page["minutes"])}</p>' if page.get("minutes") else ""
+        return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+{meta_tags(page)}
+<style>
+  body {{ margin: 0; background: #000; color: #e7e9ea; font: 20px/28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+  article {{ max-width: 600px; margin: 0 auto; padding: 0 0 48px; }}
+  .cover {{ width: 100%; aspect-ratio: 2 / 1; object-fit: cover; background: #16181c; display: block; }}
+  h1 {{ font-size: 34px; line-height: 40px; font-weight: 800; margin: 20px 16px 8px; }}
+  .who {{ display: flex; gap: 12px; align-items: center; margin: 8px 16px 4px; }}
+  .avatar {{ width: 40px; height: 40px; border-radius: 999px; object-fit: cover; background: #2f3336; }}
+  .name {{ font-size: 15px; font-weight: 700; margin: 0; }}
+  .handle {{ color: #71767b; margin: 2px 0 0; font-size: 15px; }}
+  .mins {{ color: #71767b; font-size: 15px; margin: 0 16px 12px; }}
+  .text {{ white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 16px 16px; }}
+  .open {{ display: inline-block; margin: 8px 16px; background: #eff3f4; color: #0f1419; text-decoration: none; font-weight: 700; border-radius: 999px; padding: 10px 18px; font-size: 15px; }}
+</style>
+</head>
+<body>
+<article>
+  {cover}
+  <h1>{esc(page.get("article_title") or page.get("title") or "Article")}</h1>
+  <div class="who">{avatar}<div><p class="name">{esc(page.get("author") or "")}</p><p class="handle">{esc(page.get("byline") or "")}</p></div></div>
+  {minutes}
+  {f'<p class="text">{esc(text)}</p>' if text else ''}
+  {full}
+  <a class="open" href="{esc(page["open_href"])}">Open in {SITE_NAME}</a>
+</article>
+<script>
+(function () {{
+  var ua = navigator.userAgent || "";
+  if (/bot|crawl|spider|facebookexternalhit|WhatsApp|Telegram|Slack|Discord|Twitter|vkShare/i.test(ua)) return;
+  var path = location.pathname.replace(/\\/(?:s|u)\\/[^/]+$/, "/");
+  location.replace(path + {route});
+}})();
+</script>
+</body>
+</html>
+"""
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -545,6 +590,41 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
         write_page(site / "s", f"{platform}-{token}.html", page)
         seen.add(platform + ":" + token)
         counts["posts"] += 1
+        article = post.get("article") if isinstance(post.get("article"), dict) else None
+        if article and (article.get("title") or article.get("cover")):
+            article_id = safe_slug(str(article.get("id") or token))
+            if article_id:
+                blocks = article.get("blocks") if isinstance(article.get("blocks"), list) else []
+                words = []
+                for block in blocks:
+                    if isinstance(block, dict) and block.get("text"):
+                        words.append(str(block.get("text")))
+                body = "\n\n".join(words).strip()
+                if not body:
+                    body = str(article.get("preview") or "").strip()
+                count = len(body.split())
+                minutes = (str(max(1, round(count / 220))) + " min read") if count else ""
+                route = "#/article/" + quote(str(article.get("id") or route_id(post)), safe="")
+                article_page = dict(page)
+                article_page.update({
+                    "layout": "article",
+                    "title": str(article.get("title") or page["title"]),
+                    "article_title": str(article.get("title") or "Article"),
+                    "description": trim(str(article.get("preview") or body)) or page["description"],
+                    "url": join_url(base, f"s/article-{article_id}.html"),
+                    "hash": route,
+                    "open_href": "../" + route,
+                    "cover": https(article.get("cover")),
+                    "body": body[:8000],
+                    "has_body": any(isinstance(block, dict) and block.get("type") not in ("embed",) and block.get("text") for block in blocks),
+                    "full_url": str(article.get("url") or post.get("url") or ""),
+                    "minutes": minutes,
+                })
+                cover = article_page["cover"]
+                if cover:
+                    article_page["image"] = {"url": cover, "width": 1600, "height": 800, "kind": "image"}
+                write_page(site / "s", f"article-{article_id}.html", article_page)
+                counts["articles"] = counts.get("articles", 0) + 1
         video = youtube_id(post, token)
         if player and video:
             watch = dict(page)

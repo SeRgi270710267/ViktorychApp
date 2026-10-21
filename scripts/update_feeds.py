@@ -90,7 +90,7 @@ def apply_override(profile: dict, feed: dict) -> dict:
     merged["handle"] = feed.get("handle") or merged.get("handle") or ""
     merged["name"] = merged.get("name") or feed.get("handle") or ""
     merged["title"] = merged.get("name")
-    merged["configured"] = True
+    merged["configured"] = feed.get("defaultFollow", True) is not False
     if feed.get("channelId") and not merged.get("channelId"):
         merged["channelId"] = feed["channelId"]
     if not merged.get("url"):
@@ -565,6 +565,32 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                 cap = int(feed.get("limit") or 20)
                 posts.extend(replies[:cap])
                 print(f"[ok] {feed['id']}: {len(replies[:cap])} replies")
+            articles_url = ""
+            bare = source_url.split("?")[0].rstrip("/")
+            if bare.endswith("/statuses"):
+                articles_url = bare[: -len("/statuses")] + "/articles?count=10"
+            elif bare.endswith("/media"):
+                articles_url = bare[: -len("/media")] + "/articles?count=10"
+            if articles_url:
+                try:
+                    extra_articles = run_adapter("fxtwitter", read_source(articles_url), feed)
+                except Exception as exc:
+                    extra_articles = {}
+                    print(f"[keep] {feed['id']}: articles: {exc}", file=sys.stderr)
+                added = 0
+                previous = {str(item.get("id") or ""): item for item in old_by_feed.get(feed["id"], [])}
+                for post in extra_articles.get("posts") or []:
+                    if str(post.get("id") or "") in have or not post.get("article"):
+                        continue
+                    old = previous.get(str(post.get("id") or "")) or {}
+                    old_article = old.get("article") if isinstance(old.get("article"), dict) else {}
+                    if old_article.get("blocks") and not post["article"].get("blocks"):
+                        post["article"]["blocks"] = old_article["blocks"]
+                    have.add(str(post.get("id") or ""))
+                    posts.append(post)
+                    added += 1
+                if added:
+                    print(f"[ok] {feed['id']}: {added} articles")
         if adapter == "youtube_rss" and not use_fixtures:
             from yt_remote import carry_youtube_fields
 
@@ -572,7 +598,10 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             carry_youtube_fields(posts, old_by_feed.get(feed["id"], []), saved)
         limit = feed.get("limit")
         if limit:
-            posts = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)[: int(limit)]
+            ranked = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)
+            articles = [post for post in ranked if post.get("article")]
+            rest = [post for post in ranked if not post.get("article")][: int(limit)]
+            posts = articles + rest
         if feed.get("platform") == "youtube" and not use_fixtures:
             from adapters.youtube_community import fetch_community
 

@@ -715,6 +715,9 @@ def post_shell(**kwargs) -> dict:
         "replyingTo": kwargs.get("replyingTo"),
         "quoted": kwargs.get("quoted"),
     }
+    article = kwargs.get("article")
+    if isinstance(article, dict) and (article.get("title") or article.get("cover") or article.get("preview") or article.get("blocks")):
+        post["article"] = article
     if kwargs.get("sortDate"):
         post["sortDate"] = kwargs["sortDate"]
     stats = kwargs.get("stats") or {}
