@@ -898,7 +898,7 @@ def main() -> None:
         profile_html = (share_root / "u" / "x-ada.html").read_text(encoding="utf-8")
         check(counts["posts"] == 7 and counts["watch"] == 1 and counts["profiles"] == 1 and counts["stubs"] == 1 and counts["spaces"] == 1, "share pages cover posts, a watch page, a profile, a new stub, and a Space")
         space_html = (share_root / "s" / "space-superintelmusic.html").read_text(encoding="utf-8")
-        check('og:title" content="SuperintelMusic"' in space_html and 'og:description" content="Live Space"' in space_html and "#/spaces/superintelmusic" in space_html and "streamTitle" not in space_html, "a Space share page uses the station title and cover, not a track name")
+        check('og:title" content="SuperintelMusic"' in space_html and 'og:description" content="Live Space"' in space_html and "#/spaces/superintelmusic" in space_html and "streamTitle" not in space_html and "rss-feeds" not in space_html and 'src="../icons/' in space_html, "a Space share page uses the station title and a relative cover, not a track name")
         discord_html = (share_root / "s" / "discord-discord-10-20.html").read_text(encoding="utf-8")
         check('og:title" content="Ada (@ada) on Discord"' in discord_html and "#/discord/ada/status/discord%3A10%3A20" in discord_html, "an id with colons still gets a share page and opens that post")
         check(not (share_root / "s" / "stale.html").exists(), "rebuilding share pages removes pages from the previous deploy")

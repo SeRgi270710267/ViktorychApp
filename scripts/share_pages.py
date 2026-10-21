@@ -628,14 +628,12 @@ def write_space_pages(site: Path, base: str, brand: str) -> int:
         cover = str(space.get("cover") or "").strip()
         image_url = https(cover)
         if not image_url and cover and not cover.startswith(("http://", "https://", "//")):
-            image_url = join_url(base, cover)
-        if not image_url:
-            image_url = brand
+            image_url = "../" + cover.lstrip("/")
         route = "#/spaces/" + quote(ident, safe="")
         write_page(site / "s", f"space-{ident}.html", {
             "title": title,
             "description": "Live Space",
-            "url": join_url(base, f"s/space-{ident}.html"),
+            "url": f"space-{ident}.html",
             "image": {"url": image_url, "width": 320, "height": 320, "kind": "image"},
             "og_type": "website",
             "player": "",
@@ -644,7 +642,7 @@ def write_space_pages(site: Path, base: str, brand: str) -> int:
             "open_href": "../" + route,
             "author": title,
             "byline": "Live Space",
-            "avatar": image_url if image_url != brand else "",
+            "avatar": image_url,
             "body": "",
         })
         count += 1
