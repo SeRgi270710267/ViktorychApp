@@ -385,6 +385,7 @@ img { max-width: 100%; }
   justify-content: center;
   padding: 0 0 0 4px;
 }
+.play { z-index: 3; }
 .play svg { width: 28px; height: 28px; fill: #fff; }
 .alt-badge, .gif-badge {
   position: absolute;
@@ -415,6 +416,14 @@ img { max-width: 100%; }
 }
 .vplay { cursor: pointer; background: #000; min-height: 180px; }
 .media.m1 .vplay { min-height: 220px; }
+.vplay .vposter {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.vplay .vdur, .vplay .gif-badge { z-index: 3; }
 .vplay video, .vplay iframe {
   position: absolute;
   inset: 0;
@@ -425,10 +434,42 @@ img { max-width: 100%; }
   z-index: 1;
   object-fit: contain;
 }
-.vplay.is-playing .vposter,
-.vplay.is-playing > .play,
-.vplay.is-playing .vdur,
-.vplay.is-playing .gif-badge { visibility: hidden; }
+.vplay.is-shown .vposter,
+.vplay.is-shown > .play,
+.vplay.is-shown .vdur { visibility: hidden; }
+.vmute {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 4;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 20, 25, 0.75);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.vmute svg { width: 18px; height: 18px; fill: #fff; }
+.vmute[hidden], .vleft[hidden] { display: none !important; }
+.vleft {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 4;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  border-radius: 4px;
+  padding: 2px 4px;
+  pointer-events: none;
+}
+.player .vmute, .player .vleft { display: none !important; }
 .vplay.is-failed { cursor: default; }
 .vplay.is-failed > .play,
 .vplay.is-failed .vdur { display: none; }
@@ -1407,7 +1448,13 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 .yt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 16px; }
 .yt-card { display: block; color: inherit; }
 .yt-thumb { position: relative; aspect-ratio: 16 / 9; background: var(--banner); border-radius: 12px; overflow: hidden; }
+.yt-thumb.vplay { min-height: 0; background: #000; }
 .yt-thumb img, .yt-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.yt-thumb > img { position: absolute; inset: 0; z-index: 2; }
+.yt-thumb video, .yt-thumb iframe { position: absolute; inset: 0; z-index: 1; border: 0; background: #000; }
+.yt-thumb .plat, .yt-thumb .yt-time { z-index: 3; }
+.yt-thumb.is-shown > img { visibility: hidden; }
+.yt-thumb.is-shown video, .yt-thumb.is-shown iframe { z-index: 2; }
 .yt-thumb.broken img, .yt-thumb.broken video { display: none; }
 .yt-time {
   position: absolute;
@@ -1641,14 +1688,16 @@ html[data-theme="default"] .account-pill:hover { background: rgba(15, 20, 25, 0.
   overscroll-behavior: none;
 }
 #viewer[hidden] { display: none; }
-#viewer img {
+#viewer img, #viewer video {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  background: #000;
 }
+#viewer video { width: 100%; height: 100%; }
 .viewer-x {
   position: absolute;
   top: calc(12px + env(safe-area-inset-top));
