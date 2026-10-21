@@ -6678,8 +6678,19 @@
   let tabScrollLeft = null;
   let tabScrollRoute = "";
 
+  function revealSelectedTab(scroller) {
+    const current = scroller.querySelector(".tab-pair.on") || scroller.querySelector(".tab.on");
+    if (!current) return;
+    const pad = 48;
+    const box = current.getBoundingClientRect();
+    const host = scroller.getBoundingClientRect();
+    if (box.right > host.right - pad) scroller.scrollLeft += box.right - (host.right - pad);
+    else if (box.left < host.left + pad) scroller.scrollLeft -= host.left + pad - box.left;
+  }
+
   function syncTabArrows() {
     const scroller = document.querySelector(".tabs");
+    const bar = document.querySelector(".tabs-bar");
     const left = document.querySelector(".tab-arrow.left");
     const right = document.querySelector(".tab-arrow.right");
     if (!scroller || !left || !right) return;
@@ -6689,20 +6700,17 @@
       const sameTab = tabScrollRoute === route && tabScrollLeft != null;
       tabScrollRoute = route;
       if (sameTab) scroller.scrollLeft = tabScrollLeft;
-      else {
-        const current = scroller.querySelector(".tab-pair.on") || scroller.querySelector(".tab.on");
-        if (current) {
-          const box = current.getBoundingClientRect();
-          const host = scroller.getBoundingClientRect();
-          const pad = window.innerWidth < 500 ? 8 : 36;
-          if (box.right > host.right - pad) scroller.scrollLeft += box.right - host.right + pad;
-          else if (box.left < host.left + pad) scroller.scrollLeft -= host.left + pad - box.left;
-        }
-      }
+      else revealSelectedTab(scroller);
     }
     const max = scroller.scrollWidth - scroller.clientWidth;
-    left.hidden = max <= 2 || scroller.scrollLeft <= 2;
-    right.hidden = max <= 2 || scroller.scrollLeft >= max - 2;
+    const canLeft = max > 2 && scroller.scrollLeft > 2;
+    const canRight = max > 2 && scroller.scrollLeft < max - 2;
+    left.hidden = !canLeft;
+    right.hidden = !canRight;
+    if (bar) {
+      bar.classList.toggle("is-fade-left", canLeft);
+      bar.classList.toggle("is-fade-right", canRight);
+    }
     tabScrollLeft = scroller.scrollLeft;
     if (scroller.dataset.arrows !== "1") {
       scroller.dataset.arrows = "1";
@@ -6957,9 +6965,14 @@
     if (act === "tab-scroll") {
       const scroller = document.querySelector(".tabs");
       if (!scroller) return;
-      scroller.scrollBy({ left: (Number(el.dataset.dir) || 1) * Math.max(140, scroller.clientWidth * 0.7), behavior: "auto" });
-      tabScrollLeft = scroller.scrollLeft;
+      const dir = Number(el.dataset.dir) || 1;
+      const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      const amount = scroller.clientWidth || 240;
+      const next = Math.max(0, Math.min(max, scroller.scrollLeft + dir * amount));
+      const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      tabScrollLeft = next;
       tabScrollRoute = routeScrollKey();
+      scroller.scrollTo({ left: next, behavior: reduced ? "auto" : "smooth" });
       syncTabArrows();
       return;
     }

@@ -26,6 +26,9 @@
   --ava: #2f3336;
   --initials-bg: #3d4248;
   --initials-fg: #fff;
+  --tab-arrow: rgba(61, 66, 72, 0.78);
+  --tab-arrow-hover: rgba(91, 98, 107, 0.92);
+  --tab-arrow-shadow: 0 0 8px rgba(0, 0, 0, 0.45);
   --font: TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --top: 53px;
   color-scheme: dark;
@@ -40,6 +43,9 @@ html[data-theme="dim"] {
   --banner: #38444d;
   --sheet: #15202b;
   --topbar: rgba(21, 32, 43, 0.85);
+  --tab-arrow: rgba(56, 68, 77, 0.82);
+  --tab-arrow-hover: rgba(90, 106, 120, 0.92);
+  --tab-arrow-shadow: 0 0 8px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }
 html[data-theme="default"] {
@@ -63,6 +69,9 @@ html[data-theme="default"] {
   --ava: #cfd9de;
   --initials-bg: #cfd9de;
   --initials-fg: #0f1419;
+  --tab-arrow: rgba(255, 255, 255, 0.88);
+  --tab-arrow-hover: rgba(247, 249, 249, 0.98);
+  --tab-arrow-shadow: 0 0 8px rgba(101, 119, 134, 0.35);
   color-scheme: light;
 }
 .vh {
@@ -241,6 +250,7 @@ img { max-width: 100%; }
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   flex: 1;
   min-width: 0;
@@ -316,6 +326,8 @@ img { max-width: 100%; }
 .tab-caret:hover, .tab-caret[aria-expanded="true"] { background: var(--hover); }
 .tab-caret svg { width: 16px; height: 16px; fill: currentColor; }
 .tab-manage {
+  position: relative;
+  z-index: 5;
   flex: none;
   width: 46px;
   height: 53px;
@@ -329,25 +341,59 @@ img { max-width: 100%; }
 }
 .tab-manage:hover { background: var(--hover); }
 .tab-manage svg { width: 20px; height: 20px; fill: currentColor; }
+.tabs-bar::before,
+.tabs-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+}
+.tabs-bar.is-fade-left::before {
+  left: 0;
+  opacity: 1;
+  background: linear-gradient(to right, var(--bg) 0%, var(--bg) 22%, transparent 100%);
+}
+.tabs-bar.is-fade-right::after {
+  right: 46px;
+  opacity: 1;
+  background: linear-gradient(to left, var(--bg) 0%, var(--bg) 22%, transparent 100%);
+}
 .tab-arrow {
   position: absolute;
-  top: 10px;
-  z-index: 3;
-  width: 32px;
-  height: 32px;
+  top: 50%;
+  z-index: 4;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  border: 0;
   border-radius: 9999px;
-  border: 1px solid var(--line);
-  background: var(--bg);
+  padding: 0;
   color: var(--text);
+  background: var(--tab-arrow);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: var(--tab-arrow-shadow);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
-  box-shadow: 0 0 8px var(--shadow);
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, background 0.15s ease;
 }
+.tabs-bar:hover .tab-arrow:not([hidden]),
+.tabs-bar:focus-within .tab-arrow:not([hidden]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tab-arrow:hover { background: var(--tab-arrow-hover); }
 .tab-arrow svg { width: 18px; height: 18px; fill: currentColor; }
-.tab-arrow.left { left: 6px; }
-.tab-arrow.right { right: 52px; }
+.tab-arrow.left { left: 8px; }
+.tab-arrow.right { right: 54px; }
 .tab-arrow[hidden] { display: none; }
 .tab-sheet {
   position: fixed;
@@ -378,6 +424,9 @@ img { max-width: 100%; }
 @keyframes tab-sheet-in {
   from { transform: translateY(100%); }
   to { transform: none; }
+}
+@media (pointer: coarse) {
+  .tab-arrow { display: none !important; }
 }
 @media (max-width: 499px) {
   .tab-arrow { display: none !important; }
