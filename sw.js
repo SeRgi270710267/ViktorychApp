@@ -1,5 +1,5 @@
-/* Feeds service worker. Cache names are spaces-tv1- plus the deploy SHA. */
-const VERSION = "spaces-tv1-__SW_VERSION__";
+/* Feeds service worker. Cache names are discord-live1- plus the deploy SHA. */
+const VERSION = "discord-live1-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;

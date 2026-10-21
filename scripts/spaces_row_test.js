@@ -97,7 +97,7 @@ assert.deepStrictEqual(space.source.allow, ["trycloudflare.com"]);
 assert.ok(!space.source.url);
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "spaces-tv1-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "discord-live1-__SW_VERSION__"'));
 assert.ok(worker.includes("./spaces.js") && worker.includes("./spaces.css"));
 assert.ok(!worker.includes("superintelmusic.json"));
 assert.ok(worker.includes("isSpaceStatus"));

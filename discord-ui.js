@@ -598,7 +598,7 @@
   }
 
   function listHtml(route) {
-    const text = state.channels.filter(function (ch) { return ch.mode === "messages"; });
+    const text = state.channels.filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
     const groups = orderedCategories(text);
     const serverIcon = state.icon
       ? '<img src="' + esc(state.icon) + '" alt="" referrerpolicy="no-referrer">'
@@ -753,12 +753,23 @@
     refreshLive();
   }
 
+  function topicOk(value) {
+    const text = String(value || "").trim();
+    return /^[A-Za-z0-9_-]{8,80}$/.test(text) ? text : "";
+  }
+
+  function liveTopic() {
+    return state.topic || TOPIC;
+  }
+
   function applyConfig(servers) {
     const channels = [];
     let name = "";
     (servers || []).forEach(function (server) {
       if (!server || !Array.isArray(server.channels)) return;
       if (!name && server.name) name = String(server.name).slice(0, 80);
+      const topic = topicOk(server.ntfy);
+      if (topic) state.topic = topic;
       server.channels.forEach(function (ch) {
         const id = snowflake(ch && ch.id);
         const mode = ch && (ch.mode === "posts" || ch.mode === "messages") ? ch.mode : "";
@@ -790,6 +801,7 @@
         if (ch.name) row.name = String(ch.name).slice(0, 80);
         if (ch.category) row.category = String(ch.category).slice(0, 80);
         if (ch.file && /^discord\/messages\/\d{1,22}\.json$/.test(ch.file)) row.file = ch.file;
+        row.inaccessible = !!ch.inaccessible;
       });
     });
   }
@@ -886,7 +898,7 @@
     state.timer = 0;
     if (!wantLive()) return;
     ensureSince();
-    fetch("https://ntfy.sh/" + TOPIC + "/json?poll=1&since=" + encodeURIComponent(state.since), { cache: "no-store" }).then(function (res) {
+    fetch("https://ntfy.sh/" + liveTopic() + "/json?poll=1&since=" + encodeURIComponent(state.since), { cache: "no-store" }).then(function (res) {
       if (!res.ok) throw new Error(String(res.status));
       return res.text();
     }).then(function (text) {
@@ -905,7 +917,7 @@
     ensureSince();
     let es;
     try {
-      es = new EventSource("https://ntfy.sh/" + TOPIC + "/sse?since=" + encodeURIComponent(state.since));
+      es = new EventSource("https://ntfy.sh/" + liveTopic() + "/sse?since=" + encodeURIComponent(state.since));
     } catch (err) {
       schedulePoll();
       return;
