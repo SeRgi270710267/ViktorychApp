@@ -35,9 +35,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from adapters.common import post_shell  # noqa: E402
 from adapters.threads_replies import parse_threads_document  # noqa: E402
+from site_paths import user_agent  # noqa: E402
 from x_guard import assert_not_x_api, open_url  # noqa: E402
 
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 MOBILE = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1"
 BROWSER = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 REPLY_CAP = 20

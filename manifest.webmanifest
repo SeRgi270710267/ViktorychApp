@@ -1,9 +1,9 @@
 {
-  "id": "/rss-feeds/",
-  "name": "Feeds",
-  "short_name": "Feeds",
+  "id": "./",
+  "name": "SuperintelApp",
+  "short_name": "SintelApp",
   "description": "An X-style home for posts from X, Threads, Instagram, YouTube, VK, and RSS.",
-  "scope": "/rss-feeds/",
+  "scope": "./",
   "start_url": "./#/home",
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone"],

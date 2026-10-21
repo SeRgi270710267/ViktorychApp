@@ -30,7 +30,13 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from html.parser import HTMLParser
+from pathlib import Path
 from urllib.parse import urlparse
+
+_SCRIPTS = Path(__file__).resolve().parents[1]
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+from site_paths import user_agent  # noqa: E402
 
 from .common import (
     blank_profile,
@@ -43,7 +49,7 @@ from .common import (
     relative_label,
 )
 
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 POST_ID = re.compile(r"/post/([A-Za-z0-9_-]{10,80})")
 EXACT_COUNT = re.compile(r"^([\d,]{1,12})\s+(likes?|comments?|replies)\b", re.I)
 

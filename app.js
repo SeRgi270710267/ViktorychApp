@@ -1,5 +1,7 @@
 /* X-style reader. Timelines come from feeds.json plus monthly archive stubs on the data branch. X replies, YouTube comments, and old-post details load live in the browser. */
 (function () {
+  // Keys stay on the rss-feeds- prefix. Storage is per origin, so the Pages
+  // path can change without dropping saved follows. Do not rename them.
   const KEY = "rss-feeds-settings-v1";
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -139,8 +141,27 @@
   let ARCHIVE_OBS = null;
   let archiveBusy = false;
   const HYDRATE_TTL = 24 * 60 * 60 * 1000;
-  const ARCHIVE_RAW = "https://raw.githubusercontent.com/owner-account/rss-feeds/data/archive/";
-  const ARCHIVE_CDN = "https://cdn.jsdelivr.net/gh/owner-account/rss-feeds@data/archive/";
+  function pagesDirectory() {
+    let path = location.pathname || "/";
+    if (/\/index\.html$/i.test(path)) path = path.slice(0, -"index.html".length);
+    path = path.replace(/\/(?:s|u)\/[^/]+$/, "/");
+    if (!path.endsWith("/")) path += "/";
+    return path;
+  }
+
+  function githubRepo() {
+    const fallback = "owner-account/SuperintelApp";
+    const host = String(location.hostname || "");
+    if (!/\.github\.io$/i.test(host)) return fallback;
+    const owner = host.split(".")[0];
+    const seg = pagesDirectory().split("/").filter(Boolean)[0];
+    if (!owner || !seg || seg === "s" || seg === "u") return fallback;
+    return owner + "/" + seg;
+  }
+
+  const GITHUB_REPO = githubRepo();
+  const ARCHIVE_RAW = "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/archive/";
+  const ARCHIVE_CDN = "https://cdn.jsdelivr.net/gh/" + GITHUB_REPO + "@data/archive/";
   const ARCHIVE_IA = "https://archive.org/download/sergi-rss-feeds-archive/archive/";
   const IA = { ready: false, files: [], byUrl: {}, posts: {} };
 
@@ -730,7 +751,6 @@
     return `#/${encodeURIComponent(platform)}/${encodeURIComponent(handle)}/status/${encodeURIComponent(id)}`;
   }
 
-  const GITHUB_REPO = "owner-account/rss-feeds";
 
   function parseAccountInput(raw) {
     const text = String(raw || "").trim();
@@ -1841,7 +1861,7 @@
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: (post && (post.title || String(post.text || "").slice(0, 80))) || "Video",
-          artist: (post && (post.author || post.handle)) || "Feeds",
+          artist: (post && (post.author || post.handle)) || "SuperintelApp",
           artwork: artwork
         });
         navigator.mediaSession.setActionHandler("play", () => { video.play(); });
@@ -4669,10 +4689,15 @@
     return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${label}</span></a>`;
   }
 
+  function brandLink() {
+    return `<a class="logo" href="#/" aria-label="SuperintelApp"><svg class="logo-full" viewBox="0 0 9539.20 2079.00" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5774.2 1661 6315.2 171H 6535.2L 7083.2 1661H 6883.2L 6734.2 1245H 6120.2L 5976.2 1661ZM 6178.2 1079H 6675.2L 6567.2 777Q 6540.2 702 6506.2 593.5Q 6472.2 485 6424.2 323Q 6377.2 488 6342.2 598Q 6307.2 708 6283.2 777Z M 7293.2 2079V 543H 7467.2V 722H 7487.2Q 7506.2 692 7540.2 646.5Q 7574.2 601 7638.2 565Q 7702.2 529 7811.2 529Q 7951.2 529 8057.7 599Q 8164.2 669 8224.7 798.5Q 8285.2 928 8285.2 1105Q 8285.2 1283 8225.2 1413Q 8165.2 1543 8058.7 1614Q 7952.2 1685 7812.2 1685Q 7706.2 1685 7641.2 1648.5Q 7576.2 1612 7541.2 1565.5Q 7506.2 1519 7487.2 1488H 7473.2V 2079ZM 7785.2 1524Q 7890.2 1524 7960.7 1467.5Q 8031.2 1411 8066.7 1315.5Q 8102.2 1220 8102.2 1103Q 8102.2 987 8067.2 893.5Q 8032.2 800 7961.7 745Q 7891.2 690 7785.2 690Q 7631.2 690 7551.2 804Q 7471.2 918 7471.2 1103Q 7471.2 1290 7552.2 1407Q 7633.2 1524 7785.2 1524Z M 8547.2 2079V 543H 8721.2V 722H 8741.2Q 8760.2 692 8794.2 646.5Q 8828.2 601 8892.2 565Q 8956.2 529 9065.2 529Q 9205.2 529 9311.7 599Q 9418.2 669 9478.7 798.5Q 9539.2 928 9539.2 1105Q 9539.2 1283 9479.2 1413Q 9419.2 1543 9312.7 1614Q 9206.2 1685 9066.2 1685Q 8960.2 1685 8895.2 1648.5Q 8830.2 1612 8795.2 1565.5Q 8760.2 1519 8741.2 1488H 8727.2V 2079ZM 9039.2 1524Q 9144.2 1524 9214.7 1467.5Q 9285.2 1411 9320.7 1315.5Q 9356.2 1220 9356.2 1103Q 9356.2 987 9321.2 893.5Q 9286.2 800 9215.7 745Q 9145.2 690 9039.2 690Q 8885.2 690 8805.2 804Q 8725.2 918 8725.2 1103Q 8725.2 1290 8806.2 1407Q 8887.2 1524 9039.2 1524Z"/></svg><svg class="logo-si" viewBox="0 0 1986.60 1680.80" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z"/></svg></a>`;
+  }
+
   function nav(route) {
     const name = route.name;
     return `<header class="nav">
       <div class="nav-scroll">
+        ${brandLink()}
         ${navItem("#/", "home", "Home", name === "home")}
         ${navItem("#/explore", "search", "Explore", name === "explore")}
         ${navItem("#/notifications", "bell", "Notifications", name === "notifications")}
@@ -4718,7 +4743,7 @@
       </form>
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
       ${people.length ? `<section class="card"><h2>Who to follow</h2>${rows}<a class="show-more-row" href="#/feeds">Show more</a></section>` : ""}
-      <div class="fineprint"><span>Preview snapshot</span><a href="https://github.com/owner-account/rss-feeds">GitHub</a><span>Not affiliated with X</span></div>
+      <div class="fineprint"><span>SuperintelApp</span><span>Preview snapshot</span><a href="https://github.com/${GITHUB_REPO}">GitHub</a><span>Not affiliated with X</span></div>
     </aside>`;
   }
 
@@ -4877,6 +4902,7 @@
       <h1 class="vh">Home</h1>
       <div class="mhead">
         <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
+        <a class="m-logo" href="#/" aria-label="SuperintelApp"><svg class="logo-full" viewBox="0 0 9539.20 2079.00" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5774.2 1661 6315.2 171H 6535.2L 7083.2 1661H 6883.2L 6734.2 1245H 6120.2L 5976.2 1661ZM 6178.2 1079H 6675.2L 6567.2 777Q 6540.2 702 6506.2 593.5Q 6472.2 485 6424.2 323Q 6377.2 488 6342.2 598Q 6307.2 708 6283.2 777Z M 7293.2 2079V 543H 7467.2V 722H 7487.2Q 7506.2 692 7540.2 646.5Q 7574.2 601 7638.2 565Q 7702.2 529 7811.2 529Q 7951.2 529 8057.7 599Q 8164.2 669 8224.7 798.5Q 8285.2 928 8285.2 1105Q 8285.2 1283 8225.2 1413Q 8165.2 1543 8058.7 1614Q 7952.2 1685 7812.2 1685Q 7706.2 1685 7641.2 1648.5Q 7576.2 1612 7541.2 1565.5Q 7506.2 1519 7487.2 1488H 7473.2V 2079ZM 7785.2 1524Q 7890.2 1524 7960.7 1467.5Q 8031.2 1411 8066.7 1315.5Q 8102.2 1220 8102.2 1103Q 8102.2 987 8067.2 893.5Q 8032.2 800 7961.7 745Q 7891.2 690 7785.2 690Q 7631.2 690 7551.2 804Q 7471.2 918 7471.2 1103Q 7471.2 1290 7552.2 1407Q 7633.2 1524 7785.2 1524Z M 8547.2 2079V 543H 8721.2V 722H 8741.2Q 8760.2 692 8794.2 646.5Q 8828.2 601 8892.2 565Q 8956.2 529 9065.2 529Q 9205.2 529 9311.7 599Q 9418.2 669 9478.7 798.5Q 9539.2 928 9539.2 1105Q 9539.2 1283 9479.2 1413Q 9419.2 1543 9312.7 1614Q 9206.2 1685 9066.2 1685Q 8960.2 1685 8895.2 1648.5Q 8830.2 1612 8795.2 1565.5Q 8760.2 1519 8741.2 1488H 8727.2V 2079ZM 9039.2 1524Q 9144.2 1524 9214.7 1467.5Q 9285.2 1411 9320.7 1315.5Q 9356.2 1220 9356.2 1103Q 9356.2 987 9321.2 893.5Q 9286.2 800 9215.7 745Q 9145.2 690 9039.2 690Q 8885.2 690 8805.2 804Q 8725.2 918 8725.2 1103Q 8725.2 1290 8806.2 1407Q 8887.2 1524 9039.2 1524Z"/></svg></a>
         <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
       </div>
       <div class="tabs-bar">
@@ -6237,6 +6263,8 @@
       <button class="primary" type="button" data-act="notify">${notifyOn ? "Notifications on" : "Notify me about new posts"}</button>
       <button class="primary" data-act="export">Export settings</button>
       <label class="primary import-btn">Import settings<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
+      <h2>About</h2>
+      <p class="phandle">SuperintelApp. Posts from accounts you follow stay in this browser. Not affiliated with X.</p>
     </div>`;
   }
 
@@ -7538,7 +7566,7 @@
       const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
-      document.title = (discordTitle || personName || (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / Feeds";
+      document.title = (discordTitle || personName || (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / SuperintelApp";
       window.scrollTo(0, y);
       if (focusId) {
         const el = document.getElementById(focusId);
@@ -8241,7 +8269,7 @@
       const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0 }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "rss-feeds-settings.json";
+      a.download = "superintelapp-settings.json";
       a.click();
       return;
     }
@@ -9323,7 +9351,7 @@
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: post.title || String(post.text || "").slice(0, 80) || "Video",
-        artist: post.author || post.handle || "Feeds",
+        artist: post.author || post.handle || "SuperintelApp",
         artwork: artwork
       });
       const video = document.querySelector(".player video");

@@ -21,9 +21,11 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from archive import canonical_id
+from site_paths import pages_base
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_BASE = "https://owner-account.github.io/rss-feeds/"
+DEFAULT_BASE = pages_base()
+SITE_NAME = "SuperintelApp"
 SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
 SAFE_HANDLE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 PLATFORM = {
@@ -43,10 +45,16 @@ THUMB_LADDER = (
     ("hqdefault.jpg", 480, 360),
 )
 FONT = {
-    "F": ("11110", "10000", "11100", "10000", "10000", "10000", "10000"),
+    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
     "E": ("11111", "10000", "11110", "10000", "10000", "10000", "11111"),
-    "D": ("11110", "10001", "10001", "10001", "10001", "10001", "11110"),
+    "I": ("11111", "00100", "00100", "00100", "00100", "00100", "11111"),
+    "L": ("10000", "10000", "10000", "10000", "10000", "10000", "11111"),
+    "N": ("10001", "11001", "10101", "10011", "10001", "10001", "10001"),
+    "P": ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
+    "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
     "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
+    "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
+    "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
 }
 
 
@@ -297,11 +305,12 @@ def feed_for(feeds: list, platform: str, handle: str) -> dict | None:
 
 def png_card() -> bytes:
     width, height = 1200, 630
-    scale = 16
-    word = "FEEDS"
-    text_w = len(word) * (5 * scale + scale) - scale
+    word = SITE_NAME.upper()
     mark = 150
     gap = 48
+    max_text = width - 128 - mark - gap
+    scale = max(4, min(16, max_text // (len(word) * 6 - 1)))
+    text_w = len(word) * (5 * scale + scale) - scale
     block = mark + gap + text_w
     origin_x = (width - block) // 2
     origin_y = (height - 7 * scale) // 2
@@ -353,7 +362,7 @@ def meta_tags(page: dict) -> str:
         '<meta name="referrer" content="no-referrer">',
         f'<title>{esc(page["title"])}</title>',
         f'<link rel="canonical" href="{esc(page["url"])}">',
-        '<meta property="og:site_name" content="Feeds">',
+        '<meta property="og:site_name" content="' + SITE_NAME + '">',
         f'<meta property="og:type" content="{esc(page["og_type"])}">',
         f'<meta property="og:title" content="{esc(page["title"])}">',
         f'<meta property="og:description" content="{esc(page["description"])}">',
@@ -422,7 +431,7 @@ def page_html(page: dict) -> str:
   <div class="who">{avatar}<div><h1>{esc(page.get("author") or page["title"])}</h1><p class="handle">{esc(page.get("byline") or "")}</p></div></div>
   {f'<p class="text">{esc(text)}</p>' if text else ''}
   {media}
-  <a class="open" href="{esc(page["open_href"])}">Open in Feeds</a>
+  <a class="open" href="{esc(page["open_href"])}">Open in {SITE_NAME}</a>
 </article>
 <script>
 (function () {{
@@ -493,7 +502,7 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
         if not image["url"]:
             image = {"url": brand, "width": 1200, "height": 630, "kind": "brand"}
         player, mp4 = video_targets(post, token)
-        description = trim(str(post.get("text") or post.get("title") or "")) or "Post on Feeds"
+        description = trim(str(post.get("text") or post.get("title") or "")) or ("Post on " + SITE_NAME)
         route = status_hash(platform, handle, route_id(post))
         author = str(post.get("author") or handle or "Post")
         page = {
@@ -593,7 +602,7 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
                 route = status_hash(platform, handle, raw_id)
                 write_page(site / "s", f"{platform}-{token}.html", {
                     "title": title_for(author, handle, platform),
-                    "description": trim(text) or "Post on Feeds",
+                    "description": trim(text) or ("Post on " + SITE_NAME),
                     "url": join_url(base, f"s/{platform}-{token}.html"),
                     "image": image,
                     "og_type": "article",

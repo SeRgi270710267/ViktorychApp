@@ -20,8 +20,11 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from site_paths import user_agent  # noqa: E402
+
 CONFIG = ROOT / "feeds.config.json"
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 PLATFORMS = ("x", "threads", "instagram", "youtube", "vk", "telegram", "rss")
 HANDLE = {
     "x": re.compile(r"^[A-Za-z0-9_]{1,15}$"),

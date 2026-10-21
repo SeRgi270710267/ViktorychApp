@@ -13,10 +13,18 @@ import urllib.request
 from html.parser import HTMLParser
 from urllib.parse import urlparse
 
+import sys
+from pathlib import Path
+
+_SCRIPTS = Path(__file__).resolve().parents[1]
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+from site_paths import user_agent  # noqa: E402
+
 from .common import clean_text, is_playable_video, parse_xml, post_shell, profile_url, to_iso
 
 HANDLE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 _COUNT = re.compile(r"^([\d]+(?:[.,]\d+)?)\s*([KMB])?$", re.I)
 _CSS_URL = re.compile(r"""background-image:\s*url\(\s*(['"]?)(.*?)\1\s*\)""", re.I)
 _BEFORE = re.compile(r'data-before="(\d+)"')

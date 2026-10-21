@@ -58,7 +58,7 @@ def main() -> int:
             metadata={
                 "mediatype": "data",
                 "collection": "opensource",
-                "title": "rss-feeds archive stubs",
+                "title": "SuperintelApp archive stubs",
                 "creator": "owner-account",
             },
             verbose=False,

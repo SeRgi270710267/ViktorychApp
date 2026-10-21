@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Draw the install icons and iOS splash screens.
+"""Install icons and splash screens.
 
-The mark is an original feed glyph: three bars and a dot. It is not the X logo.
+The shipped mark is the SIntelApp wordmark from scripts/wordmark.py.
+This file no longer draws a logo of its own.
 """
 
 from __future__ import annotations
@@ -15,12 +16,19 @@ BLUE = (29, 155, 240, 255)
 WHITE = (255, 255, 255, 255)
 BLACK = (0, 0, 0, 255)
 
-# 5x7 glyphs for the splash wordmark.
+# 5x7 glyphs for the splash wordmark. The home-screen icons stay the feed glyph.
+SITE_WORD = "SUPERINTELAPP"
 FONT = {
-    "F": ["11110", "10000", "11100", "10000", "10000", "10000", "10000"],
+    "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
     "E": ["11110", "10000", "11100", "10000", "10000", "10000", "11110"],
-    "D": ["11100", "10010", "10010", "10010", "10010", "10010", "11100"],
+    "I": ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+    "L": ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+    "N": ["10001", "11001", "10101", "10011", "10001", "10001", "10001"],
+    "P": ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+    "R": ["11110", "10001", "10001", "11110", "10100", "10010", "10001"],
     "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+    "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+    "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
 }
 
 
@@ -134,8 +142,10 @@ def splash(width: int, height: int, mark: bytearray) -> bytes:
     scaled = scale(mark, 512, 512, icon)
     blit(buf, width, height, scaled, icon, icon, (width - icon) // 2, int(height * 0.40) - icon // 2)
     text_scale = max(3, icon // 28)
-    text_w = 5 * 6 * text_scale - text_scale
-    word(buf, width, height, "FEEDS", (width - text_w) // 2, int(height * 0.40) + icon // 2 + text_scale * 4, text_scale, WHITE)
+    while text_scale > 2 and (len(SITE_WORD) * 6 * text_scale - text_scale) > width - 48:
+        text_scale -= 1
+    text_w = len(SITE_WORD) * 6 * text_scale - text_scale
+    word(buf, width, height, SITE_WORD, (width - text_w) // 2, int(height * 0.40) + icon // 2 + text_scale * 4, text_scale, WHITE)
     raw = bytes(buf)
     return png(width, height, raw)
 
@@ -164,39 +174,8 @@ def draw_monochrome(size: int) -> bytearray:
 
 
 def main() -> None:
-    any_icon = draw_mark(512, BLACK, BLUE)
-    mask_icon = draw_mark(512, BLUE, WHITE)
-    write(ROOT / "icons" / "icon-512.png", png(512, 512, bytes(any_icon)))
-    write(ROOT / "icons" / "icon-192.png", png(192, 192, bytes(scale(any_icon, 512, 512, 192))))
-    write(ROOT / "icons" / "icon-maskable-512.png", png(512, 512, bytes(mask_icon)))
-    write(ROOT / "icons" / "icon-monochrome-512.png", png(512, 512, bytes(draw_monochrome(512))))
-    write(ROOT / "icons" / "apple-touch-icon.png", png(180, 180, bytes(scale(any_icon, 512, 512, 180))))
-    shots = {
-        "narrow": (1080, 1920),
-        "wide": (1920, 1080),
-    }
-    for name, (w, h) in shots.items():
-        write(ROOT / "screenshots" / f"{name}.png", splash(w, h, any_icon))
-    splashes = [
-        ("iphone-se", 640, 1136),
-        ("iphone-8", 750, 1334),
-        ("iphone-8-plus", 1242, 2208),
-        ("iphone-x", 1125, 2436),
-        ("iphone-xr", 828, 1792),
-        ("iphone-xs-max", 1242, 2688),
-        ("iphone-12", 1170, 2532),
-        ("iphone-14-plus", 1284, 2778),
-        ("iphone-14-pro", 1179, 2556),
-        ("iphone-14-pro-max", 1290, 2796),
-        ("iphone-16-pro-max", 1320, 2868),
-        ("ipad", 1536, 2048),
-        ("ipad-10", 1620, 2160),
-        ("ipad-pro-11", 1668, 2388),
-        ("ipad-pro-12", 2048, 2732),
-    ]
-    for name, w, h in splashes:
-        write(ROOT / "splash" / f"{name}.png", splash(w, h, any_icon))
-        print(name, w, h)
+    from wordmark import main as draw_wordmark
+    draw_wordmark()
 
 
 if __name__ == "__main__":

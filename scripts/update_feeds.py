@@ -43,9 +43,10 @@ from adapters.common import (  # noqa: E402
     save_document,
 )
 from meta_media import refresh_saved  # noqa: E402
+from site_paths import user_agent  # noqa: E402
 from x_guard import assert_not_x_api, auth_cookie_header, open_url  # noqa: E402
 
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 
 
 def now_iso() -> str:

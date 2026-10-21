@@ -18,9 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from adapters.x_replies import merge_replies  # noqa: E402
+from site_paths import user_agent  # noqa: E402
 from x_guard import assert_not_x_api, open_url  # noqa: E402
 
-UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+UA = user_agent()
 INSTANCES = "https://api.invidious.io/instances.json"
 PIPED_SEEDS = (
     "https://pipedapi.kavin.rocks",

@@ -1,5 +1,5 @@
-/* Feeds service worker. Cache names are discord-servers1- plus the deploy SHA. */
-const VERSION = "discord-servers1-__SW_VERSION__";
+/* SuperintelApp service worker. Cache names are superintel3- plus the deploy SHA. */
+const VERSION = "superintel3-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;

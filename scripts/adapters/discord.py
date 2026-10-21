@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -32,13 +33,18 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+_SCRIPTS = Path(__file__).resolve().parents[1]
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
+from site_paths import github_web, pages_base, user_agent  # noqa: E402
+
 from .common import clean_text, dedupe_posts, drop_empty, merge_profiles, post_shell, to_iso
 
 API = "https://discord.com/api/v10"
-SITE = "https://owner-account.github.io/rss-feeds/"
-USER_AGENT = "DiscordBot (https://github.com/owner-account/rss-feeds, 1.0)"
+SITE = pages_base()
+USER_AGENT = "DiscordBot (" + github_web() + ", 1.0)"
 BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-SITE_AGENT = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
+SITE_AGENT = user_agent()
 USER_INTERVAL = 1.5
 USER_PAGE_SIZE = 25
 # VIEW_CHANNEL (1 << 10) and READ_MESSAGE_HISTORY (1 << 16). Nothing else.

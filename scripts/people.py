@@ -377,10 +377,11 @@ def _account_row(person_account: dict, profile: dict | None) -> dict:
 
 
 def _fetch_json(url: str, timeout: int = 15) -> dict:
+    from site_paths import user_agent
     from x_guard import assert_not_x_api, open_url
 
     assert_not_x_api(url)
-    request = urllib.request.Request(url, headers={"User-Agent": "rss-feeds-preview/1.0", "Accept": "application/json"})
+    request = urllib.request.Request(url, headers={"User-Agent": user_agent(), "Accept": "application/json"})
     with open_url(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8", "replace"))
 
