@@ -268,7 +268,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", translateTo: "en" });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, translateTo: "en" });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -293,6 +293,8 @@
       parsed.groupsOwn = parsed.groupsOwn === true;
       parsed.subsGroup = typeof parsed.subsGroup === "string" ? parsed.subsGroup : "";
       parsed.followingSort = parsed.followingSort === "popular" ? "popular" : "recent";
+      parsed.forYouReposts = parsed.forYouReposts !== false;
+      parsed.forYouReplies = parsed.forYouReplies !== false;
       parsed.translateTo = window.FeedsTranslate ? window.FeedsTranslate.normalize(parsed.translateTo) : (parsed.translateTo || "en");
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
@@ -2095,7 +2097,7 @@
         iframe: false
       };
       pausePreview(tile);
-      location.hash = watchHash(post);
+      goHash(watchHash(post));
       return;
     }
     openVideoViewer(post, media, src, time);
@@ -4257,17 +4259,86 @@
     return list && list.sort === "popular" ? "popular" : "recent";
   }
 
+  function homePath(tab) {
+    if (tab === "following") return "#/following";
+    if (tab && tab.indexOf("list:") === 0) return "#/tab/" + encodeURIComponent(tab.slice(5));
+    return "#/";
+  }
+
+  function homeHash(tab) {
+    const q = new URLSearchParams();
+    if (tab === "following") q.set("sort", STATE.settings.followingSort === "popular" ? "popular" : "recent");
+    else if (tab && tab.indexOf("list:") === 0) {
+      const list = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
+      q.set("sort", listSortOf(list));
+    } else {
+      q.set("reposts", STATE.settings.forYouReposts === false ? "0" : "1");
+      q.set("replies", STATE.settings.forYouReplies === false ? "0" : "1");
+    }
+    const text = q.toString();
+    return homePath(tab) + (text ? "?" + text : "");
+  }
+
+  function syncHomeFromQuery(route) {
+    if (!route || route.name !== "home" || !route.query) return;
+    const tab = route.tab || "foryou";
+    let changed = false;
+    if (tab === "following" || tab.indexOf("list:") === 0) {
+      const sort = route.query.get("sort");
+      if (sort === "recent" || sort === "popular") {
+        if (tab === "following") {
+          if (STATE.settings.followingSort !== sort) { STATE.settings.followingSort = sort; changed = true; }
+        } else {
+          const list = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
+          if (list && listSortOf(list) !== sort) { list.sort = sort; changed = true; }
+        }
+      }
+    } else {
+      if (route.query.has("reposts")) {
+        const on = route.query.get("reposts") !== "0";
+        if ((STATE.settings.forYouReposts !== false) !== on) { STATE.settings.forYouReposts = on; changed = true; }
+      }
+      if (route.query.has("replies")) {
+        const on = route.query.get("replies") !== "0";
+        if ((STATE.settings.forYouReplies !== false) !== on) { STATE.settings.forYouReplies = on; changed = true; }
+      }
+    }
+    if (changed) saveSettings();
+  }
+
+  function tabSort(tab) {
+    if (tab === "following") return STATE.settings.followingSort === "popular" ? "popular" : "recent";
+    if (tab && tab.indexOf("list:") === 0) return listSortOf((STATE.settings.lists || []).find((item) => item.id === tab.slice(5)));
+    return "recent";
+  }
+
+  function homeMember(post, tab) {
+    if (tab === "following") {
+      const followed = STATE.settings.follows || [];
+      return followed.indexOf(post.feedId) >= 0 || followed.indexOf((post.platform || "x") + ":" + (post.handle || "")) >= 0;
+    }
+    if (tab && tab.indexOf("list:") === 0) {
+      const found = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
+      const ids = (found && found.members) || [];
+      return ids.indexOf(post.feedId) >= 0 || ids.indexOf((post.platform || "x") + ":" + (post.handle || "")) >= 0;
+    }
+    if (STATE.settings.forYouReposts === false && (post.kind === "repost" || post.repostedBy)) return false;
+    if (STATE.settings.forYouReplies === false && post.kind === "reply") return false;
+    return true;
+  }
+
+  function homeShows(post, route) {
+    if (!post || !inTimeline(post) || hiddenPost(post)) return false;
+    return homeMember(post, (route && route.tab) || "foryou");
+  }
+
   function homeHeader(tab) {
     const lists = STATE.settings.lists.filter((l) => l.pinned);
-    const open = STATE.tabMenu === "following";
     const tabBtn = (id, label, on) => `<button class="tab${on ? " on" : ""}" data-act="htab" data-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}"><span>${esc(label)}</span></button>`;
-    const following = `<div class="tab-pair${tab === "following" ? " on" : ""}">${tabBtn("following", "Following", tab === "following")}<button class="tab-caret" type="button" data-act="tab-options" aria-label="Following options" aria-expanded="${open ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
-    const listTab = (l) => {
-      const id = "list:" + l.id;
-      const on = tab === id;
-      if (!on) return tabBtn(id, l.name, false);
+    const tabWithMenu = (id, label) => {
+      if (tab !== id) return tabBtn(id, label, false);
       const expanded = STATE.tabMenu === id;
-      return `<div class="tab-pair on">${tabBtn(id, l.name, true)}<button class="tab-caret" type="button" data-act="tab-options" data-id="${esc(l.id)}" aria-label="${esc(l.name)} options" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
+      return `<div class="tab-pair on">${tabBtn(id, label, true)}<button class="tab-caret" type="button" data-act="tab-options" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
     };
     return `<div class="topbar tall">
       <h1 class="vh">Home</h1>
@@ -4278,9 +4349,9 @@
       <div class="tabs-bar">
         <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="Scroll tabs left" hidden>${icon("chevL")}</button>
         <div class="tabs" role="tablist" aria-label="Home timeline">
-          ${tabBtn("foryou", "For you", tab === "foryou")}
-          ${following}
-          ${lists.map(listTab).join("")}
+          ${tabWithMenu("foryou", "For you")}
+          ${tabWithMenu("following", "Following")}
+          ${lists.map((l) => tabWithMenu("list:" + l.id, l.name)).join("")}
         </div>
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="Manage tabs">${icon("sliders")}</button>
@@ -4290,14 +4361,24 @@
 
   function tabMenu() {
     if (!STATE.tabMenu) return "";
-    const listId = STATE.tabMenu.indexOf("list:") === 0 ? STATE.tabMenu.slice(5) : "";
+    const which = STATE.tabMenu;
+    const listId = which.indexOf("list:") === 0 ? which.slice(5) : "";
     const list = listId ? (STATE.settings.lists || []).find((item) => item.id === listId && item.pinned) : null;
     if (listId && !list) return "";
-    const sort = list ? listSortOf(list) : (STATE.settings.followingSort === "popular" ? "popular" : "recent");
-    const sortItem = (id, label) => `<button type="button" role="menuitemradio" aria-checked="${sort === id ? "true" : "false"}" data-act="follow-sort" data-sort="${id}"${list ? ` data-list="${esc(list.id)}"` : ""}><span>${esc(label)}</span>${sort === id ? icon("tick") : ""}</button>`;
-    const extra = list ? `<div class="tab-menu-gap"></div><button type="button" role="menuitem" data-act="edit-list" data-id="${esc(list.id)}">Edit list</button><button type="button" role="menuitem" data-act="tab-unpin" data-id="${esc(list.id)}">Unpin from Home</button>` : "";
-    const label = list ? esc(list.name) + " options" : "Following options";
-    return `<div class="menu tab-menu" data-act="stop" role="menu" aria-label="${label}">${sortItem("recent", "Most recent")}${sortItem("popular", "Popular")}${extra}</div>`;
+    let body = "";
+    let label = "Home options";
+    if (which === "foryou") {
+      label = "For you options";
+      const box = (key, text, on) => `<button type="button" role="menuitemcheckbox" aria-checked="${on ? "true" : "false"}" data-act="foryou-toggle" data-key="${key}"><span>${text}</span>${on ? icon("tick") : ""}</button>`;
+      body = box("reposts", "Show reposts", STATE.settings.forYouReposts !== false) + box("replies", "Show replies", STATE.settings.forYouReplies !== false);
+    } else {
+      label = list ? list.name + " options" : "Following options";
+      const sort = list ? listSortOf(list) : (STATE.settings.followingSort === "popular" ? "popular" : "recent");
+      const sortItem = (id, text) => `<button type="button" role="menuitemradio" aria-checked="${sort === id ? "true" : "false"}" data-act="follow-sort" data-sort="${id}"${list ? ` data-list="${esc(list.id)}"` : ""}><span>${esc(text)}</span>${sort === id ? icon("tick") : ""}</button>`;
+      const extra = list ? `<div class="tab-menu-gap"></div><button type="button" role="menuitem" data-act="edit-list" data-id="${esc(list.id)}">Edit list</button><button type="button" role="menuitem" data-act="tab-unpin" data-id="${esc(list.id)}">Unpin from Home</button>` : "";
+      body = sortItem("recent", "Recent") + sortItem("popular", "Popular") + extra;
+    }
+    return `<div class="tab-sheet" data-act="close-tab-menu"><div class="menu tab-menu" data-act="stop" role="menu" aria-label="${esc(label)}">${body}</div></div>`;
   }
 
   function listMembersPosts(list) {
@@ -4307,18 +4388,9 @@
 
   function homeView(route) {
     const tab = route.tab || "foryou";
-    let list = posts().slice().sort(byStamp);
-    if (tab === "following") {
-      const followed = new Set(STATE.settings.follows);
-      list = list.filter((p) => followed.has(p.feedId) || followed.has((p.platform || "x") + ":" + p.handle));
-    }
-    if (tab.startsWith("list:")) {
-      const found = STATE.settings.lists.find((l) => l.id === tab.slice(5));
-      list = found ? listMembersPosts(found) : [];
-    }
-    list = list.filter((post) => inTimeline(post) && !hiddenPost(post));
-    const popular = tab === "following" ? STATE.settings.followingSort === "popular" : (tab.startsWith("list:") && listSortOf(STATE.settings.lists.find((l) => l.id === tab.slice(5))) === "popular");
-    if (popular) {
+    let list = posts().filter((post) => homeShows(post, route));
+    list.sort(byStamp);
+    if (tabSort(tab) === "popular") {
       const heat = (post) => {
         const stats = (post && post.stats) || {};
         return (Number(stats.likes) || 0) + (Number(stats.reposts) || 0) + (Number(stats.replies) || 0) + (Number(stats.quotes) || 0);
@@ -5826,9 +5898,7 @@
   }
 
   function goSubs(id) {
-    const next = subsHash(id);
-    if (location.hash === next) render();
-    else location.hash = next;
+    goHash(subsHash(id));
   }
 
   function groupTarget(node) {
@@ -6416,6 +6486,64 @@
     return location.hash || "#/";
   }
 
+  function pageY() {
+    return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+  }
+
+  function smoothTop() {
+    const y = pageY();
+    const repeat = !!STATE.snapTop && y > 4;
+    STATE.snapTop = y > 4;
+    STATE.tabMenu = null;
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: repeat || reduced ? "auto" : "smooth" });
+    if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = 0;
+    STATE.headerHidden = false;
+    document.querySelectorAll(".topbar").forEach((el) => el.classList.remove("is-hidden"));
+    document.querySelectorAll('.tab-caret[aria-expanded="true"]').forEach((btn) => btn.setAttribute("aria-expanded", "false"));
+    const sheet = document.querySelector(".tab-sheet");
+    if (sheet) sheet.remove();
+  }
+
+  function reloadAtTop() {
+    STATE.tabMenu = null;
+    refreshOpenComments();
+    refreshFeeds(true);
+    refreshLiveTimeline(true);
+  }
+
+  function navSection(name) {
+    if (name === "list") return "lists";
+    if (name === "home" || name === "explore" || name === "notifications" || name === "messages" || name === "feeds" || name === "lists" || name === "bookmarks" || name === "settings" || name === "subscriptions") return name;
+    return "";
+  }
+
+  function hrefSection(href) {
+    const path = String(href || "").replace(/^#/, "").split("?")[0];
+    const head = path.split("/").filter(Boolean)[0] || "home";
+    if (head === "home" || head === "following" || head === "tab") return "home";
+    if (head === "list") return "lists";
+    return navSection(head);
+  }
+
+  function sameNavSection(route, href) {
+    const here = navSection(route && route.name);
+    const there = hrefSection(href);
+    return !!here && here === there;
+  }
+
+  function goHash(next) {
+    const wanted = next || "#/";
+    const here = location.hash || "#/";
+    if (here === wanted || (wanted === "#/" && (here === "#" || here === ""))) {
+      render();
+      return;
+    }
+    if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = pageY();
+    scrollFreeze = true;
+    location.hash = wanted;
+  }
+
   function placeTabMenu() {
     const menu = document.querySelector(".tab-menu");
     const caret = document.querySelector('.tab-caret[aria-expanded="true"]');
@@ -6470,10 +6598,11 @@
   }
 
   function render(opts) {
+    const gen = (STATE.renderGen = (STATE.renderGen || 0) + 1);
     const route = parseRoute();
-    const menuTab = STATE.tabMenu && STATE.tabMenu.indexOf("list:") === 0 ? STATE.tabMenu : "";
-    const menuFits = route.name === "home" && (STATE.tabMenu === "following" ? route.tab === "following" : menuTab && route.tab === menuTab);
-    if (!menuFits) STATE.tabMenu = null;
+    syncHomeFromQuery(route);
+    const currentTab = route.name === "home" ? (route.tab || "foryou") : "";
+    if (!(route.name === "home" && STATE.tabMenu === currentTab)) STATE.tabMenu = null;
     const nextKey = routeScrollKey();
     const routeChanged = !!STATE.scrollKey && STATE.scrollKey !== nextKey;
     if (route.name === "status") {
@@ -6498,7 +6627,9 @@
     }
     if (route.name !== "status") STATE.focusId = "";
     const reset = opts && opts.reset;
-    let y = opts && Object.prototype.hasOwnProperty.call(opts, "y") ? opts.y : (reset ? 0 : window.scrollY);
+    if (opts && Object.prototype.hasOwnProperty.call(opts, "y")) STATE.holdY = opts.y;
+    if (STATE.snapTop) STATE.holdY = 0;
+    let y = STATE.holdY != null ? STATE.holdY : (reset ? 0 : window.scrollY);
     if (leavingWatch) {
       y = 0;
       SCROLLS[nextKey] = 0;
@@ -6512,6 +6643,10 @@
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const transition = routeChanged && document.startViewTransition && !reduced;
     const apply = () => {
+      if (gen !== STATE.renderGen) return;
+      if (STATE.snapTop) y = 0;
+      else if (STATE.holdY != null) y = STATE.holdY;
+      else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
       document.getElementById("app").innerHTML = shell(view(route), route);
       previewAnchor = y;
       const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
@@ -6542,11 +6677,29 @@
       placeTabMenu();
       syncTabArrows();
     };
+    const endRoute = () => {
+      if (gen !== STATE.renderGen) return;
+      if (STATE.snapTop) y = 0;
+      else if (STATE.holdY != null) y = STATE.holdY;
+      else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
+      if (!STATE.snapTop && window.scrollY > y + 4) y = window.scrollY;
+      window.scrollTo(0, y);
+      if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = y;
+      if (STATE.holdY === y) STATE.holdY = null;
+      routing = false;
+      scrollFreeze = false;
+      if (opts && opts.done) opts.done();
+    };
     if (transition) {
-      const change = document.startViewTransition(apply);
+      let change = null;
+      try { change = document.startViewTransition(apply); } catch (err) { apply(); endRoute(); return; }
       if (change && change.ready) change.ready.catch(() => {});
-      if (change && change.finished) change.finished.then(() => window.scrollTo(0, y)).catch(() => {});
-    } else apply();
+      if (change && change.finished) change.finished.then(endRoute).catch(endRoute);
+      else endRoute();
+    } else {
+      apply();
+      endRoute();
+    }
   }
 
   function toast(message) {
@@ -6582,7 +6735,7 @@
     if (act === "back") {
       if (STATE.viewer) { closeViewer(); return; }
       if (history.length > 1) history.back();
-      else location.hash = "#/";
+      else goHash("#/");
       return;
     }
     if (act === "view") {
@@ -6595,34 +6748,53 @@
     if (act === "compose") { STATE.modal = "compose"; render(); return; }
     if (act === "close-modal") { STATE.modal = null; STATE.confirm = null; render(); return; }
     if (act === "compose-post") { STATE.modal = null; render(); toast("Posts come from your feeds"); return; }
-    if (act === "htab") {
+    if (act === "close-tab-menu") {
       STATE.tabMenu = null;
-      const tab = el.dataset.tab;
-      const next = tab === "foryou" ? "#/" : tab === "following" ? "#/following" : tab.startsWith("list:") ? "#/tab/" + encodeURIComponent(tab.slice(5)) : "#/";
-      const here = location.hash || "#/";
-      if (here === next || (next === "#/" && (here === "#/" || here === "#" || here === ""))) { render(); return; }
-      location.hash = next;
+      render();
       return;
     }
-    if (act === "tab-options") {
-      const wanted = el.dataset.id ? "list:" + el.dataset.id : "following";
-      const opening = STATE.tabMenu !== wanted;
-      STATE.tabMenu = opening ? wanted : null;
+    if (act === "htab" || act === "tab-options") {
+      const tab = el.dataset.tab || (el.dataset.id ? "list:" + el.dataset.id : "following");
       const route = parseRoute();
-      const there = route.name === "home" && route.tab === wanted;
-      if (opening && !there) location.hash = wanted === "following" ? "#/following" : "#/tab/" + encodeURIComponent(el.dataset.id);
-      else render();
+      const selected = route.name === "home" && (route.tab || "foryou") === tab;
+      if (!selected) {
+        STATE.tabMenu = null;
+        goHash(homeHash(tab));
+        return;
+      }
+      if (pageY() > 4) {
+        smoothTop();
+        return;
+      }
+      STATE.snapTop = false;
+      STATE.tabMenu = STATE.tabMenu === tab ? null : tab;
+      render();
       return;
     }
     if (act === "follow-sort") {
       const sort = el.dataset.sort === "popular" ? "popular" : "recent";
+      const tab = el.dataset.list ? "list:" + el.dataset.list : "following";
       if (el.dataset.list) {
         const list = (STATE.settings.lists || []).find((item) => item.id === el.dataset.list);
         if (list) list.sort = sort;
       } else STATE.settings.followingSort = sort;
       STATE.tabMenu = null;
       saveSettings();
-      render();
+      const next = homeHash(tab);
+      if ((location.hash || "#/") !== next) history.replaceState(null, "", next);
+      SCROLLS[routeScrollKey()] = 0;
+      render({ y: 0 });
+      return;
+    }
+    if (act === "foryou-toggle") {
+      const key = el.dataset.key === "replies" ? "forYouReplies" : "forYouReposts";
+      STATE.settings[key] = STATE.settings[key] === false;
+      saveSettings();
+      const next = homeHash("foryou");
+      if ((location.hash || "#/") !== next) history.replaceState(null, "", next);
+      STATE.tabMenu = "foryou";
+      SCROLLS[routeScrollKey()] = 0;
+      render({ y: 0 });
       return;
     }
     if (act === "manage-tabs") {
@@ -6660,7 +6832,7 @@
       STATE.tabMenu = null;
       saveSettings();
       const route = parseRoute();
-      if (route.name === "home" && route.tab === "list:" + el.dataset.id) location.hash = "#/following";
+      if (route.name === "home" && route.tab === "list:" + el.dataset.id) goHash(homeHash("following"));
       else render();
       return;
     }
@@ -6870,7 +7042,7 @@
     }
     if (act === "open-status") {
       const post = posts().find((p) => p.id === el.dataset.id);
-      if (post) location.hash = statusHash(post);
+      if (post) goHash(statusHash(post));
       return;
     }
     if (act === "thread-more") {
@@ -6946,7 +7118,7 @@
       saveSettings();
       STATE.confirm = null;
       STATE.modal = null;
-      location.hash = "#/lists";
+      goHash("#/lists");
       return;
     }
     if (act === "pin") {
@@ -7048,7 +7220,7 @@
       STATE.groupMenu = null;
       STATE.draft = null;
       const encoded = encodeURIComponent(id);
-      if (id && location.hash.indexOf("group=") >= 0 && location.hash.indexOf(encoded) >= 0) location.hash = "#/subscriptions";
+      if (id && location.hash.indexOf("group=") >= 0 && location.hash.indexOf(encoded) >= 0) goHash("#/subscriptions");
       else render();
       return;
     }
@@ -7086,7 +7258,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")) }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")) }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -7103,11 +7275,15 @@
       onAct(actEl);
       return;
     }
+    if (window.innerWidth < 500 && event.target.closest(".topbar") && !event.target.closest("button, a, input, textarea, select")) {
+      smoothTop();
+      return;
+    }
     if (event.target.closest("a, button, video, input, textarea, label")) return;
     const post = event.target.closest("[data-href], [data-open]");
     if (!post) return;
     if (post.dataset.href) window.open(post.dataset.href, "_blank", "noopener,noreferrer");
-    else location.hash = post.dataset.open;
+    else goHash(post.dataset.open);
   });
 
   let groupPress = 0;
@@ -7228,7 +7404,7 @@
     event.preventDefault();
     const input = form.querySelector("input");
     const q = (input && input.value || "").trim();
-    location.hash = "#/explore" + (q ? "?q=" + encodeURIComponent(q) : "");
+    goHash("#/explore" + (q ? "?q=" + encodeURIComponent(q) : ""));
   });
 
   document.addEventListener("change", (event) => {
@@ -7261,6 +7437,8 @@
         }
         if (typeof data.subsGroup === "string") STATE.settings.subsGroup = data.subsGroup;
         if (data.followingSort === "popular" || data.followingSort === "recent") STATE.settings.followingSort = data.followingSort;
+        if (data.forYouReposts === false || data.forYouReposts === true) STATE.settings.forYouReposts = data.forYouReposts;
+        if (data.forYouReplies === false || data.forYouReplies === true) STATE.settings.forYouReplies = data.forYouReplies;
         if (data.translateTo && window.FeedsTranslate) STATE.settings.translateTo = window.FeedsTranslate.normalize(data.translateTo);
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
@@ -7458,24 +7636,60 @@
 
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
   let routing = false;
+  let scrollFreeze = false;
   window.addEventListener("scroll", () => {
-    if (routing || !STATE.scrollKey) return;
+    if (pageY() <= 4) STATE.snapTop = false;
+    if (routing || scrollFreeze || !STATE.scrollKey) return;
     SCROLLS[STATE.scrollKey] = window.scrollY;
   }, { passive: true });
   document.addEventListener("click", (event) => {
-    const hit = event.target && event.target.closest && event.target.closest("a[href^='#'], [data-act='htab']");
-    if (hit && STATE.scrollKey) SCROLLS[STATE.scrollKey] = window.scrollY;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const navLink = event.target.closest && event.target.closest(".nav-item, .bottom-nav a");
+    if (navLink) {
+      const href = navLink.getAttribute("href") || "";
+      if (sameNavSection(parseRoute(), href)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (pageY() > 4) smoothTop();
+        else reloadAtTop();
+        return;
+      }
+    }
+    if (!STATE.scrollKey) return;
+    const link = event.target.closest && event.target.closest("a[href^='#']");
+    const opener = !link && event.target.closest && event.target.closest("[data-open]") && !event.target.closest("a, button, input, textarea");
+    const tab = event.target.closest && event.target.closest("[data-act='htab']");
+    let next = "";
+    if (link) next = link.getAttribute("href") || "";
+    else if (opener) next = opener.dataset.open || "";
+    else if (tab) {
+      const id = tab.dataset.tab || "";
+      const route = parseRoute();
+      if (route.name === "home" && (route.tab || "foryou") === id) return;
+      if (id) next = homeHash(id);
+    }
+    if (!next || next === (location.hash || "#/") || next === location.hash) return;
+    SCROLLS[STATE.scrollKey] = window.scrollY;
+    scrollFreeze = true;
   }, true);
   window.addEventListener("hashchange", () => {
     routing = true;
+    scrollFreeze = true;
     STATE.modal = null;
     STATE.drawer = false;
     STATE.menu = null;
     STATE.share = null;
     STATE.groupMenu = null;
     STATE.headerHidden = false;
-    render({ y: SCROLLS[routeScrollKey()] || 0 });
-    routing = false;
+    const key = routeScrollKey();
+    const y = SCROLLS[key] || 0;
+    render({
+      y: y,
+      done: () => {
+        routing = false;
+        scrollFreeze = false;
+      }
+    });
   });
 
   function resolvedTheme() {
@@ -7574,7 +7788,9 @@
   function showPill(posts) {
     const el = document.getElementById("new-posts");
     if (!el) return;
-    const list = Array.isArray(posts) ? posts.filter(Boolean) : [];
+    const route = parseRoute();
+    let list = Array.isArray(posts) ? posts.filter(Boolean) : [];
+    if (route.name === "home") list = list.filter((post) => homeShows(post, route));
     if (!list.length) { el.hidden = true; return; }
     const faces = [];
     const seen = {};
@@ -8380,7 +8596,9 @@
       updateBadge(0);
       const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
       if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
-      render({ y: 0 });
+      const route = parseRoute();
+      const popular = route.name === "home" && tabSort(route.tab || "foryou") === "popular";
+      render(popular ? undefined : { y: 0 });
     });
     let pullStart = 0;
     let pulling = false;
@@ -8525,8 +8743,8 @@
         return;
       }
       const tab = route.tab === "following" ? "following" : "foryou";
-      if (dx < 0 && tab === "foryou") location.hash = "#/following";
-      else if (dx > 0 && tab === "following") location.hash = "#/";
+      if (dx < 0 && tab === "foryou") goHash(homeHash("following"));
+      else if (dx > 0 && tab === "following") goHash(homeHash("foryou"));
     }, { passive: true });
   }
 
