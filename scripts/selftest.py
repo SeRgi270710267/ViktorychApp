@@ -718,6 +718,9 @@ def main() -> None:
                 {"platform": "youtube", "id": "abcdefghijk", "statusId": "abcdefghijk", "handle": "Chan", "author": "Chan", "title": "Watch me", "text": "", "url": "https://www.youtube.com/watch?v=abcdefghijk", "media": [{"type": "video", "url": "https://www.youtube.com/embed/abcdefghijk", "poster": "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", "width": 480, "height": 360}]},
                 {"platform": "instagram", "id": "https://www.instagram.com/p/AbC123/", "statusId": "https://www.instagram.com/p/AbC123/", "handle": "ada", "author": "Ada", "text": "photo", "url": "https://www.instagram.com/p/AbC123/"},
                 {"platform": "discord", "id": "discord:10:20", "statusId": "discord:10:20", "handle": "ada", "author": "Ada", "text": "hello", "url": "https://discord.com/channels/1/10/20"},
+                {"platform": "x", "id": "nitter", "statusId": "nitter", "handle": "ada", "author": "Ada", "text": "From nitter", "media": [{"type": "photo", "url": "http://nitter.example/pic/media%2Fabc.jpg"}]},
+                {"platform": "x", "id": "mp4", "statusId": "mp4", "handle": "ada", "author": "Ada", "text": "Clip", "media": [{"type": "video", "url": "http://video.twimg.com/amplify_video/1/vid/avc1/720x720/a.mp4", "poster": "https://pbs.twimg.com/amplify_video_thumb/1/img/a.jpg"}]},
+                {"platform": "x", "id": "cdn", "statusId": "cdn", "handle": "cdn", "author": "CDN", "text": "skip", "avatar": "https://cdn.jsdelivr.net/gh/owner-account/rss-feeds@data/archive/x.jpg", "media": [{"type": "photo", "url": "https://raw.githubusercontent.com/owner-account/rss-feeds/data/archive/x.jpg"}]},
             ],
         }), encoding="utf-8")
         archive = share_root / "archive"
@@ -738,7 +741,7 @@ def main() -> None:
         ig_html = (share_root / "s" / "instagram-AbC123.html").read_text(encoding="utf-8")
         stub_html = (share_root / "s" / "x-stub1.html").read_text(encoding="utf-8")
         profile_html = (share_root / "u" / "x-ada.html").read_text(encoding="utf-8")
-        check(counts["posts"] == 4 and counts["watch"] == 1 and counts["profiles"] == 1 and counts["stubs"] == 1, "share pages cover posts, a watch page, a profile, and a new stub")
+        check(counts["posts"] == 7 and counts["watch"] == 1 and counts["profiles"] == 1 and counts["stubs"] == 1, "share pages cover posts, a watch page, a profile, and a new stub")
         discord_html = (share_root / "s" / "discord-discord-10-20.html").read_text(encoding="utf-8")
         check('og:title" content="Ada (@ada) on Discord"' in discord_html and "#/discord/ada/status/discord%3A10%3A20" in discord_html, "an id with colons still gets a share page and opens that post")
         check(not (share_root / "s" / "stale.html").exists(), "rebuilding share pages removes pages from the previous deploy")
@@ -749,6 +752,17 @@ def main() -> None:
         from share_pages import sized as size_share_image
         original = size_share_image("https://pbs.twimg.com/media/abc.jpg", 4096, 2599, "image")
         check(original["url"].endswith("?name=large") and original["width"] == 2048 and original["height"] == 1300, "a Twitter original is requested at the large rendition with matching dimensions")
+        from share_pages import https as share_https
+        check(share_https("http://pbs.twimg.com/media/abc.jpg") == "https://pbs.twimg.com/media/abc.jpg", "an http Twitter image is rewritten to https")
+        check(share_https("https://nitter.example/pic/media%2Fabc.jpg") == "https://pbs.twimg.com/media/abc.jpg?name=large", "a Nitter picture proxy becomes the Twitter CDN image")
+        check(share_https("http://video.twimg.com/tweet_video/abc.mp4") == "https://video.twimg.com/tweet_video/abc.mp4", "an http Twitter video is rewritten to https")
+        check(share_https("https://cdn.jsdelivr.net/gh/x.png") == "" and share_https("https://raw.githubusercontent.com/o/r/data/x.jpg") == "", "jsDelivr and the data branch are not preview images")
+        nitter_html = (share_root / "s" / "x-nitter.html").read_text(encoding="utf-8")
+        mp4_html = (share_root / "s" / "x-mp4.html").read_text(encoding="utf-8")
+        cdn_html = (share_root / "s" / "x-cdn.html").read_text(encoding="utf-8")
+        check('og:image" content="https://pbs.twimg.com/media/abc.jpg?name=large"' in nitter_html, "a Nitter picture proxy is the share image")
+        check('og:video" content="https://video.twimg.com/amplify_video/1/vid/avc1/720x720/a.mp4"' in mp4_html and 'og:video:type" content="video/mp4"' in mp4_html, "an http mp4 on video.twimg.com is shared as https")
+        check("jsdelivr" not in cdn_html and "raw.githubusercontent.com" not in cdn_html and "og-card.png" in cdn_html, "a blocked image host falls back to the Feeds card")
         check("maxresdefault.jpg" in watch_html and 'twitter:card" content="player"' in watch_html and "youtube.com/embed/abcdefghijk" in watch_html and "#/watch/youtube:abcdefghijk" in watch_html, "a YouTube video offers a player card and opens the watch route")
         from share_pages import choose_youtube_thumb
         wide = choose_youtube_thumb("abcdefghijk", lambda url: "maxresdefault.jpg" in url)

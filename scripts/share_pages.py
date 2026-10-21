@@ -18,7 +18,7 @@ import struct
 import urllib.request
 import zlib
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from archive import canonical_id
 
@@ -61,9 +61,42 @@ def trim(text: str, limit: int = 200) -> str:
     return flat[: limit - 1].rstrip() + "…"
 
 
+def rewrite_media_url(url: str) -> str:
+    """Turn a Nitter /pic proxy or an http Twitter CDN URL into absolute https."""
+    parsed = urlparse(url)
+    host = (parsed.netloc or "").lower()
+    if parsed.scheme == "http" and host in ("pbs.twimg.com", "video.twimg.com"):
+        parsed = parsed._replace(scheme="https")
+        url = urlunparse(parsed)
+        parsed = urlparse(url)
+    if "/pic/" not in parsed.path:
+        return url
+    raw = unquote(parsed.path.split("/pic/", 1)[1]).split("?")[0]
+    if raw.startswith("http://"):
+        raw = "https://" + raw[len("http://"):]
+    if raw.startswith("https://"):
+        return raw
+    prefixes = ("media/", "amplify_video_thumb/", "ext_tw_video_thumb/", "tweet_video_thumb/", "tweet_video/")
+    if raw.startswith(prefixes):
+        suffix = "?name=large" if raw.startswith("media/") else ""
+        return "https://pbs.twimg.com/" + raw + suffix
+    return url
+
+
 def https(url) -> str:
-    text = str(url or "").strip()
-    return text if text.startswith("https://") else ""
+    """Absolute https media. jsDelivr and the data branch are not preview images."""
+    text = rewrite_media_url(str(url or "").strip())
+    if text.startswith("//"):
+        text = "https:" + text
+    if not text.startswith("https://"):
+        return ""
+    parsed = urlparse(text)
+    host = (parsed.netloc or "").lower()
+    if host == "cdn.jsdelivr.net":
+        return ""
+    if host == "raw.githubusercontent.com" and "/data/" in parsed.path:
+        return ""
+    return text
 
 
 def safe_slug(value: str) -> str:
