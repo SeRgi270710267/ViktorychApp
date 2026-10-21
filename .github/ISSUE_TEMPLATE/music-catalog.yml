@@ -1,0 +1,17 @@
+name: Music catalog
+description: Publish the SIntelMusic library. Only an issue opened by the repo owner is applied.
+title: "Music catalog"
+labels: []
+body:
+  - type: textarea
+    id: catalog
+    attributes:
+      label: Catalog
+      description: JSON for SIntelMusic. Songs need a direct https audio or YouTube link. Files uploaded on a device stay on that device.
+      placeholder: |
+        {
+          "songs": [],
+          "playlists": []
+        }
+    validations:
+      required: true

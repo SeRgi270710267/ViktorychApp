@@ -150,6 +150,7 @@
   const icon = (name) => name === "clock"
     ? `<svg class="clock" viewBox="0 0 24 24" aria-hidden="true">${LINE.clock}</svg>`
     : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name] || ""}"/></svg>`;
+  if (window.SIntelMusic && window.SIntelMusic.install) window.SIntelMusic.install(PATH);
   const LINE = {
     clock: `<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l2.8 1.7"/>`,
     rocket: `<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>`,
@@ -4924,6 +4925,7 @@ const here = parseRoute();
     }
     if (parts[0] === "article" && parts[1]) return { name: "article", id: parts.slice(1).join("/"), query };
     if (parts[0] === "bookmarks" && parts.length === 1) return { name: "history", tab: "bookmarks", query };
+    if (parts[0] === "music") return { name: "music", section: parts[1] || "home", id: parts.slice(2).join("/"), query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -4955,10 +4957,12 @@ const here = parseRoute();
     return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
   }
 
-  function navItem(href, name, label, on) {
-    const glyph = icon(on && name === "home" ? "homeOn" : name);
+  function navItem(href, name, label, on, aria) {
+    const onName = name + "On";
+    const glyph = icon(on && PATH[onName] && (name === "home" || name.indexOf("mu") === 0) ? onName : name);
     const badge = name === "bell" ? bellBadgeHtml() : "";
-    return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${label}</span></a>`;
+    const accessible = aria || label;
+    return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(accessible)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${label}</span></a>`;
   }
 
   function wordmarkSvg(cls) {
@@ -4971,20 +4975,27 @@ const here = parseRoute();
 
   function nav(route) {
     const name = route.name;
-    return `<header class="nav">
-      <div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize sidebar" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>
-      <div class="nav-scroll">
-        ${brandLink()}
-        ${navItem("#/", "home", "Home", name === "home")}
+    const music = name === "music" && window.SIntelMusic;
+    const brand = music ? window.SIntelMusic.brand() : brandLink();
+    const links = music ? window.SIntelMusic.links(route, navItem) : `${navItem("#/", "home", "Home", name === "home")}
         ${navItem("#/explore", "search", "Explore", name === "explore")}
         ${navItem("#/notifications", "bell", "Notifications", name === "notifications")}
         ${navItem("#/messages", "mail", "Messages", name === "messages")}
         ${navItem("#/feeds", "spark", "Feeds", name === "feeds")}
         ${navItem("#/lists", "lists", "Lists", name === "lists" || name === "list")}
         ${navItem("#/history", "clock", "History", name === "history")}
+        ${navItem("#/music", "muNote", "Music", false)}
         ${navItem(subsHash(STATE.settings.subsGroup), "subs", "Subscriptions", name === "subscriptions")}
-        ${navItem("#/settings", "more", "More", name === "settings")}
-        <button class="post-btn" data-act="compose" aria-label="Post"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>
+        ${navItem("#/settings", "more", "More", name === "settings")}`;
+    const post = music
+      ? `<button class="post-btn" data-act="music-add" aria-label="Add song"><span class="post-label">Add song</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
+      : `<button class="post-btn" data-act="compose" aria-label="Post"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
+    return `<header class="nav">
+      <div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize sidebar" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>
+      <div class="nav-scroll">
+        ${brand}
+        ${links}
+        ${post}
       </div>
       <button class="account-pill" data-act="drawer" aria-label="Account menu">
         <span class="ava initials">Y</span>
@@ -5025,6 +5036,7 @@ const here = parseRoute();
   }
 
   function bottom(route) {
+    if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.bottomHtml) return window.SIntelMusic.bottomHtml(route, icon);
     const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(name)}${name === "bell" ? bellBadgeHtml() : ""}</span></a>`;
     return `<nav class="bottom-nav" aria-label="Primary">
       ${item("#/", route.name === "home" ? "homeOn" : "home", "Home", route.name === "home")}
@@ -8063,13 +8075,16 @@ const here = parseRoute();
 
   function drawer() {
     if (!STATE.drawer) return "";
-    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
-      <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>You</b><div class="phandle">@reader</div></div></div>
-      <a href="#/lists">${icon("lists")} Lists</a>
+    const music = parseRoute().name === "music" && window.SIntelMusic;
+    const links = music ? window.SIntelMusic.drawerLinks(icon) : `<a href="#/lists">${icon("lists")} Lists</a>
       <a href="#/history">${icon("clock")} History</a>
       <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} Subscriptions</a>
       <a href="#/feeds">${icon("spark")} Feeds</a>
-      <a href="#/settings">${icon("more")} Settings</a>
+      <a href="#/music">${icon("muNote")} Music</a>
+      <a href="#/settings">${icon("more")} Settings</a>`;
+    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
+      <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>You</b><div class="phandle">@reader</div></div></div>
+      ${links}
       ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} Install app</button>`}
     </div></div>`;
   }
@@ -8204,7 +8219,7 @@ if (STATE.histClear) {
   function shell(main, route) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages";
     const explore = route.name === "explore";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const top = (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall ? 106 : 53) + rowExtra + storyExtra;
@@ -9250,6 +9265,7 @@ if (STATE.histClear) {
   }
 
   function view(route) {
+    if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead("SIntelMusic") + emptyBlock("SIntelMusic isn’t available", "Reload the page.");
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>Home</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
@@ -9332,6 +9348,7 @@ if (STATE.histClear) {
   }
 
   function sameNavSection(route, href) {
+    if (route && route.name === "music" && window.SIntelMusic && window.SIntelMusic.sameSection) return window.SIntelMusic.sameSection(route, href);
     const here = navSection(route && route.name);
     const there = hrefSection(href);
     return !!here && here === there;
@@ -9541,7 +9558,8 @@ if (STATE.histClear) {
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
       const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
-      document.title = (discordTitle || personName || (route.name === "home" ? "Home" : route.name === "explore" ? (exploreQ ? exploreQ + " - Explore" : "Explore") : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / SuperintelApp";
+      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = window.SIntelMusic.titleFor(route);
+      else document.title = (discordTitle || personName || (route.name === "home" ? "Home" : route.name === "explore" ? (exploreQ ? exploreQ + " - Explore" : "Explore") : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / SuperintelApp";
       window.scrollTo(0, y);
       if (focusId) {
         const el = document.getElementById(focusId);
@@ -9564,6 +9582,7 @@ if (STATE.histClear) {
       watchHydration();
       scheduleDetect();
       if (window.FeedsTranslate) window.FeedsTranslate.paint();
+      if (window.SIntelMusic && window.SIntelMusic.afterRender) window.SIntelMusic.afterRender(route);
       syncMediaSession();
       if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);
       bindPlayers();
@@ -9649,6 +9668,7 @@ if (STATE.histClear) {
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
+    if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
     if (act === "skip") {
       const main = document.querySelector("main.center");
@@ -11762,6 +11782,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function syncMediaSession() {
     if (!navigator.mediaSession) return;
     const route = parseRoute();
+    if (route.name === "music") return;
     if (route.name !== "watch") {
       navigator.mediaSession.metadata = null;
       return;
@@ -11803,7 +11824,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     let timer = 0;
     const go = () => {
       if (readStored(sessionStorage, "sw-reload") === "1") return;
-      const busy = [...document.querySelectorAll("video")].some((video) => video && !video.paused && !video.ended) || !!(window.Spaces && window.Spaces.playing && window.Spaces.playing());
+      const busy = [...document.querySelectorAll("video")].some((video) => video && !video.paused && !video.ended) || !!(window.Spaces && window.Spaces.playing && window.Spaces.playing()) || !!(window.SIntelMusic && window.SIntelMusic.playing && window.SIntelMusic.playing());
       if (busy && document.visibilityState === "visible") {
         timer = setTimeout(go, 4000);
         return;
@@ -12734,6 +12755,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       toast: toast
     });
     window.Spaces.start();
+  }
+  if (window.SIntelMusic && window.SIntelMusic.bind) {
+    window.SIntelMusic.bind({
+      render: function () { render(); },
+      toast: toast,
+      go: goHash,
+      repo: function () { return GITHUB_REPO; }
+    });
   }
   boot();
 })();
