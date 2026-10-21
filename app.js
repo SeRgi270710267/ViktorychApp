@@ -3112,13 +3112,53 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return "";
   }
 
+  function calendarDate(text) {
+    const match = String(text || "").match(/\b([A-Za-z]{3,9})\s+(\d{1,2}),\s+(\d{4})\b/);
+    if (!match) return "";
+    const months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+    const month = months[match[1].slice(0, 3).toLowerCase()];
+    if (month == null) return "";
+    const stamp = Date.UTC(Number(match[3]), month, Number(match[2]));
+    if (!isFinite(stamp)) return "";
+    return new Date(stamp).toISOString().replace(/\.\d{3}Z$/, ".000Z");
+  }
+
   function ivPublish(item) {
     if (!item) return "";
-    const label = item.publishedText || "";
+    const label = String(item.publishedText || "").trim();
     if (relativeLabel(label)) return "";
+    const day = calendarDate(label);
     const iso = ivIso(item.published);
-    if (!label && iso && Math.abs(Date.now() - timeMs(iso)) < 120000) return "";
-    return iso;
+    if (iso && Math.abs(Date.now() - timeMs(iso)) < 180000) return day || "";
+    if (day && iso) {
+      const start = timeMs(day);
+      const at = timeMs(iso);
+      if (at >= start && at < start + 86400000) return iso;
+      return day;
+    }
+    if (day) return day;
+    return iso || "";
+  }
+
+  function seenDates() {
+    try {
+      const parsed = JSON.parse(readStored(localStorage, "seen-dates") || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function rememberSeen(id) {
+    const key = String(id || "");
+    if (!key) return "";
+    const all = seenDates();
+    if (all[key]) return all[key];
+    const keys = Object.keys(all);
+    if (keys.length > 400) delete all[keys[0]];
+    all[key] = new Date().toISOString().replace(/\.\d{3}Z$/, ".000Z");
+    try { writeStored(localStorage, "seen-dates", JSON.stringify(all)); } catch (err) { /* storage can be full */ }
+    return all[key];
   }
 
   function upgradeAvatar(url) {
@@ -3991,7 +4031,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       kind: "community",
       author: item.author || seed.author || "",
       text: item.content || seed.text || "",
-      date: ivIso(item.published) || seed.date || "",
+      date: ivPublish(item) || seed.date || "",
       url: "https://www.youtube.com/post/" + item.commentId,
       media: media,
       avatar: bestThumb(item.authorThumbnails).url || seed.avatar || ""
@@ -5649,6 +5689,7 @@ const here = parseRoute();
       text: video.title || "",
       description: video.description || "",
       date: ivPublish(video),
+      dateFrom: relativeLabel(video.publishedText || "") ? "relative" : "",
       url: "https://www.youtube.com/watch?v=" + id,
       media: [{ type: "video", url: "", poster: poster, duration: video.lengthSeconds, videoId: id }],
       stats: { views: video.viewCount }
@@ -5687,6 +5728,7 @@ const here = parseRoute();
       verifiedType: profile && profile.verifiedType,
       text: item.content || "",
       date: ivPublish(item),
+      dateFrom: relativeLabel(item.publishedText || "") ? "relative" : "",
       url: "https://www.youtube.com/post/" + id,
       media: (built && built.media) || [],
       stats: { likes: item.likeCount, replies: item.replyCount }
@@ -11461,7 +11503,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const title = ((node.getElementsByTagName("title")[0] && node.getElementsByTagName("title")[0].textContent) || "").trim();
       const linkNode = node.getElementsByTagName("link")[0];
       const link = (linkNode && (linkNode.getAttribute("href") || linkNode.textContent)) || "";
-      const published = xmlText(node, ["published", "pubdate", "updated"]);
+      const published = xmlText(node, (feed.platform || "") === "youtube" ? ["published", "pubdate"] : ["published", "pubdate", "updated"]);
       const summary = (node.getElementsByTagName("description")[0] && node.getElementsByTagName("description")[0].textContent)
         || (node.getElementsByTagName("summary")[0] && node.getElementsByTagName("summary")[0].textContent)
         || (node.getElementsByTagName("content")[0] && node.getElementsByTagName("content")[0].textContent)
@@ -11544,6 +11586,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       copy.feedId = feed.id;
       copy.platform = "youtube";
       copy.date = earlierIso(stored[id], earlierIso(rssDate[id], copy.date || ""));
+      if (!copy.date && copy.dateFrom !== "relative") copy.date = seenDates()[id] || rememberSeen(id);
+      delete copy.dateFrom;
       out.push(copy);
     });
     return out;

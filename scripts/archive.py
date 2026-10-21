@@ -16,7 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from adapters.common import post_is_bridge_error, stub_is_bridge_error  # noqa: E402
+from adapters.common import post_is_bridge_error, stub_is_bridge_error, trusted_time  # noqa: E402
 
 SNIPPET = 280
 MONTH = re.compile(r"^(\d{4})-(\d{2})")
@@ -214,6 +214,42 @@ def _enrich_stub(archive: dict, seen: dict, stub: dict) -> None:
         return
 
 
+def _earlier_date(left, right) -> str:
+    a = trusted_time(left)
+    b = trusted_time(right)
+    if a and b:
+        return str(left if a <= b else right)
+    if a:
+        return str(left or "")
+    if b:
+        return str(right or "")
+    return ""
+
+
+def _pull_date_earlier(archive: dict, seen: dict, stub: dict) -> None:
+    """A later copy can only move a stub's date backward, then into that month."""
+    key = (stub.get("p"), str(stub.get("id")))
+    name = seen.get(key)
+    rows = archive["shards"].get(name) or []
+    incoming = str(stub.get("d") or "")
+    for row in rows:
+        if row.get("p") != stub.get("p") or str(row.get("id")) != str(stub.get("id")):
+            continue
+        chosen = _earlier_date(row.get("d") or "", incoming)
+        if not chosen or chosen == str(row.get("d") or ""):
+            return
+        row["d"] = chosen[:40]
+        dest = month_key(chosen)
+        if dest == name:
+            return
+        rows.remove(row)
+        if not rows:
+            archive["shards"].pop(name, None)
+        archive["shards"].setdefault(dest, []).append(row)
+        seen[key] = dest
+        return
+
+
 def merge_posts(archive: dict, posts) -> int:
     seen = _remember(archive)
     added = 0
@@ -223,6 +259,7 @@ def merge_posts(archive: dict, posts) -> int:
             continue
         key = (stub["p"], stub["id"])
         if key in seen:
+            _pull_date_earlier(archive, seen, stub)
             _enrich_stub(archive, seen, stub)
             continue
         name = month_key(stub.get("d") or "")
@@ -243,6 +280,7 @@ def merge_stubs(archive: dict, stubs) -> int:
             continue
         key = (stub["p"], stub["id"])
         if key in seen:
+            _pull_date_earlier(archive, seen, stub)
             continue
         name = month_key(stub.get("d") or "")
         archive["shards"].setdefault(name, []).append(stub)

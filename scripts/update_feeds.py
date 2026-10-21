@@ -597,11 +597,23 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             saved = next((item for item in profiles if item.get("id") == feed.get("id")), {})
             carry_youtube_fields(posts, old_by_feed.get(feed["id"], []), saved)
         limit = feed.get("limit")
-        if limit:
+        # YouTube's channel RSS is already a short list and every entry has a
+        # real <published> time. Cutting it to the newest few drops older
+        # uploads, and the next live fetch then treats them as new.
+        if limit and feed.get("platform") != "youtube":
             ranked = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)
             articles = [post for post in ranked if post.get("article")]
             rest = [post for post in ranked if not post.get("article")][: int(limit)]
             posts = articles + rest
+        if feed.get("platform") == "youtube" and not use_fixtures:
+            from adapters.youtube_rss import backfill_youtube_dates
+
+            try:
+                filled = backfill_youtube_dates(posts)
+                if filled:
+                    print(f"[youtube] {feed['id']}: {filled} publish dates from the watch page")
+            except Exception as exc:
+                print(f"[keep] {feed['id']}: watch dates: {exc}", file=sys.stderr)
         if feed.get("platform") == "youtube" and not use_fixtures:
             from adapters.youtube_community import fetch_community
 
