@@ -1106,7 +1106,7 @@ def main() -> None:
     workflow_text = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy]" in workflow_text, "the sync uploads a report and keeps one problem issue")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "saveData" in app and "are not Never" in app and "threshold: [0, 0.6, 1]" in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app and "function scheduleIdleReload(" in app and 'box.id = "autoplay-debug"' in app and "function xRefresh(" in app and "onReady" in app and "reload-armed" in app, "one in-view video previews muted, a miss is explained, and an update reloads when idle")
-    check('cache: "reload"' in worker and "skipWaiting" in worker and "clients.claim" in worker and "function isShell(" in worker and "reload-when-idle" in worker and "client.navigate" in worker and "translate.js" in worker and "translate.css" in worker, "a new service worker activates, reloads an open page, and loads translate.js from the network")
+    check('cache: "reload"' in worker and "skipWaiting" in worker and "clients.claim" in worker and "function isShell(" in worker and "reload-when-idle" in worker and "client.navigate" in worker and "includeUncontrolled" in worker and "prev.version" in worker and "translate.js" in worker and "translate.css" in worker, "a new service worker activates, reloads an open page, and loads translate.js from the network")
     check("function posterList(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.6" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 60 percent visible")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
@@ -1139,7 +1139,8 @@ def main() -> None:
     vk_client = parse_web_client('{clientSecret:L,clientId:R,authClientId:D}=(j=111,P="publicsecretvalue1",O=1);mG:"5.289"')
     check(vk_client == ("111", "publicsecretvalue1", "5.289"), "the public web bundle yields the anonymous client")
     check("6287487" not in (ROOT / "scripts" / "vk_remote.py").read_text(encoding="utf-8"), "vk client credentials are parsed from vk.com, not copied into the repo")
-    check("loadVkSaved" in app and "Watch on VK" in app and "seenFeeds" in app and 'platform === "vk"' in app, "vk profiles use the synced wall and a new follow is picked up once")
+    check("loadVkSaved" in app and "Watch on VK" in app and "seenFeeds" in app and "seenDefaults" in app and "function mergeDefaultFollows(" in app and 'id === "vk:vk"' in app and 'platform === "vk"' in app, "vk profiles use the synced wall and a new follow is picked up once")
+    check("function catalogSignature(" in app and "feedsChanged" in app and "function adoptFeeds(" in app, "a configured feed with no posts still updates the Feeds page")
     from adapters.telegram import fetch_channel, parse as parse_telegram
 
     tg_html = (FIX / "telegram_channel.html").read_text(encoding="utf-8")

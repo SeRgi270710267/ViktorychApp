@@ -543,7 +543,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0 });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0 });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -579,21 +579,9 @@
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
+        parsed.seenDefaults = configured.slice();
         parsed.initialized = true;
-      }
-      if (!Array.isArray(parsed.seenFeeds)) {
-        // Existing follows stay as the reader left them. vk:vk is new in this
-        // version, so it joins Following once. Later accounts use seenFeeds.
-        parsed.seenFeeds = configured.slice();
-        if (configured.indexOf("vk:vk") >= 0 && parsed.follows.indexOf("vk:vk") < 0) parsed.follows.push("vk:vk");
-      } else {
-        configured.forEach((id) => {
-          if (parsed.seenFeeds.indexOf(id) < 0) {
-            parsed.seenFeeds.push(id);
-            if (parsed.follows.indexOf(id) < 0) parsed.follows.push(id);
-          }
-        });
-      }
+      } else mergeDefaultFollows(parsed, configured);
       return parsed;
     } catch (err) {
       return fresh();
@@ -603,6 +591,52 @@
   function saveSettings() {
     localStorage.setItem(KEY, JSON.stringify(STATE.settings));
     syncWorkerState();
+  }
+
+  function feedHasPosts(id) {
+    return posts().some((post) => post && post.feedId === id);
+  }
+
+  // seenDefaults is every default this device has already been offered.
+  // A configured feed that appears later is followed once. Unfollow leaves
+  // the id in the list, so the next load does not add it again.
+  function mergeDefaultFollows(parsed, configured) {
+    if (!configured.length || !posts().length) return;
+    const follows = parsed.follows || [];
+    if (!Array.isArray(parsed.seenDefaults)) {
+      if (Array.isArray(parsed.seenFeeds)) {
+        parsed.seenDefaults = parsed.seenFeeds.slice();
+        // The first migration copied every configured id into seenFeeds and
+        // followed only vk:vk. An empty feed in that list was never unfollowed.
+        configured.forEach((id) => {
+          if (follows.indexOf(id) >= 0 || feedHasPosts(id)) return;
+          const at = parsed.seenDefaults.indexOf(id);
+          if (at >= 0) parsed.seenDefaults.splice(at, 1);
+        });
+      } else {
+        parsed.seenDefaults = follows.slice();
+        configured.forEach((id) => {
+          if (parsed.seenDefaults.indexOf(id) >= 0) return;
+          if (id === "vk:vk") return;
+          if (feedHasPosts(id)) parsed.seenDefaults.push(id);
+        });
+      }
+    }
+    configured.forEach((id) => {
+      if (parsed.seenDefaults.indexOf(id) < 0) {
+        parsed.seenDefaults.push(id);
+        if (follows.indexOf(id) < 0) follows.push(id);
+      }
+    });
+    parsed.follows = follows;
+    parsed.seenFeeds = parsed.seenDefaults.slice();
+  }
+
+  function rememberUnfollow(id) {
+    if (!STATE.settings || !id) return;
+    if (!Array.isArray(STATE.settings.seenDefaults)) STATE.settings.seenDefaults = (STATE.settings.seenFeeds || []).slice();
+    if (STATE.settings.seenDefaults.indexOf(id) < 0) STATE.settings.seenDefaults.push(id);
+    STATE.settings.seenFeeds = STATE.settings.seenDefaults.slice();
   }
 
   function isFollowed(id) { return STATE.settings.follows.includes(id); }
@@ -5673,7 +5707,7 @@
     row.posts = [];
     absorbSaved(row);
     row.media = (row.posts || []).filter((post) => (post.media || []).some((item) => item && item.type !== "file" && item.type !== "audio" && (item.url || item.poster)));
-    row.limited = !(row.posts || []).length;
+    row.limited = !feed && !(row.posts || []).length;
     if ((row.posts || []).length) row.saved = false;
     row.fetchedAt = Date.now();
     return Promise.resolve();
@@ -5886,7 +5920,7 @@
     else if (list.length) body = list.map((post) => card(post, post.repostedBy ? "" : "author")).join("");
     else body = emptyBlock(
       tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : tab === "community" ? "No community posts yet" : tab === "videos" ? "No videos yet" : "No posts yet",
-      row.error === "thin" && !row.saved ? "The live timeline didn’t load from the public sources." : "Nothing from this account is available in this tab."
+      row.error === "thin" && !row.saved ? "The live timeline didn’t load from the public sources." : (tab === "replies" ? "Replies from this account will show up here." : tab === "media" ? "Photos and videos from this account will show up here." : "Posts from this account will show up here.")
     );
     const more = tab && row.cursor[tab] && !row.saved ? `<div id="live-more" class="live-more">${row.paging === tab ? "Loading…" : ""}</div>` : "";
     return `<div class="topbar profile-bar">
@@ -7788,8 +7822,10 @@
       const on = ids.some((item) => isFollowed(item));
       ids.forEach((item) => {
         const i = STATE.settings.follows.indexOf(item);
-        if (on) { if (i >= 0) STATE.settings.follows.splice(i, 1); }
-        else if (i < 0) STATE.settings.follows.push(item);
+        if (on) {
+          if (i >= 0) STATE.settings.follows.splice(i, 1);
+          rememberUnfollow(item);
+        } else if (i < 0) STATE.settings.follows.push(item);
       });
       saveSettings();
       render();
@@ -8202,7 +8238,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0 }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0 }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -8408,7 +8444,10 @@
         STATE.settings.bookmarks = data.bookmarks || {};
         STATE.settings.reposts = data.reposts || {};
         STATE.settings.savedPosts = data.savedPosts || STATE.settings.savedPosts || {};
+        if (Array.isArray(data.seenDefaults)) STATE.settings.seenDefaults = data.seenDefaults;
+        else if (Array.isArray(data.seenFeeds)) STATE.settings.seenDefaults = data.seenFeeds.slice();
         if (Array.isArray(data.seenFeeds)) STATE.settings.seenFeeds = data.seenFeeds;
+        if (Array.isArray(STATE.settings.seenDefaults)) STATE.settings.seenFeeds = STATE.settings.seenDefaults.slice();
         if (data.appearance) STATE.settings.appearance = data.appearance;
         if (data.autoplay === "all" || data.autoplay === "wifi" || data.autoplay === "never") STATE.settings.autoplay = data.autoplay;
         if (Array.isArray(data.mutedWords)) STATE.settings.mutedWords = data.mutedWords;
@@ -9215,6 +9254,20 @@
     return res.json();
   }
 
+  function catalogSignature(doc) {
+    return ((doc && doc.feeds) || []).map((feed) => {
+      if (!feed || !feed.id) return "";
+      return feed.id + (feed.configured ? "*" : "");
+    }).sort().join("|");
+  }
+
+  function adoptFeeds(doc) {
+    if (!doc || !STATE.data) return;
+    STATE.data.feeds = doc.feeds || [];
+    STATE.settings = loadSettings();
+    saveSettings();
+  }
+
   async function refreshFeeds(apply) {
     try {
       const doc = lockDocDates(await fetchFeeds(true));
@@ -9225,16 +9278,22 @@
         if (post.id) current[String(post.id)] = true;
       });
       const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !current[String(post.id || "")]);
-      if (apply || !STATE.data) {
+      const feedsChanged = catalogSignature(STATE.data) !== catalogSignature(doc);
+      if (apply || !STATE.data || (feedsChanged && !added.length)) {
         notePublished(doc);
         STATE.data = withMemory(doc);
         STATE.error = null;
         STATE.pendingFeed = null;
         if (!(STATE.pendingLive || []).length) showPill([]);
+        if (feedsChanged) adoptFeeds(doc);
         render();
         scanBellPosts(doc.posts);
         ensureVideoOwners();
         return;
+      }
+      if (feedsChanged) {
+        adoptFeeds(doc);
+        render();
       }
       scanBellPosts(doc.posts);
       if (!added.length) return;
@@ -9870,7 +9929,10 @@
       if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
       if (data.type === "feeds-updated") refreshFeeds(false);
       if (data.type === "bell-delivered" || data.type === "bell-queue") commitBellNotes(data.notes || []);
-      if (data.type === "reload-when-idle" && STATE.swUpdate) showUpdate();
+      if (data.type === "reload-when-idle") {
+        STATE.swUpdate = true;
+        showUpdate();
+      }
     });
   }
 

@@ -60,19 +60,19 @@ self.addEventListener("activate", (event) => {
 // client.navigate is not awaited: waiting for it inside activate deadlocks
 // the navigation on this worker.
 async function takeOverClients() {
-  let at = 0;
   try {
     const db = await idb();
-    at = Number(await idbGet(db, "shell-reload-at") || 0);
-    if (at && Date.now() - at < 15000) return;
-    await idbSet(db, "shell-reload-at", Date.now());
+    const prev = await idbGet(db, "shell-reload-at");
+    const at = typeof prev === "number" ? prev : Number(prev && prev.at) || 0;
+    const version = prev && typeof prev === "object" ? prev.version : "";
+    if (version === VERSION && at && Date.now() - at < 15000) return;
+    await idbSet(db, "shell-reload-at", { version: VERSION, at: Date.now() });
   } catch (err) { /* a missed guard still reloads at most once per window */ }
-  const windows = await self.clients.matchAll({ type: "window" });
+  const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   for (const client of windows) {
     try { client.postMessage({ type: "reload-when-idle" }); } catch (err) { /* the page may already be closing */ }
     if (!client.navigate) continue;
     client.navigate(client.url).catch(() => {});
-    return;
   }
 }
 
