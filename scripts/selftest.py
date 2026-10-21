@@ -691,7 +691,9 @@ def main() -> None:
     check("Translate post" in translate_js and "Translate reply" in translate_js and "Translate bio" in translate_js and "Show original" in translate_js and "Translated from " in translate_js and "LanguageDetector" in translate_js and "downloadable" in translate_js and "api.mymemory.translated.net" in translate_js and "lingva" in translate_js and "translate.google.com" in translate_js and "sessionStorage" in translate_js and "Open in Google Translate" in translate_js, "in-place translation keeps links and falls through free engines")
     check("corsproxy.io" not in translate_js and "allorigins" not in translate_js and "api.x.com" not in translate_js, "translation does not depend on an open proxy or the X API")
     check(page.index('src="translate.js"') < page.index('src="app.js"') and 'href="translate.css"' in page, "the page loads the translator before the app")
-    check("translate.js" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
+    check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
+    check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "people-__SW_VERSION__"' in worker, "the service worker cache stamp includes the unified profile")
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
     follows_workflow = (ROOT / ".github" / "workflows" / "follows.yml").read_text(encoding="utf-8")
     check("github.actor == github.repository_owner" in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues from anyone but the owner are ignored")
@@ -1332,6 +1334,59 @@ if (FT.offer("k", en) !== false) throw new Error("english offer");
         text=True,
     )
     check(node_check.returncode == 0, "translate.js shields tokens and skips text already in the target language: " + (node_check.stderr or node_check.stdout))
+    people_check = subprocess.run(
+        ["node", "--input-type=module", "-e", r"""
+import fs from "fs";
+import vm from "vm";
+const context = { console };
+vm.createContext(context);
+vm.runInContext(fs.readFileSync("people.js", "utf8"), context);
+const P = context.FeedsPeople;
+P.use(JSON.parse(fs.readFileSync("people.json", "utf8")));
+const hash = "#/p/canadian-prepper";
+if (P.hashFor("x", "redacted_handle") !== hash) throw new Error("x");
+if (P.hashFor("youtube", "redacted_handle") !== hash) throw new Error("yt");
+if (P.hashFor("youtube", "UCfgtuaUadGgOA-91geQ8Qog") !== hash) throw new Error("channel");
+if (P.hashFor("instagram", "redacted_handle") !== hash) throw new Error("ig");
+if (P.hashFor("x", "nasa") !== "") throw new Error("other");
+const posts = [
+  { id: "1", platform: "x", handle: "redacted_handle", kind: "post", date: "2026-10-20T00:00:00Z", media: [{ type: "video", url: "https://example.test/a.mp4" }] },
+  { id: "2", platform: "youtube", handle: "redacted_handle", kind: "post", date: "2026-10-21T00:00:00Z", url: "https://www.youtube.com/shorts/abc" },
+  { id: "3", platform: "youtube", handle: "redacted_handle", kind: "community", date: "2026-10-19T00:00:00Z" },
+  { id: "4", platform: "x", handle: "redacted_handle", kind: "reply", date: "2026-10-18T00:00:00Z" },
+  { id: "5", platform: "x", handle: "someoneelse", kind: "post", date: "2026-10-22T00:00:00Z" },
+  { id: "6", platform: "instagram", handle: "redacted_handle", kind: "post", date: "2026-10-17T00:00:00Z", media: [{ type: "photo", url: "https://example.test/p.jpg" }] }
+];
+const person = P.byId("canadian-prepper");
+const rows = P.postsFor(person, posts);
+if (rows.map((post) => post.id).join(",") !== "2,1,3,4,6") throw new Error("order " + rows.map((post) => post.id).join(","));
+const tabs = P.tabsFor(person, rows).map((pair) => pair[0]);
+["posts", "videos", "shorts", "community", "replies", "media"].forEach((name) => {
+  if (tabs.indexOf(name) < 0) throw new Error("missing " + name);
+});
+if (P.filterTab(rows, "videos").some((post) => post.id === "2")) throw new Error("short listed as a video");
+if (!P.filterTab(rows, "videos").some((post) => post.id === "1")) throw new Error("x video missing");
+if (!P.filterTab(rows, "shorts").some((post) => post.id === "2")) throw new Error("short missing");
+if (P.filterTab(rows, "posts").some((post) => post.id === "4")) throw new Error("reply in posts");
+const collapsed = P.collapse([
+  { id: "youtube:redacted_handle", platform: "youtube", handle: "redacted_handle", name: "Canadian Prepper" },
+  { id: "x:redacted_handle", platform: "x", handle: "redacted_handle", name: "Canadian Prepper" },
+  { id: "x:nasa", platform: "x", handle: "nasa", name: "NASA" }
+]);
+if (collapsed.length !== 2 || collapsed[0].personId !== "canadian-prepper" || collapsed[0].name !== "Canadian Prepper") throw new Error("collapse");
+const suggested = P.suggestions([
+  { id: "youtube:redacted_handle", platform: "youtube", handle: "redacted_handle", configured: true },
+  { id: "x:redacted_handle", platform: "x", handle: "redacted_handle", configured: true },
+  { id: "x:nasa", platform: "x", handle: "nasa", configured: true }
+], (id) => id === "youtube:redacted_handle");
+if (suggested.some((feed) => feed.personId === "canadian-prepper" || feed.handle === "redacted_handle")) throw new Error("followed person still suggested");
+if (!suggested.some((feed) => feed.handle === "nasa")) throw new Error("nasa missing");
+"""],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    check(people_check.returncode == 0, "one person profile covers every linked account: " + (people_check.stderr or people_check.stdout))
     discord_checks()
     print("all adapter checks passed")
 
