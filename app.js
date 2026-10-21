@@ -4221,6 +4221,7 @@
       const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
       return { name: "messages", channel: channel, query };
     }
+    if (parts[0] === "spaces" && parts[1]) return { name: "spaces", id: parts[1], query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -4292,6 +4293,7 @@
       <form class="side-search" data-act="search-form">
         <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="Search" aria-label="Search"></label>
       </form>
+      ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
       ${people.length ? `<section class="card"><h2>Who to follow</h2>${rows}<a class="show-more-row" href="#/feeds">Show more</a></section>` : ""}
       <div class="fineprint"><span>Preview snapshot</span><a href="https://github.com/owner-account/rss-feeds">GitHub</a><span>Not affiliated with X</span></div>
     </aside>`;
@@ -4464,6 +4466,7 @@
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="Manage tabs">${icon("sliders")}</button>
       </div>
+      ${window.Spaces && window.Spaces.homeRow ? window.Spaces.homeRow() : ""}
     </div>`;
   }
 
@@ -4529,7 +4532,8 @@
       repostsOnly ? "No reposts yet" : tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
       repostsOnly ? "Reposts and forwards on this tab show up here." : tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
     );
-    return homeHeader(tab) + body + archiveSentinel();
+    const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
+    return homeHeader(tab) + spaceCard + body + archiveSentinel();
   }
 
   function pageHead(title, extra, back, action) {
@@ -5462,7 +5466,7 @@
     ${banner}
     <div class="pinfo" data-live-error="${esc(row.errorDetail || row.error || "")}">
       <div class="pava-row">
-        ${avatar(profile.avatar, profile.name, "pava")}
+        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(profile.avatar, profile.name, "pava"), profile.platform, profile.handle) : avatar(profile.avatar, profile.name, "pava")}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(profile.id || (profile.platform + ":" + profile.handle))}" aria-label="Share">${icon("share")}</button>
           ${followButtonClean(liveFollowId(profile), true)}
@@ -5479,6 +5483,7 @@
       ${saved}
       ${note}
     </div>
+    ${window.Spaces && window.Spaces.profileCard ? window.Spaces.profileCard(profile.platform, profile.handle) : ""}
     ${tabs.length ? `<div class="tabs ptabs" role="tablist" aria-label="Profile">${tabHtml}</div>` : ""}
     ${body}${more}`;
   }
@@ -5531,7 +5536,7 @@
     ${banner}
     <div class="pinfo">
       <div class="pava-row">
-        ${avatar(feed.avatar, feed.name, "pava")}
+        ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(feed.avatar, feed.name, "pava"), feed.platform, feed.handle) : avatar(feed.avatar, feed.name, "pava")}
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(feed.id)}" aria-label="Share">${icon("share")}</button>
           ${followButtonClean(feed.id, true)}
@@ -5544,6 +5549,7 @@
       ${meta ? `<div class="pmeta">${meta}</div>` : ""}
       ${counts}
     </div>
+    ${window.Spaces && window.Spaces.profileCard ? window.Spaces.profileCard(feed.platform, feed.handle) : ""}
     <div class="tabs ptabs" role="tablist" aria-label="Profile">${tabs}</div>
     ${list.length ? list.map((p) => {
       const byThis = p.repostedBy && (p.repostedBy.handle || "").toLowerCase() === (feed.handle || "").toLowerCase();
@@ -5855,7 +5861,8 @@
   function shell(main, route) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "settings", "notifications", "messages"].includes(route.name);
-    const top = route.name === "messages" ? 0 : route.name === "explore" ? 124 : tall ? 106 : 53;
+    const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
+    const top = (route.name === "messages" ? 0 : route.name === "explore" ? 124 : tall ? 106 : 53) + rowExtra;
     return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}`;
   }
 
@@ -6600,6 +6607,7 @@
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock("No posts yet", "When the accounts you follow post, their updates will show up here.");
     if (route.name === "home") return homeView(route);
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead("Profile", "", true) + emptyBlock("Profile isn’t available", "This person isn’t in people.json.");
+    if (route.name === "spaces") return (window.Spaces && window.Spaces.page && window.Spaces.page(route)) || pageHead("Space", "", true) + emptyBlock("This Space has ended", "This Space isn’t available.");
     if (route.name === "profile") return profileView(route);
     if (route.name === "user") return userView(route);
     if (route.name === "status") return statusView(route);
@@ -6822,6 +6830,7 @@
       scheduleDetect();
       if (window.FeedsTranslate) window.FeedsTranslate.paint();
       syncMediaSession();
+      if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);
       bindPlayers();
       resumePlayback();
       placeTabMenu();
@@ -8545,7 +8554,7 @@
     let timer = 0;
     const go = () => {
       if (sessionStorage.getItem("rss-feeds-sw-reload") === "1") return;
-      const busy = [...document.querySelectorAll("video")].some((video) => video && !video.paused && !video.ended);
+      const busy = [...document.querySelectorAll("video")].some((video) => video && !video.paused && !video.ended) || !!(window.Spaces && window.Spaces.playing && window.Spaces.playing());
       if (busy && document.visibilityState === "visible") {
         timer = setTimeout(go, 4000);
         return;
@@ -9095,6 +9104,16 @@
   if (window.FeedsDiscord) {
     window.FeedsDiscord.bind({ esc: esc, render: render });
     window.FeedsDiscord.start();
+  }
+  if (window.Spaces) {
+    window.Spaces.bind({
+      isFollowed: isFollowed,
+      render: render,
+      findFeed: findFeed,
+      shareRoot: shareRoot,
+      toast: toast
+    });
+    window.Spaces.start();
   }
   boot();
 })();

@@ -1,5 +1,5 @@
-/* Feeds service worker. Cache names are discord-msg1- plus the deploy SHA. */
-const VERSION = "discord-msg1-__SW_VERSION__";
+/* Feeds service worker. Cache names are spaces-discord1- plus the deploy SHA. */
+const VERSION = "spaces-discord1-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
@@ -19,6 +19,8 @@ const SHELL_FILES = [
   "./tv.css",
   "./discord-ui.js",
   "./discord-ui.css",
+  "./spaces.js",
+  "./spaces.css",
   "./favicon.svg",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
@@ -83,6 +85,10 @@ function isData(url) {
 function isMedia(url) {
   const host = url.hostname;
   return /(^|\.)pbs\.twimg\.com$/.test(host) || /(^|\.)video\.twimg\.com$/.test(host) || host === "i.ytimg.com" || /(^|\.)ggpht\.com$/.test(host) || /(^|\.)googleusercontent\.com$/.test(host) || /(^|\.)cdninstagram\.com$/.test(host) || /(^|\.)fbcdn\.net$/.test(host);
+}
+
+function isSpaceStatus(url) {
+  return url.origin === self.location.origin && /\/live\/[^/]+\.json$/.test(url.pathname);
 }
 
 function isLive(url) {
@@ -316,6 +322,10 @@ self.addEventListener("fetch", (event) => {
     })());
     return;
   }
+  if (isSpaceStatus(url)) {
+    event.respondWith(fetch(new Request(request, { cache: "no-store" })));
+    return;
+  }
   if (url.origin === self.location.origin) {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
   }
@@ -331,7 +341,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|discord-ui\.js|discord-ui\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
 }
 
 function canonicalNotifyId(post) {

@@ -351,7 +351,12 @@
     const shareId = base.id || ("person:" + person.id);
     const hrefFor = (id) => "#/p/" + encodeURIComponent(person.id) + (id === "posts" ? "" : "?tab=" + id);
     const tabHtml = tabs.map((pair) => `<a class="tab${tab === pair[0] ? " on" : ""}" role="tab" aria-selected="${tab === pair[0] ? "true" : "false"}" href="${esc(hrefFor(pair[0]))}"><span>${esc(pair[1])}</span></a>`).join("");
-    const avatar = h.avatar ? h.avatar(person.avatar, person.name, "pava") : "";
+    let avatar = h.avatar ? h.avatar(person.avatar, person.name, "pava") : "";
+    if (root.Spaces && root.Spaces.avatar) {
+      (person.accounts || []).forEach((account) => {
+        avatar = root.Spaces.avatar(avatar, account && account.platform, account && account.handle);
+      });
+    }
     const bio = h.bioBlock ? h.bioBlock({
       id: "person:" + person.id,
       platform: (preferred(person) || {}).platform || "x",
@@ -368,6 +373,13 @@
       body = h.emptyBlock ? h.emptyBlock(copy[0], copy[1]) : "";
     }
     const tail = h.archiveSentinel ? h.archiveSentinel() : "";
+    let liveCard = "";
+    if (root.Spaces && root.Spaces.profileCard) {
+      (person.accounts || []).some((account) => {
+        liveCard = root.Spaces.profileCard(account && account.platform, account && account.handle) || "";
+        return !!liveCard;
+      });
+    }
     return `<div class="topbar profile-bar">
       <div class="page-head">
         <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
@@ -388,6 +400,7 @@
       ${bio}
       ${countHtml(person)}
     </div>
+    ${liveCard}
     <div class="tabs ptabs" role="tablist" aria-label="Profile">${tabHtml}</div>
     ${body}${tail}`;
   }
