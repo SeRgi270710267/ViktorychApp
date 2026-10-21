@@ -811,7 +811,56 @@
   function playPost(el) {
     const id = el && el.dataset.pid;
     if (!id) return null;
-    return posts().find((item) => item && (item.id === id || String(item.statusId || "") === id)) || STATE.shared[id] || null;
+    const direct = posts().find((item) => item && (item.id === id || String(item.statusId || "") === id)) || STATE.shared[id] || null;
+    if (direct) return direct;
+    const list = posts();
+    for (let i = 0; i < list.length; i++) {
+      const quoted = list[i] && list[i].quoted;
+      if (quoted && (quoted.id === id || String(quoted.statusId || "") === id)) return asPost(quoted, quoted.platform || list[i].platform || "x");
+    }
+    return null;
+  }
+
+  function posterList(post, media) {
+    const out = [];
+    const push = (url) => {
+      const text = String(url || "").trim();
+      if (!text || !/^https:\/\//i.test(text) || playableFile(text) || out.indexOf(text) >= 0) return;
+      out.push(text);
+    };
+    push(media && media.poster);
+    if (media && media.type !== "video" && media && media.type !== "animated_gif") push(media && media.url);
+    else if (media && media.url && !playableFile(media.url)) push(media.url);
+    const yt = youtubeId(post, media);
+    if (yt) {
+      push("https://i.ytimg.com/vi/" + yt + "/hqdefault.jpg");
+      push("https://i.ytimg.com/vi/" + yt + "/mqdefault.jpg");
+      push("https://i.ytimg.com/vi/" + yt + "/sddefault.jpg");
+    }
+    const avatar = upgradeAvatar((post && post.avatar) || "") || ((post && post.avatar) || "");
+    push(avatar);
+    return { urls: out, avatar: avatar };
+  }
+
+  function posterImg(post, media, cls) {
+    const pack = posterList(post, media);
+    if (!pack.urls.length) return "";
+    const first = pack.urls[0];
+    const face = first === pack.avatar ? " face" : "";
+    return `<img class="${cls}${face}" src="${esc(first)}" alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
+  }
+
+  function advancePoster(img) {
+    if (!img || !img.dataset) return false;
+    let urls = [];
+    try { urls = JSON.parse(img.dataset.falls || "[]"); } catch (err) { urls = []; }
+    const next = Number(img.dataset.pi || 0) + 1;
+    if (!urls[next]) return false;
+    img.dataset.pi = String(next);
+    img.classList.toggle("face", urls[next] === (img.dataset.avatar || ""));
+    img.referrerPolicy = "no-referrer";
+    img.src = urls[next];
+    return true;
   }
 
   function playMedia(el, post) {
@@ -823,10 +872,6 @@
   function playerTile(post, media, index, preview) {
     const platform = (post && post.platform) || "";
     const yt = youtubeId(post, media);
-    let poster = (media && media.poster) || "";
-    if (!poster && media && media.url && !playableFile(media.url) && !yt) poster = media.url;
-    if (!poster && yt) poster = "https://i.ytimg.com/vi/" + yt + "/hqdefault.jpg";
-    if (deadMediaUrl(poster)) poster = "";
     const dur = formatDur(media && media.duration);
     const gif = media && media.type === "animated_gif";
     const label = watchOn(yt ? "youtube" : platform);
@@ -836,7 +881,7 @@
       ? `<button class="vmute" type="button" data-act="mute" aria-label="Unmute" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden></span>`
       : "";
     return `<div class="tile vplay"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}">
-      ${poster ? `<img class="vposter" src="${esc(poster)}" alt="" referrerpolicy="no-referrer">` : ""}
+      ${posterImg(post, media, "vposter")}
       ${dur ? `<span class="vdur">${esc(dur)}</span>` : ""}
       ${gif ? `<span class="gif-badge">GIF</span>` : ""}
       <button class="play" type="button" data-act="play" aria-label="Play">${icon("play")}</button>
@@ -959,8 +1004,9 @@
 
   function embedUrl(id, preview) {
     const base = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id);
-    if (preview) return base + "?autoplay=1&mute=1&playsinline=1&controls=0&rel=0";
-    return base + "?rel=0";
+    const api = "&enablejsapi=1&origin=" + encodeURIComponent(location.origin);
+    if (preview) return base + "?autoplay=1&mute=1&playsinline=1&controls=0&rel=0" + api;
+    return base + "?rel=0" + api;
   }
 
   function metaCode(post) {
@@ -1134,15 +1180,24 @@
         if (id) url = embedUrl(decodeURIComponent(id), true);
       }
       const frame = document.createElement("iframe");
+      frame.id = "ytf" + gen;
       if (/youtube-nocookie\.com|youtube\.com/.test(url || "")) frame.referrerPolicy = "strict-origin-when-cross-origin";
       frame.src = url;
       frame.title = (post && (post.title || post.text)) || "Video";
       frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
       frame.allowFullscreen = !opts.preview;
+      const hello = () => {
+        if (el._gen !== gen || !frame.contentWindow) return;
+        try {
+          frame.contentWindow.postMessage(JSON.stringify({ event: "listening", id: frame.id, channel: "widget" }), "*");
+          if (opts.preview) frame.contentWindow.postMessage(JSON.stringify({ event: "command", func: "playVideo", args: [] }), "*");
+        } catch (err) { /* the embed answers with onStateChange */ }
+      };
       frame.addEventListener("load", () => {
         if (el._gen !== gen) return;
         if (!frame.src || frame.src === "about:blank") return;
-        markShown(el);
+        hello();
+        setTimeout(hello, 500);
       });
       el.appendChild(frame);
       el.classList.add("is-playing");
@@ -1152,15 +1207,19 @@
     const video = document.createElement("video");
     video.playsInline = true;
     video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
     video.setAttribute("referrerpolicy", "no-referrer");
     video.referrerPolicy = "no-referrer";
     video.controls = !opts.preview && !opts.loop;
-    if (opts.muted) video.muted = true;
+    if (opts.muted || opts.preview) {
+      video.muted = true;
+      video.defaultMuted = true;
+      video.setAttribute("muted", "");
+    }
     if (opts.loop || (media && media.type === "animated_gif")) { video.loop = true; video.muted = true; }
-    const poster = el.querySelector(".vposter");
-    if (poster && poster.getAttribute("src")) video.poster = poster.getAttribute("src");
-    video.preload = "none";
-    if (!opts.preview || visibleRatio(el) >= 0.5) video.preload = "auto";
+    const poster = el.querySelector(".vposter") || el.querySelector("img");
+    if (poster && poster.getAttribute("src") && !poster.classList.contains("face")) video.poster = poster.getAttribute("src");
+    video.preload = opts.preview && visibleRatio(el) < 0.6 ? "metadata" : "auto";
     const token = el._src;
     const fail = () => {
       if (el._gen !== gen || el._src !== token) return;
@@ -1170,7 +1229,25 @@
     video.addEventListener("error", fail);
     video.addEventListener("playing", () => {
       if (el._gen !== gen) return;
-      markShown(el);
+      if (video.currentTime > 0 || video.videoWidth > 0) markShown(el);
+    });
+    video.addEventListener("loadeddata", () => {
+      if (el._gen !== gen) return;
+      const img = el.querySelector(".vposter.face, .yt-thumb img.face");
+      if (!img || !video.videoWidth) return;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.min(video.videoWidth, 480);
+        canvas.height = Math.max(1, Math.round(canvas.width * video.videoHeight / video.videoWidth));
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const sample = ctx.getImageData(0, 0, Math.min(8, canvas.width), Math.min(8, canvas.height)).data;
+        let sum = 0;
+        for (let i = 0; i < sample.length; i += 4) sum += sample[i] + sample[i + 1] + sample[i + 2];
+        if (sum / (sample.length / 4) < 24) return;
+        img.classList.remove("face");
+        img.src = canvas.toDataURL("image/jpeg", 0.72);
+      } catch (err) { /* a cross-origin file keeps the avatar */ }
     });
     video.addEventListener("timeupdate", () => {
       if (el._gen !== gen) return;
@@ -1516,26 +1593,24 @@
         if (STATE.subsHover && document.body.contains(STATE.subsHover) && visibleRatio(STATE.subsHover) > 0) return STATE.subsHover;
         return null;
       }
-      if (!STATE.scrolled) return null;
       let best = null;
       let bestDist = Infinity;
       const mid = (window.innerHeight || 0) / 2;
       document.querySelectorAll(".vplay[data-preview='subs']").forEach((el) => {
         if (el.classList.contains("is-failed")) return;
-        if (visibleRatio(el) < 0.5) return;
+        if (visibleRatio(el) < 0.6) return;
         const rect = el.getBoundingClientRect();
         const dist = Math.abs(rect.top + rect.height / 2 - mid);
         if (dist < bestDist) { best = el; bestDist = dist; }
       });
       return best;
     }
-    if (!STATE.scrolled) return null;
     let best = null;
     let bestRatio = 0;
     document.querySelectorAll(".vplay[data-preview='feed']").forEach((el) => {
       if (el.classList.contains("is-failed") || el.classList.contains("player")) return;
       const ratio = visibleRatio(el);
-      if (ratio >= 0.5 && ratio > bestRatio) { best = el; bestRatio = ratio; }
+      if (ratio >= 0.6 && ratio > bestRatio) { best = el; bestRatio = ratio; }
     });
     return best;
   }
@@ -1587,7 +1662,7 @@
         if (entry.isIntersecting) prefetchPreview(entry.target);
       });
       schedulePreview();
-    }, { rootMargin: "200px 0px", threshold: [0, 0.5, 0.75, 1] });
+    }, { rootMargin: "200px 0px", threshold: [0, 0.6, 1] });
     document.querySelectorAll(".vplay[data-preview]").forEach((el) => STATE.videoObserver.observe(el));
     schedulePreview();
   }
@@ -5063,10 +5138,8 @@
 
   function subsThumb(post) {
     const media = (post.media || [])[0] || {};
-    const rawPoster = media.poster || (media.type === "photo" ? media.url : "");
-    const poster = deadMediaUrl(rawPoster) ? "" : rawPoster;
     const duration = clock(media.duration);
-    return `<div class="yt-thumb vplay" data-preview="subs" data-pid="${esc(post.id || "")}" data-mi="0">${poster ? `<img src="${esc(poster)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<span class="plat">${esc(PLATFORM[post.platform] || "")}</span>${duration ? `<span class="yt-time" data-full="${esc(duration)}">${esc(duration)}</span>` : ""}</div>`;
+    return `<div class="yt-thumb vplay" data-preview="subs" data-pid="${esc(post.id || "")}" data-mi="0">${posterImg(post, media, "")}<span class="plat">${esc(PLATFORM[post.platform] || "")}</span>${duration ? `<span class="yt-time" data-full="${esc(duration)}">${esc(duration)}</span>` : ""}</div>`;
   }
 
   function ytCard(post, layout) {
@@ -6160,10 +6233,14 @@
       img.replaceWith(span);
       return;
     }
+    if (img.dataset && img.dataset.falls) {
+      if (advancePoster(img)) return;
+      img.remove();
+      return;
+    }
     const player = img.closest(".vplay");
     if (player) {
       if (img.tagName === "VIDEO") return;
-      img.remove();
       return;
     }
     const next = img.dataset.refresh || "";
@@ -6182,6 +6259,20 @@
   }, true);
 
   let lastY = 0;
+  window.addEventListener("message", (event) => {
+    const host = String(event.origin || "");
+    if (host.indexOf("youtube.com") < 0 && host.indexOf("youtube-nocookie.com") < 0) return;
+    let data = event.data;
+    if (typeof data === "string") {
+      try { data = JSON.parse(data); } catch (err) { return; }
+    }
+    if (!data || typeof data !== "object") return;
+    const state = data.event === "onStateChange" ? data.info : (data.info && data.info.playerState);
+    if (state !== 1) return;
+    document.querySelectorAll(".vplay iframe").forEach((frame) => {
+      if (frame.contentWindow === event.source) markShown(frame.closest(".vplay"));
+    });
+  });
   window.addEventListener("scroll", () => {
     if (!routing && Math.abs(window.scrollY - previewAnchor) >= 24) STATE.scrolled = true;
     schedulePreview();

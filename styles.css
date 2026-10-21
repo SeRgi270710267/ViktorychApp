@@ -463,14 +463,21 @@ img { max-width: 100%; }
   padding: 1px 4px;
   pointer-events: none;
 }
-.vplay { cursor: pointer; background: #000; min-height: 180px; }
+.vplay { cursor: pointer; background: var(--banner); min-height: 180px; }
 .media.m1 .vplay { min-height: 220px; }
-.vplay .vposter {
-  position: relative;
+.vplay .vposter, .media.m1 .vplay .vposter {
+  position: absolute;
+  inset: 0;
   z-index: 2;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  max-height: none;
+  object-fit: cover;
+  background: var(--banner);
+}
+.vplay .vposter.face, .yt-thumb img.face {
+  filter: blur(16px);
+  transform: scale(1.12);
 }
 .vplay .vdur, .vplay .gif-badge { z-index: 3; }
 .vplay video, .vplay iframe {
@@ -1512,7 +1519,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .yt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 16px; }
 .yt-card { display: block; color: inherit; }
 .yt-thumb { position: relative; aspect-ratio: 16 / 9; background: var(--banner); border-radius: 12px; overflow: hidden; }
-.yt-thumb.vplay { min-height: 0; background: #000; }
+.yt-thumb.vplay { min-height: 0; background: var(--banner); }
 .yt-thumb img, .yt-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .yt-thumb > img { position: absolute; inset: 0; z-index: 2; }
 .yt-thumb video, .yt-thumb iframe { position: absolute; inset: 0; z-index: 1; border: 0; background: #000; }
