@@ -608,7 +608,47 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
                 })
                 seen.add(key)
                 counts["stubs"] += 1
+    counts["spaces"] = write_space_pages(site, base, brand)
     return counts
+
+
+def write_space_pages(site: Path, base: str, brand: str) -> int:
+    """Crawler pages for Spaces. Title and cover only — never a track name."""
+    config = load_json(site / "feeds.config.json")
+    if not isinstance(config, dict):
+        config = load_json(ROOT / "feeds.config.json") or {}
+    count = 0
+    for space in config.get("spaces") or []:
+        if not isinstance(space, dict):
+            continue
+        ident = str(space.get("id") or "")
+        if not SAFE_ID.match(ident):
+            continue
+        title = str(space.get("title") or "Space").strip() or "Space"
+        cover = str(space.get("cover") or "").strip()
+        image_url = https(cover)
+        if not image_url and cover and not cover.startswith(("http://", "https://", "//")):
+            image_url = join_url(base, cover)
+        if not image_url:
+            image_url = brand
+        route = "#/spaces/" + quote(ident, safe="")
+        write_page(site / "s", f"space-{ident}.html", {
+            "title": title,
+            "description": "Live Space",
+            "url": join_url(base, f"s/space-{ident}.html"),
+            "image": {"url": image_url, "width": 320, "height": 320, "kind": "image"},
+            "og_type": "website",
+            "player": "",
+            "mp4": "",
+            "hash": route,
+            "open_href": "../" + route,
+            "author": title,
+            "byline": "Live Space",
+            "avatar": image_url if image_url != brand else "",
+            "body": "",
+        })
+        count += 1
+    return count
 
 
 def main() -> None:
@@ -618,7 +658,7 @@ def main() -> None:
     args = parser.parse_args()
     counts = build(Path(args.site), args.base)
     print(
-        "share pages: {posts} posts, {watch} watch pages, {profiles} profiles, {stubs} stubs".format(**counts)
+        "share pages: {posts} posts, {watch} watch pages, {profiles} profiles, {stubs} stubs, {spaces} spaces".format(**counts)
     )
 
 
