@@ -1,10 +1,6 @@
 name: Internet Archive backup
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/ia-backup.yml
   schedule:
     # After the 06:17 UTC data-branch publish. GitHub may skip a slot; Run workflow still works.
     - cron: "47 7 * * *"
