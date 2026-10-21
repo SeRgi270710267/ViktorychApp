@@ -4,7 +4,7 @@
   const GUILD_ID = "169256939211980800";
   const SEEN_KEY = "rss-feeds-discord-seen-v1";
   const WINDOW = 300;
-  const CATEGORY_ORDER = ["Information", "Announcements", "Town Hall General", "Community Fun"];
+  const CATEGORY_ORDER = ["Information", "Announcements", "Boosters & Feedback", "Town Hall General", "Community Fun"];
   const CATALOG = [
     { id: "1502285163009409175", name: "rules", category: "Information", mode: "messages" },
     { id: "739179537933533264", name: "support", category: "Information", mode: "messages" },

@@ -210,6 +210,35 @@ def account_block(status: int, body) -> str:
     return ""
 
 
+def channel_denied(status: int, body) -> bool:
+    """A 403 that means this channel is hidden, not that the account was refused.
+
+    Missing Access (50001) and Missing Permissions (50013) skip that channel.
+    A 401, a captcha, or any other 403 still stops the run.
+    """
+    if status != 403:
+        return False
+    if isinstance(body, (bytes, bytearray)):
+        text = body.decode("utf-8", "replace")
+    else:
+        text = str(body or "")
+    payload = {}
+    try:
+        parsed = json.loads(text) if text else {}
+        if isinstance(parsed, dict):
+            payload = parsed
+    except (TypeError, ValueError, json.JSONDecodeError):
+        payload = {}
+    try:
+        code = int(payload.get("code"))
+    except (TypeError, ValueError):
+        code = None
+    if code in (50001, 50013):
+        return True
+    lowered = text.lower()
+    return "missing access" in lowered or "missing permissions" in lowered
+
+
 def user_get_allowed(url: str) -> bool:
     path = urllib.parse.urlparse(url).path or ""
     return bool(USER_GET.match(path))
@@ -798,6 +827,7 @@ class Client:
         self.auth_mode = "user" if auth == "user" else "bot"
         self._last_request = None
         self._skip_pace = False
+        self.last_status = 0
         self._opener = urllib.request.build_opener(_NoRedirect)
         if self.auth_mode == "user":
             self.min_interval = USER_INTERVAL if min_interval is None else float(min_interval)
@@ -842,10 +872,13 @@ class Client:
             except Exception as exc:
                 print(f"[discord] {type(exc).__name__} talking to Discord")
                 return None
+            self.last_status = status
             block = account_block(status, body) if auth else ""
             if block in ("captcha", "verification"):
                 raise DiscordStop(block)
-            if self.auth_mode == "user" and block == "unauthorized":
+            if self.auth_mode == "user" and status == 403 and channel_denied(status, body):
+                return None
+            if self.auth_mode == "user" and block in ("unauthorized", "forbidden"):
                 raise DiscordStop(block)
             if status == 401 and auth:
                 raise DiscordAuthError("Discord rejected the bot token")

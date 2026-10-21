@@ -1,0 +1,60 @@
+name: Discord live
+
+on:
+  workflow_dispatch:
+  schedule:
+    # A new run queues while one is in progress and starts when it exits.
+    - cron: "*/5 * * * *"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/discord-live.yml"
+      - "scripts/discord_live.py"
+      - "scripts/discord_publish.py"
+      - "scripts/pages_deploy.js"
+      - "feeds.config.json"
+
+# One long job. cancel-in-progress is false, so a cron tick does not kill it.
+concurrency:
+  group: discord-live
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    environment:
+      name: github-pages
+      url: https://owner-account.github.io/SuperintelApp/
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the Pages deploy helper
+        run: npm install --no-save --prefix "$RUNNER_TEMP/discord-live" @actions/artifact@2.3.2 @actions/core@1.11.1
+
+      - name: Poll Discord read-only and publish
+        timeout-minutes: 348
+        env:
+          DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          NODE_PATH: ${{ runner.temp }}/discord-live/node_modules
+        run: |
+          if [ -n "${DISCORD_USER_TOKEN:-}" ]; then
+            echo "::add-mask::${DISCORD_USER_TOKEN}"
+          fi
+          python3 scripts/discord_live.py

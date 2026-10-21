@@ -2180,6 +2180,80 @@ if (page.includes("<script>")) throw new Error("page xss");
     )
     check(ui_check.returncode == 0, "discord messages escape text, validate ntfy, and render the fixture: " + (ui_check.stderr or ui_check.stdout))
 
+    import discord_live
+
+    live = discord_live.live_servers(json.loads(config_text))
+    check(len(live) == 1 and live[0]["ntfy"] == "superintelmusic-discord-th-7f3a91c2" and len(live[0]["channels"]) == 19, "the live poller reads every Town Hall message channel")
+    busy_ids = [item["id"] for item in live[0]["channels"] if item["busy"]]
+    check(busy_ids == ["169256939211980800", "1539754628575404213", "889950993352110160"], "general-chat, discord-discussion, and peer-help are the busy channels")
+    rotation = [{"id": "1", "busy": True}, {"id": "2", "busy": False}, {"id": "3", "busy": True}]
+    first, cursor = discord_live.pick_due(rotation, {"1": 0, "2": 0, "3": 0}, 10, 0)
+    second, cursor = discord_live.pick_due(rotation, {"1": 0, "2": 0, "3": 0}, 10, cursor)
+    third, _cursor = discord_live.pick_due(rotation, {"1": 0, "2": 0, "3": 0}, 10, cursor)
+    check([first["id"], second["id"], third["id"]] == ["1", "3", "1"], "due busy channels are preferred and rotate")
+
+    class _Low:
+        def uniform(self, low, _high):
+            return low
+
+    class _High:
+        def uniform(self, _low, high):
+            return high
+
+    check(discord_live.next_gap(True, _Low()) == 10 and discord_live.next_gap(True, _High()) == 15, "busy channels wait 10 to 15 seconds")
+    check(discord_live.next_gap(False, _Low()) == 120 and discord_live.next_gap(False, _High()) == 300, "quiet channels wait 2 to 5 minutes")
+    secret = "super-secret-discord-token"
+    fitted = discord_live.fit_ntfy({"v": 1, "ch": "9", "m": {"content": ("y" * 5000) + secret}})
+    dumped = json.dumps(fitted, ensure_ascii=False, separators=(",", ":"))
+    check(len(dumped.encode("utf-8")) <= 3800 and secret not in dumped and fitted["v"] == 1, "an ntfy body stays under 3800 bytes and drops a trailing token")
+    sample = discord_live.ntfy_body(
+        {"content": "**hi** <@9>"},
+        {"id": "42", "text": "hi", "date": "2024-05-01T00:00:00.000Z", "attachments": [], "cards": [], "reactions": []},
+        "99",
+        "9",
+        {"name": "Ada", "avatar": "https://cdn.discordapp.com/embed/avatars/0.png"},
+        {},
+    )
+    check(sample["v"] == 1 and sample["ch"] == "99" and sample["m"]["content"] == "**hi** @user" and sample["m"]["author"]["name"] == "Ada", "the ntfy payload matches the Messages page")
+
+    pace_calls = []
+    pace_slept = []
+    pace_clock = {"t": 0.0}
+
+    def pace_sleep(seconds):
+        pace_slept.append(seconds)
+        pace_clock["t"] += seconds
+
+    def pace_transport(url, headers):
+        pace_calls.append(url)
+        check(headers.get("Authorization") == "tok" and not str(headers.get("Authorization") or "").startswith("Bot "), "a live read sends the user token with no Bot prefix")
+        if "/channels/50001/" in url:
+            return 403, {}, b'{"message":"Missing Access","code":50001}'
+        if "/channels/20016/" in url:
+            return 403, {}, b'{"message":"This account is not allowed to use the API","code":20016}'
+        return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([
+            {"id": "200000000000000001", "channel_id": "111", "type": 0, "content": "hello", "timestamp": "2024-05-01T18:00:00.000Z", "author": {"id": "9", "username": "ada", "global_name": "Ada"}},
+        ]).encode()
+
+    paced_live = Client("tok", auth="user", transport=pace_transport, sleep=pace_sleep, clock=lambda: pace_clock["t"], min_interval=1.5)
+    paced_live.max_attempts = 4
+    first_page, _gap = discord_live.page(paced_live, "111")
+    second_page, _gap = discord_live.page(paced_live, "222")
+    hidden_page, _gap = discord_live.page(paced_live, "50001")
+    check(isinstance(first_page, list) and isinstance(second_page, list) and hidden_page is None, "a missing-access channel is skipped and the others are read")
+    check(pace_slept == [1.5, 1.5] and any("limit=50" in url for url in pace_calls), "live pages request 50 messages and wait 1.5 seconds")
+    try:
+        discord_live.page(paced_live, "20016")
+    except DiscordStop as exc:
+        stopped_reason = exc.reason
+    else:
+        stopped_reason = ""
+    check(stopped_reason == "forbidden", "a user-level 403 stops the live read")
+    live_workflow = (ROOT / ".github" / "workflows" / "discord-live.yml").read_text(encoding="utf-8")
+    live_script = (ROOT / "scripts" / "discord_live.py").read_text(encoding="utf-8")
+    check("group: discord-live" in live_workflow and "cancel-in-progress: false" in live_workflow and "add-mask" in live_workflow and "timeout-minutes: 350" in live_workflow and 'cron: "*/5 * * * *"' in live_workflow, "the live workflow is one long job that does not cancel itself")
+    check("owner-account.github.io/SuperintelApp/" in live_workflow and "rss-feeds" not in live_workflow and "rss-feeds" not in live_script, "the live job uses the renamed site and no old feed URL")
+
 
 if __name__ == "__main__":
     main()
