@@ -76,6 +76,7 @@
     forceReply: "",
     forceWatch: "",
     replyEpoch: {},
+    ytDocs: {},
     pendingFeed: null,
     installPrompt: null,
     incoming: null,
@@ -363,6 +364,13 @@
         if (platform && reply.platform && reply.platform !== platform) continue;
         return reply;
       }
+    }
+    const nested = commentInDocs(String(id));
+    if (nested && nested.comment) {
+      const comment = nested.comment;
+      if (platform && comment.platform && comment.platform !== platform) return openedPost(id);
+      if (h && (comment.handle || "").toLowerCase() !== h) return openedPost(id);
+      return comment;
     }
     return openedPost(id);
   }
@@ -1950,7 +1958,7 @@
     STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want, fetchedAt: fresh ? 0 : cachedAt || 0 };
     const finish = (replies, missing, cap, fetchedAt) => {
       if (STATE.replyEpoch[id] !== epoch) return;
-      STATE.replies[id] = { loading: false, replies: replies || [], missing: !!missing, cap: cap || want, fetchedAt: fetchedAt || Date.now(), settled: true };
+      STATE.replies[id] = { loading: false, replies: replies || [], missing: !!missing, cap: cap || want, fetchedAt: typeof fetchedAt === "number" ? fetchedAt : Date.now(), settled: true };
       render();
     };
     const snap = (ownAt) => snapshotDoc(id).then((doc) => {
@@ -1970,11 +1978,17 @@
       }
       snap(own && own._at);
     });
-    if (post.kind === "community") {
-      loadCommunityComments(post).then((result) => {
-        if (!result || !(result.replies || []).length) finish([], true, want, (result && result.fetchedAt) || Date.now());
-        else finish(result.replies, false, want, result.fetchedAt || Date.now());
-      }).catch(() => finish([], true, want, Date.now()));
+    if ((post.platform || "") === "youtube") {
+      loadYtComments(post).then((doc) => {
+        if (STATE.replyEpoch[id] !== epoch) return;
+        const rows = (doc && doc.replies) || [];
+        const at = ytFetchedAt(doc);
+        if (!rows.length) finish([], !(doc && doc.commentCount != null), want, at);
+        else finish(rows.slice(0, want), false, want, at);
+      }).catch(() => {
+        if (STATE.replyEpoch[id] !== epoch) return;
+        finish([], true, want, 0);
+      });
       return STATE.replies[id];
     }
     if ((post.platform || "") === "x") {
@@ -2264,58 +2278,163 @@
     return next;
   }
 
-  function loadCommunityComments(post) {
+  function ytVideoId(id) {
+    return /^[A-Za-z0-9_-]{11}$/.test(String(id || ""));
+  }
+
+  function ytFetchedAt(doc) {
+    if (!doc) return 0;
+    const raw = doc.fetchedAt != null && doc.fetchedAt !== "" ? doc.fetchedAt : doc._at;
+    const t = typeof raw === "number" ? raw : Date.parse(raw || "");
+    return isFinite(t) && t > 0 ? t : 0;
+  }
+
+  function ytUsable(doc) {
+    return !!(doc && (((doc.replies || []).length) || doc.commentCount != null));
+  }
+
+  function rememberYt(id, doc, live) {
+    if (live) doc.fetchedAt = new Date().toISOString();
+    else if (!doc.fetchedAt && doc._at) doc.fetchedAt = new Date(doc._at).toISOString();
+    STATE.ytDocs[id] = doc;
+    return cacheSet("yt:doc:" + id, doc).then(() => doc);
+  }
+
+  function ivCommunityThread(post) {
     const id = postKey(post);
     const ucid = (feedOf(post).channelId) || "";
-    function page(continuation) {
-      let path = "/api/v1/post/" + encodeURIComponent(id) + "/comments?sort_by=top";
-      if (ucid) path += "&ucid=" + encodeURIComponent(ucid);
-      if (continuation) path += "&continuation=" + encodeURIComponent(continuation);
-      return rotate(ivBases(), path, 4, "ivBase");
-    }
-    return loadStatus().then(() => page("").then((payload) => {
-      if (payload && Array.isArray(payload.comments)) {
-        if (payload.commentCount != null && isFinite(Number(payload.commentCount))) applyLiveStats(id, { replies: Number(payload.commentCount) });
-        const top = [];
-        payload.comments.forEach((comment) => {
-          if (!String(comment.content || "").trim()) return;
-          const row = ivComment(comment, id, post.handle || "");
-          row._community = true;
-          delete row._continuation;
-          top.push(row);
-        });
-        return { replies: top, fetchedAt: Date.now() };
-      }
-      return ownPack(id).then((own) => {
-        if (!own || !(own.replies || []).length) return null;
-        return { replies: own.replies, fetchedAt: own._at || Date.now() };
+    let path = "/api/v1/post/" + encodeURIComponent(id) + "/comments?sort_by=top";
+    if (ucid) path += "&ucid=" + encodeURIComponent(ucid);
+    return rotate(ivBases(), path, 4, "ivBase").then((payload) => {
+      if (!payload || !Array.isArray(payload.comments)) return null;
+      const top = [];
+      payload.comments.forEach((comment) => {
+        if (!String(comment.content || "").trim()) return;
+        const row = ivComment(comment, id, post.handle || "");
+        row._community = true;
+        delete row._continuation;
+        top.push(row);
       });
-    }));
+      const doc = { postId: "yt_" + id, platform: "youtube", source: "invidious", replies: top };
+      if (payload.commentCount != null && isFinite(Number(payload.commentCount))) {
+        doc.commentCount = Number(payload.commentCount);
+        applyLiveStats(id, { replies: doc.commentCount });
+      }
+      return ytUsable(doc) ? doc : null;
+    });
+  }
+
+  function ytStub(id) {
+    return snapshotDoc("yt_" + id).then((doc) => ytUsable(doc) ? doc : null).catch(() => null);
+  }
+
+  function loadYtRoot(post) {
+    const id = postKey(post);
+    if (!id) return Promise.resolve(null);
+    const community = post.kind === "community";
+    const fresh = STATE.forceWatch === id || STATE.forceReply === id;
+    if (STATE.forceWatch === id) STATE.forceWatch = "";
+    if (STATE.forceReply === id) STATE.forceReply = "";
+    if (fresh) cacheDrop("yt:doc:" + id);
+    return once((fresh ? "ytfresh:" : "yt:") + id, () => (fresh ? Promise.resolve(null) : cacheGet("yt:doc:" + id, COMMENT_TTL)).then((hit) => {
+      if (hit) {
+        STATE.ytDocs[id] = hit;
+        return hit;
+      }
+      const live = community ? ivCommunityThread(post) : ivThread(id, post.handle || "");
+      return loadStatus().then(() => live.then((doc) => {
+        if (ytUsable(doc)) return rememberYt(id, doc, true);
+        return ownPack("yt_" + id).then((own) => {
+          if (ytUsable(own)) return rememberYt(id, own, false);
+          return ytStub(id).then((stub) => stub ? rememberYt(id, stub, false) : null);
+        });
+      }));
+    })).catch(() => null);
+  }
+
+  function commentInDocs(id) {
+    const key = String(id || "");
+    if (!key) return null;
+    const names = Object.keys(STATE.ytDocs || {});
+    for (let i = 0; i < names.length; i++) {
+      const doc = STATE.ytDocs[names[i]];
+      const found = findComment((doc && doc.replies) || [], key) || findComment((doc && doc.newest) || [], key);
+      if (found) return { comment: found, doc: doc, videoId: names[i] };
+    }
+    return null;
+  }
+
+  function ytRootPost(id, handle) {
+    const known = posts().find((item) => item && item.platform === "youtube" && postKey(item) === id);
+    if (known) return known;
+    return { id: id, statusId: id, platform: "youtube", handle: handle || "", kind: ytVideoId(id) ? "post" : "community" };
+  }
+
+  function ytCandidateIds(handle) {
+    const h = String(handle || "").toLowerCase();
+    const ids = [];
+    posts().forEach((item) => {
+      if (!item || item.platform !== "youtube" || item.kind === "reply") return;
+      if (h && String(item.handle || "").toLowerCase() !== h) return;
+      const id = postKey(item);
+      if (id && ids.indexOf(id) < 0) ids.push(id);
+    });
+    return ids;
+  }
+
+  function packYtComment(comment, doc) {
+    return {
+      replies: (comment && comment.replies) || [],
+      fetchedAt: doc && (doc.fetchedAt || doc._at) || "",
+      source: (doc && doc.source) || "",
+      comment: comment || null,
+      commentCount: comment && comment.stats ? comment.stats.replies : null
+    };
+  }
+
+  function loadYtReplies(post) {
+    const id = postKey(post);
+    const cached = commentInDocs(id);
+    if (cached) return Promise.resolve(packYtComment(cached.comment, cached.doc));
+    const parent = String((post.replyingTo || {}).id || "");
+    const seeds = [];
+    if (parent && (ytVideoId(parent) || posts().some((item) => item.platform === "youtube" && postKey(item) === parent))) seeds.push(parent);
+    ytCandidateIds(post.handle).forEach((vid) => { if (seeds.indexOf(vid) < 0) seeds.push(vid); });
+    const finishSeed = (vid, probed) => loadYtRoot(ytRootPost(vid, post.handle)).then((doc) => {
+      const liveHit = commentInDoc(doc, id);
+      if (liveHit) {
+        STATE.ytDocs[vid] = doc;
+        return packYtComment(liveHit, doc);
+      }
+      const file = probed ? Promise.resolve(probed) : ownPack("yt_" + vid);
+      return file.then((stored) => {
+        const found = commentInDoc(stored, id);
+        if (found) {
+          STATE.ytDocs[vid] = stored;
+          return packYtComment(found, stored);
+        }
+        return snapshotDoc(id).then((stub) => ytUsable(stub) ? stub : null).catch(() => null);
+      });
+    });
+    if (parent && seeds[0] === parent) return finishSeed(parent, null);
+    return Promise.all(seeds.map((vid) => ownPack("yt_" + vid).then((doc) => ({ vid: vid, doc: doc })).catch(() => ({ vid: vid, doc: null })))).then((rows) => {
+      const hit = rows.find((row) => commentInDoc(row.doc, id));
+      if (hit) return finishSeed(hit.vid, hit.doc);
+      return snapshotDoc(id).then((stub) => ytUsable(stub) ? stub : null).catch(() => null);
+    });
+  }
+
+  function commentInDoc(doc, id) {
+    if (!doc) return null;
+    return findComment(doc.replies || [], id) || findComment(doc.newest || [], id);
   }
 
   function loadYtComments(post) {
     const id = postKey(post);
-    if (!id) return Promise.resolve(null);
-    const fresh = STATE.forceWatch === id;
-    if (fresh) STATE.forceWatch = "";
-    if (fresh) cacheDrop("yt:doc:" + id);
-    return once((fresh ? "ytfresh:" : "yt:") + id, () => (fresh ? Promise.resolve(null) : cacheGet("yt:doc:" + id, COMMENT_TTL)).then((hit) => {
-      if (hit) return hit;
-      const remember = (doc) => {
-        doc.fetchedAt = new Date().toISOString();
-        return cacheSet("yt:doc:" + id, doc).then(() => doc);
-      };
-      return loadStatus().then(() => ivThread(id, post.handle || "").then((doc) => {
-        if (doc && ((doc.replies || []).length || doc.commentCount != null)) return remember(doc);
-        return pipedThread(id, post.handle || "").then((piped) => {
-          if (piped && ((piped.replies || []).length || piped.commentCount != null)) return remember(piped);
-          return ownPack("yt_" + id).then((own) => {
-            if (!own || !(own.replies || []).length) return null;
-            return cacheSet("yt:doc:" + id, own).then(() => own);
-          });
-        });
-      }));
-    })).catch(() => null);
+    if (!id || !post || post.platform !== "youtube") return Promise.resolve(null);
+    const known = posts().some((item) => item.platform === "youtube" && postKey(item) === id && item.kind !== "reply");
+    if (post.kind === "reply" || (!known && !ytVideoId(id) && post.kind !== "community")) return loadYtReplies(post);
+    return loadYtRoot(post);
   }
 
   function liveDuration(id) {
@@ -2675,6 +2794,7 @@
 
   function childPool(reply, siblings) {
     const count = Number((reply.stats || {}).replies || 0);
+    if ((reply.platform || "") === "youtube" && (reply.replies || []).length) return reply.replies;
     if (!(count > 0)) return siblings;
     const bucket = replyBucket(reply);
     if (bucket.loading || bucket.missing || !(bucket.replies || []).length) return siblings;
@@ -2720,7 +2840,7 @@
 
   function freshLabel(at) {
     const t = typeof at === "number" ? at : Date.parse(at || "");
-    if (!isFinite(t) || t <= 0) return "Updating…";
+    if (!isFinite(t) || t <= 0) return "";
     const mins = Math.max(0, Math.floor((Date.now() - t) / 60000));
     if (mins < 1) return "Updated just now";
     return "Updated " + mins + " min ago";
@@ -2746,7 +2866,8 @@
 
   function replyTools(post) {
     const bucket = STATE.replies[postKey(post)] || {};
-    return `<div class="reply-tools"><span class="reply-fresh">${esc(freshLabel(bucket.fetchedAt))}</span></div>${replySortTabs()}`;
+    const label = freshLabel(bucket.fetchedAt);
+    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}`;
   }
 
   function replyList(post) {
@@ -2760,7 +2881,11 @@
     const root = originalHandle(post);
     const html = slice.shown.map((reply) => {
       const pool = childPool(reply, slice.pool);
-      let inline = inlineChildren(reply, pool);
+      let inline = [];
+      if ((reply.platform || post.platform) === "youtube" && (reply.replies || []).length) {
+        inline = reply.replies.filter((child) => child && String(child.text || "").trim()).slice(0, 20);
+      }
+      if (!inline.length) inline = inlineChildren(reply, pool);
       if (!inline.length) {
         const op = inlineOp(reply, pool, root);
         if (op) inline = [op];
@@ -3860,8 +3985,12 @@
   function statusView(route) {
     let post = findPost(route.platform, route.handle, route.id);
     if (!post && (route.platform === "instagram" || route.platform === "threads" || route.platform === "youtube")) {
-      post = expandStub({ p: route.platform, id: route.id, h: route.handle });
-      if (post) STATE.shared[String(route.id)] = post;
+      const archived = (ARCHIVE.posts || []).find((item) => item && item.p === route.platform && String(item.id) === String(route.id));
+      const knownShape = route.platform !== "youtube" || ytVideoId(route.id) || !!(archived && archived.k);
+      if (knownShape) {
+        post = expandStub(archived || { p: route.platform, id: route.id, h: route.handle });
+        if (post) STATE.shared[String(route.id)] = post;
+      }
     }
     if (post && post.tombstone) {
       return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>` + tombstoneCard(post);
@@ -4204,24 +4333,21 @@
     if (STATE.forceWatch === id) delete STATE.replies[key];
     if (STATE.replies[key]) return STATE.replies[key];
     STATE.replies[key] = { loading: true, doc: null, missing: false };
-    const stamp = (doc) => {
-      const parsed = doc && doc.fetchedAt ? Date.parse(doc.fetchedAt) : Date.now();
-      return isFinite(parsed) ? parsed : Date.now();
-    };
     const snap = () => snapshotDoc(file).then((doc) => {
-      STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: stamp(doc) };
+      STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: ytFetchedAt(doc) };
       render();
     }).catch(() => {
-      STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: Date.now() };
+      STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: 0 };
       render();
     });
     if (post.platform === "youtube") {
       loadYtComments(post).then((doc) => {
-        if (!doc) {
-          snap();
-          return;
-        }
-        STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: stamp(doc) };
+        const at = ytFetchedAt(doc);
+        if (!ytUsable(doc)) STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: at };
+        else STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: at };
+        render();
+      }).catch(() => {
+        STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: 0 };
         render();
       });
       return STATE.replies[key];
@@ -4300,9 +4426,10 @@
         rows.sort(byLikes);
       }
       const total = bucket.doc.commentCount != null ? bucket.doc.commentCount : rows.length;
-      const stamped = bucket.fetchedAt || (bucket.doc && bucket.doc.fetchedAt);
+      const stamped = bucket.fetchedAt || ytFetchedAt(bucket.doc);
+      const label = freshLabel(stamped);
       comments = (rows.length ? rows.map(ytComment).join("") : `<div class="reply-empty">No comments yet.</div>`);
-      comments = `<h3>${esc(formatCount(total) || "0")} Comments</h3><div class="reply-tools"><span class="reply-fresh">${esc(freshLabel(stamped))}</span></div>${replySortTabs()}${comments}`;
+      comments = `<h3>${esc(formatCount(total) || "0")} Comments</h3><div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}${comments}`;
     }
     const up = posts().filter((item) => isVideoPost(item) && followedPost(item) && postKey(item) !== id).sort(byStamp).slice(0, 16);
     const upHtml = up.length ? `<aside class="upnext"><h2>Up next</h2>${up.map((item) => {
@@ -4373,6 +4500,8 @@
       const found = findComment(commentRows(bucket.doc).concat(bucket.replies || []), key);
       if (found) return found;
     }
+    const nested = commentInDocs(key);
+    if (nested && nested.comment) return nested.comment;
     return openedPost(key);
   }
 
@@ -4539,6 +4668,16 @@
 
   function loadSharedStatus(route) {
     const key = String(route.id);
+    if ((route.platform || "x") === "youtube") {
+      loadYtComments({ id: key, statusId: key, platform: "youtube", handle: route.handle || "", kind: "reply" }).then((doc) => {
+        const comment = doc && doc.comment ? doc.comment : (commentInDocs(key) || {}).comment;
+        if (comment && (comment.text || comment.author || comment.handle)) {
+          STATE.shared[key] = comment;
+          STATE.sharedState[key] = "ok";
+        } else STATE.sharedState[key] = "miss";
+      }).catch(() => { STATE.sharedState[key] = "miss"; }).then(() => render());
+      return;
+    }
     const live = (route.platform || "x") === "x" ? hydrateX(key) : Promise.resolve(null);
     live.then((post) => {
       if (post && post.tombstone) {

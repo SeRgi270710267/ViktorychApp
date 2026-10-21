@@ -662,6 +662,9 @@ def main() -> None:
     check("manifest.webmanifest" in workflow and "__SW_VERSION__" in workflow and "GITHUB_SHA" in workflow, "the deploy copies the app shell and stamps the service worker")
     check('ranking_mode: "recency"' in app, "fxtwitter conversations also request newest replies")
     check("COMMENT_TTL" in app and "reply-sort" in app and "Updated " in app and 'tab("relevant", "Relevant")' in app and 'tab("recent", "Recent")' in app and 'tab("liked", "Liked")' in app and "replySortMode" in app, "opening a post can sort replies and show when they were fetched")
+    yt_loader = app[app.index("function ytStub("):app.index("function liveDuration(")]
+    reply_bucket = app[app.index("function replyBucket("):app.index("function ivIso(")]
+    check("ivThread(" in yt_loader and "ivCommunityThread(" in yt_loader and 'ownPack("yt_"' in yt_loader and 'snapshotDoc("yt_"' in yt_loader and "pipedThread(" not in yt_loader and "loadYtComments(post)" in reply_bucket, "youtube comments share one loader on every surface")
     check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
     check("status.json" in workflow and "fallback" in workflow, "the deploy publishes status and the own-fetcher files")
     check('name: "sources"' in app and "ownPack" in app and "fxDown" in app and "fallback/" in app and "settled" in app and "source-row" in (ROOT / "styles.css").read_text(encoding="utf-8"), "a hidden sources view fails over to our own files")
