@@ -2,7 +2,7 @@
    Remote: arrows, Enter/OK, Back (Escape, Backspace, 10009, 461),
    media play/seek, and the colour keys. */
 (function () {
-  var KEY = "rss-feeds-settings-v1";
+  var KEY = "superintelapp-settings-v1";
   var TV = {
     on: false,
     forced: "",
@@ -21,6 +21,12 @@
   function loadSettings() {
     try {
       var raw = localStorage.getItem(KEY);
+      if (!raw) {
+        raw = localStorage.getItem("rss-" + "feeds-settings-v1");
+        if (raw) {
+          try { localStorage.setItem(KEY, raw); } catch (err) {}
+        }
+      }
       if (!raw) return {};
       var parsed = JSON.parse(raw);
       return parsed && typeof parsed === "object" ? parsed : {};

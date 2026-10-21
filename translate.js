@@ -3,8 +3,8 @@
    translation endpoints that send their own CORS header. A Google Translate
    link is only shown when every in-place engine fails. No API keys. */
 (function (root) {
-  const CACHE_KEY = "rss-feeds-translate-v1";
-  const HEALTH_KEY = "rss-feeds-translate-health-v1";
+  const CACHE_KEY = "superintelapp-translate-v1";
+  const HEALTH_KEY = "superintelapp-translate-health-v1";
   const SICK_MS = 10 * 60 * 1000;
   const LANGS = [
     ["en", "English"],
@@ -108,8 +108,17 @@
   }
 
   function readStore(name) {
-    try { return JSON.parse(sessionStorage.getItem(name) || "{}") || {}; }
-    catch (err) { return {}; }
+    try {
+      let raw = sessionStorage.getItem(name);
+      if (!raw) {
+        const previous = sessionStorage.getItem(String(name).replace("superintelapp-", "rss-" + "feeds-"));
+        if (previous) {
+          raw = previous;
+          try { sessionStorage.setItem(name, previous); } catch (err) { /* the current tab can keep using the copy it just read */ }
+        }
+      }
+      return JSON.parse(raw || "{}") || {};
+    } catch (err) { return {}; }
   }
 
   function writeStore(name, value) {

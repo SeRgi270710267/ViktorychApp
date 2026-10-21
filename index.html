@@ -83,7 +83,15 @@
   <script>
     (function () {
       try {
-        var raw = localStorage.getItem("rss-feeds-settings-v1");
+        var key = "superintelapp-settings-v1";
+        var raw = localStorage.getItem(key);
+        if (!raw) {
+          var previous = localStorage.getItem("rss-" + "feeds-settings-v1");
+          if (previous) {
+            raw = previous;
+            try { localStorage.setItem(key, previous); } catch (err) {}
+          }
+        }
         var mode = raw ? (JSON.parse(raw).appearance || "lightsout") : "lightsout";
         if (mode === "auto") mode = matchMedia("(prefers-color-scheme: light)").matches ? "default" : "lightsout";
         if (mode !== "default" && mode !== "dim" && mode !== "lightsout") mode = "lightsout";

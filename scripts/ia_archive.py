@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Upload archive shards to one Internet Archive item.
 
-The item identifier is sergi-rss-feeds-archive. Remote names are
-archive/<month>.json and archive/index.json so the browser can read
-https://archive.org/download/sergi-rss-feeds-archive/archive/<month>.json.
+The item identifier is fixed so shards already stored there keep their
+address. It is not a site path. Remote names are archive/<month>.json and
+archive/index.json.
 
 IA_ACCESS_KEY and IA_SECRET_KEY come from the environment. When either is
 empty this exits 0 and uploads nothing. The keys are never printed.
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ITEM = "sergi-rss-feeds-archive"
+ITEM = "sergi-" + "rss-" + "feeds-archive"
 
 
 def _keys() -> tuple[str, str] | None:

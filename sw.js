@@ -109,7 +109,7 @@ function isCommentApi(url) {
 
 function idb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open("rss-feeds-sw", 1);
+    const req = indexedDB.open("superintelapp-sw", 1);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");

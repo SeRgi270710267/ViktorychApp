@@ -744,7 +744,7 @@ def write_space_pages(site: Path, base: str, brand: str) -> int:
         write_page(site / "s", f"space-{ident}.html", {
             "title": title,
             "description": "Live Space",
-            "url": f"space-{ident}.html",
+            "url": join_url(base, f"s/space-{ident}.html"),
             "image": {"url": image_url, "width": 320, "height": 320, "kind": "image"},
             "og_type": "website",
             "player": "",
