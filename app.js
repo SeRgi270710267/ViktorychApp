@@ -59,6 +59,7 @@
     headerHidden: false,
     confirm: null,
     replies: {},
+    liveUsers: {},
     replyUi: {},
     subsLayout: "grid",
     commentSort: {},
@@ -218,6 +219,10 @@
     if (!handle) return "#/";
     if ((platform || "x") === "x") return `#/@${encodeURIComponent(handle)}`;
     return `#/${encodeURIComponent(platform)}/${encodeURIComponent(handle)}`;
+  }
+  function userHash(platform, handle) {
+    if (!handle) return "#/";
+    return "#/u/" + encodeURIComponent(platform || "x") + "/" + encodeURIComponent(handle);
   }
   function statusHash(post) {
     const platform = post.platform || "x";
@@ -423,7 +428,7 @@
       }
       const mention = src.slice(i).match(/^@([A-Za-z0-9_]{1,30})/);
       if (mention && (i === 0 || !/[A-Za-z0-9_]/.test(src[i - 1]))) {
-        html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(mentionHref(mention[1], platform))}">@${esc(mention[1])}</a>`;
+        html += `<a class="entity" data-act="stop" data-card="${esc((platform || "x") + ":" + mention[1])}" href="${esc(userHash(platform || "x", mention[1]))}">@${esc(mention[1])}</a>`;
         i += mention[0].length;
         continue;
       }
@@ -584,6 +589,7 @@
   const LIVE_TTL = 12 * 60 * 1000;
   const COMMENT_TTL = 2 * 60 * 1000;
   const FX = "https://api.fxtwitter.com";
+  const NITTER_RSS = ["https://nitter.meowing.monster", "https://nitter.kareem.one", "https://nitter.jaydenha.uk"];
   const IV_SEEDS = ["https://invidious.f5.si", "https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://yt.artemislena.eu"];
   const PIPED_SEEDS = ["https://pipedapi.kavin.rocks", "https://pipedapi.adminforge.de", "https://api.piped.private.coffee", "https://pipedapi.leptons.xyz"];
   const LIVE = { mem: {}, flight: {}, dbp: null, iv: null, dead: {}, videosDown: false, fxDown: false, status: null, statusP: null, statusLoaded: false };
@@ -1427,6 +1433,11 @@
       replies: [],
       replyingTo: { id: parentId, handle: handle }
     };
+    if (comment.authorId) row.channelId = String(comment.authorId);
+    else if (comment.authorUrl) {
+      const channel = String(comment.authorUrl).match(/UC[\w-]{10,}/);
+      if (channel) row.channelId = channel[0];
+    }
     if (!row.date && comment.publishedText) row.timeLabel = comment.publishedText;
     if (info.continuation) row._continuation = info.continuation;
     return row;
@@ -1520,6 +1531,7 @@
       replies: [],
       replyingTo: { id: parentId, handle: handle }
     };
+    if (comment.authorId || comment.channelId) row.channelId = String(comment.authorId || comment.channelId);
     if (comment.commentedTime) row.timeLabel = comment.commentedTime;
     if (depth === 0 && Array.isArray(comment.replies)) {
       const kids = [];
@@ -1832,6 +1844,10 @@
   }
 
   function loadNextShard() {
+    if (parseRoute().name === "user") {
+      loadMoreLive(parseRoute());
+      return;
+    }
     const name = nextShardName();
     if (!name || archiveBusy) return;
     archiveBusy = true;
@@ -1971,6 +1987,8 @@
     ARCHIVE_OBS.disconnect();
     const sentinel = document.getElementById("archive-more");
     if (sentinel) ARCHIVE_OBS.observe(sentinel);
+    const liveSentinel = document.getElementById("live-more");
+    if (liveSentinel) ARCHIVE_OBS.observe(liveSentinel);
   }
 
   function ensureYtSubs(feed) {
@@ -2163,8 +2181,8 @@
         ${avatar(face.avatar, post.author || post.handle)}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || post.handle || "Post")}${badge(face.verified)}</a>
-            ${post.handle ? `<a class="handle" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle)}</a>` : ""}
+            <a class="name" href="${esc(userHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || "Post")}${badge(face.verified)}</a>
+            ${post.handle ? `<a class="handle" href="${esc(userHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + post.handle)}">@${esc(post.handle)}</a>` : ""}
             ${when}
             ${sourceBadge(post.platform)}
           </div>
@@ -2196,16 +2214,18 @@
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
     const hideRepost = mode === "author" || mode === "status";
-    const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a href="${esc(profileHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
+    const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a data-card="${esc("x:" + (post.repostedBy.handle || ""))}" href="${esc(userHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
-    const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" href="${esc(profileHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(userHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(sitePermalink(statusHash(post)))}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const eager = !!opts.eager;
-    const avaLink = `<a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(face.avatar, post.author || post.handle)}</a>`;
+    const dest = post.watch ? watchHash(post) : statusHash(post);
+    const who = post.profileHandle || post.handle;
+    const avaLink = `<a href="${esc(userHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${avatar(face.avatar, post.author || post.handle)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
-    const open = ` data-open="${esc(statusHash(post))}"`;
+    const open = ` data-open="${esc(dest)}"`;
     const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
     const hydrate = post.stub ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
@@ -2215,10 +2235,10 @@
         ${avaCol}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
-            <a class="handle" href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">@${esc(post.handle || "")}</a>
+            <a class="name" href="${esc(userHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
+            ${post.handle ? `<a class="handle" href="${esc(userHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(post.handle)}</a>` : ""}
             <span class="dot">·</span>
-            <a class="time" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
+            <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
             ${sourceBadge(post.platform)}
             <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="More">${icon("more")}</button>
           </div>
@@ -2257,6 +2277,10 @@
     }
     if (parts[0] === "tab" && parts[1]) return { name: "home", tab: "list:" + parts[1], query };
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
+    if (parts[0] === "u" && parts[1] && parts[2]) {
+      const platform = parts[1] === "twitter" ? "x" : parts[1];
+      return { name: "user", platform: platform, handle: parts[2], query };
+    }
     const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -2312,7 +2336,7 @@
   function sidebar() {
     const people = followSuggestions().slice(0, 3);
     const rows = people.map((f) => `<div class="who-row">
-      <a class="who-main" href="${esc(profileHash(f.platform, f.handle))}" data-card="${esc(f.id)}">
+      <a class="who-main" href="${esc(userHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">
         ${avatar(f.avatar, f.name)}
         <span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)} ${sourceBadge(f.platform)}</span></span>
       </a>
@@ -2387,6 +2411,690 @@
         <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
       </div>
       <div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>` : ""}<div class="head-text grow"><h1>${esc(title)}</h1>${extra || ""}</div>${action || ""}</div></div>`;
+  }
+
+  function liveKey(platform, handle) {
+    return (platform || "x") + ":" + String(handle || "").replace(/^@/, "").toLowerCase();
+  }
+
+  function blankLive(platform, handle) {
+    return {
+      platform: platform || "x",
+      handle: String(handle || "").replace(/^@/, ""),
+      loading: false,
+      settled: false,
+      fetchedAt: 0,
+      profile: null,
+      posts: [],
+      replies: [],
+      media: [],
+      videos: [],
+      community: [],
+      cursor: {},
+      paging: "",
+      error: "",
+      limited: false,
+      saved: false,
+      source: ""
+    };
+  }
+
+  function rememberLive(post) {
+    const id = String((post && (post.statusId || post.id)) || "");
+    if (id) STATE.shared[id] = post;
+  }
+
+  function rememberedPerson(platform, handle) {
+    const h = String(handle || "").replace(/^@/, "").toLowerCase();
+    if (!h) return null;
+    const pool = posts().slice();
+    Object.keys(STATE.replies || {}).forEach((key) => {
+      const bucket = STATE.replies[key] || {};
+      (bucket.replies || []).forEach((row) => pool.push(row));
+      commentRows(bucket.doc).forEach((row) => pool.push(row));
+    });
+    return pool.find((post) => post && (post.platform || "x") === platform && String(post.handle || "").toLowerCase() === h) || null;
+  }
+
+  function catalogFeed(profile) {
+    if (!profile) return null;
+    return feedById(profile.id) || findFeed(profile.platform, profile.handle) || findFeed(profile.platform, profile.displayHandle) || (profile.channelId ? feeds().find((feed) => feed.channelId === profile.channelId) : null) || null;
+  }
+
+  function needsSyncNote(profile) {
+    const feed = catalogFeed(profile);
+    return !feed || !feed.configured;
+  }
+
+  function liveFollowId(profile) {
+    const feed = catalogFeed(profile);
+    if (feed && feed.id) return feed.id;
+    return (profile.platform || "x") + ":" + (profile.handle || "");
+  }
+
+  function liveProfileById(id) {
+    const wanted = String(id || "");
+    const rows = STATE.liveUsers || {};
+    const keys = Object.keys(rows);
+    for (let i = 0; i < keys.length; i++) {
+      const profile = rows[keys[i]] && rows[keys[i]].profile;
+      if (!profile) continue;
+      if (profile.id === wanted || keys[i] === wanted.toLowerCase() || liveFollowId(profile) === wanted) return profile;
+    }
+    return null;
+  }
+
+  function profileStub(id) {
+    const cut = String(id || "").indexOf(":");
+    if (cut < 1) return null;
+    return { id: id, platform: id.slice(0, cut), handle: id.slice(cut + 1), name: id.slice(cut + 1), bio: "" };
+  }
+
+  function fxLivePost(status) {
+    const wrapped = status && status.tweet && typeof status.tweet === "object" ? status.tweet : status;
+    const post = fxFromStatus(wrapped);
+    if (!post) return null;
+    const by = fxPerson(wrapped.reposted_by || wrapped.retweeted_by);
+    if (by && by.handle) {
+      post.repostedBy = by;
+      post.kind = "repost";
+    }
+    if (wrapped.quote && typeof wrapped.quote === "object") {
+      const quoted = fxFromStatus(wrapped.quote);
+      if (quoted) {
+        post.quoted = quoted;
+        if (post.kind === "post") post.kind = "quote";
+      }
+    }
+    return post;
+  }
+
+  function fxOwned(post, handle) {
+    const h = String(handle || "").replace(/^@/, "").toLowerCase();
+    if (!h || !post) return false;
+    if (post.repostedBy && String(post.repostedBy.handle || "").toLowerCase() === h) return true;
+    return String(post.handle || "").toLowerCase() === h;
+  }
+
+  function takeFx(posts, kind) {
+    if (kind === "replies") return (posts || []).filter((post) => post.kind === "reply");
+    if (kind === "media") return (posts || []).filter((post) => (post.media || []).length);
+    return (posts || []).filter((post) => post.kind !== "reply");
+  }
+
+  function fxUserProfile(user) {
+    let website = user.website || "";
+    if (website && typeof website === "object") website = website.url || "";
+    website = String(website || "");
+    const home = user.url || ("https://x.com/" + user.screen_name);
+    if (/^(https?:\/\/)?(www\.)?(x|twitter)\.com\//i.test(website)) website = "";
+    return {
+      id: "x:" + user.screen_name,
+      platform: "x",
+      handle: user.screen_name,
+      name: user.name || user.screen_name,
+      avatar: upgradeAvatar(user.avatar_url || ""),
+      banner: user.banner_url || "",
+      bio: user.description || "",
+      location: user.location || "",
+      website: website,
+      joined: isoDate(user.joined || ""),
+      following: user.following != null ? user.following : null,
+      followers: user.followers != null ? user.followers : null,
+      postsCount: user.tweets != null ? user.tweets : (user.statuses != null ? user.statuses : null),
+      verifiedType: fxVerified(user),
+      url: home
+    };
+  }
+
+  function fxHeader(handle) {
+    if (LIVE.fxDown) return Promise.resolve(null);
+    const once = () => fetchJson(FX + "/" + encodeURIComponent(handle)).then((data) => {
+      const user = data && (data.user || data.profile);
+      if (!user || !user.screen_name) return null;
+      return fxUserProfile(user);
+    }).catch((err) => ({ error: String((err && (err.status || err.message)) || err) }));
+    return once().then((profile) => (profile && profile.handle ? profile : once()));
+  }
+
+  function fxTimeline(handle, kind, cursor) {
+    if (LIVE.fxDown) return Promise.resolve(null);
+    let path = "/2/profile/" + encodeURIComponent(handle) + (kind === "media" ? "/media" : "/statuses");
+    const query = ["count=40"];
+    if (kind === "replies") query.push("with_replies=1");
+    if (cursor) query.push("cursor=" + encodeURIComponent(cursor));
+    return fetchJson(FX + path + "?" + query.join("&")).then((data) => {
+      const posts = [];
+      let profile = null;
+      const h = String(handle || "").toLowerCase();
+      ((data && data.results) || []).forEach((item) => {
+        if (!item || typeof item !== "object") return;
+        const author = item.author;
+        if (!profile && author && String(author.screen_name || "").toLowerCase() === h) profile = fxUserProfile(author);
+        const by = item.reposted_by || item.retweeted_by;
+        if (!profile && by && String(by.screen_name || "").toLowerCase() === h) profile = fxUserProfile(by);
+        const post = fxLivePost(item);
+        if (post && fxOwned(post, handle)) posts.push(post);
+      });
+      const bottom = data && data.cursor && data.cursor.bottom;
+      return { posts: posts, cursor: bottom || "", profile: profile };
+    }).catch(() => null);
+  }
+
+  function fxPages(handle, kind, cursor, left) {
+    return fxTimeline(handle, kind, cursor).then((pack) => {
+      if (!pack) return null;
+      const posts = takeFx(pack.posts, kind);
+      const nextCursor = pack.cursor === cursor ? "" : pack.cursor;
+      if (posts.length || !pack.cursor || left <= 0 || pack.cursor === cursor) return { posts: posts, cursor: nextCursor, profile: pack.profile || null };
+      return fxPages(handle, kind, pack.cursor, left - 1).then((more) => {
+        if (!more) return { posts: posts, cursor: "", profile: pack.profile || null };
+        return { posts: posts.concat(more.posts), cursor: more.cursor, profile: pack.profile || more.profile || null };
+      });
+    });
+  }
+
+  function parseNitterRss(xml, handle) {
+    if (!xml || String(xml).indexOf("<item") < 0 || typeof DOMParser === "undefined") return [];
+    const doc = new DOMParser().parseFromString(xml, "text/xml");
+    if (!doc || doc.querySelector("parsererror")) return [];
+    const out = [];
+    const items = doc.getElementsByTagName("item");
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const link = (item.getElementsByTagName("link")[0] && item.getElementsByTagName("link")[0].textContent) || "";
+      const title = ((item.getElementsByTagName("title")[0] && item.getElementsByTagName("title")[0].textContent) || "").trim();
+      const desc = (item.getElementsByTagName("description")[0] && item.getElementsByTagName("description")[0].textContent) || "";
+      const published = (item.getElementsByTagName("pubDate")[0] && item.getElementsByTagName("pubDate")[0].textContent) || "";
+      const status = String(link).match(/\/([A-Za-z0-9_]{1,30})\/status\/(\d+)/);
+      if (!status) continue;
+      const authorHandle = status[1];
+      const statusId = status[2];
+      const rt = title.match(/^RT by @([A-Za-z0-9_]{1,30})\s*:/i);
+      const holder = document.createElement("div");
+      holder.innerHTML = desc;
+      const text = (holder.textContent || "").replace(/\s+/g, " ").trim();
+      const media = [];
+      holder.querySelectorAll("img").forEach((img) => {
+        const src = img.getAttribute("src") || "";
+        if (src && !/profile_images|avatar/i.test(src)) media.push({ type: "photo", url: src, poster: src });
+      });
+      const reply = /^R to @/i.test(title);
+      const post = {
+        id: statusId,
+        statusId: statusId,
+        platform: "x",
+        kind: rt ? "repost" : reply ? "reply" : "post",
+        author: rt ? authorHandle : handle,
+        handle: authorHandle || handle,
+        text: text || title,
+        date: isoDate(published),
+        url: "https://x.com/" + (authorHandle || handle) + "/status/" + statusId,
+        media: media,
+        stats: {}
+      };
+      if (rt) post.repostedBy = { name: rt[1], handle: rt[1], avatar: "" };
+      if (fxOwned(post, handle) || (post.repostedBy && String(post.repostedBy.handle).toLowerCase() === handle.toLowerCase())) out.push(post);
+    }
+    return out;
+  }
+
+  function nitterPosts(handle) {
+    const bases = NITTER_RSS.filter((base) => !LIVE.dead[base]);
+    if (!bases.length) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let pending = bases.length;
+      let done = false;
+      const finish = (posts) => {
+        if (done) return;
+        done = true;
+        resolve(posts && posts.length ? posts : null);
+      };
+      const timer = setTimeout(() => finish(null), 2500);
+      bases.forEach((base) => {
+        const url = base.replace(/\/$/, "") + "/" + encodeURIComponent(handle) + "/rss";
+        fetch(url, { cache: "no-cache", signal: AbortSignal.timeout(2000) }).then((res) => {
+          if (!res.ok) throw new Error(String(res.status));
+          return res.text();
+        }).then((xml) => {
+          const posts = parseNitterRss(xml, handle);
+          if (posts.length) {
+            clearTimeout(timer);
+            finish(posts);
+          }
+        }).catch(() => {
+          LIVE.dead[base] = true;
+        }).finally(() => {
+          pending -= 1;
+          if (!pending) {
+            clearTimeout(timer);
+            finish(null);
+          }
+        });
+      });
+    });
+  }
+
+  function ivBest(list) {
+    let best = "";
+    let width = -1;
+    (list || []).forEach((thumb) => {
+      if (!thumb || !thumb.url) return;
+      const w = Number(thumb.width || 0);
+      if (w >= width) {
+        best = thumb.url;
+        width = w;
+      }
+    });
+    if (String(best).indexOf("//") === 0) best = "https:" + best;
+    return best;
+  }
+
+  function ytProfileFromChannel(data, requested) {
+    const id = data.authorId || requested;
+    const known = feeds().find((feed) => feed.platform === "youtube" && (feed.channelId === id || String(feed.handle || "").toLowerCase() === String(requested || "").toLowerCase()));
+    const joined = Number(data.joined) > 1000000000 ? ivIso(data.joined) : "";
+    return {
+      id: known && known.id ? known.id : "youtube:" + id,
+      platform: "youtube",
+      handle: id,
+      displayHandle: known && known.handle ? known.handle : "",
+      channelId: id,
+      name: data.author || (known && known.name) || id,
+      avatar: ivBest(data.authorThumbnails) || (known && known.avatar) || "",
+      banner: ivBest(data.authorBanners) || (known && known.banner) || "",
+      bio: data.description || (known && known.bio) || "",
+      location: "",
+      website: "",
+      joined: joined,
+      following: null,
+      followers: data.subCount != null ? data.subCount : null,
+      postsCount: null,
+      verifiedType: data.authorVerified ? "blue" : "",
+      url: "https://www.youtube.com/channel/" + id
+    };
+  }
+
+  function ivVideoPost(video, profile) {
+    const id = video && (video.videoId || video.id);
+    if (!id) return null;
+    const poster = ivBest(video.videoThumbnails) || video.thumbnail || "";
+    return {
+      id: id,
+      statusId: id,
+      platform: "youtube",
+      kind: "post",
+      watch: true,
+      author: (profile && profile.name) || video.author || "",
+      handle: (profile && profile.displayHandle) || "",
+      profileHandle: (profile && (profile.channelId || profile.handle)) || "",
+      avatar: (profile && profile.avatar) || "",
+      verifiedType: profile && profile.verifiedType,
+      title: video.title || "",
+      text: video.title || "",
+      description: video.description || "",
+      date: ivIso(video.published),
+      url: "https://www.youtube.com/watch?v=" + id,
+      media: [{ type: "video", url: "", poster: poster, duration: video.lengthSeconds }],
+      stats: { views: video.viewCount }
+    };
+  }
+
+  function ivCommunityPost(item, profile) {
+    const id = item && item.commentId;
+    if (!id) return null;
+    return {
+      id: id,
+      statusId: id,
+      platform: "youtube",
+      kind: "community",
+      author: (profile && profile.name) || item.author || "",
+      handle: (profile && profile.displayHandle) || "",
+      profileHandle: (profile && (profile.channelId || profile.handle)) || "",
+      avatar: (profile && profile.avatar) || ivBest(item.authorThumbnails),
+      verifiedType: profile && profile.verifiedType,
+      text: item.content || "",
+      date: ivIso(item.published),
+      url: "https://www.youtube.com/channel/" + (profile && profile.channelId ? profile.channelId : ""),
+      media: [],
+      stats: { likes: item.likeCount, replies: item.replyCount }
+    };
+  }
+
+  function ivVideoPosts(data, profile) {
+    const list = (data && (data.videos || data.latestVideos)) || [];
+    const out = [];
+    list.forEach((video) => {
+      const post = ivVideoPost(video, profile);
+      if (post) out.push(post);
+    });
+    return out;
+  }
+
+  function limitedProfile(platform, handle) {
+    const knownFeed = findFeed(platform, handle);
+    const knownPost = rememberedPerson(platform, handle);
+    const known = knownFeed || knownPost || {};
+    return {
+      id: knownFeed && knownFeed.id ? knownFeed.id : platform + ":" + handle,
+      platform: platform,
+      handle: handle,
+      name: known.name || known.author || handle,
+      avatar: known.avatar || "",
+      banner: known.banner || "",
+      bio: known.bio || "",
+      location: known.location || "",
+      website: "",
+      joined: known.joined || "",
+      following: known.following != null ? known.following : null,
+      followers: known.followers != null ? known.followers : null,
+      postsCount: null,
+      verifiedType: known.verifiedType || "",
+      url: externalProfile({ platform: platform, handle: handle, url: known.url || "" })
+    };
+  }
+
+  function absorbSaved(row) {
+    if ((row.posts || []).length) return;
+    const feed = catalogFeed(row.profile);
+    if (!feed) return;
+    const saved = postsFor(feed).filter((post) => post.kind !== "reply");
+    if (!saved.length) return;
+    row.posts = saved;
+    row.saved = true;
+  }
+
+  function loadXLive(row, handle) {
+    return Promise.all([fxHeader(handle), nitterPosts(handle)]).then((pair) => {
+      const header = pair[0];
+      const nitter = pair[1];
+      const postsJob = nitter && nitter.length
+        ? Promise.resolve({ posts: nitter.filter((post) => post.kind !== "reply"), cursor: "", source: "nitter" })
+        : fxPages(handle, "posts", "", 2).then((pack) => ({ posts: (pack && pack.posts) || [], cursor: (pack && pack.cursor) || "", source: "fxtwitter" }));
+      const repliesJob = nitter && nitter.some((post) => post.kind === "reply")
+        ? Promise.resolve({ posts: nitter.filter((post) => post.kind === "reply"), cursor: "" })
+        : fxPages(handle, "replies", "", 1);
+      const mediaJob = nitter && nitter.some((post) => (post.media || []).length)
+        ? Promise.resolve({ posts: nitter.filter((post) => (post.media || []).length), cursor: "" })
+        : fxPages(handle, "media", "", 1);
+      return Promise.all([postsJob, repliesJob, mediaJob]).then((packs) => {
+        const fromPosts = (packs[0] && packs[0].profile) || (packs[1] && packs[1].profile) || (packs[2] && packs[2].profile);
+        row.profile = (header && header.handle ? header : null) || fromPosts || limitedProfile("x", handle);
+        if (!header || !header.handle) row.error = fromPosts ? "" : "thin";
+        if (header && header.error) row.errorDetail = header.error;
+        row.limited = false;
+        row.source = packs[0].source || "";
+        row.posts = packs[0].posts || [];
+        row.cursor.posts = packs[0].cursor || "";
+        row.replies = (packs[1] && packs[1].posts) || [];
+        row.cursor.replies = (packs[1] && packs[1].cursor) || "";
+        row.media = (packs[2] && packs[2].posts) || [];
+        row.cursor.media = (packs[2] && packs[2].cursor) || "";
+        absorbSaved(row);
+        row.posts.concat(row.replies, row.media).forEach(rememberLive);
+        row.fetchedAt = Date.now();
+      });
+    });
+  }
+
+  function loadYtChannel(handle) {
+    const id = String(handle || "").replace(/^@/, "");
+    return rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(id), 4, "ivBase").then((data) => {
+      if (data && data.authorId) return data;
+      if (/^UC[\w-]{10,}$/.test(id)) return null;
+      return rotate(ivBases(), "/api/v1/search?q=" + encodeURIComponent(id) + "&type=channel", 3, "ivBase").then((found) => {
+        const list = (found && (found.results || found)) || [];
+        const rows = Array.isArray(list) ? list : [];
+        const hit = rows.find((item) => item && item.authorId && (String(item.author || "").toLowerCase() === id.toLowerCase() || String(item.authorUrl || "").toLowerCase().indexOf(id.toLowerCase()) >= 0));
+        if (!hit) return null;
+        return rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(hit.authorId), 4, "ivBase");
+      });
+    });
+  }
+
+  function loadYtLive(row, handle) {
+    return loadYtChannel(handle).then((data) => {
+      if (!data || !data.authorId) {
+        row.profile = limitedProfile("youtube", handle);
+        row.limited = true;
+        row.error = "thin";
+        row.fetchedAt = Date.now();
+        return;
+      }
+      row.profile = ytProfileFromChannel(data, handle);
+      row.videos = ivVideoPosts({ videos: data.latestVideos || [] }, row.profile);
+      row.videos.forEach(rememberLive);
+      const id = data.authorId;
+      return Promise.all([
+        rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(id) + "/videos", 4, "ivBase").catch(() => null),
+        rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(id) + "/community", 4, "ivBase").catch(() => null)
+      ]).then((pair) => {
+        const page = pair[0];
+        const extra = ivVideoPosts(page, row.profile);
+        if (extra.length) {
+          const seen = {};
+          row.videos.forEach((post) => { seen[post.id] = true; });
+          extra.forEach((post) => {
+            if (seen[post.id]) return;
+            seen[post.id] = true;
+            row.videos.push(post);
+            rememberLive(post);
+          });
+          row.cursor.videos = page.continuation || "";
+        }
+        const community = pair[1];
+        row.community = ((community && community.comments) || []).map((item) => ivCommunityPost(item, row.profile)).filter((post) => post && post.text);
+        row.cursor.community = (community && community.continuation) || "";
+        row.community.forEach(rememberLive);
+        row.fetchedAt = Date.now();
+      });
+    }).catch(() => {
+      row.profile = limitedProfile("youtube", handle);
+      row.limited = true;
+      row.error = "thin";
+      row.fetchedAt = Date.now();
+    });
+  }
+
+  function loadLimited(row, platform, handle) {
+    row.profile = limitedProfile(platform, handle);
+    row.limited = true;
+    row.fetchedAt = Date.now();
+    return Promise.resolve();
+  }
+
+  function ensureLiveHeader(platform, handle) {
+    const key = liveKey(platform, handle);
+    const row = STATE.liveUsers[key] || (STATE.liveUsers[key] = blankLive(platform, handle));
+    if (row.profile && row.fetchedAt && Date.now() - row.fetchedAt < COMMENT_TTL) return Promise.resolve(row);
+    if (row.headerTask) return row.headerTask;
+    const clean = String(handle || "").replace(/^@/, "");
+    const job = platform === "youtube" ? loadYtChannel(clean).then((data) => (data && data.authorId ? ytProfileFromChannel(data, clean) : null))
+      : (platform === "instagram" || platform === "threads") ? Promise.resolve(limitedProfile(platform, clean))
+      : fxHeader(clean);
+    row.headerTask = job.then((profile) => {
+      if (profile) {
+        row.profile = profile;
+        if (!row.fetchedAt) row.fetchedAt = Date.now();
+      }
+      return row;
+    }).catch(() => row).finally(() => { row.headerTask = null; });
+    return row.headerTask;
+  }
+
+  function ensureLiveUser(platform, handle) {
+    const key = liveKey(platform, handle);
+    const row = STATE.liveUsers[key] || (STATE.liveUsers[key] = blankLive(platform, handle));
+    if (row.pageTask) return row;
+    if (row.settled && row.fetchedAt && Date.now() - row.fetchedAt < COMMENT_TTL) return row;
+    row.loading = !row.profile;
+    const clean = String(handle || "").replace(/^@/, "");
+    const job = platform === "youtube" ? loadYtLive(row, clean)
+      : (platform === "instagram" || platform === "threads") ? loadLimited(row, platform, clean)
+      : loadXLive(row, clean);
+    row.pageTask = job.then(() => {
+      row.loading = false;
+      row.settled = true;
+      if (!row.fetchedAt) row.fetchedAt = Date.now();
+      render();
+      const hoverEl = document.querySelector("[data-card]:hover");
+      if (hoverEl) showHover(hoverEl);
+    }).catch(() => {
+      row.loading = false;
+      row.settled = true;
+      row.fetchedAt = Date.now();
+      render();
+    }).finally(() => { row.pageTask = null; });
+    return row;
+  }
+
+  function liveTabs(row) {
+    if (!row || row.limited) return [];
+    if ((row.platform || "") === "youtube") {
+      const tabs = [];
+      if ((row.videos || []).length || row.cursor.videos) tabs.push(["videos", "Videos"]);
+      if ((row.community || []).length || row.cursor.community) tabs.push(["community", "Community"]);
+      if (!tabs.length) tabs.push(["videos", "Videos"]);
+      return tabs;
+    }
+    const tabs = [["posts", "Posts"]];
+    if ((row.replies || []).length || row.cursor.replies) tabs.push(["replies", "Replies"]);
+    if ((row.media || []).length || row.cursor.media) tabs.push(["media", "Media"]);
+    return tabs;
+  }
+
+  function liveBucket(row, tab) {
+    if (tab === "replies") return "replies";
+    if (tab === "media") return "media";
+    if (tab === "videos") return "videos";
+    if (tab === "community") return "community";
+    return "posts";
+  }
+
+  function loadMoreLive(route) {
+    const row = STATE.liveUsers[liveKey(route.platform, route.handle)];
+    if (!row || row.paging || row.saved) return;
+    const tabs = liveTabs(row);
+    const requested = route.query.get("tab") || "";
+    const tab = tabs.some((pair) => pair[0] === requested) ? requested : (tabs[0] ? tabs[0][0] : "posts");
+    const cursor = row.cursor[tab];
+    if (!cursor) return;
+    row.paging = tab;
+    const finish = (pack) => {
+      row.paging = "";
+      const bucket = liveBucket(row, tab);
+      const list = row[bucket] || (row[bucket] = []);
+      if (pack && pack.posts && pack.posts.length) {
+        const seen = {};
+        list.forEach((post) => { seen[post.id] = true; });
+        pack.posts.forEach((post) => {
+          if (!post || seen[post.id]) return;
+          seen[post.id] = true;
+          list.push(post);
+          rememberLive(post);
+        });
+      }
+      row.cursor[tab] = pack && pack.cursor && pack.cursor !== cursor ? pack.cursor : "";
+      render();
+    };
+    if (route.platform === "youtube" && tab === "videos") {
+      const id = (row.profile && row.profile.channelId) || row.handle;
+      rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(id) + "/videos?continuation=" + encodeURIComponent(cursor), 4, "ivBase").then((data) => {
+        finish({ posts: ivVideoPosts(data, row.profile), cursor: (data && data.continuation) || "" });
+      }).catch(() => finish(null));
+      return;
+    }
+    if (route.platform === "youtube" && tab === "community") {
+      const id = (row.profile && row.profile.channelId) || row.handle;
+      rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(id) + "/community?continuation=" + encodeURIComponent(cursor), 4, "ivBase").then((data) => {
+        const posts = ((data && data.comments) || []).map((item) => ivCommunityPost(item, row.profile)).filter((post) => post && post.text);
+        finish({ posts: posts, cursor: (data && data.continuation) || "" });
+      }).catch(() => finish(null));
+      return;
+    }
+    fxPages(row.handle, tab === "posts" ? "posts" : tab, cursor, 1).then(finish);
+  }
+
+  function openLabel(platform) {
+    if (platform === "instagram") return "Open on Instagram";
+    if (platform === "threads") return "Open on Threads";
+    if (platform === "youtube") return "View on YouTube";
+    if (platform === "x") return "View on X";
+    return "View on " + (PLATFORM[platform] || "web");
+  }
+
+  function userView(route) {
+    const row = ensureLiveUser(route.platform, route.handle);
+    const profile = row.profile || {
+      id: route.platform + ":" + route.handle,
+      platform: route.platform,
+      handle: route.handle,
+      name: route.handle,
+      limited: route.platform === "instagram" || route.platform === "threads"
+    };
+    const tabs = liveTabs(row);
+    const requested = route.query.get("tab") || "";
+    const tab = tabs.some((pair) => pair[0] === requested) ? requested : (tabs[0] ? tabs[0][0] : "");
+    const bucket = tab ? liveBucket(row, tab) : "";
+    const list = bucket ? (row[bucket] || []) : [];
+    const shown = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
+    const banner = profile.banner ? `<img class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : `<div class="pbanner"></div>`;
+    const meta = [
+      profile.location ? `<span>${icon("loc")}${esc(profile.location)}</span>` : "",
+      profile.website ? `<a data-act="stop" href="${esc(profile.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(profile.website).replace(/^https?:\/\//, ""))}</a>` : "",
+      profile.joined ? `<span>${icon("cal")}${esc(joinedLabel(profile.joined))}</span>` : ""
+    ].join("");
+    const followerWord = profile.platform === "youtube" ? "Subscribers" : "Followers";
+    const counts = (profile.following != null || profile.followers != null) ? `<div class="counts">
+      ${profile.following != null ? `<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>` : ""}
+      ${profile.followers != null ? `<div><b>${esc(formatCount(profile.followers))}</b> <span>${followerWord}</span></div>` : ""}
+    </div>` : "";
+    const count = profile.postsCount != null ? formatCount(profile.postsCount) + " posts" : "";
+    const tabHtml = tabs.map((pair) => {
+      const href = userHash(profile.platform, profile.channelId || profile.handle) + (pair[0] === tabs[0][0] ? "" : "?tab=" + pair[0]);
+      return `<a class="tab${tab === pair[0] ? " on" : ""}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
+    }).join("");
+    const note = needsSyncNote(profile) ? `<p class="pfollow-note">Follow saves this account on this device. Add it to feeds.config.json and sync before its posts join the home timeline.</p>` : "";
+    const limited = row.limited ? `<p class="pfollow-note">Posts from this account can’t be loaded in the browser.</p>` : "";
+    const saved = row.saved ? `<p class="pfollow-note">Showing saved posts. The live timeline didn’t load.</p>` : "";
+    const fresh = row.fetchedAt ? `<p class="source-checked">${esc(freshLabel(row.fetchedAt))}</p>` : "";
+    let body = "";
+    if (!tabs.length) body = "";
+    else if (row.loading && !list.length) body = `<div class="reply-empty">Loading…</div>`;
+    else if (list.length) body = list.map((post) => card(post, post.repostedBy ? "" : "author")).join("");
+    else body = emptyBlock(
+      tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : tab === "community" ? "No community posts yet" : tab === "videos" ? "No videos yet" : "No posts yet",
+      row.error === "thin" && !row.saved ? "The live timeline didn’t load from the public sources." : "Nothing from this account is available in this tab."
+    );
+    const more = tab && row.cursor[tab] && !row.saved ? `<div id="live-more" class="live-more">${row.paging === tab ? "Loading…" : ""}</div>` : "";
+    return `<div class="topbar profile-bar">
+      <div class="page-head">
+        <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
+        <div class="head-text"><div class="pt-name">${esc(profile.name || profile.handle)}</div>${count ? `<div class="pt-count">${esc(count)}</div>` : ""}</div>
+      </div>
+    </div>
+    ${banner}
+    <div class="pinfo" data-live-error="${esc(row.errorDetail || row.error || "")}">
+      <div class="pava-row">
+        ${avatar(profile.avatar, profile.name, "pava")}
+        <div class="pactions">
+          <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(profile.id || (profile.platform + ":" + profile.handle))}" aria-label="Share">${icon("share")}</button>
+          ${followButtonClean(liveFollowId(profile), true)}
+          <a class="outline" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(profile))}">${esc(openLabel(profile.platform))}</a>
+        </div>
+      </div>
+      <h2 class="pname">${esc(profile.name || profile.handle)}${badge(profile.verifiedType)}</h2>
+      ${shown ? `<div class="phandle">@${esc(shown)}</div>` : ""}
+      ${profile.bio ? `<div class="bio">${linkify(profile.bio, [], profile.platform)}</div>` : ""}
+      ${meta ? `<div class="pmeta">${meta}</div>` : ""}
+      ${counts}
+      ${fresh}
+      ${limited}
+      ${saved}
+      ${note}
+    </div>
+    ${tabs.length ? `<div class="tabs ptabs" role="tablist">${tabHtml}</div>` : ""}
+    ${body}${more}`;
   }
 
   function profileView(route) {
@@ -2480,7 +3188,7 @@
     const chain = ancestorChain(post);
     const slice = replySlice(post);
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
-    const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a href="${esc(profileHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(userHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const body = `${replyLine}
         <div class="status-text">${textHtml(post, post.id, true)}</div>
         ${pollHtml(post)}
@@ -2491,14 +3199,14 @@
         ${actionBar(post)}`;
     const face = authorFace(post);
     const names = `<div>
-            <a class="name" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>
-            <a class="handle" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
+            <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>
+            <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
           </div>
           <span style="margin-left:auto">${sourceBadge(post.platform)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
-      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
-      : `<article class="status${parented}"><div class="status-author"><a href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
+      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
+      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
       ${ancestorBlock(post, chain)}
       ${article}
@@ -2521,7 +3229,7 @@
   }
 
   function accountRow(f) {
-    return `<div class="acct-row"><a class="who-main" href="${esc(profileHash(f.platform, f.handle))}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span></span></a>${followButtonClean(f.id)}</div>`;
+    return `<div class="acct-row"><a class="who-main" href="${esc(userHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span></span></a>${followButtonClean(f.id)}</div>`;
   }
 
   function feedsView() {
@@ -2835,10 +3543,14 @@
     const kids = comment.replies || [];
     const toggle = count > 0 ? `<button class="yt-replies" type="button" data-act="yt-replies" data-id="${esc(comment.id)}">${open ? "Hide replies" : esc(formatCount(count) || String(count)) + " replies"}</button>` : "";
     const nested = open ? `<div class="yt-kids">${kids.length ? kids.map(ytComment).join("") : `<div class="reply-empty">Replies aren’t available.</div>`}</div>` : "";
+    const href = comment.channelId ? userHash("youtube", comment.channelId) : "";
+    const cardId = comment.channelId ? ` data-card="youtube:${esc(comment.channelId)}"` : "";
+    const face = href ? `<a href="${esc(href)}"${cardId}>${avatar(comment.avatar, comment.author || comment.handle)}</a>` : avatar(comment.avatar, comment.author || comment.handle);
+    const name = href ? `<a class="name" href="${esc(href)}"${cardId}>${esc(comment.author || comment.handle || "")}</a>` : esc(comment.author || comment.handle || "");
     return `<div class="yt-c">
-      ${avatar(comment.avatar, comment.author || comment.handle)}
+      ${face}
       <div class="yt-c-main">
-        <div class="yt-c-name">${esc(comment.author || comment.handle || "")}${badge(comment.verifiedType)} <span>${esc(when)}</span></div>
+        <div class="yt-c-name">${name}${badge(comment.verifiedType)} <span>${esc(when)}</span></div>
         <p>${esc(comment.text || "")}</p>
         ${likes ? `<div class="yt-c-likes">${icon("thumb")}<span>${esc(likes)}</span></div>` : ""}
         ${toggle}
@@ -2848,7 +3560,7 @@
   }
 
   function watchView(route) {
-    const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id));
+    const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id)) || STATE.shared[String(route.id)];
     if (!post) return pageHead("Watch", "", true) + emptyBlock("Video unavailable", "This video isn’t in the current snapshot.");
     const feed = feedOf(post);
     ensureYtMeta(post);
@@ -2919,8 +3631,8 @@
           ${switcher}${pip}
           <h1 class="watch-title">${esc(post.title || post.text || "")}</h1>
           <div class="watch-chan">
-            <a href="${esc(profileHash(feed.platform, feed.handle))}">${avatar(post.avatar || feed.avatar, feed.name || post.author)}</a>
-            <div class="watch-who"><a class="name" href="${esc(profileHash(feed.platform, feed.handle))}">${esc(feed.name || post.author || "")}${badge(feed.verifiedType || post.verifiedType)}</a><div class="yt-sub">${esc(subs)}</div></div>
+            <a data-card="${esc(feed.platform + ":" + (feed.channelId || feed.handle))}" href="${esc(userHash(feed.platform, feed.channelId || feed.handle))}">${avatar(post.avatar || feed.avatar, feed.name || post.author)}</a>
+            <div class="watch-who"><a class="name" data-card="${esc(feed.platform + ":" + (feed.channelId || feed.handle))}" href="${esc(userHash(feed.platform, feed.channelId || feed.handle))}">${esc(feed.name || post.author || "")}${badge(feed.verifiedType || post.verifiedType)}</a><div class="yt-sub">${esc(subs)}</div></div>
             ${followButtonClean(feed.id, true)}
           </div>
           <div class="pills">
@@ -2983,11 +3695,12 @@
     const share = STATE.share;
     if (!share) return null;
     if (share.kind === "profile") {
-      const feed = feedById(share.id);
-      if (!feed) return null;
+      const feed = feedById(share.id) || liveProfileById(share.id) || profileStub(share.id);
+      if (!feed || !feed.handle) return null;
       const original = externalProfile(feed);
+      const routeHandle = feed.platform === "youtube" && feed.channelId ? feed.channelId : feed.handle;
       return {
-        permalink: sitePermalink(profileHash(feed.platform, feed.handle)),
+        permalink: sitePermalink(userHash(feed.platform || "x", routeHandle)),
         original: original && original !== "#" ? original : "",
         title: feed.name || feed.handle || "",
         text: feed.bio || feed.name || "",
@@ -3105,14 +3818,14 @@
 
   function ancestorCard(post) {
     const showReply = !!(post.replyingTo && post.replyingTo.handle);
-    const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" href="${esc(profileHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(userHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const face = authorFace(post);
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
-      <div class="ava-col"><a data-act="stop" href="${esc(profileHash(post.platform, post.handle))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
+      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
         <div class="byline">
-          <a class="name" data-act="stop" href="${esc(profileHash(post.platform, post.handle))}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
-          <a class="handle" data-act="stop" href="${esc(profileHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
+          <a class="name" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
+          <a class="handle" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
           <span class="dot">·</span>
           <a class="time" data-act="stop" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
         </div>
@@ -3236,6 +3949,7 @@
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock("No posts yet", "When the accounts you follow post, their updates will show up here.");
     if (route.name === "home") return homeView(route);
     if (route.name === "profile") return profileView(route);
+    if (route.name === "user") return userView(route);
     if (route.name === "status") return statusView(route);
     if (route.name === "explore") return exploreView(route);
     if (route.name === "feeds") return feedsView();
@@ -3284,7 +3998,8 @@
     const focusId = focus && focus.id;
     const caret = focus && typeof focus.selectionStart === "number" ? focus.selectionStart : null;
     document.getElementById("app").innerHTML = shell(view(route), route);
-    document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
+    const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
+    document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
     if (opts && Object.prototype.hasOwnProperty.call(opts, "y")) window.scrollTo(0, opts.y);
     else if (reset) window.scrollTo(0, 0);
     else window.scrollTo(0, y);
@@ -3347,7 +4062,12 @@
       const id = el.dataset.id;
       const i = STATE.settings.follows.indexOf(id);
       if (i >= 0) STATE.settings.follows.splice(i, 1);
-      else STATE.settings.follows.push(id);
+      else {
+        STATE.settings.follows.push(id);
+        const known = feedById(id) || liveProfileById(id);
+        const configured = known && (known.configured || (catalogFeed(known) && catalogFeed(known).configured));
+        if (!configured) toast("Saved on this device. Add it to feeds.config.json and sync for the home timeline.");
+      }
       saveSettings();
       render();
       return;
@@ -3725,17 +4445,37 @@
     }
   });
 
-  function showHover(el) {
-    const id = el.dataset.card || "";
-    const [platform, handle] = id.split(":");
-    const feed = feedById(id) || findFeed(platform, handle);
-    if (!feed) return;
+  function paintHover(el, profile) {
     const rect = el.getBoundingClientRect();
     const box = document.getElementById("hover");
-    box.innerHTML = `<div class="hcard"><div class="hbanner" style="background:${feed.banner ? "url(" + encodeURI(feed.banner) + ") center/cover" : "#333639"}"></div><div class="hbody"><div class="pava-row">${avatar(feed.avatar, feed.name, "pava")}${followButtonClean(feed.id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(feed.name)}${badge(feed.verifiedType)}</div><div class="phandle">@${esc(feed.handle)}</div>${feed.bio ? `<div class="hbio">${esc(feed.bio)}</div>` : ""}${(feed.following != null || feed.followers != null) ? `<div class="counts">${feed.following != null ? `<div><b>${esc(formatCount(feed.following))}</b> <span>Following</span></div>` : ""}${feed.followers != null ? `<div><b>${esc(formatCount(feed.followers))}</b> <span>Followers</span></div>` : ""}</div>` : ""}</div></div>`;
+    if (!box || !profile) return;
+    const handle = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
+    const id = liveFollowId(profile);
+    box.innerHTML = `<div class="hcard"><div class="hbanner" style="background:${profile.banner ? "url(" + encodeURI(profile.banner) + ") center/cover" : "#333639"}"></div><div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava")}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${(profile.following != null || profile.followers != null) ? `<div class="counts">${profile.following != null ? `<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>` : ""}${profile.followers != null ? `<div><b>${esc(formatCount(profile.followers))}</b> <span>${profile.platform === "youtube" ? "Subscribers" : "Followers"}</span></div>` : ""}</div>` : ""}</div></div>`;
     const left = Math.min(rect.left, window.innerWidth - 320);
     box.style.left = Math.max(8, left) + "px";
     box.style.top = (rect.bottom + 8) + "px";
+  }
+
+  function showHover(el) {
+    const id = el.dataset.card || "";
+    const cut = id.indexOf(":");
+    if (cut < 1) return;
+    const platform = id.slice(0, cut);
+    const handle = id.slice(cut + 1);
+    if (!handle) return;
+    const feed = feedById(id) || findFeed(platform, handle);
+    const live = STATE.liveUsers[liveKey(platform, handle)];
+    const profile = (live && live.profile) || feed;
+    if (!profile) {
+      paintHover(el, { platform: platform, handle: handle, name: handle, id: platform + ":" + handle });
+      ensureLiveHeader(platform, handle).then(() => {
+        const current = document.querySelector("[data-card]:hover");
+        if (current) showHover(current);
+      });
+      return;
+    }
+    paintHover(el, profile);
   }
 
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
@@ -3868,7 +4608,7 @@
       navigator.mediaSession.metadata = null;
       return;
     }
-    const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id));
+    const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id)) || STATE.shared[String(route.id)];
     if (!post) return;
     const poster = ((post.media || [])[0] || {}).poster;
     const artwork = [{ src: new URL("icons/icon-512.png", location.href).href, sizes: "512x512", type: "image/png" }];

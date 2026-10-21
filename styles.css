@@ -1133,6 +1133,9 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 .hcard .pava-row { margin-top: -30px; min-height: 40px; }
 .hcard .pava, .hcard .pava img { width: 64px; height: 64px; border-width: 3px; }
 .hbio { margin-top: 8px; font-size: 15px; line-height: 20px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.pfollow-note { margin: 10px 0 0; color: var(--muted); font-size: 13px; line-height: 18px; }
+.live-more { padding: 16px; text-align: center; color: var(--muted); font-size: 14px; }
+.yt-c-name a { color: inherit; }
 
 @media (max-width: 1279px) and (min-width: 500px) {
   .nav { width: 88px; flex-basis: 88px; padding: 0 4px; align-items: center; }

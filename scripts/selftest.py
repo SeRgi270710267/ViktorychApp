@@ -615,6 +615,7 @@ def main() -> None:
     check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
     check("status.json" in workflow and "fallback" in workflow, "the deploy publishes status and the own-fetcher files")
     check('name: "sources"' in app and "ownPack" in app and "fxDown" in app and "fallback/" in app and "settled" in app and "source-row" in (ROOT / "styles.css").read_text(encoding="utf-8"), "a hidden sources view fails over to our own files")
+    check('name: "user"' in app and "#/u/" in app and "with_replies=1" in app and "Open on Instagram" in app and "feeds.config.json" in app and "pfollow-note" in (ROOT / "styles.css").read_text(encoding="utf-8"), "live profiles open from a handle and keep follows on the device")
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
     community_src = (ROOT / "scripts" / "adapters" / "youtube_community.py").read_text(encoding="utf-8")
     check("rsshub.rssforever.com" not in config_text and "rsshub.pseudoyu.com" not in config_text and "hub.slarker.me" not in config_text, "public RSSHub mirrors are not feed sources")
