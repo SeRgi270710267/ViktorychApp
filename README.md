@@ -257,6 +257,149 @@ Follow on a profile that is not in this file, or Add account on the Feeds page, 
 
 Subscription groups are saved on this device immediately. **Save groups to the site** opens a prefilled issue titled `Subscription groups`. The same owner-only workflow writes the `groups` field in this file and starts a sync, so the groups show up on every device. Edits on this device win until the published list matches. Issues from anyone else are ignored.
 
+## Discord
+
+Discord is read with a bot you create, using Discord’s official HTTP API. The sync does not use a user token, does not log into the website, and does not bypass a block, a captcha, or a rate limit. The bot token lives only in the Actions secret `DISCORD_BOT_TOKEN`. It is sent as `Authorization: Bot …` to `discord.com` and is never written into the repo, the site, or the log. If that secret is missing, or Discord rejects it, the sync prints a skip line and continues. Previous Discord posts stay in `feeds.json`. Message files already on the site are copied forward when they can be downloaded.
+
+Anything the bot can read is published on this public site. Point it at channels you are willing to show.
+
+`feeds.config.json` has a `discord` list next to `feeds`. Ids are strings, because a snowflake is larger than a JavaScript number. An empty list syncs nothing.
+
+```json
+"discord": [
+  {
+    "id": "123456789012345678",
+    "name": "My Server",
+    "invite": "https://discord.gg/yourCode",
+    "channels": [
+      { "id": "234567890123456789", "name": "announcements", "mode": "posts", "limit": 30 },
+      { "id": "345678901234567890", "name": "general", "mode": "messages", "limit": 40 }
+    ]
+  }
+]
+```
+
+`invite` is optional. It can be a code or a `discord.gg` URL. `limit` defaults to 30 for posts and 40 for messages, and is capped at 100. A channel `mode` is `posts` or `messages`. Any other mode is ignored.
+
+**posts.** Each message becomes one post in `feeds.json`, on the feed `discord:<guildId>`. The author name and avatar are the person who sent it. The id is `discord:<channelId>:<messageId>` and does not change. `date` is Discord’s `timestamp`, never `edited_timestamp` and never the time the sync ran. Replies and messages in a thread started from one of those messages are nested on `replies` (oldest first) and are not also separate timeline rows. A thread keeps its latest 20 messages, and at most 8 threads per channel are read.
+
+**messages.** A channel is a conversation for the Messages page, not a timeline post. The file is `discord/messages/<channelId>.json`. Author records are stored once. Photos, videos, and other files stay on Discord’s CDN; nothing is downloaded. Attachment URLs are signed and are replaced on the next successful sync. Avatar, server icon, and custom emoji URLs are not signed.
+
+`discord/index.json` lists every configured server and channel. `discord/state.json` stores the newest snowflake per channel so the next run can ask for messages `after` that id. The first request for a channel omits `after` and returns Discord’s newest page, which refreshes those signed URLs. Further pages pass `after` set to the newest id in the previous page. That is the direction this endpoint pages. `X-RateLimit-Remaining: 0` waits `X-RateLimit-Reset-After`. HTTP 429 waits `Retry-After` and tries the same request again. It does not send faster.
+
+The server header comes from the public widget and invite when the server exposes them, then from `GET /guilds/<id>?with_counts=true` for an icon or member count those two left blank. Widget `presence_count` is `online`, not the member count. Member count is `followers`.
+
+### What the page can render
+
+The shell (`app.js`, `styles.css`, `sw.js`) is unchanged. Posts use the same card as every other platform, plus the Discord fields below. A Messages page can read the index and one channel file. Suggested routes, when that UI is added: `#/discord/<guildId>` for the server, `#/messages` for the channel list, `#/messages/discord/<channelId>` for one transcript. Fetch `discord/index.json`, then the `file` path on each messages channel. Those paths are relative, like `feeds.json`.
+
+A Discord post in `feeds.json`:
+
+| Field | Meaning |
+| --- | --- |
+| `id`, `statusId` | `discord:<channelId>:<messageId>`. Stable. The message id is the same after an edit |
+| `feedId` | `discord:<guildId>` |
+| `platform` | `discord` |
+| `guildId`, `channelId`, `channelName` | Server and the configured channel. The permalink `url` uses the message’s own channel, so a thread link opens the thread |
+| `kind` | `post` or `reply` |
+| `author`, `handle`, `avatar` | `global_name` or username, the username, and `cdn.discordapp.com/avatars/…` (or an embed default avatar) |
+| `bot` | `true` when the author is a bot. Omitted otherwise |
+| `text` | Plain text. Mentions are `@Name`, channels are `#name`, custom emoji are `:name:`, markdown markers are removed, spoilers are visible. A Discord `<t:…:R>` relative time is an absolute UTC time so a later sync does not rewrite it. Inline code is left alone |
+| `emojis` | Custom emoji in the order of `:name:` in `text`: `{id, name, animated, url}`. The URL is `cdn.discordapp.com/emojis/<id>.png` or `.gif` |
+| `date` | Original `timestamp` (`2024-05-01T15:30:00.000Z`). There is no `sortDate` unless some other step added one |
+| `url` | `https://discord.com/channels/<guildId>/<channelId>/<messageId>` |
+| `links` | The usual `{expanded, display, anchorText}` list. Embed URLs and non-image files are included |
+| `media` | Attachments the player already understands: `{type, url, poster, width, height, alt}`. `type` is `photo`, `animated_gif`, or `video`. The URL is the attachment URL Discord returned. A Lottie sticker is omitted |
+| `cards` | Link cards from embeds: `{url, title, description, image, author, site}` |
+| `replyingTo` | `{id, name, handle, avatar}` on a reply. `id` is the parent post id |
+| `replies` | Nested replies and thread messages, same shape, oldest first |
+| `threadId`, `threadName` | Present on a message that started a thread |
+| `stats` | `likes` is the sum of reaction counts. `replies` is the thread’s `message_count` when Discord sent one |
+
+`discord/index.json`:
+
+```json
+{
+  "fetchedAt": "2026-10-21T15:00:00Z",
+  "servers": [
+    {
+      "id": "123456789012345678",
+      "name": "My Server",
+      "handle": "123456789012345678",
+      "icon": "https://cdn.discordapp.com/icons/123456789012345678/hash.png?size=128",
+      "members": 500,
+      "online": 12,
+      "invite": "https://discord.gg/yourCode",
+      "url": "https://discord.gg/yourCode",
+      "channels": [
+        { "id": "234567890123456789", "name": "announcements", "mode": "posts" },
+        { "id": "345678901234567890", "name": "general", "mode": "messages", "file": "discord/messages/345678901234567890.json" }
+      ]
+    }
+  ]
+}
+```
+
+`fetchedAt` is when the file was written. It is not a message time. The same profile is merged into `feeds.json` (`id` `discord:<guildId>`, `platform` `discord`, `followers` from the member count, `online` from the presence count, `configured` true).
+
+`discord/messages/<channelId>.json`:
+
+```json
+{
+  "platform": "discord",
+  "guildId": "123456789012345678",
+  "channelId": "345678901234567890",
+  "name": "general",
+  "fetchedAt": "2026-10-21T15:00:00Z",
+  "authors": {
+    "42": { "name": "Ada Lovelace", "handle": "ada", "avatar": "https://cdn.discordapp.com/avatars/42/abc.png?size=128" }
+  },
+  "messages": [
+    {
+      "id": "200",
+      "author": "42",
+      "text": "Hello @Bob",
+      "date": "2024-05-01T15:30:00.000Z",
+      "reply": "199",
+      "thread": "198",
+      "attachments": [{ "type": "photo", "url": "https://cdn.discordapp.com/attachments/…/pic.png", "width": 100, "height": 80 }],
+      "cards": [{ "url": "https://example.com", "title": "Example" }],
+      "emojis": [{ "id": "99", "name": "wave", "animated": false, "url": "https://cdn.discordapp.com/emojis/99.png" }]
+    }
+  ]
+}
+```
+
+`author` on a message is a key in `authors`. `reply` is the parent message id in this channel. `thread` is the starter message id when this row was read from a thread. Empty fields are omitted. The list is newest first, capped at the channel `limit`.
+
+### Set up the bot
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications) and create an application.
+2. Open **Bot** and add a bot. Copy the token once. This is the bot token, not a token from the browser’s logged-in client.
+3. On that Bot page, turn on the privileged **Message Content Intent** and save. Discord uses that intent for bots that read message text. `GET /channels/{id}/messages` returns `content` for channels this bot can view; the intent is still the switch the portal asks you to enable, and Discord’s message search refuses content without it.
+4. Invite the bot with read-only permissions. In **OAuth2 → URL Generator**, choose the `bot` scope and only **View Channels** and **Read Message History**. Or open this URL with your application id:
+
+   `https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=66560&scope=bot`
+
+   `66560` is View Channels (`1024`) plus Read Message History (`65536`). Do not grant Administrator, Send Messages, or Manage Messages.
+5. Add the bot to a server you manage. It can only read channels that role can see.
+6. In the Discord app, turn on **Settings → Advanced → Developer Mode**. Right-click the server icon and choose **Copy Server ID**. Right-click a channel and choose **Copy Channel ID**. Paste those strings into `feeds.config.json`.
+7. On GitHub, open **Settings → Secrets and variables → Actions** and create `DISCORD_BOT_TOKEN` with the bot token. Do not commit it, do not put it in `feeds.config.json`, and do not print it in a workflow command.
+8. Push the config. The next sync reads the channels. `--fixtures` does not call Discord.
+
+### Announcement channels you do not run
+
+Discord will not give this bot the history of a server it has not joined, and joining someone else’s server is their decision. For a public announcement channel, use Discord’s own Follow:
+
+1. In your server, create a channel the bot can view (an announcement channel or a normal text channel).
+2. Open the public server’s announcement channel while logged into your own user account.
+3. Use that channel’s **Follow** button and pick the channel in your server. Discord copies new announcements into it.
+4. Put your channel’s id in the `discord` list. The bot reads the copies from your server. It does not join the public server and it does not scrape the website.
+
+### Server icon and member count
+
+In the server, open **Server Settings → Widget** (Engagement → Server Widget on current clients) and enable the widget. The sync then reads `https://discord.com/api/guilds/<guild id>/widget.json` with no token. That file has the server name, an invite, and the number of people online. The sync resolves the invite with `GET /invites/<code>?with_counts=true`, also with no token, for the icon and the member count. If the widget is off, the bot’s guild request still fills the icon and the member count while the bot is a member. Neither call is made when `DISCORD_BOT_TOKEN` is unset.
+
 ## Optional secrets
 
 The sync runs without any secrets. Add these only as repository Actions secrets (Settings → Secrets and variables → Actions). They are passed to the job as environment variables when the secret exists, and the workflow never prints them.
@@ -268,6 +411,7 @@ The sync runs without any secrets. Add these only as repository Actions secrets 
 | `TWITTER_AUTH_TOKEN` | Optional `auth_token` cookie sent only to Nitter and to RSSHub `/twitter` or `/x` routes during the build |
 | `IA_ACCESS_KEY` | S3 access key for the daily upload to the Internet Archive item `sergi-rss-feeds-archive`. The upload is skipped when this or `IA_SECRET_KEY` is empty |
 | `IA_SECRET_KEY` | S3 secret key for that same item. The upload is skipped when this or `IA_ACCESS_KEY` is empty |
+| `DISCORD_BOT_TOKEN` | Bot token for Discord channels listed under `discord` in `feeds.config.json`. The sync skips Discord when this is unset. Never a user token |
 
 The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the browser from fxtwitter, which needs no token. Do not put a bearer token in the page.
 
@@ -308,7 +452,7 @@ Worth adding later, against each site’s own public API (their Grayjay plugins 
 
 If the sync fails, a followed source returns nothing for six hours, or the Pages deploy fails, the workflow opens one **Sync problem** issue. A later run edits that issue when the failure changes, and closes it with “Sync is healthy again.” once the next sync is healthy. GitHub emails that to the repository owner. A source that is merely quiet still counts as healthy when its fetch returns posts.
 
-The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `manifest.webmanifest`, `sw.js`, `icons/`, `splash/`, `screenshots/`, `.nojekyll`, `feeds.json`, `archive/*.json`, and any `comments/*.json` into `_site`, stamps the commit SHA into `_site/sw.js`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/`, `media/`, and `archive/` are gitignored, so `main` keeps the code and the `feeds.json` seed. At 06:17 UTC the workflow uploads `archive/` to the Internet Archive when the keys are set, then force-pushes one squashed commit to the orphan `data` branch. See Archive above.
+The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `manifest.webmanifest`, `sw.js`, `icons/`, `splash/`, `screenshots/`, `.nojekyll`, `feeds.json`, `archive/*.json`, any `comments/*.json`, and `discord/**/*.json` into `_site`, stamps the commit SHA into `_site/sw.js`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/`, `media/`, and `archive/` are gitignored, so `main` keeps the code and the `feeds.json` seed. At 06:17 UTC the workflow uploads `archive/` to the Internet Archive when the keys are set, then force-pushes one squashed commit to the orphan `data` branch. See Archive above.
 
 ## Installed app
 

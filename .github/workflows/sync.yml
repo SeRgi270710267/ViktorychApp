@@ -144,11 +144,13 @@ jobs:
         # Timelines, Meta CDN refreshes, and Instagram/Threads comments under 7 days.
         # X replies and YouTube video comments are fetched in the browser.
         # Community post comments are written to fallback/ytpost_<id>.json here.
+        # Discord is skipped when DISCORD_BOT_TOKEN is unset.
         env:
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}
           TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
           VK_SERVICE_TOKEN: ${{ secrets.VK_SERVICE_TOKEN }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
         run: python3 scripts/update_feeds.py
 
       - name: Assemble the site and check its size
@@ -173,6 +175,10 @@ jobs:
           if [ -d archive ]; then
             mkdir -p _site/archive
             find archive -name '*.json' -type f -exec cp {} _site/archive/ \;
+          fi
+          if [ -d discord ]; then
+            mkdir -p _site/discord
+            find discord -name '*.json' -type f -exec cp --parents {} _site/ \;
           fi
           python3 - <<'PY'
           import os
