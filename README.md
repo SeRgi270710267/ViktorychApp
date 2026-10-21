@@ -440,8 +440,8 @@ The sync runs without any secrets. Add these only as repository Actions secrets 
 | `INSTAGRAM_COOKIE` | Last resort for Instagram comments, after the public sources miss. A `sessionid` value or a full cookie header |
 | `THREADS_COOKIE` | Last resort for Threads replies, after the public page and RSSHub miss |
 | `TWITTER_AUTH_TOKEN` | Optional `auth_token` cookie sent only to Nitter and to RSSHub `/twitter` or `/x` routes during the build |
-| `IA_ACCESS_KEY` | S3 access key for the daily upload to the Internet Archive item `sergi-rss-feeds-archive`. The upload is skipped when this or `IA_SECRET_KEY` is empty |
-| `IA_SECRET_KEY` | S3 secret key for that same item. The upload is skipped when this or `IA_ACCESS_KEY` is empty |
+| `IA_ACCESS_KEY` | S3 access key for the Internet Archive backup. The upload is skipped when this or `IA_SECRET_KEY` is empty. Create both at <https://archive.org/account/s3.php> |
+| `IA_SECRET_KEY` | S3 secret key for that backup. The upload is skipped when this or `IA_ACCESS_KEY` is empty |
 | `DISCORD_BOT_TOKEN` | Bot token for Discord servers whose `auth` is `bot` (the default). The sync skips those servers when this is unset. Never a user token |
 | `DISCORD_USER_TOKEN` | Optional token from a spare Discord account, used only for servers with `"auth": "user"`. Masked in the Actions log. Discord’s terms say automating a user account can get that account banned. Changing the password resets it |
 
@@ -485,6 +485,16 @@ Worth adding later, against each site’s own public API (their Grayjay plugins 
 If the sync fails, a followed source returns nothing for six hours, or the Pages deploy fails, the workflow opens one **Sync problem** issue. A later run edits that issue when the failure changes, and closes it with “Sync is healthy again.” once the next sync is healthy. GitHub emails that to the repository owner. A source that is merely quiet still counts as healthy when its fetch returns posts.
 
 The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `manifest.webmanifest`, `sw.js`, `icons/`, `splash/`, `screenshots/`, `.nojekyll`, `feeds.json`, `archive/*.json`, any `comments/*.json`, and `discord/**/*.json` into `_site`, stamps the commit SHA into `_site/sw.js`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/`, `media/`, and `archive/` are gitignored, so `main` keeps the code and the `feeds.json` seed. At 06:17 UTC the workflow uploads `archive/` to the Internet Archive when the keys are set, then force-pushes one squashed commit to the orphan `data` branch. See Archive above.
+
+## Internet Archive backup
+
+`.github/workflows/ia-backup.yml` runs at 07:47 UTC and from **Run workflow**. It has its own `ia-backup` concurrency group, so it does not cancel a Pages deploy. `IA_ACCESS_KEY` and `IA_SECRET_KEY` are the S3 keys from <https://archive.org/account/s3.php>. If either secret is missing, the script prints a skip line and exits 0. The values are never written to the log or the repo.
+
+Each month of stubs is uploaded as `superintelapp-YYYY-MM` (`mediatype=data`, collection `opensource` when the account may use it). Public photos and avatars for that month go to `superintelapp-img-YYYY-MM` (`image`, `opensource_media`). Public videos go to `superintelapp-mov-YYYY-MM` (`movies`, `opensource_media`). Discord messages and anything that is not a public file (login walls, 401/403, HTML, or a host that needs a cookie) are not uploaded. The same bytes are stored once. A 503 or `SlowDown` waits and retries.
+
+`archive/ia-manifest.json` on the `data` branch maps a post id and the original media URL to `https://archive.org/download/superintelapp-…`. The page also requests that file from the relative `archive/` path and from `superintelapp-manifest` on archive.org. When a live image or video fails, the page tries the download URL, then `https://cors.archive.org/cors/…` so the redirect still works in an image or video tag. If the live post is gone and the manifest has a copy, the card keeps the stub text and shows that copy. Otherwise the stub stays as it is.
+
+The job uploads at most 30 new media files per run, each at most 48 MB, with a short pause between files. After the backlog is caught up, a day is the new public files from that sync: usually a handful of photos and avatars (a few megabytes) and, on a day with clips, one or a few videos. The 30-file cap is the ceiling, not the typical day. Media stays on archive.org; it is not committed to git.
 
 ## Installed app
 

@@ -267,6 +267,8 @@ jobs:
             mv archive/archive/*.json archive/
             rm -rf archive/archive
           fi
+          git fetch -q --depth=1 origin data || true
+          git checkout origin/data -- archive/ia-manifest.json archive/ia-state.json 2>/dev/null || true
           if [ ! -f archive/index.json ]; then
             echo "no archive index; not updating data"
             exit 1

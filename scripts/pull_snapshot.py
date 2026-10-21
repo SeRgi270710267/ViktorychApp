@@ -32,6 +32,7 @@ from archive import load_archive, merge_stubs, purge_bridge_errors, save_archive
 SITE = "https://owner-account.github.io/rss-feeds/"
 DATA_ARCHIVE = "https://raw.githubusercontent.com/owner-account/rss-feeds/data/"
 IA_ARCHIVE = "https://archive.org/download/sergi-rss-feeds-archive/"
+IA_MANIFEST = "https://archive.org/download/superintelapp-manifest/"
 ARCHIVE_SOURCES = (
     ("pages", SITE),
     ("data", DATA_ARCHIVE),
@@ -115,6 +116,30 @@ def pull_archive(root: Path, fetch) -> str:
     return "updated"
 
 
+def pull_ia_sidecars(root: Path) -> None:
+    """Copy the media manifest when a source has one. A miss leaves the files alone."""
+    dest = root / "archive"
+    dest.mkdir(parents=True, exist_ok=True)
+    for name in ("ia-manifest.json", "ia-state.json"):
+        body = None
+        for _label, base in ARCHIVE_SOURCES:
+            body = _get(base + "archive/" + name)
+            if body:
+                break
+        if not body:
+            body = _get(IA_MANIFEST + name)
+        parsed = None
+        if body:
+            try:
+                parsed = json.loads(body.decode("utf-8"))
+            except (UnicodeError, json.JSONDecodeError):
+                parsed = None
+        if not isinstance(parsed, dict):
+            continue
+        _write(dest / name, body)
+        print(f"[snapshot] {name}")
+
+
 def main() -> None:
     try:
         _pull_feeds()
@@ -122,6 +147,10 @@ def main() -> None:
         for label, base in ARCHIVE_SOURCES:
             result = pull_archive(ROOT, lambda rel, base=base: _get(base + rel))
             print(f"[snapshot] archive {label} {result}")
+        try:
+            pull_ia_sidecars(ROOT)
+        except (OSError, urllib.error.URLError, TimeoutError):
+            print("[snapshot] media manifest unavailable", file=sys.stderr)
 
 
 def _pull_feeds() -> None:

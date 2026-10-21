@@ -142,6 +142,197 @@
   const ARCHIVE_RAW = "https://raw.githubusercontent.com/owner-account/rss-feeds/data/archive/";
   const ARCHIVE_CDN = "https://cdn.jsdelivr.net/gh/owner-account/rss-feeds@data/archive/";
   const ARCHIVE_IA = "https://archive.org/download/sergi-rss-feeds-archive/archive/";
+  const IA = { ready: false, files: [], byUrl: {}, posts: {} };
+
+  function iaParts(url) {
+    const match = String(url || "").match(/^https:\/\/(?:cors\.archive\.org\/cors|archive\.org\/(?:download|cors))\/([^/?#]+)\/([^?#]+)/i);
+    if (!match) return null;
+    try {
+      return { id: match[1], file: decodeURIComponent(match[2]) };
+    } catch (err) {
+      return { id: match[1], file: match[2] };
+    }
+  }
+
+  function iaDownloadUrl(url) {
+    const parts = iaParts(url);
+    if (!parts) return "";
+    return "https://archive.org/download/" + parts.id + "/" + encodeURIComponent(parts.file).replace(/%2F/g, "/");
+  }
+
+  function iaCorsUrl(url) {
+    const parts = iaParts(url);
+    if (!parts) return "";
+    return "https://cors.archive.org/cors/" + parts.id + "/" + encodeURIComponent(parts.file).replace(/%2F/g, "/");
+  }
+
+  function iaCandidates(url) {
+    const raw = String(url || "");
+    const list = [raw];
+    if (/pbs\.twimg\.com\/media\//.test(raw) && /[?&]name=/.test(raw)) {
+      list.push(raw.replace(/([?&]name=)[^&]+/, "$1orig"));
+      list.push(raw.replace(/([?&]name=)[^&]+/, "$1large"));
+    }
+    return list;
+  }
+
+  function installIaManifest(doc) {
+    IA.ready = true;
+    IA.files = [];
+    IA.byUrl = {};
+    IA.posts = {};
+    if (!doc || Number(doc.v) !== 1 || !Array.isArray(doc.files)) {
+      retryWaitingImages();
+      return;
+    }
+    doc.files.forEach((file) => {
+      if (!file || !file.u || !file.a) return;
+      IA.files.push(file);
+      if (!IA.byUrl[file.u]) IA.byUrl[file.u] = file;
+    });
+    const posts = doc.posts || {};
+    Object.keys(posts).forEach((key) => {
+      const idxs = posts[key];
+      if (!Array.isArray(idxs)) return;
+      IA.posts[key] = idxs.map((index) => doc.files[index]).filter((file) => file && file.a);
+    });
+    retryWaitingImages();
+  }
+
+  function iaForUrl(url) {
+    let found = "";
+    iaCandidates(url).forEach((item) => {
+      if (found) return;
+      const file = IA.byUrl[item];
+      if (file) found = iaDownloadUrl(file.a);
+    });
+    return found;
+  }
+
+  function nextIaUrl(img) {
+    const origin = img.dataset.iaOrigin || img.getAttribute("src") || "";
+    if (!img.dataset.iaOrigin) img.dataset.iaOrigin = origin;
+    const step = img.dataset.iaStep || "";
+    if (step === "") {
+      const found = iaForUrl(origin);
+      if (found && found !== img.src) {
+        img.dataset.iaStep = "download";
+        return found;
+      }
+    }
+    if (step !== "cors") {
+      const basis = iaForUrl(origin) || origin;
+      const cors = iaCorsUrl(basis);
+      if (cors && cors !== img.src) {
+        img.dataset.iaStep = "cors";
+        return cors;
+      }
+    }
+    return "";
+  }
+
+  function useArchiveMedia(img) {
+    if (!img || img.tagName !== "IMG") return false;
+    if (!IA.ready) {
+      img.dataset.iaWait = "1";
+      return true;
+    }
+    const next = nextIaUrl(img);
+    if (!next) return false;
+    img.removeAttribute("srcset");
+    img.referrerPolicy = "no-referrer";
+    img.src = next;
+    return true;
+  }
+
+  function retryWaitingImages() {
+    document.querySelectorAll("img[data-ia-wait]").forEach((img) => {
+      img.removeAttribute("data-ia-wait");
+      if (useArchiveMedia(img)) return;
+      finishMediaError(img);
+    });
+  }
+
+  function finishMediaError(img) {
+    if (!img || !img.isConnected) return;
+    if (img.dataset.fallback === "avatar") {
+      const span = document.createElement("span");
+      span.className = String(img.className || "").replace("ava", "ava initials");
+      if (span.className.indexOf("initials") < 0) span.className += " initials";
+      span.textContent = img.dataset.initials || "?";
+      img.replaceWith(span);
+      return;
+    }
+    const tile = img.closest(".tile") || img.closest(".media") || img.closest(".yt-thumb");
+    if (tile) tile.classList.add("broken");
+    img.remove();
+  }
+
+  function archivedFromManifest(stub) {
+    if (!stub) return null;
+    const rows = IA.posts[postIdentity(stub)] || [];
+    if (!rows.length) return null;
+    let avatar = "";
+    const media = [];
+    rows.forEach((file) => {
+      const playback = iaDownloadUrl(file.a);
+      const cors = iaCorsUrl(file.a);
+      if (!playback) return;
+      if (file.k === "avatar") {
+        avatar = playback;
+        return;
+      }
+      if (file.k === "video" || file.k === "animated_gif") {
+        media.push({
+          type: file.k === "animated_gif" ? "animated_gif" : "video",
+          url: playback,
+          fallback: cors,
+          poster: file.p ? iaForUrl(file.p) : ""
+        });
+        return;
+      }
+      media.push({ type: "photo", url: playback, fallback: cors });
+    });
+    if (!media.length && !avatar) return null;
+    return Object.assign({}, stub, {
+      stub: false,
+      archived: true,
+      tombstone: false,
+      avatar: avatar || stub.avatar || "",
+      media: media.length ? media : (stub.media || [])
+    });
+  }
+
+  function applyIaPreview(doc) {
+    const host = String(location.hostname || "");
+    if (host !== "localhost" && host !== "127.0.0.1") return false;
+    if (new URLSearchParams(location.search).get("ia-deleted") !== "1") return false;
+    if (!doc || !Array.isArray(doc.posts)) return false;
+    const dead = "https://example.invalid/deleted-source.jpg";
+    const saved = "https://archive.org/download/3163616/3163616_thumb.jpg";
+    installIaManifest({
+      v: 1,
+      files: [{ u: dead, a: saved, k: "photo" }, { u: dead, a: saved, k: "avatar" }],
+      posts: { "x:9001": [0, 1] }
+    });
+    if (!doc.posts.some((post) => post && String(post.id) === "9001")) {
+      doc.posts.unshift({
+        id: "9001",
+        statusId: "9001",
+        platform: "x",
+        handle: "archived",
+        author: "Deleted post",
+        feedId: "x:archived",
+        kind: "post",
+        text: "This post was deleted at the source. The photo is loading from archive.org.",
+        date: "2099-10-21T12:00:00Z",
+        url: "https://x.com/archived/status/9001",
+        media: [{ type: "photo", url: dead, alt: "Saved on archive.org" }],
+        avatar: dead
+      });
+    }
+    return true;
+  }
 
   function canonicalId(post) {
     const platform = (post && post.platform) || "";
@@ -1132,6 +1323,14 @@
     }
     const avatar = upgradeAvatar((post && post.avatar) || "") || ((post && post.avatar) || "");
     push(avatar);
+    const saved = [];
+    out.forEach((url) => {
+      const next = iaForUrl(url);
+      if (next) saved.push(next);
+      const cors = next ? iaCorsUrl(next) : "";
+      if (cors) saved.push(cors);
+    });
+    saved.forEach(push);
     return { urls: out, avatar: avatar };
   }
 
@@ -1381,6 +1580,12 @@
     [picked, media && media.url, media && media.fallback, media && media.hls].forEach((url) => {
       if (!url || !playableFile(url) || oePast(url)) return;
       pushSource(out, { kind: /\.m3u8(\?|$)/i.test(url) ? "hls" : "mp4", url: url });
+    });
+    [media && media.url, media && media.fallback].forEach((url) => {
+      const saved = iaForUrl(url);
+      if (saved && playableFile(saved)) pushSource(out, { kind: "mp4", url: saved });
+      const cors = saved ? iaCorsUrl(saved) : "";
+      if (cors && playableFile(cors)) pushSource(out, { kind: "mp4", url: cors });
     });
     return out;
   }
@@ -3777,10 +3982,16 @@
   }
 
   function archiveSources(file, fresh) {
+    const local = new URL("archive/" + file, document.baseURI).href;
     const raw = ARCHIVE_RAW + file;
     const cdn = ARCHIVE_CDN + file;
     const ia = ARCHIVE_IA + file;
-    return fresh ? [raw, cdn, ia] : [cdn, raw, ia];
+    const extra = [];
+    const month = String(file).match(/^(\d{4}-\d{2}|undated)\.json$/);
+    if (month) extra.push("https://archive.org/download/superintelapp-" + month[1] + "/" + file);
+    if (file === "index.json" || file === "ia-manifest.json") extra.push("https://archive.org/download/superintelapp-manifest/" + file);
+    const primary = fresh ? [local, raw, cdn] : [local, cdn, raw];
+    return primary.concat(extra).concat([ia]);
   }
 
   async function fetchArchive(file, fresh) {
@@ -3822,12 +4033,19 @@
     ARCHIVE.order = [];
     ARCHIVE.loaded = {};
     ARCHIVE.posts = [];
+    const manifestTask = fetchArchive("ia-manifest.json", true).then((doc) => {
+      installIaManifest(doc || { v: 1, files: [], posts: {} });
+    }).catch(() => {
+      installIaManifest({ v: 1, files: [], posts: {} });
+    });
     try {
       const index = await fetchArchive("index.json", true);
-      if (!index) return;
-      ARCHIVE.order = (index.shards || []).filter((name) => /^\d{4}-\d{2}$/.test(name) || name === "undated");
-      if (ARCHIVE.order.length) await loadShard(ARCHIVE.order[0]);
+      if (index) {
+        ARCHIVE.order = (index.shards || []).filter((name) => /^\d{4}-\d{2}$/.test(name) || name === "undated");
+        if (ARCHIVE.order.length) await loadShard(ARCHIVE.order[0]);
+      }
     } catch (err) { /* the timeline stays on feeds.json */ }
+    await manifestTask;
   }
 
   function revealArchive() {
@@ -3938,6 +4156,11 @@
   function applyHydrated(key, value, stub) {
     if (!value) return;
     if (value.tombstone) {
+      const saved = archivedFromManifest(stub);
+      if (saved) {
+        HYDRATED[key] = saved;
+        return;
+      }
       HYDRATED[key] = Object.assign({}, stub, { tombstone: true, text: "", media: [], stub: false });
       return;
     }
@@ -3952,7 +4175,12 @@
     if (!key || HYDRATED[key] || HYDRATE_FLIGHT[key] || HYDRATE_MISS[key]) return;
     const stub = ARCHIVE.posts.find((item) => postIdentity(item) === key);
     if (!stub || !stub.stub) return;
-    if (stub.platform === "instagram" || stub.platform === "threads" || stub.platform === "rss") {
+    if (stub.platform === "instagram" || stub.platform === "threads" || stub.platform === "rss" || stub.platform === "discord") {
+      const saved = archivedFromManifest(stub);
+      if (saved) {
+        HYDRATED[key] = saved;
+        render();
+      }
       HYDRATE_MISS[key] = true;
       return;
     }
@@ -3967,6 +4195,12 @@
     }).then((value) => {
       delete HYDRATE_FLIGHT[key];
       if (!value) {
+        const saved = archivedFromManifest(stub);
+        if (saved) {
+          HYDRATED[key] = saved;
+          render();
+          return;
+        }
         HYDRATE_MISS[key] = true;
         return;
       }
@@ -3974,6 +4208,12 @@
       render();
     }).catch(() => {
       delete HYDRATE_FLIGHT[key];
+      const saved = archivedFromManifest(stub);
+      if (saved) {
+        HYDRATED[key] = saved;
+        render();
+        return;
+      }
       HYDRATE_MISS[key] = true;
     });
   }
@@ -8220,36 +8460,31 @@
     const img = event.target;
     if (!img || (img.tagName !== "IMG" && img.tagName !== "VIDEO")) return;
     if (img.dataset.fallback === "avatar") {
-      const span = document.createElement("span");
-      span.className = img.className.replace("ava", "ava initials");
-      if (!span.className.includes("initials")) span.className += " initials";
-      span.textContent = img.dataset.initials || "?";
-      img.replaceWith(span);
+      if (useArchiveMedia(img)) return;
+      finishMediaError(img);
       return;
     }
     if (img.dataset && img.dataset.falls) {
       if (advancePoster(img)) return;
-      img.remove();
+      if (useArchiveMedia(img)) return;
+      finishMediaError(img);
       return;
     }
     const player = img.closest(".vplay");
     if (player) {
       if (img.tagName === "VIDEO") return;
+      if (useArchiveMedia(img)) return;
       return;
     }
     const next = img.dataset.refresh || "";
     if (next && img.dataset.tried !== "1") {
       img.dataset.tried = "1";
       img.removeAttribute("data-refresh");
-      if (img.tagName === "IMG") img.src = next;
-      else img.src = next;
+      img.src = next;
       return;
     }
-    const tile = img.closest(".tile") || img.closest(".media") || img.closest(".yt-thumb");
-    if (tile) {
-      tile.classList.add("broken");
-      img.remove();
-    }
+    if (useArchiveMedia(img)) return;
+    finishMediaError(img);
   }, true);
 
   let lastY = 0;
@@ -9876,6 +10111,7 @@
       STATE.data = loaded;
       saveTimelineSnap(STATE.data);
       ensureVideoOwners();
+      applyIaPreview(STATE.data);
       STATE.settings = loadSettings();
       applyTheme();
       STATE.loading = false;
@@ -9887,7 +10123,10 @@
         }
       }
       render({ reset: true });
-      loadNewestShard().then(() => revealArchive());
+      loadNewestShard().then(() => {
+        if (applyIaPreview(STATE.data)) render({ reset: true });
+        revealArchive();
+      });
       const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
       const seenIds = {};
       ((snap && snap.posts) || []).forEach((post) => {

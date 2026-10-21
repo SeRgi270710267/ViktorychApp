@@ -816,6 +816,7 @@ def main() -> None:
     combined = skipped.stdout + skipped.stderr
     check(skipped.returncode == 0 and "skipping the upload" in skipped.stdout, "missing Internet Archive keys skip the upload")
     check("sentinel-secret-value" not in combined and "IA_SECRET_KEY" not in combined, "the skip path does not print a secret")
+    ia_backup_checks()
 
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
@@ -2306,6 +2307,223 @@ if (page.includes("<script>")) throw new Error("page xss");
     live_script = (ROOT / "scripts" / "discord_live.py").read_text(encoding="utf-8")
     check("group: discord-live" in live_workflow and "cancel-in-progress: false" in live_workflow and "add-mask" in live_workflow and "timeout-minutes: 350" in live_workflow and 'cron: "*/5 * * * *"' in live_workflow, "the live workflow is one long job that does not cancel itself")
     check("owner-account.github.io/SuperintelApp/" in live_workflow and "rss-feeds" not in live_workflow and "rss-feeds" not in live_script, "the live job uses the renamed site and no old feed URL")
+
+
+def ia_backup_checks() -> None:
+    import subprocess
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    import ia_backup
+
+    source = (ROOT / "scripts" / "ia_backup.py").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "ia-backup.yml").read_text(encoding="utf-8")
+    sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    check("rss-feeds" not in source and "rss-feeds" not in workflow, "the new backup does not hard-code the old site path")
+    check("superintelapp-" in source and "Authorization" in source and "LOW" in source, "backup items are named superintelapp and use LOW auth")
+    check("group: ia-backup" in workflow and "workflow_dispatch" in workflow and 'cron: "47 7 * * *"' in workflow, "the backup workflow is scheduled, manual, and in its own group")
+    check("group: pages" not in workflow and "echo \"$IA_" not in workflow and "echo $IA_" not in workflow, "the backup workflow does not take the pages lock or print the keys")
+    check("ia-manifest.json" in sync and "ia-state.json" in sync, "the daily data push keeps the media manifest")
+    check('new URL("archive/"' in app and "function installIaManifest(" in app and "superintelapp-" in app and "cors.archive.org/cors/" in app and "function applyIaPreview(" in app, "the page loads archive media from a relative manifest and archive.org")
+    preview = app[app.index("function applyIaPreview("):app.index("function applyIaPreview(") + 700]
+    check("127.0.0.1" in preview and "localhost" in preview and "ia-deleted" in preview, "the deleted-post preview stays on localhost")
+    check(ia_backup.public_media_url("https://pbs.twimg.com/media/abc.jpg"), "public X images are eligible")
+    check(not ia_backup.public_media_url("https://cdn.discordapp.com/attachments/1/a.png"), "Discord files are not eligible")
+    check(not ia_backup.public_media_url("https://www.youtube-nocookie.com/embed/abcdefghijk"), "embed pages are not eligible")
+    check(ia_backup.archive_download_url("superintelapp-img-2026-10", "abc.jpg") == "https://archive.org/download/superintelapp-img-2026-10/abc.jpg", "download URLs use the archive.org download host")
+    check(ia_backup.archive_cors_url("superintelapp-img-2026-10", "abc.jpg") == "https://cors.archive.org/cors/superintelapp-img-2026-10/abc.jpg", "playback can fall back to the CORS host")
+
+    env = os.environ.copy()
+    env.pop("IA_ACCESS_KEY", None)
+    env["IA_SECRET_KEY"] = "sentinel-secret-value"
+    skipped = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "ia_backup.py")],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+        cwd=ROOT,
+    )
+    skipped_out = skipped.stdout + skipped.stderr
+    check(skipped.returncode == 0 and "not set" in skipped.stdout and "Nothing was uploaded" in skipped.stdout, "missing backup keys skip the run")
+    check("sentinel-secret-value" not in skipped_out, "the backup skip path does not print a secret")
+
+    jpeg = b"\xff\xd8\xff\xd9"
+    calls = []
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+
+        def log_message(self, fmt, *args):
+            return
+
+        def do_GET(self):
+            calls.append(("GET", self.path, self.headers.get("Authorization")))
+            name = self.path.rsplit("/", 1)[-1]
+            if name == "blocked.jpg":
+                self.send_response(403)
+                self.end_headers()
+                return
+            if name == "page.html":
+                body = b"<html>login</html>"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if name in {"a.jpg", "b.jpg"}:
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(jpeg)))
+                self.end_headers()
+                self.wfile.write(jpeg)
+                return
+            self.send_response(404)
+            self.end_headers()
+
+        def do_PUT(self):
+            length = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(length)
+            decision = "ok"
+            if "/superintelapp-img-" in self.path:
+                seen = sum(1 for row in calls if row[0] == "PUT" and "/superintelapp-img-" in row[1])
+                if seen == 0:
+                    decision = "slowdown"
+                elif self.headers.get("x-archive-meta-collection"):
+                    decision = "collection"
+            calls.append((
+                "PUT",
+                self.path,
+                self.headers.get("Authorization"),
+                self.headers.get("x-archive-meta-mediatype"),
+                self.headers.get("x-archive-meta-collection"),
+                decision,
+                body,
+            ))
+            if decision == "slowdown":
+                payload = b"<Error><Code>SlowDown</Code></Error>"
+                self.send_response(503)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            if decision == "collection":
+                payload = b"collection is not allowed"
+                self.send_response(400)
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = "http://127.0.0.1:%d" % server.server_address[1]
+    sleeps = []
+    try:
+        result = ia_backup.run_backup(
+            {
+                "access": "test-access",
+                "secret": "test-secret-value",
+                "endpoint": base,
+                "download_base": "https://archive.org/download",
+                "pace": 0,
+                "backoff": 0.01,
+                "max_uploads": 10,
+                "max_bytes": 100000,
+                "allow_hosts": ("127.0.0.1",),
+                "allow_http": True,
+            },
+            [
+                {
+                    "platform": "x",
+                    "id": "20",
+                    "handle": "ada",
+                    "date": "2026-10-12T00:00:00Z",
+                    "text": "public",
+                    "avatar": base + "/files/a.jpg",
+                    "media": [{"type": "photo", "url": base + "/files/b.jpg"}],
+                },
+                {
+                    "platform": "discord",
+                    "id": "discord:1:2",
+                    "date": "2026-10-12T00:00:00Z",
+                    "text": "discord secret words",
+                    "avatar": base + "/files/discord.jpg",
+                    "media": [{"type": "photo", "url": base + "/files/discord.jpg"}],
+                },
+                {
+                    "platform": "x",
+                    "id": "21",
+                    "date": "2026-10-03T00:00:00Z",
+                    "media": [{"type": "photo", "url": base + "/files/page.html"}, {"type": "photo", "url": base + "/files/blocked.jpg"}],
+                },
+            ],
+            {"2026-10": [
+                {"p": "x", "id": "20", "h": "ada", "d": "2026-10-12T00:00:00Z", "t": "public"},
+                {"p": "discord", "id": "abc", "t": "discord secret words"},
+            ]},
+            sleep=lambda delay: sleeps.append(delay),
+        )
+    finally:
+        server.shutdown()
+    puts = [row for row in calls if row[0] == "PUT"]
+    gets = [row for row in calls if row[0] == "GET"]
+    joined = " ".join(result["notes"])
+    bodies = b"\n".join(row[6] for row in puts)
+    check(all(row[2] == "LOW test-access:test-secret-value" for row in puts), "uploads send the LOW authorization header")
+    check("test-secret-value" not in joined and "test-access" not in joined, "upload notes do not print the keys")
+    check(not any(path.endswith("/discord.jpg") for _method, path, _auth in gets), "Discord media is not downloaded")
+    check(b"discord secret words" not in bodies, "Discord message text is not uploaded")
+    check(any(row[1].endswith("/superintelapp-2026-10/2026-10.json") and row[3] == "data" for row in puts), "the month shard is its own data item")
+    img = [row for row in puts if "/superintelapp-img-" in row[1]]
+    check([row[5] for row in img] == ["slowdown", "collection", "ok"], "image uploads back off on SlowDown and retry without a rejected collection")
+    check(any(delay >= 0.01 for delay in sleeps), "SlowDown waits before the next attempt")
+    check(img[-1][4] is None and img[-1][6] == jpeg, "the retried image upload has no collection and the file bytes")
+    manifest = result["manifest"]
+    saved = manifest["files"]
+    check("x:20" in manifest["posts"] and len(manifest["posts"]["x:20"]) == 2, "the manifest maps the post to its avatar and photo")
+    check(all(item["a"].startswith("https://archive.org/download/superintelapp-img-2026-10/") for item in saved), "manifest URLs are archive.org download links")
+    check(len({item["a"] for item in saved}) == 1, "identical bytes are stored once")
+    check(result["failures"] == 0, "the mocked backup finishes the files it attempted")
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("second run tried the network")
+
+    again = ia_backup.run_backup(
+        {
+            "access": "test-access",
+            "secret": "test-secret-value",
+            "endpoint": base,
+            "pace": 0,
+            "backoff": 0,
+            "max_uploads": 10,
+            "allow_hosts": ("127.0.0.1",),
+            "allow_http": True,
+            "opener": type("Opener", (), {"open": staticmethod(refuse)})(),
+        },
+        [{
+            "platform": "x",
+            "id": "20",
+            "handle": "ada",
+            "date": "2026-10-12T00:00:00Z",
+            "text": "public",
+            "avatar": base + "/files/a.jpg",
+            "media": [{"type": "photo", "url": base + "/files/b.jpg"}],
+        }],
+        {"2026-10": [
+            {"p": "x", "id": "20", "h": "ada", "d": "2026-10-12T00:00:00Z", "t": "public"},
+            {"p": "discord", "id": "abc", "t": "discord secret words"},
+        ]},
+        result["state"],
+        sleep=lambda delay: None,
+    )
+    check(again["manifest"]["posts"]["x:20"] == manifest["posts"]["x:20"], "a second run keeps the manifest and does not upload again")
 
 
 if __name__ == "__main__":
