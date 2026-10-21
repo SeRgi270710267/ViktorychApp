@@ -401,8 +401,12 @@ _RELATIVE = re.compile(
     re.I,
 )
 _YOUTUBE_ID = re.compile(r"(?:[?&]v=|youtu\.be/|shorts/|embed/)([A-Za-z0-9_-]{11})")
-_PUBLISH_EXACT = re.compile(r'"publishDate":"([^"]+)"')
-_PUBLISH_DAY = re.compile(r'"publishDate":\{"simpleText":"([^"]+)"\}')
+_PUBLISH_EXACT = re.compile(r'"(?:uploadDate|datePublished|publishDate)":"([^"]+)"')
+_PUBLISH_DAY = re.compile(r'"(?:uploadDate|datePublished|publishDate|dateText)":\{"simpleText":"([^"]+)"\}')
+_PUBLISH_CONTENT = re.compile(
+    r'itemprop="(?:uploadDate|datePublished)"[^>]*\bcontent="([^"]+)"|content="([^"]+)"[^>]*itemprop="(?:uploadDate|datePublished)"',
+    re.I,
+)
 
 
 def relative_label(text: str) -> bool:
@@ -555,23 +559,69 @@ def calendar_date(text: str) -> str:
 
 
 def publish_date_from_html(html: str) -> str:
-    """The absolute publishDate on a watch or community post page."""
-    exact = _PUBLISH_EXACT.search(html or "")
-    if exact:
-        parsed = trusted_time(exact.group(1))
+    """The absolute uploadDate, datePublished, or publishDate on a watch page.
+
+    A calendar day is used only when the page has no clock time. A relative
+    label is not a publish time.
+    """
+    text = html or ""
+    found = []
+    for match in _PUBLISH_EXACT.finditer(text):
+        parsed = trusted_time(match.group(1))
         if parsed:
-            return format_time(parsed)
-    day = _PUBLISH_DAY.search(html or "")
-    if day:
-        return calendar_date(day.group(1))
+            found.append(format_time(parsed))
+    for match in _PUBLISH_CONTENT.finditer(text):
+        parsed = trusted_time(match.group(1) or match.group(2) or "")
+        if parsed:
+            found.append(format_time(parsed))
+    if found:
+        return min(found, key=lambda value: trusted_time(value) or datetime.max.replace(tzinfo=timezone.utc))
+    for match in _PUBLISH_DAY.finditer(text):
+        label = match.group(1)
+        if relative_label(label):
+            continue
+        day = calendar_date(label)
+        if day:
+            return day
     return ""
 
 
-def lock_publish_time(previous: dict | None, post: dict) -> None:
+def dates_moved_later(before, after) -> list:
+    """Ids whose stored publish time became later. An empty previous date is not a move."""
+    previous = {}
+    for post in before or []:
+        if not isinstance(post, dict):
+            continue
+        ident = canonical_status_id(post) or str(post.get("id") or "")
+        if not ident:
+            continue
+        key = (str(post.get("platform") or ""), ident)
+        moment = trusted_time(post.get("date"))
+        if moment is None:
+            continue
+        have = previous.get(key)
+        if have is None or moment < have[0]:
+            previous[key] = (moment, ident)
+    moved = []
+    for post in after or []:
+        if not isinstance(post, dict):
+            continue
+        ident = canonical_status_id(post) or str(post.get("id") or "")
+        key = (str(post.get("platform") or ""), ident)
+        have = previous.get(key)
+        moment = trusted_time(post.get("date"))
+        if not have or moment is None or moment <= have[0]:
+            continue
+        moved.append(ident)
+    return moved
+
+
+def lock_publish_time(previous: dict | None, post: dict, now: datetime | None = None) -> None:
     """Keep the earliest trusted publish time and one canonical id.
 
     A later sync, a relative label turned into 'now', or a second source
-    must not move that time forward.
+    must not move that time forward. A post with no real date records the
+    first time it was seen and never replaces that with a later clock time.
     """
     if not isinstance(post, dict):
         return
@@ -581,7 +631,29 @@ def lock_publish_time(previous: dict | None, post: dict) -> None:
         if cid:
             post["id"] = cid
             post["statusId"] = cid
-    post["date"] = earlier_iso(old.get("date") or "", post.get("date") or "")
+    incoming = post.get("date") or ""
+    if relative_label(str(incoming)):
+        incoming = ""
+    stored = old.get("date") or ""
+    if relative_label(str(stored)):
+        stored = ""
+    chosen = earlier_iso(stored, incoming)
+    seen = old.get("seenAt") or ""
+    if not chosen:
+        if trusted_time(seen):
+            chosen = seen if isinstance(seen, str) else format_time(trusted_time(seen))
+            post["seenAt"] = chosen
+        elif not old:
+            moment = now or datetime.now(timezone.utc)
+            if moment.tzinfo is None:
+                moment = moment.replace(tzinfo=timezone.utc)
+            chosen = format_time(moment)
+            post["seenAt"] = chosen
+        else:
+            chosen = ""
+    elif old.get("seenAt"):
+        post["seenAt"] = old["seenAt"]
+    post["date"] = chosen
     if old.get("sortDate") and post.get("kind") == "repost":
         post["sortDate"] = old["sortDate"]
 

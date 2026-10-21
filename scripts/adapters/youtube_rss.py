@@ -6,8 +6,14 @@ Thumbnails are rewritten to i.ytimg.com and are not downloaded.
 
 from __future__ import annotations
 
+import re
+import urllib.error
+import urllib.parse
+import urllib.request
+
 from .common import (
     blank_profile,
+    canonical_status_id,
     child_text,
     children,
     clean_text,
@@ -15,7 +21,10 @@ from .common import (
     parse_xml,
     post_shell,
     profile_url,
+    publish_date_from_html,
+    relative_label,
     rfc822_to_iso,
+    trusted_time,
 )
 
 
@@ -37,15 +46,58 @@ def _video_id(entry) -> str:
 
 
 def _published(entry) -> str:
-    raw = child_text(entry, "published") or child_text(entry, "updated")
-    if not raw:
+    """The Atom <published> instant. <updated> is an edit time and is ignored."""
+    raw = child_text(entry, "published")
+    if not raw or relative_label(raw):
         return ""
     if "T" in raw and raw.endswith("Z"):
-        return raw
+        return raw if trusted_time(raw) else ""
     iso = rfc822_to_iso(raw)
-    if iso:
+    if iso and trusted_time(iso):
         return iso
-    return raw.replace("+00:00", "Z")
+    if trusted_time(raw):
+        return raw.replace("+00:00", "Z")
+    return ""
+
+
+def _fetch_watch(video_id: str) -> str:
+    from site_paths import user_agent
+
+    url = "https://www.youtube.com/watch?v=" + urllib.parse.quote(video_id) + "&hl=en"
+    request = urllib.request.Request(url, headers={"User-Agent": user_agent(), "Accept-Language": "en"})
+    with urllib.request.urlopen(request, timeout=12) as response:
+        return response.read(1_800_000).decode("utf-8", "replace")
+
+
+def backfill_youtube_dates(posts, fetch=None, limit: int = 8) -> int:
+    """Fill a missing video date from uploadDate or datePublished. Never uses now()."""
+    if fetch is None:
+        fetch = _fetch_watch
+    filled = 0
+    attempts = 0
+    for post in posts or []:
+        if attempts >= limit:
+            break
+        if not isinstance(post, dict) or (post.get("platform") or "") != "youtube":
+            continue
+        if post.get("kind") not in (None, "", "post"):
+            continue
+        if trusted_time(post.get("date")):
+            continue
+        video_id = canonical_status_id(post)
+        if not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id or ""):
+            continue
+        attempts += 1
+        try:
+            html = fetch(video_id)
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+            continue
+        found = publish_date_from_html(html or "")
+        if not found:
+            continue
+        post["date"] = found
+        filled += 1
+    return filled
 
 
 def _thumbnail(video_id: str, group) -> str:

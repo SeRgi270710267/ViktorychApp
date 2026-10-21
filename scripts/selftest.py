@@ -725,6 +725,16 @@ def main() -> None:
     check(undated and undated["id"] == "item-1" and "d" not in undated, "undated stub omits an empty date")
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
+        merge_archive(root / "archive", [post])
+        merge_archive(root / "archive", [dict(post, date="2026-10-21T20:24:18Z", text="later text")])
+        kept_month = json.loads((root / "archive" / "2026-10.json").read_text(encoding="utf-8"))
+        check(kept_month[0]["d"].startswith("2026-10-12") and kept_month[0]["t"] == stub["t"], "a later sync cannot move an archived date forward")
+        merge_archive(root / "archive", [dict(post, date="2026-09-02T00:00:00Z")])
+        check(not (root / "archive" / "2026-10.json").exists(), "an earlier real date leaves the later month shard")
+        moved_month = json.loads((root / "archive" / "2026-09.json").read_text(encoding="utf-8"))
+        check(moved_month[0]["id"] == "DeZgzTEggQe" and moved_month[0]["d"].startswith("2026-09-02") and moved_month[0]["t"] == stub["t"], "an archived post keeps the earliest real date and the first text")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
         added = merge_archive(root / "archive", [post, post])
         check(added == 1, "the same id is not archived twice")
         added = merge_archive(root / "archive", [dict(post, text="different text that must not replace the first snippet")])
@@ -1467,7 +1477,8 @@ def main() -> None:
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("Watch on Instagram" in app and "function youtubeSources" in app and "function startPlayback" in app and 'toast("Video unavailable")' not in app and "hls.min.js" in app, "the player rotates sources and does not toast video unavailable")
     check("latest_version" not in (ROOT / "scripts" / "yt_remote.py").read_text(encoding="utf-8"), "sync does not bake an invidious itag url")
-    from adapters.common import lock_publish_time, publish_date_from_html, relative_label
+    from adapters.common import dates_moved_later, lock_publish_time, publish_date_from_html, relative_label
+    from adapters.youtube_rss import backfill_youtube_dates
 
     check(relative_label("0 seconds ago") and relative_label("1 day ago") and relative_label("Streamed 1 week ago") and relative_label("Premiered 3 hours ago") and relative_label("2d ago") and not relative_label("2026-10-11T00:00:00Z"), "relative publish labels are recognized")
     restamped = {"id": "yt:video:Iuvm-HKIMg8", "platform": "youtube", "kind": "post", "date": "2026-10-21T13:35:36Z", "url": "https://www.youtube.com/watch?v=Iuvm-HKIMg8"}
@@ -1484,8 +1495,56 @@ def main() -> None:
     check(kept_x["date"] == "2026-01-02T00:00:00Z" and kept_x["id"] == "123", "an empty new date keeps the stored time")
     exact = publish_date_from_html('{"publishDate":"2026-03-15T17:37:27.463301-07:00"}')
     day = publish_date_from_html('{"publishDate":{"simpleText":"Oct 11, 2026"}}')
-    check(exact == "2026-03-16T00:37:27.000Z" and day == "2026-10-11T00:00:00.000Z", "watch and community pages yield the real publish date")
-    check("function canonicalPostId(" in app and "function relativeLabel(" in app and "seenPostIds" in app and "seen-ids" in worker and "def lock_publish_time(" in (ROOT / "scripts" / "adapters" / "common.py").read_text(encoding="utf-8"), "publish times stay on the original post and new posts are unseen ids")
+    uploaded = publish_date_from_html('{"uploadDate":"2026-10-11T21:31:32+00:00","datePublished":"2026-10-11T21:31:32+00:00"}')
+    check(exact == "2026-03-16T00:37:27.000Z" and day == "2026-10-11T00:00:00.000Z" and uploaded == "2026-10-11T21:31:32.000Z", "watch and community pages yield the real publish date")
+    drifted = """<?xml version="1.0"?>
+    <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
+    <title>Canadian Prepper</title><yt:channelId>UCfgtuaUadGgOA-91geQ8Qog</yt:channelId>
+    <entry><id>yt:video:Iuvm-HKIMg8</id><yt:videoId>Iuvm-HKIMg8</yt:videoId>
+    <title>AI Expert Just Ruined My Day With This WARNING</title>
+    <published>2026-10-11T21:31:32+00:00</published><updated>2026-10-21T20:24:18+00:00</updated>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=Iuvm-HKIMg8"/></entry>
+    <entry><id>yt:video:Sl0xhb6STQ0</id><yt:videoId>Sl0xhb6STQ0</yt:videoId>
+    <title>Russia's Plan to Win WW3</title>
+    <updated>2026-10-21T20:24:18+00:00</updated>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=Sl0xhb6STQ0"/></entry></feed>"""
+    drifted_posts = parse_youtube(drifted, {"id": "youtube:redacted_handle", "platform": "youtube", "handle": "redacted_handle"})["posts"]
+    by_video = {post["id"]: post for post in drifted_posts}
+    check(by_video["Iuvm-HKIMg8"]["date"].startswith("2026-10-11T21:31:32") and "20:24:18" not in by_video["Iuvm-HKIMg8"]["date"], "youtube uses the RSS published time, not the later updated time")
+    check(by_video["Sl0xhb6STQ0"]["date"] == "", "a missing published field does not fall back to updated or now")
+    filled = backfill_youtube_dates(drifted_posts, fetch=lambda video_id: '{"uploadDate":"2026-10-10T21:36:22+00:00"}' if video_id == "Sl0xhb6STQ0" else "")
+    check(filled == 1 and by_video["Sl0xhb6STQ0"]["date"] == "2026-10-10T21:36:22.000Z", "a missing youtube date comes from the watch page uploadDate")
+    first_seen_at = datetime(2026, 10, 21, 20, 24, 18, tzinfo=timezone.utc)
+    later_sync = datetime(2026, 10, 21, 21, 0, 0, tzinfo=timezone.utc)
+    first_pass = [
+        {"id": "Iuvm-HKIMg8", "platform": "youtube", "kind": "post", "date": "2026-10-11T21:31:32+00:00"},
+        {"id": "Sl0xhb6STQ0", "platform": "youtube", "kind": "post", "date": "2026-10-10T21:36:22+00:00"},
+        {"id": "nodate", "platform": "x", "kind": "post", "date": ""},
+        {"id": "kept-empty", "platform": "rss", "kind": "post", "date": ""},
+    ]
+    locked_first = []
+    for row in first_pass:
+        item = dict(row)
+        previous = {"id": "kept-empty", "platform": "rss", "date": ""} if row["id"] == "kept-empty" else None
+        lock_publish_time(previous, item, now=first_seen_at)
+        locked_first.append(item)
+    second_pass = []
+    for row in locked_first:
+        item = dict(row)
+        if row["id"] in ("Iuvm-HKIMg8", "Sl0xhb6STQ0"):
+            item["date"] = "2026-10-21T21:00:00Z"
+        elif row["id"] == "nodate":
+            item["date"] = ""
+            item.pop("seenAt", None)
+        lock_publish_time(row, item, now=later_sync)
+        second_pass.append(item)
+    check(not dates_moved_later(locked_first, second_pass), "no item date moves later between syncs")
+    by_second = {post["id"]: post for post in second_pass}
+    check(by_second["Iuvm-HKIMg8"]["date"].startswith("2026-10-11") and by_second["Sl0xhb6STQ0"]["date"].startswith("2026-10-10"), "stored youtube dates stay on the original upload")
+    check(by_second["nodate"]["date"] == locked_first[2]["date"] == "2026-10-21T20:24:18.000Z" and by_second["nodate"].get("seenAt") == by_second["nodate"]["date"], "a post with no real date keeps the first time it was seen")
+    check(by_second["kept-empty"]["date"] == "", "a post already stored without a date is not restamped on a later sync")
+    check("function calendarDate(" in app and "seen-dates" in app and "180000" in app and '["published", "pubdate"]' in app, "live youtube dates come from a real publish time, not a fresh clock time")
+    check("function canonicalPostId(" in app and "function relativeLabel(" in app and "seenPostIds" in app and "seen-ids" in worker and "def lock_publish_time(" in (ROOT / "scripts" / "adapters" / "common.py").read_text(encoding="utf-8") and "def dates_moved_later(" in (ROOT / "scripts" / "adapters" / "common.py").read_text(encoding="utf-8"), "publish times stay on the original post and new posts are unseen ids")
 
     import subprocess
 
