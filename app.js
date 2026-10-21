@@ -107,6 +107,17 @@
   const THEME_COLORS = { default: "#ffffff", dim: "#15202b", lightsout: "#000000" };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
+  const LINE = {
+    clock: `<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l2.8 1.7"/>`,
+    rocket: `<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>`,
+    posts: `<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>`,
+    repost: `<path d="m17 2 4 4-4 4"/><path d="M3 11V10a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>`,
+    reply: `<path d="M9 17 4 12l5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>`,
+    pencil: `<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>`,
+    pin: `<path d="M12 17v5"/><path d="M9 4h6l-1 6 3 3H7l3-3-1-6z"/>`,
+    gear: `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>`
+  };
+  const menuIcon = (name) => `<svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true">${LINE[name] || ""}</svg>`;
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, (c) => ({
@@ -4431,6 +4442,16 @@
     </div>`;
   }
 
+  function tabChoice(role, attrs, text, on, glyph, control) {
+    const mark = control === "radio"
+      ? `<span class="tab-radio${on ? " on" : ""}" aria-hidden="true"></span>`
+      : control === "check"
+        ? `<span class="tab-check${on ? " on" : ""}" aria-hidden="true"></span>`
+        : "";
+    const checked = on == null ? "" : ` aria-checked="${on ? "true" : "false"}"`;
+    return `<button type="button" role="${role}" class="tab-choice"${checked} ${attrs}><span class="tab-choice-ico">${menuIcon(glyph)}</span><span class="tab-choice-label">${esc(text)}</span>${mark}</button>`;
+  }
+
   function tabMenu() {
     if (!STATE.tabMenu) return "";
     const which = STATE.tabMenu;
@@ -4441,21 +4462,22 @@
     let label = "Home options";
     const viewItems = (tab) => {
       const view = tabView(tab);
-      const item = (id, text) => `<button type="button" role="menuitemradio" aria-checked="${view === id ? "true" : "false"}" data-act="tab-view" data-view="${id}" data-tab="${esc(tab)}"><span>${esc(text)}</span>${view === id ? icon("tick") : ""}</button>`;
+      const item = (id, text) => tabChoice("menuitemradio", `data-act="tab-view" data-view="${id}" data-tab="${esc(tab)}"`, text, view === id, id === "reposts" ? "repost" : "posts", "radio");
       return `<div class="tab-menu-gap"></div><div class="tab-menu-label">Show</div>${item("all", "All posts")}${item("reposts", "Reposts only")}`;
     };
     if (which === "foryou") {
       label = "For you options";
-      const box = (key, text, on) => `<button type="button" role="menuitemcheckbox" aria-checked="${on ? "true" : "false"}" data-act="foryou-toggle" data-key="${key}"><span>${text}</span>${on ? icon("tick") : ""}</button>`;
-      body = box("reposts", "Show reposts", STATE.settings.forYouReposts !== false) + box("replies", "Show replies", STATE.settings.forYouReplies !== false) + viewItems("foryou");
+      const box = (key, text, on, glyph) => tabChoice("menuitemcheckbox", `data-act="foryou-toggle" data-key="${key}"`, text, on, glyph, "check");
+      body = box("reposts", "Show reposts", STATE.settings.forYouReposts !== false, "repost") + box("replies", "Show replies", STATE.settings.forYouReplies !== false, "reply") + viewItems("foryou");
     } else {
       label = list ? list.name + " options" : "Following options";
       const sort = list ? listSortOf(list) : (STATE.settings.followingSort === "popular" ? "popular" : "recent");
-      const sortItem = (id, text) => `<button type="button" role="menuitemradio" aria-checked="${sort === id ? "true" : "false"}" data-act="follow-sort" data-sort="${id}"${list ? ` data-list="${esc(list.id)}"` : ""}><span>${esc(text)}</span>${sort === id ? icon("tick") : ""}</button>`;
-      const extra = list ? `<div class="tab-menu-gap"></div><button type="button" role="menuitem" data-act="edit-list" data-id="${esc(list.id)}">Edit list</button><button type="button" role="menuitem" data-act="tab-unpin" data-id="${esc(list.id)}">Unpin from Home</button>` : "";
-      body = sortItem("recent", "Recent") + sortItem("popular", "Popular") + viewItems(which) + extra;
+      const sortItem = (id, text) => tabChoice("menuitemradio", `data-act="follow-sort" data-sort="${id}"${list ? ` data-list="${esc(list.id)}"` : ""}`, text, sort === id, id === "popular" ? "rocket" : "clock", "radio");
+      const extra = list ? `<div class="tab-menu-gap"></div><div class="tab-menu-label">List</div>${tabChoice("menuitem", `data-act="edit-list" data-id="${esc(list.id)}"`, "Edit list", null, "pencil", "")}${tabChoice("menuitem", `data-act="tab-unpin" data-id="${esc(list.id)}"`, "Unpin from Home", null, "pin", "")}` : "";
+      body = `<div class="tab-menu-label">Sort by</div>${sortItem("recent", "Recent")}${sortItem("popular", "Popular")}` + viewItems(which) + extra;
     }
-    return `<div class="tab-sheet" data-act="close-tab-menu"><div class="menu tab-menu" data-act="stop" role="menu" aria-label="${esc(label)}">${body}</div></div>`;
+    const manage = `<div class="tab-menu-gap"></div>${tabChoice("menuitem", `data-act="manage-tabs"`, "Manage tabs", null, "gear", "")}`;
+    return `<div class="tab-sheet" data-act="close-tab-menu"><div class="menu tab-menu" data-act="stop" role="menu" aria-label="${esc(label)}"><div class="tab-grab" aria-hidden="true"></div>${body}${manage}</div></div>`;
   }
 
   function listMembersPosts(list) {
@@ -6802,6 +6824,32 @@
     toast._t = setTimeout(() => { el.hidden = true; }, 1800);
   }
 
+  let tabSheetClose = 0;
+  let tabSheetDrag = null;
+  let swallowTabSheet = false;
+
+  function closeTabMenu() {
+    const menu = document.querySelector(".menu.tab-menu");
+    const phone = !!(menu && window.innerWidth < 500);
+    STATE.tabMenu = null;
+    if (!phone) {
+      render();
+      return;
+    }
+    const token = ++tabSheetClose;
+    menu.style.transition = "transform .2s ease";
+    menu.style.transform = "translateY(100%)";
+    const sheet = menu.parentElement;
+    if (sheet && sheet.classList.contains("tab-sheet")) {
+      sheet.style.transition = "background .2s ease";
+      sheet.style.background = "transparent";
+    }
+    setTimeout(() => {
+      if (token !== tabSheetClose || STATE.tabMenu) return;
+      render();
+    }, 200);
+  }
+
   function openListModal(list) {
     STATE.draft = list ? { id: list.id, name: list.name, description: list.description || "", bannerColor: list.bannerColor || COLORS[0] } : { name: "", description: "", bannerColor: COLORS[0] };
     STATE.modal = "list";
@@ -6841,8 +6889,7 @@
     if (act === "close-modal") { STATE.modal = null; STATE.confirm = null; render(); return; }
     if (act === "compose-post") { STATE.modal = null; render(); toast("Posts come from your feeds"); return; }
     if (act === "close-tab-menu") {
-      STATE.tabMenu = null;
-      render();
+      closeTabMenu();
       return;
     }
     if (act === "htab" || act === "tab-options") {
@@ -7381,7 +7428,46 @@
     }
   }
 
+  document.addEventListener("pointerdown", (event) => {
+    if (window.innerWidth >= 500 || !STATE.tabMenu) return;
+    const menu = event.target.closest && event.target.closest(".menu.tab-menu");
+    if (!menu) return;
+    const grab = event.target.closest(".tab-grab");
+    if (!grab && menu.scrollTop > 2) return;
+    tabSheetDrag = { id: event.pointerId, y: event.clientY, menu, dy: 0, grab: !!grab };
+  });
+  document.addEventListener("pointermove", (event) => {
+    if (!tabSheetDrag || event.pointerId !== tabSheetDrag.id) return;
+    const dy = event.clientY - tabSheetDrag.y;
+    if (dy < 6 && !tabSheetDrag.grab) return;
+    tabSheetDrag.dy = Math.max(0, dy);
+    if (tabSheetDrag.dy < 8) return;
+    tabSheetDrag.menu.style.transition = "none";
+    tabSheetDrag.menu.style.transform = "translateY(" + tabSheetDrag.dy + "px)";
+    if (event.cancelable) event.preventDefault();
+  }, { passive: false });
+  const endTabSheetDrag = (event) => {
+    if (!tabSheetDrag || (event && event.pointerId !== tabSheetDrag.id)) return;
+    const drag = tabSheetDrag;
+    tabSheetDrag = null;
+    if (drag.dy > 10) swallowTabSheet = true;
+    if (drag.dy > 72) {
+      closeTabMenu();
+      return;
+    }
+    drag.menu.style.transition = "transform .18s ease";
+    drag.menu.style.transform = "";
+  };
+  document.addEventListener("pointerup", endTabSheetDrag);
+  document.addEventListener("pointercancel", endTabSheetDrag);
+
   document.addEventListener("click", (event) => {
+    if (swallowTabSheet) {
+      swallowTabSheet = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const actEl = event.target.closest("[data-act]");
     if (actEl) {
       if (actEl.dataset.act !== "stop" && actEl.tagName !== "A") event.preventDefault();

@@ -1,5 +1,5 @@
-/* Feeds service worker. Cache names are people- plus the deploy SHA. */
-const VERSION = "people-__SW_VERSION__";
+/* Feeds service worker. Cache names are sheet- plus the deploy SHA. */
+const VERSION = "sheet-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
