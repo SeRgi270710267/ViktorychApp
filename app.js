@@ -47,6 +47,7 @@
     ig: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm5 4.2A4.8 4.8 0 1 0 16.8 12 4.8 4.8 0 0 0 12 7.2zm6.3-.8a1.15 1.15 0 1 0 1.15 1.15A1.15 1.15 0 0 0 18.3 6.4zM12 9.3A2.7 2.7 0 1 1 9.3 12 2.7 2.7 0 0 1 12 9.3z",
     threads: "M12.2 3C7.8 3 4.6 6.2 4.6 10.8c0 2.3.8 4.3 2.2 5.8l-1 3.2 3.3-1.2c.9.3 1.9.5 2.9.5 4.5 0 7.8-3.2 7.8-7.6C19.8 6.4 16.6 3 12.2 3zm0 2.2c3.2 0 5.4 2.3 5.4 5.5 0 1.5-.5 2.8-1.4 3.8-.3-2.3-1.8-4-4-4.6.8-.4 1.3-1.1 1.3-2 0-1.3-1.1-2.2-2.6-2.2-1.7 0-2.9 1.1-3.1 2.7H6.2c.3-2.6 2.6-4.6 5.9-4.6-.1 0 .1 0 .1 1.4zm-.4 4.2c1.6.2 2.8 1.3 3.1 3-.6.5-1.4.8-2.3.8-1.5 0-2.6-.8-3-2 .7-.3 1.4-.6 2.2-.8z",
     rss: "M6 17.5A1.5 1.5 0 1 1 4.5 16 1.5 1.5 0 0 1 6 17.5zM4 11a7 7 0 0 1 7 7h-2a5 5 0 0 0-5-5v-2zm0-4a11 11 0 0 1 11 11h-2A9 9 0 0 0 4 9V7z",
+    discord: "M5 6.5A2.5 2.5 0 0 1 7.5 4h9A2.5 2.5 0 0 1 19 6.5v7A2.5 2.5 0 0 1 16.5 16H12l-4.2 3.2c-.5.4-1.3 0-1.3-.7V16H7.5A2.5 2.5 0 0 1 5 13.5v-7z",
     vk: "M3.2 6h3.1l2.7 6.6L11.7 6h3.1L10.4 15H7.6L3.2 6zm9.4 0H21v2.2h-5.2v1.6H20v2.1h-4.2v1.7H21V15h-8.4V6z",
     tg: "M2.01 21 23 12 2.01 3 2 10l15 2-15 2z",
     feather: "M22 3.2c-5.8 0-9.4 2.2-12 5.6C8.2 11.4 7.2 15 7 19h2.1c.2-2.6.8-4.8 2-6.2 1 .2 2.1.5 3.2.9l-2.1 3.1h2.2l1.5-2.2c1.7.4 3.4.7 5.2 1 .2-.7.4-1.4.5-2.1-.9-.2-1.7-.4-2.5-.6 2-1.5 3.8-3.5 5-5.9-.3 0-.6-.1-1-.1z",
@@ -1067,7 +1068,7 @@
 
   function sourceBadge(platform) {
     if (!platform || platform === "x") return "";
-    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : "rss";
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : "rss";
     return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
   }
 
@@ -1152,6 +1153,29 @@
     return html;
   }
 
+  function discordEmojiHtml(html, emojis) {
+    const map = {};
+    (emojis || []).forEach((emoji) => {
+      const name = emoji && /^[A-Za-z0-9_]{2,32}$/.test(emoji.name) ? emoji.name : "";
+      const url = emoji && /^https:\/\/cdn\.discordapp\.com\/(?:emojis\/\d+\.(?:png|gif)|embed\/avatars\/\d\.png)(?:\?.*)?$/.test(String(emoji.url || "")) ? emoji.url : "";
+      if (name && url) map[name] = url;
+    });
+    const names = Object.keys(map);
+    if (!names.length) return html;
+    return String(html || "").split(/(<[^>]+>)/).map((part) => {
+      if (!part || part.charAt(0) === "<") return part;
+      return part.replace(/:([A-Za-z0-9_]{2,32}):/g, (whole, name) => {
+        if (!map[name]) return whole;
+        return `<img class="discord-emoji" alt=":${esc(name)}:" src="${esc(map[name])}" referrerpolicy="no-referrer">`;
+      });
+    }).join("");
+  }
+
+  function withDiscordEmoji(post, html) {
+    if (!post || post.platform !== "discord") return html;
+    return discordEmojiHtml(html, post.emojis);
+  }
+
   function safeRich(html) {
     const raw = String(html || "");
     if (!raw || /<\s*script\b|javascript:|onerror\s*=|onload\s*=/i.test(raw)) return "";
@@ -1217,7 +1241,7 @@
     STATE.translatePlatform[key] = post.platform || "";
     STATE.translateFull[key] = !!full;
     if (window.FeedsTranslate) window.FeedsTranslate.prepare(key);
-    const inner = textHtml(post, key, full);
+    const inner = withDiscordEmoji(post, textHtml(post, key, full));
     if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner);
     const offer = offerTranslate(key, sample)
       ? `<button class="show-more translate-link" type="button" data-act="translate" data-key="${esc(key)}">Translate post</button>`
@@ -1460,6 +1484,41 @@
       const extra = item.extra ? `<span class="file-extra">${esc(item.extra)}</span>` : "";
       return `<a class="file-card" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href)}"><span class="file-kind">${kind}</span><span class="file-title">${esc(item.title || kind)}</span>${extra}</a>`;
     }).join("");
+  }
+
+  function postCards(post) {
+    const seen = {};
+    const rows = [];
+    const add = (link) => {
+      if (!link || !link.url || seen[link.url]) return;
+      seen[link.url] = true;
+      const html = linkCard(link);
+      if (html) rows.push(html);
+    };
+    add(post && post.link);
+    ((post && post.cards) || []).forEach(add);
+    return rows.join("");
+  }
+
+  function discordMeta(post) {
+    if (!post || post.platform !== "discord") return "";
+    const guild = post.guildId || "";
+    const href = guild ? profileHash("discord", guild) : (post.url || "#");
+    const channel = post.channelName ? `<a class="discord-channel" data-act="stop" href="${esc(href)}">#${esc(post.channelName)}</a>` : "";
+    const thread = post.threadName ? `<span class="discord-thread">${esc(post.threadName)}</span>` : "";
+    const bot = post.bot ? `<span class="discord-bot">Bot</span>` : "";
+    if (!channel && !thread && !bot) return "";
+    return `<div class="discord-meta">${channel}${thread}${bot}</div>`;
+  }
+
+  function audienceCounts(profile, word) {
+    if (!profile) return "";
+    const label = word || (profile.platform === "youtube" || profile.platform === "telegram" ? "Subscribers" : profile.platform === "discord" ? "Members" : "Followers");
+    const bits = [];
+    if (profile.following != null) bits.push(`<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>`);
+    if (profile.followers != null) bits.push(`<div><b>${esc(formatCount(profile.followers))}</b> <span>${label}</span></div>`);
+    if (profile.platform === "discord" && profile.online != null) bits.push(`<div><b>${esc(formatCount(profile.online))}</b> <span>Online</span></div>`);
+    return bits.length ? `<div class="counts">${bits.join("")}</div>` : "";
   }
 
   function linkCard(link) {
@@ -3461,6 +3520,17 @@
       STATE.replies[id] = bucket;
       return bucket;
     }
+    if ((post.platform || "") === "discord") {
+      const stamp = (reply) => {
+        if (!reply || typeof reply !== "object") return reply;
+        if (!reply.platform) reply.platform = "discord";
+        if (!reply.guildId && post.guildId) reply.guildId = post.guildId;
+        if (!reply.channelId && post.channelId) reply.channelId = post.channelId;
+        if (!reply.channelName && post.channelName) reply.channelName = post.channelName;
+        return reply;
+      };
+      return { loading: false, replies: (Array.isArray(post.replies) ? post.replies : []).map(stamp), missing: false, cap: want, fetchedAt: Date.now(), settled: true };
+    }
     if (post._community && post.kind !== "community") {
       return { loading: false, replies: Array.isArray(post.replies) ? post.replies : [], missing: false, cap: want };
     }
@@ -4461,6 +4531,9 @@
       if ((reply.platform || post.platform) === "youtube" && (reply.replies || []).length) {
         inline = reply.replies.filter((child) => child && String(child.text || "").trim()).slice(0, 20);
       }
+      if ((reply.platform || post.platform) === "discord" && (reply.replies || []).length) {
+        inline = reply.replies.filter((child) => child && (String(child.text || "").trim() || (child.media || []).length || child.author)).slice(0, 20);
+      }
       if (!inline.length) inline = inlineChildren(reply, pool);
       inline = inline.filter((child) => child && !hiddenPost(child));
       if (!inline.length) {
@@ -4584,7 +4657,8 @@
     const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || "Profile")}">${avatar(face.avatar, displayName)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
-    const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
+    const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
+    const threadLink = mode !== "status" && mode !== "reply" && (threadChildren(post).length || nestedDiscord)
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
     const hydrate = post.stub ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
@@ -4605,10 +4679,11 @@
             <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="More">${icon("more")}</button>
           </div>
           ${reply}
+          ${discordMeta(post)}
           ${textBlock(post, post.id, false)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
-          ${linkCard(post.link)}
+          ${postCards(post)}
           ${quoteCard(post.quoted)}
           ${threadLink}
           ${actionBar(post)}
@@ -5929,11 +6004,7 @@
       profile.website ? `<a data-act="stop" href="${esc(profile.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(profile.website).replace(/^https?:\/\//, ""))}</a>` : "",
       profile.joined ? `<span>${icon("cal")}${esc(joinedLabel(profile.joined))}</span>` : ""
     ].join("");
-    const followerWord = profile.platform === "youtube" || profile.platform === "telegram" ? "Subscribers" : "Followers";
-    const counts = (profile.following != null || profile.followers != null) ? `<div class="counts">
-      ${profile.following != null ? `<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>` : ""}
-      ${profile.followers != null ? `<div><b>${esc(formatCount(profile.followers))}</b> <span>${followerWord}</span></div>` : ""}
-    </div>` : "";
+    const counts = audienceCounts(profile);
     const count = profile.postsCount != null ? formatCount(profile.postsCount) + " posts" : "";
     const tabHtml = tabs.map((pair) => {
       const href = accountHash(profile.platform, profile.channelId || profile.handle) + (pair[0] === tabs[0][0] ? "" : "?tab=" + pair[0]);
@@ -6019,11 +6090,7 @@
       feed.website ? `<a href="${esc(feed.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(feed.website).replace(/^https?:\/\//, ""))}</a>` : "",
       feed.joined ? `<span>${icon("cal")}${esc(joinedLabel(feed.joined))}</span>` : ""
     ].join("");
-    const followerWord = youtube || feed.platform === "telegram" ? "Subscribers" : "Followers";
-    const counts = (feed.following != null || feed.followers != null) ? `<div class="counts">
-      ${feed.following != null ? `<div><b>${esc(formatCount(feed.following))}</b> <span>Following</span></div>` : ""}
-      ${feed.followers != null ? `<div><b>${esc(formatCount(feed.followers))}</b> <span>${followerWord}</span></div>` : ""}
-    </div>` : "";
+    const counts = audienceCounts(feed, feed.platform === "youtube" || feed.platform === "telegram" ? "Subscribers" : feed.platform === "discord" ? "Members" : "Followers");
     const tabIds = youtube ? [["posts", "Posts"], ["videos", "Videos"], ["community", "Community"]] : feed.platform === "telegram" ? [["posts", "Posts"], ["media", "Media"]] : [["posts", "Posts"], ["replies", "Replies"], ["media", "Media"]];
     const tabs = tabIds.map((pair) => {
       const id = pair[0];
@@ -6103,8 +6170,9 @@
         ${textBlock(post, post.id, true, "status-text")}
         ${hiddenPost(post) ? `<p class="phandle">Muted on this device.</p>` : ""}
         ${pollHtml(post)}
+        ${discordMeta(post)}
         ${mediaHtml(post.media, false, post)}
-        ${linkCard(post.link)}
+        ${postCards(post)}
         ${quoteCard(post.quoted)}
         <div class="status-time">${esc(fullTime(post.date))}${post.edited ? " · Edited" : ""}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
         ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> Views</div>` : `<div class="status-views"></div>`}
@@ -6114,7 +6182,7 @@
             <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>
             <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
           </div>
-          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${post.handle ? followButtonClean((post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${(post.platform === "discord" && post.guildId) || post.handle ? followButtonClean(post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
       ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
@@ -8742,7 +8810,7 @@
     if (!box || !profile) return;
     const handle = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
     const id = liveFollowId(profile);
-    box.innerHTML = `<div class="hcard"><div class="hbanner" style="background:${profile.banner ? "url(" + encodeURI(profile.banner) + ") center/cover" : "var(--banner)"}"></div><div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava")}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${(profile.following != null || profile.followers != null) ? `<div class="counts">${profile.following != null ? `<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>` : ""}${profile.followers != null ? `<div><b>${esc(formatCount(profile.followers))}</b> <span>${profile.platform === "youtube" ? "Subscribers" : "Followers"}</span></div>` : ""}</div>` : ""}</div></div>`;
+    box.innerHTML = `<div class="hcard"><div class="hbanner" style="background:${profile.banner ? "url(" + encodeURI(profile.banner) + ") center/cover" : "var(--banner)"}"></div><div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava")}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
     const left = Math.min(rect.left, window.innerWidth - 320);
     box.style.left = Math.max(8, left) + "px";
     box.style.top = (rect.bottom + 8) + "px";

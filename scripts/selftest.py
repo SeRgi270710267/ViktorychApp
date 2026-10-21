@@ -903,16 +903,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel3-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel4-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "superintel3-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "superintel4-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel3-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel4-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
@@ -2356,6 +2356,8 @@ if (!D._accept({ v: 1, ch: general, m: { id: "10", content: "one again", author:
 if (D._ids(general).join(",") !== "10") throw new Error("dedupe " + D._ids(general).join(","));
 if (!D._accept({ v: 1, ch: general, del: "10" })) throw new Error("del");
 if (D._ids(general).length) throw new Error("deleted");
+const empty = D.page({ name: "messages", query: new URLSearchParams("") });
+if (!empty.includes("No conversations yet")) throw new Error("empty " + empty.slice(0, 240));
 const page = D.page({ name: "messages", channel: general, query: new URLSearchParams("fixture=1") });
 if (!page.includes("Read-only channel") || !page.includes("general-chat") || !page.includes("peer-help") || !page.includes("dmsg-embed") || !page.includes("dmsg-rx")) throw new Error("page");
 if (page.includes("<script>")) throw new Error("page xss");

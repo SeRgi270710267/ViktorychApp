@@ -251,27 +251,45 @@
 .dmsgs-placeholder p { margin: 0; color: var(--muted); font-size: 15px; line-height: 20px; }
 .dmsg-day {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 8px 16px;
+  justify-content: center;
+  margin: 12px 16px 4px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
 }
-.dmsg-day::before,
-.dmsg-day::after {
-  content: "";
-  height: 1px;
-  background: var(--line);
-  flex: 1;
-}
 .dmsg {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
-  column-gap: 4px;
-  padding: 1px 16px 1px 8px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 1px 16px;
 }
-.dmsg.group { margin-top: 14px; }
+.dmsg.group { margin-top: 14px; align-items: flex-start; }
+.dmsg-gutter { width: 40px; flex: none; }
+.dmsg-bubble {
+  display: inline-block;
+  max-width: min(520px, 100%);
+  background: var(--search);
+  border-radius: 22px;
+  padding: 8px 12px 10px;
+}
+.dmsg.group .dmsg-bubble { border-top-left-radius: 6px; }
+.dmsg.cont .dmsg-bubble { border-top-left-radius: 6px; border-bottom-left-radius: 6px; }
+.dmsgs-head-face,
+.dmsgs-head-face img {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: none;
+}
+.dmsgs-head-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ava);
+  font-weight: 700;
+  overflow: hidden;
+}
 .dmsg-ava,
 .dmsg-ava img {
   width: 40px;
@@ -435,14 +453,14 @@
 }
 .dmsgs-compose { padding: 8px 16px 16px; flex: none; }
 .dmsgs-compose-box {
-  min-height: 52px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  min-height: 48px;
+  border: 0;
+  border-radius: 999px;
   display: flex;
   align-items: center;
   padding: 0 16px;
   color: var(--muted);
-  background: var(--bg);
+  background: var(--search);
 }
 body:has(.dmsgs) .fab { display: none; }
 

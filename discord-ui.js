@@ -238,7 +238,11 @@
 
   function knownMap() {
     const map = {};
-    state.channels.forEach(function (ch) { map[ch.id] = ch; });
+    const list = state.channels.length ? state.channels : CATALOG_SERVERS.reduce(function (all, server) {
+      (server.channels || []).forEach(function (ch) { all.push(copyChannel(ch, server.id)); });
+      return all;
+    }, []);
+    list.forEach(function (ch) { map[ch.id] = ch; });
     return map;
   }
 
@@ -582,15 +586,13 @@
       const head = fresh
         ? '<div class="dmsg-head"><span class="dmsg-name"' + (color ? ' style="color:' + color + '"' : "") + ">" + esc(row.name) + '</span><time datetime="' + esc(row.date) + '">' + esc(formatClock(row)) + "</time></div>"
         : "";
-      const gutter = fresh
-        ? avatarHtml(row)
-        : '<time class="dmsg-hovertime" datetime="' + esc(row.date) + '">' + esc(formatClock(row).replace(/^.*,\s*/, "")) + "</time>";
+      const gutter = fresh ? avatarHtml(row) : "";
       prev = row;
-      return day + '<article class="dmsg' + (fresh ? " group" : " cont") + '">' + gutter + '<div class="dmsg-body">' +
-        replyHtml(row, byId) + head +
-        '<div class="dmsg-text">' + format(row.body, row.emojis) + (row.edited ? ' <span class="dmsg-edited">(edited)</span>' : "") + "</div>" +
+      return day + '<article class="dmsg' + (fresh ? " group" : " cont") + '"><div class="dmsg-gutter">' + gutter + "</div>" +
+        '<div class="dmsg-body">' + head + replyHtml(row, byId) +
+        '<div class="dmsg-bubble"><div class="dmsg-text">' + format(row.body, row.emojis) + (row.edited ? ' <span class="dmsg-edited">(edited)</span>' : "") + "</div>" +
         mediaHtml(row) + embedHtml(row) + reactionHtml(row) +
-        "</div></article>";
+        "</div></div></article>";
     }).join("");
   }
 
@@ -835,9 +837,14 @@
   }
 
   function listHtml(route) {
+    const head = '<header class="dmsgs-head"><h1>Messages</h1></header>';
+    const text = state.channels.filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
+    if (!text.length) {
+      return head + '<div class="dmsgs-placeholder"><h2>No conversations yet</h2><p>Channels set to messages show up here. None are configured yet.</p></div>';
+    }
     const rows = serverOrder().map(function (server) { return serverBlock(server, route); }).join("");
     const filtering = state.query ? " is-filtering" : "";
-    return '<header class="dmsgs-head"><h1>Messages</h1></header>' +
+    return head +
       '<label class="search dmsgs-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 20.3 16.7 16a7.5 7.5 0 1 0-.7.7L20.3 21 21 20.3zM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0z"/></svg>' +
       '<input id="dmsgs-q" class="dmsgs-q" type="search" placeholder="Search Direct Messages" aria-label="Search Direct Messages" value="' + esc(state.query) + '"></label>' +
       '<div class="dmsgs-channels' + filtering + '">' + rows + "</div>";
@@ -846,7 +853,7 @@
   function conversationHtml(route) {
     const id = route && route.channel || "";
     if (!id) {
-      return '<section class="dmsgs-conv dmsgs-conv-empty"><div class="dmsgs-placeholder"><h2>Select a message</h2><p>Choose a channel to read. This inbox is read-only.</p></div></section>';
+      return '<section class="dmsgs-conv dmsgs-conv-empty"><div class="dmsgs-placeholder"><h2>Select a message</h2><p>Choose from your existing conversations, or just keep swimming.</p></div></section>';
     }
     const ch = channelById(id);
     if (!ch) {
@@ -855,8 +862,13 @@
     if (ch.mode !== "messages") {
       return '<section class="dmsgs-conv"><header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a><span class="dmsgs-hash lg" aria-hidden="true">#</span><div><b>' + esc(ch.name) + "</b><span>" + esc(ch.category) + '</span></div></header><div class="dmsgs-log"><div class="dmsgs-placeholder"><h2>Posted on Home</h2><p>Announcement channels are published with the rest of the feed.</p></div></div></section>';
     }
+    const server = serverById(ch.serverId);
+    const who = messagesFor(id)[0];
+    const face = who && who.avatar
+      ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>'
+      : '<span class="dmsgs-head-face initials" aria-hidden="true">' + esc((ch.name || "?").slice(0, 1).toUpperCase()) + "</span>";
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a><span class="dmsgs-hash lg" aria-hidden="true">#</span><div><b>' + esc(ch.name) + "</b><span>" + esc(ch.category) + "</span></div></header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a>' + face + '<div><b>' + esc(ch.name) + "</b><span>" + esc((server && server.name) || ch.category || "Discord") + "</span></div></header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
       '<button type="button" class="dmsgs-jump" hidden>Jump to present</button>' +
       '<div class="dmsgs-compose"><div class="dmsgs-compose-box" role="textbox" aria-disabled="true" aria-label="Read-only channel"><span>Read-only channel</span></div></div>' +
@@ -865,6 +877,7 @@
 
   function page(route) {
     state.fixture = !!(route && route.query && typeof route.query.get === "function" && route.query.get("fixture") === "1");
+    if (state.fixture) adoptServers(CATALOG_SERVERS);
     ensureLoad();
     const id = route && snowflake(route.channel);
     if (id && !state.fixture) ensureChannel(id);
@@ -1072,7 +1085,7 @@
   }
 
   function ensureLoad() {
-    if (state.loadStarted) return;
+    if (state.fixture || state.loadStarted) return;
     state.loadStarted = true;
     if (typeof fetch !== "function") return;
     let pending;
@@ -1237,8 +1250,6 @@
   }
 
   function bind(next) { state.bound = next || null; }
-
-  adoptServers(CATALOG_SERVERS);
 
   root.FeedsDiscord = {
     bind: bind,

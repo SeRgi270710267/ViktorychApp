@@ -2556,3 +2556,8 @@ html.tv-on #new-posts { display: none; }
     background: var(--muted);
   }
 }
+.discord-emoji { width: 1.25em; height: 1.25em; vertical-align: -0.25em; object-fit: contain; }
+.discord-meta { display: flex; align-items: center; gap: 8px; margin-top: 2px; color: var(--muted); font-size: 13px; line-height: 16px; }
+.discord-channel { color: var(--blue); font-weight: 700; }
+.discord-thread { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.discord-bot { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
