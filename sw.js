@@ -1,5 +1,5 @@
 /* Feeds service worker. The shell cache name changes on each deploy. */
-const VERSION = "fresh-__SW_VERSION__";
+const VERSION = "translate-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
