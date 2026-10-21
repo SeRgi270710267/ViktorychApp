@@ -622,6 +622,7 @@
 
   function onKeyDown(event) {
     if (!TV.on || TV.ignore) return;
+    if (event.target && event.target.closest && event.target.closest(".nav-split")) return;
     var key = event.key || "";
     var code = event.keyCode || event.which || 0;
     if (isBack(event)) {

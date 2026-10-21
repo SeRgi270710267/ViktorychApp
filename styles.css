@@ -139,14 +139,43 @@ img { max-width: 100%; }
 }
 
 .nav {
-  width: 275px;
-  flex: 0 0 275px;
+  width: var(--nav-w, 275px);
+  flex: 0 0 var(--nav-w, 275px);
   position: sticky;
   top: 0;
+  z-index: 2;
   height: 100vh;
   padding: 8px 12px 0;
   display: flex;
   flex-direction: column;
+}
+.nav-split {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  z-index: 6;
+  width: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+.nav-split:focus { outline: none; }
+.nav-split::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+}
+.nav-split:hover::before,
+.nav-split.is-dragging::before,
+.nav-split:focus-visible::before {
+  background: var(--blue);
 }
 .nav-scroll { display: flex; flex-direction: column; align-items: flex-start; width: 100%; }
 .logo, .nav-item, .icon-btn, .more-btn, .m-ava, .m-icon {
@@ -220,6 +249,57 @@ html[data-theme="default"] .m-logo { color: #000; }
 .account-meta span { color: var(--muted); font-size: 15px; }
 .account-pill .dots { margin-left: auto; color: var(--text); }
 
+html[data-nav="icons"] .nav {
+  width: 88px;
+  flex-basis: 88px;
+  padding: 0 4px;
+  align-items: center;
+}
+html[data-nav="icons"] .nav-scroll { align-items: center; }
+html[data-nav="icons"] .logo { width: 50px; height: 50px; margin: 2px 0; padding: 0; justify-content: center; }
+html[data-nav="icons"] .logo .logo-full { display: none; }
+html[data-nav="icons"] .logo .logo-si { display: block; height: 26px; width: auto; }
+html[data-nav="icons"] .nav-label,
+html[data-nav="icons"] .account-meta,
+html[data-nav="icons"] .post-label,
+html[data-nav="icons"] .account-pill .dots { display: none; }
+html[data-nav="icons"] .nav-item { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; }
+html[data-nav="icons"] .post-btn { width: 50px; height: 50px; padding: 0; max-width: none; }
+html[data-nav="icons"] .post-btn .post-ico { display: block; width: 24px; height: 24px; margin: 0 auto; fill: var(--on-fill); }
+html[data-nav="icons"] .account-pill { width: 50px; height: 50px; justify-content: center; padding: 0; }
+html[data-nav="icons"] .nav-item,
+html[data-nav="icons"] .logo,
+html[data-nav="icons"] .post-btn,
+html[data-nav="icons"] .account-pill { position: relative; }
+html[data-nav="icons"] .nav-item::after,
+html[data-nav="icons"] .logo::after,
+html[data-nav="icons"] .post-btn::after,
+html[data-nav="icons"] .account-pill::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 8;
+}
+html[data-nav="icons"] .nav-item:hover::after,
+html[data-nav="icons"] .nav-item:focus-visible::after,
+html[data-nav="icons"] .logo:hover::after,
+html[data-nav="icons"] .logo:focus-visible::after,
+html[data-nav="icons"] .post-btn:hover::after,
+html[data-nav="icons"] .post-btn:focus-visible::after,
+html[data-nav="icons"] .account-pill:hover::after,
+html[data-nav="icons"] .account-pill:focus-visible::after { opacity: 1; }
 .center {
   width: 600px;
   flex: 0 0 600px;
@@ -227,6 +307,9 @@ html[data-theme="default"] .m-logo { color: #000; }
   border-left: 1px solid var(--line);
   border-right: 1px solid var(--line);
   min-width: 0;
+}
+@media (min-width: 1280px) {
+  .center { width: auto; flex: 1 1 auto; }
 }
 html.is-split-drag,
 html.is-split-drag * {
@@ -1674,6 +1757,9 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .live-more { padding: 16px; text-align: center; color: var(--muted); font-size: 14px; }
 .yt-c-name a { color: inherit; }
 
+@media (max-width: 1279px) {
+  .nav-split { display: none; }
+}
 @media (max-width: 1279px) and (min-width: 500px) {
   .nav { width: 88px; flex-basis: 88px; padding: 0 4px; align-items: center; }
   .nav-scroll { align-items: center; }

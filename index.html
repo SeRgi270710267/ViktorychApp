@@ -68,6 +68,32 @@
   <link rel="apple-touch-startup-image" media="screen and (device-width: 810px) and (device-height: 1080px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/ipad-10.png">
   <link rel="apple-touch-startup-image" media="screen and (device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/ipad-pro-11.png">
   <link rel="apple-touch-startup-image" media="screen and (device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/ipad-pro-12.png">
+  <script>
+    (function () {
+      try {
+        var narrow = window.matchMedia && window.matchMedia("(max-width: 1279px)").matches;
+        var raw = localStorage.getItem("superintelapp-splits-v1");
+        if (!raw) raw = localStorage.getItem("rss-" + "feeds-splits-v1");
+        var n = 275;
+        if (raw) {
+          var map = JSON.parse(raw);
+          var saved = Math.round(Number(map && map.sidebar));
+          if (isFinite(saved) && saved > 0) n = saved;
+        }
+        if (narrow) {
+          document.documentElement.setAttribute("data-nav", "icons");
+          document.documentElement.style.setProperty("--nav-w", "88px");
+          return;
+        }
+        if (n < 200) n = 88;
+        else if (n < 248) n = 248;
+        if (n > 275) n = 275;
+        if (n < 88) n = 88;
+        document.documentElement.style.setProperty("--nav-w", n + "px");
+        if (n < 200) document.documentElement.setAttribute("data-nav", "icons");
+      } catch (err) {}
+    })();
+  </script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="translate.css">
   <link rel="stylesheet" href="people.css">
