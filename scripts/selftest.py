@@ -2972,7 +2972,7 @@ def ia_backup_checks() -> None:
         sleep=lambda delay: None,
     )
     check(retired["deleted"] >= 1 and any(path.endswith("/" + old_name) for path in deleted), "old files are deleted only after the new copy and the site manifest check out")
-    check(any("noindex" in patch and "title" in patch for patch in patches), "retired items are marked noindex and lose their title")
+    check("noindex" in " ".join(patches) and "title" in " ".join(patches), "retired items are marked noindex and lose their title")
     check(not any("test-secret-value" in patch or "test-secret-value" in " ".join(retired["notes"]) for patch in patches), "metadata writes do not print the keys")
 
     story_checks()

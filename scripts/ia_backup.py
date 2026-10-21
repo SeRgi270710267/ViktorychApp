@@ -305,8 +305,8 @@ def upload_bytes(endpoint, item, name, body, *, content_type, access, secret, op
         "x-archive-meta-description": NEUTRAL_DESCRIPTION,
         "x-archive-meta-noindex": "true",
     }
-    delay = backoff
-    for attempt in range(4):
+    delay = max(backoff, 5)
+    for attempt in range(8):
         status, payload = _s3_once(endpoint, item, name, body, headers, access, secret, opener)
         lowered = payload.lower()
         if status in {200, 201, 204}:
@@ -318,7 +318,7 @@ def upload_bytes(endpoint, item, name, body, *, content_type, access, secret, op
             continue
         detail = scrub(payload[:160].decode("utf-8", "replace"), secrets_for_log)
         notes.append(f"[ia-backup] {item}/{name} failed ({status}) {detail}".rstrip())
-        if attempt + 1 < 4 and status >= 500:
+        if attempt + 1 < 8 and status >= 500:
             sleep(delay)
             delay = min(delay * 3, 120)
             continue
@@ -714,6 +714,18 @@ def _matches(urlopen, url: str, digest: str) -> bool:
     return status == 200 and bool(body) and hashlib.sha256(body).hexdigest() == digest
 
 
+def _matches_soon(urlopen, url: str, digest: str, sleep, tries: int = 8) -> bool:
+    """A new upload can take a little while before archive.org serves the bytes."""
+    delay = 2.0
+    for attempt in range(tries):
+        if _matches(urlopen, url, digest):
+            return True
+        if attempt + 1 < tries:
+            sleep(delay)
+            delay = min(delay * 2, 20)
+    return False
+
+
 def discover_old_items(urlopen) -> list:
     found = {item for item in KNOWN_OLD_ITEMS if old_slot(item)}
     url = "https://archive.org/advancedsearch.php?q=identifier%3Asuperintelapp*&fl[]=identifier&rows=100&output=json"
@@ -808,7 +820,7 @@ def migrate_copies(config: dict, state: dict, sleep=time.sleep) -> dict:
             new_name = digest[:20] + ext
             new_item = slot_item(state, slot)
             url = archive_download_url(new_item, new_name, download_base)
-            uploaded = prev.get("digest") == digest and prev.get("name") == new_name and valid_item_id(prev.get("item"))
+            uploaded = _matches(urlopen, url, digest)
             if not uploaded:
                 uploaded = upload_bytes(
                     endpoint,
@@ -826,13 +838,17 @@ def migrate_copies(config: dict, state: dict, sleep=time.sleep) -> dict:
                 )
                 if pace:
                     sleep(pace)
-            if not uploaded or not _matches(urlopen, url, digest):
+            if uploaded:
+                uploaded = _matches_soon(urlopen, url, digest, sleep)
+            if not uploaded:
                 notes.append(f"[ia-backup] copy check failed {key}")
+                print(notes[-1], flush=True)
                 failures += 1
                 continue
             copied[key] = {"item": new_item, "name": new_name, "digest": digest, "url": url, "slot": slot}
             _rewrite_pointer(state, item, name, url, digest, slot)
             notes.append(f"[ia-backup] copied {key}")
+            print(notes[-1], flush=True)
     return {"notes": [scrub(line, log_secrets) for line in notes], "failures": failures}
 
 
@@ -878,7 +894,7 @@ def _delete_object(endpoint: str, item: str, name: str, access: str, secret: str
         return False
 
 
-def _patch_metadata(item: str, want: dict, remove: tuple, access: str, secret: str, urlopen, opener, metadata_base: str) -> bool:
+def _patch_metadata(item: str, want: dict, remove: tuple, access: str, secret: str, urlopen, opener, metadata_base: str, sleep=time.sleep) -> tuple[bool, str]:
     doc = _http_json(metadata_base.rstrip("/") + "/" + urllib.parse.quote(item), urlopen) or {}
     current = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
     patch = []
@@ -890,36 +906,56 @@ def _patch_metadata(item: str, want: dict, remove: tuple, access: str, secret: s
         if key in current:
             patch.append({"op": "remove", "path": "/" + key})
     if not patch:
-        return True
+        return True, ""
     body = urllib.parse.urlencode({"-target": "metadata", "-patch": json.dumps(patch, separators=(",", ":"))}).encode()
-    request = urllib.request.Request(
-        metadata_base.rstrip("/") + "/" + urllib.parse.quote(item),
-        data=body,
-        method="POST",
-        headers={
-            "Authorization": f"LOW {access}:{secret}",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": UA,
-        },
-    )
-    try:
-        with opener.open(request, timeout=60) as response:
-            status = getattr(response, "status", 200)
-            payload = response.read()
-    except urllib.error.HTTPError as err:
-        status = err.code
+    delay = 5.0
+    status = 0
+    payload = b""
+    for attempt in range(4):
+        request = urllib.request.Request(
+            metadata_base.rstrip("/") + "/" + urllib.parse.quote(item),
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"LOW {access}:{secret}",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": UA,
+            },
+        )
         try:
-            payload = err.read() or b""
-        except OSError:
+            with opener.open(request, timeout=60) as response:
+                status = getattr(response, "status", 200)
+                payload = response.read()
+        except urllib.error.HTTPError as err:
+            status = err.code
+            try:
+                payload = err.read() or b""
+            except OSError:
+                payload = b""
+        except (urllib.error.URLError, TimeoutError, OSError):
+            status = 0
             payload = b""
-    except (urllib.error.URLError, TimeoutError, OSError):
-        return False
-    if status not in {200, 201, 204}:
-        return False
-    lowered = payload.lower()
-    if b'"error"' in lowered and b"success" not in lowered:
-        return False
-    return True
+        if status in {200, 201, 204} and not (b'"error"' in payload.lower() and b"success" not in payload.lower()):
+            return True, ""
+        if attempt + 1 < 4 and (status in {0, 429, 503} or b"slowdown" in payload.lower()):
+            sleep(delay)
+            delay = min(delay * 2, 60)
+            continue
+        break
+    detail = scrub(payload[:120].decode("utf-8", "replace"), [access, secret]).strip()
+    return False, f"{status} {detail}".strip()
+
+
+def _write_hidden(item: str, title: str, description: str, access: str, secret: str, urlopen, opener, metadata_base: str) -> tuple[bool, str]:
+    """noindex is its own write so a rejected blank title cannot drop it."""
+    indexed, detail = _patch_metadata(item, {"noindex": "true"}, (), access, secret, urlopen, opener, metadata_base)
+    blank, blank_detail = _patch_metadata(item, {"title": title, "description": description}, (), access, secret, urlopen, opener, metadata_base)
+    if not blank and title == "":
+        blank, blank_detail = _patch_metadata(item, {"title": " ", "description": " "}, (), access, secret, urlopen, opener, metadata_base)
+    _patch_metadata(item, {}, ("subject", "creator", "collection"), access, secret, urlopen, opener, metadata_base)
+    if indexed and blank:
+        return True, ""
+    return False, detail or blank_detail
 
 
 def stamp_items(config: dict, state: dict) -> dict:
@@ -933,22 +969,21 @@ def stamp_items(config: dict, state: dict) -> dict:
         if valid_item_id(ident) and ident not in seen:
             seen.append(ident)
     for ident in seen:
-        ok = _patch_metadata(
+        ok, detail = _write_hidden(
             ident,
-            {"noindex": "true", "title": NEUTRAL_TITLE, "description": NEUTRAL_DESCRIPTION},
-            (),
+            NEUTRAL_TITLE,
+            NEUTRAL_DESCRIPTION,
             config["access"],
             config["secret"],
             urlopen,
             opener,
             metadata_base,
         )
-        _patch_metadata(ident, {}, ("subject", "creator", "collection"), config["access"], config["secret"], urlopen, opener, metadata_base)
         if ok:
             notes.append(f"[ia-backup] stamped {ident}")
         else:
             failures += 1
-            notes.append(f"[ia-backup] could not stamp {ident}")
+            notes.append(f"[ia-backup] could not stamp {ident} ({detail})")
     return {"notes": notes, "failures": failures}
 
 
@@ -966,22 +1001,12 @@ def hide_old_items(config: dict, state: dict) -> dict:
         doc = _http_json(metadata_base + "/" + urllib.parse.quote(item), urlopen)
         if not isinstance(doc, dict) or not (doc.get("metadata") or doc.get("files")):
             continue
-        ok = _patch_metadata(
-            item,
-            {"noindex": "true", "title": "", "description": ""},
-            (),
-            config["access"],
-            config["secret"],
-            urlopen,
-            opener,
-            metadata_base,
-        )
-        _patch_metadata(item, {}, ("subject", "creator", "collection"), config["access"], config["secret"], urlopen, opener, metadata_base)
+        ok, detail = _write_hidden(item, "", "", config["access"], config["secret"], urlopen, opener, metadata_base)
         if ok:
             notes.append(f"[ia-backup] hid {item}")
         else:
             failures += 1
-            notes.append(f"[ia-backup] could not hide {item}")
+            notes.append(f"[ia-backup] could not hide {item} ({detail})")
     return {"notes": [scrub(line, [config["access"], config["secret"]]) for line in notes], "failures": failures}
 
 
@@ -1046,17 +1071,8 @@ def retire_old(config: dict, state: dict, sleep=time.sleep) -> dict:
         if pace:
             sleep(pace)
     for item in ready_items:
-        ok = _patch_metadata(
-            item,
-            {"noindex": "true", "title": "", "description": ""},
-            ("subject", "creator", "collection"),
-            access,
-            secret,
-            urlopen,
-            opener,
-            metadata_base,
-        )
-        notes.append(f"[ia-backup] retired metadata {item}" if ok else f"[ia-backup] could not retire metadata {item}")
+        ok, detail = _write_hidden(item, "", "", access, secret, urlopen, opener, metadata_base)
+        notes.append(f"[ia-backup] retired metadata {item}" if ok else f"[ia-backup] could not retire metadata {item} ({detail})")
     return {"notes": [scrub(line, [access, secret]) for line in notes], "deleted": deleted}
 
 
