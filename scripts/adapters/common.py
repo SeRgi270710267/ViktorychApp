@@ -570,6 +570,8 @@ def profile_url(platform: str, handle: str) -> str:
         return f"https://www.instagram.com/{handle}/"
     if platform == "vk":
         return f"https://vk.com/{handle}"
+    if platform == "telegram":
+        return f"https://t.me/{handle}"
     return ""
 
 

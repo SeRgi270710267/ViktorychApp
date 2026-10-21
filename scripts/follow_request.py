@@ -22,13 +22,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "feeds.config.json"
 UA = "rss-feeds-preview/1.0 (+https://github.com/owner-account/rss-feeds)"
-PLATFORMS = ("x", "threads", "instagram", "youtube", "vk", "rss")
+PLATFORMS = ("x", "threads", "instagram", "youtube", "vk", "telegram", "rss")
 HANDLE = {
     "x": re.compile(r"^[A-Za-z0-9_]{1,15}$"),
     "threads": re.compile(r"^[A-Za-z0-9._]{1,30}$"),
     "instagram": re.compile(r"^[A-Za-z0-9._]{1,30}$"),
     "youtube": re.compile(r"^(?:[A-Za-z0-9._-]{3,30}|UC[\w-]{22})$"),
     "vk": re.compile(r"^[A-Za-z0-9_.]{1,32}$"),
+    "telegram": re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$"),
 }
 NITTER = [
     "https://nitter.meowing.monster/{handle}/rss",
@@ -120,7 +121,7 @@ def parse_issue(title: str, body: str) -> dict:
     if not account:
         raise Reject("the account field is empty")
     if platform and platform not in PLATFORMS:
-        raise Reject("pick x, threads, instagram, youtube, vk, or rss")
+        raise Reject("pick x, threads, instagram, youtube, vk, telegram, or rss")
     return {"kind": kind, "account": account.strip(), "platform": platform}
 
 
@@ -164,14 +165,14 @@ def _url_handle(pattern: str, url: str) -> str:
 def normalize(account: str, platform: str) -> dict:
     text = (account or "").strip()
     forced = (platform or "").strip().lower()
-    prefixed = re.match(r"^(x|threads|instagram|youtube|vk|rss):(\S+)$", text, re.I)
+    prefixed = re.match(r"^(x|threads|instagram|youtube|vk|telegram|rss):(\S+)$", text, re.I)
     if prefixed:
         forced = forced or prefixed.group(1).lower()
         text = prefixed.group(2)
         if prefixed.group(1).lower() != forced:
             raise Reject("the platform does not match the account")
     if forced and forced not in PLATFORMS:
-        raise Reject("pick x, threads, instagram, youtube, vk, or rss")
+        raise Reject("pick x, threads, instagram, youtube, vk, telegram, or rss")
     lower = text.lower()
     detected = forced
     handle = ""
@@ -208,6 +209,13 @@ def normalize(account: str, platform: str) -> dict:
             detected = "vk"
             handle = _url_handle(r"/([A-Za-z0-9_.]{1,32})/?$", path)
             url = "https://vk.com/" + handle
+        elif host in ("t.me", "telegram.me") or host.endswith(".t.me"):
+            detected = "telegram"
+            found = re.search(r"/(?:s/)?([A-Za-z][A-Za-z0-9_]{4,31})(?:/\d+)?/?$", path)
+            if not found or found.group(1).lower() in ("share", "addstickers", "joinchat", "iv", "proxy"):
+                raise Reject("that URL does not match the platform")
+            handle = found.group(1)
+            url = "https://t.me/" + handle
         else:
             detected = "rss"
             url = text.split("#")[0]
@@ -226,6 +234,8 @@ def normalize(account: str, platform: str) -> dict:
             url = "https://www.instagram.com/" + handle + "/"
         elif detected == "vk":
             url = "https://vk.com/" + handle
+        elif detected == "telegram":
+            url = "https://t.me/" + handle
         elif detected == "youtube":
             url = "https://www.youtube.com/@" + handle
         else:
@@ -260,6 +270,8 @@ def check_url(spec: dict) -> str:
         return "https://www.instagram.com/" + urllib.parse.quote(handle) + "/"
     if platform == "vk":
         return "https://vk.com/" + urllib.parse.quote(handle)
+    if platform == "telegram":
+        return "https://t.me/s/" + urllib.parse.quote(handle)
     if platform == "youtube":
         channel = spec.get("channelId") or ""
         if channel:
@@ -287,6 +299,8 @@ def confirm_source(spec: dict, fetch, resolve=None) -> dict:
         spec["url"] = "https://www.youtube.com/channel/" + spec["channelId"]
     if spec["platform"] == "x" and not (body or "").lstrip().startswith("{"):
         raise Reject("X did not confirm that account")
+    if spec["platform"] == "telegram" and spec["handle"].lower() not in (body or "").lower():
+        raise Reject("Telegram did not confirm that channel")
     return spec
 
 
@@ -355,6 +369,17 @@ def entry_for(spec: dict) -> dict:
             "platform": "vk",
             "handle": handle,
             "adapter": "vk",
+            "limit": 8,
+            "profile": profile,
+        }
+    if platform == "telegram":
+        return {
+            "id": feed_id,
+            "platform": "telegram",
+            "handle": handle,
+            "adapter": "telegram",
+            "source_urls": ["https://t.me/s/{handle}"],
+            "fallbacks": [{"adapter": "telegram", "source_urls": ["{rsshubBase}/telegram/channel/{handle}"]}],
             "limit": 8,
             "profile": profile,
         }

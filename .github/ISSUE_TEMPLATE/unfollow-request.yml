@@ -21,6 +21,7 @@ body:
         - instagram
         - youtube
         - vk
+        - telegram
         - rss
     validations:
       required: true
