@@ -1479,6 +1479,17 @@ def main() -> None:
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "link-accounts.yml").is_file(), "the link-accounts issue form exists")
     site_config = json.loads((ROOT / "feeds.config.json").read_text(encoding="utf-8"))
     people.validate_config(site_config)
+    x_account = next((feed for feed in site_config.get("feeds") or [] if feed.get("id") == "x:X"), None)
+    check(x_account is not None and x_account.get("defaultFollow") is False and x_account.get("adapter") == "fxtwitter", "the X account is synced as a feed and is not a default follow")
+    check(not any(isinstance(item, dict) and item.get("id") == "x:X" for item in site_config.get("discord") or []), "the X account is not stored as a Discord server")
+    from pull_snapshot import merge_seed_articles
+    published_articles = {"posts": [{"id": "1", "article": {"title": "T", "preview": "p"}}], "feeds": []}
+    seed_articles = {"posts": [
+        {"id": "1", "feedId": "x:X", "article": {"title": "T", "blocks": [{"type": "paragraph", "text": "body"}]}},
+        {"id": "2", "feedId": "x:X", "article": {"title": "New", "blocks": [{"type": "paragraph", "text": "full"}]}},
+    ], "feeds": [{"id": "x:X", "handle": "X", "configured": False}]}
+    added_articles = merge_seed_articles(published_articles, seed_articles)
+    check(added_articles == 1 and published_articles["posts"][0]["article"]["blocks"][0]["text"] == "body" and published_articles["posts"][1]["id"] == "2" and published_articles["feeds"][0]["configured"] is False, "a seed article survives the published snapshot and keeps its body")
     prepper = next(person for person in site_config["people"] if person["id"] == "canadian-prepper")
     prepper_accounts = {(account["platform"], account["handle"]) for account in prepper["accounts"]}
     check(("youtube", "redacted_handle") in prepper_accounts and ("x", "redacted_handle") in prepper_accounts and ("instagram", "redacted_handle") in prepper_accounts, "Canadian Prepper links the verified YouTube, X, and Instagram accounts")

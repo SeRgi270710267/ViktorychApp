@@ -154,7 +154,65 @@ def main() -> None:
             print("[snapshot] media manifest unavailable", file=sys.stderr)
 
 
+def merge_seed_articles(published: dict, seed: dict) -> int:
+    """Keep git-seed articles when the live snapshot does not have them yet.
+
+    The profile articles list is often a preview. A seed post that already
+    has the body should survive the snapshot overwrite, and its blocks should
+    fill a preview that came back without them. Returns how many posts were
+    added. Missing blocks are copied in place.
+    """
+    if not isinstance(published, dict) or not isinstance(seed, dict):
+        return 0
+    seed_posts = [
+        post for post in (seed.get("posts") or [])
+        if isinstance(post, dict) and isinstance(post.get("article"), dict) and post.get("id")
+    ]
+    posts = published.get("posts")
+    if not seed_posts or not isinstance(posts, list):
+        return 0
+    by_id = {}
+    for post in posts:
+        if isinstance(post, dict) and post.get("id"):
+            by_id[str(post.get("id"))] = post
+    added = 0
+    feed_ids = set()
+    for post in seed_posts:
+        pid = str(post.get("id"))
+        article = post.get("article") or {}
+        blocks = article.get("blocks") if isinstance(article.get("blocks"), list) else []
+        current = by_id.get(pid)
+        if current is None:
+            posts.append(post)
+            by_id[pid] = post
+            added += 1
+            if post.get("feedId"):
+                feed_ids.add(post.get("feedId"))
+            continue
+        current_article = current.get("article") if isinstance(current.get("article"), dict) else None
+        if blocks and (current_article is None or not current_article.get("blocks")):
+            if current_article is None:
+                current["article"] = dict(article)
+            else:
+                current_article["blocks"] = blocks
+            if post.get("feedId"):
+                feed_ids.add(post.get("feedId"))
+    feeds = published.get("feeds")
+    if feed_ids and isinstance(feeds, list):
+        have = {item.get("id") for item in feeds if isinstance(item, dict)}
+        for item in seed.get("feeds") or []:
+            if isinstance(item, dict) and item.get("id") in feed_ids and item.get("id") not in have:
+                feeds.append(item)
+                have.add(item.get("id"))
+    return added
+
+
 def _pull_feeds() -> None:
+    seed = {}
+    try:
+        seed = json.loads((ROOT / "feeds.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        seed = {}
     body = _get(SITE + "feeds.json")
     if not body:
         print("[snapshot] published feeds.json unavailable; keeping the seed", file=sys.stderr)
@@ -169,12 +227,13 @@ def _pull_feeds() -> None:
         return
     posts = [post for post in doc["posts"] if isinstance(post, dict) and not post_is_bridge_error(post)]
     removed = len(doc["posts"]) - len(posts)
+    doc["posts"] = posts
+    added = merge_seed_articles(doc, seed if isinstance(seed, dict) else {})
+    _write(ROOT / "feeds.json", (json.dumps(doc, ensure_ascii=False) + "\n").encode("utf-8"))
     if removed:
-        doc["posts"] = posts
-        _write(ROOT / "feeds.json", (json.dumps(doc, ensure_ascii=False) + "\n").encode("utf-8"))
         print(f"[snapshot] dropped {removed} bridge error posts")
-    else:
-        _write(ROOT / "feeds.json", body)
+    if added:
+        print(f"[snapshot] kept {added} seed articles")
     print(f"[snapshot] feeds.json {len(doc['posts'])} posts")
     comments = ROOT / "comments"
     kept = 0
