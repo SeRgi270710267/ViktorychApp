@@ -42,7 +42,7 @@ Everything below is stored in `localStorage` under `rss-feeds-settings-v1` for a
 
 - **For you** shows every post, newest first (`sortDate`, otherwise `date`). **Following** shows posts from accounts you follow. **Pinned Lists** appear as extra tabs and scroll sideways on a narrow screen. The selected tab has the blue underline.
 - **Follow** is a light pill. **Following** is an outline pill that turns into a red **Unfollow** on hover. On the first visit every configured account is followed. Accounts discovered inside posts are not. They show up in **Who to follow**.
-- **Lists** can be created, edited, deleted, pinned, and filled from the accounts in `feeds.json`. A pinned list is a Home tab. Its page shows that list’s banner, name, description, member count, and the members’ posts.
+- **Lists** can be created, edited, deleted, pinned, and filled from the accounts in `feeds.json`. A pinned list is a Home tab. Its page shows that list’s banner, name, description, member count, and the members’ posts. The arrow on Following chooses Most recent or Popular. Manage tabs reorders or unpins those List tabs, and arrows scroll the row when it overflows.
 - **Explore** matches post text and account names.
 - The bookmark icon saves a post (filled blue). The heart likes it locally (filled pink, count +1). Reposts toggle the same way (green, count +1). None of these leave the browser.
 - **Settings** exports and imports that JSON (follows, lists, likes, bookmarks, reposts).

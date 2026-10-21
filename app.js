@@ -45,7 +45,12 @@
     rss: "M6 17.5A1.5 1.5 0 1 1 4.5 16 1.5 1.5 0 0 1 6 17.5zM4 11a7 7 0 0 1 7 7h-2a5 5 0 0 0-5-5v-2zm0-4a11 11 0 0 1 11 11h-2A9 9 0 0 0 4 9V7z",
     vk: "M3.2 6h3.1l2.7 6.6L11.7 6h3.1L10.4 15H7.6L3.2 6zm9.4 0H21v2.2h-5.2v1.6H20v2.1h-4.2v1.7H21V15h-8.4V6z",
     feather: "M22 3.2c-5.8 0-9.4 2.2-12 5.6C8.2 11.4 7.2 15 7 19h2.1c.2-2.6.8-4.8 2-6.2 1 .2 2.1.5 3.2.9l-2.1 3.1h2.2l1.5-2.2c1.7.4 3.4.7 5.2 1 .2-.7.4-1.4.5-2.1-.9-.2-1.7-.4-2.5-.6 2-1.5 3.8-3.5 5-5.9-.3 0-.6-.1-1-.1z",
-    pip: "M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v11c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 20 4 18.88 4 17.5v-11zM6.5 6A.5.5 0 0 0 6 6.5v11c0 .28.22.5.5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11zM10 12h8v6h-8v-6z"
+    pip: "M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v11c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 20 4 18.88 4 17.5v-11zM6.5 6A.5.5 0 0 0 6 6.5v11c0 .28.22.5.5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11zM10 12h8v6h-8v-6z",
+    chevL: "M15.4 5.4 9.8 11l5.6 5.6-1.4 1.4L7 11l7-7z",
+    chevR: "M8.6 5.4 14.2 11 8.6 16.6l1.4 1.4 7-7-7-7z",
+    caret: "M7 9.2 12 14.2 17 9.2l1.2 1.2L12 16.6 5.8 10.4z",
+    tick: "M9.2 16.2 4.5 11.5l1.4-1.4 3.3 3.3 7.9-7.9 1.4 1.4z",
+    sliders: "M3 6h8v2H3V6zm12 0h6v2h-6V6zM3 11h4v2H3v-2zm8 0h10v2H11v-2zM3 16h10v2H3v-2zm14 0h4v2h-4v-2zM9 4h2v6H9V4zm6 5h2v6h-2V9zM11 14h2v6h-2v-6z"
   };
 
   const STATE = {
@@ -70,6 +75,7 @@
     disliked: {},
     share: null,
     groupMenu: null,
+    tabMenu: null,
     shared: {},
     sharedState: {},
     chain: {},
@@ -260,7 +266,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "" });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent" });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -280,6 +286,7 @@
       parsed.groups = Array.isArray(parsed.groups) ? cleanGroups(parsed.groups) : [];
       parsed.groupsOwn = parsed.groupsOwn === true;
       parsed.subsGroup = typeof parsed.subsGroup === "string" ? parsed.subsGroup : "";
+      parsed.followingSort = parsed.followingSort === "popular" ? "popular" : "recent";
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
@@ -3897,17 +3904,28 @@
 
   function homeHeader(tab) {
     const lists = STATE.settings.lists.filter((l) => l.pinned);
+    const sort = STATE.settings.followingSort === "popular" ? "popular" : "recent";
+    const open = STATE.tabMenu === "following";
     const tabBtn = (id, label, on) => `<button class="tab${on ? " on" : ""}" data-act="htab" data-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}"><span>${esc(label)}</span></button>`;
+    const sortItem = (id, label) => `<button type="button" role="menuitemradio" aria-checked="${sort === id ? "true" : "false"}" data-act="follow-sort" data-sort="${id}"><span>${esc(label)}</span>${sort === id ? icon("tick") : ""}</button>`;
+    const menu = open ? `<div class="menu tab-menu" data-act="stop" role="menu" aria-label="Following options">${sortItem("recent", "Most recent")}${sortItem("popular", "Popular")}</div>` : "";
+    const following = `<div class="tab-pair${tab === "following" ? " on" : ""}">${tabBtn("following", "Following", tab === "following")}<button class="tab-caret" type="button" data-act="tab-options" aria-label="Following options" aria-expanded="${open ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
     return `<div class="topbar tall">
       <h1 class="vh">Home</h1>
       <div class="mhead">
         <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
         <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
       </div>
-      <div class="tabs" role="tablist" aria-label="Home timeline">
-        ${tabBtn("foryou", "For you", tab === "foryou")}
-        ${tabBtn("following", "Following", tab === "following")}
-        ${lists.map((l) => tabBtn("list:" + l.id, l.name, tab === "list:" + l.id)).join("")}
+      <div class="tabs-bar">
+        <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="Scroll tabs left" hidden>${icon("chevL")}</button>
+        <div class="tabs" role="tablist" aria-label="Home timeline">
+          ${tabBtn("foryou", "For you", tab === "foryou")}
+          ${following}
+          ${lists.map((l) => tabBtn("list:" + l.id, l.name, tab === "list:" + l.id)).join("")}
+        </div>
+        <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button>
+        <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="Manage tabs">${icon("sliders")}</button>
+        ${menu}
       </div>
     </div>`;
   }
@@ -3929,6 +3947,13 @@
       list = found ? listMembersPosts(found) : [];
     }
     list = list.filter((post) => inTimeline(post) && !hiddenPost(post));
+    if (tab === "following" && STATE.settings.followingSort === "popular") {
+      const heat = (post) => {
+        const stats = (post && post.stats) || {};
+        return (Number(stats.likes) || 0) + (Number(stats.reposts) || 0) + (Number(stats.replies) || 0) + (Number(stats.quotes) || 0);
+      };
+      list.sort((a, b) => heat(b) - heat(a) || byStamp(a, b));
+    }
     const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
       tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
@@ -5194,6 +5219,18 @@
         </div>
       </div></div>`;
     }
+    if (STATE.modal === "tabs") {
+      const pinned = STATE.settings.lists.filter((list) => list.pinned);
+      const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${(list.members || []).length} members</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="Move ${esc(list.name)} left"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="Move ${esc(list.name)} right"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">Unpin</button></div>`).join("");
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-label="Manage tabs" data-act="stop">
+        <div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>Manage tabs</h2></div>
+        <div class="modal-body">
+          <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">For you</span><span class="handle">Always on Home</span></span></div>
+          <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">Following</span><span class="handle">Always on Home</span></span></div>
+          ${rows || `<p class="phandle">Pin a List to add it beside Following.</p>`}
+        </div>
+      </div></div>`;
+    }
     return "";
   }
 
@@ -5964,8 +6001,47 @@
     return location.hash || "#/";
   }
 
+  function placeTabMenu() {
+    const menu = document.querySelector(".tab-menu");
+    const caret = document.querySelector(".tab-caret");
+    const bar = document.querySelector(".tabs-bar");
+    if (!menu || !caret || !bar) return;
+    const item = caret.getBoundingClientRect();
+    const host = bar.getBoundingClientRect();
+    const width = menu.offsetWidth || 200;
+    let left = item.left - host.left;
+    if (left + width > host.width - 8) left = Math.max(8, host.width - width - 8);
+    menu.style.left = Math.max(8, left) + "px";
+    menu.style.top = (item.bottom - host.top + 4) + "px";
+  }
+
+  function syncTabArrows() {
+    const scroller = document.querySelector(".tabs");
+    const left = document.querySelector(".tab-arrow.left");
+    const right = document.querySelector(".tab-arrow.right");
+    if (!scroller || !left || !right) return;
+    if (scroller.dataset.seen !== "1") {
+      scroller.dataset.seen = "1";
+      const current = scroller.querySelector(".tab.on");
+      if (current) {
+        const box = current.getBoundingClientRect();
+        const host = scroller.getBoundingClientRect();
+        if (box.right > host.right - 8) scroller.scrollLeft += box.right - host.right + 16;
+        else if (box.left < host.left + 8) scroller.scrollLeft -= host.left - box.left + 16;
+      }
+    }
+    const max = scroller.scrollWidth - scroller.clientWidth;
+    left.hidden = max <= 2 || scroller.scrollLeft <= 2;
+    right.hidden = max <= 2 || scroller.scrollLeft >= max - 2;
+    if (scroller.dataset.arrows !== "1") {
+      scroller.dataset.arrows = "1";
+      scroller.addEventListener("scroll", syncTabArrows, { passive: true });
+    }
+  }
+
   function render(opts) {
     const route = parseRoute();
+    if (route.name !== "home" || route.tab !== "following") STATE.tabMenu = null;
     const nextKey = routeScrollKey();
     const routeChanged = !!STATE.scrollKey && STATE.scrollKey !== nextKey;
     if (route.name === "status") {
@@ -6030,6 +6106,8 @@
       syncMediaSession();
       bindPlayers();
       resumePlayback();
+      placeTabMenu();
+      syncTabArrows();
     };
     if (transition) {
       const change = document.startViewTransition(apply);
@@ -6083,10 +6161,61 @@
     if (act === "close-modal") { STATE.modal = null; STATE.confirm = null; render(); return; }
     if (act === "compose-post") { STATE.modal = null; render(); toast("Posts come from your feeds"); return; }
     if (act === "htab") {
+      STATE.tabMenu = null;
       const tab = el.dataset.tab;
-      if (tab === "foryou") location.hash = "#/";
-      else if (tab === "following") location.hash = "#/following";
-      else if (tab.startsWith("list:")) location.hash = "#/tab/" + tab.slice(5);
+      const next = tab === "foryou" ? "#/" : tab === "following" ? "#/following" : tab.startsWith("list:") ? "#/tab/" + encodeURIComponent(tab.slice(5)) : "#/";
+      const here = location.hash || "#/";
+      if (here === next || (next === "#/" && (here === "#/" || here === "#" || here === ""))) { render(); return; }
+      location.hash = next;
+      return;
+    }
+    if (act === "tab-options") {
+      const opening = STATE.tabMenu !== "following";
+      STATE.tabMenu = opening ? "following" : null;
+      const route = parseRoute();
+      if (opening && !(route.name === "home" && route.tab === "following")) location.hash = "#/following";
+      else render();
+      return;
+    }
+    if (act === "follow-sort") {
+      STATE.settings.followingSort = el.dataset.sort === "popular" ? "popular" : "recent";
+      STATE.tabMenu = null;
+      saveSettings();
+      const route = parseRoute();
+      if (!(route.name === "home" && route.tab === "following")) location.hash = "#/following";
+      else render();
+      return;
+    }
+    if (act === "manage-tabs") {
+      STATE.tabMenu = null;
+      STATE.modal = "tabs";
+      render();
+      return;
+    }
+    if (act === "tab-scroll") {
+      const scroller = document.querySelector(".tabs");
+      if (scroller) scroller.scrollBy({ left: (Number(el.dataset.dir) || 1) * Math.max(140, scroller.clientWidth * 0.7), behavior: "smooth" });
+      return;
+    }
+    if (act === "tab-move") {
+      const lists = STATE.settings.lists || [];
+      const pinnedAt = [];
+      lists.forEach((list, index) => { if (list && list.pinned) pinnedAt.push(index); });
+      const from = pinnedAt.findIndex((index) => lists[index].id === el.dataset.id);
+      const to = from + (Number(el.dataset.dir) || 0);
+      if (from < 0 || to < 0 || to >= pinnedAt.length) return;
+      const swap = lists[pinnedAt[from]];
+      lists[pinnedAt[from]] = lists[pinnedAt[to]];
+      lists[pinnedAt[to]] = swap;
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "tab-unpin") {
+      const list = (STATE.settings.lists || []).find((item) => item.id === el.dataset.id);
+      if (list) list.pinned = false;
+      saveSettings();
+      render();
       return;
     }
     if (act === "repost-off") {
@@ -6510,7 +6639,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "" }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent" }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -6572,6 +6701,13 @@
   const endGroupPress = () => { clearTimeout(groupPress); groupPoint = null; };
   document.addEventListener("touchend", endGroupPress, { passive: true });
   document.addEventListener("touchcancel", endGroupPress, { passive: true });
+  document.addEventListener("click", (event) => {
+    if (!STATE.tabMenu) return;
+    if (event.target.closest && event.target.closest(".tab-menu, .tab-caret")) return;
+    STATE.tabMenu = null;
+    if (!(event.target.closest && event.target.closest("[data-act], a, [data-open]"))) setTimeout(render, 0);
+  }, true);
+
   document.addEventListener("click", (event) => {
     if (swallowGroupClick) {
       swallowGroupClick = false;
@@ -6673,6 +6809,7 @@
           STATE.settings.groupsOwn = true;
         }
         if (typeof data.subsGroup === "string") STATE.settings.subsGroup = data.subsGroup;
+        if (data.followingSort === "popular" || data.followingSort === "recent") STATE.settings.followingSort = data.followingSort;
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();
@@ -6687,12 +6824,13 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu)) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu)) {
       STATE.modal = null;
       STATE.drawer = false;
       STATE.menu = null;
       STATE.share = null;
       STATE.groupMenu = null;
+      STATE.tabMenu = null;
       STATE.confirm = null;
       render();
     }
@@ -6777,6 +6915,7 @@
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (motion.addEventListener) motion.addEventListener("change", () => schedulePreview());
   }
+  window.addEventListener("resize", () => { syncTabArrows(); placeTabMenu(); });
   window.addEventListener("scroll", () => {
     if (window.innerWidth >= 500) {
       STATE.headerHidden = false;

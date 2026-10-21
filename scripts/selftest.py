@@ -691,6 +691,7 @@ def main() -> None:
     check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
     check("var(--fill)" in css[css.index(".yt-chip.on"):css.index(".yt-chip.on") + 160], "the selected subscription chip uses the inverted fill")
     check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups to the site" in app, "subscription groups filter from the chip bar and can be published")
+    check("Manage tabs" in app and "Following options" in app and "Most recent" in app and "Popular" in app and "Scroll tabs left" in app and "followingSort" in app and "function syncTabArrows(" in app, "home tabs have a sort menu, a manage button, and scroll arrows")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "follow-request.yml").is_file() and (ROOT / ".github" / "ISSUE_TEMPLATE" / "unfollow-request.yml").is_file(), "follow and unfollow issue forms exist")
     import follow_request as follow_req
 
