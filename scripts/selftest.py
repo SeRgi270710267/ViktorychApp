@@ -834,7 +834,7 @@ def main() -> None:
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
     workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
-    check(manifest["display"] == "standalone" and manifest["scope"] == "./" and manifest["id"] == "./" and manifest["name"] == "SuperintelApp" and manifest["short_name"] == "SintelApp", "the install name is SuperintelApp, the icon label is SintelApp, and scope and id follow the manifest directory")
+    check(manifest["display"] == "standalone" and manifest["scope"] == "./" and manifest["id"] == "./" and manifest["name"] == "SIntelApp" and manifest["short_name"] == "SIntelApp", "the installed shortcut name is SIntelApp, and scope and id follow the manifest directory")
     check("404.html" in workflow and "__SITE_BASE__" in workflow and "GITHUB_REPOSITORY" in workflow, "the deploy publishes the 404 fallback and stamps the Pages URL from the repository")
     missing = ROOT / "404.html"
     missing_text = missing.read_text(encoding="utf-8")
@@ -861,9 +861,9 @@ def main() -> None:
     check(not stale, "old rss-feeds URLs are gone: " + ", ".join(stale))
     check(str(manifest["start_url"]).endswith("#/home"), "the manifest opens the home timeline")
     check("window-controls-overlay" in manifest["display_override"], "desktop installs can use the window controls overlay")
-    purposes = {icon.get("purpose") for icon in manifest["icons"]}
+    purposes = [icon.get("purpose") for icon in manifest["icons"]]
     sizes = {icon.get("sizes") for icon in manifest["icons"]}
-    check("192x192" in sizes and "512x512" in sizes and "maskable" in purposes and "monochrome" in purposes, "the manifest has 192, 512, maskable, and monochrome icons")
+    check("192x192" in sizes and "512x512" in sizes and "any" in purposes and "maskable" in purposes and "monochrome" in purposes and all(" " not in (item or "") for item in purposes) and all("?v=6" in icon["src"] for icon in manifest["icons"]), "the manifest has separate any, maskable, and monochrome icons with a cache-busting query")
     shortcut_names = [item["name"] for item in manifest["shortcuts"]]
     check(shortcut_names == ["Search", "Bookmarks", "Subscriptions", "Notifications"], "the manifest shortcuts are Search, Bookmarks, Subscriptions, and Notifications")
     check(manifest["share_target"]["method"] == "GET" and manifest["share_target"]["enctype"] == "application/x-www-form-urlencoded" and "url" in manifest["share_target"]["params"], "sharing a link into the app is a GET share target")
@@ -916,16 +916,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel5-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel6-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "superintel5-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "superintel6-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel5-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel6-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
@@ -954,7 +954,7 @@ def main() -> None:
     check("bellButton" in (ROOT / "people.js").read_text(encoding="utf-8"), "unified profiles get the same notify bell")
     check("pinned.slice" not in app and "lists.slice(0," not in app, "pinned home tabs are not capped")
     check("function sharePostUrl(" in app and "function shareProfileUrl(" in app and "isn’t in the published snapshot" in app and 's/watch-"' in app and 's/" + (post.platform' in app and "function notePublished(" in app and "PUBLISHED.posts" in app, "share and copy use the static preview pages, and a live post outside the snapshot does not")
-    check('og:image" content="__SITE_BASE__icons/icon-512.png"' in page and 'rel="canonical" href="__SITE_BASE__"' in page and 'og:site_name" content="SuperintelApp"' in page and "<title>Home / SuperintelApp</title>" in page and 'apple-mobile-web-app-title" content="SintelApp"' in page and '" / SuperintelApp"' in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'class="logo-full"' in app and 'class="logo-si"' in app and "function githubRepo(" in app and "rss-feeds-settings-v1" in app, "the home page names SuperintelApp, the wordmark links home, and the repository URL is derived")
+    check('og:image" content="__SITE_BASE__icons/icon-512.png?v=6"' in page and 'rel="canonical" href="__SITE_BASE__"' in page and 'og:site_name" content="SuperintelApp"' in page and "<title>Home / SuperintelApp</title>" in page and 'apple-mobile-web-app-title" content="SIntelApp"' in page and "manifest.webmanifest?v=6" in page and "favicon.ico?v=6" in page and '" / SuperintelApp"' in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'class="logo-full"' in app and 'class="logo-si"' in app and "function githubRepo(" in app and "rss-feeds-settings-v1" in app, "the home page names SuperintelApp, the shortcut label is SIntelApp, and the repository URL is derived")
     check("Search SIntelApp" in app and "Surprise me" in app and "explore-mode" in app and "rss-feeds-searches-v1" in app and 'id="explore-q"' in app and "function exploreHome(" in app and "function wordmarkSvg(" in app and '["videos", "Videos"]' in app and "ghome-logo" in css and "html[data-theme=\"default\"] .ghome-logo" in css, "explore is a search home with themed wordmark, suggestions, and result tabs")
     check("function shellDocument(" in worker and "/\\/(?:s|u)\\/" in worker, "a share-page navigation does not replace the cached app shell")
     check("python3 scripts/share_pages.py --site _site" in workflow, "the deploy rebuilds share pages inside the artifact")
@@ -1428,7 +1428,11 @@ def main() -> None:
     check(png_size(ROOT / "screenshots" / "wide.png") == (1920, 1080), "the wide screenshot is a desktop frame")
     check((ROOT / "scripts" / "pwa_assets.py").read_text(encoding="utf-8").find("M18.244") < 0, "the install mark is not the X logo")
     check("M18.244" not in (ROOT / "app.js").read_text(encoding="utf-8") and "M18.244" not in (ROOT / "favicon.svg").read_text(encoding="utf-8") and 'icon("logo")' not in (ROOT / "app.js").read_text(encoding="utf-8"), "the X logo is not in the app chrome or the favicon")
-    check("SIntelApp" in (ROOT / "favicon.svg").read_text(encoding="utf-8") and "M12 2.2l1.7 5.4" not in (ROOT / "favicon.svg").read_text(encoding="utf-8") and "function sourceBadge(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the favicon is the SI mark and posts keep their source badges")
+    favicon = (ROOT / "favicon.svg").read_text(encoding="utf-8")
+    check("SIntelApp" in favicon and 'fill="#fff"' in favicon and 'fill="#000"' in favicon and "M12 2.2l1.7 5.4" not in favicon and "function sourceBadge(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the favicon is a black SI on white, and posts keep their source badges")
+    ico = (ROOT / "favicon.ico").read_bytes()
+    ico_count = struct.unpack_from("<H", ico, 4)[0]
+    check(ico[:4] == b"\x00\x00\x01\x00" and ico_count == 4, "favicon.ico carries the 16, 32, 48, and 256 tiles")
 
     from adapters.common import html_to_parts, is_playable_video
     from video_media import _one, extract_video, probe
