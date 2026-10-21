@@ -428,6 +428,10 @@ def run(actor: str, owner: str, title: str, body: str, config: dict, fetch=None,
         groups = clean_groups(raw, resolve)
         config["groups"] = groups
         return "Saved " + str(len(groups)) + " subscription groups.", config
+    if (title or "").strip().lower().startswith("link accounts"):
+        from people import apply_link
+
+        return apply_link(config, body, fetch or default_fetch, resolve)
     parsed = parse_issue(title, body)
     spec = normalize(parsed["account"], parsed["platform"])
     if parsed["kind"] == "follow":

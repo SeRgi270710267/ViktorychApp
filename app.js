@@ -266,7 +266,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent" });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", translateTo: "en" });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -291,6 +291,7 @@
       parsed.groupsOwn = parsed.groupsOwn === true;
       parsed.subsGroup = typeof parsed.subsGroup === "string" ? parsed.subsGroup : "";
       parsed.followingSort = parsed.followingSort === "popular" ? "popular" : "recent";
+      parsed.translateTo = window.FeedsTranslate ? window.FeedsTranslate.normalize(parsed.translateTo) : (parsed.translateTo || "en");
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
@@ -738,9 +739,14 @@
   }
 
   function textHtml(post, key, full) {
-    const translated = STATE.translated[key];
-    if (translated && !STATE.originalShown[key]) {
-      return linkify(translated, [], post.platform) + ` <button class="show-more" data-act="show-original" data-key="${esc(key)}">Show original</button>`;
+    if (window.FeedsTranslate) {
+      const swapped = window.FeedsTranslate.textFor(key);
+      if (swapped != null) return linkify(swapped, post.links || [], post.platform);
+    } else {
+      const translated = STATE.translated[key];
+      if (translated && !STATE.originalShown[key]) {
+        return linkify(translated, [], post.platform) + ` <button class="show-more" data-act="show-original" data-key="${esc(key)}">Show original</button>`;
+      }
     }
     const text = post.text || "";
     if (full || STATE.expanded[key] || text.length <= 280) return linkify(text, post.links, post.platform);
@@ -774,13 +780,29 @@
   function textBlock(post, key, full, cls) {
     const sample = String(post.text || "").trim().slice(0, 5000);
     if (sample) STATE.translateText[key] = sample;
+    STATE.translateLinks = STATE.translateLinks || {};
+    STATE.translatePlatform = STATE.translatePlatform || {};
+    STATE.translateFull = STATE.translateFull || {};
+    STATE.translateLinks[key] = post.links || [];
+    STATE.translatePlatform[key] = post.platform || "";
+    STATE.translateFull[key] = !!full;
+    if (window.FeedsTranslate) window.FeedsTranslate.prepare(key);
+    const inner = textHtml(post, key, full);
+    if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner);
     const offer = offerTranslate(key, sample)
       ? `<button class="show-more translate-link" type="button" data-act="translate" data-key="${esc(key)}">Translate post</button>`
       : "";
-    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${textHtml(post, key, full)}</div>${offer}`;
+    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${inner}</div>${offer}`;
+  }
+
+  function bioBlock(entity) {
+    if (!entity || !entity.bio) return "";
+    const key = "bio:" + (entity.id || ((entity.platform || "x") + ":" + (entity.handle || "")));
+    return textBlock({ text: entity.bio, platform: entity.platform, links: [], kind: "bio", id: key }, key, true, "bio");
   }
 
   function scheduleDetect() {
+    if (window.FeedsTranslate) { window.FeedsTranslate.scheduleDetect(); return; }
     if (typeof LanguageDetector === "undefined") return;
     const rows = [];
     const nodes = document.querySelectorAll("[data-tr]");
@@ -823,6 +845,7 @@
   }
 
   async function translateNow(key) {
+    if (window.FeedsTranslate) return window.FeedsTranslate.translate(key);
     const sample = String(STATE.translateText[key] || "").slice(0, 5000);
     const target = readerLanguage();
     if (!sample) return;
@@ -2028,7 +2051,7 @@
         ${quoted.handle ? `<span class="handle">@${esc(quoted.handle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
-      ${quoted.text ? `<div class="quote-text">${textHtml(quoted, key, false)}</div>` : ""}
+      ${quoted.text ? textBlock(quoted, key, false, "quote-text") : ""}
       ${mediaHtml(quoted.media, false, quoted)}
     </div>`;
   }
@@ -5085,7 +5108,7 @@
       </div>
       <h1 class="pname">${esc(profile.name || profile.handle)}${badge(profile.verifiedType)}</h1>
       ${shown ? `<div class="phandle">@${esc(shown)}</div>` : ""}
-      ${profile.bio ? `<div class="bio">${linkify(profile.bio, [], profile.platform)}</div>` : ""}
+      ${bioBlock(profile)}
       ${meta ? `<div class="pmeta">${meta}</div>` : ""}
       ${counts}
       ${fresh}
@@ -5150,7 +5173,7 @@
       </div>
       <h1 class="pname">${esc(feed.name || feed.handle)}${badge(feed.verifiedType)}</h1>
       <div class="phandle">@${esc(feed.handle)}</div>
-      ${feed.bio ? `<div class="bio">${linkify(feed.bio, [], feed.platform)}</div>` : ""}
+      ${bioBlock(feed)}
       ${meta ? `<div class="pmeta">${meta}</div>` : ""}
       ${counts}
     </div>
@@ -5328,6 +5351,7 @@
         ${autoBtn("never", "Never")}
       </div>
       ${installControl()}
+      ${window.FeedsTranslate ? window.FeedsTranslate.settingsHtml() : ""}
       <h2>Privacy</h2>
       <h3>Mute and block</h3>
       <p class="phandle">Muted words, muted accounts, and reposts you turn off stay on this device.</p>
@@ -6335,6 +6359,7 @@
       }
       watchHydration();
       scheduleDetect();
+      if (window.FeedsTranslate) window.FeedsTranslate.paint();
       syncMediaSession();
       bindPlayers();
       resumePlayback();
@@ -6483,8 +6508,8 @@
     }
     if (act === "translate") { translateNow(el.dataset.key); return; }
     if (act === "show-original") {
-      STATE.originalShown[el.dataset.key] = true;
-      render();
+      if (window.FeedsTranslate) window.FeedsTranslate.showOriginal(el.dataset.key);
+      else { STATE.originalShown[el.dataset.key] = true; render(); }
       return;
     }
     if (act === "follow-request") {
@@ -6884,7 +6909,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent" }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")) }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -7030,6 +7055,10 @@
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.id === "translate-to" && window.FeedsTranslate) {
+      window.FeedsTranslate.setTarget(event.target.value);
+      return;
+    }
     if (event.target.id !== "import-file" || !event.target.files[0]) return;
     const file = event.target.files[0];
     const reader = new FileReader();
@@ -7055,6 +7084,7 @@
         }
         if (typeof data.subsGroup === "string") STATE.settings.subsGroup = data.subsGroup;
         if (data.followingSort === "popular" || data.followingSort === "recent") STATE.settings.followingSort = data.followingSort;
+        if (data.translateTo && window.FeedsTranslate) STATE.settings.translateTo = window.FeedsTranslate.normalize(data.translateTo);
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();
@@ -8387,5 +8417,6 @@
     }
   }
 
+  if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
   boot();
 })();

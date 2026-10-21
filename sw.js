@@ -11,6 +11,8 @@ const SHELL_FILES = [
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./translate.js",
+  "./translate.css",
   "./favicon.svg",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
@@ -80,7 +82,7 @@ async function takeOverClients() {
 
 function isData(url) {
   if (/\/archive\/[^/]+\.json$/.test(url.pathname)) return true;
-  return url.origin === self.location.origin && /\/feeds\.json$/.test(url.pathname);
+  return url.origin === self.location.origin && /\/(?:feeds|people|suggestions)\.json$/.test(url.pathname);
 }
 
 function isMedia(url) {

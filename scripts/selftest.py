@@ -682,10 +682,15 @@ def main() -> None:
     check('data-act="autoplay"' in app and "On cellular and Wi-Fi" in app and "Wi-Fi only" in app and 'autoplay: "all"' in app, "settings can keep autoplay on, limit it to Wi-Fi, or turn it off")
     check('meta[name="theme-color"]' in app and 'meta[name="color-scheme"]' in app and "apple-mobile-web-app-status-bar-style" in app and "black-translucent" in page and ".wco { display: none; background: var(--bg); }" in css, "the status bar matches the theme")
     check("follow-request.yml" in app and "unfollow-request.yml" in app and 'class="add-account"' in app and "form.add-account" in app and "function parseAccountInput(" in app and 'data-act="follow-request"' in app, "follow and unfollow open a prefilled issue")
-    check("Translate post" in app and "Show original" in app and "function foreignScript(" in app and "translate.google.com" in app and "LanguageDetector" in app and "function translateNow(" in app and "STATE.translated" in app and "translated" not in app[app.index("function saveSettings("):app.index("function saveSettings(") + 800], "a foreign post translates in the browser or opens Google Translate, and the result is not saved")
+    check("Translate post" in app and "Show original" in app and "function foreignScript(" in app and "translate.google.com" in app and "LanguageDetector" in app and "function translateNow(" in app and "STATE.translated" in app and "FeedsTranslate" in app and "translated" not in app[app.index("function saveSettings("):app.index("function saveSettings(") + 800], "a foreign post translates in the browser or opens Google Translate, and the result is not saved")
+    translate_js = (ROOT / "translate.js").read_text(encoding="utf-8")
+    check("Translate post" in translate_js and "Translate reply" in translate_js and "Translate bio" in translate_js and "Show original" in translate_js and "Translated from " in translate_js and "LanguageDetector" in translate_js and "downloadable" in translate_js and "api.mymemory.translated.net" in translate_js and "lingva" in translate_js and "translate.google.com" in translate_js and "sessionStorage" in translate_js and "Open in Google Translate" in translate_js, "in-place translation keeps links and falls through free engines")
+    check("corsproxy.io" not in translate_js and "allorigins" not in translate_js and "api.x.com" not in translate_js, "translation does not depend on an open proxy or the X API")
+    check(page.index('src="translate.js"') < page.index('src="app.js"') and 'href="translate.css"' in page, "the page loads the translator before the app")
+    check("translate.js" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
     follows_workflow = (ROOT / ".github" / "workflows" / "follows.yml").read_text(encoding="utf-8")
-    check("github.actor == github.repository_owner" in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow, "follow and group issues from anyone but the owner are ignored")
+    check("github.actor == github.repository_owner" in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues from anyone but the owner are ignored")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "groups.yml").is_file(), "subscription group issue form exists")
     check("feeds.config.json _site/" in workflow, "the deploy publishes feeds.config.json")
     chips_css = css[css.index(".yt-chips"):css.index(".yt-chips") + 500]
@@ -1062,6 +1067,142 @@ def main() -> None:
     day = publish_date_from_html('{"publishDate":{"simpleText":"Oct 11, 2026"}}')
     check(exact == "2026-03-16T00:37:27.000Z" and day == "2026-10-11T00:00:00.000Z", "watch and community pages yield the real publish date")
     check("function canonicalPostId(" in app and "function relativeLabel(" in app and "seenPostIds" in app and "seen-ids" in worker and "def lock_publish_time(" in (ROOT / "scripts" / "adapters" / "common.py").read_text(encoding="utf-8"), "publish times stay on the original post and new posts are unseen ids")
+
+    import subprocess
+
+    import people
+
+    people_src = (ROOT / "scripts" / "people.py").read_text(encoding="utf-8")
+    check("api.x.com" not in people_src and "api.twitter.com" not in people_src and "api.fxtwitter.com" in people_src, "people sync uses fxtwitter and never the X API")
+    check((ROOT / ".github" / "ISSUE_TEMPLATE" / "link-accounts.yml").is_file(), "the link-accounts issue form exists")
+    site_config = json.loads((ROOT / "feeds.config.json").read_text(encoding="utf-8"))
+    people.validate_config(site_config)
+    prepper = next(person for person in site_config["people"] if person["id"] == "canadian-prepper")
+    prepper_accounts = {(account["platform"], account["handle"]) for account in prepper["accounts"]}
+    check(("youtube", "redacted_handle") in prepper_accounts and ("x", "redacted_handle") in prepper_accounts and ("instagram", "redacted_handle") in prepper_accounts, "Canadian Prepper links the verified YouTube, X, and Instagram accounts")
+    check(any(account.get("channelId") == "UCfgtuaUadGgOA-91geQ8Qog" for account in prepper["accounts"]), "the YouTube account keeps the channel id")
+    x_source = next(account["source"] for account in prepper["accounts"] if account["platform"] == "x")
+    ig_source = next(account["source"] for account in prepper["accounts"] if account["platform"] == "instagram")
+    check("canadianpreparedness.com" in x_source and "twitter.com/redacted_handle" in x_source, "the X handle is sourced from the website")
+    check("youtube.com/@redacted_handle/about" in ig_source and "canadianpreparedness.com" in ig_source, "Instagram is sourced from the About page and the website")
+    check(not any(account["platform"] in ("threads", "telegram") for account in prepper["accounts"]), "Threads and Telegram are omitted when no source lists them")
+    bad_id = empty_accounts = duplicate_account = False
+    try:
+        people.validate_person({"id": "Bad", "name": "Nope", "accounts": [{"platform": "x", "handle": "nasa"}]})
+    except people.SchemaError:
+        bad_id = True
+    try:
+        people.validate_person({"id": "ok-person", "name": "Ok", "accounts": []})
+    except people.SchemaError:
+        empty_accounts = True
+    try:
+        people.validate_config({"people": [
+            {"id": "one", "name": "One", "accounts": [{"platform": "x", "handle": "nasa"}]},
+            {"id": "two", "name": "Two", "accounts": [{"platform": "x", "handle": "NASA"}]},
+        ]})
+    except people.SchemaError:
+        duplicate_account = True
+    check(bad_id and empty_accounts and duplicate_account, "people schema rejects a bad id, an empty account list, and a shared account")
+    extra = people.extra_feeds(site_config)
+    extra_ids = {row["id"] for row in extra}
+    check("x:redacted_handle" in extra_ids and "instagram:redacted_handle" in extra_ids and "youtube:redacted_handle" not in extra_ids, "sync follows linked accounts that are not already feeds")
+    check(people.extra_feeds({"feeds": [], "people": [{"id": "t", "name": "T", "accounts": [{"platform": "telegram", "handle": "prepperchannel"}]}]}) == [], "telegram is not followed until an adapter exists")
+
+    cross_posts = [
+        {"platform": "youtube", "handle": "redacted_handle", "id": "abcdefghijk", "url": "https://www.youtube.com/watch?v=abcdefghijk", "feedId": "youtube:redacted_handle"},
+        {"platform": "x", "handle": "redacted_handle", "id": "1", "text": "new video", "links": [{"expanded": "https://youtu.be/abcdefghijk"}]},
+        {"platform": "x", "handle": "redacted_handle", "id": "2", "text": "also the shop", "links": [{"expanded": "https://youtu.be/abcdefghijk"}, {"expanded": "https://canadianpreparedness.com/shop"}]},
+        {"platform": "x", "handle": "someoneelse", "id": "3", "text": "share", "links": [{"expanded": "https://youtu.be/abcdefghijk"}]},
+    ]
+    cross_config = {"people": [prepper]}
+    stamped = people.stamp_cross_posts(cross_posts, cross_config, fetch=False)
+    check(stamped == 1 and cross_posts[1]["alsoOn"] == {"person": "canadian-prepper", "platform": "youtube", "handle": "redacted_handle", "videoId": "abcdefghijk", "url": "https://youtu.be/abcdefghijk"}, "an X post that only links the person's own video gets alsoOn")
+    check("alsoOn" not in cross_posts[2] and "alsoOn" not in cross_posts[3], "a second link or a different author does not count as a cross-post")
+    unknown = [{"platform": "x", "handle": "redacted_handle", "id": "4", "text": "live", "links": [{"expanded": "https://www.youtube.com/watch?v=zzzzzzzzzzz"}]}]
+    stamped_live = people.stamp_cross_posts(unknown, cross_config, fetch=True, oembed=lambda url: {"author_url": "https://www.youtube.com/@redacted_handle"})
+    check(stamped_live == 1 and unknown[0]["alsoOn"]["videoId"] == "zzzzzzzzzzz", "oembed author_url can confirm the person's channel")
+    foreign = [{"platform": "x", "handle": "redacted_handle", "id": "5", "text": "nope", "links": [{"expanded": "https://www.youtube.com/watch?v=yyyyyyyyyyy"}]}]
+    stamped_foreign = people.stamp_cross_posts(foreign, cross_config, fetch=True, oembed=lambda url: {"author_url": "https://www.youtube.com/@SomeoneElse"})
+    check(stamped_foreign == 0 and "alsoOn" not in foreign[0], "a different YouTube author is not alsoOn")
+
+    suggest_profiles = [
+        {"platform": "x", "handle": "lefty", "name": "Left", "bio": "see https://www.youtube.com/@righty", "avatar": "https://example.com/a.jpg"},
+        {"platform": "youtube", "handle": "righty", "name": "Right", "bio": "https://x.com/lefty", "avatar": "https://example.com/b.jpg"},
+        {"platform": "instagram", "handle": "oneway", "name": "One", "bio": "https://x.com/lefty", "avatar": "https://example.com/c.jpg"},
+        {"platform": "threads", "handle": "samename", "name": "Same Person", "avatar": "https://cdn.example/face.jpg?s=1"},
+        {"platform": "vk", "handle": "samename", "name": "Same Person", "avatar": "https://cdn.example/face.jpg"},
+        {"platform": "x", "handle": "nameonly", "name": "Same Person", "avatar": "https://cdn.example/other.jpg"},
+    ]
+
+    def suggestion_pair(rows, left, right):
+        for row in rows:
+            handles = {(account["platform"], account["handle"]) for account in row["accounts"]}
+            if left in handles and right in handles:
+                return row
+        return None
+
+    suggestions = people.suggest(suggest_profiles, [])
+    mutual = suggestion_pair(suggestions, ("x", "lefty"), ("youtube", "righty"))
+    same_face = suggestion_pair(suggestions, ("threads", "samename"), ("vk", "samename"))
+    check(mutual and "bio links point at each other" in mutual["reasons"], "bios that point at each other are suggested")
+    check(suggestion_pair(suggestions, ("instagram", "oneway"), ("x", "lefty")) is None, "a one-way bio link is not a suggestion")
+    check(same_face and "same name and avatar" in same_face["reasons"], "the same name and avatar on two platforms is a suggestion")
+    check(suggestion_pair(suggestions, ("x", "nameonly"), ("vk", "samename")) is None, "the same name with a different avatar is not a suggestion")
+    linked_people = [{"id": "p", "name": "P", "accounts": [{"platform": "x", "handle": "lefty"}]}]
+    linked_before = json.dumps(linked_people)
+    linked_suggestions = people.suggest(suggest_profiles, linked_people)
+    check(suggestion_pair(linked_suggestions, ("x", "lefty"), ("youtube", "righty")) is None and json.dumps(linked_people) == linked_before, "suggestions never merge or rewrite people")
+
+    link_body = "### Person\n\nCanadian Prepper\n\n### Accounts\n\nx:nasa\n"
+    link_config = {"feeds": [{"id": "x:keep"}], "people": json.loads(json.dumps(site_config["people"]))}
+    linked_msg, linked_config = follow_req.run("owner-account", "owner-account", "Link accounts: Canadian Prepper", link_body, link_config, fake_follow_fetch, public_resolve)
+    linked_person = next(person for person in linked_config["people"] if person["id"] == "canadian-prepper")
+    check(linked_msg.startswith("Linked x:nasa") and any(account["platform"] == "x" and account["handle"] == "nasa" for account in linked_person["accounts"]) and linked_config["feeds"] == [{"id": "x:keep"}], "the owner can link a confirmed account without adding a feed")
+    stranger_link, stranger_people = follow_req.run("someone", "owner-account", "Link accounts: Canadian Prepper", link_body, {"feeds": [{"id": "x:keep"}], "people": []}, fake_follow_fetch, public_resolve)
+    check(stranger_link == "" and stranger_people == {"feeds": [{"id": "x:keep"}], "people": []}, "a link issue from anyone else is ignored")
+    owned_config = {"people": [
+        {"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "redacted_handle"}]},
+        {"id": "other", "name": "Other", "accounts": [{"platform": "x", "handle": "nasa"}]},
+    ]}
+    owned_rejected = False
+    try:
+        follow_req.run("owner-account", "owner-account", "Link accounts: Canadian Prepper", link_body, owned_config, fake_follow_fetch, public_resolve)
+    except follow_req.Reject:
+        owned_rejected = True
+    check(owned_rejected, "an account already linked to another person is rejected")
+
+    def telegram_fetch(url):
+        if "t.me/" in url:
+            return 200, '<div class="tgme_page_title">Prepper</div>'
+        return fake_follow_fetch(url)
+
+    telegram_body = "### Person\n\nCanadian Prepper\n\n### Accounts\n\ntelegram:prepperchannel\n"
+    telegram_config = {"people": [{"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "redacted_handle"}]}]}
+    telegram_msg, telegram_updated = follow_req.run("owner-account", "owner-account", "Link accounts: Canadian Prepper", telegram_body, telegram_config, telegram_fetch, public_resolve)
+    check("telegram:prepperchannel" in telegram_msg and any(account["platform"] == "telegram" and account["handle"] == "prepperchannel" for account in telegram_updated["people"][0]["accounts"]), "a confirmed Telegram page can be linked")
+
+    node_check = subprocess.run(
+        ["node", "--input-type=module", "-e", r"""
+import fs from "fs";
+import vm from "vm";
+const context = { console, Intl };
+vm.createContext(context);
+vm.runInContext(fs.readFileSync("translate.js", "utf8"), context);
+const FT = context.FeedsTranslate;
+const sample = "see https://vk.com/vk and @vk #вконтакте $BTC";
+const shielded = FT._shield(sample);
+if (!shielded.text.includes("[[0]]") || shielded.text.includes("https://")) throw new Error("shield " + shielded.text);
+if (FT._restore(shielded.text, shielded.kept) !== sample) throw new Error("restore");
+if (FT._offerText("This is a normal English sentence for the feed and you.", "en") !== false) throw new Error("english");
+if (FT._offerText("Новая запись в блоге про ленту и рекомендации.", "en") !== true) throw new Error("russian");
+if (FT._offerText("Новая запись в блоге про ленту и рекомендации.", "ru") !== false) throw new Error("same");
+if (FT.normalize("EN-us") !== "en" || FT.normalize("nope") !== "en") throw new Error("normalize");
+"""],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    check(node_check.returncode == 0, "translate.js shields tokens and skips text already in the target language: " + (node_check.stderr or node_check.stdout))
     print("all adapter checks passed")
 
 

@@ -407,7 +407,15 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     health = {key: dict(value) for key, value in (existing.get("sourceHealth") or {}).items() if isinstance(value, dict)}
     stamp = now_iso()
 
-    for feed in config.get("feeds") or []:
+    feed_rows = list(config.get("feeds") or [])
+    if not use_fixtures:
+        try:
+            from people import extra_feeds
+
+            feed_rows.extend(extra_feeds(config))
+        except Exception as exc:
+            print(f"[people] feeds: {exc}", file=sys.stderr)
+    for feed in feed_rows:
         configured_ids.add(feed["id"])
         payload = None
         source_url = ""
@@ -579,6 +587,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             profile["configured"] = True
     health = prune_health(health, configured_ids)
     posts = dedupe_posts(collected, cap=int(config.get("cap") or 300))
+    try:
+        from people import stamp_cross_posts
+
+        stamped = stamp_cross_posts(posts, config, fetch=not use_fixtures)
+        if stamped:
+            print(f"[people] {stamped} cross-posts")
+    except Exception as exc:
+        print(f"[people] cross-posts: {exc}", file=sys.stderr)
     if download:
         print("[media] --download-media no longer copies Meta CDN files; URLs stay hotlinked", file=sys.stderr)
     refresh_saved(posts, profiles, fresh_ids)
@@ -623,6 +639,12 @@ def main() -> None:
     media_dir = ROOT / "media"
     removed = prune_media(media_dir, doc)
     save_document(out, doc)
+    try:
+        from people import publish
+
+        publish(config, doc, fetch=not args.fixtures)
+    except Exception as exc:
+        print(f"[people] {exc}", file=sys.stderr)
     from sync_health import write_report
 
     write_report(doc)

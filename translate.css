@@ -1,0 +1,89 @@
+/* In-place translation. Matches the X post credit: 13px secondary text, blue Show original. */
+.tr-credit {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 400;
+}
+.tr-credit[hidden] { display: none; }
+.tr-credit .show-more {
+  color: var(--blue);
+  font-size: 13px;
+  line-height: 16px;
+  margin-left: 4px;
+  font-weight: 400;
+}
+button.translate-link[hidden] { display: none; }
+.tr-fallback { font-size: 13px; line-height: 16px; }
+
+.tr-progress {
+  margin-top: 6px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.tr-progress > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--blue);
+}
+.tr-progress em {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 16px;
+  font-style: normal;
+}
+
+.post-text.tr-busy,
+.status-text.tr-busy,
+.bio.tr-busy,
+.quote-text.tr-busy {
+  position: relative;
+}
+.post-text.tr-busy::after,
+.status-text.tr-busy::after,
+.bio.tr-busy::after,
+.quote-text.tr-busy::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 25%, color-mix(in srgb, var(--text) 16%, transparent) 50%, transparent 75%);
+  background-size: 220% 100%;
+  animation: tr-shimmer 1.05s ease-in-out infinite;
+}
+@keyframes tr-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .post-text.tr-busy::after,
+  .status-text.tr-busy::after,
+  .bio.tr-busy::after,
+  .quote-text.tr-busy::after {
+    animation: none;
+    opacity: 0.45;
+  }
+}
+
+.tr-settings { margin: 4px 0 16px; }
+.tr-settings .phandle { margin: 0 0 8px; }
+.tr-select {
+  width: 100%;
+  max-width: 280px;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 8px 0;
+  font: inherit;
+  font-size: 17px;
+  outline: none;
+}
+.tr-select:focus { border-bottom-color: var(--blue); }

@@ -1,0 +1,23 @@
+name: Link accounts
+description: Attach platform accounts to one person. Nothing is merged automatically.
+title: "Link accounts: "
+labels: []
+body:
+  - type: input
+    id: person
+    attributes:
+      label: Person
+      description: An existing person id or name, or a new name. A new name creates a person.
+      placeholder: Canadian Prepper
+    validations:
+      required: true
+  - type: textarea
+    id: accounts
+    attributes:
+      label: Accounts
+      description: One account per line. Use a profile URL or platform:handle. Platforms are x, threads, instagram, youtube, vk, telegram, and rss.
+      placeholder: |
+        x:redacted_handle
+        instagram:redacted_handle
+    validations:
+      required: true
