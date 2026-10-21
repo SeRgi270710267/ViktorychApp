@@ -186,7 +186,7 @@ def _lengths(payload: dict) -> dict:
     return found
 
 
-def _apply_duration(post: dict, seconds, stream: str = "") -> None:
+def _apply_duration(post: dict, seconds) -> None:
     if seconds is None:
         return
     try:
@@ -199,15 +199,9 @@ def _apply_duration(post: dict, seconds, stream: str = "") -> None:
     if not isinstance(media, dict):
         return
     media["duration"] = seconds
-    if stream:
-        media["stream"] = stream
+    # One instance's itag=18 URL dies often. The player rotates instances itself.
+    media.pop("stream", None)
     post["short"] = seconds <= 60
-
-
-def _stream(base: str, video_id: str) -> str:
-    if not base or not video_id:
-        return ""
-    return f"{base.rstrip('/')}/latest_version?id={urllib.parse.quote(video_id)}&itag=18"
 
 
 def enrich_youtube(posts: list, profiles: list, feed: dict) -> None:
@@ -245,11 +239,11 @@ def enrich_youtube(posts: list, profiles: list, feed: dict) -> None:
             post["verifiedType"] = verified
         video_id = str(post.get("statusId") or post.get("id") or "")
         if video_id in lengths:
-            _apply_duration(post, lengths[video_id], _stream(base, video_id))
+            _apply_duration(post, lengths[video_id])
             continue
         video, video_base = invidious_get(f"/api/v1/videos/{urllib.parse.quote(video_id)}")
         if video and video.get("lengthSeconds") is not None:
-            _apply_duration(post, video.get("lengthSeconds"), _stream(video_base, video_id))
+            _apply_duration(post, video.get("lengthSeconds"))
             likes = _positive(video.get("likeCount"))
             if likes is not None:
                 post.setdefault("stats", {})["likes"] = likes
@@ -260,7 +254,7 @@ def enrich_youtube(posts: list, profiles: list, feed: dict) -> None:
         piped, piped_base = piped_get(f"/streams/{urllib.parse.quote(video_id)}")
         if not piped:
             continue
-        _apply_duration(post, piped.get("duration"), f"{piped_base.rstrip('/')}/streams/{urllib.parse.quote(video_id)}")
+        _apply_duration(post, piped.get("duration"))
         views = _positive(piped.get("views"))
         if views is not None:
             post.setdefault("stats", {})["views"] = views
@@ -290,8 +284,7 @@ def carry_youtube_fields(posts: list, previous: list, saved_profile: dict | None
         if not media.get("duration") and old_media.get("duration"):
             media["duration"] = old_media["duration"]
             post["short"] = int(old_media["duration"]) <= 60
-        if not media.get("stream") and old_media.get("stream"):
-            media["stream"] = old_media["stream"]
+        media.pop("stream", None)
 
 
 def normalize_invidious_comment(comment: dict, parent_id: str, handle: str) -> dict:

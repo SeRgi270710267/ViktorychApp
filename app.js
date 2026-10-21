@@ -458,8 +458,78 @@
     return linkify(cut, post.links, post.platform) + ` <button class="show-more" data-act="more" data-key="${esc(key)}">Show more</button>`;
   }
 
-  function mediaHtml(items, eager) {
-    const list = (items || []).filter((m) => m && (m.url || m.poster || m.type === "embed" || m.type === "placeholder")).slice(0, 4);
+  function formatDur(value) {
+    let n = Number(value);
+    if (!isFinite(n) || n <= 0) return "";
+    if (n > 100000) n = Math.round(n / 1000);
+    n = Math.round(n);
+    const m = Math.floor(n / 60);
+    const s = n % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function youtubeId(post, media) {
+    const blob = [media && media.videoId, media && media.url, post && post.url, post && post.statusId, post && post.id].join(" ");
+    const match = blob.match(/(?:embed\/|watch\?v=|youtu\.be\/|shorts\/|[?&]v=)([A-Za-z0-9_-]{11})/);
+    if (match) return match[1];
+    const direct = String((media && media.videoId) || "");
+    if (/^[A-Za-z0-9_-]{11}$/.test(direct)) return direct;
+    if (post && post.platform === "youtube" && post.kind !== "community") {
+      const id = String(post.statusId || post.id || "");
+      if (/^[A-Za-z0-9_-]{11}$/.test(id)) return id;
+    }
+    return "";
+  }
+
+  function watchOn(platform) {
+    if (platform === "instagram") return "Watch on Instagram";
+    if (platform === "threads") return "Watch on Threads";
+    if (platform === "youtube") return "Watch on YouTube";
+    if (platform === "x") return "Watch on X";
+    return "Open original";
+  }
+
+  function originalOf(post, media) {
+    if (post && post.url && !/youtube-nocookie\.com\/embed\//.test(post.url)) return post.url;
+    const id = youtubeId(post, media);
+    if (id) return "https://www.youtube.com/watch?v=" + id;
+    return (post && post.url) || "";
+  }
+
+  function playPost(el) {
+    const id = el && el.dataset.pid;
+    if (!id) return null;
+    return posts().find((item) => item && (item.id === id || String(item.statusId || "") === id)) || STATE.shared[id] || null;
+  }
+
+  function playMedia(el, post) {
+    const index = Number(el && el.dataset.mi);
+    const list = (post && post.media) || [];
+    return list[isFinite(index) ? index : 0] || list[0] || null;
+  }
+
+  function playerTile(post, media, index) {
+    const platform = (post && post.platform) || "";
+    const yt = youtubeId(post, media);
+    let poster = (media && media.poster) || "";
+    if (!poster && media && media.url && !playableFile(media.url) && !yt) poster = media.url;
+    if (!poster && yt) poster = "https://i.ytimg.com/vi/" + yt + "/hqdefault.jpg";
+    const dur = formatDur(media && media.duration);
+    const gif = media && media.type === "animated_gif";
+    const label = watchOn(yt ? "youtube" : platform);
+    const href = originalOf(post, media);
+    return `<div class="tile vplay" data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}">
+      ${poster ? `<img class="vposter" src="${esc(poster)}" alt="" referrerpolicy="no-referrer">` : ""}
+      ${dur ? `<span class="vdur">${esc(dur)}</span>` : ""}
+      ${gif ? `<span class="gif-badge">GIF</span>` : ""}
+      <button class="play" type="button" data-act="play" aria-label="Play">${icon("play")}</button>
+      <button class="vretry" type="button" data-act="video-retry" hidden>Retry</button>
+      <a class="vfallback" data-act="stop" hidden target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}"><span>${esc(label)}</span></a>
+    </div>`;
+  }
+
+  function mediaHtml(items, eager, post) {
+    const list = (items || []).filter((m) => m && (m.url || m.poster || m.videoId || m.type === "embed" || m.type === "placeholder" || m.type === "video" || m.type === "animated_gif")).slice(0, 4);
     if (!list.length) return "";
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
@@ -472,21 +542,428 @@
     const n = list.length;
     const cls = n === 1 ? "m1" : n === 2 ? "m2" : n === 3 ? "m3" : "m4";
     const tiles = list.map((m, index) => {
+      if (m.type === "video" || m.type === "animated_gif" || youtubeId(post, m)) {
+        return playerTile(post || { media: [m] }, m, index);
+      }
       const alt = m.alt ? `<span class="alt-badge">ALT</span>` : "";
-      const gif = m.type === "animated_gif" ? `<span class="gif-badge">GIF</span>` : "";
       const refresh = m.fallback ? ` data-refresh="${esc(m.fallback)}"` : "";
       const first = eager && index === 0;
-      if (m.type === "photo" || !m.url || m.url === m.poster || /youtube-nocookie\.com|\/embed\//.test(m.url)) {
-        const src = /youtube-nocookie\.com|\/embed\//.test(m.url || "") ? (m.poster || "") : (m.url || m.poster);
-        const loading = first ? "eager" : "lazy";
-        const priority = first ? ` fetchpriority="high"` : "";
-        return `<div class="tile"><img src="${esc(src)}"${refresh} alt="${esc(m.alt || "")}" loading="${loading}"${priority} referrerpolicy="no-referrer">${alt}</div>`;
-      }
-      const poster = m.poster ? ` poster="${esc(m.poster)}"` : "";
-      const loop = m.type === "animated_gif" ? " autoplay muted loop playsinline" : "";
-      return `<div class="tile"><video src="${esc(m.url)}"${poster}${refresh}${loop} playsinline preload="metadata"></video><button class="play" data-act="play" aria-label="Play">${icon("play")}</button>${gif}${alt}</div>`;
+      const src = m.url || m.poster || "";
+      const loading = first ? "eager" : "lazy";
+      const priority = first ? ` fetchpriority="high"` : "";
+      return `<div class="tile"><img src="${esc(src)}"${refresh} alt="${esc(m.alt || "")}" loading="${loading}"${priority} referrerpolicy="no-referrer">${alt}</div>`;
     }).join("");
     return `<div class="media ${cls}">${tiles}</div>`;
+  }
+
+  function fetchTimed(url, ms) {
+    return fetch(url, { cache: "no-cache", signal: AbortSignal.timeout(ms || 5000) }).then((res) => {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    });
+  }
+
+  function healthyIv() {
+    return loadStatus().then(() => ivBases()).then((bases) => (bases || IV_SEEDS).filter((base) => base && !LIVE.dead[base]));
+  }
+
+  function pushSource(list, item) {
+    if (!item || !item.url) return;
+    if (list.some((row) => row.url === item.url)) return;
+    list.push(item);
+  }
+
+  function youtubeSources(id) {
+    const narrow = (window.innerWidth || 390) < 700;
+    const itags = narrow ? ["18", "22"] : ["22", "18"];
+    return healthyIv().then((bases) => {
+      const out = [];
+      let chain = Promise.resolve();
+      bases.slice(0, 3).forEach((base) => {
+        chain = chain.then(() => {
+          if (out.length >= 4) return null;
+          return fetchTimed(base + "/api/v1/videos/" + encodeURIComponent(id), 5000).then((data) => {
+            itags.forEach((itag) => {
+              pushSource(out, { kind: "mp4", url: base + "/latest_version?id=" + encodeURIComponent(id) + "&itag=" + itag + "&local=true" });
+            });
+            ((data && data.formatStreams) || []).forEach((row) => {
+              const itag = String((row && row.itag) || "");
+              if (itags.indexOf(itag) < 0 || !row.url) return;
+              pushSource(out, { kind: "mp4", url: row.url });
+            });
+            if (data && data.hlsUrl) pushSource(out, { kind: "hls", url: data.hlsUrl });
+          }).catch(() => {
+            itags.forEach((itag) => {
+              pushSource(out, { kind: "mp4", url: base + "/latest_version?id=" + encodeURIComponent(id) + "&itag=" + itag + "&local=true" });
+            });
+          });
+        });
+      });
+      return chain.then(() => out);
+    }).then((out) => {
+      const pipedBases = PIPED_SEEDS.filter((base) => !LIVE.dead[base]).slice(0, 2);
+      let chain = Promise.resolve();
+      pipedBases.forEach((base) => {
+        chain = chain.then(() => {
+          if (out.length >= 6) return null;
+          return fetchTimed(base + "/streams/" + encodeURIComponent(id), 5000).then((data) => {
+            ((data && data.videoStreams) || []).forEach((row) => {
+              if (!row || !row.url || row.videoOnly) return;
+              const mime = String(row.mimeType || row.format || "");
+              if (mime && !/mp4|webm/i.test(mime)) return;
+              pushSource(out, { kind: "mp4", url: row.url });
+            });
+            if (data && data.hls) pushSource(out, { kind: "hls", url: data.hls });
+          }).catch(() => null);
+        });
+      });
+      return chain.then(() => {
+        pushSource(out, { kind: "iframe", url: "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id) + "?rel=0" });
+        return out.slice(0, 7);
+      });
+    });
+  }
+
+  function metaCode(post) {
+    const blob = [(post && post.url) || "", (post && post.statusId) || "", (post && post.id) || ""].join(" ");
+    const ig = blob.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/);
+    if (ig) return ig[1];
+    const threads = blob.match(/threads\.(?:com|net)\/(?:@[^/\s]+\/)?(?:post|t)\/([A-Za-z0-9_-]+)/);
+    if (threads) return threads[1];
+    const code = String((post && post.statusId) || "");
+    if (code && !/^\d+$/.test(code) && /^[A-Za-z0-9_-]{5,}$/.test(code)) return code;
+    return "";
+  }
+
+  function metaRefresh(post) {
+    const code = metaCode(post);
+    if (!code) return Promise.resolve(null);
+    const platform = post.platform || "";
+    const pages = platform === "threads"
+      ? ["https://www.threads.net/t/" + code + "/embed", "https://www.threads.com/t/" + code]
+      : ["https://www.instagram.com/reel/" + code + "/embed/captioned/", "https://www.instagram.com/p/" + code + "/embed/captioned/"];
+    let chain = Promise.resolve(null);
+    pages.forEach((page) => {
+      chain = chain.then((found) => {
+        if (found && found.url) return found;
+        return fetch(page, { signal: AbortSignal.timeout(5000) }).then((res) => res.ok ? res.text() : "").then((html) => {
+          if (!html || (html.indexOf("httpErrorPage") >= 0 && html.toLowerCase().indexOf(".mp4") < 0)) return found;
+          const match = html.replace(/\\\//g, "/").match(/https:\/\/[^"'\\\s]+\.mp4[^"'\\\s]*/i);
+          if (!match || !playableFile(match[0])) return found;
+          return { url: match[0] };
+        }).catch(() => found);
+      });
+    });
+    return chain;
+  }
+
+  function fileSources(post, media) {
+    const out = [];
+    const picked = pickMp4((media && media.variants) || []);
+    [picked, media && media.url, media && media.fallback, media && media.hls].forEach((url) => {
+      if (!url || !playableFile(url) || oePast(url)) return;
+      pushSource(out, { kind: /\.m3u8(\?|$)/i.test(url) ? "hls" : "mp4", url: url });
+    });
+    return out;
+  }
+
+  function sourcesFor(post, media, depth) {
+    const yt = youtubeId(post, media);
+    if (yt) return youtubeSources(yt);
+    const files = fileSources(post, media);
+    if (files.length || depth) return Promise.resolve(files);
+    const platform = (post && post.platform) || "";
+    if (platform === "x") {
+      const id = String((post && (post.statusId || post.id)) || "");
+      if (!/^\d{6,}$/.test(id)) return Promise.resolve(files);
+      return fxStatusPost(id).then((extra) => {
+        const row = extra && (extra.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif"));
+        if (!row) return files;
+        return sourcesFor(post, row, 1);
+      }).catch(() => files);
+    }
+    if (platform === "instagram" || platform === "threads") {
+      return metaRefresh(post).then((fresh) => {
+        if (fresh && fresh.url) pushSource(files, { kind: "mp4", url: fresh.url });
+        return files;
+      });
+    }
+    return Promise.resolve(files);
+  }
+
+  function loadHls() {
+    if (window.Hls) return Promise.resolve(window.Hls);
+    if (STATE.hlsP) return STATE.hlsP;
+    STATE.hlsP = new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js";
+      script.onload = () => resolve(window.Hls || null);
+      script.onerror = () => resolve(null);
+      document.head.appendChild(script);
+    });
+    return STATE.hlsP;
+  }
+
+  function clearPlayer(el) {
+    if (el._stall) { clearTimeout(el._stall); el._stall = 0; }
+    if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
+    el.querySelectorAll("video, iframe").forEach((node) => node.remove());
+  }
+
+  function showVideoCard(el, post, media) {
+    clearPlayer(el);
+    if (el && el.dataset) delete el.dataset.want;
+    el.classList.add("is-failed");
+    el.classList.remove("is-playing");
+    if (!el.querySelector(".vposter")) {
+      const src = (media && media.poster) || (media && media.url && !playableFile(media.url) ? media.url : "") || "";
+      if (src) {
+        const img = document.createElement("img");
+        img.className = "vposter";
+        img.alt = "";
+        img.referrerPolicy = "no-referrer";
+        img.src = src;
+        el.prepend(img);
+      }
+    }
+    const link = el.querySelector(".vfallback");
+    if (link) {
+      link.hidden = false;
+      const href = originalOf(post, media);
+      if (href) link.href = href;
+    }
+    const retry = el.querySelector(".vretry");
+    if (retry) retry.hidden = false;
+    const play = el.querySelector(".play");
+    if (play) play.hidden = true;
+  }
+
+  function armStall(el, video, gen, fail) {
+    if (el._stall) clearTimeout(el._stall);
+    const started = video.currentTime;
+    el._stall = setTimeout(() => {
+      if (el._gen !== gen) return;
+      if (video.currentTime > started + 0.2) return;
+      fail();
+    }, 5000);
+    const clear = () => {
+      if (video.currentTime > 0.2 && el._stall) { clearTimeout(el._stall); el._stall = 0; }
+    };
+    video.addEventListener("timeupdate", clear);
+    video.addEventListener("playing", clear);
+  }
+
+  function playSource(el, source, post, media, opts, gen, advance) {
+    if (el._gen !== gen) return;
+    el._src = (el._src || 0) + 1;
+    clearPlayer(el);
+    if (!source) { showVideoCard(el, post, media); return; }
+    if (source.kind === "iframe") {
+      const frame = document.createElement("iframe");
+      frame.src = source.url;
+      frame.title = (post && (post.title || post.text)) || "Video";
+      frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+      frame.allowFullscreen = true;
+      el.appendChild(frame);
+      el.classList.add("is-playing");
+      el.classList.remove("is-failed");
+      const play = el.querySelector(".play");
+      if (play) play.hidden = true;
+      return;
+    }
+    const video = document.createElement("video");
+    video.playsInline = true;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("referrerpolicy", "no-referrer");
+    video.referrerPolicy = "no-referrer";
+    video.controls = !opts.loop;
+    if (opts.muted) video.muted = true;
+    if (opts.loop || (media && media.type === "animated_gif")) { video.loop = true; video.muted = true; }
+    const poster = el.querySelector(".vposter");
+    if (poster && poster.getAttribute("src")) video.poster = poster.getAttribute("src");
+    video.preload = "auto";
+    const token = el._src;
+    const fail = () => {
+      if (el._gen !== gen || el._src !== token) return;
+      el._src += 1;
+      advance();
+    };
+    video.addEventListener("error", fail);
+    el.appendChild(video);
+    el.classList.add("is-playing");
+    const start = () => {
+      const at = Number(opts.resume) || 0;
+      opts.resume = 0;
+      if (at > 0.3) {
+        const seek = () => { if (el._gen === gen) { try { video.currentTime = at; } catch (err) { /* not seekable yet */ } } };
+        if (video.readyState >= 1) seek();
+        else video.addEventListener("loadedmetadata", seek, { once: true });
+      }
+      armStall(el, video, gen, fail);
+      video.play().catch((err) => {
+        if (err && err.name === "NotAllowedError") return;
+        fail();
+      });
+    };
+    if (source.kind === "hls") {
+      const native = video.canPlayType("application/vnd.apple.mpegurl");
+      if (native) { video.src = source.url; start(); return; }
+      loadHls().then((Hls) => {
+        if (el._gen !== gen || el._src !== token) return;
+        if (!Hls || !Hls.isSupported) { fail(); return; }
+        const hls = new Hls();
+        el._hls = hls;
+        const wait = setTimeout(() => fail(), 5000);
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data && data.fatal) { clearTimeout(wait); fail(); }
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (el._gen !== gen || el._src !== token) return;
+          clearTimeout(wait);
+          start();
+        });
+        hls.loadSource(source.url);
+        hls.attachMedia(video);
+      });
+      return;
+    }
+    video.referrerPolicy = "no-referrer";
+    video.src = source.url;
+    start();
+  }
+
+  function rememberPlayback() {
+    const el = document.querySelector(".vplay.is-playing") || document.querySelector(".vplay[data-want='1']");
+    if (!el) { STATE.playing = null; }
+    else {
+      const video = el.querySelector("video");
+      STATE.playing = {
+        pid: el.dataset.pid || "",
+        mi: el.dataset.mi || "0",
+        time: video ? video.currentTime : 0,
+        muted: !!(video && video.muted),
+        src: video ? (video.currentSrc || video.src || "") : "",
+        iframe: !!el.querySelector("iframe")
+      };
+    }
+    document.querySelectorAll(".vplay").forEach((node) => { node._gen = (node._gen || 0) + 1; });
+  }
+
+  function resumePlayback() {
+    const saved = STATE.playing;
+    STATE.playing = null;
+    if (!saved) return;
+    let el = null;
+    document.querySelectorAll(".vplay").forEach((node) => {
+      if (!el && node.dataset.pid === saved.pid && String(node.dataset.mi || "0") === String(saved.mi)) el = node;
+    });
+    if (!el) return;
+    if (saved.iframe) {
+      startPlayback(el, { muted: saved.muted, iframe: true });
+      return;
+    }
+    if (saved.src) {
+      const post = playPost(el) || {};
+      const media = playMedia(el, post) || {};
+      el.dataset.want = "1";
+      const gen = (el._gen || 0) + 1;
+      el._gen = gen;
+      const kind = /\.m3u8(\?|$)/i.test(saved.src) ? "hls" : "mp4";
+      playSource(el, { kind: kind, url: saved.src }, post, media, { muted: saved.muted, resume: saved.time }, gen, () => {
+        delete el.dataset.want;
+        startPlayback(el, { muted: saved.muted });
+      });
+      return;
+    }
+    startPlayback(el, { muted: saved.muted, resume: saved.time });
+  }
+
+  function startPlayback(el, opts) {
+    if (!el) return;
+    opts = opts || {};
+    if (el.classList.contains("is-playing")) {
+      const video = el.querySelector("video");
+      if (video && video.muted && !opts.muted) { video.muted = false; if (opts.resume > 0.3) { try { video.currentTime = opts.resume; } catch (err) { /* ignore */ } } }
+      return;
+    }
+    const post = playPost(el) || {};
+    const media = playMedia(el, post) || {};
+    const yt = youtubeId(post, media);
+    el.dataset.want = "1";
+    const gen = (el._gen || 0) + 1;
+    el._gen = gen;
+    if (opts.iframe && yt) {
+      playSource(el, { kind: "iframe", url: "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(yt) + "?rel=0" }, post, media, opts, gen, () => showVideoCard(el, post, media));
+      return;
+    }
+    let jumped = false;
+    const deadline = setTimeout(() => {
+      if (!yt || el._gen !== gen || jumped) return;
+      const video = el.querySelector("video");
+      if (video && video.currentTime > 0.2) return;
+      if (el.querySelector("iframe")) return;
+      jumped = true;
+      el._src = (el._src || 0) + 1;
+      playSource(el, { kind: "iframe", url: "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(yt) + "?rel=0" }, post, media, opts, gen, () => showVideoCard(el, post, media));
+    }, 8000);
+    el.classList.remove("is-failed");
+    const link = el.querySelector(".vfallback");
+    if (link) link.hidden = true;
+    const retry = el.querySelector(".vretry");
+    if (retry) retry.hidden = true;
+    sourcesFor(post, media, 0).then((list) => {
+      if (el._gen !== gen || jumped) { clearTimeout(deadline); return; }
+      let index = 0;
+      const advance = () => {
+        if (el._gen !== gen) return;
+        index += 1;
+        if (index >= list.length) { showVideoCard(el, post, media); return; }
+        playSource(el, list[index], post, media, opts, gen, advance);
+      };
+      if (!list.length) { showVideoCard(el, post, media); return; }
+      playSource(el, list[0], post, media, opts, gen, advance);
+    }).catch(() => { if (el._gen === gen) showVideoCard(el, post, media); });
+  }
+
+  function stopPlayback(el) {
+    if (!el) return;
+    el._gen = (el._gen || 0) + 1;
+    if (el.dataset) delete el.dataset.want;
+    clearPlayer(el);
+    el.classList.remove("is-playing");
+    const play = el.querySelector(".play");
+    if (play && !el.classList.contains("is-failed")) play.hidden = false;
+  }
+
+  function bindPlayers() {
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.querySelectorAll(".vplay").forEach((el) => {
+      const post = playPost(el);
+      const media = playMedia(el, post);
+      if (!reduce && media && media.type === "animated_gif" && !el.dataset.gif) {
+        el.dataset.gif = "1";
+        startPlayback(el, { muted: true, loop: true });
+      }
+    });
+    if (STATE.videoObserver) STATE.videoObserver.disconnect();
+    if (reduce || !("IntersectionObserver" in window)) return;
+    STATE.videoObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        const el = entry.target;
+        const post = playPost(el);
+        const media = playMedia(el, post);
+        if (!media || media.type === "animated_gif" || youtubeId(post, media)) return;
+        if (entry.intersectionRatio >= 0.7) {
+          if (STATE.autoEl && STATE.autoEl !== el) stopPlayback(STATE.autoEl);
+          STATE.autoEl = el;
+          if (!el.classList.contains("is-playing") && !el.classList.contains("is-failed")) startPlayback(el, { muted: true });
+        } else if (STATE.autoEl === el) {
+          stopPlayback(el);
+          STATE.autoEl = null;
+        }
+      });
+    }, { threshold: [0, 0.7] });
+    document.querySelectorAll(".vplay").forEach((el) => STATE.videoObserver.observe(el));
   }
 
   function followButton(id, large) {
@@ -545,7 +1022,7 @@
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
       ${quoted.text ? `<div class="quote-text">${textHtml(quoted, key, false)}</div>` : ""}
-      ${mediaHtml(quoted.media)}
+      ${mediaHtml(quoted.media, false, quoted)}
     </div>`;
   }
 
@@ -831,24 +1308,54 @@
     return String(url).replace("_normal.", "_400x400.").replace("_bigger.", "_400x400.").replace("_mini.", "_400x400.");
   }
 
-  function bestMp4(variants) {
-    let best = "";
-    let bestRate = -1;
+  function playableFile(url) {
+    const raw = String(url || "");
+    if (/instagram\.com\/[^?\s]+\/media/i.test(raw)) return false;
+    return /\.(mp4|webm|mov|m3u8)(\?|$)/i.test(raw.split("?")[0]);
+  }
+
+  function oePast(url) {
+    const match = String(url || "").match(/[?&]oe=([0-9A-Fa-f]{6,})/);
+    if (!match) return false;
+    const sec = parseInt(match[1], 16);
+    return isFinite(sec) && sec * 1000 < Date.now();
+  }
+
+  function videoFields(variants) {
+    const files = [];
+    let hls = "";
     (variants || []).forEach((variant) => {
       if (!variant || typeof variant !== "object") return;
       const url = variant.url || "";
-      const ctype = String(variant.content_type || variant.type || variant.container || "").toLowerCase();
+      if (!url) return;
       const path = url.split("?")[0].toLowerCase();
-      if (path.indexOf(".m3u8") >= 0) return;
+      if (path.indexOf(".m3u8") >= 0) { if (!hls) hls = url; return; }
+      const ctype = String(variant.content_type || variant.type || variant.container || "").toLowerCase();
       if (ctype.indexOf("mp4") < 0 && path.indexOf(".mp4") < 0) return;
       let rate = Number(variant.bitrate || variant.bit_rate || 0);
       if (!isFinite(rate)) rate = 0;
-      if (rate >= bestRate) {
-        bestRate = rate;
-        best = url;
-      }
+      files.push({ url: url, bitrate: rate });
     });
-    return best;
+    return { variants: files, hls: hls };
+  }
+
+  function pickMp4(variants) {
+    const files = (variants || []).filter((row) => row && playableFile(row.url) && !oePast(row.url));
+    if (!files.length) return "";
+    const narrow = (window.innerWidth || 390) < 700;
+    const target = narrow ? 900000 : 2500000;
+    let best = files[0];
+    let score = Infinity;
+    files.forEach((file) => {
+      const rate = file.bitrate || (narrow ? 500000 : 2000000);
+      const dist = Math.abs(rate - target);
+      if (dist < score) { score = dist; best = file; }
+    });
+    return best.url;
+  }
+
+  function bestMp4(variants) {
+    return pickMp4(videoFields(variants).variants) || "";
   }
 
   function fxMedia(media) {
@@ -869,15 +1376,17 @@
       let kind = String(item.type || "photo").toLowerCase();
       if (kind === "gif" || kind === "animated_gif") kind = "animated_gif";
       else if (kind !== "photo" && kind !== "video" && kind !== "animated_gif") kind = item.variants || item.formats ? "video" : "photo";
-      const mp4 = bestMp4(item.variants || item.formats || item.video_files || []);
+      const extra = videoFields(item.variants || item.formats || item.video_files || []);
+      const mp4 = pickMp4(extra.variants);
       const poster = item.thumbnail_url || item.poster || item.preview_image_url || "";
       let url = item.url || "";
-      if (kind === "video" || kind === "animated_gif") url = mp4 || url || poster;
-      else {
-        url = url || poster;
-      }
-      if (!url) return;
-      out.push({ type: kind, url: url, poster: poster || (kind === "photo" ? url : ""), width: item.width || null, height: item.height || null, alt: item.alt || item.alt_text || "" });
+      if (kind === "video" || kind === "animated_gif") url = mp4 || (playableFile(url) && !oePast(url) ? url : "") || extra.hls || "";
+      else url = url || poster;
+      if (!url && !poster) return;
+      const row = { type: kind, url: url, poster: poster || (kind === "photo" ? url : ""), width: item.width || null, height: item.height || null, alt: item.alt || item.alt_text || "" };
+      if (extra.variants.length) row.variants = extra.variants;
+      if (extra.hls) row.hls = extra.hls;
+      out.push(row);
     });
     return out;
   }
@@ -1622,14 +2131,13 @@
       }
     } else if (att.type === "video" && att.videoId) {
       const poster = "https://i.ytimg.com/vi/" + att.videoId + "/hqdefault.jpg";
-      quoted = {
-        id: att.videoId,
-        platform: "youtube",
-        author: att.author || "",
-        text: att.title || "",
-        url: "https://www.youtube.com/watch?v=" + att.videoId,
-        media: [{ type: "photo", url: poster, poster: poster, alt: att.title || "" }]
-      };
+      media.push({
+        type: "video",
+        url: "https://www.youtube-nocookie.com/embed/" + att.videoId,
+        poster: poster,
+        videoId: att.videoId,
+        alt: att.title || ""
+      });
     }
     const next = Object.assign({}, seed, {
       stub: false,
@@ -2260,7 +2768,7 @@
           ${reply}
           <div class="post-text">${textHtml(post, post.id, false)}</div>
           ${pollHtml(post)}
-          ${mediaHtml(post.media, eager)}
+          ${mediaHtml(post.media, eager, post)}
           ${quoteCard(post.quoted)}
           ${threadLink}
           ${actionBar(post)}
@@ -2794,7 +3302,12 @@
   function ivCommunityPost(item, profile) {
     const id = item && item.commentId;
     if (!id) return null;
-    return {
+    const built = communityFromIv(item, {
+      author: (profile && profile.name) || "",
+      avatar: (profile && profile.avatar) || "",
+      date: ""
+    });
+    const post = {
       id: id,
       statusId: id,
       platform: "youtube",
@@ -2806,10 +3319,12 @@
       verifiedType: profile && profile.verifiedType,
       text: item.content || "",
       date: ivIso(item.published),
-      url: "https://www.youtube.com/channel/" + (profile && profile.channelId ? profile.channelId : ""),
-      media: [],
+      url: "https://www.youtube.com/post/" + id,
+      media: (built && built.media) || [],
       stats: { likes: item.likeCount, replies: item.replyCount }
     };
+    if (built && built.poll) post.poll = built.poll;
+    return post;
   }
 
   function ivVideoPosts(data, profile) {
@@ -3243,7 +3758,7 @@
     const body = `${replyLine}
         <div class="status-text">${textHtml(post, post.id, true)}</div>
         ${pollHtml(post)}
-        ${mediaHtml(post.media)}
+        ${mediaHtml(post.media, false, post)}
         ${quoteCard(post.quoted)}
         <div class="status-time">${esc(fullTime(post.date))}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
         ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> Views</div>` : `<div class="status-views"></div>`}
@@ -3612,28 +4127,18 @@
 
   function watchView(route) {
     const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id)) || STATE.shared[String(route.id)];
-    if (!post) return pageHead("Watch", "", true) + emptyBlock("Video unavailable", "This video isn’t in the current snapshot.");
+    if (!post) return pageHead("Watch", "", true) + emptyBlock("Not in this snapshot", "This video isn’t in the current snapshot.");
     const feed = feedOf(post);
     ensureYtMeta(post);
     ensureYtSubs(feed);
     const media = (post.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || (post.media || [])[0] || {};
     const id = postKey(post);
-    const alt = !!STATE.playerAlt[id];
-    const embed = post.platform === "youtube" && !alt;
-    let player;
-    if (embed) {
-      player = `<iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(post.statusId || post.id)}?rel=0" title="${esc(post.title || post.text || "Video")}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
-    } else if (post.platform === "youtube" && media.stream) {
-      player = `<video src="${esc(media.stream)}" poster="${esc(media.poster || "")}" controls playsinline></video>`;
-    } else if (media.url && !/youtube-nocookie\.com|\/embed\//.test(media.url)) {
-      player = `<video src="${esc(media.url)}" poster="${esc(media.poster || "")}" controls playsinline></video>`;
-    } else if (media.poster) {
-      player = `<img src="${esc(media.poster)}" alt="">`;
-    } else {
-      player = "";
-    }
-    const switcher = post.platform === "youtube" && media.stream ? `<button class="text-btn" type="button" data-act="player-alt" data-id="${esc(id)}">${alt ? "YouTube player" : "Alternate player"}</button>` : "";
-    const pip = !embed && /<video/.test(player) && document.pictureInPictureEnabled ? `<button class="text-btn" type="button" data-act="pip">${icon("pip")} Picture in picture</button>` : "";
+    const clip = !!(media.type === "video" || media.type === "animated_gif" || youtubeId(post, media) || post.platform === "youtube");
+    const mediaIndex = Math.max(0, (post.media || []).indexOf(media));
+    const player = clip
+      ? playerTile(post, media, mediaIndex).replace('class="tile vplay"', 'class="player vplay"')
+      : ((media.poster || media.url) ? `<div class="player"><img src="${esc(media.poster || media.url)}" alt="" referrerpolicy="no-referrer"></div>` : "");
+    const pip = clip && document.pictureInPictureEnabled ? `<button class="text-btn" type="button" data-act="pip">${icon("pip")} Picture in picture</button>` : "";
     const subs = feed.platform === "youtube" && feed.followers != null ? formatCount(feed.followers) + " subscribers" : (feed.followers != null ? formatCount(feed.followers) + " followers" : "");
     const liked = !!STATE.settings.likes[post.id];
     const booked = !!STATE.settings.bookmarks[post.id];
@@ -3678,8 +4183,8 @@
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Watch</h1></div></div>
       <div class="watch">
         <div class="watch-main">
-          <div class="player">${player}</div>
-          ${switcher}${pip}
+          ${player}
+          ${pip}
           <h1 class="watch-title">${esc(post.title || post.text || "")}</h1>
           <div class="watch-chan">
             <a data-card="${esc(feed.platform + ":" + (feed.channelId || feed.handle))}" href="${esc(userHash(feed.platform, feed.channelId || feed.handle))}">${avatar(post.avatar || feed.avatar, feed.name || post.author)}</a>
@@ -3882,7 +4387,7 @@
         </div>
         ${reply}
         <div class="post-text">${textHtml(post, "anc:" + postKey(post), false)}</div>
-        ${mediaHtml(post.media)}
+        ${mediaHtml(post.media, false, post)}
       </div>
     </article>`;
   }
@@ -4048,6 +4553,7 @@
     const focus = document.activeElement;
     const focusId = focus && focus.id;
     const caret = focus && typeof focus.selectionStart === "number" ? focus.selectionStart : null;
+    rememberPlayback();
     document.getElementById("app").innerHTML = shell(view(route), route);
     const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
     document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
@@ -4072,6 +4578,8 @@
     }
     watchHydration();
     syncMediaSession();
+    bindPlayers();
+    resumePlayback();
   }
 
   function toast(message) {
@@ -4125,12 +4633,6 @@
     }
     if (act === "subs-layout") {
       STATE.subsLayout = el.dataset.layout === "list" ? "list" : "grid";
-      render();
-      return;
-    }
-    if (act === "player-alt") {
-      const id = el.dataset.id;
-      STATE.playerAlt[id] = !STATE.playerAlt[id];
       render();
       return;
     }
@@ -4195,10 +4697,20 @@
       return;
     }
     if (act === "pip") {
-      const video = document.querySelector(".player video");
-      if (video && document.pictureInPictureEnabled) {
+      const tile = document.querySelector(".player.vplay") || document.querySelector(".player");
+      const video = tile && tile.querySelector("video");
+      if (!document.pictureInPictureEnabled) return;
+      if (video) {
         const done = document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture();
         Promise.resolve(done).catch(() => {});
+        return;
+      }
+      if (tile && tile.classList.contains("vplay")) {
+        tile.addEventListener("playing", (ev) => {
+          const node = ev.target;
+          if (node && node.requestPictureInPicture) node.requestPictureInPicture().catch(() => {});
+        }, { once: true, capture: true });
+        startPlayback(tile, {});
       }
       return;
     }
@@ -4273,13 +4785,14 @@
       render();
       return;
     }
-    if (act === "play") {
-      const video = el.parentElement && el.parentElement.querySelector("video");
-      if (video) {
-        video.controls = true;
-        video.play().catch(() => toast("Video unavailable"));
-        el.remove();
+    if (act === "play" || act === "video-retry") {
+      const tile = el.closest(".vplay") || el;
+      if (act === "video-retry") {
+        tile.classList.remove("is-failed", "is-playing");
+        tile._gen = (tile._gen || 0) + 1;
+        clearPlayer(tile);
       }
+      startPlayback(tile, {});
       return;
     }
     if (act === "new-list") { openListModal(null); return; }
@@ -4446,6 +4959,12 @@
       if (!span.className.includes("initials")) span.className += " initials";
       span.textContent = img.dataset.initials || "?";
       img.replaceWith(span);
+      return;
+    }
+    const player = img.closest(".vplay");
+    if (player) {
+      if (img.tagName === "VIDEO") return;
+      if (img.classList.contains("vposter")) img.remove();
       return;
     }
     const next = img.dataset.refresh || "";

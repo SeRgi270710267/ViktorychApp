@@ -169,25 +169,30 @@ def _poll(attachment: dict) -> dict | None:
     return poll
 
 
-def _video_quote(attachment: dict) -> dict | None:
+def _video_id(attachment: dict) -> str:
     video_id = str(attachment.get("videoId") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+        return ""
+    return video_id
+
+
+def _video_media(attachment: dict) -> dict | None:
+    """A shared YouTube video plays through the same player as a channel video."""
+    video_id = _video_id(attachment)
+    if not video_id:
         return None
     title = (attachment.get("title") or "").strip()
-    if isinstance(attachment.get("title"), dict):
-        title = _yt_text(attachment.get("title")).strip()
+    if isinstance(title, dict):
+        title = _yt_text(title).strip()
     poster = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
-    author = attachment.get("author") or ""
-    if isinstance(author, dict):
-        author = _yt_text(author)
     return {
-        "id": video_id,
-        "statusId": video_id,
-        "platform": "youtube",
-        "author": author,
-        "text": title,
-        "url": f"https://www.youtube.com/watch?v={video_id}",
-        "media": [_photo(poster, 480, 360, title)],
+        "type": "video",
+        "url": f"https://www.youtube-nocookie.com/embed/{video_id}",
+        "poster": poster,
+        "videoId": video_id,
+        "width": 480,
+        "height": 360,
+        "alt": title,
     }
 
 
@@ -277,7 +282,9 @@ def parse_invidious_posts(payload: dict, feed: dict) -> list:
         elif kind == "poll":
             poll = _poll(attachment)
         elif kind == "video":
-            quoted = _video_quote(attachment)
+            clip = _video_media(attachment)
+            if clip:
+                media = [clip]
         elif kind == "playlist":
             quoted = None
         text = item.get("content") or ""
@@ -444,13 +451,15 @@ def parse_initial_posts(data: dict, feed: dict) -> list:
             poll = _poll(attachment["pollRenderer"])
         video = attachment.get("videoRenderer") or attachment.get("backstageVideoRenderer")
         if isinstance(video, dict):
-            quoted = _video_quote(
+            clip = _video_media(
                 {
                     "videoId": video.get("videoId"),
                     "title": video.get("title"),
                     "author": video.get("ownerText") or video.get("author"),
                 }
             )
+            if clip:
+                media = [clip]
         text = _yt_text(item.get("contentText"))
         if not text and not media and not poll and not quoted:
             continue

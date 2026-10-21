@@ -545,12 +545,23 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     if download:
         print("[media] --download-media no longer copies Meta CDN files; URLs stay hotlinked", file=sys.stderr)
     refresh_saved(posts, profiles, fresh_ids)
+    video_ok = None
+    video_failed = None
+    if not use_fixtures:
+        try:
+            from video_media import repair_videos
+
+            video_ok, video_failed = repair_videos(posts)
+        except Exception as exc:
+            print(f"[video] {exc}", file=sys.stderr)
     return {
         "updated": now_iso(),
         "preview": True,
         "feeds": profiles,
         "posts": posts,
         "_archive_posts": list(existing.get("posts") or []) + list(collected),
+        "_video_ok": video_ok,
+        "_video_failed": video_failed,
     }
 
 
@@ -563,6 +574,8 @@ def main() -> None:
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
     doc = build(config, args.fixtures, args.download_media)
     archive_posts = doc.pop("_archive_posts", [])
+    video_ok = doc.pop("_video_ok", None)
+    video_failed = doc.pop("_video_failed", None)
     fresh_comment_ids = set()
     for post in doc.get("posts") or []:
         if post.pop("_fresh", False):
@@ -608,6 +621,13 @@ def main() -> None:
             write_status()
         except Exception as exc:
             print(f"[health] {exc}", file=sys.stderr)
+        if video_failed is not None:
+            try:
+                from video_media import write_video_status
+
+                write_video_status(video_ok or 0, video_failed)
+            except Exception as exc:
+                print(f"[video] status: {exc}", file=sys.stderr)
 
 
 if __name__ == "__main__":

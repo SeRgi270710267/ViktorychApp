@@ -467,8 +467,8 @@ def main() -> None:
     check(2 <= len(multi["media"]) <= 4 and all(item["type"] == "photo" and "yt3.ggpht.com" in item["url"] for item in multi["media"]), "community multi-image post keeps each photo")
     poll = next(post for post in community["posts"] if post.get("poll"))
     check(poll["poll"]["totalVotes"] > 0 and len(poll["poll"]["choices"]) >= 2 and all("percent" not in choice and "votes" not in choice for choice in poll["poll"]["choices"]), "community poll keeps choices and hides missing percents")
-    shared = next(post for post in community["posts"] if post.get("quoted"))
-    check(shared["kind"] == "community" and shared["quoted"]["url"].startswith("https://www.youtube.com/watch?v=") and shared["quoted"]["media"][0]["url"].startswith("https://i.ytimg.com/vi/") and not shared.get("media"), "community video share is a quote, not an upload")
+    shared = next(post for post in community["posts"] if any((item.get("type") == "video") for item in (post.get("media") or [])))
+    check(shared["kind"] == "community" and shared["media"][0]["videoId"] == "ofnS1aDDF3Y" and shared["media"][0]["url"].startswith("https://www.youtube-nocookie.com/embed/") and shared["media"][0]["poster"].startswith("https://i.ytimg.com/vi/") and not shared.get("quoted"), "community video plays as media")
     page = parse_community((FIX / "youtube_community_initial.json").read_text(encoding="utf-8"), community_feed)
     scraped = page["posts"][0]
     check(scraped["id"] == image_post["id"] and scraped["stats"]["likes"] == 690 and scraped["media"][0]["url"].startswith("https://yt3.ggpht.com/") and scraped["date"] == "", "posts page fallback keeps the image and does not invent a time")
@@ -729,6 +729,27 @@ def main() -> None:
     check((ROOT / "scripts" / "pwa_assets.py").read_text(encoding="utf-8").find("M18.244") < 0, "the install mark is not the X logo")
     check("M18.244" not in (ROOT / "app.js").read_text(encoding="utf-8") and "M18.244" not in (ROOT / "favicon.svg").read_text(encoding="utf-8") and 'icon("logo")' not in (ROOT / "app.js").read_text(encoding="utf-8"), "the X logo is not in the app chrome or the favicon")
     check("M12 2.2l1.7 5.4" in (ROOT / "favicon.svg").read_text(encoding="utf-8") and "function sourceBadge(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the favicon uses the Feeds icon and posts keep their source badges")
+
+    from adapters.common import html_to_parts, is_playable_video
+    from video_media import _one, extract_video, probe
+
+    stand = html_to_parts('<video poster=""><source src="https://www.instagram.com/p/AbCdEf/media?size=l"></video>')
+    check(stand["media"][0]["type"] == "video" and stand["media"][0]["url"] == "" and "media?size=l" in stand["media"][0]["poster"] and not is_playable_video(stand["media"][0]["poster"]), "an instagram image redirect is not stored as the video file")
+    real = html_to_parts('<video poster="https://cdn.example/p.jpg"><source src="https://cdn.example/clip.mp4"></video>')
+    check(real["media"][0]["url"] == "https://cdn.example/clip.mp4" and real["media"][0]["poster"].endswith("p.jpg"), "a real mp4 stays the video url")
+    found = extract_video('{"video_url":"https://cdn.example/clip.mp4","display_url":"https://cdn.example/p.jpg","video_duration":"12"}')
+    check(found["url"].endswith("clip.mp4") and found["poster"].endswith("p.jpg") and found["duration"] == 12, "extract_video reads the file, poster, and duration")
+    blocked, why = probe("https://www.instagram.com/p/AbCdEf/media?size=l")
+    check(blocked is False and why == "not a video file", "a range probe rejects an image stand-in")
+    yt_item = {"type": "video", "url": "https://www.youtube-nocookie.com/embed/abcdefghijk", "stream": "https://invidious.example/latest_version?id=abcdefghijk&itag=18"}
+    yt_ok, yt_row = _one({"platform": "youtube", "id": "abcdefghijk"}, yt_item)
+    check(yt_ok and yt_row is None and "stream" not in yt_item, "youtube playback is resolved in the player, not one baked stream")
+    ig_item = {"type": "video", "url": "https://www.instagram.com/p/AbCdEf/media?size=l"}
+    ig_ok, ig_row = _one({"platform": "rss", "id": "ig-stand-in"}, ig_item)
+    check(ig_ok is False and ig_item["url"] == "" and "media?size=l" in ig_item["poster"] and ig_row["detail"] == "image stand-in", "a stand-in url is cleared and reported")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    check("Watch on Instagram" in app and "function youtubeSources" in app and "function startPlayback" in app and 'toast("Video unavailable")' not in app and "hls.min.js" in app, "the player rotates sources and does not toast video unavailable")
+    check("latest_version" not in (ROOT / "scripts" / "yt_remote.py").read_text(encoding="utf-8"), "sync does not bake an invidious itag url")
     print("all adapter checks passed")
 
 

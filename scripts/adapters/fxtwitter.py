@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .common import best_mp4, blank_profile, clean_text, post_shell, stamp_activity, to_iso, upgrade_avatar
+from .common import best_mp4, blank_profile, clean_text, is_playable_video, post_shell, stamp_activity, to_iso, upgrade_avatar, video_fields
 
 
 def _badge(kind):
@@ -69,26 +69,39 @@ def _media(media) -> list:
             kind = "animated_gif"
         elif kind not in ("photo", "video", "animated_gif"):
             kind = "video" if item.get("variants") else "photo"
-        mp4 = best_mp4(item.get("variants") or item.get("video_files") or [])
+        variants = item.get("variants") or item.get("video_files") or []
+        mp4 = best_mp4(variants)
         poster = item.get("thumbnail_url") or item.get("poster") or item.get("preview_image_url") or ""
         url = item.get("url") or ""
+        extra = {}
         if kind in ("video", "animated_gif"):
-            url = mp4 or url or poster
+            extra = video_fields(variants)
+            file_url = url if is_playable_video(url) else ""
+            url = mp4 or file_url or extra.get("hls") or ""
         else:
             url = url or poster
             poster = poster or url
-        if not url:
+        if not url and not poster:
             continue
-        out.append(
-            {
-                "type": kind,
-                "url": url,
-                "poster": poster or "",
-                "width": item.get("width"),
-                "height": item.get("height"),
-                "alt": item.get("alt") or item.get("alt_text") or "",
-            }
-        )
+        row = {
+            "type": kind,
+            "url": url,
+            "poster": poster or "",
+            "width": item.get("width"),
+            "height": item.get("height"),
+            "alt": item.get("alt") or item.get("alt_text") or "",
+        }
+        row.update(extra)
+        duration = item.get("duration")
+        try:
+            duration = float(duration)
+        except (TypeError, ValueError):
+            duration = 0
+        if duration > 100000:
+            duration = duration / 1000
+        if 0 < duration < 86400:
+            row["duration"] = int(duration)
+        out.append(row)
     return out
 
 

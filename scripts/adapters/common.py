@@ -119,6 +119,48 @@ def best_mp4(variants) -> str:
     return best
 
 
+def is_playable_video(url: str) -> bool:
+    """A file a <video> element can try. Image redirects are not videos."""
+    if not url:
+        return False
+    lowered = url.lower()
+    if "instagram.com" in lowered and "/media" in lowered:
+        return False
+    path = urlparse(url).path.lower().split("?")[0]
+    return path.endswith((".mp4", ".webm", ".mov", ".m3u8"))
+
+
+def video_fields(variants) -> dict:
+    """Keep every mp4 and an HLS playlist so the player can pick one."""
+    files = []
+    hls = ""
+    for variant in variants or []:
+        if not isinstance(variant, dict):
+            continue
+        url = variant.get("url") or ""
+        if not url:
+            continue
+        path = url.split("?")[0].lower()
+        if path.endswith(".m3u8"):
+            hls = hls or url
+            continue
+        ctype = (variant.get("content_type") or variant.get("type") or "").lower()
+        if "mp4" not in ctype and not path.endswith(".mp4"):
+            continue
+        rate = variant.get("bitrate") or variant.get("bit_rate") or 0
+        try:
+            rate = int(rate)
+        except (TypeError, ValueError):
+            rate = 0
+        files.append({"url": url, "bitrate": rate})
+    out = {}
+    if files:
+        out["variants"] = files
+    if hls:
+        out["hls"] = hls
+    return out
+
+
 def _int(value):
     try:
         return int(value)
@@ -205,21 +247,30 @@ class _Extractor(HTMLParser):
             srcs = self._video["srcs"]
             mp4 = ""
             for src in srcs:
-                if ".mp4" in src.split("?")[0].lower():
+                if is_playable_video(src) and ".m3u8" not in src.split("?")[0].lower():
                     mp4 = src
                     break
-            url = mp4 or (srcs[0] if srcs else "")
+            hls = next((src for src in srcs if ".m3u8" in src.split("?")[0].lower()), "")
+            url = mp4 or hls
             poster = self._video["poster"] or ""
-            self._add_media(
-                {
-                    "type": "video",
-                    "url": url or poster,
-                    "poster": poster,
-                    "width": None,
-                    "height": None,
-                    "alt": "",
-                }
-            )
+            # A /media?size=l redirect is a JPEG. Keep it as the poster only.
+            if not url:
+                for src in srcs:
+                    if src and not poster:
+                        poster = src
+            item = {
+                "type": "video",
+                "url": url,
+                "poster": poster,
+                "width": None,
+                "height": None,
+                "alt": "",
+            }
+            if hls and hls != url:
+                item["hls"] = hls
+            elif hls and not mp4:
+                item["hls"] = hls
+            self._add_media(item)
             self._video = None
         elif tag == "a" and self._anchor is not None:
             href = self._anchor["href"]
