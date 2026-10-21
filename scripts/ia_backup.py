@@ -946,6 +946,58 @@ def _patch_metadata(item: str, want: dict, remove: tuple, access: str, secret: s
     return False, f"{status} {detail}".strip()
 
 
+def _noindex_set(meta: dict) -> bool:
+    return str((meta or {}).get("noindex") or "").strip().lower() in {"1", "true", "yes"}
+
+
+def _item_metadata(item: str, metadata_base: str, urlopen) -> dict:
+    doc = _http_json(metadata_base.rstrip("/") + "/" + urllib.parse.quote(item), urlopen) or {}
+    current = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
+    return current
+
+
+def _probe_name(item: str) -> str:
+    return hashlib.sha256((item + ":noindex").encode("utf-8")).hexdigest()[:20] + ".txt"
+
+
+def _s3_noindex(endpoint, item, access, secret, opener, urlopen, metadata_base, sleep, secrets_for_log) -> tuple[bool, str, bool]:
+    """Try the create-time noindex header on an existing item. The third value is True when IA left noindex unchanged after a successful PUT."""
+    if _noindex_set(_item_metadata(item, metadata_base, urlopen)):
+        return True, "", False
+    name = _probe_name(item)
+    headers = {"Content-Type": "text/plain", "x-archive-meta-noindex": "true"}
+    status, payload = _s3_once(endpoint, item, name, b"\n", headers, access, secret, opener)
+    if status not in {200, 201, 204}:
+        detail = scrub(payload[:120].decode("utf-8", "replace"), secrets_for_log).strip()
+        _delete_object(endpoint, item, name, access, secret, opener)
+        return False, f"s3 {status} {detail}".strip(), False
+    delay = 2.0
+    seen = False
+    for attempt in range(6):
+        if _noindex_set(_item_metadata(item, metadata_base, urlopen)):
+            seen = True
+            break
+        if attempt + 1 < 6:
+            sleep(delay)
+            delay = min(delay * 2, 20)
+    if not seen:
+        _delete_object(endpoint, item, name, access, secret, opener)
+        return False, "noindex unchanged after s3 header", True
+    _delete_object(endpoint, item, name, access, secret, opener)
+    sleep(1)
+    if _noindex_set(_item_metadata(item, metadata_base, urlopen)):
+        return True, "", False
+    status, payload = _s3_once(endpoint, item, name, b"\n", headers, access, secret, opener)
+    if status not in {200, 201, 204}:
+        detail = scrub(payload[:120].decode("utf-8", "replace"), secrets_for_log).strip()
+        return False, f"s3 {status} {detail}".strip(), False
+    sleep(2)
+    if _noindex_set(_item_metadata(item, metadata_base, urlopen)):
+        return True, "kept-file", False
+    _delete_object(endpoint, item, name, access, secret, opener)
+    return False, "noindex did not stay", True
+
+
 def _write_hidden(item: str, title: str, description: str, access: str, secret: str, urlopen, opener, metadata_base: str) -> tuple[bool, str]:
     """noindex is its own write so a rejected blank title cannot drop it."""
     indexed, detail = _patch_metadata(item, {"noindex": "true"}, (), access, secret, urlopen, opener, metadata_base)
@@ -987,27 +1039,49 @@ def stamp_items(config: dict, state: dict) -> dict:
     return {"notes": notes, "failures": failures}
 
 
-def hide_old_items(config: dict, state: dict) -> dict:
+def hide_old_items(config: dict, state: dict, sleep=time.sleep) -> dict:
     """Keep the old files, but drop them from search and clear identifying metadata."""
     urlopen = config.get("urlopen") or urllib.request.urlopen
     opener = config.get("opener") or _opener()
     metadata_base = (config.get("metadata_base") or METADATA_BASE).rstrip("/")
+    endpoint = config.get("endpoint") or S3_ENDPOINT
+    access = config["access"]
+    secret = config["secret"]
     old_items = list(config["old_items"]) if "old_items" in config else discover_old_items(urlopen)
     notes = []
     failures = 0
+    blocked = state.get("noindexBlocked") or {}
     for item in old_items:
         if not old_slot(item):
             continue
         doc = _http_json(metadata_base + "/" + urllib.parse.quote(item), urlopen)
         if not isinstance(doc, dict) or not (doc.get("metadata") or doc.get("files")):
             continue
-        ok, detail = _write_hidden(item, "", "", config["access"], config["secret"], urlopen, opener, metadata_base)
+        if blocked.get(item) == "readonly":
+            _write_hidden(item, "", "", access, secret, urlopen, opener, metadata_base)
+            notes.append(f"[ia-backup] {item} stays listed; noindex is read-only on an existing item")
+            continue
+        ok, detail = _write_hidden(item, "", "", access, secret, urlopen, opener, metadata_base)
+        s3_detail = ""
+        if not ok:
+            s3_ok, s3_detail, locked = _s3_noindex(
+                endpoint, item, access, secret, opener, urlopen, metadata_base, sleep, [access, secret]
+            )
+            if s3_ok:
+                ok = True
+                if s3_detail == "kept-file":
+                    notes.append(f"[ia-backup] noindex on {item} stayed only while the header file was present")
+            elif locked:
+                tries = state.setdefault("noindexTries", {})
+                tries[item] = int(tries.get(item) or 0) + 1
+                if tries[item] >= 2:
+                    state.setdefault("noindexBlocked", {})[item] = "readonly"
         if ok:
             notes.append(f"[ia-backup] hid {item}")
         else:
             failures += 1
-            notes.append(f"[ia-backup] could not hide {item} ({detail})")
-    return {"notes": [scrub(line, [config["access"], config["secret"]]) for line in notes], "failures": failures}
+            notes.append(f"[ia-backup] could not hide {item} ({detail}; {s3_detail})".rstrip())
+    return {"notes": [scrub(line, [access, secret]) for line in notes], "failures": failures}
 
 
 def retire_old(config: dict, state: dict, sleep=time.sleep) -> dict:
@@ -1071,6 +1145,10 @@ def retire_old(config: dict, state: dict, sleep=time.sleep) -> dict:
         if pace:
             sleep(pace)
     for item in ready_items:
+        if (state.get("noindexBlocked") or {}).get(item) == "readonly":
+            _write_hidden(item, "", "", access, secret, urlopen, opener, metadata_base)
+            notes.append(f"[ia-backup] retired metadata {item}; noindex stays read-only")
+            continue
         ok, detail = _write_hidden(item, "", "", access, secret, urlopen, opener, metadata_base)
         notes.append(f"[ia-backup] retired metadata {item}" if ok else f"[ia-backup] could not retire metadata {item} ({detail})")
     return {"notes": [scrub(line, [access, secret]) for line in notes], "deleted": deleted}

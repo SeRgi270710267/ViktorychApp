@@ -3050,6 +3050,94 @@ def ia_backup_checks() -> None:
     check("noindex" in " ".join(patches) and "title" in " ".join(patches), "retired items are marked noindex and lose their title")
     check(not any("test-secret-value" in patch or "test-secret-value" in " ".join(retired["notes"]) for patch in patches), "metadata writes do not print the keys")
 
+    probe_meta = {"title": "superintelapp-img-2026-10", "description": "Public backup", "creator": "owner-account"}
+    probe_puts = []
+    probe_deletes = []
+
+    def hide_open(request, timeout=None):
+        method = request.get_method()
+        path = urllib.parse.urlparse(request.full_url).path
+        if method == "PUT":
+            header_map = {key.lower(): value for key, value in request.header_items()}
+            probe_puts.append((
+                path,
+                header_map.get("x-archive-meta-noindex"),
+                header_map.get("authorization"),
+                header_map.get("x-archive-meta-title"),
+            ))
+            probe_meta["noindex"] = "true"
+            return Resp(200, b"")
+        if method == "DELETE":
+            probe_deletes.append(path)
+            return Resp(204, b"")
+        if method == "POST":
+            body = request.data.decode("utf-8")
+            if "noindex" in body:
+                return Resp(400, b'{"success":false,"error":"Can\'t modify read-only field \'noindex\'"}')
+            return Resp(200, b'{"success":true}')
+        if path.endswith("/superintelapp-img-2026-10"):
+            return Resp(200, json.dumps({"metadata": dict(probe_meta), "files": [{"name": "a.jpg"}]}).encode())
+        return Resp(404, b"")
+
+    hidden_state = {"v": 1}
+    hidden = ia_backup.hide_old_items(
+        {
+            "access": "test-access",
+            "secret": "test-secret-value",
+            "endpoint": host,
+            "metadata_base": host + "/metadata",
+            "old_items": ["superintelapp-img-2026-10"],
+            "urlopen": hide_open,
+            "opener": type("Opener", (), {"open": staticmethod(hide_open)})(),
+        },
+        hidden_state,
+        sleep=lambda delay: None,
+    )
+    probe = ia_backup._probe_name("superintelapp-img-2026-10")
+    check(hidden["failures"] == 0 and any("hid superintelapp-img-2026-10" in line for line in hidden["notes"]), "an existing item gets noindex from the s3 header when the metadata write is rejected")
+    check(probe_puts and probe_puts[0][1] == "true" and probe_puts[0][2] == "LOW test-access:test-secret-value" and probe_puts[0][3] is None and probe_puts[0][0].endswith("/" + probe), "the noindex header is sent on a hashed file without a title")
+    check(probe_deletes == ["/" + "superintelapp-img-2026-10" + "/" + probe], "the noindex probe file is removed after the flag sticks")
+    check("test-secret-value" not in " ".join(hidden["notes"]), "hide notes do not print the keys")
+
+    refused_meta = {"title": "superintelapp-img-2026-10"}
+    refused_puts = []
+
+    def refuse_open(request, timeout=None):
+        method = request.get_method()
+        path = urllib.parse.urlparse(request.full_url).path
+        if method == "PUT":
+            refused_puts.append(path)
+            return Resp(200, b"")
+        if method == "DELETE":
+            return Resp(204, b"")
+        if method == "POST":
+            body = request.data.decode("utf-8")
+            if "noindex" in body:
+                return Resp(400, b'{"success":false,"error":"Can\'t modify read-only field \'noindex\'"}')
+            return Resp(200, b'{"success":true}')
+        if path.endswith("/superintelapp-img-2026-10"):
+            return Resp(200, json.dumps({"metadata": dict(refused_meta), "files": [{"name": "a.jpg"}]}).encode())
+        return Resp(404, b"")
+
+    refused_state = {"v": 1}
+    refused_config = {
+        "access": "test-access",
+        "secret": "test-secret-value",
+        "endpoint": host,
+        "metadata_base": host + "/metadata",
+        "old_items": ["superintelapp-img-2026-10"],
+        "urlopen": refuse_open,
+        "opener": type("Opener", (), {"open": staticmethod(refuse_open)})(),
+    }
+    first_refuse = ia_backup.hide_old_items(refused_config, refused_state, sleep=lambda delay: None)
+    still_open = not refused_state.get("noindexBlocked")
+    second_refuse = ia_backup.hide_old_items(refused_config, refused_state, sleep=lambda delay: None)
+    puts_after_lock = len(refused_puts)
+    third_refuse = ia_backup.hide_old_items(refused_config, refused_state, sleep=lambda delay: None)
+    check(first_refuse["failures"] == 1 and still_open, "one rejected s3 header is retried later")
+    check(second_refuse["failures"] == 1 and refused_state["noindexBlocked"].get("superintelapp-img-2026-10") == "readonly", "a second rejection records that noindex is read-only")
+    check(len(refused_puts) == puts_after_lock and any("stays listed" in line for line in third_refuse["notes"]), "later runs do not upload another probe once noindex is known read-only")
+
     story_checks()
 
 
