@@ -254,7 +254,7 @@
   function overlayRoot() {
     var viewer = document.getElementById("viewer");
     if (viewer && !viewer.hidden) return viewer;
-    var sheet = document.querySelector(".modal-back, .drawer-back, .share-back, .tab-sheet");
+    var sheet = document.querySelector(".modal-back, .drawer-back, .share-back, .tab-sheet, .bell-sheet");
     if (sheet) return sheet.querySelector(".modal, .drawer, .share-pop, .tab-menu") || sheet;
     var menu = document.querySelector(".post .menu, article .menu");
     if (menu && visible(menu)) return menu;

@@ -285,7 +285,9 @@ async function tizen(browser) {
   assert(info.cls.indexOf("sp-") >= 0, "Space page is reachable by remote, got " + JSON.stringify(info));
   await shot(page, "tv_desktop_space_1080.png");
   await page.keyboard.press("Escape");
-  await sleep(400);
+  await sleep(300);
+  await page.evaluate(() => { location.hash = "#/"; });
+  await waitReady(page);
 
   info = await focusInfo(page);
   if (info.cls.indexOf("tab") < 0 && info.tag !== "ARTICLE") {
@@ -382,7 +384,7 @@ async function tizen(browser) {
   await context.close();
   if (video) {
     const saved = await video.path();
-    const dest = OUT + "/tv_remote_desktop_1080.webm";
+    const dest = OUT + "/tv_remote_layout_1080.webm";
     const { rename } = await import("node:fs/promises");
     await rename(saved, dest);
   }
