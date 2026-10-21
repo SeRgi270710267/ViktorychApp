@@ -40,20 +40,28 @@
     nl: [" het ", " een ", " van ", " niet ", " dat ", " met ", " voor ", " zijn ", " ook "]
   };
   const NONLATIN = { ru: "cyr", uk: "cyr", ar: "arab", hi: "deva", ja: "ja", ko: "ko", zh: "cjk", th: "th", he: "he", el: "el" };
-  /* Public Lingva instances from the project's instance list. Dead ones are skipped after a failed translation. */
+  /* Public Lingva instances. A host that fails its health check is skipped for ten minutes. */
   const LINGVA = [
     "https://lingva.ml",
     "https://translate.plausibility.cloud",
     "https://lingva.lunar.icu",
-    "https://lingva.garudalinux.org",
+    "https://lingva.garudalinux.org"
+  ];
+  /* Mozhi mirrors send their own CORS header. No open proxy in front of them. */
+  const MOZHI = [
+    "https://mozhi.ducks.party",
+    "https://mozhi.catsarch.com",
+    "https://mozhi.aryak.me",
     "https://translate.projectsegfau.lt",
-    "https://translate.jae.fi"
+    "https://mozhi.pussthecat.org",
+    "https://mozhi.adminforge.de"
   ];
   const KEEP = /(https?:\/\/[^\s<]+|www\.[^\s<]+|@[A-Za-z0-9_]{1,30}|#[\p{L}\p{N}_]{1,60}|\$[A-Za-z]{1,10})/gu;
 
   const pending = new Set();
   let bound = null;
   let lingvaCursor = 0;
+  let mozhiCursor = 0;
   let names = null;
 
   function normalize(code) {
@@ -290,11 +298,24 @@
     return out;
   }
 
+  function translateButtons(key) {
+    const out = [];
+    if (typeof document === "undefined") return out;
+    document.querySelectorAll('[data-act="translate"]').forEach((btn) => {
+      if (!key || btn.getAttribute("data-key") === key) out.push(btn);
+    });
+    return out;
+  }
+
   function markBusy(key, on) {
     nodes("data-tr", key).forEach((el) => {
       el.classList.toggle("tr-busy", !!on);
       if (on) el.setAttribute("aria-busy", "true");
       else el.removeAttribute("aria-busy");
+    });
+    translateButtons(key).forEach((btn) => {
+      btn.disabled = !!on;
+      if (on) btn.textContent = "Translating...";
     });
     if (!on) nodes("data-tr-progress", key).forEach((el) => el.remove());
   }
@@ -338,12 +359,11 @@
       el.innerHTML = credit;
       el.hidden = !credit;
     });
-    if (typeof document !== "undefined") {
-      document.querySelectorAll('[data-act="translate"]').forEach((btn) => {
-        if (btn.getAttribute("data-key") !== key) return;
-        btn.hidden = !offer(key, sampleOf(key));
-      });
-    }
+    translateButtons(key).forEach((btn) => {
+      btn.hidden = !offer(key, sampleOf(key));
+      btn.disabled = false;
+      btn.textContent = kindLabel(btn.getAttribute("data-kind") || "post");
+    });
     nodes("data-tr-progress", key).forEach((el) => el.remove());
   }
 
@@ -416,9 +436,9 @@
       .replace(/&#39;/g, "'");
   }
 
-  async function getJson(url) {
+  async function getJson(url, timeoutMs) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), 12000) : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs || 8000) : null;
     try {
       const res = await fetch(url, {
         signal: ctrl ? ctrl.signal : undefined,
@@ -433,26 +453,48 @@
     }
   }
 
+  async function translatePiece(text, runLine) {
+    const parts = [];
+    let source = "";
+    let keptAll = true;
+    const blocks = chunks(text);
+    for (let j = 0; j < blocks.length; j++) {
+      const shielded = shield(blocks[j]);
+      if (!shielded.text.replace(/\[\[\d+\]\]/g, "").trim()) { parts.push(blocks[j]); continue; }
+      const result = await runLine(shielded.text);
+      if (!result || !result.text) throw new Error("empty");
+      if (!placeholdersKept(result.text, shielded.kept)) keptAll = false;
+      if (result.source && !source) source = result.source;
+      parts.push(restore(decodeEntities(result.text), shielded.kept));
+    }
+    return { text: parts.join(" "), source: source, kept: keptAll };
+  }
+
   async function translateLines(sample, runLine) {
-    const lines = String(sample || "").split("\n");
+    const raw = String(sample || "");
+    const breaks = (raw.match(/\n/g) || []).length;
+    /* One request keeps the pause short. Fall back to each line when a mirror collapses breaks. */
+    if (raw.length <= 1400) {
+      try {
+        const once = await translatePiece(raw, runLine);
+        const got = (String(once.text || "").match(/\n/g) || []).length;
+        if (!once.kept) throw new Error("tokens");
+        if (got === breaks && once.text && once.text.trim()) return once;
+      } catch (err) {
+        if (String(err && err.message) === "tokens") throw err;
+      }
+    }
+    const lines = raw.split("\n");
     const out = [];
     let source = "";
     let keptAll = true;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       if (!line.trim()) { out.push(line); continue; }
-      const parts = [];
-      const blocks = chunks(line);
-      for (let j = 0; j < blocks.length; j++) {
-        const shielded = shield(blocks[j]);
-        if (!shielded.text.replace(/\[\[\d+\]\]/g, "").trim()) { parts.push(blocks[j]); continue; }
-        const result = await runLine(shielded.text);
-        if (!result || !result.text) throw new Error("empty");
-        if (!placeholdersKept(result.text, shielded.kept)) keptAll = false;
-        if (result.source && !source) source = result.source;
-        parts.push(restore(decodeEntities(result.text), shielded.kept));
-      }
-      out.push(parts.join(" "));
+      const piece = await translatePiece(line, runLine);
+      if (!piece.kept) keptAll = false;
+      if (piece.source && !source) source = piece.source;
+      out.push(piece.text);
     }
     return { text: out.join("\n"), source: source, kept: keptAll };
   }
@@ -463,7 +505,13 @@
     const translated = data && (data.translation || (data.target && data.target.text));
     if (!translated || data.error) throw new Error(data && data.error || "lingva");
     const detected = data.info && (data.info.detectedSource || data.info.source || (data.source && data.source.lang && data.source.lang.code));
-    return { text: decodeEntities(translated), source: detected ? String(detected).toLowerCase().slice(0, 2) : "" };
+    return { text: decodeEntities(translated), source: cleanSource(detected) };
+  }
+
+  function cleanSource(code) {
+    const key = String(code || "").toLowerCase().split("-")[0];
+    if (!key || key === "auto" || key === "autodetect") return "";
+    return /^[a-z]{2,3}$/.test(key) ? key.slice(0, 2) : "";
   }
 
   async function memoryLine(source, target, text) {
@@ -472,7 +520,30 @@
     const translated = data && data.responseData && data.responseData.translatedText;
     if (!translated || Number(data.responseStatus) >= 400) throw new Error("mymemory");
     if (/MYMEMORY WARNING|QUERY LENGTH LIMIT|INVALID LANGUAGE PAIR/i.test(translated)) throw new Error("mymemory");
-    return { text: decodeEntities(translated), source: source && source !== "autodetect" ? source : "" };
+    return { text: decodeEntities(translated), source: cleanSource(source) };
+  }
+
+  async function mozhiOnce(base, engine, source, target, text) {
+    const url = base.replace(/\/$/, "") + "/api/translate?engine=" + encodeURIComponent(engine) + "&from=" + encodeURIComponent(source || "auto") + "&to=" + encodeURIComponent(target) + "&text=" + encodeURIComponent(text);
+    const data = await getJson(url);
+    const translated = data && (data["translated-text"] || data.translated_text || data.translation);
+    if (!translated || typeof translated !== "string" || /<!doctype html/i.test(translated)) throw new Error("mozhi");
+    const marks = String(text).match(/\[\[\d+\]\]/g) || [];
+    for (let i = 0; i < marks.length; i++) {
+      const n = marks[i].replace(/\D/g, "");
+      if (!new RegExp("\\[\\[\\s*" + n + "\\s*\\]\\]").test(translated)) throw new Error("tokens");
+    }
+    return { text: decodeEntities(translated), source: cleanSource(data.source_language || data.sourceLanguage || "") };
+  }
+
+  async function mozhiLine(base, source, target, text) {
+    let last = new Error("mozhi");
+    const engines = ["google", "duckduckgo"];
+    for (let i = 0; i < engines.length; i++) {
+      try { return await mozhiOnce(base, engines[i], source, target, text); }
+      catch (err) { last = err; }
+    }
+    throw last;
   }
 
   async function googleLine(target, text) {
@@ -481,7 +552,7 @@
     if (!Array.isArray(segs) || !segs.length) throw new Error("google");
     const translated = segs.map((seg) => (seg && seg[0]) || "").join("");
     if (!translated.trim()) throw new Error("google");
-    const detected = data[2] ? String(data[2]).toLowerCase().split("-")[0] : "";
+    const detected = data[2] ? cleanSource(data[2]) : "";
     return { text: decodeEntities(translated), source: detected };
   }
 
@@ -497,7 +568,8 @@
     const result = await translateLines(sample, (line) => lineFn(line));
     if (!usable(result, sample)) throw new Error("same");
     if (!result.kept) throw new Error("tokens");
-    if (!result.source) result.source = source || guess(sample) || "";
+    if (!cleanSource(result.source)) result.source = cleanSource(source) || guess(sample) || "";
+    else result.source = cleanSource(result.source);
     if (result.source === target) throw new Error("target");
     markWell(id);
     return result;
@@ -624,7 +696,7 @@
     if (!sample || pending.has(key)) return;
     const target = targetLang();
     const cached = cacheGet(key, sample);
-    if (cached && cached.text && !cached.originalShown) {
+    if (cached && cached.text) {
       applyResult(key, cached.text, cached.source, cached.engine);
       patch(key);
       return;
@@ -651,7 +723,7 @@
         return;
       }
       const source = (box.lang && box.lang[key] && box.lang[key] !== "yes" && box.lang[key] !== "no") ? box.lang[key] : (guess(sample) || "");
-      const hosts = LINGVA.slice(lingvaCursor).concat(LINGVA.slice(0, lingvaCursor));
+      const hosts = rotateLive(LINGVA, "lingva:", lingvaCursor);
       for (let i = 0; i < hosts.length; i++) {
         const base = hosts[i];
         try {
@@ -671,6 +743,19 @@
         return;
       } catch (err) {
         if (String(err && err.message) !== "sick") markSick("mymemory");
+      }
+      const mirrors = rotateLive(MOZHI, "mozhi:", mozhiCursor);
+      for (let i = 0; i < mirrors.length; i++) {
+        const base = mirrors[i];
+        try {
+          const result = await runEngine("mozhi:" + base, sample, source, target, (line) => mozhiLine(base, source || "auto", target, line));
+          mozhiCursor = (MOZHI.indexOf(base) + 1) % MOZHI.length;
+          applyResult(key, result.text, result.source || source, "Mozhi");
+          patch(key);
+          return;
+        } catch (err) {
+          if (String(err && err.message) !== "sick") markSick("mozhi:" + base);
+        }
       }
       try {
         const result = await runEngine("google-public", sample, source, target, (line) => googleLine(target, line));
@@ -719,6 +804,11 @@
     const current = targetLang();
     const options = LANGS.map((row) => `<option value="${esc(row[0])}"${row[0] === current ? " selected" : ""}>${esc(row[1])}</option>`).join("");
     return `<h2>Translation</h2><div class="tr-settings"><p class="phandle">Translate to</p><label class="vh" for="translate-to">Translate to</label><select id="translate-to" class="tr-select">${options}</select></div>`;
+  }
+
+  function rotateLive(list, prefix, cursor) {
+    const rotated = list.slice(cursor).concat(list.slice(0, cursor));
+    return rotated.filter((base) => !sick(prefix + base));
   }
 
   function bind(hooks) {

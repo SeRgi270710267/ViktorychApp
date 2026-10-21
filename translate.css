@@ -15,6 +15,11 @@
   font-weight: 400;
 }
 button.translate-link[hidden] { display: none; }
+button.translate-link[disabled] {
+  color: var(--muted);
+  cursor: progress;
+}
+button.translate-link[disabled]:hover { text-decoration: none; }
 .tr-fallback { font-size: 13px; line-height: 16px; }
 
 .tr-progress {
@@ -45,6 +50,9 @@ button.translate-link[hidden] { display: none; }
 .quote-text.tr-busy {
   position: relative;
 }
+:root, html[data-theme="lightsout"] { --tr-sheen: rgba(231, 233, 234, 0.22); }
+html[data-theme="dim"] { --tr-sheen: rgba(247, 249, 249, 0.18); }
+html[data-theme="default"] { --tr-sheen: rgba(15, 20, 25, 0.14); }
 .post-text.tr-busy::after,
 .status-text.tr-busy::after,
 .bio.tr-busy::after,
@@ -53,7 +61,8 @@ button.translate-link[hidden] { display: none; }
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(100deg, transparent 25%, color-mix(in srgb, var(--text) 16%, transparent) 50%, transparent 75%);
+  /* rgba ends stay white. The keyword transparent interpolates through black and hides the text. */
+  background: linear-gradient(100deg, rgba(255, 255, 255, 0) 28%, var(--tr-sheen) 50%, rgba(255, 255, 255, 0) 72%);
   background-size: 220% 100%;
   animation: tr-shimmer 1.05s ease-in-out infinite;
 }
