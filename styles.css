@@ -379,6 +379,7 @@ img { max-width: 100%; }
 .tab-menu button { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .tab-menu svg { width: 18px; height: 18px; fill: var(--blue); flex: none; }
 .tab-menu-gap { height: 1px; margin: 0; background: var(--line); }
+.tab-menu-label { padding: 8px 16px 2px; color: var(--muted); font-size: 13px; line-height: 16px; font-weight: 700; }
 .tab-manage-row { gap: 8px; flex-wrap: nowrap; }
 .tab-manage-row .who-copy { flex: 1; }
 .tab-manage-row .icon-btn, .tab-manage-row .outline { flex: none; }

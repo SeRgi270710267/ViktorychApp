@@ -268,7 +268,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, translateTo: "en" });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en" });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -295,6 +295,7 @@
       parsed.followingSort = parsed.followingSort === "popular" ? "popular" : "recent";
       parsed.forYouReposts = parsed.forYouReposts !== false;
       parsed.forYouReplies = parsed.forYouReplies !== false;
+      parsed.tabViews = cleanTabViews(parsed.tabViews);
       parsed.translateTo = window.FeedsTranslate ? window.FeedsTranslate.normalize(parsed.translateTo) : (parsed.translateTo || "en");
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
@@ -3682,7 +3683,9 @@
     if (!center) { render(); return; }
     const seen = {};
     center.querySelectorAll("article[data-post]").forEach((el) => { seen[el.dataset.post] = true; });
-    const list = posts().filter(inTimeline).sort(byStamp);
+    const list = posts().filter((post) => homeShows(post, route));
+    if (tabView(route.tab || "foryou") === "reposts") list.sort(byRepostTime);
+    else list.sort(byStamp);
     const head = center.querySelector("article[data-post]");
     if (head && list[0] && list[0].id !== head.dataset.post && stamp(list[0]) > (head.dataset.date || "")) {
       render();
@@ -4102,7 +4105,7 @@
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
     const hideRepost = mode === "author" || mode === "status";
-    const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a data-card="${esc("x:" + (post.repostedBy.handle || ""))}" href="${esc(accountHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
+    const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a data-card="${esc("x:" + (post.repostedBy.handle || ""))}" href="${esc(accountHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : (!hideRepost && post.kind === "repost" ? `<div class="repost-line">${icon("repost")}<span>Reposted</span></div>` : "");
     const forwarded = forwardLine(post);
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
     const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
@@ -4125,7 +4128,7 @@
     const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
     const hydrate = post.stub ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
-    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-date="${esc(post.date || "")}"${open}${hydrate}>
+    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
       ${context}
       ${repost}
       ${forwarded}
@@ -4274,6 +4277,50 @@
     return list && list.sort === "popular" ? "popular" : "recent";
   }
 
+  function cleanTabViews(raw) {
+    const out = {};
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return out;
+    Object.keys(raw).forEach((key) => {
+      if (raw[key] === "reposts" && key && String(key).length < 160) out[key] = "reposts";
+    });
+    return out;
+  }
+
+  function tabView(tab) {
+    const views = (STATE.settings && STATE.settings.tabViews) || {};
+    return views[tab || "foryou"] === "reposts" ? "reposts" : "all";
+  }
+
+  function setTabView(tab, view) {
+    if (!STATE.settings.tabViews || typeof STATE.settings.tabViews !== "object" || Array.isArray(STATE.settings.tabViews)) STATE.settings.tabViews = {};
+    const key = tab || "foryou";
+    if (view === "reposts") STATE.settings.tabViews[key] = "reposts";
+    else delete STATE.settings.tabViews[key];
+  }
+
+  function isRepost(post) {
+    if (!post) return false;
+    if (post.kind === "repost") return true;
+    const by = post.repostedBy;
+    if (by && (by.handle || by.name)) return true;
+    const from = post.forwardedFrom;
+    return !!(from && typeof from === "object");
+  }
+
+  function repostMillis(post) {
+    const raw = (post && (post.sortDate || post.date)) || "";
+    const ms = Date.parse(raw);
+    return isFinite(ms) ? ms : 0;
+  }
+
+  function byRepostTime(a, b) {
+    const delta = repostMillis(b) - repostMillis(a);
+    if (delta) return delta;
+    const aid = String((a && a.id) || "");
+    const bid = String((b && b.id) || "");
+    return aid < bid ? 1 : aid > bid ? -1 : 0;
+  }
+
   function homePath(tab) {
     if (tab === "following") return "#/following";
     if (tab && tab.indexOf("list:") === 0) return "#/tab/" + encodeURIComponent(tab.slice(5));
@@ -4290,6 +4337,7 @@
       q.set("reposts", STATE.settings.forYouReposts === false ? "0" : "1");
       q.set("replies", STATE.settings.forYouReplies === false ? "0" : "1");
     }
+    if (tabView(tab) === "reposts") q.set("view", "reposts");
     const text = q.toString();
     return homePath(tab) + (text ? "?" + text : "");
   }
@@ -4318,6 +4366,10 @@
         if ((STATE.settings.forYouReplies !== false) !== on) { STATE.settings.forYouReplies = on; changed = true; }
       }
     }
+    if (route.query.has("view")) {
+      const want = route.query.get("view") === "reposts" ? "reposts" : "all";
+      if (tabView(tab) !== want) { setTabView(tab, want); changed = true; }
+    }
     if (changed) saveSettings();
   }
 
@@ -4337,14 +4389,19 @@
       const ids = (found && found.members) || [];
       return ids.indexOf(post.feedId) >= 0 || ids.indexOf((post.platform || "x") + ":" + (post.handle || "")) >= 0;
     }
-    if (STATE.settings.forYouReposts === false && (post.kind === "repost" || post.repostedBy)) return false;
-    if (STATE.settings.forYouReplies === false && post.kind === "reply") return false;
+    if (tabView(tab) !== "reposts") {
+      if (STATE.settings.forYouReposts === false && (post.kind === "repost" || post.repostedBy)) return false;
+      if (STATE.settings.forYouReplies === false && post.kind === "reply") return false;
+    }
     return true;
   }
 
   function homeShows(post, route) {
     if (!post || !inTimeline(post) || hiddenPost(post)) return false;
-    return homeMember(post, (route && route.tab) || "foryou");
+    const tab = (route && route.tab) || "foryou";
+    if (!homeMember(post, tab)) return false;
+    if (tabView(tab) === "reposts" && !isRepost(post)) return false;
+    return true;
   }
 
   function homeHeader(tab) {
@@ -4382,16 +4439,21 @@
     if (listId && !list) return "";
     let body = "";
     let label = "Home options";
+    const viewItems = (tab) => {
+      const view = tabView(tab);
+      const item = (id, text) => `<button type="button" role="menuitemradio" aria-checked="${view === id ? "true" : "false"}" data-act="tab-view" data-view="${id}" data-tab="${esc(tab)}"><span>${esc(text)}</span>${view === id ? icon("tick") : ""}</button>`;
+      return `<div class="tab-menu-gap"></div><div class="tab-menu-label">Show</div>${item("all", "All posts")}${item("reposts", "Reposts only")}`;
+    };
     if (which === "foryou") {
       label = "For you options";
       const box = (key, text, on) => `<button type="button" role="menuitemcheckbox" aria-checked="${on ? "true" : "false"}" data-act="foryou-toggle" data-key="${key}"><span>${text}</span>${on ? icon("tick") : ""}</button>`;
-      body = box("reposts", "Show reposts", STATE.settings.forYouReposts !== false) + box("replies", "Show replies", STATE.settings.forYouReplies !== false);
+      body = box("reposts", "Show reposts", STATE.settings.forYouReposts !== false) + box("replies", "Show replies", STATE.settings.forYouReplies !== false) + viewItems("foryou");
     } else {
       label = list ? list.name + " options" : "Following options";
       const sort = list ? listSortOf(list) : (STATE.settings.followingSort === "popular" ? "popular" : "recent");
       const sortItem = (id, text) => `<button type="button" role="menuitemradio" aria-checked="${sort === id ? "true" : "false"}" data-act="follow-sort" data-sort="${id}"${list ? ` data-list="${esc(list.id)}"` : ""}><span>${esc(text)}</span>${sort === id ? icon("tick") : ""}</button>`;
       const extra = list ? `<div class="tab-menu-gap"></div><button type="button" role="menuitem" data-act="edit-list" data-id="${esc(list.id)}">Edit list</button><button type="button" role="menuitem" data-act="tab-unpin" data-id="${esc(list.id)}">Unpin from Home</button>` : "";
-      body = sortItem("recent", "Recent") + sortItem("popular", "Popular") + extra;
+      body = sortItem("recent", "Recent") + sortItem("popular", "Popular") + viewItems(which) + extra;
     }
     return `<div class="tab-sheet" data-act="close-tab-menu"><div class="menu tab-menu" data-act="stop" role="menu" aria-label="${esc(label)}">${body}</div></div>`;
   }
@@ -4404,17 +4466,21 @@
   function homeView(route) {
     const tab = route.tab || "foryou";
     let list = posts().filter((post) => homeShows(post, route));
-    list.sort(byStamp);
-    if (tabSort(tab) === "popular") {
-      const heat = (post) => {
-        const stats = (post && post.stats) || {};
-        return (Number(stats.likes) || 0) + (Number(stats.reposts) || 0) + (Number(stats.replies) || 0) + (Number(stats.quotes) || 0);
-      };
-      list.sort((a, b) => heat(b) - heat(a) || byStamp(a, b));
+    if (tabView(tab) === "reposts") list.sort(byRepostTime);
+    else {
+      list.sort(byStamp);
+      if (tabSort(tab) === "popular") {
+        const heat = (post) => {
+          const stats = (post && post.stats) || {};
+          return (Number(stats.likes) || 0) + (Number(stats.reposts) || 0) + (Number(stats.replies) || 0) + (Number(stats.quotes) || 0);
+        };
+        list.sort((a, b) => heat(b) - heat(a) || byStamp(a, b));
+      }
     }
+    const repostsOnly = tabView(tab) === "reposts";
     const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
-      tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
-      tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
+      repostsOnly ? "No reposts yet" : tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
+      repostsOnly ? "Reposts and forwards on this tab show up here." : tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
     );
     return homeHeader(tab) + body + archiveSentinel();
   }
@@ -6797,6 +6863,18 @@
       render();
       return;
     }
+    if (act === "tab-view") {
+      const view = el.dataset.view === "reposts" ? "reposts" : "all";
+      const tab = el.dataset.tab || "foryou";
+      setTabView(tab, view);
+      STATE.tabMenu = null;
+      saveSettings();
+      const next = homeHash(tab);
+      if ((location.hash || "#/") !== next) history.replaceState(null, "", next);
+      SCROLLS[routeScrollKey()] = 0;
+      render({ y: 0 });
+      return;
+    }
     if (act === "follow-sort") {
       const sort = el.dataset.sort === "popular" ? "popular" : "recent";
       const tab = el.dataset.list ? "list:" + el.dataset.list : "following";
@@ -7294,7 +7372,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")) }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")) }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -7475,6 +7553,7 @@
         if (data.followingSort === "popular" || data.followingSort === "recent") STATE.settings.followingSort = data.followingSort;
         if (data.forYouReposts === false || data.forYouReposts === true) STATE.settings.forYouReposts = data.forYouReposts;
         if (data.forYouReplies === false || data.forYouReplies === true) STATE.settings.forYouReplies = data.forYouReplies;
+        if (data.tabViews && typeof data.tabViews === "object") STATE.settings.tabViews = cleanTabViews(data.tabViews);
         if (data.translateTo && window.FeedsTranslate) STATE.settings.translateTo = window.FeedsTranslate.normalize(data.translateTo);
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
