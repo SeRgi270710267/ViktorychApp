@@ -117,12 +117,18 @@ def pull_archive(root: Path, fetch) -> str:
 
 
 def pull_ia_sidecars(root: Path) -> None:
-    """Copy the media manifest when a source has one. A miss leaves the files alone."""
+    """Copy the media manifest when a source has one. A miss leaves the files alone.
+
+    The data branch is first. Pages would otherwise keep serving the previous
+    manifest, and a newer backup published only on the data branch would never
+    replace it.
+    """
     dest = root / "archive"
     dest.mkdir(parents=True, exist_ok=True)
+    sources = (("data", DATA_ARCHIVE), ("pages", SITE), ("ia", IA_ARCHIVE))
     for name in ("ia-manifest.json", "ia-state.json"):
         body = None
-        for _label, base in ARCHIVE_SOURCES:
+        for _label, base in sources:
             body = _get(base + "archive/" + name)
             if body:
                 break

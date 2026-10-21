@@ -2719,6 +2719,9 @@ def ia_backup_checks() -> None:
     check("group: ia-backup" in workflow and "workflow_dispatch" in workflow and 'cron: "47 7 * * *"' in workflow, "the backup workflow is scheduled, manual, and in its own group")
     check("group: pages" not in workflow and "echo \"$IA_" not in workflow and "echo $IA_" not in workflow, "the backup workflow does not take the pages lock or print the keys")
     check("ia-manifest.json" in sync and "ia-state.json" in sync, "the daily data push keeps the media manifest")
+    snap = (ROOT / "scripts" / "pull_snapshot.py").read_text(encoding="utf-8")
+    sidecar = snap[snap.index("def pull_ia_sidecars"):]
+    check(sidecar.index('("data", DATA_ARCHIVE)') < sidecar.index('("pages", SITE)'), "the media manifest is taken from the data branch before the live site")
     check('new URL("archive/"' in app and "function installIaManifest(" in app and "archive.org/download/superintelapp-" not in app and "superintelapp-manifest" not in app and "cors.archive.org/cors/" in app and "function applyIaPreview(" in app and "IA.shards" in app, "the page loads archive media from a relative manifest and archive.org")
     preview = app[app.index("function applyIaPreview("):app.index("function applyIaPreview(") + 700]
     check("127.0.0.1" in preview and "localhost" in preview and "ia-deleted" in preview, "the deleted-post preview stays on localhost")
