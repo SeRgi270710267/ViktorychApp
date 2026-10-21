@@ -637,6 +637,154 @@ def post_shell(**kwargs) -> dict:
     return post
 
 
+class BridgeError(Exception):
+    """RSS-Bridge or RSSHub returned an error page instead of posts."""
+
+
+# Phrases these generators put in the error item. A real caption does not use them.
+_BRIDGE_MARKERS = (
+    "bridge returned error",
+    "httpexception",
+    "lib/http.php",
+    "looks like something went wrong",
+)
+# RSS-Bridge's Atom fallback when an item has no permalink: urn:sha1 of the error text.
+_SHA_GUID = re.compile(r"(?i)^urn:sha1:[0-9a-f]{40}$")
+_MOZILLA_STATUS = re.compile(r"(?i)https?://developer\.mozilla\.org/\S*status/\d+")
+_RSSHUB_DOCS = re.compile(r"(?i)^https?://docs\.rsshub\.app/?$")
+_BRIDGE_ACTION = re.compile(r"(?i)[?&]action=display\b")
+_BRIDGE_NAME = re.compile(r"(?i)[?&]bridge=")
+
+
+def bridge_error_text(*parts) -> bool:
+    folded = "\n".join(str(part or "") for part in parts).casefold()
+    return any(marker in folded for marker in _BRIDGE_MARKERS)
+
+
+def _error_locator(value: str) -> bool:
+    """A guid or link that points at the error page rather than a post."""
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if bridge_error_text(text):
+        return True
+    if _MOZILLA_STATUS.search(text):
+        return True
+    if _RSSHUB_DOCS.match(text):
+        return True
+    return bool(_BRIDGE_ACTION.search(text) and _BRIDGE_NAME.search(text))
+
+
+def bridge_error_guid(guid: str, link: str = "") -> bool:
+    """Error-like ids: bridge URLs, MDN status pages, RSSHub's docs guid, or a hash with no permalink."""
+    if _error_locator(guid) or _error_locator(link):
+        return True
+    return not str(link or "").strip() and _SHA_GUID.match(str(guid or "").strip()) is not None
+
+
+def post_is_bridge_error(post: dict) -> bool:
+    """A normalized post whose title, body, or id is an upstream error page."""
+    if not isinstance(post, dict):
+        return False
+    quoted = post.get("quoted") if isinstance(post.get("quoted"), dict) else {}
+    if bridge_error_text(post.get("text"), post.get("title"), post.get("description"), quoted.get("text")):
+        return True
+    guid = str(post.get("statusId") or post.get("id") or "")
+    link = str(post.get("url") or "")
+    return bridge_error_guid(guid, link)
+
+
+def stub_is_bridge_error(row: dict) -> bool:
+    if not isinstance(row, dict):
+        return False
+    text = row.get("t") if row.get("t") is not None else row.get("text")
+    return post_is_bridge_error({"text": text or "", "id": row.get("id") or "", "url": row.get("url") or ""})
+
+
+def _item_links(item) -> list:
+    found = []
+    text = child_text(item, "link")
+    if text:
+        found.append(text)
+    for child in list(item):
+        if local_name(child.tag) != "link":
+            continue
+        href = (child.attrib.get("href") or child.text or "").strip()
+        if href and href not in found:
+            found.append(href)
+    return found
+
+
+def _item_body(item) -> str:
+    parts = []
+    for child in list(item):
+        if local_name(child.tag) not in ("title", "description", "summary", "content", "encoded"):
+            continue
+        text = "".join(child.itertext()).strip()
+        if text:
+            parts.append(text)
+    return "\n".join(parts)
+
+
+def xml_item_is_bridge_error(item) -> bool:
+    if item is None:
+        return False
+    guid = child_text(item, "guid") or child_text(item, "id")
+    if bridge_error_text(child_text(item, "title"), _item_body(item)):
+        return True
+    links = _item_links(item)
+    if _error_locator(guid):
+        return True
+    if links and all(_error_locator(link) for link in links):
+        return True
+    return not links and _SHA_GUID.match(guid or "") is not None
+
+
+def iter_feed_items(root):
+    if root is None:
+        return []
+    return [el for el in root.iter() if local_name(el.tag) in ("item", "entry")]
+
+
+def items_are_only_bridge_errors(payload: str) -> bool:
+    """True when every RSS/Atom entry is an upstream error page."""
+    if not isinstance(payload, str):
+        return False
+    try:
+        root = parse_xml(payload)
+    except Exception:
+        return False
+    items = iter_feed_items(root)
+    return bool(items) and all(xml_item_is_bridge_error(item) for item in items)
+
+
+def document_is_bridge_error(payload: str) -> bool:
+    """An HTML error page, not a feed. RSS that merely quotes the phrase is left to the item filter."""
+    if not isinstance(payload, str):
+        return False
+    sample = payload[:12000]
+    head = sample.lstrip()[:400].casefold()
+    html = (
+        head.startswith("<!doctype html")
+        or head.startswith("<html")
+        or "<h1>looks like something went wrong" in sample.casefold()
+    )
+    return bool(html and bridge_error_text(sample))
+
+
+def guard_posts(root, posts, channel_title: str = "", channel_description: str = "") -> list:
+    """Drop error items. Raise when the document is only an error so the caller can try the next mirror."""
+    items = iter_feed_items(root)
+    if items and all(xml_item_is_bridge_error(item) for item in items):
+        raise BridgeError("bridge error feed")
+    kept = [post for post in posts or [] if not post_is_bridge_error(post)]
+    if (posts or []) and not kept:
+        raise BridgeError("bridge error items")
+    if not kept and bridge_error_text(channel_title, channel_description):
+        raise BridgeError("bridge error feed")
+    return kept
+
+
 def dedupe_posts(posts, cap: int = 300):
     """One row per canonical id. The earliest trusted publish time stays."""
     ranked = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)

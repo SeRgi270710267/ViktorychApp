@@ -25,8 +25,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from adapters.common import post_is_bridge_error  # noqa: E402
 from adapters.x_replies import comments_kept  # noqa: E402
-from archive import load_archive, merge_stubs, save_archive  # noqa: E402
+from archive import load_archive, merge_stubs, purge_bridge_errors, save_archive  # noqa: E402
 
 SITE = "https://owner-account.github.io/rss-feeds/"
 DATA_ARCHIVE = "https://raw.githubusercontent.com/owner-account/rss-feeds/data/"
@@ -106,8 +107,9 @@ def pull_archive(root: Path, fetch) -> str:
         return "kept"
     dest = root / "archive"
     archive = load_archive(dest)
+    removed = purge_bridge_errors(archive)
     added = merge_stubs(archive, rows)
-    if not added:
+    if not added and not removed:
         return "kept"
     save_archive(dest, archive)
     return "updated"
@@ -135,7 +137,14 @@ def _pull_feeds() -> None:
     if not isinstance(doc, dict) or not isinstance(doc.get("posts"), list):
         print("[snapshot] published feeds.json had no posts; keeping the seed", file=sys.stderr)
         return
-    _write(ROOT / "feeds.json", body)
+    posts = [post for post in doc["posts"] if isinstance(post, dict) and not post_is_bridge_error(post)]
+    removed = len(doc["posts"]) - len(posts)
+    if removed:
+        doc["posts"] = posts
+        _write(ROOT / "feeds.json", (json.dumps(doc, ensure_ascii=False) + "\n").encode("utf-8"))
+        print(f"[snapshot] dropped {removed} bridge error posts")
+    else:
+        _write(ROOT / "feeds.json", body)
     print(f"[snapshot] feeds.json {len(doc['posts'])} posts")
     comments = ROOT / "comments"
     kept = 0

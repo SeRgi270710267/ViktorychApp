@@ -6,8 +6,10 @@ import re
 
 from .common import (
     blank_profile,
+    bridge_error_text,
     child_text,
     children,
+    guard_posts,
     html_to_parts,
     local_name,
     parse_xml,
@@ -49,7 +51,8 @@ def parse(payload, feed: dict | None = None) -> dict:
     name = title.split("(@")[0].strip() or handle
     avatar = _image(channel)
     profile = blank_profile("threads", handle, name, avatar)
-    profile["bio"] = re.sub(r"\s*-\s*Powered by RSSHub\s*$", "", child_text(channel, "description")).strip()
+    raw_bio = re.sub(r"\s*-\s*Powered by RSSHub\s*$", "", child_text(channel, "description")).strip()
+    profile["bio"] = "" if bridge_error_text(raw_bio) else raw_bio
     if profile["bio"].lower().startswith(name.lower()) or "on threads" in profile["bio"].lower():
         profile["bio"] = ""
     posts = []
@@ -87,4 +90,5 @@ def parse(payload, feed: dict | None = None) -> dict:
                 media=parts["media"],
             )
         )
+    posts = guard_posts(root, posts, channel_title=title, channel_description=raw_bio)
     return {"posts": posts, "profiles": [profile]}

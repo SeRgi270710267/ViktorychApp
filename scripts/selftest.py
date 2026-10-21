@@ -169,6 +169,139 @@ def main() -> None:
     check(post.get("commentRss") == "https://example.com/comments.xml", "generic commentRss")
     check((post.get("stats") or {}).get("replies") == 2, "generic slash comments")
 
+    from adapters.common import BridgeError, post_is_bridge_error
+    from archive import merge_archive, purge_bridge_errors
+    from update_feeds import build as build_feeds
+
+    def raises_bridge(parser, payload, feed):
+        try:
+            parser(payload, feed)
+        except BridgeError:
+            return True
+        return False
+
+    live_error = {
+        "id": "urn:sha1:e3c20ce9e73fcb2aad62770f7a19d0d558f47d5a",
+        "text": "Bridge returned error 302! (20747)\nType: HttpException\nFile: lib/http.php\nLine: 34",
+        "url": "http://localhost:8080/?action=display&bridge=InstagramBridge&context=Username&u=redacted_handle&format=Atom",
+    }
+    check(post_is_bridge_error(live_error), "a stored bridge error post is detected")
+    check(not post_is_bridge_error({"id": "Abcd1234", "text": "The word error is not a failure", "url": "https://www.instagram.com/p/Abcd1234/"}), "a caption that merely says error stays")
+    check(post_is_bridge_error({"id": "urn:sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "text": "photo", "url": ""}), "a sha1 guid with no permalink is an error id")
+    check(not post_is_bridge_error({"id": "urn:sha1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "text": "photo", "url": "https://www.instagram.com/p/Abcd1234/"}), "a sha1 guid with a real permalink stays")
+    check(post_is_bridge_error({"id": "notice", "text": "try again", "url": "https://docs.rsshub.app/"}), "an RSSHub docs guid is an error id")
+    check("function bridgeErrorPost(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the renderer hides bridge error items")
+
+    atom_error = """<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom"><title>redacted_handle</title>
+    <entry><title>Bridge returned error 302! (20747)</title>
+    <id>urn:sha1:e3c20ce9e73fcb2aad62770f7a19d0d558f47d5a</id>
+    <link href="http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;context=Username&amp;u=redacted_handle&amp;format=Atom"/>
+    <content type="html">Type: HttpException File: lib/http.php Line: 34</content></entry></feed>"""
+    check(raises_bridge(parse_ig, atom_error, {"id": "instagram:redacted_handle", "handle": "redacted_handle"}), "instagram drops an Atom bridge error")
+    rsshub_error = """<?xml version="1.0"?><rss><channel><title>RSSHub</title>
+    <item><title>Looks like something went wrong</title><description>Error message: timeout</description>
+    <link>https://docs.rsshub.app/</link><guid>https://docs.rsshub.app/</guid></item></channel></rss>"""
+    check(raises_bridge(parse_generic, rsshub_error, {"id": "rss:x", "handle": "x"}), "generic rss drops an RSSHub error item")
+    http_only = """<?xml version="1.0"?><rss><channel><title>redacted_handle</title>
+    <item><title>Update</title><description>Type: HttpException Code: 301</description>
+    <link>https://www.threads.com/t/NoPost</link><guid>NoPost</guid></item></channel></rss>"""
+    check(raises_bridge(parse_threads, http_only, {"id": "threads:redacted_handle", "handle": "redacted_handle"}), "threads drops an HttpException item")
+    php_only = """<?xml version="1.0"?><rss><channel><title>redacted_handle</title>
+    <item><title>Update</title><description>File: lib/http.php Line: 34</description>
+    <link>https://www.threads.com/t/NoPost</link><guid>NoPost</guid></item></channel></rss>"""
+    check(raises_bridge(parse_threads, php_only, {"id": "threads:redacted_handle", "handle": "redacted_handle"}), "threads drops a lib/http.php item")
+    guid_only = """<?xml version="1.0"?><rss><channel><title>redacted_handle</title>
+    <item><title>Update</title><description>photo</description>
+    <link>http://localhost:8080/?action=display&amp;bridge=ThreadsBridge&amp;context=Username&amp;u=redacted_handle&amp;format=Atom</link>
+    <guid>urn:sha1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb</guid></item></channel></rss>"""
+    check(raises_bridge(parse_threads, guid_only, {"id": "threads:redacted_handle", "handle": "redacted_handle"}), "threads drops an error-like bridge guid")
+    mixed = """<?xml version="1.0"?><rss><channel><title>Mark Zuckerberg (@redacted_handle) - Instagram</title><description>I build stuff</description>
+    <item><title>Bridge returned error 302!</title><description>Type: HttpException File: lib/http.php</description>
+    <link>http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=redacted_handle&amp;format=Atom</link>
+    <guid>urn:sha1:cccccccccccccccccccccccccccccccccccccccc</guid><pubDate>Tue, 21 Oct 2026 16:48:30 GMT</pubDate></item>
+    <item><title>A real caption</title><description>Building something new</description>
+    <link>https://www.instagram.com/p/Abcd1234/</link><guid>Abcd1234</guid>
+    <pubDate>Mon, 20 Oct 2026 10:00:00 GMT</pubDate></item></channel></rss>"""
+    mixed_posts = parse_ig(mixed, {"id": "instagram:redacted_handle", "handle": "redacted_handle"})["posts"]
+    check(len(mixed_posts) == 1 and "Building something new" in mixed_posts[0]["text"] and "Bridge returned" not in mixed_posts[0]["text"], "a mixed instagram feed keeps the real post")
+    plain = parse_generic("""<?xml version="1.0"?><rss><channel><title>Example</title>
+    <item><title>No failure</title><description>The word error is not a bridge failure</description>
+    <link>https://example.com/fine</link><guid>fine-1</guid></item></channel></rss>""", {"id": "rss:example", "handle": "example"})
+    check(len(plain["posts"]) == 1 and "error" in plain["posts"][0]["text"].lower(), "generic rss keeps a normal post that says error")
+
+    import json as bridge_json
+    import tempfile as bridge_tempfile
+    with bridge_tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        error_xml = root / "error.xml"
+        good_xml = root / "good.xml"
+        error_xml.write_text(atom_error, encoding="utf-8")
+        good_xml.write_text("""<?xml version="1.0"?><rss><channel><title>Canadian Prepper</title>
+        <item><title>Ready</title><description>Water storage</description>
+        <link>https://www.instagram.com/p/GoodNew1/</link><guid>GoodNew1</guid>
+        <pubDate>Mon, 20 Oct 2026 10:00:00 GMT</pubDate></item></channel></rss>""", encoding="utf-8")
+        out = root / "feeds.json"
+        seed = {
+            "posts": [
+                {"id": "good-old", "statusId": "good-old", "platform": "instagram", "feedId": "instagram:redacted_handle", "handle": "redacted_handle", "text": "Earlier real post", "url": "https://www.instagram.com/p/GoodOld1/", "date": "2026-10-01T00:00:00Z"},
+                live_error | {"statusId": live_error["id"], "platform": "instagram", "feedId": "instagram:redacted_handle", "handle": "redacted_handle", "date": "2026-10-21T16:48:30Z"},
+            ],
+            "feeds": [],
+        }
+        out.write_text(bridge_json.dumps(seed), encoding="utf-8")
+        config = {
+            "output": str(out),
+            "rsshubBase": "http://localhost:1200",
+            "fxtwitterBase": "https://api.fxtwitter.com",
+            "cap": 50,
+            "people": [],
+            "feeds": [{
+                "id": "instagram:redacted_handle",
+                "platform": "instagram",
+                "handle": "redacted_handle",
+                "adapter": "rsshub_instagram",
+                "source_urls": [str(error_xml), str(good_xml)],
+                "limit": 8,
+            }],
+        }
+        rotated = build_feeds(config, False, False)
+        texts = " ".join(post.get("text") or "" for post in rotated["posts"])
+        ids = {post.get("id") for post in rotated["posts"]}
+        check("Bridge returned error" not in texts and live_error["id"] not in ids, "rotation does not publish the bridge error")
+        check("Earlier real post" in texts and "GoodNew1" in ids and "Water storage" in texts, "rotation keeps the stored post and uses the next mirror")
+        check((rotated.get("sourceHealth") or {}).get("instagram:redacted_handle", {}).get("ok"), "a later good mirror counts as a successful fetch")
+        out.write_text(bridge_json.dumps(seed), encoding="utf-8")
+        config["feeds"][0]["source_urls"] = [str(error_xml)]
+        kept = build_feeds(config, False, False)
+        kept_ids = {post.get("id"): post.get("text") for post in kept["posts"]}
+        check(kept_ids.get("good-old") == "Earlier real post" and live_error["id"] not in kept_ids, "an error fetch does not overwrite the stored post")
+        check(not (kept.get("sourceHealth") or {}).get("instagram:redacted_handle", {}).get("ok"), "an error-only fetch is a failed source")
+        same = dict(seed)
+        same["posts"] = [dict(seed["posts"][0], id="GoodNew1", statusId="GoodNew1", text="Earlier real post")]
+        out.write_text(bridge_json.dumps(same), encoding="utf-8")
+        same_xml = root / "same.xml"
+        same_xml.write_text("""<?xml version="1.0"?><rss><channel><title>Canadian Prepper</title>
+        <item><title>Bridge returned error 302!</title><description>Type: HttpException File: lib/http.php</description>
+        <link>http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=redacted_handle&amp;format=Atom</link>
+        <guid>GoodNew1</guid><pubDate>Tue, 21 Oct 2026 16:48:30 GMT</pubDate></item></channel></rss>""", encoding="utf-8")
+        config["feeds"][0]["source_urls"] = [str(same_xml)]
+        replaced = build_feeds(config, False, False)
+        same_post = next(post for post in replaced["posts"] if post.get("id") == "GoodNew1")
+        check(same_post["text"] == "Earlier real post" and "Bridge returned" not in same_post["text"], "an error item does not replace a stored post with the same id")
+        shard = root / "archive"
+        shard.mkdir()
+        (shard / "2026-10.json").write_text(bridge_json.dumps([
+            {"p": "instagram", "id": "GoodOld1", "h": "redacted_handle", "d": "2026-10-01T00:00:00Z", "t": "Earlier real post"},
+            {"p": "threads", "id": "err1", "h": "redacted_handle", "d": "2026-10-21T00:00:00Z", "t": "Bridge returned error 301! HttpException"},
+            {"p": "threads", "id": "err2", "h": "redacted_handle", "d": "2026-10-21T00:00:00Z", "t": "Looks like something went wrong"},
+        ]), encoding="utf-8")
+        (shard / "index.json").write_text('{"shards":["2026-10"]}\n', encoding="utf-8")
+        merge_archive(shard, [])
+        saved_ids = {row["id"] for row in bridge_json.loads((shard / "2026-10.json").read_text(encoding="utf-8"))}
+        check(saved_ids == {"GoodOld1"}, "archive shards drop bridge error stubs and keep the real one")
+        check(purge_bridge_errors({"shards": {"2026-10": [{"p": "x", "id": "1", "t": "hello"}]}}) == 0, "a clean shard is not rewritten as an error")
+
     conv_raw = (FIX / "replies" / "2112600761762717997.json").read_text(encoding="utf-8")
     conv = parse_fxtwitter_conversation(conv_raw, "2112600761762717997")
     clean = [c for c in conv if not c.get("spam")]
@@ -693,7 +826,7 @@ def main() -> None:
     check(page.index('src="translate.js"') < page.index('src="app.js"') and 'href="translate.css"' in page, "the page loads the translator before the app")
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "sheet-__SW_VERSION__"' in worker, "the service worker cache stamp includes the unified profile")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "bridge-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
     follows_workflow = (ROOT / ".github" / "workflows" / "follows.yml").read_text(encoding="utf-8")
     check("github.actor == github.repository_owner" in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues from anyone but the owner are ignored")

@@ -14,6 +14,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from adapters.common import post_is_bridge_error, stub_is_bridge_error  # noqa: E402
+
 SNIPPET = 280
 MONTH = re.compile(r"^(\d{4})-(\d{2})")
 SHARD_NAME = re.compile(r"^(?:\d{4}-\d{2}|undated)$")
@@ -55,7 +58,7 @@ def month_key(date: str) -> str:
 
 
 def stub_from_post(post: dict) -> dict | None:
-    if not isinstance(post, dict):
+    if not isinstance(post, dict) or post_is_bridge_error(post):
         return None
     platform = str(post.get("platform") or "").strip().lower()
     ident = canonical_id(post)
@@ -135,7 +138,7 @@ def _sort_shards(archive: dict) -> None:
 
 
 def _stub_row(row: dict) -> dict | None:
-    if not isinstance(row, dict):
+    if not isinstance(row, dict) or stub_is_bridge_error(row):
         return None
     platform = str(row.get("p") or "").strip().lower()
     ident = str(row.get("id") or "").strip()
@@ -214,8 +217,24 @@ def save_archive(dest: Path, archive: dict) -> list[str]:
     return written
 
 
+def purge_bridge_errors(archive: dict) -> int:
+    """Remove error stubs already stored. A later sync must not keep them."""
+    removed = 0
+    shards = archive.get("shards") or {}
+    for name, rows in list(shards.items()):
+        kept = []
+        for row in rows:
+            if stub_is_bridge_error(row):
+                removed += 1
+                continue
+            kept.append(row)
+        archive["shards"][name] = kept
+    return removed
+
+
 def merge_archive(dest: Path, posts) -> int:
     archive = load_archive(dest)
+    purge_bridge_errors(archive)
     added = merge_posts(archive, posts)
     save_archive(dest, archive)
     return added

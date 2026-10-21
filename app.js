@@ -199,6 +199,7 @@
 
   function expandStub(row) {
     if (!row || !row.p || !row.id) return null;
+    if (bridgeErrorPost({ text: row.t || "", id: String(row.id || ""), url: "" })) return null;
     const platform = String(row.p);
     const id = String(row.id);
     const handle = String(row.h || "");
@@ -274,7 +275,7 @@
     const seen = {};
     full.forEach((post) => { seen[postIdentity(post)] = true; });
     const extra = ARCHIVE.posts.filter((post) => !seen[postIdentity(post)]).map((post) => HYDRATED[postIdentity(post)] || post);
-    return collapseSameUrl(full.concat(extra));
+    return collapseSameUrl(full.concat(extra)).filter((post) => !bridgeErrorPost(post));
   }
 
   function loadSettings() {
@@ -2233,6 +2234,25 @@
     return matchesMute((STATE.settings && STATE.settings.repostOff) || [], by.handle, by.platform || post.platform || "x", by.feedId || post.feedId);
   }
 
+  function bridgeErrorPost(post) {
+    if (!post) return false;
+    const quoted = post.quoted || {};
+    const blob = [post.text, post.title, post.description, quoted.text].join("\n");
+    const folded = blob.toLowerCase();
+    if (folded.indexOf("bridge returned error") >= 0) return true;
+    if (folded.indexOf("httpexception") >= 0) return true;
+    if (folded.indexOf("lib/http.php") >= 0) return true;
+    if (folded.indexOf("looks like something went wrong") >= 0) return true;
+    const guid = String(post.statusId || post.id || "");
+    const link = String(post.url || "");
+    if (/developer\.mozilla\.org\/\S*status\/\d+/i.test(guid) || /developer\.mozilla\.org\/\S*status\/\d+/i.test(link)) return true;
+    if (/^https?:\/\/docs\.rsshub\.app\/?$/i.test(guid) || /^https?:\/\/docs\.rsshub\.app\/?$/i.test(link)) return true;
+    const bridgeUrl = (value) => /[?&]action=display\b/i.test(value) && /[?&]bridge=/i.test(value);
+    if (bridgeUrl(guid) || bridgeUrl(link)) return true;
+    if (!link && /^urn:sha1:[0-9a-f]{40}$/i.test(guid)) return true;
+    return false;
+  }
+
   function hiddenPost(post) {
     if (!post) return false;
     if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) return true;
@@ -4113,6 +4133,7 @@
   }
 
   function card(post, mode, opts) {
+    if (bridgeErrorPost(post)) return "";
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
     const hideRepost = mode === "author" || mode === "status";

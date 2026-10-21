@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from .common import (
     blank_profile,
+    bridge_error_text,
     child_text,
     children,
+    guard_posts,
     html_to_parts,
     local_name,
     parse_xml,
@@ -89,7 +91,8 @@ def parse(payload, feed: dict | None = None) -> dict:
     platform = feed.get("platform") or "rss"
     profile = blank_profile(platform, handle, title, image)
     profile["url"] = site or profile["url"]
-    profile["bio"] = child_text(channel, "subtitle") or child_text(channel, "description")
+    raw_bio = child_text(channel, "subtitle") or child_text(channel, "description")
+    profile["bio"] = "" if bridge_error_text(raw_bio) else raw_bio
     posts = []
     items = children(channel, "item") or children(channel, "entry")
     for item in items:
@@ -158,4 +161,5 @@ def parse(payload, feed: dict | None = None) -> dict:
         )
         if comment_rss:
             posts[-1]["commentRss"] = comment_rss
+    posts = guard_posts(root, posts, channel_title=title, channel_description=raw_bio)
     return {"posts": posts, "profiles": [profile]}

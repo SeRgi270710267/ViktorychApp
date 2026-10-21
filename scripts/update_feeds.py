@@ -30,12 +30,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from adapters import ADAPTERS  # noqa: E402
 from adapters.common import (  # noqa: E402
+    BridgeError,
     canonical_status_id,
     dedupe_posts,
+    document_is_bridge_error,
+    items_are_only_bridge_errors,
     load_document,
     lock_publish_time,
     media_basename,
     merge_profiles,
+    post_is_bridge_error,
     save_document,
 )
 from meta_media import refresh_saved  # noqa: E402
@@ -99,6 +103,45 @@ def run_adapter(name: str, payload: str, feed: dict) -> dict:
     if name not in ADAPTERS:
         raise SystemExit(f"unknown adapter {name}")
     return ADAPTERS[name](payload, feed)
+
+
+def accept_feed(name: str, payload, feed: dict) -> dict:
+    """Parse one response. An error page is a failed fetch, not a list of posts."""
+    if isinstance(payload, str) and (document_is_bridge_error(payload) or items_are_only_bridge_errors(payload)):
+        raise BridgeError("bridge error feed")
+    result = run_adapter(name, payload, feed)
+    if not isinstance(result, dict):
+        return {"posts": [], "profiles": []}
+    posts = [post for post in (result.get("posts") or []) if not post_is_bridge_error(post)]
+    if (result.get("posts") or []) and not posts:
+        raise BridgeError("bridge error items")
+    cleaned = dict(result)
+    cleaned["posts"] = posts
+    return cleaned
+
+
+def _fetch_sources(urls, adapter_name, feed, config, errors):
+    """Try each mirror. A bridge error falls through to the next URL."""
+    for source in urls or []:
+        url = expand(source, config, feed)
+        if not url:
+            continue
+        try:
+            payload = read_source(url)
+            result = accept_feed(adapter_name, payload, feed)
+        except BridgeError as exc:
+            errors.append(f"{url}: {exc}")
+            print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
+            continue
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+            errors.append(f"{url}: {exc}")
+            continue
+        except Exception as exc:
+            errors.append(f"{url}: {exc}")
+            print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
+            continue
+        return payload, url, adapter_name, result
+    return None, "", adapter_name, None
 
 
 # pbs.twimg.com and video.twimg.com stay hotlinked. Only Meta CDNs expire.
@@ -397,6 +440,8 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     existing = load_document(out_path)
     old_by_feed = {}
     for post in existing.get("posts") or []:
+        if not isinstance(post, dict) or post_is_bridge_error(post):
+            continue
         old_by_feed.setdefault(post.get("feedId"), []).append(post)
     profiles = [dict(f) for f in existing.get("feeds") or []]
     collected = []
@@ -420,6 +465,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         payload = None
         source_url = ""
         adapter = feed.get("adapter")
+        result = None
         errors = []
         if not use_fixtures and feed.get("platform") == "youtube" and not feed.get("channelId"):
             try:
@@ -436,8 +482,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             adapter = feed.get("fixtureAdapter") or adapter
             try:
                 payload = (ROOT / feed["fixture"]).read_text(encoding="utf-8")
+                result = accept_feed(adapter, payload, feed)
             except OSError as exc:
                 errors.append(str(exc))
+                payload = None
+            except Exception as exc:
+                errors.append("parse failed: " + str(exc))
+                payload = None
+                result = None
         else:
             if feed.get("adapter") == "vk":
                 try:
@@ -445,9 +497,12 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
 
                     payload = wall_payload(feed.get("handle") or "", int(feed.get("limit") or 8))
                     adapter = "vk"
+                    result = accept_feed(adapter, payload, feed)
                 except Exception as exc:
                     errors.append(f"vk: {exc}")
-            if payload is None and feed.get("adapter") == "telegram":
+                    payload = None
+                    result = None
+            if result is None and payload is None and feed.get("adapter") == "telegram":
                 try:
                     from adapters.telegram import fetch_channel
 
@@ -456,53 +511,38 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     payload = fetch_channel(handle, int(feed.get("limit") or 8), backfill=not prior)
                     adapter = "telegram"
                     source_url = "https://t.me/s/" + handle
+                    result = accept_feed(adapter, payload, feed)
                 except Exception as exc:
                     errors.append(f"telegram: {exc}")
+                    payload = None
+                    result = None
             if feed.get("adapter") == "x_api_v2":
                 print(f"[keep] {feed['id']}: x_api_v2 parses fixtures only and does not call the X API", file=sys.stderr)
                 record_source(health, feed["id"], False, stamp, "x_api_v2 parses fixtures only")
                 collected.extend(old_by_feed.get(feed["id"], []))
                 continue
-            if payload is None:
-                for source in feed.get("source_urls") or []:
-                    url = expand(source, config, feed)
-                    if not url:
-                        continue
-                    try:
-                        payload = read_source(url)
-                        source_url = url
-                        adapter = feed.get("adapter")
-                        break
-                    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-                        errors.append(f"{url}: {exc}")
-            if payload is None:
+            if result is None and payload is None:
+                payload, source_url, adapter, result = _fetch_sources(
+                    feed.get("source_urls") or [], feed.get("adapter"), feed, config, errors
+                )
+            if result is None and payload is None:
                 for fallback in feed.get("fallbacks") or []:
                     if fallback.get("adapter") == "x_api_v2":
                         print(f"[skip] {feed['id']}: x_api_v2 is not a live fallback", file=sys.stderr)
                         continue
-                    for source in fallback.get("source_urls") or []:
-                        url = expand(source, config, feed)
-                        if not url:
-                            continue
-                        try:
-                            payload = read_source(url)
-                            adapter = fallback.get("adapter") or adapter
-                            break
-                        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-                            errors.append(f"{url}: {exc}")
-                    if payload is not None:
+                    payload, source_url, adapter, result = _fetch_sources(
+                        fallback.get("source_urls") or [],
+                        fallback.get("adapter") or feed.get("adapter"),
+                        feed,
+                        config,
+                        errors,
+                    )
+                    if result is not None:
                         break
-        if payload is None:
+        if result is None:
             detail = errors[-1] if errors else "no source"
             print(f"[keep] {feed['id']}: {detail}", file=sys.stderr)
             record_source(health, feed["id"], False, stamp, detail)
-            collected.extend(old_by_feed.get(feed["id"], []))
-            continue
-        try:
-            result = run_adapter(adapter, payload, feed)
-        except Exception as exc:  # keep last good snapshot if a parser breaks
-            print(f"[keep] {feed['id']}: parse failed: {exc}", file=sys.stderr)
-            record_source(health, feed["id"], False, stamp, "parse failed: " + str(exc))
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
         posts = result.get("posts") or []
@@ -545,6 +585,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                 print(f"[ok] {feed['id']}: {len(extra)} community posts via {source}")
             else:
                 print(f"[keep] {feed['id']}: no community posts", file=sys.stderr)
+        posts = [post for post in posts if not post_is_bridge_error(post)]
         stored = {}
         for item in old_by_feed.get(feed["id"], []):
             raw_id = str(item.get("id") or "")
@@ -624,7 +665,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         "feeds": profiles,
         "posts": posts,
         "sourceHealth": health,
-        "_archive_posts": list(existing.get("posts") or []) + list(collected),
+        "_archive_posts": [post for post in list(existing.get("posts") or []) + list(collected) if not post_is_bridge_error(post)],
         "_video_ok": video_ok,
         "_video_failed": video_failed,
     }
