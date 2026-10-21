@@ -400,6 +400,10 @@
     }) || null;
   }
   function accountHash(platform, handle) {
+    if (window.FeedsPeople) {
+      const merged = window.FeedsPeople.hashFor(platform, handle);
+      if (merged) return merged;
+    }
     const feed = catalogAccount(platform, handle);
     if (feed && feed.handle) return profileHash(feed.platform, feed.handle);
     return userHash(platform, handle);
@@ -2112,13 +2116,16 @@
   }
 
   function followButtonClean(id, large) {
-    if (isFollowed(id)) {
-      return `<button class="follow following${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}"><span class="f">Following</span><span class="u">Unfollow</span></button>`;
+    const ids = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(id) : [id];
+    const primary = ids[0] || id;
+    const attr = ` data-id="${esc(primary)}" data-ids="${esc(ids.join(","))}"`;
+    if (ids.some((item) => isFollowed(item))) {
+      return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">Following</span><span class="u">Unfollow</span></button>`;
     }
-    if (!configuredFeed(id)) {
-      return `<a class="follow${large ? " lg" : ""}" data-act="follow-request" data-id="${esc(id)}" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("follow", id))}">Follow</a>`;
+    if (!ids.some((item) => configuredFeed(item))) {
+      return `<a class="follow${large ? " lg" : ""}" data-act="follow-request" data-id="${esc(primary)}" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("follow", primary))}">Follow</a>`;
     }
-    return `<button class="follow${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}">Follow</button>`;
+    return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>Follow</button>`;
   }
 
   function actionBar(post) {
@@ -4174,6 +4181,7 @@
       const platform = parts[1] === "twitter" ? "x" : parts[1];
       return { name: "user", platform: platform, handle: parts[2], query };
     }
+    if (parts[0] === "p" && parts[1]) return { name: "person", id: parts[1], query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -4221,8 +4229,15 @@
     </header>`;
   }
 
+  function shownFeeds(list) {
+    if (window.FeedsPeople && window.FeedsPeople.collapse) return window.FeedsPeople.collapse(list);
+    return list;
+  }
+
   function followSuggestions() {
-    return feeds().filter((f) => f.id && !isFollowed(f.id)).sort((a, b) => (b.configured ? 1 : 0) - (a.configured ? 1 : 0));
+    const list = feeds().filter((f) => f.id);
+    if (window.FeedsPeople && window.FeedsPeople.suggestions) return window.FeedsPeople.suggestions(list, isFollowed);
+    return list.filter((f) => !isFollowed(f.id)).sort((a, b) => (b.configured ? 1 : 0) - (a.configured ? 1 : 0));
   }
 
   function sidebar() {
@@ -5267,6 +5282,10 @@
   }
 
   function userView(route) {
+    if (window.FeedsPeople) {
+      const merged = window.FeedsPeople.page(route);
+      if (merged) return merged;
+    }
     const known = catalogAccount(route.platform, route.handle);
     if (known && known.handle) {
       const tab = route.query.get("tab") || "";
@@ -5352,6 +5371,10 @@
   }
 
   function profileView(route) {
+    if (window.FeedsPeople) {
+      const merged = window.FeedsPeople.page(route);
+      if (merged) return merged;
+    }
     const feed = findFeed(route.platform, route.handle) || {
       id: route.platform + ":" + route.handle,
       platform: route.platform,
@@ -5491,7 +5514,7 @@
     const lq = q.toLowerCase();
     let body = emptyBlock("Search posts and accounts", "Try a name, @handle, or a word from a post.");
     if (lq) {
-      const accounts = feeds().filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && (f.name + " " + f.handle + " " + (f.bio || "")).toLowerCase().includes(lq));
+      const accounts = shownFeeds(feeds()).filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && (f.name + " " + f.handle + " " + (f.aliases || "") + " " + (f.bio || "")).toLowerCase().includes(lq));
       const found = posts().filter((p) => !hiddenPost(p) && (p.text + " " + p.author + " " + p.handle + " " + ((p.quoted && p.quoted.text) || "")).toLowerCase().includes(lq)).sort(byStamp);
       const acct = accounts.length ? `<section class="card"><h2>Accounts</h2>${accounts.map(accountRow).join("")}</section>` : "";
       body = acct + (found.length ? found.map((p) => card(p)).join("") : emptyBlock("No results", "Nothing matched “" + q + "”."));
@@ -5508,7 +5531,7 @@
   }
 
   function feedsView() {
-    const list = feeds().slice().sort((a, b) => Number(b.configured) - Number(a.configured) || (a.name || "").localeCompare(b.name || ""));
+    const list = shownFeeds(feeds().slice()).sort((a, b) => Number(b.configured) - Number(a.configured) || (a.name || "").localeCompare(b.name || ""));
     const box = `<form class="add-account"><label class="search"><span>${icon("search")}</span><input id="add-account" placeholder="Add account URL or @handle" aria-label="Add account"></label><button class="follow" type="submit">Add</button></form>`;
     return pageHead("Feeds") + box + (list.length ? `<div>${list.map((f) => accountRow(f, { remove: true })).join("")}</div>` : emptyBlock("No accounts", "Paste a profile URL or @handle above."));
   }
@@ -5819,7 +5842,7 @@
       if (ay !== by) return ay - by;
       return String(a.name || a.handle || "").localeCompare(String(b.name || b.handle || ""));
     });
-    return rows;
+    return shownFeeds(rows);
   }
 
   function memberOn(group, feed) {
@@ -5846,6 +5869,7 @@
     add(feed.id);
     add((feed.platform || "x") + ":" + (feed.handle || ""));
     if (feed.channelId) add((feed.platform || "youtube") + ":" + feed.channelId);
+    if (Array.isArray(feed.memberIds)) feed.memberIds.forEach(add);
     return keys;
   }
 
@@ -6426,7 +6450,7 @@
     const shared = sharedAccount();
     const feed = shared.handle ? findFeed(shared.platform || "x", shared.handle) : null;
     const q = shared.handle || "";
-    const matches = q ? feeds().filter((item) => (item.name + " " + item.handle).toLowerCase().includes(q.toLowerCase())).slice(0, 8) : [];
+    const matches = q ? shownFeeds(feeds()).filter((item) => (item.name + " " + item.handle + " " + (item.aliases || "")).toLowerCase().includes(q.toLowerCase())).slice(0, 8) : [];
     return pageHead("Add account", "", true) + `<div class="modal-body">
       <p>${esc((STATE.incoming && (STATE.incoming.text || STATE.incoming.url)) || shared.url || "")}</p>
       ${shared.handle ? `<p class="phandle">${esc(PLATFORM[shared.platform] || shared.platform)} · @${esc(shared.handle)}</p>` : `<p class="phandle">Search for an account, or follow one that’s already in your feeds.</p>`}
@@ -6461,6 +6485,7 @@
     const params = new URLSearchParams(location.search);
     if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock("No posts yet", "When the accounts you follow post, their updates will show up here.");
     if (route.name === "home") return homeView(route);
+    if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead("Profile", "", true) + emptyBlock("Profile isn’t available", "This person isn’t in people.json.");
     if (route.name === "profile") return profileView(route);
     if (route.name === "user") return userView(route);
     if (route.name === "status") return statusView(route);
@@ -6650,7 +6675,8 @@
       document.getElementById("app").innerHTML = shell(view(route), route);
       previewAnchor = y;
       const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
-      document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
+      const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
+      document.title = (personName || (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / Feeds";
       window.scrollTo(0, y);
       if (focusId) {
         const el = document.getElementById(focusId);
@@ -6869,10 +6895,14 @@
       return;
     }
     if (act === "follow") {
-      const id = el.dataset.id;
-      const i = STATE.settings.follows.indexOf(id);
-      if (i >= 0) STATE.settings.follows.splice(i, 1);
-      else STATE.settings.follows.push(id);
+      const ids = String(el.dataset.ids || el.dataset.id || "").split(",").map((part) => part.trim()).filter(Boolean);
+      if (!ids.length) return;
+      const on = ids.some((item) => isFollowed(item));
+      ids.forEach((item) => {
+        const i = STATE.settings.follows.indexOf(item);
+        if (on) { if (i >= 0) STATE.settings.follows.splice(i, 1); }
+        else if (i < 0) STATE.settings.follows.push(item);
+      });
       saveSettings();
       render();
       return;
@@ -7168,9 +7198,15 @@
       if (!draft) return;
       const id = el.dataset.id || "";
       const feed = feedById(id) || { id: id, platform: id.split(":")[0], handle: id.split(":").slice(1).join(":") };
+      const keys = feedKeys(feed);
+      if (window.FeedsPeople && window.FeedsPeople.followIds) {
+        window.FeedsPeople.followIds(id).forEach((item) => { if (keys.indexOf(item) < 0) keys.push(item); });
+      }
       draft.members = draft.members || [];
-      if (draftHas(draft, feed)) draft.members = draft.members.filter((item) => feedKeys(feed).indexOf(item) < 0);
-      else if (draft.members.length < 200 && draft.members.indexOf(feed.id) < 0) draft.members.push(feed.id);
+      if (keys.some((key) => draft.members.indexOf(key) >= 0)) draft.members = draft.members.filter((item) => keys.indexOf(item) < 0);
+      else keys.forEach((key) => {
+        if (draft.members.length < 200 && draft.members.indexOf(key) < 0) draft.members.push(key);
+      });
       render();
       return;
     }
@@ -8822,5 +8858,14 @@
   }
 
   if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
+  if (window.FeedsPeople) {
+    window.FeedsPeople.bind({
+      esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
+      followButtonClean: followButtonClean, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
+      sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
+      statusHash: statusHash, watchHash: watchHash, render: render
+    });
+    window.FeedsPeople.start();
+  }
   boot();
 })();
