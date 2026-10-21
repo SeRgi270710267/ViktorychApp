@@ -2005,6 +2005,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 }
 .yt-strip {
   display: flex;
+  align-items: flex-start;
   gap: 4px;
   overflow-x: auto;
   padding: 12px 12px 4px;
@@ -2017,6 +2018,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-start;
   gap: 6px;
   color: var(--muted);
   font-size: 12px;
@@ -2025,14 +2027,22 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   padding: 4px;
   border-radius: 12px;
 }
-.yt-ch span:last-child {
-  max-width: 80px;
+.yt-ch .ch-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  width: 76px;
+  height: 32px;
+  max-height: 32px;
+  line-height: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: break-word;
 }
 .yt-ch:hover { background: var(--hover); }
-.yt-ch.on { color: var(--text); }
+.yt-ch.on { color: var(--text); font-weight: 500; }
 .yt-ch .ava, .yt-ch .ava img, .yt-all {
   width: 56px;
   height: 56px;

@@ -713,6 +713,15 @@
     return "#/subscriptions?group=" + encodeURIComponent(id);
   }
 
+  function subsChannelHash(groupId, channelId) {
+    const base = subsHash(groupId);
+    const id = String(channelId || "");
+    if (!id) return base;
+    const cut = base.indexOf("?");
+    const path = "#/subscriptions/" + encodeURIComponent(id);
+    return cut < 0 ? path : path + base.slice(cut);
+  }
+
   function profileHash(platform, handle) {
     if (!handle) return "#/";
     if ((platform || "x") === "x") return `#/@${encodeURIComponent(handle)}`;
@@ -4712,7 +4721,7 @@
     });
     if (!parts.length || parts[0] === "home") return { name: "home", tab: parts[1] === "following" ? "following" : parts[1] === "tab" ? "list:" + parts[2] : "foryou", query };
     if (parts[0] === "following") return { name: "home", tab: "following", query };
-    if (parts[0] === "subscriptions") return { name: "subscriptions", channel: query.get("c") || "", query };
+    if (parts[0] === "subscriptions") return { name: "subscriptions", channel: parts[1] || query.get("c") || "", query };
     if (parts[0] === "watch") {
       const spec = parts.slice(1).join("/");
       const cut = spec.indexOf(":");
@@ -7015,13 +7024,18 @@
       STATE.settings.subsGroup = remembered;
       saveSettings();
     }
-    const here = subsHash(remembered);
+    const here = subsChannelHash(remembered, "");
     const channels = videoFeeds().filter((feed) => !active || memberOn(active, feed));
     const chips = `<div class="yt-chips" aria-label="Subscription groups"><button class="yt-chip${!active ? " on" : ""}" type="button" data-act="subs-group" data-group="" aria-pressed="${!active ? "true" : "false"}">All</button>${(STATE.settings.groups || []).map((group) => {
       const on = active && active.id === group.id;
       return `<button class="yt-chip${on ? " on" : ""}" type="button" data-act="subs-group" data-group="${esc(group.id)}" aria-pressed="${on ? "true" : "false"}">${groupFace(group)}<span>${esc(group.name)}</span></button>`;
     }).join("")}<button class="yt-chip yt-chip-add" type="button" data-act="group-new" aria-pressed="false" aria-label="New group">${icon("plus")}<span>New group</span></button></div>`;
-    const strip = `<div class="yt-strip"><a class="yt-ch${!route.channel ? " on" : ""}" href="${esc(here)}"><span class="yt-all">All</span><span>All</span></a>${channels.map((feed) => `<a class="yt-ch${route.channel === feed.id ? " on" : ""}" data-feed="${esc(feed.id)}" href="${esc(accountHash(feed.platform, feed.channelId || feed.handle))}">${avatar(feed.avatar, feed.name, "ch")}<span>${esc(feed.name || feed.handle)}</span></a>`).join("")}</div>`;
+    const strip = `<div class="yt-strip" aria-label="Channels"><a class="yt-ch${!route.channel ? " on" : ""}" href="${esc(here)}"${!route.channel ? ' aria-current="page"' : ""}><span class="yt-all">All</span><span class="ch-name">All</span></a>${channels.map((feed) => {
+      const on = route.channel === feed.id;
+      const href = on ? here : subsChannelHash(remembered, feed.id);
+      return `<a class="yt-ch${on ? " on" : ""}" data-feed="${esc(feed.id)}" href="${esc(href)}"${on ? ' aria-current="page"' : ""}>${avatar(feed.avatar, feed.name, "ch")}<span class="ch-name">${esc(feed.name || feed.handle)}</span></a>`;
+    }).join("")}</div>`;
+    posts().forEach(creditCarried);
     let list = posts().filter((post) => isVideoPost(post) && followedPost(post) && postInGroup(active, post)).sort(byStamp);
     if (route.channel) list = list.filter((post) => onChannel(post, route.channel));
     channels.forEach(ensureYtSubs);
@@ -7030,7 +7044,7 @@
     let body = "";
     if (!STATE.settings.follows.length) body = emptyBlock("No videos yet", "Follow accounts to see their videos here.");
     else if (active && !(active.members || []).length) body = emptyBlock("No channels in this group", "Edit the group and pick channels.");
-    else if (!list.length) body = emptyBlock(active ? "No videos in this group" : "No videos yet", active ? "Videos from these channels will show up here." : "Videos from accounts you follow will show up here.");
+    else if (!list.length) body = emptyBlock(route.channel ? "No videos from this channel" : active ? "No videos in this group" : "No videos yet", route.channel ? "This channel's videos will show up here." : active ? "Videos from these channels will show up here." : "Videos from accounts you follow will show up here.");
     else {
       const shorts = list.filter((post) => post.short);
       const rest = list.filter((post) => !post.short);
@@ -7048,6 +7062,16 @@
       body = shelf + sections;
     }
     return `<div class="subs ${layout}">${head}${chips}${save}${strip}${body}</div>`;
+  }
+
+  function revealSubsChannel() {
+    const picked = document.querySelector(".yt-strip .yt-ch.on[data-feed]");
+    const strip = picked && picked.parentElement;
+    if (!picked || !strip) return;
+    const left = picked.offsetLeft;
+    const right = left + picked.offsetWidth;
+    if (left >= strip.scrollLeft && right <= strip.scrollLeft + strip.clientWidth) return;
+    strip.scrollLeft = Math.max(0, left - 12);
   }
 
   function watchComments(post) {
@@ -7741,6 +7765,7 @@
         }
       }
       document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden && window.innerWidth < 500));
+      if (route.name === "subscriptions" && route.channel && (routeChanged || !STATE.scrollKey)) revealSubsChannel();
       STATE.scrollKey = nextKey;
       lastKey = location.hash;
       if (routeChanged && !transition) {

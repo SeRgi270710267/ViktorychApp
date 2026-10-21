@@ -925,6 +925,10 @@ def main() -> None:
     check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
     check("var(--fill)" in css[css.index(".yt-chip.on"):css.index(".yt-chip.on") + 160], "the selected subscription chip uses the inverted fill")
     check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups to the site" in app, "subscription groups filter from the chip bar and can be published")
+    subs_strip = app[app.index("const strip = "):app.index("const strip = ") + 1100]
+    ch_name = css[css.index(".yt-ch .ch-name"):css.index(".yt-ch .ch-name") + 420]
+    subs_view = app[app.index("function subsView("):app.index("function revealSubsChannel(")]
+    check("function subsChannelHash(" in app and "parts[1] || query.get(\"c\")" in app and "subsChannelHash" in subs_strip and "accountHash" not in subs_strip and "ch-name" in subs_strip and "creditCarried" in subs_view and "onChannel" in subs_view and "-webkit-line-clamp: 2" in ch_name and "height: 32px" in ch_name and "align-items: flex-start" in css[css.index(".yt-strip {"):css.index(".yt-strip {") + 180], "a channel in the subscription row filters that creator's videos and its name wraps to two lines")
     tabs_css = css[css.index(".tabs {"):css.index(".tabs {") + 360]
     check("flex-wrap: nowrap" in tabs_css and "overflow-x: auto" in tabs_css and "white-space: nowrap" in tabs_css, "home tabs stay on one scrolling row")
     tab_menu_css = css[css.index(".menu.tab-menu"):css.index(".menu.tab-menu") + 1400]
