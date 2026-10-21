@@ -42,7 +42,8 @@
     ig: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm5 4.2A4.8 4.8 0 1 0 16.8 12 4.8 4.8 0 0 0 12 7.2zm6.3-.8a1.15 1.15 0 1 0 1.15 1.15A1.15 1.15 0 0 0 18.3 6.4zM12 9.3A2.7 2.7 0 1 1 9.3 12 2.7 2.7 0 0 1 12 9.3z",
     threads: "M12.2 3C7.8 3 4.6 6.2 4.6 10.8c0 2.3.8 4.3 2.2 5.8l-1 3.2 3.3-1.2c.9.3 1.9.5 2.9.5 4.5 0 7.8-3.2 7.8-7.6C19.8 6.4 16.6 3 12.2 3zm0 2.2c3.2 0 5.4 2.3 5.4 5.5 0 1.5-.5 2.8-1.4 3.8-.3-2.3-1.8-4-4-4.6.8-.4 1.3-1.1 1.3-2 0-1.3-1.1-2.2-2.6-2.2-1.7 0-2.9 1.1-3.1 2.7H6.2c.3-2.6 2.6-4.6 5.9-4.6-.1 0 .1 0 .1 1.4zm-.4 4.2c1.6.2 2.8 1.3 3.1 3-.6.5-1.4.8-2.3.8-1.5 0-2.6-.8-3-2 .7-.3 1.4-.6 2.2-.8z",
     rss: "M6 17.5A1.5 1.5 0 1 1 4.5 16 1.5 1.5 0 0 1 6 17.5zM4 11a7 7 0 0 1 7 7h-2a5 5 0 0 0-5-5v-2zm0-4a11 11 0 0 1 11 11h-2A9 9 0 0 0 4 9V7z",
-    feather: "M22 3.2c-5.8 0-9.4 2.2-12 5.6C8.2 11.4 7.2 15 7 19h2.1c.2-2.6.8-4.8 2-6.2 1 .2 2.1.5 3.2.9l-2.1 3.1h2.2l1.5-2.2c1.7.4 3.4.7 5.2 1 .2-.7.4-1.4.5-2.1-.9-.2-1.7-.4-2.5-.6 2-1.5 3.8-3.5 5-5.9-.3 0-.6-.1-1-.1z"
+    feather: "M22 3.2c-5.8 0-9.4 2.2-12 5.6C8.2 11.4 7.2 15 7 19h2.1c.2-2.6.8-4.8 2-6.2 1 .2 2.1.5 3.2.9l-2.1 3.1h2.2l1.5-2.2c1.7.4 3.4.7 5.2 1 .2-.7.4-1.4.5-2.1-.9-.2-1.7-.4-2.5-.6 2-1.5 3.8-3.5 5-5.9-.3 0-.6-.1-1-.1z",
+    pip: "M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v11c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 20 4 18.88 4 17.5v-11zM6.5 6A.5.5 0 0 0 6 6.5v11c0 .28.22.5.5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11zM10 12h8v6h-8v-6z"
   };
 
   const STATE = {
@@ -69,8 +70,14 @@
     sharedState: {},
     chain: {},
     threadMore: {},
-    focusId: ""
+    focusId: "",
+    pendingFeed: null,
+    installPrompt: null,
+    incoming: null,
+    scrollKey: ""
   };
+  const SCROLLS = {};
+  const THEME_COLORS = { default: "#ffffff", dim: "#15202b", lightsout: "#000000" };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
 
@@ -170,7 +177,7 @@
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) {
-        return { version: 1, initialized: true, follows: configured, lists: [], likes: {}, bookmarks: {}, reposts: {} };
+        return { version: 1, initialized: true, follows: configured, lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false };
       }
       const parsed = JSON.parse(raw);
       parsed.follows = Array.isArray(parsed.follows) ? parsed.follows : configured;
@@ -178,18 +185,22 @@
       parsed.likes = parsed.likes || {};
       parsed.bookmarks = parsed.bookmarks || {};
       parsed.reposts = parsed.reposts || {};
+      parsed.savedPosts = parsed.savedPosts || {};
+      if (!parsed.appearance) parsed.appearance = "lightsout";
+      if (parsed.notify !== true) parsed.notify = false;
       if (!parsed.initialized) {
         parsed.follows = configured;
         parsed.initialized = true;
       }
       return parsed;
     } catch (err) {
-      return { version: 1, initialized: true, follows: configured, lists: [], likes: {}, bookmarks: {}, reposts: {} };
+      return { version: 1, initialized: true, follows: configured, lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false };
     }
   }
 
   function saveSettings() {
     localStorage.setItem(KEY, JSON.stringify(STATE.settings));
+    syncWorkerState();
   }
 
   function isFollowed(id) { return STATE.settings.follows.includes(id); }
@@ -435,7 +446,7 @@
     return linkify(cut, post.links, post.platform) + ` <button class="show-more" data-act="more" data-key="${esc(key)}">Show more</button>`;
   }
 
-  function mediaHtml(items) {
+  function mediaHtml(items, eager) {
     const list = (items || []).filter((m) => m && (m.url || m.poster || m.type === "embed" || m.type === "placeholder")).slice(0, 4);
     if (!list.length) return "";
     if (list.length === 1 && list[0].type === "embed") {
@@ -448,13 +459,16 @@
     }
     const n = list.length;
     const cls = n === 1 ? "m1" : n === 2 ? "m2" : n === 3 ? "m3" : "m4";
-    const tiles = list.map((m) => {
+    const tiles = list.map((m, index) => {
       const alt = m.alt ? `<span class="alt-badge">ALT</span>` : "";
       const gif = m.type === "animated_gif" ? `<span class="gif-badge">GIF</span>` : "";
       const refresh = m.fallback ? ` data-refresh="${esc(m.fallback)}"` : "";
+      const first = eager && index === 0;
       if (m.type === "photo" || !m.url || m.url === m.poster || /youtube-nocookie\.com|\/embed\//.test(m.url)) {
         const src = /youtube-nocookie\.com|\/embed\//.test(m.url || "") ? (m.poster || "") : (m.url || m.poster);
-        return `<div class="tile"><img src="${esc(src)}"${refresh} alt="${esc(m.alt || "")}" loading="lazy" referrerpolicy="no-referrer">${alt}</div>`;
+        const loading = first ? "eager" : "lazy";
+        const priority = first ? ` fetchpriority="high"` : "";
+        return `<div class="tile"><img src="${esc(src)}"${refresh} alt="${esc(m.alt || "")}" loading="${loading}"${priority} referrerpolicy="no-referrer">${alt}</div>`;
       }
       const poster = m.poster ? ` poster="${esc(m.poster)}"` : "";
       const loop = m.type === "animated_gif" ? " autoplay muted loop playsinline" : "";
@@ -1486,6 +1500,28 @@
     } catch (err) { /* the timeline stays on feeds.json */ }
   }
 
+  function revealArchive() {
+    const route = parseRoute();
+    if (route.name !== "home" || (route.tab && route.tab !== "foryou")) { render(); return; }
+    const center = document.querySelector("main.center");
+    if (!center) { render(); return; }
+    const seen = {};
+    center.querySelectorAll("article[data-post]").forEach((el) => { seen[el.dataset.post] = true; });
+    const list = posts().filter(inTimeline).sort(byStamp);
+    const head = center.querySelector("article[data-post]");
+    if (head && list[0] && list[0].id !== head.dataset.post && stamp(list[0]) > (head.dataset.date || "")) {
+      render();
+      return;
+    }
+    const extra = list.filter((post) => !seen[post.id]);
+    const old = document.getElementById("archive-more");
+    if (old) old.remove();
+    if (extra.length) center.insertAdjacentHTML("beforeend", extra.map((post) => card(post)).join(""));
+    const marker = archiveSentinel();
+    if (marker) center.insertAdjacentHTML("beforeend", marker);
+    watchHydration();
+  }
+
   function loadNextShard() {
     const name = nextShardName();
     if (!name || archiveBusy) return;
@@ -1785,13 +1821,14 @@
     const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(sitePermalink(statusHash(post)))}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
+    const eager = !!opts.eager;
     const avaLink = `<a href="${esc(profileHash(post.platform, post.handle))}" data-card="${esc(post.platform + ":" + post.handle)}">${avatar(face.avatar, post.author || post.handle)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(statusHash(post))}"`;
     const threadLink = mode !== "status" && mode !== "reply" && threadChildren(post).length
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
     const hydrate = post.stub ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
-    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}"${open}${hydrate}>
+    return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-date="${esc(post.date || "")}"${open}${hydrate}>
       ${repost}
       <div class="post-row">
         ${avaCol}
@@ -1806,7 +1843,7 @@
           </div>
           ${reply}
           <div class="post-text">${textHtml(post, post.id, false)}</div>
-          ${mediaHtml(post.media)}
+          ${mediaHtml(post.media, eager)}
           ${quoteCard(post.quoted)}
           ${threadLink}
           ${actionBar(post)}
@@ -1837,7 +1874,7 @@
       if (cut > 0) return { name: "watch", platform: spec.slice(0, cut), id: spec.slice(cut + 1), query };
     }
     if (parts[0] === "tab" && parts[1]) return { name: "home", tab: "list:" + parts[1], query };
-    const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings"];
+    const names = ["explore", "notifications", "messages", "feeds", "lists", "bookmarks", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
     let platform = "x";
@@ -1953,7 +1990,7 @@
       list = found ? listMembersPosts(found) : [];
     }
     list = list.filter(inTimeline);
-    const body = list.length ? list.map((p) => card(p)).join("") : emptyBlock(
+    const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
       tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
     );
@@ -2130,9 +2167,18 @@
       ${items.length ? items.map((p) => card(p)).join("") : emptyBlock("No posts in this List", "Add members to see their posts here.")}` + archiveSentinel();
   }
 
+  function bookmarkedPosts() {
+    const ids = STATE.settings.bookmarks || {};
+    const saved = STATE.settings.savedPosts || {};
+    const fromFeed = posts().filter((p) => ids[p.id]);
+    const seen = {};
+    fromFeed.forEach((p) => { seen[p.id] = true; });
+    const extra = Object.keys(ids).filter((id) => ids[id] && !seen[id] && saved[id]).map((id) => saved[id]);
+    return fromFeed.concat(extra).sort(byStamp);
+  }
+
   function bookmarksView() {
-    const ids = STATE.settings.bookmarks;
-    const list = posts().filter((p) => ids[p.id]).sort(byStamp);
+    const list = bookmarkedPosts();
     return pageHead("Bookmarks", `<div class="subhead">@reader</div>`) + (list.length ? list.map((p) => card(p)).join("") : emptyBlock("Save posts for later", "Bookmark posts to easily find them again in the future."));
   }
 
@@ -2140,9 +2186,30 @@
     return pageHead(title) + emptyBlock(headline, body);
   }
 
+  function isStandalone() {
+    return matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
+  }
+
+  function installControl() {
+    if (isStandalone()) return "";
+    return `<button class="primary" type="button" data-act="install">Install app</button>`;
+  }
+
   function settingsView() {
+    const appearance = (STATE.settings && STATE.settings.appearance) || "lightsout";
+    const themeBtn = (id, label) => `<button class="outline${appearance === id ? " on" : ""}" type="button" data-act="theme" data-theme="${id}">${label}</button>`;
+    const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     return pageHead("Settings", "", true) + `<div class="modal-body">
       <p class="phandle">Follows, Lists, likes, and bookmarks stay in this browser.</p>
+      <h2>Appearance</h2>
+      <div class="theme-row">
+        ${themeBtn("auto", "Auto")}
+        ${themeBtn("default", "Default")}
+        ${themeBtn("dim", "Dim")}
+        ${themeBtn("lightsout", "Lights out")}
+      </div>
+      ${installControl()}
+      <button class="primary" type="button" data-act="notify">${notifyOn ? "Notifications on" : "Notify me about new posts"}</button>
       <button class="primary" data-act="export">Export settings</button>
       <label class="primary import-btn">Import settings<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
     </div>`;
@@ -2157,6 +2224,7 @@
       <a href="#/subscriptions">${icon("subs")} Subscriptions</a>
       <a href="#/feeds">${icon("spark")} Feeds</a>
       <a href="#/settings">${icon("more")} Settings</a>
+      ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} Install app</button>`}
     </div></div>`;
   }
 
@@ -2168,6 +2236,16 @@
         <button class="outline" data-act="close-modal" style="margin-left:8px">Cancel</button></div></div></div>`;
     }
     if (!STATE.modal) return "";
+    if (STATE.modal === "install") {
+      const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const steps = ios
+        ? `<div class="install-step"><span>1</span> Tap Share in Safari</div><div class="install-step"><span>2</span> Choose Add to Home Screen</div><div class="install-step"><span>3</span> Tap Add</div>`
+        : `<p>Use the install icon in the address bar, or open the browser menu and choose Install app.</p>`;
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" data-act="stop">
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>Install app</h2></div>
+        <div class="modal-body install-sheet">${steps}</div>
+      </div></div>`;
+    }
     if (STATE.modal === "compose") {
       return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" data-act="stop">
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><div class="grow"></div></div>
@@ -2396,6 +2474,7 @@
       player = "";
     }
     const switcher = post.platform === "youtube" && media.stream ? `<button class="text-btn" type="button" data-act="player-alt" data-id="${esc(id)}">${alt ? "YouTube player" : "Alternate player"}</button>` : "";
+    const pip = !embed && /<video/.test(player) && document.pictureInPictureEnabled ? `<button class="text-btn" type="button" data-act="pip">${icon("pip")} Picture in picture</button>` : "";
     const subs = feed.platform === "youtube" && feed.followers != null ? formatCount(feed.followers) + " subscribers" : (feed.followers != null ? formatCount(feed.followers) + " followers" : "");
     const liked = !!STATE.settings.likes[post.id];
     const booked = !!STATE.settings.bookmarks[post.id];
@@ -2425,7 +2504,7 @@
       <div class="watch">
         <div class="watch-main">
           <div class="player">${player}</div>
-          ${switcher}
+          ${switcher}${pip}
           <h1 class="watch-title">${esc(post.title || post.text || "")}</h1>
           <div class="watch-chan">
             <a href="${esc(profileHash(feed.platform, feed.handle))}">${avatar(post.avatar || feed.avatar, feed.name || post.author)}</a>
@@ -2687,6 +2766,38 @@
       .then(() => render());
   }
 
+  function sharedAccount() {
+    const raw = String((STATE.incoming && (STATE.incoming.url || STATE.incoming.text)) || "");
+    const found = raw.match(/https?:\/\/[^\s]+/);
+    const url = found ? found[0] : raw;
+    const skip = { home: 1, share: 1, intent: 1, search: 1, i: 1, p: 1, reel: 1, tv: 1, stories: 1, watch: 1, shorts: 1 };
+    let platform = "";
+    let handle = "";
+    const x = url.match(/(?:x|twitter)\.com\/([A-Za-z0-9_]{1,30})/);
+    const ig = url.match(/instagram\.com\/([A-Za-z0-9_.]{1,30})/);
+    const th = url.match(/threads\.(?:com|net)\/@([A-Za-z0-9_.]{1,30})/);
+    const yt = url.match(/youtube\.com\/@([A-Za-z0-9_-]{1,40})/);
+    if (x && !skip[x[1]]) { platform = "x"; handle = x[1]; }
+    else if (ig && !skip[ig[1]]) { platform = "instagram"; handle = ig[1]; }
+    else if (th && !skip[th[1]]) { platform = "threads"; handle = th[1]; }
+    else if (yt) { platform = "youtube"; handle = yt[1]; }
+    return { url: url, platform: platform, handle: handle };
+  }
+
+  function incomingView() {
+    const shared = sharedAccount();
+    const feed = shared.handle ? findFeed(shared.platform || "x", shared.handle) : null;
+    const q = shared.handle || "";
+    const matches = q ? feeds().filter((item) => (item.name + " " + item.handle).toLowerCase().includes(q.toLowerCase())).slice(0, 8) : [];
+    return pageHead("Add account", "", true) + `<div class="modal-body">
+      <p>${esc((STATE.incoming && (STATE.incoming.text || STATE.incoming.url)) || shared.url || "")}</p>
+      ${shared.handle ? `<p class="phandle">${esc(PLATFORM[shared.platform] || shared.platform)} · @${esc(shared.handle)}</p>` : `<p class="phandle">Search for an account, or follow one that’s already in your feeds.</p>`}
+      ${feed ? followButtonClean(feed.id, true) : (shared.handle ? `<p class="phandle">@${esc(shared.handle)} isn’t in the catalog yet. Add the account in feeds.config.json, then sync.</p>` : "")}
+      <form data-act="search-form" class="explore-form"><label class="search"><span>${icon("search")}</span><input id="explore-q" value="${esc(q)}" placeholder="Search accounts" aria-label="Search accounts"></label></form>
+      ${matches.map(accountRow).join("")}
+    </div>`;
+  }
+
   function view(route) {
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>Home</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
@@ -2707,14 +2818,23 @@
     if (route.name === "subscriptions") return subsView(route);
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
+    if (route.name === "incoming") return incomingView();
     if (route.name === "notifications") return notesView("Notifications", "Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
     if (route.name === "messages") return notesView("Messages", "Welcome to your inbox", "Private conversations aren’t part of this reader.");
     return homeView({ tab: "foryou", query: new URLSearchParams() });
   }
 
   let lastKey = "";
+  function routeScrollKey() {
+    const route = parseRoute();
+    if (route.name === "home") return "home:" + (route.tab || "foryou");
+    return location.hash || "#/";
+  }
+
   function render(opts) {
     const route = parseRoute();
+    const nextKey = routeScrollKey();
+    const routeChanged = !!STATE.scrollKey && STATE.scrollKey !== nextKey;
     if (route.name !== "status") STATE.focusId = "";
     const reset = opts && opts.reset;
     const y = reset ? 0 : window.scrollY;
@@ -2722,8 +2842,9 @@
     const focusId = focus && focus.id;
     const caret = focus && typeof focus.selectionStart === "number" ? focus.selectionStart : null;
     document.getElementById("app").innerHTML = shell(view(route), route);
-    document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
-    if (reset) window.scrollTo(0, 0);
+    document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
+    if (opts && Object.prototype.hasOwnProperty.call(opts, "y")) window.scrollTo(0, opts.y);
+    else if (reset) window.scrollTo(0, 0);
     else window.scrollTo(0, y);
     if (focusId) {
       const el = document.getElementById(focusId);
@@ -2735,8 +2856,14 @@
       }
     }
     document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden && window.innerWidth < 500));
+    STATE.scrollKey = nextKey;
     lastKey = location.hash;
+    if (routeChanged) {
+      const center = document.querySelector(".center");
+      if (center) center.classList.add("route-in");
+    }
     watchHydration();
+    syncMediaSession();
   }
 
   function toast(message) {
@@ -2814,10 +2941,51 @@
     if (act === "like" || act === "bookmark" || act === "repost") {
       const bucket = act === "like" ? "likes" : act === "bookmark" ? "bookmarks" : "reposts";
       const id = el.dataset.id;
-      if (STATE.settings[bucket][id]) delete STATE.settings[bucket][id];
-      else STATE.settings[bucket][id] = true;
+      if (STATE.settings[bucket][id]) {
+        delete STATE.settings[bucket][id];
+        if (act === "bookmark" && STATE.settings.savedPosts) delete STATE.settings.savedPosts[id];
+      } else {
+        STATE.settings[bucket][id] = true;
+        if (act === "bookmark") rememberBookmark(id);
+      }
       saveSettings();
       render();
+      return;
+    }
+    if (act === "install") {
+      STATE.drawer = false;
+      if (STATE.installPrompt) {
+        const prompt = STATE.installPrompt;
+        STATE.installPrompt = null;
+        Promise.resolve()
+          .then(() => prompt.prompt())
+          .then(() => prompt.userChoice)
+          .then(() => render())
+          .catch(() => { STATE.modal = "install"; render(); });
+        render();
+        return;
+      }
+      STATE.modal = "install";
+      render();
+      return;
+    }
+    if (act === "theme") {
+      STATE.settings.appearance = el.dataset.theme || "lightsout";
+      saveSettings();
+      applyTheme();
+      render();
+      return;
+    }
+    if (act === "notify") {
+      enableNotifications();
+      return;
+    }
+    if (act === "pip") {
+      const video = document.querySelector(".player video");
+      if (video && document.pictureInPictureEnabled) {
+        const done = document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture();
+        Promise.resolve(done).catch(() => {});
+      }
       return;
     }
     if (act === "more") {
@@ -2967,7 +3135,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -3030,6 +3198,9 @@
         STATE.settings.likes = data.likes || {};
         STATE.settings.bookmarks = data.bookmarks || {};
         STATE.settings.reposts = data.reposts || {};
+        STATE.settings.savedPosts = data.savedPosts || STATE.settings.savedPosts || {};
+        if (data.appearance) STATE.settings.appearance = data.appearance;
+        if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();
         render();
@@ -3124,35 +3295,309 @@
     box.style.top = (rect.bottom + 8) + "px";
   }
 
+  if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  let routing = false;
+  window.addEventListener("scroll", () => {
+    if (routing || !STATE.scrollKey) return;
+    SCROLLS[STATE.scrollKey] = window.scrollY;
+  }, { passive: true });
+  document.addEventListener("click", (event) => {
+    const hit = event.target && event.target.closest && event.target.closest("a[href^='#'], [data-act='htab']");
+    if (hit && STATE.scrollKey) SCROLLS[STATE.scrollKey] = window.scrollY;
+  }, true);
   window.addEventListener("hashchange", () => {
+    routing = true;
     STATE.modal = null;
     STATE.drawer = false;
     STATE.menu = null;
     STATE.share = null;
     STATE.headerHidden = false;
-    render({ reset: true });
+    render({ y: SCROLLS[routeScrollKey()] || 0 });
+    routing = false;
   });
 
+  function resolvedTheme() {
+    const mode = (STATE.settings && STATE.settings.appearance) || "lightsout";
+    if (mode === "auto") return matchMedia("(prefers-color-scheme: light)").matches ? "default" : "lightsout";
+    return THEME_COLORS[mode] ? mode : "lightsout";
+  }
+
+  function applyTheme() {
+    const theme = resolvedTheme();
+    document.documentElement.setAttribute("data-theme", theme);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", THEME_COLORS[theme]);
+  }
+
+  function slimPost(post) {
+    if (!post) return null;
+    const media = (post.media || []).slice(0, 4).map((item) => ({ type: item.type, url: item.url || "", poster: item.poster || "", alt: item.alt || "" }));
+    return {
+      id: post.id,
+      statusId: post.statusId || post.id,
+      platform: post.platform,
+      handle: post.handle,
+      author: post.author,
+      avatar: post.avatar || "",
+      text: post.text || "",
+      title: post.title || "",
+      date: post.date || "",
+      url: post.url || "",
+      feedId: post.feedId || "",
+      kind: post.kind || "post",
+      media: media,
+      stats: post.stats || {}
+    };
+  }
+
+  function rememberBookmark(id) {
+    const post = findAnyPost(id);
+    const slim = slimPost(post);
+    if (!slim) return;
+    STATE.settings.savedPosts = STATE.settings.savedPosts || {};
+    STATE.settings.savedPosts[id] = slim;
+    const urls = [];
+    if (slim.avatar) urls.push(slim.avatar);
+    (slim.media || []).forEach((item) => {
+      if (item.url) urls.push(item.url);
+      if (item.poster) urls.push(item.poster);
+    });
+    const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (worker) worker.postMessage({ type: "cache-bookmark", urls: urls });
+  }
+
+  function followedSince(post, since) {
+    if (!post || !STATE.settings) return false;
+    if (!followedPost(post)) return false;
+    return (Date.parse(post.date || "") || 0) > since;
+  }
+
+  function updateBadge(count) {
+    if (!navigator.setAppBadge) return;
+    const op = count > 0 ? navigator.setAppBadge(count) : (navigator.clearAppBadge ? navigator.clearAppBadge() : Promise.resolve());
+    Promise.resolve(op).catch(() => {});
+  }
+
+  function showPill(show) {
+    const el = document.getElementById("new-posts");
+    if (el) el.hidden = !show;
+  }
+
+  async function fetchFeeds(fresh) {
+    const headers = fresh ? { "X-Feed-Refresh": "1" } : {};
+    const init = fresh ? { cache: "no-store", headers: headers } : { credentials: "omit" };
+    const res = await fetch("feeds.json", init);
+    if (!res.ok) throw new Error(String(res.status));
+    return res.json();
+  }
+
+  async function refreshFeeds(apply) {
+    try {
+      const doc = await fetchFeeds(true);
+      if (!doc || !Array.isArray(doc.posts)) return;
+      const current = {};
+      ((STATE.data && STATE.data.posts) || []).forEach((post) => { current[post.id] = true; });
+      const added = doc.posts.filter((post) => !current[post.id]);
+      if (apply || !STATE.data) {
+        STATE.data = doc;
+        STATE.error = null;
+        STATE.pendingFeed = null;
+        showPill(false);
+        render();
+        return;
+      }
+      if (!added.length) return;
+      STATE.pendingFeed = doc;
+      showPill(true);
+      const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
+      const fresh = doc.posts.filter((post) => followedSince(post, since));
+      if (document.hidden) updateBadge(fresh.length || added.length);
+      if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) {
+        try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
+      }
+    } catch (err) { /* keep the posts already on screen */ }
+  }
+
+  function syncMediaSession() {
+    if (!navigator.mediaSession) return;
+    const route = parseRoute();
+    if (route.name !== "watch") {
+      navigator.mediaSession.metadata = null;
+      return;
+    }
+    const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id));
+    if (!post) return;
+    const poster = ((post.media || [])[0] || {}).poster;
+    const artwork = [{ src: new URL("icons/icon-512.png", location.href).href, sizes: "512x512", type: "image/png" }];
+    if (poster) artwork.unshift({ src: poster, sizes: "1280x720", type: "image/jpeg" });
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: post.title || String(post.text || "").slice(0, 80) || "Video",
+        artist: post.author || post.handle || "Feeds",
+        artwork: artwork
+      });
+      const video = document.querySelector(".player video");
+      const setHandler = (name, fn) => { try { navigator.mediaSession.setActionHandler(name, fn); } catch (err) { /* this action is not supported */ } };
+      setHandler("play", () => { if (video) video.play(); });
+      setHandler("pause", () => { if (video) video.pause(); });
+    } catch (err) { /* metadata is optional */ }
+  }
+
+  function setOffline(offline) {
+    const el = document.getElementById("offline");
+    if (!el) return;
+    const was = !el.hidden;
+    el.hidden = !offline;
+    if (was && !offline) toast("You're back online");
+  }
+
+  function consumeShareTarget() {
+    const params = new URLSearchParams(location.search);
+    if (!params.has("url") && !params.has("text") && !params.has("title")) return;
+    STATE.incoming = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "" };
+    const hash = location.hash && location.hash !== "#/" && location.hash !== "#/home" ? location.hash : "#/incoming";
+    history.replaceState(null, "", location.pathname + hash);
+  }
+
+  async function enableNotifications() {
+    if (typeof Notification === "undefined") { toast("Notifications aren’t available"); return; }
+    let permission = Notification.permission;
+    if (permission !== "granted") permission = await Notification.requestPermission();
+    STATE.settings.notify = permission === "granted";
+    saveSettings();
+    if (STATE.settings.notify) registerPeriodic();
+    render();
+    toast(STATE.settings.notify ? "Notifications on" : "Notifications stay off");
+  }
+
+  function registerPeriodic() {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.ready.then((reg) => {
+      if (!reg.periodicSync) return;
+      return reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 });
+    }).catch(() => {});
+  }
+
+  function syncWorkerState() {
+    const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!worker || !STATE.settings) return;
+    worker.postMessage({
+      type: "state",
+      seen: Number(localStorage.getItem("rss-feeds-seen-at") || 0),
+      follows: STATE.settings.follows || []
+    });
+  }
+
+  let swStarted = false;
+  function registerSW() {
+    if (!("serviceWorker" in navigator) || swStarted) return;
+    swStarted = true;
+    navigator.serviceWorker.register("sw.js").then(() => {
+      syncWorkerState();
+      if (STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted") registerPeriodic();
+    }).catch(() => {});
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
+      if (data.type === "feeds-updated") refreshFeeds(false);
+    });
+  }
+
+  let shellBound = false;
+  function bindShell() {
+    if (shellBound) return;
+    shellBound = true;
+    window.addEventListener("online", () => setOffline(false));
+    window.addEventListener("offline", () => setOffline(true));
+    setOffline(!navigator.onLine);
+    window.addEventListener("beforeinstallprompt", (event) => {
+      event.preventDefault();
+      STATE.installPrompt = event;
+      render();
+    });
+    window.addEventListener("appinstalled", () => { STATE.installPrompt = null; render(); });
+    matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
+      if (STATE.settings && STATE.settings.appearance === "auto") applyTheme();
+    });
+    document.getElementById("new-posts").addEventListener("click", () => {
+      if (!STATE.pendingFeed) { showPill(false); return; }
+      STATE.data = STATE.pendingFeed;
+      STATE.pendingFeed = null;
+      showPill(false);
+      localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
+      updateBadge(0);
+      const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (worker) worker.postMessage({ type: "seen" });
+      render({ y: 0 });
+    });
+    let pullStart = 0;
+    let pulling = false;
+    document.addEventListener("touchstart", (event) => {
+      if (window.scrollY > 2 || event.touches.length !== 1) { pulling = false; return; }
+      pullStart = event.touches[0].clientY;
+      pulling = true;
+    }, { passive: true });
+    document.addEventListener("touchmove", (event) => {
+      if (!pulling) return;
+      const dy = event.touches[0].clientY - pullStart;
+      const el = document.getElementById("pull");
+      if (dy > 8 && window.scrollY <= 2) {
+        el.classList.add("on");
+        el.classList.toggle("ready", dy > 70);
+      } else el.classList.remove("on", "ready");
+    }, { passive: true });
+    document.addEventListener("touchend", () => {
+      const el = document.getElementById("pull");
+      const ready = el.classList.contains("ready");
+      pulling = false;
+      el.classList.remove("on", "ready");
+      if (ready) refreshFeeds(true);
+    }, { passive: true });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
+        updateBadge(0);
+        const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+        if (worker) worker.postMessage({ type: "seen" });
+        refreshFeeds(false);
+      }
+    });
+  }
+
   async function boot() {
+    consumeShareTarget();
+    bindShell();
+    registerSW();
     STATE.loading = true;
     STATE.error = null;
+    STATE.settings = loadSettings();
+    applyTheme();
     render();
     const params = new URLSearchParams(location.search);
     try {
       if (params.get("error") === "1") throw new Error("forced");
-      const res = await fetch("feeds.json", { cache: "no-cache" });
-      if (!res.ok) throw new Error(String(res.status));
-      STATE.data = await res.json();
-      await loadNewestShard();
-      STATE.loading = false;
+      STATE.data = await fetchFeeds(false);
       STATE.settings = loadSettings();
+      applyTheme();
+      STATE.loading = false;
       saveSettings();
+      render({ reset: true });
+      loadNewestShard().then(() => revealArchive());
+      const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
+      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since));
+      const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
+      if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted") {
+        try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
+      }
+      if (document.visibilityState === "visible") {
+        localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
+        updateBadge(0);
+      } else if (fresh.length) updateBadge(fresh.length);
     } catch (err) {
       STATE.loading = false;
       STATE.error = err;
-      STATE.settings = loadSettings();
+      render({ reset: true });
     }
-    render({ reset: true });
   }
 
   boot();

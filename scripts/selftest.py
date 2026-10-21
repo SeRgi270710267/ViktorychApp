@@ -553,6 +553,41 @@ def main() -> None:
     combined = skipped.stdout + skipped.stderr
     check(skipped.returncode == 0 and "skipping the upload" in skipped.stdout, "missing Internet Archive keys skip the upload")
     check("sentinel-secret-value" not in combined and "IA_SECRET_KEY" not in combined, "the skip path does not print a secret")
+
+    import struct
+    manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
+    check(manifest["display"] == "standalone" and manifest["scope"] == "/rss-feeds/", "the manifest is a standalone app scoped to /rss-feeds/")
+    check(str(manifest["start_url"]).endswith("#/home"), "the manifest opens the home timeline")
+    check("window-controls-overlay" in manifest["display_override"], "desktop installs can use the window controls overlay")
+    purposes = {icon.get("purpose") for icon in manifest["icons"]}
+    sizes = {icon.get("sizes") for icon in manifest["icons"]}
+    check("192x192" in sizes and "512x512" in sizes and "maskable" in purposes, "the manifest has 192, 512, and maskable icons")
+    shortcut_names = [item["name"] for item in manifest["shortcuts"]]
+    check(shortcut_names == ["Home", "Subscriptions", "Bookmarks", "Lists"], "the manifest shortcuts are Home, Subscriptions, Bookmarks, and Lists")
+    check(manifest["share_target"]["method"] == "GET" and manifest["share_target"]["enctype"] == "application/x-www-form-urlencoded" and "url" in manifest["share_target"]["params"], "sharing a link into the app is a GET share target")
+    worker = (ROOT / "sw.js").read_text(encoding="utf-8")
+    check("__SW_VERSION__" in worker and "150 * 1024 * 1024" in worker and "staleWhileRevalidate" in worker, "the service worker versions its cache and caps media")
+    check("api.fxtwitter.com" in worker and "networkFirst" in worker, "live APIs fall back to the cache")
+    page = (ROOT / "index.html").read_text(encoding="utf-8")
+    check('rel="manifest"' in page and "apple-mobile-web-app-capable" in page and "apple-touch-icon" in page, "the page links the manifest and the iOS install tags")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    check("beforeinstallprompt" in app and "Install app" in app and "pictureInPicture" in app and "mediaSession" in app, "install, picture in picture, and media session are in the page")
+    check("requestPermission" in app and app.index("requestPermission") > app.index("data-act=\"notify\""), "notification permission is requested from the settings control")
+    workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    check("manifest.webmanifest" in workflow and "__SW_VERSION__" in workflow and "GITHUB_SHA" in workflow, "the deploy copies the app shell and stamps the service worker")
+
+    def png_size(path: Path):
+        data = path.read_bytes()
+        check(data.startswith(b"\x89PNG\r\n\x1a\n"), path.name + " is a png")
+        return struct.unpack(">II", data[16:24])
+
+    check(png_size(ROOT / "icons" / "icon-192.png") == (192, 192), "the 192 icon is 192 pixels")
+    check(png_size(ROOT / "icons" / "icon-512.png") == (512, 512), "the 512 icon is 512 pixels")
+    check(png_size(ROOT / "icons" / "icon-maskable-512.png") == (512, 512), "the maskable icon is 512 pixels")
+    check(png_size(ROOT / "icons" / "apple-touch-icon.png") == (180, 180), "the apple touch icon is 180 pixels")
+    check(png_size(ROOT / "screenshots" / "narrow.png") == (1080, 1920), "the narrow screenshot is a phone frame")
+    check(png_size(ROOT / "screenshots" / "wide.png") == (1920, 1080), "the wide screenshot is a desktop frame")
+    check((ROOT / "scripts" / "pwa_assets.py").read_text(encoding="utf-8").find("M18.244") < 0, "the install mark is not the X logo")
     print("all adapter checks passed")
 
 

@@ -10,7 +10,7 @@ The preview snapshot in this repo is real public posts converted by the adapters
 python3 -m http.server 8080
 ```
 
-Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHub Pages.
+Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHub Pages. The installable app is scoped to `/rss-feeds/` (the GitHub Pages path). More and the mobile menu include Install app. `sw.js` caches the shell, refreshes `feeds.json` and archive shards in the background, and keeps bookmarked images for offline reading. Notifications stay off until that setting is tapped.
 
 | Route | Page |
 | --- | --- |
@@ -262,7 +262,7 @@ The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the
 
 `.github/workflows/sync.yml` runs every 30 minutes, on **Run workflow**, and on every push to `main`. The job starts RSSHub (`diygod/rsshub` on port 1200) and RSS-Bridge (`rssbridge/rss-bridge` on port 8080). It downloads the last published `feeds.json` (and Instagram/Threads comment files under 7 days old) so a failed source can keep the previous data. Instagram and Threads try the local RSSHub container, then the public RSSHub mirrors in `feeds.config.json`, then RSS-Bridge. X timelines try fxtwitter, then the Nitter mirrors. One failed source keeps that feed’s previous posts and does not fail the run.
 
-The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `.nojekyll`, `feeds.json`, `archive/*.json`, and any `comments/*.json` into `_site`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/`, `media/`, and `archive/` are gitignored, so `main` keeps the code and the `feeds.json` seed. At 06:17 UTC the workflow uploads `archive/` to the Internet Archive when the keys are set, then force-pushes one squashed commit to the orphan `data` branch. See Archive above.
+The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `manifest.webmanifest`, `sw.js`, `icons/`, `splash/`, `screenshots/`, `.nojekyll`, `feeds.json`, `archive/*.json`, and any `comments/*.json` into `_site`, stamps the commit SHA into `_site/sw.js`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/`, `media/`, and `archive/` are gitignored, so `main` keeps the code and the `feeds.json` seed. At 06:17 UTC the workflow uploads `archive/` to the Internet Archive when the keys are set, then force-pushes one squashed commit to the orphan `data` branch. See Archive above.
 
 ## GitHub Pages
 

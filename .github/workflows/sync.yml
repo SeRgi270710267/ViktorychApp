@@ -86,7 +86,12 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html app.js styles.css favicon.svg .nojekyll feeds.json _site/
+          cp index.html app.js styles.css favicon.svg manifest.webmanifest sw.js .nojekyll feeds.json _site/
+          mkdir -p _site/icons _site/splash _site/screenshots
+          cp icons/* _site/icons/
+          cp splash/* _site/splash/
+          cp screenshots/* _site/screenshots/
+          if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s/__SW_VERSION__/${GITHUB_SHA}/" _site/sw.js; fi
           if [ -d comments ]; then
             mkdir -p _site/comments
             find comments -name '*.json' -type f -exec cp {} _site/comments/ \;
