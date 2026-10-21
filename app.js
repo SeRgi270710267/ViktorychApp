@@ -71,6 +71,10 @@
     chain: {},
     threadMore: {},
     focusId: "",
+    replySort: "relevant",
+    forceReply: "",
+    forceWatch: "",
+    replyEpoch: {},
     pendingFeed: null,
     installPrompt: null,
     incoming: null,
@@ -578,6 +582,7 @@
   }
 
   const LIVE_TTL = 12 * 60 * 1000;
+  const COMMENT_TTL = 2 * 60 * 1000;
   const FX = "https://api.fxtwitter.com";
   const IV_SEEDS = ["https://invidious.f5.si", "https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://yt.artemislena.eu"];
   const PIPED_SEEDS = ["https://pipedapi.kavin.rocks", "https://pipedapi.adminforge.de", "https://api.piped.private.coffee", "https://pipedapi.leptons.xyz"];
@@ -641,26 +646,46 @@
     }));
   }
 
-  function cacheGet(key) {
+  function cacheFresh(row, ttl) {
+    return !!(row && row.at && Date.now() - row.at < (ttl || LIVE_TTL));
+  }
+
+  function cacheGet(key, ttl) {
+    const max = ttl || LIVE_TTL;
     const hit = LIVE.mem[key];
-    if (hit && Date.now() - hit.at < LIVE_TTL) return Promise.resolve(hit.value);
+    if (cacheFresh(hit, max)) return Promise.resolve(hit.value);
     try {
       const raw = sessionStorage.getItem("rss-live:" + key);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && Date.now() - parsed.at < LIVE_TTL) {
+        if (cacheFresh(parsed, max)) {
           LIVE.mem[key] = parsed;
           return Promise.resolve(parsed.value);
         }
       }
     } catch (err) { /* quota or private mode */ }
     return idbGet(key).then((parsed) => {
-      if (parsed && Date.now() - parsed.at < LIVE_TTL) {
+      if (cacheFresh(parsed, max)) {
         LIVE.mem[key] = parsed;
         return parsed.value;
       }
       return null;
     });
+  }
+
+  function cacheDrop(key) {
+    delete LIVE.mem[key];
+    try { sessionStorage.removeItem("rss-live:" + key); } catch (err) { /* private mode */ }
+    return liveDb().then((db) => new Promise((resolve) => {
+      if (!db) return resolve();
+      try {
+        const query = db.transaction("cache", "readwrite").objectStore("cache").delete(key);
+        query.onsuccess = () => resolve();
+        query.onerror = () => resolve();
+      } catch (err) {
+        resolve();
+      }
+    }));
   }
 
   function cacheSet(key, value) {
@@ -1050,9 +1075,40 @@
     const others = clean.filter((post) => selfPosts.indexOf(post) < 0);
     others.sort((a, b) => fxEngagement(b) - fxEngagement(a) || fxNum((b.stats || {}).likes) - fxNum((a.stats || {}).likes) || String(b.date || "").localeCompare(String(a.date || "")));
     flagged.sort((a, b) => fxEngagement(b) - fxEngagement(a));
-    const result = fxChain(selfPosts).concat(others).slice(0, cap).concat(flagged.slice(0, 20));
-    result.forEach((post) => { delete post._rankId; });
-    return result;
+    const ranked = fxChain(selfPosts).concat(others);
+    const newest = clean.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 30);
+    const picked = {};
+    const result = [];
+    function push(post) {
+      const sid = String(post.id || post._rankId || "");
+      if (!sid || picked[sid]) return;
+      picked[sid] = true;
+      result.push(post);
+    }
+    ranked.forEach((post) => {
+      if (result.length >= cap) return;
+      push(post);
+    });
+    newest.forEach((post) => {
+      const sid = String(post.id || post._rankId || "");
+      if (!sid || picked[sid]) return;
+      if (result.length >= cap) {
+        for (let i = result.length - 1; i >= 0; i--) {
+          const id = String(result[i].id || "");
+          const isNew = newest.some((item) => String(item.id || "") === id);
+          const isSelf = author && String(result[i].handle || "").toLowerCase() === author;
+          if (!isNew && !isSelf) {
+            delete picked[id];
+            result.splice(i, 1);
+            break;
+          }
+        }
+      }
+      if (result.length < cap) push(post);
+    });
+    const out = result.concat(flagged.slice(0, 20));
+    out.forEach((post) => { delete post._rankId; });
+    return out;
   }
 
   function fxFillRank(post, parentId) {
@@ -1085,7 +1141,7 @@
   function fxStatusPost(id) {
     const key = String(id || "");
     if (!key) return Promise.resolve(null);
-    return once("fxstatus:" + key, () => cacheGet("fx:status:" + key).then((hit) => {
+    return once("fxstatus:" + key, () => cacheGet("fx:status:" + key, COMMENT_TTL).then((hit) => {
       if (hit) return hit;
       return fetchJson(FX + "/2/status/" + encodeURIComponent(key)).then((data) => {
         const status = fxStatusObject(data);
@@ -1122,20 +1178,62 @@
     });
   }
 
-  function loadXThread(post) {
+  function fxUsable(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    if (payload.code != null && payload.code !== 200 && payload.code !== "200") return false;
+    return !!(payload.status || (payload.replies && payload.replies.length));
+  }
+
+  function fxConversation(id, params) {
+    const query = new URLSearchParams(params || {});
+    const suffix = query.toString();
+    return fetchJson(FX + "/2/conversation/" + encodeURIComponent(id) + (suffix ? "?" + suffix : ""));
+  }
+
+  function fxConversationPages(id) {
+    const soft = (params) => fxConversation(id, params).catch(() => null);
+    return Promise.all([
+      soft({}),
+      soft({ ranking_mode: "recency" })
+    ]).then((pair) => {
+      const recent = pair[1];
+      const cursor = recent && recent.cursor && recent.cursor.bottom;
+      if (!cursor) return pair;
+      return soft({ ranking_mode: "recency", cursor: cursor }).then((next) => pair.concat([next]));
+    });
+  }
+
+  function loadXThread(post, fresh) {
     const id = postKey(post);
     if (!id) return Promise.resolve(null);
-    return once("fx:" + id, () => cacheGet("fx:conv:" + id).then((hit) => {
-      if (hit && hit.replies) return hit;
-      return fetchJson(FX + "/2/conversation/" + encodeURIComponent(id)).then((payload) => {
-        if (!payload || (payload.code != null && payload.code !== 200 && payload.code !== "200")) throw new Error("code");
-        const author = ((payload.status || {}).author || {}).screen_name || post.handle || "";
-        return fxFill(fxExtract(payload, id), id).then((filled) => {
-          const pack = { replies: fxRank(filled, author, 50), stats: fxStats(payload.status || {}) };
-          return cacheSet("fx:conv:" + id, pack).then(() => pack);
+    const key = "fx:conv:" + id;
+    if (fresh) cacheDrop(key);
+    return once((fresh ? "fxfresh:" : "fx:") + id, () => (fresh ? Promise.resolve(null) : cacheGet(key, COMMENT_TTL)).then((hit) => {
+      if (hit && hit.replies) {
+        if (!hit.fetchedAt) hit.fetchedAt = Date.now();
+        return hit;
+      }
+      return fxConversationPages(id).then((pages) => {
+        const usable = (pages || []).filter(fxUsable);
+        if (!usable.length) throw new Error("code");
+        const merged = [];
+        const seen = {};
+        usable.forEach((payload) => {
+          fxExtract(payload, id).forEach((row) => {
+            const sid = postKey(row);
+            if (!sid || seen[sid]) return;
+            seen[sid] = true;
+            merged.push(row);
+          });
         });
-      }).catch(() => null);
-    }));
+        const primary = usable.find((payload) => payload.status) || usable[0];
+        const author = ((primary.status || {}).author || {}).screen_name || post.handle || "";
+        return fxFill(merged, id).then((filled) => {
+          const pack = { replies: fxRank(filled, author, 60), stats: fxStats(primary.status || {}), fetchedAt: Date.now() };
+          return cacheSet(key, pack).then(() => pack);
+        });
+      });
+    }).catch(() => null));
   }
 
   function takeRanked(replies, cap) {
@@ -1179,48 +1277,59 @@
   function replyBucket(post) {
     const id = postKey(post);
     if (!id) return { loading: false, replies: [], missing: true };
-    const want = String(STATE.focusId || "") === id ? 50 : 20;
+    const focused = String(STATE.focusId || "") === id;
+    const want = focused ? 60 : 20;
     if (post._community && post.kind !== "community") {
       return { loading: false, replies: Array.isArray(post.replies) ? post.replies : [], missing: false, cap: want };
     }
+    const fresh = String(STATE.forceReply || "") === id;
+    if (fresh) STATE.forceReply = "";
     const bucket = STATE.replies[id];
-    if (bucket && (bucket.cap || 0) >= want) return bucket;
-    STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want };
-    const finish = (replies, missing, cap) => {
-      STATE.replies[id] = { loading: false, replies: replies || [], missing: !!missing, cap: cap || want };
+    const cachedAt = bucket && bucket.fetchedAt;
+    const stillFresh = cachedAt && Date.now() - cachedAt < COMMENT_TTL;
+    if (!fresh && bucket && !bucket.loading && (bucket.cap || 0) >= want && stillFresh) return bucket;
+    if (!fresh && bucket && bucket.loading) return bucket;
+    const epoch = (STATE.replyEpoch[id] || 0) + 1;
+    STATE.replyEpoch[id] = epoch;
+    STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want, fetchedAt: fresh ? 0 : cachedAt || 0 };
+    const finish = (replies, missing, cap, fetchedAt) => {
+      if (STATE.replyEpoch[id] !== epoch) return;
+      STATE.replies[id] = { loading: false, replies: replies || [], missing: !!missing, cap: cap || want, fetchedAt: fetchedAt || Date.now() };
       render();
     };
     const snap = () => snapshotDoc(id).then((doc) => {
       if (!commentsCurrent(post, doc)) {
-        finish([], true, want);
+        finish([], true, want, Date.now());
         return;
       }
-      finish(((doc && doc.replies) || []).slice(), false, want);
-    }).catch(() => finish([], true, want));
+      const stamped = doc && doc.fetchedAt ? Date.parse(doc.fetchedAt) : Date.now();
+      finish(((doc && doc.replies) || []).slice(), false, want, isFinite(stamped) ? stamped : Date.now());
+    }).catch(() => finish([], true, want, Date.now()));
     if (post.kind === "community") {
       loadCommunityComments(post).then((rows) => {
-        if (!rows) finish([], true, want);
-        else finish(rows, false, want);
-      }).catch(() => finish([], true, want));
+        if (!rows) finish([], true, want, Date.now());
+        else finish(rows, false, want, Date.now());
+      }).catch(() => finish([], true, want, Date.now()));
       return STATE.replies[id];
     }
     if ((post.platform || "") === "x") {
-      loadXThread(post).then((pack) => {
+      loadXThread(post, fresh || focused).then((pack) => {
+        if (STATE.replyEpoch[id] !== epoch) return;
         if (!pack) {
           snap();
           return;
         }
         applyLiveStats(id, pack.stats);
-        const capNow = String(STATE.focusId || "") === id ? 50 : 20;
+        const capNow = String(STATE.focusId || "") === id ? 60 : 20;
         const rows = takeRanked(pack.replies, capNow);
-        if (capNow === 50 && !PREFETCHED[id]) {
+        if (capNow === 60 && !PREFETCHED[id]) {
           PREFETCHED[id] = true;
           selectSubthreads(rows).forEach((reply) => {
             const cid = postKey(reply);
             if (cid && !(STATE.replies[cid] && (STATE.replies[cid].cap || 0) >= 20)) replyBucket(reply);
           });
         }
-        finish(rows, false, capNow);
+        finish(rows, false, capNow, pack.fetchedAt || Date.now());
       });
       return STATE.replies[id];
     }
@@ -1509,11 +1618,21 @@
   function loadYtComments(post) {
     const id = postKey(post);
     if (!id) return Promise.resolve(null);
-    return once("yt:" + id, () => cacheGet("yt:doc:" + id).then((hit) => {
+    const fresh = STATE.forceWatch === id;
+    if (fresh) STATE.forceWatch = "";
+    if (fresh) cacheDrop("yt:doc:" + id);
+    return once((fresh ? "ytfresh:" : "yt:") + id, () => (fresh ? Promise.resolve(null) : cacheGet("yt:doc:" + id, COMMENT_TTL)).then((hit) => {
       if (hit) return hit;
       return ivThread(id, post.handle || "").then((doc) => {
-        if (doc) return cacheSet("yt:doc:" + id, doc).then(() => doc);
-        return pipedThread(id, post.handle || "").then((piped) => piped ? cacheSet("yt:doc:" + id, piped).then(() => piped) : null);
+        if (doc) {
+          doc.fetchedAt = new Date().toISOString();
+          return cacheSet("yt:doc:" + id, doc).then(() => doc);
+        }
+        return pipedThread(id, post.handle || "").then((piped) => {
+          if (!piped) return null;
+          piped.fetchedAt = new Date().toISOString();
+          return cacheSet("yt:doc:" + id, piped).then(() => piped);
+        });
       });
     })).catch(() => null);
   }
@@ -1852,7 +1971,9 @@
     const clean = all.filter((reply) => !reply.spam);
     const junk = all.filter((reply) => reply.spam && isDirect(post, reply));
     const pool = ui.spam ? clean.concat(junk) : clean;
-    const shown = orderReplies(post, pool.filter((reply) => isDirect(post, reply)));
+    let directs = pool.filter((reply) => isDirect(post, reply));
+    if (STATE.replySort === "latest") directs = directs.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || fxEngagement(b) - fxEngagement(a));
+    const shown = orderReplies(post, directs);
     return { loading: false, shown: shown, pool: clean, more: false, spam: !ui.spam && junk.length > 0, missing: false };
   }
 
@@ -1907,11 +2028,26 @@
     return `<a class="show-replies" data-act="stop" href="${esc(statusHash(reply))}">${label}</a>`;
   }
 
+  function freshLabel(at) {
+    const t = typeof at === "number" ? at : Date.parse(at || "");
+    if (!isFinite(t) || t <= 0) return "Updating…";
+    const mins = Math.max(0, Math.floor((Date.now() - t) / 60000));
+    if (mins < 1) return "Updated just now";
+    return "Updated " + mins + " min ago";
+  }
+
+  function replyTools(post) {
+    const bucket = STATE.replies[postKey(post)] || {};
+    const sort = STATE.replySort === "latest" ? "latest" : "relevant";
+    return `<div class="reply-tools"><span class="reply-fresh">${esc(freshLabel(bucket.fetchedAt))}</span><div class="sorts"><button class="${sort === "relevant" ? "on" : ""}" type="button" data-act="reply-sort" data-sort="relevant">Relevant</button><button class="${sort === "latest" ? "on" : ""}" type="button" data-act="reply-sort" data-sort="latest">Latest</button></div></div>`;
+  }
+
   function replyList(post) {
+    const tools = replyTools(post);
     const slice = replySlice(post);
-    if (slice.loading) return `<div class="reply-empty">Loading replies…</div>`;
+    if (slice.loading) return tools + `<div class="reply-empty">Loading replies…</div>`;
     if (!slice.shown.length && !slice.more && !slice.spam) {
-      return `<div class="reply-empty">${slice.missing ? "Replies aren’t available for this post." : "No replies yet."}</div>`;
+      return tools + `<div class="reply-empty">${slice.missing ? "Replies aren’t available for this post." : "No replies yet."}</div>`;
     }
     const id = postKey(post);
     const root = originalHandle(post);
@@ -1930,7 +2066,7 @@
     }).join("");
     const more = slice.more ? `<button class="more-replies" type="button" data-act="more-replies" data-id="${esc(id)}">Show more replies</button>` : "";
     const spam = slice.spam ? `<button class="more-replies spam" type="button" data-act="spam-replies" data-id="${esc(id)}">Show probable spam</button>` : "";
-    return html + more + spam;
+    return tools + html + more + spam;
   }
 
   function composer(bridge) {
@@ -2585,13 +2721,18 @@
     const id = postKey(post);
     const file = post.platform === "youtube" ? "yt_" + id : id;
     const key = "watch:" + file;
+    if (STATE.forceWatch === id) delete STATE.replies[key];
     if (STATE.replies[key]) return STATE.replies[key];
     STATE.replies[key] = { loading: true, doc: null, missing: false };
+    const stamp = (doc) => {
+      const parsed = doc && doc.fetchedAt ? Date.parse(doc.fetchedAt) : Date.now();
+      return isFinite(parsed) ? parsed : Date.now();
+    };
     const snap = () => snapshotDoc(file).then((doc) => {
-      STATE.replies[key] = { loading: false, doc: doc, missing: false };
+      STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: stamp(doc) };
       render();
     }).catch(() => {
-      STATE.replies[key] = { loading: false, doc: null, missing: true };
+      STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: Date.now() };
       render();
     });
     if (post.platform === "youtube") {
@@ -2600,7 +2741,7 @@
           snap();
           return;
         }
-        STATE.replies[key] = { loading: false, doc: doc, missing: false };
+        STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: stamp(doc) };
         render();
       });
       return STATE.replies[key];
@@ -2670,8 +2811,9 @@
       const rows = sort === "new" && bucket.doc.newest && bucket.doc.newest.length ? bucket.doc.newest : (bucket.doc.replies || []).slice();
       if (sort === "new" && !(bucket.doc.newest && bucket.doc.newest.length)) rows.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
       const total = bucket.doc.commentCount != null ? bucket.doc.commentCount : rows.length;
+      const stamped = bucket.fetchedAt || (bucket.doc && bucket.doc.fetchedAt);
       comments = (rows.length ? rows.map(ytComment).join("") : `<div class="reply-empty">No comments yet.</div>`);
-      comments = `<h3>${esc(formatCount(total) || "0")} Comments</h3><div class="sorts"><button class="${sort === "top" ? "on" : ""}" type="button" data-act="comment-sort" data-id="${esc(id)}" data-sort="top">Top</button><button class="${sort === "new" ? "on" : ""}" type="button" data-act="comment-sort" data-id="${esc(id)}" data-sort="new">Newest</button></div>${comments}`;
+      comments = `<h3>${esc(formatCount(total) || "0")} Comments</h3><div class="reply-tools"><span class="reply-fresh">${esc(freshLabel(stamped))}</span><div class="sorts"><button class="${sort === "top" ? "on" : ""}" type="button" data-act="comment-sort" data-id="${esc(id)}" data-sort="top">Top</button><button class="${sort === "new" ? "on" : ""}" type="button" data-act="comment-sort" data-id="${esc(id)}" data-sort="new">Newest</button></div></div>${comments}`;
     }
     const up = posts().filter((item) => isVideoPost(item) && followedPost(item) && postKey(item) !== id).sort(byStamp).slice(0, 16);
     const upHtml = up.length ? `<aside class="upnext"><h2>Up next</h2>${up.map((item) => {
@@ -3013,6 +3155,20 @@
     const route = parseRoute();
     const nextKey = routeScrollKey();
     const routeChanged = !!STATE.scrollKey && STATE.scrollKey !== nextKey;
+    if (route.name === "status") {
+      const sid = String(route.id || "");
+      if (STATE.openReply !== sid) {
+        STATE.openReply = sid;
+        STATE.forceReply = sid;
+      }
+    } else STATE.openReply = "";
+    if (route.name === "watch") {
+      const sid = String(route.id || "");
+      if (STATE.openWatch !== sid) {
+        STATE.openWatch = sid;
+        STATE.forceWatch = sid;
+      }
+    } else STATE.openWatch = "";
     if (route.name !== "status") STATE.focusId = "";
     const reset = opts && opts.reset;
     const y = reset ? 0 : window.scrollY;
@@ -3107,6 +3263,11 @@
     }
     if (act === "comment-sort") {
       STATE.commentSort[el.dataset.id] = el.dataset.sort === "new" ? "new" : "top";
+      render();
+      return;
+    }
+    if (act === "reply-sort") {
+      STATE.replySort = el.dataset.sort === "latest" ? "latest" : "relevant";
       render();
       return;
     }
@@ -3729,7 +3890,10 @@
       const ready = el.classList.contains("ready");
       pulling = false;
       el.classList.remove("on", "ready");
-      if (ready) refreshFeeds(true);
+      if (ready) {
+        refreshOpenComments();
+        refreshFeeds(true);
+      }
     }, { passive: true });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
@@ -3738,8 +3902,35 @@
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
         if (worker) worker.postMessage({ type: "seen" });
         refreshFeeds(false);
+        const route = parseRoute();
+        if (route.name === "status" || route.name === "watch") {
+          const id = String(route.id || "");
+          const bucket = STATE.replies[id] || STATE.replies["watch:yt_" + id] || STATE.replies["watch:" + id];
+          if (!bucket || !bucket.fetchedAt || Date.now() - bucket.fetchedAt >= COMMENT_TTL) refreshOpenComments();
+        }
       }
     });
+  }
+
+  function refreshOpenComments() {
+    const route = parseRoute();
+    if (route.name === "status" && route.id) {
+      const id = String(route.id);
+      STATE.openReply = "";
+      STATE.forceReply = id;
+      delete STATE.replies[id];
+      cacheDrop("fx:conv:" + id);
+      render();
+    }
+    if (route.name === "watch" && route.id) {
+      const id = String(route.id);
+      STATE.openWatch = "";
+      STATE.forceWatch = id;
+      delete STATE.replies["watch:yt_" + id];
+      delete STATE.replies["watch:" + id];
+      cacheDrop("yt:doc:" + id);
+      render();
+    }
   }
 
   async function boot() {

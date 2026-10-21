@@ -3,17 +3,20 @@ name: Sync feeds
 on:
   schedule:
     # Half-hour sync publishes the site. It does not push the data branch.
+    # GitHub often drops one of these slots, so the staggered line is a backup.
     - cron: "*/30 * * * *"
+    - cron: "15,45 * * * *"
     # Once a day, upload shards and squash them onto the orphan data branch.
     - cron: "17 6 * * *"
   workflow_dispatch:
+    inputs:
+      source:
+        description: manual, or chain from the keepalive job
+        required: false
+        default: manual
   push:
     branches:
       - main
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 # The backup job needs contents: write. The build job narrows that back to read.
 permissions:
@@ -23,7 +26,71 @@ permissions:
   actions: write
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.check.outputs.go }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          SOURCE: ${{ github.event.inputs.source }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          from datetime import datetime, timezone
+          go = "true"
+          event = os.environ.get("EVENT") or ""
+          source = os.environ.get("SOURCE") or ""
+          # Pushes and a manual dispatch always publish. Schedule and the
+          # keepalive chain skip when another sync already started recently,
+          # so the two cron lines cannot pile up.
+          schedule = os.environ.get("SCHEDULE") or ""
+          if schedule == "17 6 * * *":
+              pass
+          elif event in ("schedule",) or (event == "workflow_dispatch" and source == "chain"):
+              req = urllib.request.Request(
+                  f"https://api.github.com/repos/{os.environ['REPO']}/actions/workflows/sync.yml/runs?per_page=10",
+                  headers={
+                      "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                      "Accept": "application/vnd.github+json",
+                      "User-Agent": "feeds-sync",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=20) as res:
+                  data = json.load(res)
+              now = datetime.now(timezone.utc)
+              me = os.environ.get("RUN_ID") or ""
+              for run in data.get("workflow_runs") or []:
+                  if str(run.get("id")) == me:
+                      continue
+                  if run.get("status") == "completed" and run.get("conclusion") not in ("success", "skipped"):
+                      continue
+                  if run.get("status") not in ("in_progress", "queued", "waiting", "pending", "completed"):
+                      continue
+                  started = run.get("run_started_at") or run.get("created_at") or ""
+                  if not started:
+                      continue
+                  dt = datetime.fromisoformat(started.replace("Z", "+00:00"))
+                  if (now - dt).total_seconds() < 22 * 60:
+                      print(f"skip; run {run.get('id')} started {started}")
+                      go = "false"
+                      break
+          print(f"go={go}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"go={go}\n")
+          PY
+
   build:
+    needs: gate
+    if: needs.gate.outputs.go == 'true'
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -187,7 +254,11 @@ jobs:
           git push --force origin HEAD:data
 
   deploy:
-    needs: build
+    needs: [gate, build]
+    if: needs.gate.outputs.go == 'true'
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -199,3 +270,24 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4
+
+  # Restarts the sync if GitHub drops the cron. Sleeping here does not hold
+  # the pages concurrency group, and GITHUB_TOKEN may dispatch this workflow.
+  keepalive:
+    needs: [gate, deploy]
+    if: needs.gate.outputs.go == 'true' && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Queue the next sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          sleep 1500
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/actions/workflows/sync.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"source":"chain"}}'

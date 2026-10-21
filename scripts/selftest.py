@@ -601,7 +601,7 @@ def main() -> None:
     check(manifest["share_target"]["method"] == "GET" and manifest["share_target"]["enctype"] == "application/x-www-form-urlencoded" and "url" in manifest["share_target"]["params"], "sharing a link into the app is a GET share target")
     worker = (ROOT / "sw.js").read_text(encoding="utf-8")
     check("__SW_VERSION__" in worker and "150 * 1024 * 1024" in worker and "staleWhileRevalidate" in worker, "the service worker versions its cache and caps media")
-    check("api.fxtwitter.com" in worker and "networkFirst" in worker, "live APIs fall back to the cache")
+    check("api.fxtwitter.com" in worker and "networkFirst" in worker and "networkFirstTimeout" in worker and "6000" in worker, "comment APIs are network-first with a short timeout")
     page = (ROOT / "index.html").read_text(encoding="utf-8")
     check('rel="manifest"' in page and "apple-mobile-web-app-capable" in page and "apple-touch-icon" in page, "the page links the manifest and the iOS install tags")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
@@ -609,6 +609,9 @@ def main() -> None:
     check("requestPermission" in app and app.index("requestPermission") > app.index("data-act=\"notify\""), "notification permission is requested from the settings control")
     workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check("manifest.webmanifest" in workflow and "__SW_VERSION__" in workflow and "GITHUB_SHA" in workflow, "the deploy copies the app shell and stamps the service worker")
+    check('ranking_mode: "recency"' in app, "fxtwitter conversations also request newest replies")
+    check("COMMENT_TTL" in app and "reply-sort" in app and "Updated " in app, "opening a post can sort replies and show when they were fetched")
+    check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
 
     def png_size(path: Path):
         data = path.read_bytes()

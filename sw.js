@@ -1,5 +1,5 @@
 /* Feeds service worker. The shell cache name changes on each deploy. */
-const VERSION = "__SW_VERSION__";
+const VERSION = "fresh-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
@@ -44,6 +44,13 @@ function isMedia(url) {
 function isLive(url) {
   const host = url.hostname;
   return host === "api.fxtwitter.com" || host === "api.invidious.io" || /(^|\.)invidious\./.test(host) || /piped/i.test(host) || host === "inv.nadeko.net" || host === "yt.artemislena.eu" || host === "invidious.nerdvpn.de" || host === "invidious.f5.si";
+}
+
+function isCommentApi(url) {
+  const path = url.pathname || "";
+  if (url.hostname === "api.fxtwitter.com" && /\/(conversation|status)\//.test(path)) return true;
+  if (/\/comments(?:\/|$)/.test(path) || /\/api\/v1\/post\/[^/]+\/comments/.test(path)) return true;
+  return url.origin === self.location.origin && /\/comments\/[^/]+\.json$/.test(path);
 }
 
 function idb() {
@@ -159,6 +166,27 @@ async function networkFirst(request, cacheName) {
   }
 }
 
+async function networkFirstTimeout(request, cacheName, timeoutMs) {
+  const cache = await caches.open(cacheName);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs || 6000);
+  try {
+    const res = await fetch(new Request(request, { cache: "no-store", signal: controller.signal }));
+    clearTimeout(timer);
+    if (res && res.ok) {
+      await cache.put(request, res.clone());
+      return res;
+    }
+    const cached = await cache.match(request);
+    return cached || res;
+  } catch (err) {
+    clearTimeout(timer);
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    return new Response("", { status: 504 });
+  }
+}
+
 async function cacheBookmark(urls) {
   const cache = await caches.open(MEDIA);
   for (const url of urls || []) {
@@ -210,6 +238,10 @@ self.addEventListener("fetch", (event) => {
   }
   if (isMedia(url)) {
     event.respondWith(cacheFirstMedia(request));
+    return;
+  }
+  if (isCommentApi(url)) {
+    event.respondWith(networkFirstTimeout(request, LIVE, 6000));
     return;
   }
   if (isLive(url)) {

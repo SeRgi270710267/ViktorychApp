@@ -768,6 +768,20 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 }
 .composer .ava { position: relative; z-index: 1; }
 
+.reply-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 16px 0;
+}
+.reply-fresh {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 16px;
+}
+.reply-tools .sorts { margin: 0; flex: none; }
+
 .reply-empty {
   color: var(--muted);
   text-align: center;
