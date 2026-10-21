@@ -7,14 +7,21 @@ first one that returns real posts wins:
 2. RSSHub ``/youtube/community/<handle>`` on the sync container.
 3. Piped, when a channel payload actually contains posts.
 4. The public ``/@handle/posts`` page, parsed from ``ytInitialData``.
+5. That page's posts tab (browse id and params) goes to
+   ``youtubei/v1/browse`` when the HTML has no posts, or when it has fewer
+   than 20. One continuation is followed when it adds posts. HTML posts
+   stay first.
 
 Images stay on yt3.ggpht.com / googleusercontent. Nothing is downloaded.
 Counts and poll percents are copied only when the source gives them.
 A relative label such as "7 months ago" is not turned into a timestamp.
+The browse call uses the key published on that page. It does not solve a
+bot check.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import sys
@@ -181,9 +188,7 @@ def _video_media(attachment: dict) -> dict | None:
     video_id = _video_id(attachment)
     if not video_id:
         return None
-    title = (attachment.get("title") or "").strip()
-    if isinstance(title, dict):
-        title = _yt_text(title).strip()
+    title = _yt_text(attachment.get("title")).strip()
     poster = f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg"
     return {
         "type": "video",
@@ -638,7 +643,124 @@ def _piped_posts(channel_id: str, feed: dict) -> list:
     return []
 
 
-def _page_posts(feed: dict) -> list:
+def _token_bytes(token: str) -> bytes:
+    text = urllib.parse.unquote(token or "")
+    try:
+        return base64.urlsafe_b64decode(text + "=" * ((4 - len(text) % 4) % 4))
+    except (ValueError, TypeError):
+        return b""
+
+
+def posts_tab(html: str) -> tuple[str, str]:
+    """Return ``(browseId, params)`` for the public posts tab, or ``("", "")``."""
+    for match in re.finditer(r'"browseEndpoint":\{"browseId":"(UC[\w-]{10,})","params":"([^"\\]+)"\}', html or ""):
+        browse_id = match.group(1)
+        params = urllib.parse.unquote(match.group(2))
+        if b"posts" in _token_bytes(params):
+            return browse_id, params
+    return "", ""
+
+
+def _innertube_client(html: str) -> tuple[str, str]:
+    key = re.search(r'"INNERTUBE_API_KEY":"([^"]+)"', html or "")
+    version = re.search(r'"INNERTUBE_CLIENT_VERSION":"([^"]+)"', html or "")
+    if key:
+        found = key.group(1)
+    else:
+        from own_fetch import FALLBACK_KEY
+
+        found = FALLBACK_KEY
+    return found, (version.group(1) if version else "2.20251021.00.00")
+
+
+def _post_json(url: str, body: dict, timeout: int = 20) -> dict | None:
+    from x_guard import assert_not_x_api, open_url
+
+    assert_not_x_api(url)
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"User-Agent": UA, "Content-Type": "application/json", "Accept": "application/json"},
+    )
+    try:
+        with open_url(request, timeout=timeout) as response:
+            raw = response.read(2_000_000).decode("utf-8", "replace")
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+    if not raw.lstrip().startswith("{"):
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _browse_continuation(payload: dict) -> str:
+    found = []
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            command = node.get("continuationCommand")
+            if isinstance(command, dict) and command.get("request") == "CONTINUATION_REQUEST_TYPE_BROWSE" and command.get("token"):
+                found.append(command["token"])
+                return
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(payload or {})
+    return found[0] if found else ""
+
+
+def _browse_posts(browse_id: str, params: str, key: str, version: str, feed: dict) -> list:
+    context = {"client": {"clientName": "WEB", "clientVersion": version, "hl": "en", "gl": "US"}}
+    url = "https://www.youtube.com/youtubei/v1/browse?key=" + urllib.parse.quote(key) + "&prettyPrint=false"
+    payload = _post_json(url, {"context": context, "browseId": browse_id, "params": params})
+    if not payload:
+        return []
+    posts = parse_initial_posts(payload, feed)
+    token = _browse_continuation(payload)
+    if token and len(posts) < 20:
+        more = _post_json(url, {"context": context, "continuation": token})
+        seen = {post["id"] for post in posts}
+        for post in parse_initial_posts(more or {}, feed):
+            if post["id"] in seen:
+                continue
+            seen.add(post["id"])
+            posts.append(post)
+            if len(posts) >= 20:
+                break
+    return posts
+
+
+def _posts_from_html(html: str, feed: dict) -> tuple[list, str]:
+    posts = parse_html_posts(html, feed)
+    if len(posts) >= 20:
+        return posts[:20], "youtube"
+    browse_id, params = posts_tab(html)
+    if not browse_id or not params:
+        return (posts, "youtube") if posts else ([], "")
+    key, version = _innertube_client(html)
+    browsed = _browse_posts(browse_id, params, key, version, feed)
+    if not browsed:
+        return (posts, "youtube") if posts else ([], "")
+    if not posts:
+        return browsed[:20], "youtube-browse"
+    seen = {post["id"] for post in posts}
+    for post in browsed:
+        if post["id"] in seen:
+            continue
+        seen.add(post["id"])
+        posts.append(post)
+        if len(posts) >= 20:
+            break
+    return posts[:20], "youtube"
+
+
+def _page_posts(feed: dict) -> tuple[list, str]:
     handle = (feed.get("handle") or "").lstrip("@")
     channel_id = feed.get("channelId") or ""
     urls = []
@@ -646,16 +768,18 @@ def _page_posts(feed: dict) -> list:
         urls.append(f"https://www.youtube.com/@{urllib.parse.quote(handle)}/posts")
     if channel_id:
         urls.append(f"https://www.youtube.com/channel/{urllib.parse.quote(channel_id)}/posts")
+    if handle:
+        urls.append(f"https://www.youtube.com/@{urllib.parse.quote(handle)}")
     for url in urls:
         try:
             html = _read(url, timeout=25)
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
             print(f"[youtube] posts page: {exc}", file=sys.stderr)
             continue
-        posts = parse_html_posts(html, feed)
+        posts, source = _posts_from_html(html, feed)
         if posts:
-            return posts
-    return []
+            return posts, source
+    return [], ""
 
 
 def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
@@ -686,10 +810,10 @@ def fetch_community(feed: dict, config: dict | None = None) -> tuple[list, str]:
         if posts:
             return posts[:20], "piped"
     try:
-        posts = _page_posts(feed)
+        posts, source = _page_posts(feed)
     except Exception as exc:
         print(f"[youtube] posts page: {exc}", file=sys.stderr)
-        posts = []
+        posts, source = [], ""
     if posts:
-        return posts[:20], "youtube"
+        return posts[:20], source
     return [], ""

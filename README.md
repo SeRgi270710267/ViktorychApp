@@ -126,7 +126,7 @@ python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_
 | `rsshub_instagram` | RSSHub `/instagram/user/<user>` |
 | `generic_rss` | RSS or Atom: title, description, `content:encoded`, enclosures |
 | `youtube_rss` | YouTube’s official channel feed, `https://www.youtube.com/feeds/videos.xml?channel_id=<UC…>`. No API key. That feed has no CORS header, so the build fetches it. `channelId` is copied onto the profile so the browser can ask for subscribers. Durations and subscriber counts are not fetched during the build. Thumbnails stay on `i.ytimg.com`. The live feed is Canadian Prepper (`UCfgtuaUadGgOA-91geQ8Qog`). Marques Brownlee and Tesla exist only as files under `scripts/fixtures/` |
-| `youtube_community` | Community posts for a YouTube channel (text, images, polls, shared videos). There is no official feed. The build tries Invidious `/api/v1/channels/<id>/community`, then RSSHub `/youtube/community/<handle>` on the sync container, then Piped if that channel payload has posts, then the public `/posts` page. Images stay on `yt3.ggpht.com` / `googleusercontent`. Comments load in the browser from Invidious `/api/v1/post/<id>/comments?ucid=<channelId>` and are not stored. A failed fetch keeps the previous community posts |
+| `youtube_community` | Community posts for a YouTube channel (text, images, polls, shared videos). There is no official feed. The build tries Invidious `/api/v1/channels/<id>/community`, then RSSHub `/youtube/community/<handle>` on the sync container, then Piped if that channel payload has posts, then the public `/posts` page. When that page has fewer than 20 posts, or names the posts tab but the HTML has none, the build sends that tab’s browse id and params to `youtubei/v1/browse` and follows one continuation if it adds posts. Posts already read from the HTML stay. Images stay on `yt3.ggpht.com` / `googleusercontent`. Comments load in the browser from Invidious `/api/v1/post/<id>/comments?ucid=<channelId>` and are not stored. A failed fetch keeps the previous community posts |
 
 Each adapter strips HTML while keeping line breaks, unescapes entities, drops trailing media links, and fills the same post and profile fields. The configured profile in `feeds.config.json` wins over a thinner profile parsed from a post.
 
@@ -264,6 +264,37 @@ The sync runs without any secrets. Add these only as repository Actions secrets 
 | `IA_SECRET_KEY` | S3 secret key for that same item. The upload is skipped when this or `IA_ACCESS_KEY` is empty |
 
 The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the browser from fxtwitter, which needs no token. Do not put a bearer token in the page.
+
+## Grayjay
+
+The no-login YouTube requests above follow ideas from FUTO Grayjay’s plugins ([gitlab.futo.org/videostreaming/plugins](https://gitlab.futo.org/videostreaming/plugins)), reimplemented here. None of that source is copied.
+
+Licenses checked on 21 Oct 2026:
+
+| Source | License | Used how |
+| --- | --- | --- |
+| Grayjay app | FUTO Source First License 1.1 (non-commercial, no sublicensing) | Not copied |
+| Official YouTube, Odysee, PeerTube, and Rumble plugins | GNU AGPL-3.0 | Not copied. AGPL would cover this repo if the code were included |
+| Community Instagram plugin `b-risk/Grayjay-Instagram` | GPL-3.0 | Not copied |
+| grayjay-sources.github.io index | Public domain / Unlicense | The index only. Plugin code is separate |
+
+What was worth reimplementing, and what landed:
+
+- The watch page’s comment continuation is the token whose payload names `engagement-panel-comments-section` (or `comments-section`). Current pages omit `CONTINUATION_REQUEST_TYPE_WATCH_NEXT`, which the old matcher required, so the public `next` call never started. The token is read either way.
+- `youtubei/v1/next` is called with the WEB client and the key from that page. If `www.youtube.com` returns no comments, the same body is sent to `m.youtube.com`. One more comment page is loaded when the first page is short. One reply page is loaded for up to four threads that have a reply count and no inline replies. Both `commentEntityPayload` and the older `commentRenderer` shape are read. There is no third level.
+- Community posts use the posts tab’s `browseEndpoint` from the channel HTML when `ytInitialData` has no posts, and when that page has fewer than 20. One browse continuation is followed when it adds posts. A shared video title is read from either a string or the public text runs.
+
+What was not taken:
+
+- Bot attestation (`jnn-pa.googleapis.com` / botguard) is a bot check. This build does not solve it, and it does not embed another client’s API key.
+- The Instagram plugin rotates Kittygram frontends. On 21 Oct 2026 those hosts were down, empty, or behind a proof-of-work challenge. This build does not solve that challenge. Instagram comments stay on logged-out GraphQL, the captioned embed, and the public viewers already listed above.
+- Grayjay has no official plugin for X, Threads, or VK. X replies stay on fxtwitter, then Nitter. Threads stays on the public mobile post page. VK stays on the public wall API. A VK Video plugin is only an open request there.
+
+Worth adding later, against each site’s own public API (their Grayjay plugins are AGPL, so only the API is of interest):
+
+- **PeerTube.** `GET /api/v1/videos` and `GET /api/v1/videos/:id/comment-threads` on an instance. No login.
+- **Odysee.** Public claim and comment endpoints.
+- **Rumble.** Public pages and embeds.
 
 ## GitHub Actions
 

@@ -2,10 +2,14 @@
 
 X uses the public syndication embed (one post: text, author, likes, reply
 count). That payload has no reply bodies. YouTube comments come from the
-public watch page's innertube continuation. Instagram uses oembed (caption
-and author, no comment list). Threads uses the public mobile post page,
-which includes visible replies. Nothing here sends a cookie, calls the paid
-X API, or retries a rate limit.
+public watch page's innertube continuation: the token whose payload names
+the comments panel, then `youtubei/v1/next` on www.youtube.com and, if that
+returns no comments, on m.youtube.com. One extra comment page is loaded when
+the first page is short, and one reply page is loaded for a few threads.
+Instagram uses oembed (caption and author, no comment list). Threads uses
+the public mobile post page, which includes visible replies. Nothing here
+sends a cookie, calls the paid X API, solves a bot check, or retries a rate
+limit.
 """
 
 from __future__ import annotations
@@ -37,6 +41,8 @@ TEXT_CAP = 500
 RECENT_DAYS = 14
 FILE_CAP = 8
 YT_CAP = 2
+REPLY_PAGES = 4
+YT_NEXT_HOSTS = ("https://www.youtube.com", "https://m.youtube.com")
 FALLBACK_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 _REL = re.compile(r"(\d+)\s+(second|minute|hour|day|week|month|year)s?\s+ago", re.I)
 _UNITS = {
@@ -170,32 +176,52 @@ def parse_syndication(payload: dict, post_id: str = "") -> dict:
     }
 
 
+def _token_text(token: str) -> str:
+    text = token or ""
+    text = text.replace("\\u003d", "=").replace("\\u003D", "=")
+    return urllib.parse.unquote(text)
+
+
+def _token_bytes(token: str) -> bytes:
+    text = _token_text(token)
+    try:
+        return base64.urlsafe_b64decode(text + "=" * ((4 - len(text) % 4) % 4))
+    except (ValueError, TypeError):
+        return b""
+
+
 def _comment_token(html: str) -> str:
-    """The comment continuation is a public token inside the watch page."""
-    found = re.findall(
-        r'"continuationCommand":\{"token":"(Eg[^"\\]+)","request":"CONTINUATION_REQUEST_TYPE_WATCH_NEXT"',
-        html or "",
-    )
+    """The comment continuation is a public token inside the watch page.
+
+    Current pages put the token on ``continuationCommand`` without a
+    ``request`` field. The comments-panel token is preferred over the
+    shorter comments-section token. Older pages still name
+    ``CONTINUATION_REQUEST_TYPE_WATCH_NEXT`` on the same object.
+    """
+    html = html or ""
+    found = re.findall(r'"continuationCommand":\{"token":"(Eg[^"\\]+)"', html)
     panel = ""
     generic = ""
     for item in found:
-        text = item.replace("%3D", "=").replace("%3d", "=")
-        try:
-            raw = base64.urlsafe_b64decode(text + "=" * ((4 - len(text) % 4) % 4))
-        except (ValueError, TypeError):
-            raw = b""
+        raw = _token_bytes(item)
         if b"engagement-panel-comments-section" in raw and not panel:
-            panel = item
+            panel = _token_text(item)
         elif b"comments-section" in raw and not generic:
-            generic = item
+            generic = _token_text(item)
     if panel or generic:
         return panel or generic
-    index = (html or "").find("engagement-panel-comments-section")
+    legacy = re.findall(
+        r'"continuationCommand":\{"token":"(Eg[^"\\]+)","request":"CONTINUATION_REQUEST_TYPE_WATCH_NEXT"',
+        html,
+    )
+    if legacy:
+        return _token_text(legacy[0])
+    index = html.find("engagement-panel-comments-section")
     if index < 0:
         return ""
     window = html[max(0, index - 2500):index + 5000]
     near = re.search(r'"token":"(Eg[^"\\]+)"', window)
-    return near.group(1) if near else ""
+    return _token_text(near.group(1)) if near else ""
 
 
 def extract_watch(html: str) -> dict:
@@ -208,10 +234,49 @@ def extract_watch(html: str) -> dict:
     }
 
 
-def parse_innertube_comments(payload: dict, parent: dict | None = None, moment: datetime | None = None) -> list:
-    parent = parent or {}
+def _yt_runs(node) -> str:
+    if isinstance(node, str):
+        return node
+    if not isinstance(node, dict):
+        return ""
+    if isinstance(node.get("simpleText"), str):
+        return node["simpleText"]
+    runs = node.get("runs")
+    if isinstance(runs, list):
+        return "".join((item.get("text") or "") for item in runs if isinstance(item, dict))
+    return ""
+
+
+def _comment_row(comment_id: str, text: str, handle: str, avatar: str, published, likes, reply_count, parent: dict, moment: datetime | None) -> dict:
     parent_id = str(parent.get("statusId") or parent.get("id") or "")
     parent_handle = parent.get("handle") or ""
+    stats = {}
+    if likes is not None:
+        stats["likes"] = likes
+    if reply_count is not None:
+        stats["replies"] = reply_count
+    when = to_iso(published, moment)
+    row = post_shell(
+        id=comment_id,
+        statusId=comment_id,
+        platform="youtube",
+        kind="reply",
+        author=handle,
+        handle=handle,
+        avatar=avatar or "",
+        text=text,
+        date=when,
+        url="https://www.youtube.com/watch?v=" + parent_id if parent_id else "",
+        stats=stats,
+        replyingTo={"handle": parent_handle, "id": parent_id} if parent_id or parent_handle else None,
+    )
+    if not when and published:
+        row["timeLabel"] = str(published)
+    return row
+
+
+def parse_innertube_comments(payload: dict, parent: dict | None = None, moment: datetime | None = None, as_siblings: bool = False) -> list:
+    parent = parent or {}
     mutations = (((payload or {}).get("frameworkUpdates") or {}).get("entityBatchUpdate") or {}).get("mutations") or []
     top = []
     last = None
@@ -237,34 +302,237 @@ def parse_innertube_comments(payload: dict, parent: dict | None = None, moment: 
         handle = author.get("displayName") or ""
         comment_id = str(props.get("commentId") or "")
         level = props.get("replyLevel") if isinstance(props.get("replyLevel"), int) else 0
-        stats = {}
-        if likes is not None:
-            stats["likes"] = likes
-        if reply_count is not None:
-            stats["replies"] = reply_count
-        when = to_iso(props.get("publishedTime"), moment)
-        row = post_shell(
-            id=comment_id,
-            statusId=comment_id,
-            platform="youtube",
-            kind="reply",
-            author=handle,
-            handle=handle,
-            avatar=author.get("avatarThumbnailUrl") or "",
-            text=text,
-            date=when,
-            url="https://www.youtube.com/watch?v=" + parent_id if parent_id else "",
-            stats=stats,
-            replyingTo={"handle": parent_handle, "id": parent_id} if parent_id or parent_handle else None,
+        row = _comment_row(
+            comment_id,
+            text,
+            handle,
+            author.get("avatarThumbnailUrl") or "",
+            props.get("publishedTime"),
+            likes,
+            reply_count,
+            parent,
+            moment,
         )
-        if not when and props.get("publishedTime"):
-            row["timeLabel"] = str(props.get("publishedTime"))
-        if level > 0 and last is not None:
+        if not as_siblings and level > 0 and last is not None:
             last.setdefault("replies", []).append(row)
         else:
             top.append(row)
             last = row
     return top
+
+
+def _each_thread(node, visit) -> None:
+    if isinstance(node, dict):
+        thread = node.get("commentThreadRenderer")
+        if isinstance(thread, dict):
+            visit(thread)
+            return
+        for value in node.values():
+            _each_thread(value, visit)
+    elif isinstance(node, list):
+        for value in node:
+            _each_thread(value, visit)
+
+
+def _renderer_likes(renderer: dict):
+    likes = _count(renderer.get("likeCount"))
+    if likes is not None:
+        return likes
+    vote = renderer.get("voteCount")
+    if isinstance(vote, dict):
+        return _count(vote.get("simpleText"))
+    return _count(vote)
+
+
+def _renderer_avatar(renderer: dict) -> str:
+    thumbs = (renderer.get("authorThumbnail") or {}).get("thumbnails") or []
+    for thumb in reversed(thumbs):
+        if isinstance(thumb, dict) and str(thumb.get("url") or "").startswith("https://"):
+            return thumb["url"]
+    return ""
+
+
+def _thread_id(thread: dict) -> str:
+    view = thread.get("commentViewModel")
+    if isinstance(view, dict):
+        inner = view.get("commentViewModel") if isinstance(view.get("commentViewModel"), dict) else view
+        if inner.get("commentId"):
+            return str(inner["commentId"])
+    comment = (thread.get("comment") or {}).get("commentRenderer")
+    if isinstance(comment, dict) and comment.get("commentId"):
+        return str(comment["commentId"])
+    return ""
+
+
+def _reply_token(thread: dict) -> str:
+    replies = (thread.get("replies") or {}).get("commentRepliesRenderer") or {}
+    contents = replies.get("contents") or []
+    for item in contents:
+        if not isinstance(item, dict):
+            continue
+        command = ((item.get("continuationItemRenderer") or {}).get("continuationEndpoint") or {}).get("continuationCommand") or {}
+        token = command.get("token") or ""
+        if token:
+            return token
+    return ""
+
+
+def reply_continuations(payload: dict) -> dict:
+    """Map a top-level comment id to the public token for its first reply page."""
+    found = {}
+
+    def visit(thread: dict) -> None:
+        comment_id = _thread_id(thread)
+        token = _reply_token(thread)
+        if comment_id and token and comment_id not in found:
+            found[comment_id] = token
+
+    _each_thread(payload or {}, visit)
+    return found
+
+
+def next_page_token(payload: dict) -> str:
+    """The continuation that loads the next page of top-level comments."""
+    for endpoint in (payload or {}).get("onResponseReceivedEndpoints") or []:
+        if not isinstance(endpoint, dict):
+            continue
+        for key in ("reloadContinuationItemsCommand", "appendContinuationItemsAction"):
+            command = endpoint.get(key) or {}
+            items = command.get("continuationItems") or []
+            if not any(isinstance(item, dict) and "commentThreadRenderer" in item for item in items):
+                continue
+            for item in items:
+                if not isinstance(item, dict) or "continuationItemRenderer" not in item:
+                    continue
+                token = (((item.get("continuationItemRenderer") or {}).get("continuationEndpoint") or {}).get("continuationCommand") or {}).get("token") or ""
+                if token:
+                    return token
+    return ""
+
+
+def parse_thread_renderers(payload: dict, parent: dict | None = None, moment: datetime | None = None) -> list:
+    """Older innertube responses nest the text on ``commentRenderer``."""
+    parent = parent or {}
+    rows = []
+
+    def visit(thread: dict) -> None:
+        renderer = (thread.get("comment") or {}).get("commentRenderer")
+        if not isinstance(renderer, dict):
+            return
+        text = _yt_runs(renderer.get("contentText")).strip()
+        if not text:
+            return
+        row = _comment_row(
+            str(renderer.get("commentId") or ""),
+            text,
+            _yt_runs(renderer.get("authorText")).lstrip("@"),
+            _renderer_avatar(renderer),
+            _yt_runs(renderer.get("publishedTimeText")),
+            _renderer_likes(renderer),
+            _count(renderer.get("replyCount")),
+            parent,
+            moment,
+        )
+        replies = (thread.get("replies") or {}).get("commentRepliesRenderer") or {}
+        kids = []
+        for item in replies.get("contents") or []:
+            child = item.get("commentRenderer") if isinstance(item, dict) else None
+            if not isinstance(child, dict):
+                continue
+            child_text = _yt_runs(child.get("contentText")).strip()
+            if not child_text:
+                continue
+            kids.append(
+                _comment_row(
+                    str(child.get("commentId") or ""),
+                    child_text,
+                    _yt_runs(child.get("authorText")).lstrip("@"),
+                    _renderer_avatar(child),
+                    _yt_runs(child.get("publishedTimeText")),
+                    _renderer_likes(child),
+                    _count(child.get("replyCount")),
+                    {"statusId": row["id"], "id": row["id"], "handle": row.get("handle") or ""},
+                    moment,
+                )
+            )
+        if kids:
+            row["replies"] = kids
+        rows.append(row)
+
+    _each_thread(payload or {}, visit)
+    return rows
+
+
+def _comments_from(payload: dict | None, parent: dict) -> list:
+    if not isinstance(payload, dict):
+        return []
+    rows = parse_innertube_comments(payload, parent)
+    if rows:
+        return rows
+    return parse_thread_renderers(payload, parent)
+
+
+def _reply_stat(row: dict) -> int:
+    try:
+        return int((row.get("stats") or {}).get("replies") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _innertube_next(host: str, key: str, version: str, token: str) -> dict | None:
+    if not token:
+        return None
+    agent = MOBILE if "m.youtube.com" in host else BROWSER
+    body = json.dumps(
+        {
+            "context": {"client": {"clientName": "WEB", "clientVersion": version, "hl": "en", "gl": "US"}},
+            "continuation": token,
+        }
+    ).encode("utf-8")
+    url = host.rstrip("/") + "/youtubei/v1/next?key=" + urllib.parse.quote(key) + "&prettyPrint=false"
+    try:
+        status, raw = _read(
+            url,
+            {"User-Agent": agent, "Content-Type": "application/json", "Accept": "application/json"},
+            data=body,
+            timeout=20,
+        )
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+    if status == 429 or status != 200 or not raw.lstrip().startswith("{"):
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _merge_rows(rows: list, extra: list) -> None:
+    seen = {str(row.get("id") or "") for row in rows}
+    for row in extra:
+        comment_id = str(row.get("id") or "")
+        if not comment_id or comment_id in seen:
+            continue
+        seen.add(comment_id)
+        rows.append(row)
+
+
+def _attach_reply_page(row: dict, payload: dict) -> None:
+    parent = {"statusId": row.get("id") or "", "id": row.get("id") or "", "handle": row.get("handle") or ""}
+    kids = parse_innertube_comments(payload, parent, as_siblings=True)
+    if not kids:
+        kids = parse_thread_renderers(payload, parent)
+    kept = []
+    for child in kids:
+        if str(child.get("id") or "") == str(row.get("id") or ""):
+            continue
+        child.pop("replies", None)
+        kept.append(child)
+        if len(kept) >= REPLY_CAP:
+            break
+    if kept:
+        row["replies"] = kept
 
 
 def parse_ig_oembed(payload: dict, code: str = "") -> dict:
@@ -391,29 +659,44 @@ def fetch_youtube_comments(video_id: str, parent: dict | None = None) -> dict | 
             "replies": [],
             "note": "watch page had no public comment continuation",
         }
-    body = json.dumps(
-        {
-            "context": {"client": {"clientName": "WEB", "clientVersion": watch["version"], "hl": "en", "gl": "US"}},
-            "continuation": watch["token"],
-        }
-    ).encode("utf-8")
-    url = "https://www.youtube.com/youtubei/v1/next?key=" + urllib.parse.quote(key) + "&prettyPrint=false"
-    post_status, raw = _read(
-        url,
-        {"User-Agent": BROWSER, "Content-Type": "application/json", "Accept": "application/json"},
-        data=body,
-        timeout=20,
-    )
-    if post_status == 429 or post_status != 200 or not raw.lstrip().startswith("{"):
-        return None
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
     parent = dict(parent or {})
     parent.setdefault("statusId", video_id)
     parent.setdefault("id", video_id)
-    replies = parse_innertube_comments(payload, parent)
+    payload = None
+    host_used = ""
+    replies = []
+    for host in YT_NEXT_HOSTS:
+        payload = _innertube_next(host, key, watch["version"], watch["token"])
+        replies = _comments_from(payload, parent)
+        if replies:
+            host_used = host
+            break
+    if not replies:
+        if payload is None:
+            return None
+        return trim_pack(
+            {
+                "postId": "yt_" + video_id,
+                "platform": "youtube",
+                "source": "own:innertube",
+                "fetchedAt": now_iso(),
+                "replies": [],
+                "note": "innertube returned no comments",
+            }
+        )
+    tokens = reply_continuations(payload)
+    if len(replies) < REPLY_CAP:
+        page = next_page_token(payload)
+        more = _innertube_next(host_used, key, watch["version"], page) if page else None
+        if more:
+            _merge_rows(replies, _comments_from(more, parent))
+            tokens.update(reply_continuations(more))
+    ranked = [row for row in replies if _reply_stat(row) > 0 and not row.get("replies") and tokens.get(str(row.get("id") or ""))]
+    ranked.sort(key=lambda row: (_reply_stat(row), int((row.get("stats") or {}).get("likes") or 0)), reverse=True)
+    for row in ranked[:REPLY_PAGES]:
+        child = _innertube_next(host_used, key, watch["version"], tokens[str(row.get("id") or "")])
+        if child:
+            _attach_reply_page(row, child)
     return trim_pack(
         {
             "postId": "yt_" + video_id,
