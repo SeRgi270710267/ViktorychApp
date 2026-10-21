@@ -6823,20 +6823,31 @@
     const cardId = platform + ":" + who;
     const dest = watchHash(post);
     const name = creator.name || post.author || post.handle || "";
-    return `<div class="yt-item">
-      ${repostBanner(post)}
-      <div class="yt-card${layout === "list" ? " row" : ""}" data-feed="${esc(creator.id || "")}" data-open="${esc(dest)}">
-        <a class="yt-open" href="${esc(dest)}">${subsThumb(post)}</a>
-        <div class="yt-meta">
-          <a data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}" aria-label="${esc(name || "Channel")}">${avatar(creator.avatar || post.avatar, name, "yt-ava")}</a>
-          <div class="yt-copy">
-            <a class="yt-open" href="${esc(dest)}"><h3 class="yt-title">${esc(title)}</h3></a>
-            <div class="yt-by"><a data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}">${esc(name)}</a>${badge(creator.verifiedType || post.verifiedType)}</div>
-            <div class="yt-sub">${esc(videoMeta(post))}</div>
+    const banner = repostBanner(post);
+    const quote = repostQuote(post);
+    const byline = `<div class="yt-by"><a data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}">${esc(name)}</a>${badge(creator.verifiedType || post.verifiedType)}</div><div class="yt-sub">${esc(videoMeta(post))}</div>`;
+    if (layout === "list") {
+      return `<div class="yt-item">
+        ${banner}
+        <div class="yt-card row" data-feed="${esc(creator.id || "")}" data-open="${esc(dest)}">
+          <a class="yt-open" href="${esc(dest)}">${subsThumb(post)}</a>
+          <div class="yt-meta">
+            <a data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}" aria-label="${esc(name || "Channel")}">${avatar(creator.avatar || post.avatar, name, "yt-ava")}</a>
+            <div class="yt-copy">
+              <a class="yt-open" href="${esc(dest)}"><h3 class="yt-title">${esc(title)}</h3></a>
+              ${byline}
+            </div>
           </div>
         </div>
-      </div>
-      ${repostQuote(post)}
+        ${quote}
+      </div>`;
+    }
+    return `<div class="yt-item" data-feed="${esc(creator.id || "")}" data-open="${esc(dest)}">
+      <div class="yt-label">${banner}</div>
+      <a class="yt-open yt-shot" href="${esc(dest)}">${subsThumb(post)}</a>
+      <a class="yt-face" data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}" aria-label="${esc(name || "Channel")}">${avatar(creator.avatar || post.avatar, name, "yt-ava")}</a>
+      <a class="yt-open yt-title-link" href="${esc(dest)}"><h3 class="yt-title">${esc(title)}</h3></a>
+      <div class="yt-lines">${byline}${quote}</div>
     </div>`;
   }
 
@@ -6935,7 +6946,7 @@
     if (!node || !node.closest) return null;
     const chip = node.closest(".yt-chip[data-group]");
     if (chip && chip.dataset.group) return { kind: "group", id: chip.dataset.group };
-    const card = node.closest(".yt-card[data-feed], .short-card[data-feed], .yt-ch[data-feed]");
+    const card = node.closest(".yt-item[data-feed], .yt-card[data-feed], .short-card[data-feed], .yt-ch[data-feed]");
     if (card && card.dataset.feed) return { kind: "feed", id: card.dataset.feed };
     return null;
   }
@@ -8750,7 +8761,7 @@
   window.addEventListener("resize", () => schedulePreview(), { passive: true });
   document.addEventListener("mouseover", (event) => {
     if (!subsDesktop()) return;
-    const card = event.target.closest && event.target.closest(".yt-card, .short-card");
+    const card = event.target.closest && event.target.closest(".yt-item, .yt-card, .short-card");
     if (!card) return;
     const thumb = card.querySelector(".vplay[data-preview='subs']");
     if (!thumb || STATE.subsHover === thumb) return;
@@ -8758,7 +8769,7 @@
     schedulePreview();
   });
   document.addEventListener("mouseout", (event) => {
-    const card = event.target.closest && event.target.closest(".yt-card, .short-card");
+    const card = event.target.closest && event.target.closest(".yt-item, .yt-card, .short-card");
     if (!card || !STATE.subsHover || !card.contains(STATE.subsHover)) return;
     const to = event.relatedTarget;
     if (to && card.contains(to)) return;

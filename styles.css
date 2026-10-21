@@ -1843,7 +1843,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .yt-chip span { overflow: hidden; text-overflow: ellipsis; }
 .yt-chip.on { background: var(--fill); color: var(--on-fill); border-color: transparent; }
 .yt-chip svg { width: 18px; height: 18px; fill: currentColor; }
-.yt-chip, .yt-card, .short-card, .yt-ch { -webkit-touch-callout: none; }
+.yt-chip, .yt-card, .yt-item, .short-card, .yt-ch { -webkit-touch-callout: none; }
 .chip-icon, .collage { width: 20px; height: 20px; border-radius: 4px; flex: none; object-fit: cover; }
 .collage { display: grid; overflow: hidden; background: var(--search); }
 .collage.one { grid-template-columns: 1fr; }
@@ -2386,6 +2386,83 @@ html.tv-on #new-posts { display: none; }
   .short-card { width: 45vw; }
   .watch-title { font-size: 18px; line-height: 26px; }
 }
+
+.subs.grid .yt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  column-gap: 16px;
+  row-gap: 0;
+}
+.subs.grid .yt-item {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  column-gap: 12px;
+  grid-template-rows: subgrid;
+  grid-row: span 4;
+  min-width: 0;
+  cursor: pointer;
+  color: inherit;
+}
+.subs.grid .yt-label,
+.subs.grid .yt-shot { grid-column: 1 / -1; min-width: 0; }
+.subs.grid .yt-label { grid-row: 1; }
+.subs.grid .yt-label:empty { margin: 0; padding: 0; font-size: 0; line-height: 0; }
+.subs.grid .yt-shot { grid-row: 2; display: block; }
+.subs.grid .yt-label .repost-line {
+  display: flex;
+  margin: 0 0 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.subs.grid .yt-label .repost-line svg { flex: none; }
+.subs.grid .yt-label .repost-line a,
+.subs.grid .yt-label .repost-line span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subs.grid .yt-face {
+  grid-column: 1;
+  grid-row: 3 / span 2;
+  align-self: start;
+  margin-top: 12px;
+  width: 36px;
+  height: 36px;
+}
+.subs.grid .yt-face .ava,
+.subs.grid .yt-face .ava img { width: 36px; height: 36px; }
+.subs.grid .yt-title-link {
+  grid-column: 2;
+  grid-row: 3;
+  min-width: 0;
+  margin-top: 12px;
+  height: 40px;
+  overflow: hidden;
+}
+.subs.grid .yt-item .yt-title {
+  height: 40px;
+  min-height: 40px;
+  max-height: 40px;
+  line-height: 20px;
+}
+.subs.grid .yt-lines {
+  grid-column: 2;
+  grid-row: 4;
+  min-width: 0;
+  padding-bottom: 24px;
+}
+.subs.grid .yt-by,
+.subs.grid .yt-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subs.grid .yt-by a {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subs.grid .yt-by .vbadge { flex: none; }
+.subs.grid .yt-lines .quote { margin-top: 8px; }
 
 .post-text .tg-spoiler, .status-text .tg-spoiler, .tg-spoiler {
   background: var(--muted);
