@@ -84,6 +84,53 @@ def main() -> None:
     check(fx["posts"][0]["quoted"]["media"][0]["url"].endswith("high.mp4"), "fxtwitter picks highest mp4")
     check(fx["posts"][0]["stats"]["views"] == 6100000, "fxtwitter stats")
     check(fx["posts"][1]["kind"] == "repost" and fx["posts"][1]["handle"] == "orig", "fxtwitter repost author")
+    moment = datetime(2026, 10, 21, 6, 40, tzinfo=timezone.utc)
+    live = parse_fx(
+        {
+            "code": 200,
+            "results": [
+                {
+                    "id": "100",
+                    "text": "older original",
+                    "created_at": "Wed Oct 21 02:41:37 +0000 2026",
+                    "author": {"name": "Other", "screen_name": "other"},
+                    "reposted_by": {"name": "Test User", "screen_name": "testuser"},
+                },
+                {
+                    "id": "200",
+                    "text": "newer post",
+                    "created_at": "Wed Oct 21 05:44:16 +0000 2026",
+                    "author": {"name": "Test User", "screen_name": "testuser"},
+                },
+                {
+                    "id": "300",
+                    "text": "not this account",
+                    "created_at": "Wed Oct 21 06:00:00 +0000 2026",
+                    "author": {"name": "Stranger", "screen_name": "stranger"},
+                },
+            ],
+        },
+        {"id": "x:testuser", "handle": "testuser"},
+        moment,
+    )
+    check(len(live["posts"]) == 2, "results timeline keeps this account and drops other people")
+    live_repost = live["posts"][0]
+    check(live_repost["kind"] == "repost" and live_repost["id"] == "repost:testuser:100" and live_repost["statusId"] == "100", "repost id is the repost and status id is the original")
+    check(live_repost["sortDate"] > "2026-10-21T05:44:16" and live_repost["sortDate"] <= "2026-10-21T06:40:00.000Z", "repost sorts above the newer original and not after the fetch")
+    check(live["posts"][1]["id"] == "200" and live["posts"][1]["kind"] == "post", "an original post keeps its id")
+    ranked = sorted(live["posts"], key=lambda post: post.get("sortDate") or post.get("date") or "", reverse=True)
+    check(ranked[0]["id"] == "repost:testuser:100", "sorting by activity keeps the recent repost")
+    kept = parse_nitter(
+        """<?xml version="1.0"?><rss><channel><title>T / @testuser</title>
+        <item><title>R to @someone: hello back</title><description>hello back</description>
+        <link>https://nitter.example/testuser/status/77</link><pubDate>Wed, 21 Oct 2026 06:10:00 GMT</pubDate></item>
+        <item><title>RT by @testuser: keep this</title><description>keep this</description>
+        <link>https://nitter.example/orig/status/66</link><pubDate>Tue, 20 Oct 2026 01:00:00 GMT</pubDate></item>
+        </channel></rss>""",
+        {"id": "x:testuser", "handle": "testuser"},
+    )
+    check(kept["posts"][0]["kind"] == "reply" and kept["posts"][0]["replyingTo"]["handle"] == "someone", "nitter R to stays a reply")
+    check(kept["posts"][1]["kind"] == "repost" and kept["posts"][1]["id"].startswith("repost:testuser:"), "nitter RT by stays a repost")
     check(fx["posts"][1]["verifiedType"] == "government", "government badge type")
     check(fx["posts"][2]["kind"] == "reply", "fxtwitter reply")
     check(any(p["followers"] == 10 for p in fx["profiles"]), "fxtwitter profile")
@@ -616,6 +663,11 @@ def main() -> None:
     check("status.json" in workflow and "fallback" in workflow, "the deploy publishes status and the own-fetcher files")
     check('name: "sources"' in app and "ownPack" in app and "fxDown" in app and "fallback/" in app and "settled" in app and "source-row" in (ROOT / "styles.css").read_text(encoding="utf-8"), "a hidden sources view fails over to our own files")
     check('name: "user"' in app and "#/u/" in app and "with_replies=1" in app and "Open on Instagram" in app and "feeds.config.json" in app and "pfollow-note" in (ROOT / "styles.css").read_text(encoding="utf-8"), "live profiles open from a handle and keep follows on the device")
+    css = (ROOT / "styles.css").read_text(encoding="utf-8")
+    check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
+    follow_fn = app[app.index("function followedFeeds()"):app.index("function followedFeeds()") + 500]
+    check("redacted_handle" not in follow_fn and "redacted_handle" not in follow_fn and "redacted_handle" not in follow_fn, "live refresh has no per-account special case")
+    check("return !isSelfReply(post);" in app and "replyParent" in app and "pill-faces" in css and "reply-context" in css, "home shows replies to other people and the new-posts pill can show avatars")
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
     community_src = (ROOT / "scripts" / "adapters" / "youtube_community.py").read_text(encoding="utf-8")
     check("rsshub.rssforever.com" not in config_text and "rsshub.pseudoyu.com" not in config_text and "hub.slarker.me" not in config_text, "public RSSHub mirrors are not feed sources")
@@ -675,6 +727,8 @@ def main() -> None:
     check(png_size(ROOT / "screenshots" / "narrow.png") == (1080, 1920), "the narrow screenshot is a phone frame")
     check(png_size(ROOT / "screenshots" / "wide.png") == (1920, 1080), "the wide screenshot is a desktop frame")
     check((ROOT / "scripts" / "pwa_assets.py").read_text(encoding="utf-8").find("M18.244") < 0, "the install mark is not the X logo")
+    check("M18.244" not in (ROOT / "app.js").read_text(encoding="utf-8") and "M18.244" not in (ROOT / "favicon.svg").read_text(encoding="utf-8") and 'icon("logo")' not in (ROOT / "app.js").read_text(encoding="utf-8"), "the X logo is not in the app chrome or the favicon")
+    check("M12 2.2l1.7 5.4" in (ROOT / "favicon.svg").read_text(encoding="utf-8") and "function sourceBadge(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the favicon uses the Feeds icon and posts keep their source badges")
     print("all adapter checks passed")
 
 

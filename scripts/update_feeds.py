@@ -404,6 +404,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     for feed in config.get("feeds") or []:
         configured_ids.add(feed["id"])
         payload = None
+        source_url = ""
         adapter = feed.get("adapter")
         errors = []
         if not use_fixtures and feed.get("platform") == "youtube" and not feed.get("channelId"):
@@ -434,6 +435,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     continue
                 try:
                     payload = read_source(url)
+                    source_url = url
                     adapter = feed.get("adapter")
                     break
                 except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
@@ -466,6 +468,29 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
         posts = result.get("posts") or []
+        previous = {str(item.get("id") or ""): item for item in old_by_feed.get(feed["id"], [])}
+        for post in posts:
+            old = previous.get(str(post.get("id") or ""))
+            if old and old.get("sortDate") and post.get("kind") == "repost":
+                post["sortDate"] = old["sortDate"]
+        if adapter == "fxtwitter" and not use_fixtures and source_url:
+            reply_url = source_url + ("&" if "?" in source_url else "?") + "with_replies=1"
+            try:
+                extra = run_adapter("fxtwitter", read_source(reply_url), feed)
+            except Exception as exc:
+                extra = {}
+                print(f"[keep] {feed['id']}: replies: {exc}", file=sys.stderr)
+            have = {str(post.get("id") or "") for post in posts}
+            replies = []
+            for post in extra.get("posts") or []:
+                if post.get("kind") != "reply" or str(post.get("id") or "") in have:
+                    continue
+                have.add(str(post.get("id") or ""))
+                replies.append(post)
+            if replies:
+                cap = int(feed.get("limit") or 20)
+                posts.extend(replies[:cap])
+                print(f"[ok] {feed['id']}: {len(replies[:cap])} replies")
         if adapter == "youtube_rss" and not use_fixtures:
             from yt_remote import carry_youtube_fields
 

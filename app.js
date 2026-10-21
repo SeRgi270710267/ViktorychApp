@@ -7,7 +7,6 @@
   const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube" };
 
   const PATH = {
-    logo: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z",
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
     homeOn: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913H9.14a.93.93 0 0 0 .929-.913v-7.075h3.909v7.075c0 .502.417.913.928.913h5.653c.51 0 .929-.41.929-.913V7.904c0-.301-.158-.584-.408-.758z",
     search: "M10.25 3.75c-3.59 0-6.5 2.91-6.5 6.5s2.91 6.5 6.5 6.5c1.795 0 3.419-.726 4.596-1.904 1.178-1.177 1.904-2.801 1.904-4.596 0-3.59-2.91-6.5-6.5-6.5zm-8.5 6.5c0-4.694 3.806-8.5 8.5-8.5s8.5 3.806 8.5 8.5c0 1.986-.682 3.815-1.824 5.262l4.781 4.781-1.414 1.414-4.781-4.781c-1.447 1.142-3.276 1.824-5.262 1.824-4.694 0-8.5-3.806-8.5-8.5z",
@@ -257,7 +256,7 @@
     const out = [];
     const seen = new Set();
     function add(post) {
-      const key = (post.platform || "") + ":" + (post.statusId || post.id);
+      const key = (post.platform || "") + ":" + (post.kind === "repost" ? post.id : (post.statusId || post.id));
       if (seen.has(key)) return;
       seen.add(key);
       out.push(post);
@@ -561,8 +560,8 @@
   }
 
   function inTimeline(post) {
-    if (post.kind !== "reply") return true;
-    return isSelfReply(post) && threadChildren(post).length > 0;
+    if (!post || post.kind !== "reply") return true;
+    return !isSelfReply(post);
   }
 
   function sameThread(parent, child) {
@@ -978,9 +977,8 @@
     if (typeof author.followers === "number") post.authorFollowers = author.followers;
     const conv = fxConversationId(wrapped);
     if (conv) post.conversationId = conv;
-    if (replying && (wrapped.replying_to && (wrapped.replying_to.status || wrapped.replying_to.status_id))) {
-      post.replyingTo = Object.assign({}, replying, { id: String(wrapped.replying_to.status || wrapped.replying_to.status_id) });
-    }
+    const parentStatus = (wrapped.replying_to && (wrapped.replying_to.status || wrapped.replying_to.status_id)) || wrapped.replying_to_status || wrapped.in_reply_to_status_id;
+    if (replying && parentStatus) post.replyingTo = Object.assign({}, replying, { id: String(parentStatus) });
     return post;
   }
 
@@ -1392,9 +1390,11 @@
   }
 
   function ivIso(value) {
-    const n = Number(value);
-    if (!isFinite(n) || n < 1000000000) return "";
-    return new Date(n * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    let n = Number(value);
+    if (!isFinite(n) || n <= 0) return "";
+    if (n < 100000000000) n *= 1000;
+    if (n < 1000000000000) return "";
+    return new Date(n).toISOString().replace(/\.\d{3}Z$/, "Z");
   }
 
   function ivAvatar(comment) {
@@ -2210,6 +2210,19 @@
     return `<div class="poll">${rows}${votes}</div>`;
   }
 
+  function contextCard(parent) {
+    if (!parent) return "";
+    const text = String(parent.text || parent.title || "").replace(/\s+/g, " ").trim();
+    return `<div class="reply-context">
+      <div class="quote-head">
+        ${avatar(parent.avatar, parent.author || parent.handle)}
+        <span class="name">${esc(parent.author || parent.handle || "Post")}</span>
+        ${parent.handle ? `<span class="handle">@${esc(parent.handle)}</span>` : ""}
+      </div>
+      ${text ? `<div class="quote-text">${esc(text.slice(0, 220))}</div>` : ""}
+    </div>`;
+  }
+
   function card(post, mode, opts) {
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
@@ -2217,6 +2230,7 @@
     const repost = !hideRepost && post.repostedBy ? `<div class="repost-line">${icon("repost")}<a data-card="${esc("x:" + (post.repostedBy.handle || ""))}" href="${esc(userHash("x", post.repostedBy.handle))}">${esc(post.repostedBy.name || post.repostedBy.handle)} reposted</a></div>` : "";
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
     const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(userHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const context = mode !== "status" && post.kind === "reply" && post.replyParent ? contextCard(post.replyParent) : "";
     const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(sitePermalink(statusHash(post)))}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
@@ -2230,6 +2244,7 @@
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
     const hydrate = post.stub ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-date="${esc(post.date || "")}"${open}${hydrate}>
+      ${context}
       ${repost}
       <div class="post-row">
         ${avaCol}
@@ -2309,7 +2324,6 @@
     const name = route.name;
     return `<header class="nav">
       <div class="nav-scroll">
-        <a class="logo" href="#/" aria-label="Home">${icon("logo")}</a>
         ${navItem("#/", "home", "Home", name === "home")}
         ${navItem("#/explore", "search", "Explore", name === "explore")}
         ${navItem("#/notifications", "bell", "Notifications", name === "notifications")}
@@ -2369,7 +2383,6 @@
     return `<div class="topbar tall">
       <div class="mhead">
         <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
-        <a class="m-logo" href="#/" aria-label="Home">${icon("logo")}</a>
         <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
       </div>
       <div class="tabs" role="tablist">
@@ -2407,7 +2420,6 @@
   function pageHead(title, extra, back, action) {
     return `<div class="topbar tall"><div class="mhead">
         <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
-        <a class="m-logo" href="#/" aria-label="Home">${icon("logo")}</a>
         <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
       </div>
       <div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>` : ""}<div class="head-text grow"><h1>${esc(title)}</h1>${extra || ""}</div>${action || ""}</div></div>`;
@@ -2490,6 +2502,38 @@
     return { id: id, platform: id.slice(0, cut), handle: id.slice(cut + 1), name: id.slice(cut + 1), bio: "" };
   }
 
+  function stampActivity(posts, nowMs) {
+    const now = nowMs || Date.now();
+    let index = 0;
+    const timeOf = (post) => {
+      const parsed = Date.parse(isoDate((post && (post.sortDate || post.date)) || ""));
+      return isFinite(parsed) ? parsed : 0;
+    };
+    while (index < posts.length) {
+      const post = posts[index];
+      if (!post || post.kind !== "repost" || post.sortDate) { index += 1; continue; }
+      const start = index;
+      while (index < posts.length && posts[index] && posts[index].kind === "repost" && !posts[index].sortDate) index += 1;
+      const run = posts.slice(start, index);
+      const anchor = index < posts.length ? timeOf(posts[index]) : 0;
+      let ceiling = now;
+      if (start > 0) ceiling = timeOf(posts[start - 1]) || now;
+      if (!anchor || ceiling <= anchor) continue;
+      const behind = run.some((item) => {
+        const posted = Date.parse(isoDate(item.date || ""));
+        return !isFinite(posted) || posted < anchor;
+      });
+      if (!behind) continue;
+      const step = (ceiling - anchor) / (run.length + 1);
+      run.forEach((item, offset) => {
+        let stamp = ceiling - step * (offset + 1);
+        if (stamp <= anchor) stamp = anchor + Math.max(1000, (run.length - offset) * 1000);
+        if (stamp >= ceiling) stamp = ceiling - (offset + 1) * 1000;
+        item.sortDate = isoDate(Math.round(stamp));
+      });
+    }
+  }
+
   function fxLivePost(status) {
     const wrapped = status && status.tweet && typeof status.tweet === "object" ? status.tweet : status;
     const post = fxFromStatus(wrapped);
@@ -2498,6 +2542,8 @@
     if (by && by.handle) {
       post.repostedBy = by;
       post.kind = "repost";
+      const who = String(by.handle).replace(/^@/, "").toLowerCase();
+      if (who && post.statusId) post.id = "repost:" + who + ":" + post.statusId;
     }
     if (wrapped.quote && typeof wrapped.quote === "object") {
       const quoted = fxFromStatus(wrapped.quote);
@@ -2561,7 +2607,7 @@
     if (LIVE.fxDown) return Promise.resolve(null);
     let path = "/2/profile/" + encodeURIComponent(handle) + (kind === "media" ? "/media" : "/statuses");
     const query = ["count=40"];
-    if (kind === "replies") query.push("with_replies=1");
+    if (kind === "replies" || kind === "home") query.push("with_replies=1");
     if (cursor) query.push("cursor=" + encodeURIComponent(cursor));
     return fetchJson(FX + path + "?" + query.join("&")).then((data) => {
       const posts = [];
@@ -2577,6 +2623,7 @@
         if (post && fxOwned(post, handle)) posts.push(post);
       });
       const bottom = data && data.cursor && data.cursor.bottom;
+      stampActivity(posts);
       return { posts: posts, cursor: bottom || "", profile: profile };
     }).catch(() => null);
   }
@@ -2633,9 +2680,13 @@
         media: media,
         stats: {}
       };
-      if (rt) post.repostedBy = { name: rt[1], handle: rt[1], avatar: "" };
+      if (rt) {
+        post.repostedBy = { name: rt[1], handle: rt[1], avatar: "" };
+        post.id = "repost:" + String(rt[1]).toLowerCase() + ":" + statusId;
+      }
       if (fxOwned(post, handle) || (post.repostedBy && String(post.repostedBy.handle).toLowerCase() === handle.toLowerCase())) out.push(post);
     }
+    stampActivity(out);
     return out;
   }
 
@@ -4561,9 +4612,308 @@
     Promise.resolve(op).catch(() => {});
   }
 
-  function showPill(show) {
+  const LIVE_REFRESH_MS = 2 * 60 * 1000;
+
+  function showPill(posts) {
     const el = document.getElementById("new-posts");
-    if (el) el.hidden = !show;
+    if (!el) return;
+    const list = Array.isArray(posts) ? posts.filter(Boolean) : [];
+    if (!list.length) { el.hidden = true; return; }
+    const faces = [];
+    const seen = {};
+    list.forEach((post) => {
+      const who = post.repostedBy || {};
+      const src = who.avatar || post.avatar || "";
+      const seenKey = who.handle || post.handle || src;
+      if (!src || seen[seenKey] || faces.length >= 3) return;
+      seen[seenKey] = true;
+      faces.push(src);
+    });
+    const avatars = faces.map((src) => `<img class="pill-ava" alt="" src="${esc(src)}">`).join("");
+    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>New posts</span>";
+    el.hidden = false;
+  }
+
+  function memoryPosts() {
+    if (!STATE.memoryPosts) STATE.memoryPosts = [];
+    return STATE.memoryPosts;
+  }
+
+  function rememberTimeline(items) {
+    const have = {};
+    memoryPosts().forEach((post) => { have[(post.platform || "") + ":" + post.id] = true; });
+    (items || []).forEach((post) => {
+      if (!post || !post.id) return;
+      const key = (post.platform || "") + ":" + post.id;
+      if (have[key]) return;
+      have[key] = true;
+      memoryPosts().push(post);
+    });
+  }
+
+  function withMemory(doc) {
+    if (!doc) return doc;
+    const posts = (doc.posts || []).slice();
+    const have = {};
+    posts.forEach((post) => { have[(post.platform || "") + ":" + post.id] = true; });
+    memoryPosts().forEach((post) => {
+      const key = (post.platform || "") + ":" + post.id;
+      if (have[key]) return;
+      have[key] = true;
+      posts.push(post);
+    });
+    return Object.assign({}, doc, { posts: posts });
+  }
+
+  function belongsToFeed(post, feed) {
+    if (!post || !feed) return false;
+    if (post.feedId && post.feedId === feed.id) return true;
+    const platform = post.platform || feed.platform || "";
+    const handle = String(feed.handle || "").toLowerCase();
+    if (platform === (feed.platform || "") && String(post.handle || "").toLowerCase() === handle) return true;
+    const by = post.repostedBy && String(post.repostedBy.handle || "").toLowerCase();
+    return !!by && by === handle && platform === (feed.platform || "");
+  }
+
+  function takeFresh(feed, incoming) {
+    const known = {};
+    let newest = "";
+    posts().forEach((post) => {
+      if (!belongsToFeed(post, feed)) return;
+      known[String(post.id)] = true;
+      const stamp = post.sortDate || post.date || "";
+      if (stamp > newest) newest = stamp;
+    });
+    const out = [];
+    let seenKnown = false;
+    (incoming || []).forEach((post) => {
+      if (!post || !post.id || out.length >= 20) return;
+      post.feedId = feed.id;
+      if (!post.platform) post.platform = feed.platform;
+      if (post.kind === "repost" && post.repostedBy && !post.repostedBy.avatar && feed.avatar) post.repostedBy.avatar = feed.avatar;
+      if (post.kind === "repost" && post.repostedBy && feed.name && post.repostedBy.name === post.repostedBy.handle) post.repostedBy.name = feed.name;
+      if (known[String(post.id)]) { seenKnown = true; return; }
+      const stamp = post.sortDate || post.date || "";
+      if (!seenKnown || (newest && stamp > newest)) out.push(post);
+    });
+    return out;
+  }
+
+  function mapLimit(items, limit, fn) {
+    const out = new Array(items.length);
+    let next = 0;
+    const workers = [];
+    const count = Math.min(limit, items.length);
+    for (let i = 0; i < count; i++) {
+      workers.push((async function () {
+        while (next < items.length) {
+          const index = next++;
+          try { out[index] = await fn(items[index]); }
+          catch (err) { out[index] = []; }
+        }
+      })());
+    }
+    return Promise.all(workers).then(() => out);
+  }
+
+  function loadCatalog() {
+    if (STATE.catalog) return Promise.resolve(STATE.catalog);
+    if (STATE.catalogP) return STATE.catalogP;
+    STATE.catalogP = fetch("feeds.config.json", { cache: "no-cache" }).then((res) => (res.ok ? res.json() : null)).then((doc) => {
+      STATE.catalog = doc;
+      return doc;
+    }).catch(() => null);
+    return STATE.catalogP;
+  }
+
+  function expandSource(template, config, feed) {
+    return String(template || "")
+      .replaceAll("{rsshubBase}", (config && config.rsshubBase) || "")
+      .replaceAll("{fxtwitterBase}", (config && config.fxtwitterBase) || "")
+      .replaceAll("{base}", (config && config.rsshubBase) || "")
+      .replaceAll("{handle}", (feed && feed.handle) || "")
+      .replaceAll("{channelId}", (feed && feed.channelId) || "");
+  }
+
+  function httpsSources(config, entry) {
+    const urls = [];
+    const add = (list) => (list || []).forEach((raw) => {
+      const url = expandSource(raw, config, entry);
+      if (/^https:\/\//i.test(url)) urls.push(url);
+    });
+    add(entry && entry.source_urls);
+    ((entry && entry.fallbacks) || []).forEach((fallback) => add(fallback.source_urls));
+    return urls;
+  }
+
+  function parseFeedXml(xml, feed) {
+    if (!xml || typeof DOMParser === "undefined") return [];
+    const doc = new DOMParser().parseFromString(xml, "text/xml");
+    if (!doc || doc.querySelector("parsererror")) return [];
+    const nodes = doc.getElementsByTagName("item");
+    const entries = nodes.length ? nodes : doc.getElementsByTagName("entry");
+    const out = [];
+    for (let i = 0; i < entries.length && out.length < 20; i++) {
+      const node = entries[i];
+      const title = ((node.getElementsByTagName("title")[0] && node.getElementsByTagName("title")[0].textContent) || "").trim();
+      const linkNode = node.getElementsByTagName("link")[0];
+      const link = (linkNode && (linkNode.getAttribute("href") || linkNode.textContent)) || "";
+      const published = (node.getElementsByTagName("pubDate")[0] && node.getElementsByTagName("pubDate")[0].textContent)
+        || (node.getElementsByTagName("updated")[0] && node.getElementsByTagName("updated")[0].textContent)
+        || (node.getElementsByTagName("published")[0] && node.getElementsByTagName("published")[0].textContent)
+        || "";
+      const summary = (node.getElementsByTagName("description")[0] && node.getElementsByTagName("description")[0].textContent)
+        || (node.getElementsByTagName("summary")[0] && node.getElementsByTagName("summary")[0].textContent)
+        || (node.getElementsByTagName("content")[0] && node.getElementsByTagName("content")[0].textContent)
+        || "";
+      const holder = document.createElement("div");
+      holder.innerHTML = summary;
+      const text = (holder.textContent || "").replace(/\s+/g, " ").trim() || title;
+      const guid = (node.getElementsByTagName("guid")[0] && node.getElementsByTagName("guid")[0].textContent)
+        || (node.getElementsByTagName("id")[0] && node.getElementsByTagName("id")[0].textContent)
+        || link || title;
+      if (!text && !title) continue;
+      const post = {
+        id: String(guid).slice(0, 180),
+        statusId: String(guid).slice(0, 180),
+        platform: feed.platform || "rss",
+        feedId: feed.id,
+        kind: "post",
+        author: feed.name || feed.handle || "",
+        handle: feed.handle || "",
+        avatar: feed.avatar || "",
+        text: text,
+        title: title,
+        date: isoDate(published),
+        url: link,
+        media: [],
+        stats: {}
+      };
+      out.push(post);
+    }
+    return out;
+  }
+
+  function liveX(feed) {
+    const handle = feed.handle;
+    if (!handle || LIVE.fxDown) return nitterPosts(handle || "").then((rows) => rows || []);
+    return nitterPosts(handle).then((rows) => {
+      if (rows && rows.length) return rows;
+      return fxTimeline(handle, "home", "").then((pack) => (pack && pack.posts) || []);
+    }).then((rows) => {
+      (rows || []).forEach((post) => {
+        post.feedId = feed.id;
+        post.platform = "x";
+        if (post.kind === "repost" && post.repostedBy) {
+          if (!post.repostedBy.avatar && feed.avatar) post.repostedBy.avatar = feed.avatar;
+          if (feed.name && (!post.repostedBy.name || post.repostedBy.name === post.repostedBy.handle)) post.repostedBy.name = feed.name;
+        }
+      });
+      return rows || [];
+    });
+  }
+
+  function liveYoutube(feed) {
+    const id = feed.channelId || feed.handle;
+    if (!id) return Promise.resolve([]);
+    const profile = {
+      name: feed.name || feed.handle || "",
+      displayHandle: feed.handle || "",
+      channelId: feed.channelId || id,
+      avatar: feed.avatar || "",
+      verifiedType: feed.verifiedType || ""
+    };
+    return rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(id), 3, "ivBase").then((data) => {
+      const authorId = (data && data.authorId) || feed.channelId || (/^UC[\w-]{10,}$/.test(id) ? id : "");
+      const videos = ivVideoPosts({ videos: (data && (data.latestVideos || data.videos)) || [] }, profile);
+      if (!authorId) return videos;
+      return rotate(ivBases(), "/api/v1/channels/" + encodeURIComponent(authorId) + "/community", 3, "ivBase").then((community) => {
+        const posts = ((community && community.comments) || []).map((item) => ivCommunityPost(item, profile)).filter((post) => post && post.text);
+        return videos.concat(posts);
+      }).catch(() => videos);
+    }).catch(() => []);
+  }
+
+  function liveConfigured(feed, config) {
+    const entry = ((config && config.feeds) || []).find((item) => item && item.id === feed.id) || null;
+    const urls = httpsSources(config, entry);
+    if (!urls.length) return Promise.resolve([]);
+    const url = urls[0];
+    return fetch(url, { cache: "no-cache", signal: AbortSignal.timeout(8000) }).then((res) => {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.text();
+    }).then((xml) => {
+      if ((entry && entry.adapter) === "nitter_rss" || /<item/i.test(xml) && /RT by @/i.test(xml)) return parseNitterRss(xml, feed.handle);
+      return parseFeedXml(xml, feed);
+    }).catch(() => []);
+  }
+
+  function livePostsForFeed(feed, config) {
+    const platform = feed.platform || "";
+    if (platform === "x") return liveX(feed);
+    if (platform === "youtube") return liveYoutube(feed).then((rows) => {
+      if (rows && rows.length) return rows;
+      return liveConfigured(feed, config);
+    });
+    return liveConfigured(feed, config);
+  }
+
+  function attachParents(items) {
+    const need = [];
+    (items || []).forEach((post) => {
+      if (!post || post.kind !== "reply" || post.replyParent) return;
+      const id = post.replyingTo && post.replyingTo.id;
+      if (!id) return;
+      const have = posts().find((item) => String(item.statusId || item.id) === String(id));
+      if (have) { post.replyParent = have; return; }
+      if (need.length < 4) need.push(post);
+    });
+    return Promise.all(need.map((post) => fxStatusPost(post.replyingTo.id).then((parent) => {
+      if (parent) post.replyParent = parent;
+    })));
+  }
+
+  function followedFeeds() {
+    const follows = (STATE.settings && STATE.settings.follows) || [];
+    return feeds().filter((feed) => feed && feed.id && follows.indexOf(feed.id) >= 0);
+  }
+
+  function applyLive(items, scroll) {
+    if (!items.length) return;
+    rememberTimeline(items);
+    if (STATE.data) STATE.data = withMemory(STATE.data);
+    STATE.pendingLive = [];
+    showPill([]);
+    render(scroll ? { y: 0 } : undefined);
+  }
+
+  let liveRefreshFlight = null;
+  function refreshLiveTimeline(apply) {
+    if (liveRefreshFlight) return liveRefreshFlight;
+    const job = loadCatalog().then((config) => {
+      const selected = followedFeeds();
+      return mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => [])).then((lists) => {
+        let incoming = [];
+        lists.forEach((list, index) => {
+          const feed = selected[index];
+          stampActivity(list || []);
+          incoming = incoming.concat(takeFresh(feed, list || []));
+        });
+        if (!incoming.length) return;
+        return attachParents(incoming).then(() => {
+          const route = parseRoute();
+          const atTop = window.scrollY < 80 && route.name === "home";
+          if (apply || atTop) applyLive(incoming, true);
+          else {
+            STATE.pendingLive = (STATE.pendingLive || []).concat(incoming);
+            showPill(STATE.pendingLive);
+            if (document.hidden) updateBadge(STATE.pendingLive.length);
+          }
+        });
+      });
+    }).catch(() => {});
+    liveRefreshFlight = job.finally(() => { liveRefreshFlight = null; });
+    return liveRefreshFlight;
   }
 
   async function fetchFeeds(fresh) {
@@ -4582,16 +4932,16 @@
       ((STATE.data && STATE.data.posts) || []).forEach((post) => { current[post.id] = true; });
       const added = doc.posts.filter((post) => !current[post.id]);
       if (apply || !STATE.data) {
-        STATE.data = doc;
+        STATE.data = withMemory(doc);
         STATE.error = null;
         STATE.pendingFeed = null;
-        showPill(false);
+        if (!(STATE.pendingLive || []).length) showPill([]);
         render();
         return;
       }
       if (!added.length) return;
       STATE.pendingFeed = doc;
-      showPill(true);
+      showPill(added.concat(STATE.pendingLive || []));
       const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
       const fresh = doc.posts.filter((post) => followedSince(post, since));
       if (document.hidden) updateBadge(fresh.length || added.length);
@@ -4703,10 +5053,14 @@
       if (STATE.settings && STATE.settings.appearance === "auto") applyTheme();
     });
     document.getElementById("new-posts").addEventListener("click", () => {
-      if (!STATE.pendingFeed) { showPill(false); return; }
-      STATE.data = STATE.pendingFeed;
+      const pending = STATE.pendingLive || [];
+      if (!STATE.pendingFeed && !pending.length) { showPill([]); return; }
+      if (STATE.pendingFeed) STATE.data = STATE.pendingFeed;
       STATE.pendingFeed = null;
-      showPill(false);
+      if (pending.length) rememberTimeline(pending);
+      STATE.pendingLive = [];
+      if (STATE.data) STATE.data = withMemory(STATE.data);
+      showPill([]);
       localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
       updateBadge(0);
       const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
@@ -4737,6 +5091,7 @@
       if (ready) {
         refreshOpenComments();
         refreshFeeds(true);
+        refreshLiveTimeline(true);
       }
     }, { passive: true });
     document.addEventListener("visibilitychange", () => {
@@ -4746,6 +5101,7 @@
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
         if (worker) worker.postMessage({ type: "seen" });
         refreshFeeds(false);
+        refreshLiveTimeline(false);
         const route = parseRoute();
         if (route.name === "status" || route.name === "watch") {
           const id = String(route.id || "");
@@ -4807,6 +5163,12 @@
         localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
         updateBadge(0);
       } else if (fresh.length) updateBadge(fresh.length);
+      refreshLiveTimeline(false);
+      if (!STATE.liveTimer) {
+        STATE.liveTimer = setInterval(() => {
+          if (document.visibilityState === "visible") refreshLiveTimeline(false);
+        }, LIVE_REFRESH_MS);
+      }
     } catch (err) {
       STATE.loading = false;
       STATE.error = err;

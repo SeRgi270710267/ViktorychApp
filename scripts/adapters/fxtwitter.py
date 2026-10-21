@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .common import best_mp4, blank_profile, clean_text, post_shell, upgrade_avatar
+from .common import best_mp4, blank_profile, clean_text, post_shell, stamp_activity, to_iso, upgrade_avatar
 
 
 def _badge(kind):
@@ -35,7 +35,7 @@ def _statuses(payload):
         return payload
     if not isinstance(payload, dict):
         return []
-    for key in ("statuses", "data", "tweets", "timeline"):
+    for key in ("results", "statuses", "data", "tweets", "timeline"):
         value = payload.get(key)
         if isinstance(value, list):
             return value
@@ -180,9 +180,18 @@ def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:
     text, links = _clean_text(status.get("text") or status.get("full_text") or "", quoted)
     status_id = str(status.get("id") or status.get("id_str") or "")
     url = status.get("url") or (f"https://x.com/{handle}/status/{status_id}" if handle and status_id else "")
-    created = status.get("created_at") or status.get("date") or ""
+    created = to_iso(status.get("created_at") or status.get("created_timestamp") or status.get("date") or "")
+    parent_id = status.get("replying_to_status") or status.get("in_reply_to_status_id")
+    if parent_id and replying and not replying.get("id"):
+        replying = dict(replying)
+        replying["id"] = str(parent_id)
+    item_id = status_id
+    if kind == "repost" and not nested:
+        who = ((reposted or {}).get("handle") or "").lstrip("@").lower()
+        if who and status_id:
+            item_id = f"repost:{who}:{status_id}"
     return post_shell(
-        id=status_id,
+        id=item_id,
         statusId=status_id,
         platform="x",
         feedId="" if nested else (feed.get("id") or ""),
@@ -203,7 +212,16 @@ def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:
     )
 
 
-def parse(payload, feed: dict | None = None) -> dict:
+def _owned(post: dict, handle: str) -> bool:
+    want = (handle or "").lstrip("@").lower()
+    if not want:
+        return True
+    author = (post.get("handle") or "").lower()
+    by = ((post.get("repostedBy") or {}).get("handle") or "").lower()
+    return author == want or by == want
+
+
+def parse(payload, feed: dict | None = None, now=None) -> dict:
     feed = feed or {}
     if isinstance(payload, str):
         from .common import parse_json_loose
@@ -214,13 +232,24 @@ def parse(payload, feed: dict | None = None) -> dict:
     for status in _statuses(payload):
         if not isinstance(status, dict):
             continue
-        posts.append(convert_status(status, feed, nested=False))
+        if status.get("type") in ("tombstone", "thread", "deleted", "unavailable"):
+            continue
+        post = convert_status(status, feed, nested=False)
+        if not post.get("id") or not _owned(post, feed.get("handle") or ""):
+            continue
+        posts.append(post)
         author = status.get("author") or {}
         handle = (author.get("screen_name") or author.get("handle") or "").lower()
         if handle and handle not in profiles:
             profiles[handle] = _author_profile(author)
+        by = status.get("reposted_by") or status.get("retweeted_by") or {}
+        if isinstance(by, dict):
+            bh = (by.get("screen_name") or by.get("handle") or "").lower()
+            if bh and bh not in profiles:
+                profiles[bh] = _author_profile(by)
         quote = status.get("quote") or {}
         qh = ((quote.get("author") or {}).get("screen_name") or "").lower()
         if qh and qh not in profiles:
             profiles[qh] = _author_profile(quote.get("author") or {})
+    stamp_activity(posts, now)
     return {"posts": posts, "profiles": list(profiles.values())}

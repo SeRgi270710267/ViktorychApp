@@ -83,7 +83,7 @@ img { max-width: 100%; }
   position: sticky;
   top: 0;
   height: 100vh;
-  padding: 0 12px;
+  padding: 8px 12px 0;
   display: flex;
   flex-direction: column;
 }
@@ -1470,14 +1470,35 @@ html[data-theme="default"] .account-pill:hover { background: rgba(15, 20, 25, 0.
   top: calc(64px + env(safe-area-inset-top));
   transform: translateX(-50%);
   z-index: 24;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   background: var(--blue);
   color: #fff;
   border: 0;
   border-radius: 999px;
   font-weight: 700;
   font-size: 15px;
-  padding: 8px 16px;
+  padding: 6px 16px 6px 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+#new-posts[hidden] { display: none; }
+.pill-faces { display: inline-flex; align-items: center; }
+.pill-ava {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 2px solid #fff;
+  margin-left: -8px;
+  background: #1d9bf0;
+}
+.pill-faces .pill-ava:first-child { margin-left: 0; }
+.reply-context {
+  margin: 0 0 8px 52px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 8px 12px;
 }
 #offline {
   position: fixed;

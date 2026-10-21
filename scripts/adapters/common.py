@@ -6,6 +6,7 @@ import email.utils
 import hashlib
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
@@ -14,6 +15,7 @@ TCO_TRAIL = re.compile(r"(?:\s*https://t\.co/\w+)+\s*$")
 PREFIX_LINE = re.compile(r"^@[\w.]{1,30}(?:\s*↩️)?\s*:?\s*$")
 AUTHOR_AT = re.compile(r"\(@([A-Za-z0-9_]{1,30})\)")
 RT_BY = re.compile(r"^RT by @([A-Za-z0-9_]{1,30})\s*:\s*", re.I)
+R_TO = re.compile(r"^R to @([A-Za-z0-9_]{1,30})\s*:", re.I)
 RT_PREFIX = re.compile(r"^RT @([A-Za-z0-9_]{1,30})\s*:\s*")
 
 
@@ -302,6 +304,91 @@ def replace_entities(text: str, entities: dict, quoted_id: str | None = None):
             links.append({"expanded": expanded, "display": display})
     text = clean_text(text)
     return text, links
+
+
+def parse_time(value):
+    """Parse an ISO, RFC822, or unix timestamp into an aware UTC datetime."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, (int, float)):
+        n = float(value)
+        if n < 10**12:
+            n *= 1000
+        return datetime.fromtimestamp(n / 1000, tz=timezone.utc)
+    text = str(value).strip()
+    if text.isdigit():
+        return parse_time(int(text))
+    if len(text) >= 20 and text[4:5] == "-" and "T" in text:
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except ValueError:
+            return None
+    try:
+        parsed = email.utils.parsedate_to_datetime(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def format_time(value: datetime) -> str:
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def to_iso(value) -> str:
+    parsed = parse_time(value)
+    return format_time(parsed) if parsed else ("" if value is None else str(value))
+
+
+def stamp_activity(posts: list, now: datetime | None = None) -> None:
+    """Order reposts by their place in a newest-first timeline.
+
+    Public sources keep the original post's created_at on a repost and do not
+    include the repost's own id. When that original time is older than a post
+    listed below the repost, the repost happened later than that post. Place
+    the run between that later post and the item above the run. The ceiling
+    for a run at the top of the page is this fetch. A stored sortDate is left
+    alone so the next sync does not move the same repost.
+    """
+    if not posts:
+        return
+    if now is None:
+        now = datetime.now(timezone.utc)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    fetched = now.astimezone(timezone.utc)
+    index = 0
+    while index < len(posts):
+        post = posts[index]
+        if post.get("kind") != "repost" or post.get("sortDate"):
+            index += 1
+            continue
+        start = index
+        while index < len(posts) and posts[index].get("kind") == "repost" and not posts[index].get("sortDate"):
+            index += 1
+        run = posts[start:index]
+        anchor = parse_time(posts[index].get("sortDate") or posts[index].get("date")) if index < len(posts) else None
+        ceiling = fetched
+        if start > 0:
+            ceiling = parse_time(posts[start - 1].get("sortDate") or posts[start - 1].get("date")) or fetched
+        if not anchor or ceiling <= anchor:
+            continue
+        if all((parse_time(item.get("date")) or anchor) >= anchor for item in run):
+            continue
+        span = (ceiling - anchor).total_seconds()
+        step = span / (len(run) + 1)
+        for offset, item in enumerate(run):
+            stamp = ceiling - timedelta(seconds=step * (offset + 1))
+            if stamp <= anchor:
+                stamp = anchor + timedelta(seconds=max(1, len(run) - offset))
+            if stamp >= ceiling:
+                stamp = ceiling - timedelta(seconds=offset + 1)
+            item["sortDate"] = format_time(stamp)
 
 
 def rfc822_to_iso(value: str) -> str:

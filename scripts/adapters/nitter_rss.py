@@ -6,6 +6,7 @@ import re
 
 from .common import (
     AUTHOR_AT,
+    R_TO,
     RT_BY,
     blank_profile,
     child_text,
@@ -16,6 +17,7 @@ from .common import (
     parse_xml,
     post_shell,
     rfc822_to_iso,
+    stamp_activity,
     strip_author_prefix,
 )
 
@@ -86,11 +88,17 @@ def parse(payload, feed: dict | None = None) -> dict:
         text = strip_author_prefix(parts["text"] or item_title)
         kind = "post"
         reposted_by = None
+        replying = None
         rt = RT_BY.match(item_title.strip())
+        reply_to = R_TO.match(item_title.strip())
         if rt:
             kind = "repost"
             reposted_by = {"name": rt.group(1), "handle": rt.group(1), "avatar": image}
             text = clean_text(RT_BY.sub("", item_title)) if not parts["text"] else text
+        elif reply_to:
+            kind = "reply"
+            replying = {"name": reply_to.group(1), "handle": reply_to.group(1), "avatar": ""}
+            text = clean_text(R_TO.sub("", item_title)) if not parts["text"] else text
         author_handle = handle
         author_name = name or handle
         found = AUTHOR_AT.search(html or "")
@@ -105,9 +113,14 @@ def parse(payload, feed: dict | None = None) -> dict:
         quoted = _quote_from(parts, link)
         if quoted and kind == "post":
             kind = "quote"
+        item_id = str(status_id)
+        if kind == "repost":
+            who = ((reposted_by or {}).get("handle") or handle or "").lstrip("@").lower()
+            if who and status_id:
+                item_id = f"repost:{who}:{status_id}"
         posts.append(
             post_shell(
-                id=str(status_id),
+                id=item_id,
                 statusId=str(status_id),
                 platform="x",
                 feedId=feed.get("id") or "",
@@ -121,7 +134,9 @@ def parse(payload, feed: dict | None = None) -> dict:
                 url=f"https://x.com/{author_handle}/status/{status_id}" if str(status_id).isdigit() else (link or ""),
                 media=parts["media"],
                 repostedBy=reposted_by,
+                replyingTo=replying,
                 quoted=quoted,
             )
         )
+    stamp_activity(posts)
     return {"posts": posts, "profiles": [owner]}
