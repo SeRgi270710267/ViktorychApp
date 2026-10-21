@@ -125,10 +125,19 @@ def probe_invidious(base: str) -> dict:
     return {"id": host, "group": "YouTube", "up": up, "detail": "invidious API" if up else _snip(f"HTTP {status}"), "down": base}
 
 
+def piped_payload_ok(status: int, body: str) -> bool:
+    """Trending is a JSON list. A channel payload is a JSON object. Both are a live host."""
+    text = (body or "").lstrip()
+    return status == 200 and (text.startswith("{") or text.startswith("["))
+
+
 def probe_piped(base: str) -> dict:
     host = urllib.parse.urlparse(base).netloc
     status, body = _get(base + "/trending?region=US", timeout=8)
-    up = status == 200 and body.lstrip().startswith("{")
+    up = piped_payload_ok(status, body)
+    if not up:
+        status, body = _get(base + "/channel/UCXuqSBlHAE6Xw-yeJA0Tunw", timeout=8)
+        up = piped_payload_ok(status, body) and '"name"' in body
     return {"id": host, "group": "YouTube", "up": up, "detail": "piped API" if up else _snip(f"HTTP {status}"), "down": base}
 
 

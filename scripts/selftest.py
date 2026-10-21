@@ -667,8 +667,8 @@ def main() -> None:
     check("ivThread(" in yt_loader and "ivCommunityThread(" in yt_loader and 'ownPack("yt_"' in yt_loader and 'snapshotDoc("yt_"' in yt_loader and 'ownPack("ytpost_"' in yt_loader and 'snapshotDoc("ytpost_"' in yt_loader and "pipedThread(" not in yt_loader and "loadYtComments(post)" in reply_bucket, "youtube comments share one loader on every surface")
     profile_view = app[app.index("function profileView("):app.index("function statusView(")]
     yt_channel = app[app.index("function ytProfileFromPiped("):app.index("function loadLimited(")]
-    check("function catalogAccount(" in app and "function accountHash(" in app and "accountHash(feed.platform, feed.channelId || feed.handle)" in app and "function stopWatchPlayback(" in app and "leavingWatch" in app and "Subscribers" in profile_view, "a followed channel opens its synced profile and the watch player stops")
-    check('"/channel/"' in yt_channel and "ytProfileFromPiped" in yt_channel and "filter=videos" in yt_channel, "a live YouTube channel uses the public channel fallback when Invidious misses")
+    check("function catalogAccount(" in app and "function accountHash(" in app and "accountHash(feed.platform, feed.channelId || feed.handle)" in app and "function stopWatchPlayback(" in app and "leavingWatch" in app and "Subscribers" in profile_view and "profileLinkLabel(feed.platform)" in profile_view, "a followed channel opens its synced profile and the watch player stops")
+    check('"/channel/"' in yt_channel and "ytProfileFromPiped" in yt_channel and "filter=videos" in yt_channel and "PIPED_SEEDS.slice()" in yt_channel and "function ytImage(" in app, "a live YouTube channel uses the public channel fallback when Invidious misses")
     community_loader = app[app.index("function ivCommunityThread("):app.index("function ytStub(")]
     check("ucid=" in community_loader and "commentCount" in community_loader, "community comments pass the channel id and keep the source count")
     check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
@@ -676,6 +676,8 @@ def main() -> None:
     check('name: "sources"' in app and "ownPack" in app and "fxDown" in app and "fallback/" in app and "settled" in app and "source-row" in (ROOT / "styles.css").read_text(encoding="utf-8"), "a hidden sources view fails over to our own files")
     check('name: "user"' in app and "#/u/" in app and "with_replies=1" in app and "Open on Instagram" in app and "feeds.config.json" in app and "pfollow-note" in (ROOT / "styles.css").read_text(encoding="utf-8"), "live profiles open from a handle and keep follows on the device")
     css = (ROOT / "styles.css").read_text(encoding="utf-8")
+    actions = css[css.index(".pactions .outline"):css.index(".pactions .outline") + 280]
+    check("flex-shrink: 100" in css and "white-space: nowrap" in actions, "the display name keeps its room and the profile link stays one line")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
     follow_fn = app[app.index("function followedFeeds()"):app.index("function followedFeeds()") + 500]
     check("redacted_handle" not in follow_fn and "redacted_handle" not in follow_fn and "redacted_handle" not in follow_fn, "live refresh has no per-account special case")
@@ -726,7 +728,7 @@ def main() -> None:
         _header_count,
         _safe_name,
     )
-    from health import build_status
+    from health import build_status, piped_payload_ok
 
     synd = parse_syndication(json.loads((FIX / "own" / "syndication.json").read_text(encoding="utf-8")))
     check(synd["handle"] == "redacted_handle" and synd["stats"]["likes"] == 48280 and synd["stats"]["replies"] == 5558 and synd["replies"] == [] and "Bach" in synd["text"], "x syndication keeps the post and does not invent replies")
@@ -879,6 +881,7 @@ def main() -> None:
         "2026-10-21T12:00:00Z",
     )
     check(status_doc["down"] == ["fxtwitter", "https://pipedapi.kavin.rocks"] and status_doc["sources"][1]["up"] is True, "status.json lists dead browser hosts and leaves live ones in rotation")
+    check(piped_payload_ok(200, '[{"url":"/watch?v=abc"}]') and piped_payload_ok(200, '{"name":"Linus"}') and not piped_payload_ok(200, "<html>") and not piped_payload_ok(404, '{"name":"x"}'), "a piped host that returns a json list stays in rotation")
 
     def png_size(path: Path):
         data = path.read_bytes()

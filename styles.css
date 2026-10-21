@@ -300,7 +300,9 @@ img { max-width: 100%; }
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 100%;
 }
 .byline .name:hover, .handle:hover, .time:hover { text-decoration: underline; }
 .handle, .dot, .time { color: var(--muted); font-weight: 400; }
@@ -310,6 +312,7 @@ img { max-width: 100%; }
   white-space: nowrap;
   min-width: 0;
 }
+.byline .handle { flex: 1 1 auto; flex-shrink: 100; }
 .time, .dot, .src, .more-btn { flex: none; }
 .more-btn { margin-left: auto; color: var(--muted); }
 .more-btn:hover { color: var(--blue); background: var(--blue-dim); }
@@ -726,8 +729,16 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 }
 .pinfo { padding: 12px 16px 0; position: relative; }
 .pava-row { display: flex; align-items: flex-end; justify-content: space-between; margin-top: -67px; min-height: 67px; }
-.pactions { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
-.pactions .outline { display: inline-flex; align-items: center; text-decoration: none; }
+.pactions { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: nowrap; }
+.pactions .outline {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  white-space: nowrap;
+  flex: none;
+  height: 36px;
+  padding: 0 12px;
+}
 .pava, .pava img {
   width: 134px;
   height: 134px;

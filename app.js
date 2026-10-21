@@ -3705,6 +3705,18 @@
     });
   }
 
+  function ytImage(url) {
+    const text = String(url || "");
+    try {
+      const parsed = new URL(text);
+      const host = parsed.searchParams.get("host") || "";
+      if (/piped/i.test(parsed.hostname) && /^(yt3\.googleusercontent\.com|yt3\.ggpht\.com|i\.ytimg\.com)$/.test(host)) {
+        return "https://" + host + parsed.pathname;
+      }
+    } catch (err) { /* keep the original address */ }
+    return text;
+  }
+
   function ytProfileFromPiped(data, requested) {
     const id = (data && data.id) || requested;
     const known = catalogAccount("youtube", id) || catalogAccount("youtube", requested);
@@ -3716,8 +3728,8 @@
       displayHandle: (known && known.handle) || "",
       channelId: id,
       name: (data && data.name) || (known && known.name) || id,
-      avatar: (data && data.avatarUrl) || (known && known.avatar) || "",
-      banner: (data && data.bannerUrl) || (known && known.banner) || "",
+      avatar: ytImage((data && data.avatarUrl) || (known && known.avatar) || ""),
+      banner: ytImage((data && data.bannerUrl) || (known && known.banner) || ""),
       bio: (data && data.description) || (known && known.bio) || "",
       location: "",
       website: "",
@@ -3739,8 +3751,8 @@
       const post = ivVideoPost({
         videoId: id,
         title: video.title,
-        thumbnail: video.thumbnail,
-        videoThumbnails: video.thumbnail ? [{ url: video.thumbnail, width: 480 }] : [],
+        thumbnail: ytImage(video.thumbnail) || (id ? "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg" : ""),
+        videoThumbnails: id ? [{ url: "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg", width: 480 }] : [],
         lengthSeconds: video.duration,
         viewCount: video.views,
         published: video.uploaded,
@@ -3758,7 +3770,8 @@
     PIPED_SEEDS.forEach((base) => {
       if (list.indexOf(base) < 0 && !LIVE.dead[base]) list.push(base);
     });
-    return list;
+    if (list.length) return list;
+    return PIPED_SEEDS.slice();
   }
 
   function pipedGet(path) {
@@ -3768,6 +3781,7 @@
       if (index >= list.length) return Promise.resolve(null);
       const base = list[index++];
       return fetchJson(base.replace(/\/$/, "") + path).then((data) => {
+        delete LIVE.dead[base];
         LIVE.pipedBase = base;
         return data;
       }).catch((err) => {
@@ -4030,6 +4044,10 @@
     return "View on " + (PLATFORM[platform] || "web");
   }
 
+  function profileLinkLabel(platform) {
+    return PLATFORM[platform] || "Web";
+  }
+
   function userView(route) {
     const known = catalogAccount(route.platform, route.handle);
     if (known && known.handle) {
@@ -4098,7 +4116,7 @@
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(profile.id || (profile.platform + ":" + profile.handle))}" aria-label="Share">${icon("share")}</button>
           ${followButtonClean(liveFollowId(profile), true)}
-          <a class="outline" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(profile))}">${esc(openLabel(profile.platform))}</a>
+          <a class="outline" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(profile))}" aria-label="${esc(openLabel(profile.platform))}">${esc(profileLinkLabel(profile.platform))}</a>
         </div>
       </div>
       <h2 class="pname">${esc(profile.name || profile.handle)}${badge(profile.verifiedType)}</h2>
@@ -4163,7 +4181,7 @@
         <div class="pactions">
           <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(feed.id)}" aria-label="Share">${icon("share")}</button>
           ${followButtonClean(feed.id, true)}
-          <a class="outline" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(feed))}">View on ${esc(PLATFORM[feed.platform] || "web")}</a>
+          <a class="outline" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(feed))}" aria-label="View on ${esc(PLATFORM[feed.platform] || "web")}">${esc(profileLinkLabel(feed.platform))}</a>
         </div>
       </div>
       <h2 class="pname">${esc(feed.name || feed.handle)}${badge(feed.verifiedType)}</h2>
