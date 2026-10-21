@@ -8219,10 +8219,11 @@ if (STATE.histClear) {
   function shell(main, route) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages";
     const explore = route.name === "explore";
+    const musicHome = route.name === "music" && (route.section || "home") === "home";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const top = (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall ? 106 : 53) + rowExtra + storyExtra;
+    const top = (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${mode}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }

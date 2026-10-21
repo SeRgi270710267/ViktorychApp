@@ -380,7 +380,10 @@
   }
 
   function head(title, tools) {
-    return '<div class="topbar tall"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button><a class="m-logo" href="#/" aria-label="' + BRAND + '">' + wordmark("") + '</a></div><div class="page-head"><div class="head-text grow"><h1>' + esc(title) + "</h1></div>" + (tools || "") + "</div></div>";
+    var logo = '<div class="mhead"><button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button><a class="m-logo" href="#/" aria-label="' + BRAND + '">' + wordmark("") + "</a></div>";
+    // Home already shows the SIntelMusic logo. A second heading would repeat it.
+    if (title === BRAND) return '<div class="topbar"><h1 class="vh">' + esc(title) + "</h1>" + logo + "</div>";
+    return '<div class="topbar tall">' + logo + '<div class="page-head"><div class="head-text grow"><h1>' + esc(title) + "</h1></div>" + (tools || "") + "</div></div>";
   }
 
   function letter(song) {
