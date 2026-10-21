@@ -159,12 +159,16 @@ jobs:
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
           IG_SESSION: ${{ secrets.IG_SESSION }}
+          VK_USER_TOKEN: ${{ secrets.VK_USER_TOKEN }}
         run: |
           if [ -n "${DISCORD_USER_TOKEN:-}" ]; then
             echo "::add-mask::${DISCORD_USER_TOKEN}"
           fi
           if [ -n "${IG_SESSION:-}" ]; then
             echo "::add-mask::${IG_SESSION}"
+          fi
+          if [ -n "${VK_USER_TOKEN:-}" ]; then
+            echo "::add-mask::${VK_USER_TOKEN}"
           fi
           python3 scripts/update_feeds.py
 

@@ -2824,7 +2824,22 @@ def ia_backup_checks() -> None:
 def story_checks() -> None:
     import subprocess
 
-    from stories import AUTH_DETAIL, StoryAuthError, collect, parse_story_document, publish, redact, session_header
+    from stories import (
+        AUTH_DETAIL,
+        StoryAuthError,
+        StoryQueryError,
+        VK_AUTH_DETAIL,
+        VK_PACE,
+        VK_QUERY_DETAIL,
+        collect,
+        fetch_vk,
+        parse_story_document,
+        parse_vk_stories,
+        publish,
+        redact,
+        session_header,
+        vk_http,
+    )
     from sync_health import problems
 
     now = datetime(2026, 10, 21, 19, 0, tzinfo=timezone.utc)
@@ -2854,6 +2869,7 @@ def story_checks() -> None:
             dest,
             now=now,
             secret="",
+            vk_secret="",
             transport=refuse,
         )
         saved = json.loads(dest.read_text(encoding="utf-8"))
@@ -2954,6 +2970,178 @@ def story_checks() -> None:
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
     check("stories.js" in worker and "stories.css" in worker and "superintel6-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     check("IG_SESSION" in workflow and "::add-mask::${IG_SESSION}" in workflow and "stories.json" in workflow and "publish-stories" in workflow, "the sync masks the story session and publishes stories.json")
+    check("VK_USER_TOKEN: ${{ secrets.VK_USER_TOKEN }}" in workflow and 'echo "::add-mask::${VK_USER_TOKEN}"' in workflow, "the sync masks the VK user token and does not print it")
+    instructions = (ROOT / "docs" / "vk-stories-token.md").read_text(encoding="utf-8")
+    check(instructions.rstrip().endswith("add it as the repo secret VK_USER_TOKEN in GitHub Settings > Secrets and variables > Actions."), "the VK token instructions end with the settings step")
+
+    token = "vk1.secret.TOKENVALUE"
+    stamp = int(now.timestamp())
+    group = {"id": 22822305, "name": "ВКонтакте", "photo_200": "https://cdn.example/vk-face.jpg"}
+    photo = {
+        "id": 5,
+        "owner_id": -22822305,
+        "date": stamp - 3600,
+        "expires_at": stamp + 3600,
+        "type": "photo",
+        "photo": {"sizes": [
+            {"url": "http://cdn.example/small.jpg", "width": 100, "height": 100},
+            {"url": "https://cdn.example/big.jpg", "width": 800, "height": 800},
+        ]},
+        "link": {"text": "Hello"},
+    }
+    video = {
+        "id": 6,
+        "owner_id": -22822305,
+        "date": stamp - 7200,
+        "type": "video",
+        "video": {
+            "files": {"mp4_720": "https://cdn.example/v.mp4", "hls": "https://cdn.example/v.m3u8", "mp4_1080": "http://cdn.example/nope.mp4"},
+            "image": [{"url": "https://cdn.example/poster.jpg", "width": 320, "height": 180}],
+        },
+    }
+    expired = {
+        "id": 4,
+        "owner_id": -22822305,
+        "date": stamp - 90000,
+        "expires_at": stamp - 100,
+        "type": "photo",
+        "photo": {"sizes": [{"url": "https://cdn.example/old.jpg", "width": 10, "height": 10}]},
+    }
+    http_only = {
+        "id": 7,
+        "owner_id": -22822305,
+        "date": stamp - 1800,
+        "expires_at": stamp + 3600,
+        "type": "photo",
+        "photo": {"sizes": [{"url": "http://cdn.example/plain.jpg", "width": 400, "height": 400}]},
+    }
+    vk_feed = {"id": "vk:vk", "platform": "vk", "handle": "vk", "ownerId": -22822305}
+    parsed = parse_vk_stories({"response": {"items": [[photo, video, expired, http_only]], "groups": [group]}}, vk_feed, now)
+    check([item["id"] for item in parsed["items"]] == ["6", "5"], "VK keeps the current video and photo, oldest first")
+    check(parsed["items"][0]["type"] == "video" and parsed["items"][0]["url"] == "https://cdn.example/v.mp4" and parsed["items"][0]["poster"] == "https://cdn.example/poster.jpg", "a VK video uses the https mp4 and its poster")
+    check(parsed["items"][1]["url"] == "https://cdn.example/big.jpg" and parsed["items"][1]["open"] == "https://vk.com/story-22822305_5", "a VK photo uses the largest https image and the story link")
+    check(parsed["name"] == "ВКонтакте" and parsed["avatar"] == "https://cdn.example/vk-face.jpg", "the VK group supplies the name and avatar")
+    check("old.jpg" not in json.dumps(parsed) and "plain.jpg" not in json.dumps(parsed) and "nope.mp4" not in json.dumps(parsed), "expired and http VK media are dropped")
+
+    paced = []
+    methods = []
+
+    def ready(method, params):
+        methods.append(method)
+        return {"response": {"items": [[photo, video]], "groups": [group]}}
+
+    filled = fetch_vk(vk_feed, token, now, call=ready, sleep=lambda delay: paced.append(delay))
+    check(methods == ["stories.get"] and paced == [VK_PACE] and [item["id"] for item in filled["items"]] == ["6", "5"], "stories.getById is skipped when the files are already present")
+
+    bare = dict(photo)
+    bare["photo"] = {}
+    follow = []
+
+    def missing_then_fill(method, params):
+        follow.append(method)
+        if method == "stories.get":
+            return {"response": {"items": [[bare]], "groups": [group]}}
+        check(params.get("stories") == "-22822305_5", "stories.getById asks for the row that had no file")
+        return {"response": {"items": [[photo]], "groups": [group]}}
+
+    filled = fetch_vk(vk_feed, token, now, call=missing_then_fill, sleep=lambda delay: paced.append(delay))
+    check(follow == ["stories.get", "stories.getById"] and filled["items"][0]["url"] == "https://cdn.example/big.jpg", "stories.getById fills a photo that arrived without a file")
+
+    for code in (5, 15, 17):
+        try:
+            fetch_vk(vk_feed, token, now, call=lambda method, params, code=code: {"error": {"error_code": code, "error_msg": token}}, sleep=None)
+        except StoryAuthError as exc:
+            check(str(exc) == VK_AUTH_DETAIL and token not in str(exc), "VK error %s is an auth failure and the token stays out" % code)
+        else:
+            check(False, "VK error %s must stop" % code)
+    try:
+        vk_http("stories.delete", {}, token)
+    except StoryQueryError as exc:
+        check(str(exc) == VK_QUERY_DETAIL and token not in str(exc), "the user token cannot call a write method")
+    else:
+        check(False, "a write method must be refused")
+    check(redact("access_token=" + token + "&v=5.199", token) == "access_token=redacted&v=5.199", "a VK error cannot carry the user token")
+
+    previous_vk = [
+        {
+            "id": "vk:vk",
+            "platform": "vk",
+            "handle": "vk",
+            "items": [
+                {"id": "1", "type": "photo", "url": "https://cdn.example/keep.jpg", "expires": "2026-10-22T00:00:00Z"},
+                {"id": "2", "type": "photo", "url": "http://cdn.example/drop.jpg", "expires": "2026-10-22T00:00:00Z"},
+            ],
+        },
+        {
+            "id": "vk:other",
+            "platform": "vk",
+            "handle": "other",
+            "items": [{"id": "3", "type": "photo", "url": "https://cdn.example/other.jpg", "expires": "2026-10-22T00:00:00Z"}],
+        },
+    ]
+    auth_calls = []
+
+    def rejected_vk(method, params):
+        auth_calls.append(method)
+        return {"error": {"error_code": 5, "error_msg": "failed " + token}}
+
+    accounts, health = collect(
+        [vk_feed, {"id": "vk:other", "platform": "vk", "handle": "other", "ownerId": 1}],
+        "",
+        now,
+        previous_vk,
+        vk_secret=token,
+        vk_call=rejected_vk,
+        sleep=lambda delay: None,
+    )
+    check(auth_calls == ["stories.get"], "a VK auth error does not call the next account or stories.getById")
+    check(health == [{"platform": "vk", "ok": False, "detail": VK_AUTH_DETAIL}] and token not in json.dumps(health), "VK errors 5, 15, and 17 are one health row and the token is absent")
+    check(sorted(row["id"] for row in accounts) == ["vk:other", "vk:vk"], "an auth failure keeps the previous VK stories")
+    check(all(item["url"].startswith("https://") for row in accounts for item in row["items"]), "only unexpired https VK stories are kept")
+
+    query_calls = []
+
+    def one_denied(method, params):
+        query_calls.append(params.get("owner_id"))
+        if params.get("owner_id") == -22822305:
+            return {"error": {"error_code": 6, "error_msg": token}}
+        return {"response": {"items": [[photo]], "groups": [group]}}
+
+    accounts, health = collect(
+        [vk_feed, {"id": "vk:other", "platform": "vk", "handle": "other", "ownerId": 1}],
+        "",
+        now,
+        previous_vk,
+        vk_secret=token,
+        vk_call=one_denied,
+        sleep=lambda delay: None,
+        vk_lookup=lambda handle: 1,
+    )
+    check(query_calls == [-22822305, 1], "a non-auth VK error fails that account and continues")
+    check(health == [{"platform": "vk", "ok": False, "detail": VK_QUERY_DETAIL}] and token not in json.dumps(health), "a query failure uses the fixed detail")
+    by_id = {row["id"]: row for row in accounts}
+    check([item["id"] for item in by_id["vk:vk"]["items"]] == ["1"], "the failed VK account keeps its previous https story")
+    check(by_id["vk:other"]["items"][0]["url"] == "https://cdn.example/big.jpg", "the next VK account is still fetched")
+
+    quiet = []
+
+    def must_not_call(*_args):
+        quiet.append("called")
+        raise AssertionError("unset VK token called the API")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp) / "stories.json"
+        dest.write_text(json.dumps({"accounts": previous_vk}), encoding="utf-8")
+        health = publish(
+            {"feeds": [vk_feed]},
+            dest,
+            now=now,
+            secret="",
+            vk_secret="",
+            vk_call=must_not_call,
+        )
+        saved = json.loads(dest.read_text(encoding="utf-8"))
+    check(health == [] and quiet == [] and saved["accounts"] == [], "VK_USER_TOKEN unset writes no VK stories and does not call out")
     check("border-radius: 16px" in styles and "linear-gradient" in styles and "#stories" in styles, "story avatars are rounded squares and the viewer is full screen")
     row = subprocess.run(["node", "scripts/stories_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "story tray ordering passed\n" + row.stdout + row.stderr)

@@ -12,7 +12,7 @@ Stories are a separate `stories.json`. Every platform that has items shares one 
 | --- | --- |
 | Instagram | RSSHub `/instagram/stories/:user` needs `INSTAGRAM_COOKIE` (`sessionid` and `ds_user_id`). Public viewers (Picuki and the rest) are unofficial scrapers and are not used. The sync calls Instagram's own story query only when `IG_SESSION` is set. A session from GitHub Actions can be checkpointed or disabled. Leave the secret unset to keep stories off. |
 | Telegram | Does not work without a user session. Public `t.me/telegram`, `t.me/durov`, `t.me/s/…`, and `t.me/<user>/s/1` return the channel preview or a profile card. The image is the avatar. There is no story file. Listing stories is `stories.getPeerStories`, and Telegram only allows a logged-in user to call it. |
-| VK | Does not work with the token this sync already uses. `stories.get` for `vk` (`owner_id` `-22822305`), through the same service-token-then-anonymous path as `wall.get`, returns "User authorization failed". The method wants a user token with the stories right, which VK issues only on request, or a community token for one community. |
+| VK | Off unless `VK_USER_TOKEN` is set. The wall token cannot call `stories.get` (VK error 5, "User authorization failed"). The secret is a user access token, read only for `stories.get` and `stories.getById`, masked, and never stored. Errors 5, 15, and 17 update the existing Sync problem issue and are not retried. Photo and video stories use the same 24-hour expiry and the VK badge. How to obtain the token: [docs/vk-stories-token.md](docs/vk-stories-token.md). |
 | X | No stories. Fleets ended in 2021. |
 | YouTube | Stories ended on 26 June 2023. Shorts are permanent videos and stay in the feed. |
 | Threads, Discord, RSS | No 24-hour story document on the free paths this sync already uses. |
@@ -452,6 +452,7 @@ The sync runs without any secrets. Add these only as repository Actions secrets 
 | --- | --- |
 | `INSTAGRAM_COOKIE` | Last resort for Instagram comments, after the public sources miss. A `sessionid` value or a full cookie header. Not used for stories |
 | `IG_SESSION` | Optional Instagram session for stories only (`sessionid` and `ds_user_id`). Off when unset. A datacenter session can be checkpointed or disabled. Never printed or stored |
+| `VK_USER_TOKEN` | Optional VK user access token for stories only. Off when unset. Read in the sync for `stories.get` and `stories.getById`, masked, and never printed or stored. Errors 5, 15, and 17 update the Sync problem issue and are not retried. Steps: [docs/vk-stories-token.md](docs/vk-stories-token.md) |
 | `THREADS_COOKIE` | Last resort for Threads replies, after the public page and RSSHub miss |
 | `TWITTER_AUTH_TOKEN` | Optional `auth_token` cookie sent only to Nitter and to RSSHub `/twitter` or `/x` routes during the build |
 | `IA_ACCESS_KEY` | S3 access key for the Internet Archive backup. The upload is skipped when this or `IA_SECRET_KEY` is empty. Create both at <https://archive.org/account/s3.php> |

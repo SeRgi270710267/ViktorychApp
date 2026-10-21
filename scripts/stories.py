@@ -10,10 +10,10 @@ do not return story media without a login this sync is not allowed to bypass:
 - Telegram. t.me/telegram, t.me/durov, t.me/s/<channel>, and t.me/<user>/s/1
   are a channel preview or a profile card. The image is the avatar.
   stories.getPeerStories is limited to a logged-in user.
-- VK stories.get for owner_id -22822305, through the same token path as
-  wall.get, returns "User authorization failed". The method wants a user
-  token whose stories right VK issues only by request, or a community
-  token for one community this sync does not have.
+- VK stories.get through the service token or the anonymous web token
+  returns "User authorization failed". A user token is optional and
+  separate: VK_USER_TOKEN. It is read only for stories.get and
+  stories.getById. It is off when unset.
 - X has no stories. Fleets ended in 2021.
 - YouTube Stories ended on 26 June 2023. Shorts are permanent videos and
   already belong in the feed.
@@ -53,9 +53,12 @@ class StoryQueryError(Exception):
     """The story query failed for a reason other than the session."""
 
 
-def redact(text: str) -> str:
+def redact(text: str, secret: str = "") -> str:
     cleaned = _SECRET.sub(r"\1=redacted", text or "")
+    cleaned = re.sub(r"(?i)(access_token=)[^&\s]+", r"\1redacted", cleaned)
     cleaned = re.sub(r"(?i)bearer\s+\S+", "bearer redacted", cleaned)
+    if secret:
+        cleaned = cleaned.replace(secret, "redacted")
     return cleaned[:240]
 
 
@@ -486,6 +489,269 @@ def fetch_instagram(feed: dict, secret: str, now: datetime, transport=None, rssh
     return parse_story_rss(text, feed, now)
 
 
+VK_PACE = 1.5
+VK_VERSION = "5.199"
+VK_AUTH_CODES = {5, 15, 17}
+VK_AUTH_DETAIL = (
+    "VK_USER_TOKEN was rejected by VK. Error 5 is a failed user authorization, "
+    "15 is access denied, and 17 requires validation. The request was not retried. The token was not logged."
+)
+VK_QUERY_DETAIL = "VK stories did not load."
+_VK_METHODS = ("stories.get", "stories.getById")
+
+
+def _vk_mp4(files: dict) -> str:
+    if not isinstance(files, dict):
+        return ""
+    for key in ("mp4_1080", "mp4_720", "mp4_480", "mp4_360", "mp4_240", "mp4_144"):
+        url = _https(files.get(key) or "")
+        if url:
+            return url
+    return ""
+
+
+def _vk_rows(response: dict) -> list:
+    rows = []
+    for item in response.get("items") or []:
+        if isinstance(item, list):
+            rows.extend(row for row in item if isinstance(row, dict))
+        elif isinstance(item, dict):
+            nested = item.get("stories")
+            if isinstance(nested, list):
+                rows.extend(row for row in nested if isinstance(row, dict))
+            else:
+                rows.append(item)
+    return rows
+
+
+def _vk_face(response: dict, owner_id: int, name: str, avatar: str) -> tuple[str, str]:
+    wanted = abs(int(owner_id))
+    for row in list(response.get("groups") or []) + list(response.get("profiles") or []):
+        if not isinstance(row, dict) or row.get("id") is None:
+            continue
+        try:
+            found = int(row.get("id"))
+        except (TypeError, ValueError):
+            continue
+        if found != wanted and found != int(owner_id):
+            continue
+        title = str(row.get("name") or "").strip()
+        if not title:
+            title = (str(row.get("first_name") or "") + " " + str(row.get("last_name") or "")).strip()
+        if title:
+            name = title
+        photo = _https(row.get("photo_200") or row.get("photo_100") or "")
+        if photo:
+            avatar = photo
+    return name, avatar
+
+
+def _vk_item(raw: dict, now: datetime) -> dict | None:
+    if not isinstance(raw, dict) or raw.get("is_deleted") or raw.get("is_expired"):
+        return None
+    kind = raw.get("type")
+    if kind not in ("photo", "video"):
+        return None
+    taken = _from_unix(raw.get("date"))
+    if taken is None:
+        return None
+    expires = _from_unix(raw.get("expires_at")) or (taken + timedelta(hours=24))
+    if expires <= now or taken < now - timedelta(hours=24):
+        return None
+    story_id = raw.get("id")
+    owner_id = raw.get("owner_id")
+    if story_id is None or owner_id is None:
+        return None
+    photo = raw.get("photo") if isinstance(raw.get("photo"), dict) else {}
+    video = raw.get("video") if isinstance(raw.get("video"), dict) else {}
+    poster = _best((photo.get("sizes") or []) if isinstance(photo.get("sizes"), list) else [])
+    if not poster and isinstance(photo.get("orig_photo"), dict):
+        poster = _https(photo.get("orig_photo").get("url") or "")
+    if kind == "video":
+        url = _vk_mp4(video.get("files") if isinstance(video.get("files"), dict) else {})
+        still = _best(video.get("image") or []) or _best(video.get("first_frame") or []) or poster
+        if not url:
+            return None
+        item_type, item_url, item_poster = "video", url, still
+    else:
+        if not poster:
+            return None
+        item_type, item_url, item_poster = "photo", poster, ""
+    link = raw.get("link") if isinstance(raw.get("link"), dict) else {}
+    return {
+        "id": str(story_id),
+        "type": item_type,
+        "url": item_url,
+        "poster": item_poster,
+        "date": _iso(taken),
+        "expires": _iso(expires),
+        "caption": str(link.get("text") or "").strip()[:500],
+        "open": f"https://vk.com/story{owner_id}_{story_id}",
+    }
+
+
+def parse_vk_stories(payload, feed: dict, now: datetime) -> dict:
+    """One VK account. Items are oldest first. Media stays on https URLs from the response."""
+    response = payload.get("response") if isinstance(payload, dict) and isinstance(payload.get("response"), dict) else payload
+    if not isinstance(response, dict):
+        response = {}
+    profile = feed.get("profile") if isinstance(feed.get("profile"), dict) else {}
+    handle = (feed.get("handle") or "").lstrip("@")
+    name = profile.get("name") or handle
+    avatar = _https(profile.get("avatar") or "")
+    items = []
+    owner_id = None
+    for raw in _vk_rows(response):
+        if raw.get("owner_id") is not None:
+            owner_id = raw.get("owner_id")
+        item = _vk_item(raw, now)
+        if item:
+            items.append(item)
+    if owner_id is not None:
+        name, avatar = _vk_face(response, int(owner_id), name, avatar)
+    items.sort(key=lambda item: item.get("date") or "")
+    return {
+        "id": feed.get("id") or f"vk:{handle}",
+        "platform": "vk",
+        "handle": handle,
+        "name": name or handle,
+        "avatar": avatar,
+        "items": items,
+    }
+
+
+def _vk_answer(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        raise StoryQueryError(VK_QUERY_DETAIL)
+    error = payload.get("error")
+    if isinstance(error, dict):
+        try:
+            code = int(error.get("error_code"))
+        except (TypeError, ValueError):
+            code = 0
+        if code in VK_AUTH_CODES:
+            raise StoryAuthError(VK_AUTH_DETAIL)
+        raise StoryQueryError(VK_QUERY_DETAIL)
+    response = payload.get("response")
+    if isinstance(response, dict):
+        return payload
+    raise StoryQueryError(VK_QUERY_DETAIL)
+
+
+def vk_http(method: str, params: dict, token: str):
+    """POST one read-only story method. The token is in the body and is not returned."""
+    if method not in _VK_METHODS:
+        raise StoryQueryError(VK_QUERY_DETAIL)
+    form = dict(params or {})
+    form["access_token"] = token
+    form["v"] = VK_VERSION
+    body = urllib.parse.urlencode(form).encode("utf-8")
+    request = urllib.request.Request(
+        "https://api.vk.com/method/" + method,
+        data=body,
+        headers={
+            "User-Agent": BROWSER,
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            text = response.read(2_000_000).decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        text = exc.read(8000).decode("utf-8", "replace")
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise StoryQueryError(VK_QUERY_DETAIL) from exc
+    if token and token in text:
+        text = text.replace(token, "redacted")
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise StoryQueryError(VK_QUERY_DETAIL) from exc
+    return _vk_answer(payload)
+
+
+def vk_owner_id(feed: dict, lookup=None) -> int:
+    for key in ("ownerId", "owner_id", "vkId"):
+        if feed.get(key) not in (None, ""):
+            return int(feed.get(key))
+    handle = str(feed.get("handle") or "").strip().lstrip("@")
+    if re.fullmatch(r"-?\d+", handle):
+        return int(handle)
+    if lookup is None:
+        lookup = _vk_lookup_owner
+    return int(lookup(handle))
+
+
+def _vk_lookup_owner(handle: str) -> int:
+    """Resolve a screen name with the wall token. The user token is not sent."""
+    from vk_remote import _group_row, api
+
+    row = None
+    try:
+        row = _group_row(api("groups.getById", group_id=handle))
+    except ValueError:
+        row = None
+    if isinstance(row, dict) and row.get("id") is not None and row.get("type") != "profile":
+        return -int(row["id"])
+    try:
+        payload = api("users.get", user_ids=handle)
+    except ValueError:
+        payload = {}
+    users = payload.get("response") if isinstance(payload, dict) else None
+    if isinstance(users, list) and users and isinstance(users[0], dict) and users[0].get("id") is not None:
+        return int(users[0]["id"])
+    raise StoryQueryError(VK_QUERY_DETAIL)
+
+
+def fetch_vk(feed: dict, token: str, now: datetime, call=None, sleep=None, lookup=None) -> dict:
+    """stories.get for one owner, then stories.getById only for rows that had no file."""
+    call = call or (lambda method, params: vk_http(method, params, token))
+    if sleep:
+        sleep(VK_PACE)
+    owner = vk_owner_id(feed, lookup)
+    payload = _vk_answer(call("stories.get", {"owner_id": owner, "extended": 1, "fields": "photo_200"}))
+    account = parse_vk_stories(payload, feed, now)
+    have = {item.get("id") for item in account.get("items") or []}
+    missing = []
+    response = payload.get("response") if isinstance(payload.get("response"), dict) else {}
+    for raw in _vk_rows(response):
+        story_id = raw.get("id")
+        owner_id = raw.get("owner_id")
+        if story_id is None or owner_id is None or str(story_id) in have:
+            continue
+        if raw.get("type") not in ("photo", "video") or raw.get("is_deleted") or raw.get("is_expired"):
+            continue
+        taken = _from_unix(raw.get("date"))
+        if taken is None or taken < now - timedelta(hours=24):
+            continue
+        expires = _from_unix(raw.get("expires_at")) or (taken + timedelta(hours=24))
+        if expires <= now:
+            continue
+        missing.append(f"{owner_id}_{story_id}")
+    if not missing:
+        return account
+    if sleep:
+        sleep(VK_PACE)
+    extra = _vk_answer(call("stories.getById", {"stories": ",".join(missing[:100]), "extended": 1, "fields": "photo_200"}))
+    filled = parse_vk_stories(extra, feed, now)
+    by_id = {item["id"]: item for item in account.get("items") or []}
+    for item in filled.get("items") or []:
+        by_id[item["id"]] = item
+    account["items"] = sorted(by_id.values(), key=lambda item: item.get("date") or "")
+    if filled.get("name"):
+        account["name"] = filled["name"]
+    if filled.get("avatar"):
+        account["avatar"] = filled["avatar"]
+    return account
+
+
+def _remember(health: list, platform: str, detail: str) -> None:
+    health[:] = [row for row in health if row.get("platform") != platform]
+    health.append({"platform": platform, "ok": False, "detail": detail})
+
+
 def _unexpired(account: dict, now: datetime) -> dict | None:
     if not isinstance(account, dict):
         return None
@@ -542,50 +808,103 @@ def save_document(path: Path, accounts: list, now: datetime) -> None:
     )
 
 
-def collect(feeds: list, secret: str, now: datetime, previous: list, transport=None, rsshub: str = "") -> tuple[list, list]:
+def collect(
+    feeds: list,
+    secret: str,
+    now: datetime,
+    previous: list,
+    transport=None,
+    rsshub: str = "",
+    vk_secret: str = "",
+    sleep=None,
+    vk_call=None,
+    vk_lookup=None,
+) -> tuple[list, list]:
     """Return (accounts, health rows). Health is empty when nothing failed."""
     secret = (secret or "").strip()
-    if not secret:
-        print("[stories] Instagram off; IG_SESSION is not set")
-        return [], []
+    vk_secret = (vk_secret or "").strip()
     fetched = {}
     failed = set()
     health = []
-    stopped = False
     instagram = [feed for feed in feeds or [] if isinstance(feed, dict) and feed.get("platform") == "instagram" and feed.get("id")]
-    for feed in instagram:
-        feed_id = str(feed.get("id"))
-        if stopped:
-            failed.add(feed_id)
-            continue
-        try:
-            account = fetch_instagram(feed, secret, now, transport=transport, rsshub=rsshub)
-        except StoryAuthError as exc:
-            stopped = True
-            failed.add(feed_id)
-            health = [{"platform": "instagram", "ok": False, "detail": str(exc)}]
-            print(f"[stories] {feed_id}: {exc}", flush=True)
-            continue
-        except StoryQueryError as exc:
-            failed.add(feed_id)
-            health = [{"platform": "instagram", "ok": False, "detail": str(exc)}]
-            print(f"[stories] {feed_id}: {exc}", flush=True)
-            continue
-        fetched[feed_id] = account
-        print(f"[stories] {feed_id}: {len(account.get('items') or [])} items")
-    if stopped:
+    if not secret:
+        print("[stories] Instagram off; IG_SESSION is not set")
+    else:
+        stopped = False
         for feed in instagram:
-            failed.add(str(feed.get("id")))
+            feed_id = str(feed.get("id"))
+            if stopped:
+                failed.add(feed_id)
+                continue
+            try:
+                account = fetch_instagram(feed, secret, now, transport=transport, rsshub=rsshub)
+            except StoryAuthError as exc:
+                stopped = True
+                failed.add(feed_id)
+                _remember(health, "instagram", str(exc))
+                print(f"[stories] {feed_id}: {exc}", flush=True)
+                continue
+            except StoryQueryError as exc:
+                failed.add(feed_id)
+                _remember(health, "instagram", str(exc))
+                print(f"[stories] {feed_id}: {exc}", flush=True)
+                continue
+            fetched[feed_id] = account
+            print(f"[stories] {feed_id}: {len(account.get('items') or [])} items")
+        if stopped:
+            for feed in instagram:
+                failed.add(str(feed.get("id")))
+    vk_feeds = [feed for feed in feeds or [] if isinstance(feed, dict) and feed.get("platform") == "vk" and feed.get("id")]
+    if not vk_secret:
+        print("[stories] VK off; VK_USER_TOKEN is not set")
+    else:
+        stopped = False
+        for feed in vk_feeds:
+            feed_id = str(feed.get("id"))
+            if stopped:
+                failed.add(feed_id)
+                continue
+            try:
+                account = fetch_vk(feed, vk_secret, now, call=vk_call, sleep=sleep, lookup=vk_lookup)
+            except StoryAuthError as exc:
+                stopped = True
+                failed.add(feed_id)
+                _remember(health, "vk", VK_AUTH_DETAIL)
+                print(f"[stories] {feed_id}: {VK_AUTH_DETAIL}", flush=True)
+                continue
+            except (StoryQueryError, ValueError, TypeError) as exc:
+                failed.add(feed_id)
+                _remember(health, "vk", VK_QUERY_DETAIL)
+                print(f"[stories] {feed_id}: {redact(str(exc), vk_secret)}", flush=True)
+                continue
+            fetched[feed_id] = account
+            print(f"[stories] {feed_id}: {len(account.get('items') or [])} items")
+        if stopped:
+            for feed in vk_feeds:
+                failed.add(str(feed.get("id")))
     accounts = assemble(previous, fetched, failed, now)
     return accounts, health
 
 
-def publish(config: dict, dest: Path, now: datetime | None = None, secret: str | None = None, transport=None) -> list:
+def publish(
+    config: dict,
+    dest: Path,
+    now: datetime | None = None,
+    secret: str | None = None,
+    transport=None,
+    vk_secret: str | None = None,
+    sleep=None,
+    vk_call=None,
+    vk_lookup=None,
+) -> list:
     import os
+    import time
 
     moment = now or datetime.now(timezone.utc)
     if secret is None:
         secret = os.environ.get("IG_SESSION") or ""
+    if vk_secret is None:
+        vk_secret = os.environ.get("VK_USER_TOKEN") or ""
     rsshub = ""
     if isinstance(config, dict):
         rsshub = str(config.get("rsshubBase") or "")
@@ -596,6 +915,10 @@ def publish(config: dict, dest: Path, now: datetime | None = None, secret: str |
         load_document(dest),
         transport=transport,
         rsshub=rsshub,
+        vk_secret=vk_secret,
+        sleep=time.sleep if sleep is None and vk_call is None else sleep,
+        vk_call=vk_call,
+        vk_lookup=vk_lookup,
     )
     save_document(dest, accounts, moment)
     count = sum(len(row.get("items") or []) for row in accounts)
