@@ -4,7 +4,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord" };
 
   const PATH = {
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
@@ -476,7 +476,8 @@
     if (/^[A-Za-z0-9_-]{1,120}$/.test(raw)) return raw;
     const canon = canonicalId(post);
     if (/^[A-Za-z0-9_-]{1,120}$/.test(canon)) return canon;
-    return "";
+    const slug = String(canon || raw).replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120);
+    return /^[A-Za-z0-9_-]{1,120}$/.test(slug) ? slug : "";
   }
 
   const PUBLISHED = { posts: new Set() };
@@ -4116,7 +4117,7 @@
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
-    } else if (["x", "threads", "instagram", "rss", "youtube", "vk"].includes(parts[0])) {
+    } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord"].includes(parts[0])) {
       platform = parts[0];
       handle = parts[1] || "";
       rest = parts.slice(2);

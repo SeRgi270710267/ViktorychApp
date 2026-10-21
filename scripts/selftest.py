@@ -717,6 +717,7 @@ def main() -> None:
                 {"platform": "x", "id": "100", "statusId": "100", "handle": "ada", "author": "Ada <script>", "text": "A <b>post</b> " + ("word " * 80), "url": "https://x.com/ada/status/100", "media": [{"type": "photo", "url": "https://pbs.twimg.com/media/abc.jpg?name=small", "width": 680, "height": 400}]},
                 {"platform": "youtube", "id": "abcdefghijk", "statusId": "abcdefghijk", "handle": "Chan", "author": "Chan", "title": "Watch me", "text": "", "url": "https://www.youtube.com/watch?v=abcdefghijk", "media": [{"type": "video", "url": "https://www.youtube.com/embed/abcdefghijk", "poster": "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", "width": 480, "height": 360}]},
                 {"platform": "instagram", "id": "https://www.instagram.com/p/AbC123/", "statusId": "https://www.instagram.com/p/AbC123/", "handle": "ada", "author": "Ada", "text": "photo", "url": "https://www.instagram.com/p/AbC123/"},
+                {"platform": "discord", "id": "discord:10:20", "statusId": "discord:10:20", "handle": "ada", "author": "Ada", "text": "hello", "url": "https://discord.com/channels/1/10/20"},
             ],
         }), encoding="utf-8")
         archive = share_root / "archive"
@@ -737,7 +738,9 @@ def main() -> None:
         ig_html = (share_root / "s" / "instagram-AbC123.html").read_text(encoding="utf-8")
         stub_html = (share_root / "s" / "x-stub1.html").read_text(encoding="utf-8")
         profile_html = (share_root / "u" / "x-ada.html").read_text(encoding="utf-8")
-        check(counts["posts"] == 3 and counts["watch"] == 1 and counts["profiles"] == 1 and counts["stubs"] == 1, "share pages cover posts, a watch page, a profile, and a new stub")
+        check(counts["posts"] == 4 and counts["watch"] == 1 and counts["profiles"] == 1 and counts["stubs"] == 1, "share pages cover posts, a watch page, a profile, and a new stub")
+        discord_html = (share_root / "s" / "discord-discord-10-20.html").read_text(encoding="utf-8")
+        check('og:title" content="Ada (@ada) on Discord"' in discord_html and "#/discord/ada/status/discord%3A10%3A20" in discord_html, "an id with colons still gets a share page and opens that post")
         check(not (share_root / "s" / "stale.html").exists(), "rebuilding share pages removes pages from the previous deploy")
         check("Ada &lt;script&gt;" in post_html and "<script>alert" not in post_html and "A &lt;b&gt;post&lt;/b&gt;" in post_html, "share page text is escaped")
         check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and 'og:site_name" content="Feeds"' in post_html and 'name="theme-color" content="#000000"' in post_html and 'rel="canonical"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL")
@@ -1258,7 +1261,296 @@ if (FT.normalize("EN-us") !== "en" || FT.normalize("nope") !== "en") throw new E
         text=True,
     )
     check(node_check.returncode == 0, "translate.js shields tokens and skips text already in the target language: " + (node_check.stderr or node_check.stdout))
+    discord_checks()
     print("all adapter checks passed")
+
+
+def discord_checks() -> None:
+    import io
+    import contextlib
+    import tempfile
+
+    from adapters.discord import (
+        attachment_parts,
+        fetch_messages,
+        invite_permissions,
+        message_time,
+        merge_discord,
+        public_error,
+        render_content,
+        Client,
+    )
+
+    check(invite_permissions() == 66560, "the Discord invite is view channel plus read history")
+    moment = datetime(2024, 5, 1, 15, 30, tzinfo=timezone.utc)
+    ms = int(moment.timestamp() * 1000)
+    snow = str((ms - 1420070400000) << 22)
+    stamped = message_time({"id": snow, "edited_timestamp": "2030-01-01T00:00:00.000Z"})
+    check(stamped == "2024-05-01T15:30:00.000Z", "a missing Discord timestamp comes from the snowflake, not the edit")
+    edited = message_time({"id": snow, "timestamp": "2024-05-01T15:30:00.000000+00:00", "edited_timestamp": "2030-01-01T00:00:00.000Z"})
+    check(edited == "2024-05-01T15:30:00.000Z", "an edit does not move the Discord publish time")
+
+    bob = "100000000000000043"
+    rendered, links, emojis = render_content(
+        "Hello <@%s> **bold** <:wave:99> [site](https://example.com) ||secret|| \\*star\\* <t:1714577400:R> <#100000000000000010> <@&5>\n`**<@%s>**` hello_world _hi_"
+        % (bob, bob),
+        {
+            "mentions": [{"id": bob, "username": "bob", "global_name": "Bob"}],
+            "mention_channels": [{"id": "100000000000000010", "name": "announcements"}],
+        },
+    )
+    check("Hello @Bob bold :wave: site secret *star*" in rendered, "discord markdown, mentions, emoji, and spoilers become plain text")
+    check("May 01, 2024" in rendered and "ago" not in rendered, "a relative Discord timestamp is stored as a clock time")
+    check("#announcements" in rendered and "@role" in rendered and "**<@%s>**" % bob in rendered and "hello_world hi" in rendered, "code, channel names, and snake_case stay put")
+    check(emojis[0]["url"] == "https://cdn.discordapp.com/emojis/99.png" and links[0]["expanded"] == "https://example.com", "custom emoji and the labeled link are kept")
+    animated, _, animated_emoji = render_content("<a:wave:99>", {})
+    check(animated == ":wave:" and animated_emoji[0]["url"].endswith(".gif") and animated_emoji[0]["animated"] is True, "an animated custom emoji points at the gif")
+    media, file_links = attachment_parts(
+        {
+            "attachments": [
+                {"filename": "pic.png", "content_type": "image/png", "url": "https://cdn.discordapp.com/attachments/1/pic.png", "width": 8, "height": 4, "description": "A pic", "proxy_url": "https://media.discordapp.net/pic.png"},
+                {"filename": "clip.mp4", "content_type": "video/mp4", "url": "https://cdn.discordapp.com/attachments/1/clip.mp4", "width": 640, "height": 360},
+                {"filename": "notes.pdf", "content_type": "application/pdf", "url": "https://cdn.discordapp.com/attachments/1/notes.pdf"},
+            ]
+        }
+    )
+    check(media[0]["type"] == "photo" and media[0]["url"].endswith("pic.png") and "media.discordapp.net" not in media[0]["url"] and media[1]["type"] == "video" and file_links[0]["expanded"].endswith("notes.pdf"), "images and video stay on the CDN and other files are links")
+
+    token = "super-secret-token"
+    old_token = os.environ.get("DISCORD_BOT_TOKEN")
+    os.environ["DISCORD_BOT_TOKEN"] = token
+    try:
+        check(token not in public_error(RuntimeError("bad " + token)) and "[redacted]" in public_error(RuntimeError("bad " + token)), "a Discord error does not repeat the bot token")
+    finally:
+        if old_token is None:
+            os.environ.pop("DISCORD_BOT_TOKEN", None)
+        else:
+            os.environ["DISCORD_BOT_TOKEN"] = old_token
+
+    guild = "100000000000000001"
+    posts_channel = "100000000000000010"
+    messages_channel = "100000000000000011"
+    forbidden = "100000000000000013"
+    scrape = "100000000000000014"
+    parent = "100000000000000200"
+    reply = "100000000000000201"
+    thread_msg = "100000000000000300"
+    chat_old = "100000000000000301"
+    chat_new = "100000000000000302"
+    cursor = "100000000000000100"
+    ada = {"id": "100000000000000042", "username": "ada", "global_name": "Ada Lovelace", "avatar": "abc123"}
+    bob_user = {"id": bob, "username": "bob", "global_name": "Bob", "avatar": "def456"}
+    parent_message = {
+        "id": parent,
+        "channel_id": posts_channel,
+        "type": 0,
+        "content": "Hello <@%s> **bold** <:wave:99> [site](https://example.com) ||secret|| \\*star\\* <t:1714577400:R>" % bob,
+        "timestamp": "2024-05-01T15:30:00.000000+00:00",
+        "edited_timestamp": "2030-01-01T00:00:00.000000+00:00",
+        "author": ada,
+        "mentions": [bob_user],
+        "attachments": [
+            {"id": "1", "filename": "pic.png", "content_type": "image/png", "url": "https://cdn.discordapp.com/attachments/10/1/pic.png?ex=abcd", "width": 100, "height": 80, "description": "A pic", "proxy_url": "https://media.discordapp.net/attachments/10/1/pic.png"},
+            {"id": "2", "filename": "clip.mp4", "content_type": "video/mp4", "url": "https://cdn.discordapp.com/attachments/10/2/clip.mp4", "width": 640, "height": 360},
+        ],
+        "embeds": [{"title": "Example", "description": "A **card**", "url": "https://example.com/post", "image": {"url": "https://cdn.discordapp.com/embed/image.png"}, "provider": {"name": "Example Site"}}],
+        "reactions": [{"count": 3, "emoji": {"name": "👍"}}],
+        "thread": {"id": parent, "name": "discussion", "message_count": 2},
+    }
+    reply_message = {
+        "id": reply,
+        "channel_id": posts_channel,
+        "type": 19,
+        "content": "a reply",
+        "timestamp": "2024-05-01T16:00:00.000000+00:00",
+        "author": bob_user,
+        "message_reference": {"message_id": parent, "channel_id": posts_channel, "guild_id": guild},
+        "referenced_message": {"id": parent, "channel_id": posts_channel, "author": ada},
+    }
+    join_message = {"id": "100000000000000190", "channel_id": posts_channel, "type": 7, "content": "Ada joined", "timestamp": "2024-05-01T15:00:00.000Z", "author": ada}
+    thread_message = {
+        "id": thread_msg,
+        "channel_id": parent,
+        "type": 0,
+        "content": "in the thread",
+        "timestamp": "2024-05-01T17:00:00.000000+00:00",
+        "author": ada,
+    }
+    avatar = "https://cdn.discordapp.com/avatars/100000000000000042/abc123.png?size=128"
+    chat = [
+        {"id": chat_new, "channel_id": messages_channel, "type": 0, "content": "one " + token, "timestamp": "2024-06-01T00:00:00.000Z", "author": ada, "attachments": [{"filename": "pic.png", "content_type": "image/png", "url": "https://cdn.discordapp.com/attachments/11/9/pic.png?ex=ffff", "width": 10, "height": 12, "proxy_url": "https://media.discordapp.net/attachments/11/9/pic.png"}]},
+        {"id": chat_old, "channel_id": messages_channel, "type": 0, "content": "earlier", "timestamp": "2024-05-02T00:00:00.000Z", "author": ada},
+    ]
+
+    def ok(payload, remaining="5"):
+        return 200, {"X-RateLimit-Remaining": remaining}, json.dumps(payload).encode()
+
+    calls = []
+
+    def transport(url, headers):
+        calls.append((url, dict(headers)))
+        auth = headers.get("Authorization")
+        if "widget.json" in url or "/invites/" in url:
+            check(auth is None, "widget and invite lookups do not send the bot token")
+        else:
+            check(auth == "Bot " + token, "Discord requests use the bot token and not a configured one")
+        check(token not in url, "the bot token is not put in the URL")
+        if url.endswith("/users/@me"):
+            return ok({"id": "100000000000000077", "username": "feedbot"})
+        if "widget.json" in url:
+            return ok({"id": guild, "name": "Widget Name", "instant_invite": "https://discord.gg/AbCdEf", "presence_count": 12})
+        if "/invites/AbCdEf" in url:
+            return ok({"code": "AbCdEf", "approximate_member_count": 500, "approximate_presence_count": 9, "guild": {"id": guild, "name": "Widget Name", "icon": "a1b2c3", "description": "A public server"}})
+        if "/guilds/%s" % guild in url and "with_counts" in url:
+            return ok({"id": guild, "name": "Guild Name", "icon": "a1b2c3", "description": "A public server", "approximate_member_count": 500, "approximate_presence_count": 12})
+        if "/channels/%s/messages" % forbidden in url:
+            return 403, {}, b'{"message":"Missing Access","code":50001}'
+        if "/channels/%s/messages" % posts_channel in url and "after=" in url:
+            check(("after=" + parent) in url, "after pages from the newest snowflake already stored")
+            return ok([reply_message])
+        if "/channels/%s/messages" % posts_channel in url:
+            return ok([reply_message, parent_message, join_message])
+        if "/channels/%s/messages" % parent in url:
+            return ok([thread_message])
+        if "/channels/%s/messages" % messages_channel in url:
+            return ok(chat)
+        return 404, {}, b"{}"
+
+    config = {
+        "cap": 300,
+        "discord": [
+            {
+                "id": guild,
+                "name": "Configured Server",
+                "token": "config-secret",
+                "channels": [
+                    {"id": posts_channel, "name": "announcements", "mode": "posts", "limit": 20},
+                    {"id": messages_channel, "name": "general", "mode": "messages", "limit": 20},
+                    {"id": forbidden, "name": "secret", "mode": "posts"},
+                    {"id": scrape, "name": "nope", "mode": "scrape"},
+                ],
+            }
+        ],
+    }
+    previous = [{"id": "discord:%s:%s" % (posts_channel, parent), "platform": "discord", "feedId": "discord:" + guild, "date": "2030-01-01T00:00:00.000Z", "text": "stale"}]
+    doc = {"posts": [{"id": "keep-x", "platform": "x", "feedId": "x:redacted_handle", "date": "2026-01-01T00:00:00.000Z", "text": "stay"}], "feeds": []}
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "discord").mkdir()
+        (root / "discord" / "state.json").write_text(json.dumps({"channels": {posts_channel: cursor}}), encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            merge_discord(doc, config, root, previous, token=token, transport=transport, remote=False, now=datetime(2030, 1, 1, tzinfo=timezone.utc))
+        log = buf.getvalue()
+        check(token not in log and "config-secret" not in log and "bot feedbot" in log, "the sync log names the bot and not the token")
+        check("not readable" in log, "a channel the bot cannot view is skipped")
+        check(not any(scrape in url for url, _headers in calls), "an unknown Discord mode is not requested")
+        post = next(item for item in doc["posts"] if item["id"] == "discord:%s:%s" % (posts_channel, parent))
+        check(post["date"] == "2024-05-01T15:30:00.000Z" and "2030" not in post["date"], "the stored Discord date is the original timestamp")
+        check(post["author"] == "Ada Lovelace" and post["handle"] == "ada" and post["avatar"] == avatar, "the post shows the Discord author")
+        check("Hello @Bob bold :wave:" in post["text"] and "secret" in post["text"] and "*star*" in post["text"] and "May 01, 2024" in post["text"], "the post text is rendered")
+        check(post["emojis"][0]["name"] == "wave" and post["media"][0]["type"] == "photo" and post["media"][1]["type"] == "video" and post["media"][1]["url"].endswith("clip.mp4"), "emoji, the photo, and the video are on the post")
+        check(post["cards"][0]["title"] == "Example" and post["cards"][0]["description"] == "A card" and post["stats"]["likes"] == 3 and post["stats"]["replies"] == 2, "an embed is a link card and reactions are likes")
+        check(post["url"] == "https://discord.com/channels/%s/%s/%s" % (guild, posts_channel, parent) and post["channelName"] == "announcements", "the permalink is the Discord message")
+        nested = {item["id"]: item for item in post["replies"]}
+        check("discord:%s:%s" % (posts_channel, reply) in nested and "discord:%s:%s" % (parent, thread_msg) in nested, "the reply and the thread are nested on the parent")
+        check(nested["discord:%s:%s" % (posts_channel, reply)]["replyingTo"]["handle"] == "ada" and nested["discord:%s:%s" % (parent, thread_msg)]["text"] == "in the thread", "a thread message points at the starter")
+        check(all(item["id"] != "discord:%s:100000000000000190" % posts_channel for item in doc["posts"]), "a join message is not a post")
+        check(any(item["id"] == "keep-x" for item in doc["posts"]), "Discord merge leaves the other feeds in place")
+        profile = next(item for item in doc["feeds"] if item["id"] == "discord:" + guild)
+        check(profile["name"] == "Configured Server" and "a1b2c3" in profile["avatar"] and profile["followers"] == 500 and profile["online"] == 12 and profile["url"] == "https://discord.gg/AbCdEf" and profile["bio"] == "A public server" and profile["configured"] is True, "widget and invite fill the server header")
+        transcript = json.loads((root / "discord" / "messages" / ("%s.json" % messages_channel)).read_text(encoding="utf-8"))
+        body = json.dumps(transcript)
+        check(transcript["messages"][0]["id"] == chat_new and transcript["messages"][0]["date"].startswith("2024-06-01") and transcript["fetchedAt"].startswith("2030-"), "message dates stay on the message and fetchedAt is the sync")
+        check(body.count(avatar) == 1 and "proxy_url" not in body and "referenced_message" not in body and token not in body and "[redacted]" in body, "a transcript stores each author once and only CDN urls")
+        check(transcript["messages"][0]["attachments"][0]["url"].startswith("https://cdn.discordapp.com/attachments/"), "transcript media stays on the Discord CDN")
+        index = json.loads((root / "discord" / "index.json").read_text(encoding="utf-8"))
+        modes = {item["id"]: item for item in index["servers"][0]["channels"]}
+        check(modes[posts_channel]["mode"] == "posts" and modes[messages_channel]["file"] == "discord/messages/%s.json" % messages_channel and scrape not in modes, "the index lists posts and message files")
+        state = json.loads((root / "discord" / "state.json").read_text(encoding="utf-8"))
+        check(state["channels"][posts_channel] == reply and token not in json.dumps(state), "the next after cursor is the newest snowflake")
+
+        skipped = {"posts": [], "feeds": []}
+        earlier = [{"id": "discord:%s:%s" % (posts_channel, parent), "platform": "discord", "feedId": "discord:" + guild, "date": "2024-05-01T15:30:00.000Z", "text": "kept"}]
+
+        def explode(_url, _headers):
+            raise AssertionError("discord was called without a token")
+
+        quiet = io.StringIO()
+        with contextlib.redirect_stdout(quiet):
+            merge_discord(skipped, config, root / "skip", earlier, token="", transport=explode, remote=False)
+        check("DISCORD_BOT_TOKEN is not set" in quiet.getvalue() and skipped["posts"][0]["date"] == "2024-05-01T15:30:00.000Z", "a missing token skips Discord and keeps the old post")
+
+        denied = {"posts": [], "feeds": []}
+
+        def reject(url, headers):
+            check(headers.get("Authorization") == "Bot " + token, "a rejected token was still sent as a bot token")
+            return 401, {}, b'{"message":"401: Unauthorized"}'
+
+        denied_log = io.StringIO()
+        with contextlib.redirect_stdout(denied_log):
+            merge_discord(denied, config, root / "denied", earlier, token=token, transport=reject, remote=False)
+        check("rejected the bot token" in denied_log.getvalue() and token not in denied_log.getvalue() and denied["posts"][0]["id"].endswith(parent), "a rejected token skips Discord without printing it")
+
+    slept = []
+
+    def limited(url, headers):
+        limited.n += 1
+        check(headers["Authorization"] == "Bot " + token, "paged reads use the bot token")
+        if limited.n == 1:
+            return 429, {"Retry-After": "0.2"}, b'{"retry_after":0.2,"message":"You are being rate limited.","global":false}'
+        if "after=" not in url:
+            return 200, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset-After": "1.25"}, b"[]"
+        if "after=100" in url:
+            return 200, {"X-RateLimit-Remaining": "1"}, json.dumps([
+                {"id": "102", "channel_id": "10", "content": "n", "timestamp": "2024-05-01T00:00:02Z", "author": {"id": "1", "username": "a"}},
+                {"id": "101", "channel_id": "10", "content": "o", "timestamp": "2024-05-01T00:00:01Z", "author": {"id": "1", "username": "a"}},
+            ]).encode()
+        if "after=102" in url:
+            return 200, {"X-RateLimit-Remaining": "1"}, json.dumps([
+                {"id": "104", "channel_id": "10", "content": "n", "timestamp": "2024-05-01T00:00:04Z", "author": {"id": "1", "username": "a"}},
+                {"id": "103", "channel_id": "10", "content": "o", "timestamp": "2024-05-01T00:00:03Z", "author": {"id": "1", "username": "a"}},
+            ]).encode()
+        return 200, {"X-RateLimit-Remaining": "1"}, b"[]"
+
+    limited.n = 0
+    paged = Client(token, transport=limited, sleep=lambda seconds: slept.append(seconds), page_size=2)
+    page_log = io.StringIO()
+    with contextlib.redirect_stdout(page_log):
+        found = fetch_messages(paged, "10", 4, "100")
+    check([item["id"] for item in found] == ["104", "103", "102", "101"], "after pages walk forward from the cursor")
+    check(slept == [0.2, 1.25], "429 and an empty rate-limit bucket are waited out")
+    check(token not in page_log.getvalue(), "rate-limit logs do not include the token")
+
+    seen_urls = []
+
+    def paging(url, headers):
+        seen_urls.append(url)
+        if "after=" not in url:
+            return 200, {"X-RateLimit-Remaining": "1"}, b"[]"
+        if "after=100&" in url or url.endswith("after=100") or "after=100" in url and "after=102" not in url and "after=101" not in url:
+            return 200, {"X-RateLimit-Remaining": "1"}, json.dumps([
+                {"id": "102", "channel_id": "10"},
+                {"id": "101", "channel_id": "10"},
+            ]).encode()
+        if "after=102" in url:
+            return 200, {"X-RateLimit-Remaining": "1"}, json.dumps([
+                {"id": "104", "channel_id": "10"},
+                {"id": "103", "channel_id": "10"},
+            ]).encode()
+        return 200, {"X-RateLimit-Remaining": "1"}, b"[]"
+
+    walker = Client(token, transport=paging, sleep=lambda _seconds: None, page_size=2)
+    walked = fetch_messages(walker, "10", 4, "100")
+    check([item["id"] for item in walked] == ["104", "103", "102", "101"], "the second after cursor is the newest id on the page")
+    check(any("after=100" in url for url in seen_urls) and any("after=102" in url for url in seen_urls) and not any("after=101" in url for url in seen_urls), "paging follows Discord's newest-id after cursor")
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    check("DISCORD_BOT_TOKEN" in readme and "66560" in readme and "Message Content Intent" in readme and "widget.json" in readme and "Follow" in readme and "discord/messages/" in readme, "the readme documents the bot, the follow trick, and the files")
+    check("DISCORD_BOT_TOKEN" in workflow and "discord/**/*.json" in readme, "the workflow receives the bot secret and the site publishes Discord json")
+    check("merge_discord" in (ROOT / "scripts" / "update_feeds.py").read_text(encoding="utf-8"), "the feed sync calls Discord")
+    check('"discord"' in (ROOT / "feeds.config.json").read_text(encoding="utf-8"), "feeds.config.json has a discord list")
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ PLATFORM = {
     "youtube": "YouTube",
     "vk": "VK",
     "rss": "RSS",
+    "discord": "Discord",
 }
 YT_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 THUMB_LADDER = (
@@ -64,6 +65,11 @@ def https(url) -> str:
     return text if text.startswith("https://") else ""
 
 
+def safe_slug(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_-]+", "-", value or "").strip("-")[:120]
+    return slug if SAFE_ID.match(slug) else ""
+
+
 def file_token(post: dict) -> str:
     raw = str(post.get("statusId") or post.get("id") or "").strip()
     if SAFE_ID.match(raw):
@@ -71,7 +77,7 @@ def file_token(post: dict) -> str:
     ident = canonical_id(post)
     if SAFE_ID.match(ident):
         return ident
-    return ""
+    return safe_slug(ident or raw)
 
 
 def route_id(post: dict) -> str:
@@ -533,8 +539,9 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
                 if not isinstance(row, dict):
                     continue
                 platform = str(row.get("p") or "")
-                token = str(row.get("id") or "")
-                if not SAFE_ID.match(platform) or not SAFE_ID.match(token):
+                raw_id = str(row.get("id") or "")
+                token = raw_id if SAFE_ID.match(raw_id) else safe_slug(raw_id)
+                if not SAFE_ID.match(platform) or not token:
                     continue
                 key = platform + ":" + token
                 if key in seen:
@@ -549,7 +556,7 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
                     image = {"url": brand, "width": 1200, "height": 630, "kind": "brand"}
                 text = str(row.get("t") or "")
                 author = handle or "Post"
-                route = status_hash(platform, handle, token)
+                route = status_hash(platform, handle, raw_id)
                 write_page(site / "s", f"{platform}-{token}.html", {
                     "title": title_for(author, handle, platform),
                     "description": trim(text) or "Post on Feeds",

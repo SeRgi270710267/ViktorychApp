@@ -638,6 +638,15 @@ def main() -> None:
     out = ROOT / config.get("output", "feeds.json")
     media_dir = ROOT / "media"
     removed = prune_media(media_dir, doc)
+    if not args.fixtures:
+        try:
+            from adapters.discord import merge_discord
+
+            merge_discord(doc, config, ROOT, archive_posts)
+        except Exception as exc:
+            from adapters.discord import public_error
+
+            print(public_error(exc), file=sys.stderr)
     save_document(out, doc)
     try:
         from people import publish
