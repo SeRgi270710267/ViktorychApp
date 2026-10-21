@@ -474,6 +474,19 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         limit = feed.get("limit")
         if limit:
             posts = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)[: int(limit)]
+        if feed.get("platform") == "youtube" and not use_fixtures:
+            from adapters.youtube_community import fetch_community
+
+            try:
+                extra, source = fetch_community(feed, config)
+            except Exception as exc:
+                extra, source = [], ""
+                print(f"[keep] {feed['id']}: community posts: {exc}", file=sys.stderr)
+            if extra:
+                posts.extend(extra)
+                print(f"[ok] {feed['id']}: {len(extra)} community posts via {source}")
+            else:
+                print(f"[keep] {feed['id']}: no community posts", file=sys.stderr)
         for post in posts:
             post["feedId"] = feed["id"]
             post["platform"] = feed.get("platform") or post.get("platform")

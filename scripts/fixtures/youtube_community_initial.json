@@ -1,0 +1,203 @@
+{
+  "contents": {
+    "twoColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "content": {
+              "sectionListRenderer": {
+                "contents": [
+                  {
+                    "itemSectionRenderer": {
+                      "contents": [
+                        {
+                          "backstagePostThreadRenderer": {
+                            "post": {
+                              "backstagePostRenderer": {
+                                "postId": "UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah",
+                                "authorText": {
+                                  "runs": [
+                                    {
+                                      "text": "Canadian Prepper",
+                                      "navigationEndpoint": {
+                                        "clickTrackingParams": "CLoBEPS8AiITCKGVwqvvyZcDFZnvPwQdcLkXpcoBBEXmbkM=",
+                                        "commandMetadata": {
+                                          "webCommandMetadata": {
+                                            "url": "/@redacted_handle",
+                                            "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                            "rootVe": 3611,
+                                            "apiUrl": "/youtubei/v1/browse"
+                                          }
+                                        },
+                                        "browseEndpoint": {
+                                          "browseId": "UCfgtuaUadGgOA-91geQ8Qog",
+                                          "canonicalBaseUrl": "/@redacted_handle"
+                                        }
+                                      }
+                                    }
+                                  ],
+                                  "accessibility": {
+                                    "accessibilityData": {
+                                      "label": "Canadian Prepper"
+                                    }
+                                  }
+                                },
+                                "authorThumbnail": {
+                                  "thumbnails": [
+                                    {
+                                      "url": "//yt3.googleusercontent.com/ytc/AIdro_nvCzAGaNykofYOjCF-rxjI-w-TWfGt1ROT8uYd2PtzB8A=s32-c-k-c0x00ffffff-no-rj-mo",
+                                      "width": 32,
+                                      "height": 32
+                                    },
+                                    {
+                                      "url": "//yt3.googleusercontent.com/ytc/AIdro_nvCzAGaNykofYOjCF-rxjI-w-TWfGt1ROT8uYd2PtzB8A=s76-c-k-c0x00ffffff-no-rj-mo",
+                                      "width": 76,
+                                      "height": 76
+                                    }
+                                  ],
+                                  "accessibility": {
+                                    "accessibilityData": {
+                                      "label": "Canadian Prepper"
+                                    }
+                                  }
+                                },
+                                "authorEndpoint": {
+                                  "clickTrackingParams": "CLoBEPS8AiITCKGVwqvvyZcDFZnvPwQdcLkXpcoBBEXmbkM=",
+                                  "commandMetadata": {
+                                    "webCommandMetadata": {
+                                      "url": "/@redacted_handle",
+                                      "webPageType": "WEB_PAGE_TYPE_CHANNEL",
+                                      "rootVe": 3611,
+                                      "apiUrl": "/youtubei/v1/browse"
+                                    }
+                                  },
+                                  "browseEndpoint": {
+                                    "browseId": "UCfgtuaUadGgOA-91geQ8Qog",
+                                    "canonicalBaseUrl": "/@redacted_handle"
+                                  }
+                                },
+                                "contentText": {
+                                  "runs": [
+                                    {
+                                      "text": "The Government will confiscate these items when SHTF "
+                                    },
+                                    {
+                                      "text": "https://youtu.be/l7uAqOvw8jQ",
+                                      "navigationEndpoint": {
+                                        "clickTrackingParams": "CMgBEJHkBxgDIhMIoZXCq-_JlwMVme8_BB1wuRelygEEReZuQw==",
+                                        "commandMetadata": {
+                                          "webCommandMetadata": {
+                                            "url": "/watch?v=l7uAqOvw8jQ",
+                                            "webPageType": "WEB_PAGE_TYPE_WATCH",
+                                            "rootVe": 3832
+                                          }
+                                        },
+                                        "watchEndpoint": {
+                                          "videoId": "l7uAqOvw8jQ",
+                                          "startTimeSeconds": 0,
+                                          "watchEndpointSupportedOnesieConfig": {
+                                            "html5PlaybackOnesieConfig": {
+                                              "commonConfig": {
+                                                "url": "https://rr3---sn-2oab55-5i.googlevideo.com/initplayback?source=youtube&oeis=1&c=WEB&oad=3200&ovd=3200&oaad=11000&oavd=11000&ocs=700&oewis=1&oputc=1&epbp=1&msp=1&odepv=1&id=97bb80a8ebf0f234&ip=3.231.131.238&initcwndbps=1370250&mt=1792542612&oweuc="
+                                              }
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "loggingDirectives": {
+                                        "trackingParams": "CMgBEJHkBxgDIhMIoZXCq-_JlwMVme8_BB1wuRel",
+                                        "visibility": {
+                                          "types": "12"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                },
+                                "backstageAttachment": {
+                                  "backstageImageRenderer": {
+                                    "image": {
+                                      "thumbnails": [
+                                        {
+                                          "url": "https://yt3.ggpht.com/fJBXZFpD7XHDTE64IfPHtNJhkUHwKislMh2MRQ4gJRcBW7OdBwCQHyaw7l9_29BkVJOXt7ZYUyna=s288-c-fcrop64=1,00000000ffffffff-rw-nd-v1",
+                                          "width": 288,
+                                          "height": 288
+                                        },
+                                        {
+                                          "url": "https://yt3.ggpht.com/fJBXZFpD7XHDTE64IfPHtNJhkUHwKislMh2MRQ4gJRcBW7OdBwCQHyaw7l9_29BkVJOXt7ZYUyna=s1024-c-fcrop64=1,00000000ffffffff-rw-nd-v1",
+                                          "width": 1024,
+                                          "height": 1024
+                                        }
+                                      ]
+                                    },
+                                    "trackingParams": "CMcBENq4ASITCKGVwqvvyZcDFZnvPwQdcLkXpQ==",
+                                    "command": {
+                                      "clickTrackingParams": "CMcBENq4ASITCKGVwqvvyZcDFZnvPwQdcLkXpcoBBEXmbkM=",
+                                      "commandMetadata": {
+                                        "webCommandMetadata": {
+                                          "url": "/post/UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah",
+                                          "webPageType": "WEB_PAGE_TYPE_BROWSE",
+                                          "rootVe": 247244,
+                                          "apiUrl": "/youtubei/v1/browse"
+                                        }
+                                      },
+                                      "browseEndpoint": {
+                                        "browseId": "FEpost_detail",
+                                        "params": "wgNaEhhVQ2ZndHVhVWFkR2dPQS05MWdlUThRb2caJFVna3h3Z0QxU3BaYkIwampkdkxWVlExa0RVQVVvalUza3lhaFoYVUNmZ3R1YVVhZEdnT0EtOTFnZVE4UW9n",
+                                        "canonicalBaseUrl": "/post/UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah"
+                                      }
+                                    },
+                                    "accessibility": {
+                                      "accessibilityData": {
+                                        "label": "Go to post detail"
+                                      }
+                                    }
+                                  }
+                                },
+                                "publishedTimeText": {
+                                  "runs": [
+                                    {
+                                      "text": "7 months ago",
+                                      "navigationEndpoint": {
+                                        "clickTrackingParams": "CLoBEPS8AiITCKGVwqvvyZcDFZnvPwQdcLkXpcoBBEXmbkM=",
+                                        "commandMetadata": {
+                                          "webCommandMetadata": {
+                                            "url": "/post/UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah",
+                                            "webPageType": "WEB_PAGE_TYPE_BROWSE",
+                                            "rootVe": 247244,
+                                            "apiUrl": "/youtubei/v1/browse"
+                                          }
+                                        },
+                                        "browseEndpoint": {
+                                          "browseId": "FEpost_detail",
+                                          "params": "wgNaEhhVQ2ZndHVhVWFkR2dPQS05MWdlUThRb2caJFVna3h3Z0QxU3BaYkIwampkdkxWVlExa0RVQVVvalUza3lhaFoYVUNmZ3R1YVVhZEdnT0EtOTFnZVE4UW9n",
+                                          "canonicalBaseUrl": "/post/UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah"
+                                        }
+                                      }
+                                    }
+                                  ]
+                                },
+                                "voteCount": {
+                                  "accessibility": {
+                                    "accessibilityData": {
+                                      "label": "690 likes"
+                                    }
+                                  },
+                                  "simpleText": "690"
+                                },
+                                "voteStatus": "INDIFFERENT"
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -667,6 +667,25 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 .status-time a { color: var(--blue); }
 .status-views { margin-top: 16px; padding: 16px 0 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 15px; }
 .status-views b { font-weight: 700; }
+.poll { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.poll-choice {
+  position: relative;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 20px;
+}
+.poll-bar { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(29, 155, 240, 0.35); }
+.poll-label, .poll-pct { position: relative; z-index: 1; }
+.poll-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+.poll-total { color: var(--muted); font-size: 13px; line-height: 16px; margin-top: 4px; }
 .status .actions { margin-top: 4px; padding-bottom: 4px; }
 .status.has-thread { padding-bottom: 0; }
 .status-thread { display: flex; gap: 12px; align-items: stretch; }

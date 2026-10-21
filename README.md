@@ -122,6 +122,7 @@ python3 scripts/x_to_feed.py response.json --feeds feeds.json --feed x:redacted_
 | `rsshub_instagram` | RSSHub `/instagram/user/<user>` |
 | `generic_rss` | RSS or Atom: title, description, `content:encoded`, enclosures |
 | `youtube_rss` | YouTube’s official channel feed, `https://www.youtube.com/feeds/videos.xml?channel_id=<UC…>`. No API key. That feed has no CORS header, so the build fetches it. `channelId` is copied onto the profile so the browser can ask for subscribers. Durations and subscriber counts are not fetched during the build. Thumbnails stay on `i.ytimg.com`. The live feed is Canadian Prepper (`UCfgtuaUadGgOA-91geQ8Qog`). Marques Brownlee and Tesla exist only as files under `scripts/fixtures/` |
+| `youtube_community` | Community posts for a YouTube channel (text, images, polls, shared videos). There is no official feed. The build tries Invidious `/api/v1/channels/<id>/community`, then RSSHub `/youtube/community/<handle>` on the sync container, then Piped if that channel payload has posts, then the public `/posts` page. Images stay on `yt3.ggpht.com` / `googleusercontent`. Comments load in the browser from Invidious `/api/v1/post/<id>/comments?ucid=<channelId>` and are not stored. A failed fetch keeps the previous community posts |
 
 Each adapter strips HTML while keeping line breaks, unescapes entities, drops trailing media links, and fills the same post and profile fields. The configured profile in `feeds.config.json` wins over a thinner profile parsed from a post.
 

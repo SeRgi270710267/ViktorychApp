@@ -124,7 +124,10 @@
     if (platform === "x" && handle && id) return "https://x.com/" + handle + "/status/" + id;
     if (platform === "instagram" && id) return "https://www.instagram.com/p/" + id + "/";
     if (platform === "threads" && id) return "https://www.threads.net/t/" + id;
-    if (platform === "youtube" && id) return "https://www.youtube.com/watch?v=" + id;
+    if (platform === "youtube" && id) {
+      if (String(id).length !== 11) return "https://www.youtube.com/post/" + id;
+      return "https://www.youtube.com/watch?v=" + id;
+    }
     return "";
   }
 
@@ -147,7 +150,8 @@
     const platform = String(row.p);
     const id = String(row.id);
     const handle = String(row.h || "");
-    const url = sourceUrl(platform, handle, id);
+    const community = row.k === "community";
+    const url = community ? "https://www.youtube.com/post/" + id : sourceUrl(platform, handle, id);
     return {
       id: id,
       statusId: id,
@@ -159,7 +163,7 @@
       text: row.t || "",
       date: row.d || "",
       url: url,
-      media: stubMedia(platform, id, url),
+      media: community ? [] : stubMedia(platform, id, url),
       stub: true
     };
   }
@@ -1172,6 +1176,9 @@
     const id = postKey(post);
     if (!id) return { loading: false, replies: [], missing: true };
     const want = String(STATE.focusId || "") === id ? 50 : 20;
+    if (post._community && post.kind !== "community") {
+      return { loading: false, replies: Array.isArray(post.replies) ? post.replies : [], missing: false, cap: want };
+    }
     const bucket = STATE.replies[id];
     if (bucket && (bucket.cap || 0) >= want) return bucket;
     STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want };
@@ -1186,6 +1193,13 @@
       }
       finish(((doc && doc.replies) || []).slice(), false, want);
     }).catch(() => finish([], true, want));
+    if (post.kind === "community") {
+      loadCommunityComments(post).then((rows) => {
+        if (!rows) finish([], true, want);
+        else finish(rows, false, want);
+      }).catch(() => finish([], true, want));
+      return STATE.replies[id];
+    }
     if ((post.platform || "") === "x") {
       loadXThread(post).then((pack) => {
         if (!pack) {
@@ -1218,17 +1232,19 @@
 
   function ivAvatar(comment) {
     if (!comment) return "";
-    if (comment.authorThumbnail) return comment.authorThumbnail;
-    let best = "";
-    let width = -1;
-    (comment.authorThumbnails || []).forEach((thumb) => {
-      if (!thumb || !thumb.url) return;
-      const w = Number(thumb.width || 0);
-      if (w >= width) {
-        best = thumb.url;
-        width = w;
-      }
-    });
+    let best = comment.authorThumbnail || "";
+    if (!best) {
+      let width = -1;
+      (comment.authorThumbnails || []).forEach((thumb) => {
+        if (!thumb || !thumb.url) return;
+        const w = Number(thumb.width || 0);
+        if (w >= width) {
+          best = thumb.url;
+          width = w;
+        }
+      });
+    }
+    if (String(best).indexOf("//") === 0) best = "https:" + best;
     return best;
   }
 
@@ -1372,6 +1388,120 @@
     });
   }
 
+  function hotImage(url) {
+    const abs = String(url || "");
+    const full = abs.indexOf("//") === 0 ? "https:" + abs : abs;
+    if (full.indexOf("https://") !== 0) return "";
+    try {
+      const host = new URL(full).hostname;
+      if (/(^|\.)ggpht\.com$/.test(host) || /(^|\.)googleusercontent\.com$/.test(host) || /(^|\.)ytimg\.com$/.test(host)) return full;
+    } catch (err) {
+      return "";
+    }
+    return "";
+  }
+
+  function bestThumb(list) {
+    let best = "";
+    let width = -1;
+    let height = 0;
+    (list || []).forEach((thumb) => {
+      if (!thumb) return;
+      const url = hotImage(thumb.url || thumb);
+      if (!url) return;
+      const w = Number(thumb.width || 0);
+      if (w >= width) {
+        best = url;
+        width = w;
+        height = Number(thumb.height || 0);
+      }
+    });
+    return { url: best, width: width > 0 ? width : 0, height: height };
+  }
+
+  function communityFromIv(item, seed) {
+    if (!item || !item.commentId) return null;
+    const att = item.attachment || {};
+    const media = [];
+    let poll = null;
+    let quoted = null;
+    if (att.type === "image") {
+      const img = bestThumb(att.imageThumbnails);
+      if (img.url) media.push({ type: "photo", url: img.url, poster: img.url, width: img.width, height: img.height, alt: "" });
+    } else if (att.type === "multiImage") {
+      (att.images || []).slice(0, 4).forEach((group) => {
+        const img = bestThumb(Array.isArray(group) ? group : ((group && (group.imageThumbnails || group.thumbnails)) || []));
+        if (img.url) media.push({ type: "photo", url: img.url, poster: img.url, width: img.width, height: img.height, alt: "" });
+      });
+    } else if (att.type === "poll" && Array.isArray(att.choices)) {
+      const choices = [];
+      att.choices.forEach((choice) => {
+        const text = choice && choice.text;
+        if (!text) return;
+        const row = { text: String(text) };
+        if (choice.percent != null && isFinite(Number(choice.percent))) row.percent = Number(choice.percent);
+        if (choice.votes != null && isFinite(Number(choice.votes))) row.votes = Number(choice.votes);
+        choices.push(row);
+      });
+      if (choices.length) {
+        poll = { choices: choices };
+        if (att.totalVotes != null && isFinite(Number(att.totalVotes))) poll.totalVotes = Number(att.totalVotes);
+      }
+    } else if (att.type === "video" && att.videoId) {
+      const poster = "https://i.ytimg.com/vi/" + att.videoId + "/hqdefault.jpg";
+      quoted = {
+        id: att.videoId,
+        platform: "youtube",
+        author: att.author || "",
+        text: att.title || "",
+        url: "https://www.youtube.com/watch?v=" + att.videoId,
+        media: [{ type: "photo", url: poster, poster: poster, alt: att.title || "" }]
+      };
+    }
+    const next = Object.assign({}, seed, {
+      stub: false,
+      kind: "community",
+      author: item.author || seed.author || "",
+      text: item.content || seed.text || "",
+      date: ivIso(item.published) || seed.date || "",
+      url: "https://www.youtube.com/post/" + item.commentId,
+      media: media,
+      avatar: bestThumb(item.authorThumbnails).url || seed.avatar || ""
+    });
+    const stats = {};
+    if (item.likeCount != null && isFinite(Number(item.likeCount))) stats.likes = Number(item.likeCount);
+    const replies = item.replyCount != null ? item.replyCount : (item.replies && item.replies.replyCount);
+    if (replies != null && isFinite(Number(replies))) stats.replies = Number(replies);
+    if (stats.likes != null || stats.replies != null) next.stats = stats;
+    if (poll) next.poll = poll;
+    if (quoted) next.quoted = quoted;
+    return next;
+  }
+
+  function loadCommunityComments(post) {
+    const id = postKey(post);
+    const ucid = (feedOf(post).channelId) || "";
+    function page(continuation) {
+      let path = "/api/v1/post/" + encodeURIComponent(id) + "/comments?sort_by=top";
+      if (ucid) path += "&ucid=" + encodeURIComponent(ucid);
+      if (continuation) path += "&continuation=" + encodeURIComponent(continuation);
+      return rotate(ivBases(), path, 4, "ivBase");
+    }
+    return page("").then((payload) => {
+      if (!payload || !Array.isArray(payload.comments)) return null;
+      if (payload.commentCount != null && isFinite(Number(payload.commentCount))) applyLiveStats(id, { replies: Number(payload.commentCount) });
+      const top = [];
+      payload.comments.forEach((comment) => {
+        if (!String(comment.content || "").trim()) return;
+        const row = ivComment(comment, id, post.handle || "");
+        row._community = true;
+        delete row._continuation;
+        top.push(row);
+      });
+      return top;
+    });
+  }
+
   function loadYtComments(post) {
     const id = postKey(post);
     if (!id) return Promise.resolve(null);
@@ -1418,7 +1548,7 @@
   }
 
   function ensureYtMeta(post) {
-    if (!post || post.platform !== "youtube") return;
+    if (!post || post.platform !== "youtube" || post.kind === "community") return;
     const id = postKey(post);
     if (!id || TRIED["dur:" + id]) return;
     TRIED["dur:" + id] = 1;
@@ -1564,7 +1694,23 @@
     }).catch(() => null);
   }
 
+  function hydrateCommunity(post) {
+    const ucid = (feedOf(post).channelId) || "";
+    let path = "/api/v1/post/" + encodeURIComponent(post.id);
+    if (ucid) path += "?ucid=" + encodeURIComponent(ucid);
+    return rotate(ivBases(), path, 3, "ivBase").then((payload) => {
+      if (!payload || typeof payload !== "object") return null;
+      const error = String(payload.error || "");
+      if (error && /unavailable|not found|private|removed/i.test(error)) return { tombstone: true };
+      const rows = payload.comments || [];
+      const item = rows.find((row) => row && row.commentId === post.id) || rows[0];
+      if (!item || !item.commentId) return null;
+      return communityFromIv(item, post);
+    }).catch(() => null);
+  }
+
   function hydrateYt(post) {
+    if (post.kind === "community") return hydrateCommunity(post);
     const id = post.id;
     return rotate(ivBases(), "/api/v1/videos/" + encodeURIComponent(id), 3, "ivBase").then((video) => {
       if (!video || typeof video !== "object") return null;
@@ -1750,6 +1896,7 @@
   }
 
   function repliesLink(reply, shown) {
+    if (reply && reply._community) return "";
     const total = Number((reply.stats || {}).replies || 0);
     if (!(total > shown)) return "";
     const label = shown ? "Show more replies" : "Show replies";
@@ -1811,6 +1958,24 @@
     </article>`;
   }
 
+  function pollHtml(post) {
+    const poll = post && post.poll;
+    if (!poll || !Array.isArray(poll.choices)) return "";
+    const choices = poll.choices.filter((choice) => choice && choice.text);
+    if (!choices.length) return "";
+    const total = Number(poll.totalVotes);
+    const rows = choices.map((choice) => {
+      let pct = choice.percent != null ? Number(choice.percent) : null;
+      if ((pct == null || !isFinite(pct)) && choice.votes != null && isFinite(total) && total > 0) pct = (Number(choice.votes) / total) * 100;
+      const has = pct != null && isFinite(pct);
+      const bar = has ? `<span class="poll-bar" style="width:${Math.max(0, Math.min(100, pct))}%"></span>` : "";
+      const label = has ? `<span class="poll-pct">${esc(String(Math.round(pct)))}%</span>` : "";
+      return `<div class="poll-choice">${bar}<span class="poll-label">${esc(choice.text)}</span>${label}</div>`;
+    }).join("");
+    const votes = isFinite(total) && total >= 0 && poll.totalVotes != null ? `<div class="poll-total">${esc(formatCount(total))} votes</div>` : "";
+    return `<div class="poll">${rows}${votes}</div>`;
+  }
+
   function card(post, mode, opts) {
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
@@ -1843,6 +2008,7 @@
           </div>
           ${reply}
           <div class="post-text">${textHtml(post, post.id, false)}</div>
+          ${pollHtml(post)}
           ${mediaHtml(post.media, eager)}
           ${quoteCard(post.quoted)}
           ${threadLink}
@@ -2015,9 +2181,12 @@
       configured: false
     };
     if (feed.platform === "youtube") ensureYtSubs(feed);
+    const youtube = feed.platform === "youtube";
     const tab = route.query.get("tab") || "posts";
     let list = postsFor(feed);
-    if (tab === "replies") list = list.filter((p) => p.kind === "reply");
+    if (youtube && tab === "videos") list = list.filter(isVideoPost);
+    else if (youtube && tab === "community") list = list.filter((p) => p.kind === "community");
+    else if (tab === "replies") list = list.filter((p) => p.kind === "reply");
     else if (tab === "media") list = list.filter((p) => (p.media || []).length);
     else list = list.filter((p) => p.kind !== "reply");
     const count = feed.postsCount != null ? formatCount(feed.postsCount) : formatCount(postsFor(feed).length);
@@ -2031,10 +2200,11 @@
       ${feed.following != null ? `<div><b>${esc(formatCount(feed.following))}</b> <span>Following</span></div>` : ""}
       ${feed.followers != null ? `<div><b>${esc(formatCount(feed.followers))}</b> <span>Followers</span></div>` : ""}
     </div>` : "";
-    const tabs = ["posts", "replies", "media"].map((id) => {
-      const label = id[0].toUpperCase() + id.slice(1);
+    const tabIds = youtube ? [["posts", "Posts"], ["videos", "Videos"], ["community", "Community"]] : [["posts", "Posts"], ["replies", "Replies"], ["media", "Media"]];
+    const tabs = tabIds.map((pair) => {
+      const id = pair[0];
       const href = profileHash(feed.platform, feed.handle) + (id === "posts" ? "" : "?tab=" + id);
-      return `<a class="tab${tab === id ? " on" : ""}" href="${esc(href)}"><span>${label}</span></a>`;
+      return `<a class="tab${tab === id ? " on" : ""}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
     }).join("");
     return `<div class="topbar profile-bar">
       <div class="page-head">
@@ -2062,7 +2232,10 @@
     ${list.length ? list.map((p) => {
       const byThis = p.repostedBy && (p.repostedBy.handle || "").toLowerCase() === (feed.handle || "").toLowerCase();
       return card(p, byThis ? "" : "author");
-    }).join("") : emptyBlock(tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : "No posts yet", tab === "replies" ? "Replies by this account will show up here." : "Posts from this account will show up here.")}` + archiveSentinel();
+    }).join("") : emptyBlock(
+      tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : tab === "videos" ? "No videos yet" : tab === "community" ? "No community posts yet" : "No posts yet",
+      tab === "replies" ? "Replies by this account will show up here." : tab === "community" ? "Community posts from this channel will show up here." : "Posts from this account will show up here."
+    )}` + archiveSentinel();
   }
 
   function statusView(route) {
@@ -2093,6 +2266,7 @@
     const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a href="${esc(profileHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const body = `${replyLine}
         <div class="status-text">${textHtml(post, post.id, true)}</div>
+        ${pollHtml(post)}
         ${mediaHtml(post.media)}
         ${quoteCard(post.quoted)}
         <div class="status-time">${esc(fullTime(post.date))}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
@@ -2295,7 +2469,7 @@
   }
 
   function isVideoPost(post) {
-    if (!post || post.kind === "reply") return false;
+    if (!post || post.kind === "reply" || post.kind === "community") return false;
     if (post.platform === "youtube") return true;
     return (post.media || []).some((item) => item && (item.type === "video" || item.type === "animated_gif"));
   }

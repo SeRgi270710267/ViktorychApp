@@ -405,6 +405,37 @@ def main() -> None:
     check(first["stats"]["views"] == 11453176 and first["stats"]["likes"] == 181847, "youtube rss views and likes")
     check(first["media"][0]["poster"] == "https://i.ytimg.com/vi/scwlR0QHGOk/hqdefault.jpg", "youtube thumbnail is hotlinked")
     check("youtube-nocookie.com/embed/scwlR0QHGOk" in first["media"][0]["url"], "youtube embed url")
+    from adapters.youtube_community import parse as parse_community
+    from adapters.youtube_community import parse_rss_posts
+
+    community_feed = {"id": "youtube:redacted_handle", "platform": "youtube", "handle": "redacted_handle", "channelId": "UCfgtuaUadGgOA-91geQ8Qog", "profile": {"name": "Canadian Prepper"}}
+    community = parse_community((FIX / "youtube_community_invidious.json").read_text(encoding="utf-8"), community_feed)
+    by_id = {post["id"]: post for post in community["posts"]}
+    image_post = by_id["UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah"]
+    check(image_post["kind"] == "community" and image_post["author"] == "Canadian Prepper" and image_post["stats"]["likes"] == 690 and image_post["stats"]["replies"] == 70, "community image post keeps likes and comments")
+    check(image_post["media"][0]["url"].startswith("https://yt3.ggpht.com/") and "s2000" in image_post["media"][0]["url"] and image_post["avatar"].startswith("https://yt3.googleusercontent.com/"), "community images hotlink the largest thumbnail")
+    check(image_post["url"] == "https://www.youtube.com/post/UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah" and image_post["date"].endswith("Z"), "community post links to the post page")
+    multi = by_id["UgzdP2CVxI1IMXtXT9B4AaABCQ"]
+    check(2 <= len(multi["media"]) <= 4 and all(item["type"] == "photo" and "yt3.ggpht.com" in item["url"] for item in multi["media"]), "community multi-image post keeps each photo")
+    poll = next(post for post in community["posts"] if post.get("poll"))
+    check(poll["poll"]["totalVotes"] > 0 and len(poll["poll"]["choices"]) >= 2 and all("percent" not in choice and "votes" not in choice for choice in poll["poll"]["choices"]), "community poll keeps choices and hides missing percents")
+    shared = next(post for post in community["posts"] if post.get("quoted"))
+    check(shared["kind"] == "community" and shared["quoted"]["url"].startswith("https://www.youtube.com/watch?v=") and shared["quoted"]["media"][0]["url"].startswith("https://i.ytimg.com/vi/") and not shared.get("media"), "community video share is a quote, not an upload")
+    page = parse_community((FIX / "youtube_community_initial.json").read_text(encoding="utf-8"), community_feed)
+    scraped = page["posts"][0]
+    check(scraped["id"] == image_post["id"] and scraped["stats"]["likes"] == 690 and scraped["media"][0]["url"].startswith("https://yt3.ggpht.com/") and scraped["date"] == "", "posts page fallback keeps the image and does not invent a time")
+    rss_image = image_post["media"][0]["url"]
+    rss = (
+        "<?xml version='1.0'?><rss version='2.0'><channel><item>"
+        f"<title>{image_post['text'][:40]}</title>"
+        f"<link>{image_post['url']}</link>"
+        f"<guid>{image_post['url']}</guid>"
+        "<pubDate>Fri, 20 Mar 2026 12:00:00 GMT</pubDate>"
+        f"<description><![CDATA[<p>{image_post['text']}</p><img src=\"{rss_image}\">]]></description>"
+        "</item></channel></rss>"
+    )
+    rss_posts = parse_rss_posts(rss, community_feed)
+    check(len(rss_posts) == 1 and rss_posts[0]["id"] == image_post["id"] and rss_posts[0]["media"][0]["url"] == rss_image and rss_posts[0]["date"].startswith("2026-03-20"), "rsshub community item keeps the post id and image")
     tesla = parse_youtube((FIX / "youtube_tesla.xml").read_text(encoding="utf-8"), {"id": "youtube:tesla", "platform": "youtube", "handle": "Tesla", "channelId": "UC5WjFrtBdufl6CZojX3D8dQ"})
     check(tesla["posts"][0]["title"].startswith("Zero to sixty") and tesla["profiles"][0]["name"] == "Tesla", "tesla fixture parses offline")
     comment = normalize_invidious_comment(
@@ -447,6 +478,9 @@ def main() -> None:
     import tempfile
 
     from archive import merge_archive, stub_from_post, summarize
+
+    community_stub = stub_from_post(image_post)
+    check(community_stub["p"] == "youtube" and community_stub["id"] == image_post["id"] and community_stub["k"] == "community" and community_stub["t"] == image_post["text"][:280], "community posts archive as stubs")
     from pull_snapshot import pull_archive
 
     long_text = "word " * 80
