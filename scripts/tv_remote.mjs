@@ -1,4 +1,4 @@
-/* Keyboard-only TV checks at 1920x1080 (Tizen) and 1280x720 (webOS). */
+/* Keyboard-only checks that TV mode drives the desktop layout. */
 import { spawn } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 
@@ -10,6 +10,7 @@ const ROOT = "http://127.0.0.1:" + PORT;
 const OUT = "/opt/cursor/artifacts";
 const TIZEN = "Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.5) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/5.0 Chrome/85.0.4183.93 TV Safari/537.36";
 const WEBOS = "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.79 Safari/537.36 WebAppManager";
+const DESKTOP = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 function assert(cond, message) {
   if (!cond) throw new Error(message);
@@ -22,20 +23,23 @@ function sleep(ms) {
 async function focusInfo(page) {
   return page.evaluate(() => {
     const el = document.activeElement;
-    if (!el) return { id: "", zone: "", index: "", text: "" };
+    if (!el || el === document.body) return { tag: "", cls: "", label: "", act: "", text: "" };
+    const card = el.closest ? el.closest("article") : null;
     return {
-      id: el.getAttribute("data-tv-id") || "",
-      zone: el.getAttribute("data-zone") || "",
-      index: el.getAttribute("data-index") || "",
-      shelf: el.getAttribute("data-shelf") || "",
-      text: (el.innerText || "").slice(0, 80)
+      tag: el.tagName,
+      cls: String(el.className || ""),
+      label: el.getAttribute("aria-label") || "",
+      act: el.getAttribute("data-act") || "",
+      text: String(el.innerText || "").replace(/\s+/g, " ").slice(0, 60),
+      post: card ? (card.getAttribute("data-post") || card.className) : ""
     };
   });
 }
 
 async function waitReady(page) {
+  await page.waitForFunction(() => document.documentElement.classList.contains("tv-on"), null, { timeout: 15000 });
+  await page.waitForSelector("main article.post", { timeout: 15000 });
   await page.waitForFunction(() => document.documentElement.getAttribute("data-tv-ready") === "1", null, { timeout: 15000 });
-  await page.waitForSelector("#tv-root h2.tv-shelf-title, #tv-root h1", { timeout: 15000 });
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
@@ -54,7 +58,7 @@ async function dispatchKey(page, keyCode, key) {
 }
 
 async function shot(page, name) {
-  await sleep(250);
+  await sleep(300);
   await page.screenshot({ path: OUT + "/" + name, fullPage: false });
 }
 
@@ -66,6 +70,29 @@ async function openContext(browser, ua, width, height, video) {
     hasTouch: false,
     serviceWorkers: "block",
     recordVideo: video ? { dir: OUT, size: { width: width, height: height } } : undefined
+  });
+}
+
+async function layoutInfo(page) {
+  return page.evaluate(() => {
+    const side = document.querySelector(".side");
+    const label = document.querySelector(".nav-label");
+    const root = document.getElementById("app");
+    const zoom = parseFloat(getComputedStyle(document.body).zoom || "1");
+    const nav = document.querySelector(".nav");
+    const nr = nav ? nav.getBoundingClientRect() : { left: 0 };
+    const post = document.querySelector("article.post");
+    const font = post ? parseFloat(getComputedStyle(post).fontSize) : 0;
+    return {
+      zoom: zoom,
+      side: side ? getComputedStyle(side).display : "missing",
+      label: label ? getComputedStyle(label).display : "missing",
+      app: root ? getComputedStyle(root).display : "missing",
+      navLeft: nr.left,
+      font: font,
+      pad: parseFloat(getComputedStyle(document.body).paddingTop) || 0,
+      custom: !!document.getElementById("tv-root")
+    };
   });
 }
 
@@ -82,7 +109,8 @@ async function main() {
   });
   const failures = [];
   try {
-    await desktop(browser);
+    await desktopOff(browser);
+    await hashAndMouse(browser);
     await tizen(browser);
     await webos(browser);
   } catch (err) {
@@ -92,211 +120,298 @@ async function main() {
     await browser.close();
     server.kill();
   }
-  if (failures.length) {
-    process.exit(1);
-  }
+  if (failures.length) process.exit(1);
   console.log("tv remote checks passed");
 }
 
-async function desktop(browser) {
-  const context = await openContext(browser, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36", 1440, 900, false);
+async function desktopOff(browser) {
+  const context = await openContext(browser, DESKTOP, 1920, 1080, false);
   const page = await context.newPage();
-  page.on("pageerror", (err) => console.log("desktop pageerror", err.message));
+  await page.goto(ROOT + "/#/", { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("main article.post", { timeout: 15000 });
+  await sleep(200);
+  const on = await page.evaluate(() => document.documentElement.classList.contains("tv-on"));
+  assert(!on, "a desktop pointer must not auto-enter TV mode");
+  const side = await page.evaluate(() => getComputedStyle(document.querySelector(".side")).display);
+  assert(side !== "none", "desktop shows the right column");
+  await shot(page, "tv_compare_desktop_1080.png");
   await page.goto(ROOT + "/#/settings", { waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(800);
-  const tvOn = await page.evaluate(() => document.documentElement.classList.contains("tv-on"));
-  assert(!tvOn, "a desktop pointer must not auto-enter TV mode");
   const toggle = page.locator("[data-tv-toggle]").first();
   await toggle.waitFor({ timeout: 15000 });
-  assert((await toggle.innerText()).indexOf("TV mode") >= 0, "Settings > Display has a TV mode control");
-  await toggle.focus();
-  await page.keyboard.press("Enter");
-  await page.waitForFunction(() => document.documentElement.classList.contains("tv-on"), null, { timeout: 8000 });
+  assert((await toggle.innerText()).indexOf("TV mode") >= 0, "Settings has a TV mode control");
   await context.close();
+}
+
+async function hashAndMouse(browser) {
+  const context = await openContext(browser, DESKTOP, 1440, 900, false);
+  const page = await context.newPage();
+  page.on("pageerror", (err) => console.log("hash pageerror", err.message));
+  await page.goto(ROOT + "/#/home?tv=1", { waitUntil: "domcontentloaded" });
+  await waitReady(page);
+  const hash = await page.evaluate(() => location.hash);
+  assert(hash === "#/home" || hash === "#/", "hash tv flag is stripped, got " + hash);
+  const tabs = await page.locator(".tab").allInnerTexts();
+  assert(tabs.join(" ").indexOf("For you") >= 0, "home tabs stayed, got " + tabs.join(", "));
+  await page.goto(ROOT + "/#/not-a-real-route?tv=1", { waitUntil: "domcontentloaded" });
+  await waitReady(page);
+  const homeText = await page.locator("main").innerText();
+  assert(/For you|Following/.test(homeText), "unknown route falls back to Home");
+  const cleaned = await page.evaluate(() => location.hash);
+  assert(cleaned.indexOf("tv=") < 0, "unknown route still strips tv, got " + cleaned);
+  await context.close();
+
+  const mouse = await openContext(browser, DESKTOP, 1440, 900, false);
+  const pointer = await mouse.newPage();
+  await pointer.goto(ROOT + "/?tv=1#/", { waitUntil: "domcontentloaded" });
+  await waitReady(pointer);
+  const box = await layoutInfo(pointer);
+  assert(box.app !== "none", "TV mode keeps the desktop app");
+  assert(!box.custom, "TV mode does not mount a second shell");
+  const before = await pointer.evaluate(() => window.scrollY);
+  await pointer.mouse.wheel(0, 800);
+  await sleep(250);
+  await pointer.mouse.wheel(0, 800);
+  await sleep(250);
+  const after = await pointer.evaluate(() => window.scrollY);
+  assert(after > before, "mouse wheel still scrolls the desktop page");
+  const like = pointer.locator("article.post .action.like").first();
+  await like.click();
+  await sleep(300);
+  const liked = await pointer.locator("article.post .action.like.on").count();
+  assert(liked > 0, "mouse click still likes a post");
+  await mouse.close();
 
   const forced = await openContext(browser, TIZEN, 1280, 720, false);
   const off = await forced.newPage();
   await off.goto(ROOT + "/?tv=0", { waitUntil: "domcontentloaded" });
-  await off.waitForTimeout(600);
+  await off.waitForTimeout(700);
   const stayed = await off.evaluate(() => document.documentElement.classList.contains("tv-on"));
   assert(!stayed, "?tv=0 keeps a TV user agent out of TV mode");
   await forced.close();
+}
+
+async function untilNav(page) {
+  for (let i = 0; i < 8; i++) {
+    const info = await focusInfo(page);
+    if (info.cls.indexOf("nav-item") >= 0 || info.cls.indexOf("post-btn") >= 0 || info.cls.indexOf("account-pill") >= 0) return info;
+    await press(page, "ArrowLeft");
+  }
+  return focusInfo(page);
 }
 
 async function tizen(browser) {
   const context = await openContext(browser, TIZEN, 1920, 1080, true);
   const page = await context.newPage();
   const errors = [];
-  page.on("pageerror", (err) => errors.push(err.message));
+  page.on("pageerror", (err) => errors.push(err.stack || err.message));
   await page.goto(ROOT + "/?tv=1#/", { waitUntil: "domcontentloaded" });
   await waitReady(page);
-  const titles = await page.locator("h2.tv-shelf-title").allInnerTexts();
-  for (const name of ["For You", "Following", "Subscriptions", "Live now", "YouTube"]) {
-    assert(titles.indexOf(name) >= 0, "missing shelf " + name + " in " + titles.join(", "));
-  }
-  const metrics = await page.evaluate(() => {
-    const text = document.querySelector(".tv-text");
-    const root = document.getElementById("tv-root");
-    const style = text ? getComputedStyle(text) : null;
-    const pad = root ? parseFloat(getComputedStyle(root).paddingTop) : 0;
-    return { font: style ? parseFloat(style.fontSize) : 0, pad: pad };
-  });
-  assert(metrics.font >= 24, "body text is " + metrics.font + "px");
-  assert(metrics.pad >= 50, "1080p overscan padding is " + metrics.pad);
-
+  const box = await layoutInfo(page);
+  assert(box.zoom >= 1.5, "1080p zoom is " + box.zoom);
+  assert(box.side === "none", "the right column hides when it does not fit");
+  assert(box.label !== "none", "the desktop nav labels stay");
+  assert(box.app !== "none", "the desktop app stays on screen");
+  assert(!box.custom, "no custom TV root");
+  assert(box.font >= 15 && box.font <= 20, "computed post text stays the desktop size, got " + box.font);
+  assert(box.navLeft >= 40, "content is inset from the left edge, got " + box.navLeft);
   let info = await focusInfo(page);
-  assert(info.zone === "card" && info.shelf === "foryou" && info.index === "0", "home should focus the first For You card, got " + JSON.stringify(info));
-  await shot(page, "tv_home_shelves_1080.png");
+  assert(info.cls.indexOf("tab") >= 0, "home focuses a tab, got " + JSON.stringify(info));
+  await shot(page, "tv_desktop_home_1080.png");
+
   await press(page, "ArrowRight");
   info = await focusInfo(page);
-  assert(info.index === "1" && info.shelf === "foryou", "ArrowRight should move along the shelf, got " + JSON.stringify(info));
-  await shot(page, "tv_focused_card_1080.png");
-  await press(page, "ArrowLeft", 2);
+  assert(info.cls.indexOf("tab") >= 0 || info.label.indexOf("options") >= 0, "ArrowRight stays on the tab row, got " + JSON.stringify(info));
+  await press(page, "ArrowDown");
   info = await focusInfo(page);
-  assert(info.zone === "nav", "ArrowLeft from the first card should enter the rail, got " + JSON.stringify(info));
-  const open = await page.evaluate(() => document.getElementById("tv-rail").classList.contains("is-open"));
-  assert(open, "the nav rail should expand on focus");
-  await shot(page, "tv_nav_expanded_1080.png");
+  assert(info.tag === "ARTICLE" || info.cls.indexOf("post") >= 0 || info.cls.indexOf("name") >= 0 || info.cls.indexOf("action") >= 0, "ArrowDown reaches a post, got " + JSON.stringify(info));
+  await sleep(500);
+  const centered = await page.evaluate(() => {
+    const el = document.activeElement;
+    const card = el && el.closest ? (el.closest("article") || el) : null;
+    if (!card) return 0;
+    const r = card.getBoundingClientRect();
+    const mid = r.top + Math.min(r.height, window.innerHeight) / 2;
+    return Math.abs(mid - window.innerHeight / 2);
+  });
+  assert(centered < windowCenteredLimit(), "focused post should sit near the middle, off by " + centered);
+  await shot(page, "tv_desktop_post_1080.png");
 
-  await press(page, "ArrowDown", 2);
+  await press(page, "ArrowRight");
+  info = await focusInfo(page);
+  assert(/name|action|play|more-btn|follow/.test(info.cls) || info.label === "Play" || info.act, "ArrowRight enters the post, got " + JSON.stringify(info));
+  await shot(page, "tv_desktop_action_1080.png");
+  info = await untilNav(page);
+  assert(info.cls.indexOf("nav-item") >= 0, "ArrowLeft from the timeline opens the sidebar, got " + JSON.stringify(info));
+  const openLabels = await page.locator(".nav-label").allInnerTexts();
+  assert(openLabels.indexOf("Home") >= 0 && openLabels.indexOf("Messages") >= 0, "sidebar keeps desktop labels");
+  await shot(page, "tv_desktop_nav_1080.png");
+
+  for (let i = 0; i < 6; i++) {
+    info = await focusInfo(page);
+    if (info.label === "Explore" || info.text === "Explore") break;
+    await press(page, "ArrowDown");
+  }
   await page.keyboard.press("Enter");
-  await waitReady(page);
-  await page.waitForSelector("#tv-keys .tv-key", { timeout: 8000 });
+  await page.waitForSelector("#explore-q", { timeout: 8000 });
+  await page.waitForFunction(() => document.activeElement && document.activeElement.id === "explore-q", null, { timeout: 8000 });
   await page.keyboard.type("elon");
-  await page.waitForTimeout(200);
-  const results = await page.locator("#tv-results").innerText();
-  assert(/Elon|elon/i.test(results), "search should list Elon, got " + results.slice(0, 180));
-  await shot(page, "tv_search_1080.png");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => /elon/i.test(document.querySelector("main") ? document.querySelector("main").innerText : ""), null, { timeout: 8000 });
+  await shot(page, "tv_desktop_search_1080.png");
   await page.keyboard.press("Escape");
-  await waitReady(page);
+  await sleep(400);
 
+  await page.keyboard.press("Escape");
+  await sleep(200);
   info = await focusInfo(page);
-  if (info.zone !== "card") {
-    await press(page, "ArrowRight");
+  if (info.cls.indexOf("nav-item") < 0) info = await untilNav(page);
+  for (let i = 0; i < 8; i++) {
+    info = await focusInfo(page);
+    if (info.label === "Messages" || info.text === "Messages") break;
+    await press(page, info.cls.indexOf("nav-item") >= 0 ? "ArrowDown" : "ArrowLeft");
+  }
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => /inbox|Messages/i.test(document.querySelector("main") ? document.querySelector("main").innerText : ""), null, { timeout: 8000 });
+  await shot(page, "tv_desktop_messages_1080.png");
+  await page.evaluate(() => { location.hash = "#/spaces/superintelmusic"; });
+  await page.waitForSelector(".sp-sheet", { timeout: 8000 });
+  await page.waitForFunction(() => /SuperintelMusic/i.test(document.querySelector("main") ? document.querySelector("main").innerText : ""), null, { timeout: 8000 });
+  await sleep(400);
+  info = await focusInfo(page);
+  for (let i = 0; i < 6 && info.cls.indexOf("sp-") < 0; i++) {
+    await page.keyboard.press("ArrowDown");
     info = await focusInfo(page);
   }
-  assert(info.zone === "card", "back from search should restore a card, got " + JSON.stringify(info));
-  await page.keyboard.down("Enter");
-  await sleep(700);
-  const menuOpen = await page.evaluate(() => {
-    const menu = document.getElementById("tv-menu");
-    return !!(menu && !menu.hidden && menu.innerText.indexOf("Like") >= 0);
-  });
-  assert(menuOpen, "holding OK should open the post menu");
-  await page.keyboard.up("Enter");
+  assert(info.cls.indexOf("sp-") >= 0, "Space page is reachable by remote, got " + JSON.stringify(info));
+  await shot(page, "tv_desktop_space_1080.png");
   await page.keyboard.press("Escape");
-  await sleep(100);
-  const menuClosed = await page.evaluate(() => document.getElementById("tv-menu").hidden);
-  assert(menuClosed, "Back should close the post menu");
+  await sleep(400);
 
-  await page.keyboard.press("Enter");
-  await waitReady(page);
-  await page.waitForSelector("#tv-replies", { timeout: 8000 });
   info = await focusInfo(page);
-  assert(info.id === "detail-author", "post detail should focus the author, got " + JSON.stringify(info));
-  await page.keyboard.press("Enter");
-  await waitReady(page);
-  const profileName = await page.locator("#tv-root h1").first().innerText();
-  assert(profileName.length > 0, "profile should show a name");
-  await shot(page, "tv_profile_1080.png");
-  for (let i = 0; i < 4; i++) {
-    const hash = await page.evaluate(() => (location.hash || "#/").split("?")[0]);
-    if (hash === "#/" || hash === "#/home" || hash === "") break;
-    await page.keyboard.press("Escape");
-    await waitReady(page);
+  if (info.cls.indexOf("tab") < 0 && info.tag !== "ARTICLE") {
+    await page.keyboard.press("ArrowRight");
   }
-
-  info = await focusInfo(page);
-  if (info.zone === "nav") await page.keyboard.press("ArrowRight");
-  for (let i = 0; i < 6 && (await focusInfo(page)).shelf !== "subs"; i++) await page.keyboard.press("ArrowDown");
-  info = await focusInfo(page);
-  assert(info.shelf === "subs" && info.zone === "card", "should reach Subscriptions, got " + JSON.stringify(info));
-  await page.keyboard.press("Enter");
-  await page.waitForSelector("#tv-player:not([hidden]) iframe, #tv-player:not([hidden]) video", { timeout: 8000 });
-  await page.waitForFunction(() => {
+  for (let i = 0; i < 4 && (await focusInfo(page)).tag !== "ARTICLE"; i++) await page.keyboard.press("ArrowDown");
+  const postId = await page.evaluate(() => {
     const el = document.activeElement;
-    return el && el.getAttribute("data-tv-id") === "player-stage";
-  }, null, { timeout: 8000 });
-  const src = await page.locator("#tv-player iframe, #tv-player video").first().getAttribute("src");
-  assert(src && (src.indexOf("youtube-nocookie.com/embed/") >= 0 || src.indexOf("http") === 0), "player should load a video, got " + src);
+    const card = el && el.closest ? el.closest("article.post") : null;
+    return card ? card.getAttribute("data-post") : "";
+  });
+  if (postId) {
+    await dispatchKey(page, 403, "ColorF0Red");
+    await page.waitForFunction((id) => {
+      const btn = document.querySelector('article[data-post="' + id + '"] .action.like');
+      return btn && btn.className.indexOf("on") >= 0;
+    }, postId, { timeout: 8000 });
+  }
+
+  for (let i = 0; i < 4 && (await focusInfo(page)).tag !== "ARTICLE"; i++) await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("article.status, .status-text, .watch, #viewer:not([hidden])", { timeout: 8000 });
+  await shot(page, "tv_desktop_detail_1080.png");
+  await page.keyboard.press("Escape");
+  await sleep(400);
+
+  let played = false;
+  await page.evaluate(() => { location.hash = "#/"; });
+  await waitReady(page);
+  const playSteps = await page.evaluate(() => {
+    const posts = Array.from(document.querySelectorAll("main article.post"));
+    for (let i = 0; i < posts.length && i < 20; i++) {
+      if (posts[i].querySelector(".play")) return i;
+    }
+    return -1;
+  });
+  if (playSteps >= 0) {
+    await press(page, "ArrowDown", playSteps + 1);
+    for (let r = 0; r < 8; r++) {
+      const label = await page.evaluate(() => {
+        const el = document.activeElement;
+        return el ? (el.getAttribute("aria-label") || "") : "";
+      });
+      if (label === "Play") {
+        await page.keyboard.press("Enter");
+        played = true;
+        break;
+      }
+      await page.keyboard.press("ArrowRight");
+    }
+  }
+  if (!played) {
+    await page.evaluate(() => { location.hash = "#/subscriptions"; });
+    await page.waitForSelector("a.yt-card, a.short-card", { timeout: 8000 });
+    await sleep(300);
+    for (let i = 0; i < 16 && !played; i++) {
+      const cls = await page.evaluate(() => {
+        const el = document.activeElement;
+        return el ? String(el.className || "") : "";
+      });
+      if (cls.indexOf("yt-card") >= 0 || cls.indexOf("short-card") >= 0) {
+        await page.keyboard.press("Enter");
+        played = true;
+        break;
+      }
+      await page.keyboard.press("ArrowDown");
+    }
+  }
+  if (played) {
+    await page.waitForSelector(".watch, .player, #viewer:not([hidden])", { timeout: 8000 });
+    await shot(page, "tv_desktop_player_1080.png");
+    await page.keyboard.press("Escape");
+    await sleep(300);
+  }
+
+  await page.evaluate(() => { location.hash = "#/"; });
+  await waitReady(page);
+  info = await focusInfo(page);
+  assert(info.act === "htab", "home should focus a tab before the menu, got " + JSON.stringify(info));
   await page.keyboard.press("ArrowRight");
-  const time = await page.locator("#tv-time").getAttribute("data-time");
-  assert(time === "10", "ArrowRight should seek +10s, got " + time);
-  await shot(page, "tv_player_1080.png");
-  await page.keyboard.press("ArrowLeft");
-  const back = await page.locator("#tv-time").getAttribute("data-time");
-  assert(back === "0", "ArrowLeft should seek -10s, got " + back);
-
-  await dispatchKey(page, 403, "ColorF0Red");
-  await sleep(200);
-  const liked = await page.locator("#tv-toast").innerText();
-  assert(/Like/.test(liked), "red key should like the video, got " + liked);
-
-  const playerPath = [];
-  for (let i = 0; i < 8; i++) {
-    const id = (await focusInfo(page)).id;
-    playerPath.push(id);
-    if (id === "player-channel") break;
-    await page.keyboard.press(id === "player-progress" || id === "player-stage" ? "ArrowDown" : "ArrowLeft");
-  }
-  assert((await focusInfo(page)).id === "player-channel", "should focus the channel control, path " + playerPath.join(" > "));
+  info = await focusInfo(page);
+  assert(info.label.indexOf("options") >= 0, "ArrowRight from For you should reach the tab menu, got " + JSON.stringify(info));
   await page.keyboard.press("Enter");
-  await waitReady(page);
-  const channel = await page.locator("#tv-root h1").first().innerText();
-  assert(/Prepper|Canadian/i.test(channel), "channel profile opened, got " + channel);
-  for (let i = 0; i < 4; i++) {
-    const id = (await focusInfo(page)).id;
-    if (id === "act-person") break;
-    await page.keyboard.press(id && id.indexOf("c-") === 0 ? "ArrowUp" : "ArrowRight");
-  }
-  assert((await focusInfo(page)).id === "act-person", "channel profile should focus All platforms, got " + JSON.stringify(await focusInfo(page)));
-  await page.keyboard.press("Enter");
-  await waitReady(page);
-  const person = await page.locator("#tv-root h1").first().innerText();
-  assert(/Prepper|Canadian/i.test(person), "unified profile opened, got " + person);
-  const personHash = await page.evaluate(() => location.hash);
-  assert(personHash.indexOf("#/p/") === 0, "unified profile route, got " + personHash);
-  const personShelves = await page.locator("h2.tv-shelf-title").allInnerTexts();
-  assert(personShelves.indexOf("All") >= 0, "person profile should shelf every tab, got " + personShelves.join(", "));
-  await press(page, "ArrowRight");
-  await shot(page, "tv_person_1080.png");
-  await dispatchKey(page, 10009, "XF86Back");
-  await waitReady(page);
+  await sleep(500);
+  if (!(await page.$(".tab-menu"))) await page.keyboard.press("Enter");
+  await page.waitForSelector(".tab-menu", { timeout: 8000 });
+  await page.keyboard.press("ArrowDown");
+  await shot(page, "tv_desktop_tabmenu_1080.png");
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector(".tab-menu"), null, { timeout: 8000 });
 
   assert(errors.length === 0, "page errors: " + errors.join(" | "));
   const video = page.video();
   await context.close();
   if (video) {
     const saved = await video.path();
-    const dest = OUT + "/tv_remote_tizen_1080_v3.webm";
+    const dest = OUT + "/tv_remote_desktop_1080.webm";
     const { rename } = await import("node:fs/promises");
     await rename(saved, dest);
   }
+}
+
+function windowCenteredLimit() {
+  return 280;
 }
 
 async function webos(browser) {
   const context = await openContext(browser, WEBOS, 1280, 720, false);
   const page = await context.newPage();
   const errors = [];
-  page.on("pageerror", (err) => errors.push(err.message));
+  page.on("pageerror", (err) => errors.push(err.stack || err.message));
   await page.goto(ROOT + "/#/", { waitUntil: "domcontentloaded" });
   await waitReady(page);
   const on = await page.evaluate(() => document.documentElement.classList.contains("tv-on"));
   assert(on, "webOS user agent should auto-enter TV mode");
-  const font = await page.evaluate(() => {
-    const text = document.querySelector(".tv-text");
-    return text ? parseFloat(getComputedStyle(text).fontSize) : 0;
-  });
-  assert(font >= 24, "720p text is " + font + "px");
-  await press(page, "ArrowRight");
+  const box = await layoutInfo(page);
+  assert(box.zoom >= 1.15, "720p zoom is " + box.zoom);
+  assert(box.side === "none", "720p hides the right column");
+  await press(page, "ArrowDown");
   const info = await focusInfo(page);
-  assert(info.index === "1", "webOS ArrowRight should move, got " + JSON.stringify(info));
-  await shot(page, "tv_home_shelves_720.png");
+  assert(info.tag === "ARTICLE" || /post|name|action/.test(info.cls), "720p ArrowDown moves into the timeline, got " + JSON.stringify(info));
+  await shot(page, "tv_desktop_home_720.png");
   await page.keyboard.press("Enter");
-  await waitReady(page);
-  await page.waitForSelector("#tv-replies", { timeout: 8000 });
+  await page.waitForSelector("article.status, .status-text, .watch, article.post", { timeout: 8000 });
   await dispatchKey(page, 461, "GoBack");
-  await waitReady(page);
+  await sleep(400);
   const home = await page.evaluate(() => (location.hash || "#/").split("?")[0]);
   assert(home === "#/" || home === "#/home" || home === "", "webOS Back should return home, got " + home);
   assert(errors.length === 0, "webOS page errors: " + errors.join(" | "));

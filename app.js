@@ -4299,6 +4299,11 @@
   }
 
   function parseRoute() {
+    try { return parseRouteInner(); }
+    catch (err) { return { name: "home", tab: "foryou", query: new URLSearchParams() }; }
+  }
+
+  function parseRouteInner() {
     const hash = location.hash || "#/";
     const qAt = hash.indexOf("?");
     const query = qAt >= 0 ? new URLSearchParams(hash.slice(qAt + 1)) : new URLSearchParams();
@@ -8137,7 +8142,8 @@
     }
     if (!STATE.scrollKey) return;
     const link = event.target.closest && event.target.closest("a[href^='#']");
-    const opener = !link && event.target.closest && event.target.closest("[data-open]") && !event.target.closest("a, button, input, textarea");
+    const openerEl = !link && event.target.closest ? event.target.closest("[data-open]") : null;
+    const opener = openerEl && !(event.target.closest && event.target.closest("a, button, input, textarea")) ? openerEl : null;
     const tab = event.target.closest && event.target.closest("[data-act='htab']");
     let next = "";
     if (link) next = link.getAttribute("href") || "";
