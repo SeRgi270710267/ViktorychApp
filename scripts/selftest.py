@@ -2978,6 +2978,250 @@ def ia_backup_checks() -> None:
     story_checks()
 
 
+def vk_web_checks(now) -> None:
+    import vk_session
+    from stories import collect
+    from sync_health import problems
+    from vk_session import (
+        BROWSER,
+        SESSION_ATTENTION,
+        SPARE_ATTENTION,
+        VK_WEB_PACE,
+        StoryAuthError,
+        decrypt_cookies,
+        encrypt_cookies,
+        fetch_vk_web,
+        forbidden_request,
+        load_cookie_export,
+        page_state,
+        parse_vk_web_stories,
+        passphrase,
+        run_sign_in,
+        totp_code,
+    )
+
+    logged_in = "window.vk = Object.assign(window.vk || {}, { id: %s });"
+    feed_html = (FIX / "vk_web_feed.html").read_text(encoding="utf-8")
+    payload = json.loads((FIX / "vk_web_stories.json").read_text(encoding="utf-8"))
+    parsed = parse_vk_web_stories(payload, now, viewer_id=100)
+    from_page = parse_vk_web_stories(feed_html, now)
+    check([row["id"] for row in parsed] == ["vk:vk", "vk:durov"], "the VK web fixture keeps followed accounts and drops the spare account")
+    check([row["id"] for row in from_page] == ["vk:vk", "vk:durov"], "the feed page fixture parses the same accounts")
+    check([item["id"] for item in parsed[0]["items"]] == ["6", "5"], "VK web stories are oldest first")
+    check(parsed[0]["items"][0]["type"] == "video" and parsed[0]["items"][0]["url"] == "https://cdn.example/v.mp4" and parsed[0]["items"][0]["poster"] == "https://cdn.example/poster.jpg", "a VK web video uses the https mp4 and its poster")
+    check(parsed[0]["name"] == "ВКонтакте" and parsed[0]["avatar"] == "https://cdn.example/vk-face.jpg" and parsed[0]["items"][1]["caption"] == "Hello", "the VK group supplies the name, avatar, and caption")
+    check(parsed[1]["name"] == "Pavel Durov" and parsed[1]["items"][0]["open"] == "https://vk.com/story1_9", "a followed profile keeps its name and story link")
+    dumped = json.dumps(parsed)
+    check("old.jpg" not in dumped and "mine.jpg" not in dumped and "nope.mp4" not in dumped and "plain" not in dumped, "expired, own, and http VK web media are dropped")
+    cards = """
+    <div data-owner-id="1" data-handle="durov" data-name="Pavel" data-avatar="https://cdn.example/durov-face.jpg">
+      <a data-story-id="9" data-type="photo" data-date="1792607400" data-expires="1792693800">
+        <img src="https://cdn.example/durov.jpg">
+      </a>
+    </div>
+    """
+    card_accounts = parse_vk_web_stories(cards, now, viewer_id=100)
+    check(card_accounts[0]["items"][0]["url"] == "https://cdn.example/durov.jpg", "a feed card with an image URL becomes a story")
+    code = totp_code("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", datetime.fromtimestamp(59, timezone.utc))
+    check(code == "287082", "the authenticator code matches the RFC 6238 vector")
+    exported = load_cookie_export(json.dumps([
+        {"domain": ".vk.com", "name": "remixsid", "value": "abc", "path": "/"},
+        {"domain": ".login.vk.com", "name": "p", "value": "long", "path": "/"},
+    ]))
+    header = load_cookie_export("remixsid=abc; remixstlid=def")
+    check([row["name"] for row in exported] == ["remixsid", "p"] and header[1]["name"] == "remixstlid", "cookie JSON and a raw Cookie header both load")
+    try:
+        load_cookie_export("{not-json remixsid=SECRETCOOKIE")
+    except StoryAuthError as exc:
+        check("SECRETCOOKIE" not in str(exc) and str(exc) == SESSION_ATTENTION, "a bad cookie export does not echo the secret")
+    else:
+        check(False, "a bad cookie export must stop")
+    phrase = passphrase("", "password-VALUE-not-logged")
+    sentinel = "remixsid-SUPERSECRETVALUE-not-logged"
+    blob = encrypt_cookies([{"domain": ".vk.com", "name": "remixsid", "value": sentinel, "path": "/"}], phrase)
+    check(sentinel.encode() not in blob and b"password-VALUE-not-logged" not in blob, "the cookie cache is ciphertext")
+    check(decrypt_cookies(blob, phrase)[0]["value"] == sentinel, "the cookie cache decrypts with the same key")
+    check(decrypt_cookies(blob, passphrase("other-key", "")) == [], "a different cache key does not return the cookies")
+    check(VK_WEB_PACE >= 2 and forbidden_request("https://login.vk.com/?act=web_token") and forbidden_request("https://vk.com/al_stories.php", "stories.markSeen") and not forbidden_request("https://vk.com/feed"), "web_token and mark-seen are refused, and requests wait at least two seconds")
+    check("6287487" not in (ROOT / "scripts" / "vk_session.py").read_text(encoding="utf-8"), "the web session path does not use an official VK app id")
+
+    def page(user_id, extra=""):
+        return "<html><body><script>%s</script>%s</body></html>" % (logged_in % user_id, extra)
+
+    class Steps:
+        def __init__(self, steps):
+            self.steps = list(steps)
+            self.calls = []
+
+        def __call__(self, url, headers):
+            self.calls.append((url, dict(headers or {})))
+            return self.steps.pop(0)
+
+    login_html = page(0, "<title>VK | Welcome!</title>")
+    captcha_html = "<html><body><form><input name=\"captcha_key\"></form><p>Confirm you are not a robot</p></body></html>"
+    check(page_state("https://vk.com/feed", 200, feed_html) == "ok", "a feed page with a user id is signed in")
+    check(page_state("https://vk.com/", 200, login_html) == "login", "the welcome page is a signed-out session")
+    check(page_state("https://vk.com/", 200, captcha_html) == "captcha", "a captcha form is a challenge")
+    check(page_state("https://vk.com/feed", 403, "no") == "denied", "403 stops before the body is treated as a feed")
+
+    sleeps = []
+    restore = Steps([
+        (302, "https://login.vk.com/?act=restore_cookies&c_hash=1", "", ["remixstlid=LONG"]),
+        (302, "https://vk.com/feed", "", ["remixsid=NEW; Path=/; Domain=.vk.com; Secure; HttpOnly"]),
+        (200, "", feed_html, []),
+    ])
+    accounts = fetch_vk_web(now, session_export="remixsid=OLD", session_key="cache-key", transport=restore, sleep=lambda delay: sleeps.append(delay), sign_in=lambda *args: (_ for _ in ()).throw(AssertionError("cookie session signed in")))
+    check([row["id"] for row in accounts] == ["vk:vk", "vk:durov"], "login.vk.com restore redirects return the feed stories")
+    check(len(restore.calls) == 3 and sleeps == [VK_WEB_PACE, VK_WEB_PACE], "restore hops are paced and the feed is fetched once")
+    check(all(call[1].get("User-Agent") == BROWSER and "web_token" not in call[0] and "access_token" not in call[0] for call in restore.calls), "the feed uses a desktop browser and does not mint a web token")
+    check("remixsid=NEW" in restore.calls[2][1].get("Cookie", ""), "the fresh remixsid is sent on the feed request")
+
+    blocked = Steps([(302, "https://login.vk.com/?act=web_token&app=1", "", [])])
+    try:
+        fetch_vk_web(now, session_export="remixsid=OLD", transport=blocked, sleep=lambda delay: None, sign_in=lambda *args: (_ for _ in ()).throw(AssertionError("web_token signed in")))
+    except StoryAuthError as exc:
+        check(str(exc) == SESSION_ATTENTION and len(blocked.calls) == 1 and "web_token" not in blocked.calls[0][0], "a web_token redirect is not requested")
+    else:
+        check(False, "web_token must stop")
+
+    denied = Steps([(401, "", "no", [])])
+    signed = []
+
+    def boom(*_args):
+        signed.append("signed")
+        raise AssertionError("401 signed in again")
+
+    try:
+        fetch_vk_web(
+            now,
+            login="spare@example.com",
+            password="secret-password",
+            session_export="remixsid=OLD",
+            transport=denied,
+            sleep=lambda delay: None,
+            sign_in=boom,
+        )
+    except StoryAuthError as exc:
+        check(str(exc) == SPARE_ATTENTION and signed == [] and len(denied.calls) == 1, "401 stops with no retry and no second sign-in")
+    else:
+        check(False, "401 must stop")
+
+    browser = vk_session.ScriptedBrowser([
+        {"html": page(0), "inputs": {"login"}},
+        {"html": captcha_html, "inputs": set()},
+    ])
+    try:
+        run_sign_in(browser, "spare@example.com", "secret-password", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")
+    except StoryAuthError as exc:
+        check(str(exc) == SPARE_ATTENTION and ("password",) not in browser.events, "a captcha stops before the password is submitted again")
+    else:
+        check(False, "captcha must stop the sign-in")
+
+    sms = vk_session.ScriptedBrowser([
+        {"html": page(0), "inputs": {"login"}},
+        {"html": page(0), "inputs": {"password"}},
+        {"html": page(0, "<p>We sent an SMS</p>"), "inputs": {"otp"}},
+    ])
+    try:
+        run_sign_in(sms, "spare@example.com", "secret-password", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")
+    except StoryAuthError as exc:
+        check(str(exc) == SPARE_ATTENTION and ("otp", 6) not in sms.events, "an SMS challenge is not answered")
+    else:
+        check(False, "SMS must stop the sign-in")
+
+    ok_browser = vk_session.ScriptedBrowser(
+        [
+            {"html": page(0), "inputs": {"login"}},
+            {"html": page(0), "inputs": {"password"}},
+            {"html": page(0, "<p>Code from the app</p>"), "inputs": {"otp"}},
+            {"html": page(42), "inputs": set()},
+        ],
+        cookies=[{"domain": ".vk.com", "name": "remixsid", "value": "fresh", "path": "/"}],
+    )
+    signed_cookies = run_sign_in(ok_browser, "spare@example.com", "secret-password", "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")
+    check(("otp", 6) in ok_browser.events and signed_cookies[0]["value"] == "fresh" and "secret-password" not in repr(ok_browser.events), "one sign-in submits the authenticator code and keeps the cookies")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        cache = str(Path(tmp) / "cookies.enc")
+        first = Steps([
+            (200, "", login_html, []),
+            (200, "", feed_html, ["remixsid=SAVED; Path=/; Domain=.vk.com"]),
+        ])
+        calls = []
+
+        def signer(user, password, secret):
+            calls.append((user, len(password), len(secret)))
+            return [{"domain": ".vk.com", "name": "remixsid", "value": "from-login", "path": "/"}]
+
+        found = fetch_vk_web(
+            now,
+            login="spare@example.com",
+            password="secret-password",
+            totp_secret="GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+            session_export="remixsid=OLD",
+            session_key="cache-key",
+            session_file=cache,
+            transport=first,
+            sleep=lambda delay: None,
+            sign_in=signer,
+        )
+        check(len(calls) == 1 and [row["id"] for row in found] == ["vk:vk", "vk:durov"], "a dead session signs in once")
+        saved = Path(cache).read_bytes()
+        check(b"from-login" not in saved and b"secret-password" not in saved and b"SAVED" not in saved, "refreshed cookies are stored only as ciphertext")
+        second = Steps([(200, "", feed_html, [])])
+
+        def refuse_sign_in(*_args):
+            raise AssertionError("cached session signed in again")
+
+        again = fetch_vk_web(
+            now,
+            login="spare@example.com",
+            password="secret-password",
+            session_key="cache-key",
+            session_file=cache,
+            transport=second,
+            sleep=lambda delay: None,
+            sign_in=refuse_sign_in,
+        )
+        check(len(second.calls) == 1 and again[0]["handle"] == "vk", "the next run reuses the cached session")
+
+    previous_vk = [{
+        "id": "vk:vk",
+        "platform": "vk",
+        "handle": "vk",
+        "items": [{"id": "1", "type": "photo", "url": "https://cdn.example/keep.jpg", "expires": "2026-10-22T00:00:00Z"}],
+    }]
+    token_calls = []
+
+    def token_must_not(method, params):
+        token_calls.append(method)
+        raise AssertionError("user token was called")
+
+    accounts, health = collect(
+        [{"id": "vk:vk", "platform": "vk", "handle": "vk", "ownerId": -22822305}],
+        "",
+        now,
+        previous_vk,
+        vk_secret="vk1.secret.TOKENVALUE",
+        vk_login="spare@example.com",
+        vk_password="secret-password",
+        vk_session="remixsid=OLD",
+        vk_transport=Steps([(403, "", "no", [])]),
+        vk_sign_in=lambda *args: (_ for _ in ()).throw(AssertionError("403 signed in")),
+        sleep=lambda delay: None,
+        vk_call=token_must_not,
+    )
+    check(token_calls == [] and health == [{"platform": "vk", "ok": False, "detail": SPARE_ATTENTION}], "the web session wins over VK_USER_TOKEN and reports one problem")
+    check(accounts[0]["items"][0]["url"] == "https://cdn.example/keep.jpg" and "secret-password" not in json.dumps(health), "the failed web fetch keeps the previous story and omits the password")
+    moment = "2026-10-21T19:00:00Z"
+    check(any(SPARE_ATTENTION in line for line in problems({"feeds": [], "stories": health}, moment)), "the spare-account challenge is the Sync problem text")
+    workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "vk-session.md").read_text(encoding="utf-8")
+    check("VK_LOGIN" in guide and "VK_PASSWORD" in guide and "VK_TOTP_SECRET" in guide and "Cookie-Editor" in guide and SPARE_ATTENTION in guide, "the owner steps name the secrets, the cookie fallback, and the issue text")
+    check("VK_LOGIN: ${{ secrets.VK_LOGIN }}" in workflow and "VK_PASSWORD: ${{ secrets.VK_PASSWORD }}" in workflow and "VK_TOTP_SECRET: ${{ secrets.VK_TOTP_SECRET }}" in workflow and "VK_SESSION: ${{ secrets.VK_SESSION }}" in workflow and 'echo "::add-mask::${VK_LOGIN}"' in workflow and 'echo "::add-mask::${VK_PASSWORD}"' in workflow and ".vk-session" in workflow, "the sync masks the spare-account secrets and caches the session")
+    check("6287487" not in workflow and "act=web_token" not in workflow, "the workflow does not call web_token or an official app id")
+
+
 def story_checks() -> None:
     import subprocess
 
@@ -3299,6 +3543,7 @@ def story_checks() -> None:
         )
         saved = json.loads(dest.read_text(encoding="utf-8"))
     check(health == [] and quiet == [] and saved["accounts"] == [], "VK_USER_TOKEN unset writes no VK stories and does not call out")
+    vk_web_checks(now)
     check("border-radius: 16px" in styles and "linear-gradient" in styles and "#stories" in styles, "story avatars are rounded squares and the viewer is full screen")
     row = subprocess.run(["node", "scripts/stories_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "story tray ordering passed\n" + row.stdout + row.stderr)

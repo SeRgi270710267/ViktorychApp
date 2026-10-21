@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Feed</title></head>
+<body>
+<script>
+window.vk = Object.assign(window.vk || {}, {
+  id: 100,
+});
+window.cur = window.cur || {};
+window.cur.apiPrefetchCache = [{"method":"stories.get","response": {
+  "count": 3,
+  "items": [
+    {
+      "type": "stories",
+      "stories": [
+        {
+          "id": 6,
+          "owner_id": -22822305,
+          "date": 1792602000,
+          "type": "video",
+          "video": {
+            "files": {
+              "mp4_720": "https://cdn.example/v.mp4",
+              "hls": "https://cdn.example/v.m3u8",
+              "mp4_1080": "http://cdn.example/nope.mp4"
+            },
+            "image": [{"url": "https://cdn.example/poster.jpg", "width": 320, "height": 180}]
+          }
+        },
+        {
+          "id": 5,
+          "owner_id": -22822305,
+          "date": 1792605600,
+          "expires_at": 1792612800,
+          "type": "photo",
+          "photo": {
+            "sizes": [
+              {"url": "http://cdn.example/small.jpg", "width": 100, "height": 100},
+              {"url": "https://cdn.example/big.jpg", "width": 800, "height": 800}
+            ]
+          },
+          "link": {"text": "Hello"}
+        },
+        {
+          "id": 4,
+          "owner_id": -22822305,
+          "date": 1792519200,
+          "expires_at": 1792609100,
+          "type": "photo",
+          "photo": {"sizes": [{"url": "https://cdn.example/old.jpg", "width": 10, "height": 10}]}
+        }
+      ]
+    },
+    {
+      "type": "stories",
+      "stories": [
+        {
+          "id": 9,
+          "owner_id": 1,
+          "date": 1792607400,
+          "expires_at": 1792693800,
+          "type": "photo",
+          "photo": {"sizes": [{"url": "https://cdn.example/durov.jpg", "width": 800, "height": 800}]}
+        }
+      ]
+    },
+    {
+      "type": "stories",
+      "stories": [
+        {
+          "id": 3,
+          "owner_id": 100,
+          "date": 1792608200,
+          "expires_at": 1792694600,
+          "type": "photo",
+          "photo": {"sizes": [{"url": "https://cdn.example/mine.jpg", "width": 400, "height": 400}]}
+        }
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "id": 22822305,
+      "name": "ВКонтакте",
+      "screen_name": "vk",
+      "photo_200": "https://cdn.example/vk-face.jpg"
+    }
+  ],
+  "profiles": [
+    {
+      "id": 1,
+      "first_name": "Pavel",
+      "last_name": "Durov",
+      "screen_name": "durov",
+      "photo_200": "https://cdn.example/durov-face.jpg"
+    },
+    {
+      "id": 100,
+      "first_name": "Spare",
+      "last_name": "Account",
+      "screen_name": "spare",
+      "photo_200": "https://cdn.example/spare.jpg"
+    }
+  ]
+}}];
+</script>
+<div data-testid="feed_wall"></div>
+</body>
+</html>

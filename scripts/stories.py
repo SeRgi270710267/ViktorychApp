@@ -10,10 +10,11 @@ do not return story media without a login this sync is not allowed to bypass:
 - Telegram. t.me/telegram, t.me/durov, t.me/s/<channel>, and t.me/<user>/s/1
   are a channel preview or a profile card. The image is the avatar.
   stories.getPeerStories is limited to a logged-in user.
-- VK stories.get through the service token or the anonymous web token
-  returns "User authorization failed". A user token is optional and
-  separate: VK_USER_TOKEN. It is read only for stories.get and
-  stories.getById. It is off when unset.
+- VK stories from the spare account's web session. VK_LOGIN and
+  VK_PASSWORD sign in through vk.com. VK_TOTP_SECRET is the authenticator
+  setup key. A cookie export in VK_SESSION is the fallback. VK_USER_TOKEN
+  remains the API alternative for stories.get and stories.getById. All of
+  them are off when unset. The web path does not call act=web_token.
 - X has no stories. Fleets ended in 2021.
 - YouTube Stories ended on 26 June 2023. Shorts are permanent videos and
   already belong in the feed.
@@ -54,11 +55,22 @@ class StoryQueryError(Exception):
 
 
 def redact(text: str, secret: str = "") -> str:
+    import os
+
     cleaned = _SECRET.sub(r"\1=redacted", text or "")
     cleaned = re.sub(r"(?i)(access_token=)[^&\s]+", r"\1redacted", cleaned)
     cleaned = re.sub(r"(?i)bearer\s+\S+", "bearer redacted", cleaned)
+    cleaned = re.sub(
+        r"(?i)((?:remixsid\d*|remixstlid|remixttpid|remixnsid\d*|remixlhk|remixstid)=)[^;\s]+",
+        r"\1redacted",
+        cleaned,
+    )
     if secret:
         cleaned = cleaned.replace(secret, "redacted")
+    for name in ("IG_SESSION", "VK_USER_TOKEN", "VK_LOGIN", "VK_PASSWORD", "VK_TOTP_SECRET", "VK_SESSION", "VK_SESSION_KEY"):
+        value = os.environ.get(name) or ""
+        if len(value) >= 6:
+            cleaned = cleaned.replace(value, "redacted")
     return cleaned[:240]
 
 
@@ -808,6 +820,15 @@ def save_document(path: Path, accounts: list, now: datetime) -> None:
     )
 
 
+def _fail_vk(previous: list, feeds: list, failed: set) -> None:
+    for account in previous or []:
+        if isinstance(account, dict) and account.get("platform") == "vk" and account.get("id"):
+            failed.add(str(account.get("id")))
+    for feed in feeds or []:
+        if isinstance(feed, dict) and feed.get("id"):
+            failed.add(str(feed.get("id")))
+
+
 def collect(
     feeds: list,
     secret: str,
@@ -819,6 +840,15 @@ def collect(
     sleep=None,
     vk_call=None,
     vk_lookup=None,
+    vk_login: str = "",
+    vk_password: str = "",
+    vk_totp: str = "",
+    vk_session: str = "",
+    vk_session_key: str = "",
+    vk_session_file: str = "",
+    vk_transport=None,
+    vk_sign_in=None,
+    vk_spa=None,
 ) -> tuple[list, list]:
     """Return (accounts, health rows). Health is empty when nothing failed."""
     secret = (secret or "").strip()
@@ -855,8 +885,44 @@ def collect(
             for feed in instagram:
                 failed.add(str(feed.get("id")))
     vk_feeds = [feed for feed in feeds or [] if isinstance(feed, dict) and feed.get("platform") == "vk" and feed.get("id")]
-    if not vk_secret:
-        print("[stories] VK off; VK_USER_TOKEN is not set")
+    vk_login = (vk_login or "").strip()
+    vk_password = (vk_password or "").strip()
+    vk_session = (vk_session or "").strip()
+    web_on = bool(vk_login and vk_password) or bool(vk_session)
+    if web_on:
+        from vk_session import SESSION_ATTENTION, SPARE_ATTENTION, fetch_vk_web
+
+        attention = SPARE_ATTENTION if vk_login and vk_password else SESSION_ATTENTION
+        try:
+            found = fetch_vk_web(
+                now,
+                login=vk_login,
+                password=vk_password,
+                totp_secret=vk_totp,
+                session_export=vk_session,
+                session_key=vk_session_key,
+                session_file=vk_session_file,
+                transport=vk_transport,
+                sleep=sleep,
+                sign_in=vk_sign_in,
+                spa_read=vk_spa,
+            )
+        except StoryAuthError as exc:
+            _fail_vk(previous, vk_feeds, failed)
+            detail = str(exc) if str(exc) in (SPARE_ATTENTION, SESSION_ATTENTION) else attention
+            _remember(health, "vk", detail)
+            print(f"[stories] vk: {detail}", flush=True)
+        except (StoryQueryError, ValueError, TypeError, OSError) as exc:
+            _fail_vk(previous, vk_feeds, failed)
+            _remember(health, "vk", VK_QUERY_DETAIL)
+            print(f"[stories] vk: {redact(str(exc), vk_password or vk_session or vk_secret)}", flush=True)
+        else:
+            for account in found or []:
+                if account.get("id"):
+                    fetched[str(account["id"])] = account
+            print(f"[stories] vk web: {len(found or [])} accounts")
+    elif not vk_secret:
+        print("[stories] VK off; VK_LOGIN, VK_SESSION, and VK_USER_TOKEN are not set")
     else:
         stopped = False
         for feed in vk_feeds:
@@ -896,6 +962,15 @@ def publish(
     sleep=None,
     vk_call=None,
     vk_lookup=None,
+    vk_login: str | None = None,
+    vk_password: str | None = None,
+    vk_totp: str | None = None,
+    vk_session: str | None = None,
+    vk_session_key: str | None = None,
+    vk_session_file: str | None = None,
+    vk_transport=None,
+    vk_sign_in=None,
+    vk_spa=None,
 ) -> list:
     import os
     import time
@@ -905,9 +980,28 @@ def publish(
         secret = os.environ.get("IG_SESSION") or ""
     if vk_secret is None:
         vk_secret = os.environ.get("VK_USER_TOKEN") or ""
+    if vk_login is None:
+        vk_login = os.environ.get("VK_LOGIN") or ""
+    if vk_password is None:
+        vk_password = os.environ.get("VK_PASSWORD") or ""
+    if vk_totp is None:
+        vk_totp = os.environ.get("VK_TOTP_SECRET") or ""
+    if vk_session is None:
+        vk_session = os.environ.get("VK_SESSION") or ""
+    if vk_session_key is None:
+        vk_session_key = os.environ.get("VK_SESSION_KEY") or ""
+    if vk_session_file is None:
+        vk_session_file = os.environ.get("VK_SESSION_FILE") or ""
     rsshub = ""
     if isinstance(config, dict):
         rsshub = str(config.get("rsshubBase") or "")
+    web_on = bool((vk_login or "").strip() and (vk_password or "").strip()) or bool((vk_session or "").strip())
+    if web_on and vk_sign_in is None:
+        from vk_session import playwright_read, playwright_sign_in
+
+        vk_sign_in = playwright_sign_in
+        if vk_spa is None:
+            vk_spa = playwright_read
     accounts, health = collect(
         (config or {}).get("feeds") or [],
         secret,
@@ -919,6 +1013,15 @@ def publish(
         sleep=time.sleep if sleep is None and vk_call is None else sleep,
         vk_call=vk_call,
         vk_lookup=vk_lookup,
+        vk_login=vk_login or "",
+        vk_password=vk_password or "",
+        vk_totp=vk_totp or "",
+        vk_session=vk_session or "",
+        vk_session_key=vk_session_key or "",
+        vk_session_file=vk_session_file or "",
+        vk_transport=vk_transport,
+        vk_sign_in=vk_sign_in,
+        vk_spa=vk_spa,
     )
     save_document(dest, accounts, moment)
     count = sum(len(row.get("items") or []) for row in accounts)

@@ -1,5 +1,7 @@
 # VK user token for stories
 
+The usual path is the spare account's web session: [vk-session.md](vk-session.md). This page is the alternative when `VK_LOGIN` and `VK_SESSION` are both unset.
+
 Checked against VK’s own pages on 21 Oct 2026. This sync reads `VK_USER_TOKEN` only inside the Refresh feeds step. It is masked, never printed, and never committed. Leave it unset and VK stories stay off. The sync calls `stories.get` and `stories.getById` only. It does not post, delete, or mark stories seen.
 
 1. Sign in to the VK ID authorization service with your own VK account and create a business profile. Creating an app requires VK Business ID. Standalone app settings on dev.vk.com are no longer available; VK moved those apps to VK ID. Official page: https://id.vk.com/about/business/go/docs/ru/vkid/latest/vk-id/connection/create-application

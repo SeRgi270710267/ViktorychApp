@@ -145,12 +145,44 @@ jobs:
       - name: Pull the last published snapshot
         run: python3 scripts/pull_snapshot.py
 
+      - name: Restore the VK browser
+        continue-on-error: true
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-v1-${{ runner.os }}
+
+      - name: Restore the VK session cache
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: .vk-session
+          key: vk-web-session-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            vk-web-session-
+
+      - name: Install the VK browser
+        env:
+          VK_LOGIN: ${{ secrets.VK_LOGIN }}
+          VK_SESSION: ${{ secrets.VK_SESSION }}
+        run: |
+          if [ -z "${VK_LOGIN:-}" ] && [ -z "${VK_SESSION:-}" ]; then
+            echo "VK web session is off"
+            exit 0
+          fi
+          if [ -n "${VK_LOGIN:-}" ]; then
+            echo "::add-mask::${VK_LOGIN}"
+          fi
+          python3 -m pip install --disable-pip-version-check -q playwright
+          python3 -m playwright install --with-deps chromium
+
       - name: Refresh feeds
         # Timelines, Meta CDN refreshes, and Instagram/Threads comments under 7 days.
         # X replies and YouTube video comments are fetched in the browser.
         # Community post comments are written to fallback/ytpost_<id>.json here.
         # Discord bot servers are skipped when DISCORD_BOT_TOKEN is unset.
         # User-auth servers use DISCORD_USER_TOKEN. The value is masked before the sync runs.
+        # VK stories use the spare account when VK_LOGIN is set, else VK_SESSION, else VK_USER_TOKEN.
         env:
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}
@@ -160,6 +192,12 @@ jobs:
           DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
           IG_SESSION: ${{ secrets.IG_SESSION }}
           VK_USER_TOKEN: ${{ secrets.VK_USER_TOKEN }}
+          VK_LOGIN: ${{ secrets.VK_LOGIN }}
+          VK_PASSWORD: ${{ secrets.VK_PASSWORD }}
+          VK_TOTP_SECRET: ${{ secrets.VK_TOTP_SECRET }}
+          VK_SESSION: ${{ secrets.VK_SESSION }}
+          VK_SESSION_KEY: ${{ secrets.VK_SESSION_KEY }}
+          VK_SESSION_FILE: ${{ github.workspace }}/.vk-session/cookies.enc
         run: |
           if [ -n "${DISCORD_USER_TOKEN:-}" ]; then
             echo "::add-mask::${DISCORD_USER_TOKEN}"
@@ -170,7 +208,51 @@ jobs:
           if [ -n "${VK_USER_TOKEN:-}" ]; then
             echo "::add-mask::${VK_USER_TOKEN}"
           fi
+          if [ -n "${VK_LOGIN:-}" ]; then
+            echo "::add-mask::${VK_LOGIN}"
+          fi
+          if [ -n "${VK_PASSWORD:-}" ]; then
+            echo "::add-mask::${VK_PASSWORD}"
+          fi
+          if [ -n "${VK_TOTP_SECRET:-}" ]; then
+            echo "::add-mask::${VK_TOTP_SECRET}"
+          fi
+          if [ -n "${VK_SESSION_KEY:-}" ]; then
+            echo "::add-mask::${VK_SESSION_KEY}"
+          fi
+          python3 - <<'PY'
+          import json, os, re
+          value = os.environ.get("VK_SESSION") or ""
+          for line in value.splitlines():
+              line = line.strip()
+              if line:
+                  print("::add-mask::" + line, flush=True)
+          rows = None
+          try:
+              data = json.loads(value) if value else None
+          except json.JSONDecodeError:
+              data = None
+          if isinstance(data, list):
+              rows = data
+          elif isinstance(data, dict):
+              rows = data.get("cookies")
+          if isinstance(rows, list):
+              for row in rows:
+                  if isinstance(row, dict) and row.get("value"):
+                      print("::add-mask::" + str(row["value"]), flush=True)
+          else:
+              for match in re.finditer(r"[^=;\s]+=([^;\s]+)", value):
+                  print("::add-mask::" + match.group(1), flush=True)
+          PY
           python3 scripts/update_feeds.py
+
+      - name: Save the VK session cache
+        if: always()
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .vk-session
+          key: vk-web-session-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Assemble the site and check its size
         run: |
