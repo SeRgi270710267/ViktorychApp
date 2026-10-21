@@ -8745,7 +8745,7 @@ if (STATE.histClear) {
       const sections = order.filter((name) => buckets[name] && buckets[name].length).map((name) => `<section class="yt-sec"><h2>${name}</h2><div class="yt-grid">${buckets[name].map((post) => ytCard(post, layout)).join("")}</div></section>`).join("");
       body = shelf + sections;
     }
-    return `<div class="subs ${layout}">${head}${chips}${save}${strip}${body}</div>`;
+    return `<div class="subs ${layout}">${head}${strip}${chips}${save}<div class="subs-feed">${body}</div></div>`;
   }
 
   function revealSubsChannel() {
