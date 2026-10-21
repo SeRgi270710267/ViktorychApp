@@ -940,9 +940,17 @@ def main() -> None:
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
     check("STATUS_MAX_AGE = 2 * 60 * 1000" in spaces_js and "function remoteStatusUrl(" in spaces_js and "function statusStale(" in spaces_js and "source.fallback" in spaces_js, "a remote Space status is allowlisted and goes offline when updated is older than two minutes")
-    check("isSpaceAsset" in worker and "nadjnizsdaskttxahclp.supabase.co" in worker and '"r2.dev"' in worker and '"trycloudflare.com"' in worker and "isSpaceStatus(url) || isSpaceAsset(url)" in worker and 'cache: "no-store"' in worker, "the service worker does not cache the remote radio status or its segments")
+    check("isSpaceAsset" in worker and "pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev" in worker and '"r2.dev"' in worker and '"trycloudflare.com"' in worker and "isSpaceStatus(url) || isSpaceAsset(url)" in worker and 'cache: "no-store"' in worker, "the service worker does not cache the remote radio status or its segments")
     music = next(item for item in json.loads((ROOT / "feeds.config.json").read_text(encoding="utf-8"))["spaces"] if item["id"] == "superintelmusic")
-    check(music["source"]["statusUrl"] == "https://nadjnizsdaskttxahclp.supabase.co/storage/v1/object/public/live/status.json" and music["source"]["fallback"] == "live/superintelmusic.json" and music["source"]["allow"] == ["nadjnizsdaskttxahclp.supabase.co", "r2.dev", "trycloudflare.com"] and "url" not in music["source"], "SuperintelMusic reads the Supabase status and falls back to the offline file")
+    check(music["source"]["statusUrl"] == "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/status.json" and music["source"]["fallback"] == "live/superintelmusic.json" and music["source"]["allow"] == ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev", "trycloudflare.com"] and "url" not in music["source"], "SuperintelMusic reads the R2 status and falls back to the offline file")
+    banned = re.compile("supa" + "base|sb_" + "publishable|nadjniz" + "sdaskttxahclp", re.I)
+    banned_hits = []
+    for path in ROOT.rglob("*"):
+        if not path.is_file() or ".git" in path.parts or path.suffix.lower() not in {".js", ".py", ".json", ".yml", ".md", ".html", ".css", ".svg", ".webmanifest"}:
+            continue
+        if banned.search(path.read_text(encoding="utf-8", errors="ignore")):
+            banned_hits.append(str(path.relative_to(ROOT)))
+    check(not banned_hits, "the old radio host is gone: " + ", ".join(banned_hits))
     check(page.index('src="music.js"') < page.index('src="app.js"') and 'href="music.css"' in page, "the page loads SIntelMusic before the app")
     check("music.js" in worker and "music.css" in worker and "data/music.json" in worker, "the service worker precaches SIntelMusic and refreshes its catalog")
     check("music.js" in workflow and "music.css" in workflow and "data/music.json" in workflow and '"music.js"' in (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8"), "the deploy publishes SIntelMusic")

@@ -95,7 +95,7 @@ function isMedia(url) {
   return /(^|\.)pbs\.twimg\.com$/.test(host) || /(^|\.)video\.twimg\.com$/.test(host) || host === "i.ytimg.com" || /(^|\.)ggpht\.com$/.test(host) || /(^|\.)googleusercontent\.com$/.test(host) || /(^|\.)cdninstagram\.com$/.test(host) || /(^|\.)fbcdn\.net$/.test(host);
 }
 
-const SPACE_HOSTS = ["nadjnizsdaskttxahclp.supabase.co", "r2.dev", "trycloudflare.com"];
+const SPACE_HOSTS = ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev", "trycloudflare.com"];
 
 function spaceHost(hostname) {
   const host = String(hostname || "").toLowerCase().replace(/\.+$/, "");
