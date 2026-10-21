@@ -137,7 +137,7 @@ assert.deepStrictEqual(space.source.allow, ["nadjnizsdaskttxahclp.supabase.co", 
 assert.ok(!space.source.url);
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "superintel9-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "superintel10-__SW_VERSION__"'));
 assert.ok(worker.includes("./spaces.js") && worker.includes("./spaces.css"));
 assert.ok(!worker.includes("superintelmusic.json"));
 assert.ok(worker.includes("isSpaceStatus"));

@@ -316,6 +316,7 @@ html.music-on .center { padding-bottom: 96px; }
   .mu-seek, .mu-vol, .mu-transport .mu-shuffle, .mu-transport .mu-rep { display: none; }
 }
 @media (max-width: 499px) {
+  html.music-on .topbar:not(.tall) { border-bottom: 1px solid var(--line); }
   html.music-on .center { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
   html.music-on .mu-dock { bottom: calc(53px + env(safe-area-inset-bottom)); }
   html.music-on .fab { bottom: calc(128px + env(safe-area-inset-bottom)); }
