@@ -2099,6 +2099,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
 }
 #new-posts[hidden] { display: none; }
+html.tv-on #new-posts { display: none; }
 .pill-faces { display: inline-flex; align-items: center; }
 .pill-ava {
   width: 26px;

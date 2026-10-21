@@ -7919,6 +7919,7 @@
     STATE.headerHidden = false;
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
+    showPill(pendingPillPosts());
     render({
       y: y,
       done: () => {
@@ -8021,12 +8022,27 @@
 
   const LIVE_REFRESH_MS = 2 * 60 * 1000;
 
+  function pendingPillPosts() {
+    const live = (STATE.pendingLive || []).filter(Boolean);
+    const doc = STATE.pendingFeed;
+    if (!doc || !Array.isArray(doc.posts)) return live;
+    const current = {};
+    ((STATE.data && STATE.data.posts) || []).forEach((post) => {
+      if (!post) return;
+      current[canonicalPostId(post)] = true;
+      if (post.id) current[String(post.id)] = true;
+    });
+    const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !current[String(post.id || "")]);
+    return added.concat(live);
+  }
+
   function showPill(posts) {
     const el = document.getElementById("new-posts");
     if (!el) return;
     const route = parseRoute();
     let list = Array.isArray(posts) ? posts.filter(Boolean) : [];
-    if (route.name === "home") list = list.filter((post) => homeShows(post, route));
+    if (route.name !== "home") { el.hidden = true; return; }
+    list = list.filter((post) => homeShows(post, route));
     if (!list.length) { el.hidden = true; return; }
     const faces = [];
     const seen = {};
@@ -8817,6 +8833,7 @@
       if (STATE.settings && STATE.settings.appearance === "auto") applyTheme();
     });
     document.getElementById("new-posts").addEventListener("click", () => {
+      if (parseRoute().name !== "home") { showPill(pendingPillPosts()); return; }
       const pending = STATE.pendingLive || [];
       if (!STATE.pendingFeed && !pending.length) { showPill([]); return; }
       if (STATE.pendingFeed) {

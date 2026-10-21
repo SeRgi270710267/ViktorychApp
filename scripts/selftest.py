@@ -826,9 +826,11 @@ def main() -> None:
     check(page.index('src="translate.js"') < page.index('src="app.js"') and 'href="translate.css"' in page, "the page loads the translator before the app")
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "bridge-tv1-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "home-pill-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "bridge-tv1-__SW_VERSION__" in worker, "the service worker precaches the TV shell and bumps its cache stamp")
+    check("tv.js" in worker and "tv.css" in worker and "home-pill-__SW_VERSION__" in worker, "the service worker precaches the TV shell and bumps its cache stamp")
+    pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
+    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")

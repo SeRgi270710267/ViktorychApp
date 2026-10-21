@@ -1,5 +1,5 @@
-/* Feeds service worker. Cache names are bridge-tv1- plus the deploy SHA. */
-const VERSION = "bridge-tv1-__SW_VERSION__";
+/* Feeds service worker. Cache names are home-pill- plus the deploy SHA. */
+const VERSION = "home-pill-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
