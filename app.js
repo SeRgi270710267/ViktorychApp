@@ -87,7 +87,12 @@
     scrolled: false,
     autoEl: null,
     subsHover: null,
-    handoff: false
+    handoff: false,
+    translated: {},
+    originalShown: {},
+    translateText: {},
+    lang: {},
+    langWait: {}
   };
   let previewAnchor = 0;
   const SCROLLS = {};
@@ -643,12 +648,122 @@
   }
 
   function textHtml(post, key, full) {
+    const translated = STATE.translated[key];
+    if (translated && !STATE.originalShown[key]) {
+      return linkify(translated, [], post.platform) + ` <button class="show-more" data-act="show-original" data-key="${esc(key)}">Show original</button>`;
+    }
     const text = post.text || "";
     if (full || STATE.expanded[key] || text.length <= 280) return linkify(text, post.links, post.platform);
     let cut = text.slice(0, 280);
     const sp = cut.lastIndexOf(" ");
     if (sp > 220) cut = cut.slice(0, sp);
     return linkify(cut, post.links, post.platform) + ` <button class="show-more" data-act="more" data-key="${esc(key)}">Show more</button>`;
+  }
+
+  function readerLanguage() {
+    return String(navigator.language || "en").toLowerCase().slice(0, 2) || "en";
+  }
+
+  function foreignScript(text) {
+    const sample = String(text || "");
+    const latin = (sample.match(/[A-Za-z]/g) || []).length;
+    const other = (sample.match(/[\u0400-\u04FF\u0500-\u052F\u0590-\u05FF\u0600-\u06FF\u0370-\u03FF\u0E00-\u0E7F\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]/g) || []).length;
+    return other >= 8 && other > latin;
+  }
+
+  function offerTranslate(key, text) {
+    const sample = String(text || "").trim();
+    if (sample.length < 8) return false;
+    if (STATE.translated[key] && !STATE.originalShown[key]) return false;
+    const known = STATE.lang[key];
+    if (known === "yes") return true;
+    if (known === "no") return false;
+    return foreignScript(sample);
+  }
+
+  function textBlock(post, key, full, cls) {
+    const sample = String(post.text || "").trim().slice(0, 5000);
+    if (sample) STATE.translateText[key] = sample;
+    const offer = offerTranslate(key, sample)
+      ? `<button class="show-more translate-link" type="button" data-act="translate" data-key="${esc(key)}">Translate post</button>`
+      : "";
+    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${textHtml(post, key, full)}</div>${offer}`;
+  }
+
+  function scheduleDetect() {
+    if (typeof LanguageDetector === "undefined") return;
+    const rows = [];
+    const nodes = document.querySelectorAll("[data-tr]");
+    for (let i = 0; i < nodes.length && rows.length < 40; i++) {
+      const node = nodes[i];
+      const key = node.dataset.tr;
+      if (!key || STATE.lang[key] || STATE.langWait[key]) continue;
+      const text = (node.innerText || "").trim();
+      if (text.length < 8) continue;
+      rows.push({ key: key, text: text.slice(0, 2000) });
+    }
+    if (!rows.length) return;
+    rows.forEach((row) => { STATE.langWait[row.key] = true; });
+    const generation = (STATE.langGen = (STATE.langGen || 0) + 1);
+    detectLanguages(rows, generation);
+  }
+
+  async function detectLanguages(rows, generation) {
+    try {
+      if (!STATE.detector) STATE.detector = await LanguageDetector.create();
+      let changed = false;
+      const target = readerLanguage();
+      for (let i = 0; i < rows.length; i++) {
+        if (STATE.langGen !== generation) return;
+        const row = rows[i];
+        const found = await STATE.detector.detect(row.text);
+        const top = found && found[0];
+        const code = top && top.detectedLanguage ? String(top.detectedLanguage).toLowerCase().slice(0, 2) : "";
+        let decision = foreignScript(row.text) ? "yes" : "no";
+        if (top && top.confidence >= 0.6 && code) decision = code === target ? "no" : "yes";
+        const before = offerTranslate(row.key, row.text);
+        STATE.lang[row.key] = decision;
+        STATE.langWait[row.key] = false;
+        if (offerTranslate(row.key, row.text) !== before) changed = true;
+      }
+      if (changed && STATE.langGen === generation) render();
+    } catch (err) {
+      rows.forEach((row) => { STATE.langWait[row.key] = false; });
+    }
+  }
+
+  async function translateNow(key) {
+    const sample = String(STATE.translateText[key] || "").slice(0, 5000);
+    const target = readerLanguage();
+    if (!sample) return;
+    try {
+      if (typeof Translator !== "undefined" && typeof LanguageDetector !== "undefined") {
+        if (!STATE.detector) STATE.detector = await LanguageDetector.create();
+        const found = await STATE.detector.detect(sample);
+        const top = found && found[0];
+        const source = top && top.confidence >= 0.6 && top.detectedLanguage ? String(top.detectedLanguage).toLowerCase().slice(0, 2) : "";
+        if (source && source !== target) {
+          const availability = await Translator.availability({ sourceLanguage: source, targetLanguage: target });
+          if (availability && availability !== "unavailable") {
+            const pair = source + ":" + target;
+            STATE.translators = STATE.translators || {};
+            if (!STATE.translators[pair]) STATE.translators[pair] = await Translator.create({ sourceLanguage: source, targetLanguage: target });
+            const out = await STATE.translators[pair].translate(sample);
+            if (out && out !== sample) {
+              STATE.translated[key] = out;
+              STATE.originalShown[key] = false;
+              render();
+              return;
+            }
+          }
+        } else if (source && source === target) {
+          STATE.lang[key] = "no";
+          render();
+          return;
+        }
+      }
+    } catch (err) { /* the browser translator is optional */ }
+    window.open("https://translate.google.com/?sl=auto&tl=" + encodeURIComponent(target) + "&text=" + encodeURIComponent(sample) + "&op=translate", "_blank", "noopener,noreferrer");
   }
 
   function formatDur(value) {
@@ -3432,7 +3547,7 @@
             <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="More">${icon("more")}</button>
           </div>
           ${reply}
-          <div class="post-text">${textHtml(post, post.id, false)}</div>
+          ${textBlock(post, post.id, false)}
           ${pollHtml(post)}
           ${mediaHtml(post.media, eager, post)}
           ${quoteCard(post.quoted)}
@@ -4612,7 +4727,7 @@
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
     const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const body = `${replyLine}
-        <div class="status-text">${textHtml(post, post.id, true)}</div>
+        ${textBlock(post, post.id, true, "status-text")}
         ${pollHtml(post)}
         ${mediaHtml(post.media, false, post)}
         ${quoteCard(post.quoted)}
@@ -5260,7 +5375,7 @@
           <a class="time" data-act="stop" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
         </div>
         ${reply}
-        <div class="post-text">${textHtml(post, "anc:" + postKey(post), false)}</div>
+        ${textBlock(post, "anc:" + postKey(post), false)}
         ${mediaHtml(post.media, false, post)}
       </div>
     </article>`;
@@ -5475,6 +5590,7 @@
         if (center) center.classList.add("route-in");
       }
       watchHydration();
+      scheduleDetect();
       syncMediaSession();
       bindPlayers();
       resumePlayback();
@@ -5535,6 +5651,12 @@
       if (tab === "foryou") location.hash = "#/";
       else if (tab === "following") location.hash = "#/following";
       else if (tab.startsWith("list:")) location.hash = "#/tab/" + tab.slice(5);
+      return;
+    }
+    if (act === "translate") { translateNow(el.dataset.key); return; }
+    if (act === "show-original") {
+      STATE.originalShown[el.dataset.key] = true;
+      render();
       return;
     }
     if (act === "follow-request") {

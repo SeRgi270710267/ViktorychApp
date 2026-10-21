@@ -393,6 +393,7 @@ img { max-width: 100%; }
   line-height: 20px;
 }
 .show-more:hover { text-decoration: underline; }
+.translate-link { display: block; margin-top: 4px; text-align: left; }
 
 .media {
   margin-top: 12px;
