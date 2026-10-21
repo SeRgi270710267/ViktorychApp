@@ -1972,8 +1972,11 @@
     const junk = all.filter((reply) => reply.spam && isDirect(post, reply));
     const pool = ui.spam ? clean.concat(junk) : clean;
     let directs = pool.filter((reply) => isDirect(post, reply));
-    if (STATE.replySort === "latest") directs = directs.slice().sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")) || fxEngagement(b) - fxEngagement(a));
-    const shown = orderReplies(post, directs);
+    const sort = replySortMode();
+    let shown;
+    if (sort === "recent") shown = directs.slice().sort(byRecent);
+    else if (sort === "liked") shown = directs.slice().sort(byLikes);
+    else shown = orderReplies(post, directs);
     return { loading: false, shown: shown, pool: clean, more: false, spam: !ui.spam && junk.length > 0, missing: false };
   }
 
@@ -2036,10 +2039,27 @@
     return "Updated " + mins + " min ago";
   }
 
+  function replySortMode() {
+    return STATE.replySort === "recent" || STATE.replySort === "liked" ? STATE.replySort : "relevant";
+  }
+
+  function byRecent(a, b) {
+    return String(b.date || "").localeCompare(String(a.date || "")) || fxNum((b.stats || {}).likes) - fxNum((a.stats || {}).likes);
+  }
+
+  function byLikes(a, b) {
+    return fxNum((b.stats || {}).likes) - fxNum((a.stats || {}).likes) || String(b.date || "").localeCompare(String(a.date || ""));
+  }
+
+  function replySortTabs() {
+    const sort = replySortMode();
+    const tab = (id, label) => `<button class="tab${sort === id ? " on" : ""}" type="button" data-act="reply-sort" data-sort="${id}" role="tab" aria-selected="${sort === id ? "true" : "false"}"><span>${label}</span></button>`;
+    return `<div class="tabs reply-tabs" role="tablist">${tab("relevant", "Relevant")}${tab("recent", "Recent")}${tab("liked", "Liked")}</div>`;
+  }
+
   function replyTools(post) {
     const bucket = STATE.replies[postKey(post)] || {};
-    const sort = STATE.replySort === "latest" ? "latest" : "relevant";
-    return `<div class="reply-tools"><span class="reply-fresh">${esc(freshLabel(bucket.fetchedAt))}</span><div class="sorts"><button class="${sort === "relevant" ? "on" : ""}" type="button" data-act="reply-sort" data-sort="relevant">Relevant</button><button class="${sort === "latest" ? "on" : ""}" type="button" data-act="reply-sort" data-sort="latest">Latest</button></div></div>`;
+    return `<div class="reply-tools"><span class="reply-fresh">${esc(freshLabel(bucket.fetchedAt))}</span></div>${replySortTabs()}`;
   }
 
   function replyList(post) {
@@ -2803,17 +2823,32 @@
     const desc = post.description && post.description !== (post.title || post.text) ? post.description : "";
     const openDesc = !!STATE.expanded["desc:" + id];
     const bucket = watchComments(post);
-    const sort = STATE.commentSort[id] === "new" ? "new" : "top";
+    const sort = replySortMode();
     let comments = "";
     if (bucket.loading) comments = `<div class="reply-empty">Loading comments…</div>`;
     else if (bucket.missing || !bucket.doc) comments = `<div class="reply-empty">Comments aren’t available for this video.</div>`;
     else {
-      const rows = sort === "new" && bucket.doc.newest && bucket.doc.newest.length ? bucket.doc.newest : (bucket.doc.replies || []).slice();
-      if (sort === "new" && !(bucket.doc.newest && bucket.doc.newest.length)) rows.sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+      const top = (bucket.doc.replies || []).slice();
+      const newest = (bucket.doc.newest || []).slice();
+      let rows = top;
+      if (sort === "recent") {
+        rows = newest.length ? newest.slice() : top.slice();
+        if (!newest.length) rows.sort(byRecent);
+      } else if (sort === "liked") {
+        const seen = {};
+        rows = [];
+        top.concat(newest).forEach((row) => {
+          const key = postKey(row);
+          if (!key || seen[key]) return;
+          seen[key] = true;
+          rows.push(row);
+        });
+        rows.sort(byLikes);
+      }
       const total = bucket.doc.commentCount != null ? bucket.doc.commentCount : rows.length;
       const stamped = bucket.fetchedAt || (bucket.doc && bucket.doc.fetchedAt);
       comments = (rows.length ? rows.map(ytComment).join("") : `<div class="reply-empty">No comments yet.</div>`);
-      comments = `<h3>${esc(formatCount(total) || "0")} Comments</h3><div class="reply-tools"><span class="reply-fresh">${esc(freshLabel(stamped))}</span><div class="sorts"><button class="${sort === "top" ? "on" : ""}" type="button" data-act="comment-sort" data-id="${esc(id)}" data-sort="top">Top</button><button class="${sort === "new" ? "on" : ""}" type="button" data-act="comment-sort" data-id="${esc(id)}" data-sort="new">Newest</button></div></div>${comments}`;
+      comments = `<h3>${esc(formatCount(total) || "0")} Comments</h3><div class="reply-tools"><span class="reply-fresh">${esc(freshLabel(stamped))}</span></div>${replySortTabs()}${comments}`;
     }
     const up = posts().filter((item) => isVideoPost(item) && followedPost(item) && postKey(item) !== id).sort(byStamp).slice(0, 16);
     const upHtml = up.length ? `<aside class="upnext"><h2>Up next</h2>${up.map((item) => {
@@ -3261,13 +3296,9 @@
       render();
       return;
     }
-    if (act === "comment-sort") {
-      STATE.commentSort[el.dataset.id] = el.dataset.sort === "new" ? "new" : "top";
-      render();
-      return;
-    }
     if (act === "reply-sort") {
-      STATE.replySort = el.dataset.sort === "latest" ? "latest" : "relevant";
+      const next = el.dataset.sort;
+      STATE.replySort = next === "recent" || next === "liked" ? next : "relevant";
       render();
       return;
     }

@@ -771,8 +771,7 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 .reply-tools {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-end;
   padding: 8px 16px 0;
 }
 .reply-fresh {
@@ -780,7 +779,7 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
   font-size: 13px;
   line-height: 16px;
 }
-.reply-tools .sorts { margin: 0; flex: none; }
+.reply-tabs { position: static; }
 
 .reply-empty {
   color: var(--muted);
@@ -1374,9 +1373,6 @@ a.who-row:hover, .who-row:hover, .list-row:hover, .acct-row:hover { background: 
 .desc-body { white-space: pre-wrap; margin-top: 8px; }
 .watch-comments { margin-top: 24px; }
 .watch-comments h3 { margin: 0 0 12px; font-size: 16px; }
-.sorts { display: flex; gap: 8px; margin-bottom: 12px; }
-.sorts button { border: 0; background: transparent; color: var(--muted); border-radius: 999px; padding: 6px 12px; font-weight: 700; }
-.sorts button.on, .sorts button:hover { background: rgba(231, 233, 234, 0.1); color: var(--text); }
 .yt-c { display: flex; gap: 12px; padding: 10px 0; }
 .yt-c .ava, .yt-c .ava img { width: 40px; height: 40px; }
 .yt-c-main { min-width: 0; }
