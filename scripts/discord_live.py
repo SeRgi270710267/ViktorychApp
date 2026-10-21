@@ -4,9 +4,11 @@
 Read-only. One process stays under 5 hours 50 minutes. It GETs
 ``/channels/<id>/messages`` and nothing else that would write, join, or type.
 Busy channels are checked about every 10–15 seconds, quiet ones every 2–5
-minutes, and requests are at least 1.5 seconds apart. A channel 403 is
-recorded as inaccessible. A 401, a captcha, a verification challenge, or any
-other 403 stops the process. New messages go to the server's ntfy topic as
+minutes, and requests are at least 1.5 seconds apart. A 403 on a channel this
+account cannot see is recorded as inaccessible and does not stop the process.
+A 401, a captcha, a verification challenge, or a 403 on the guild read stops
+the process and opens one GitHub issue. A later guild read closes that issue.
+New messages go to the server's ntfy topic as
 JSON the Messages page already accepts. About every 10 minutes the newest
 history per channel is written under discord/ and deployed with the site.
 
@@ -34,6 +36,7 @@ from adapters.discord import (  # noqa: E402
     MENTION_CHANNEL,
     MENTION_ROLE,
     MENTION_USER,
+    QUIET_CHANNELS,
     Client,
     DiscordStop,
     _mirror_published,
@@ -495,6 +498,8 @@ def run(root: Path, server: dict, token: str) -> int:
         icon, members, online = header(client, server)
     except DiscordStop:
         raise
+    if client.last_status == 200:
+        _account_issue(False, "")
     print(f"[discord-live] {server['name']} {len(server['channels'])} channels")
     started = time.monotonic()
     deadline = started + RUN_LIMIT
@@ -621,6 +626,8 @@ def write_status(root: Path, server: dict | None, status: str, detail: str, toke
             entry = {"id": channel["id"], "name": channel["name"], "mode": "messages", "file": f"discord/messages/{channel['id']}.json"}
             if channel.get("category"):
                 entry["category"] = channel["category"]
+            if channel["id"] in QUIET_CHANNELS:
+                entry["inaccessible"] = True
             channels.append(entry)
     payload = {
         "fetchedAt": iso_now(),
@@ -662,7 +669,18 @@ def main() -> int:
         print("[discord-live] " + exc.text)
         write_status(ROOT, server, exc.reason, exc.text, token)
         deploy(ROOT, token)
+        if exc.reason in ("unauthorized", "forbidden", "captcha", "verification"):
+            _account_issue(True, exc.text)
         return 0
+
+
+def _account_issue(paused: bool, reason: str) -> None:
+    try:
+        import discord_alert
+
+        discord_alert.mark(paused, reason)
+    except Exception:
+        print("[discord] could not update the account issue")
 
 
 if __name__ == "__main__":

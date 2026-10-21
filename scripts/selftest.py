@@ -878,16 +878,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "discord-live1-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "discord-servers1-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "discord-live1-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "discord-servers1-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "discord-live1-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "discord-servers1-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
@@ -1088,6 +1088,21 @@ def main() -> None:
     check(sync_health.plan(stale, [{"number": 7, "title": "Sync problem", "body": same_body}])["action"] == "none", "the same problem does not edit the issue")
     check(sync_health.plan(stale, [{"number": 7, "title": "Sync problem", "body": "The sync is not healthy.\n\n- something else\n"}])["action"] == "edit", "a changed problem edits the same issue")
     check(sync_health.plan(stale, [{"number": 3, "title": "Follow request: x nasa", "body": ""}])["action"] == "open", "a follow request is not the sync problem issue")
+    import discord_alert
+
+    stopped = discord_alert.SENTENCES["unauthorized"]
+    secret = "super-secret-discord-token"
+    check(discord_alert.safe_reason(stopped) == stopped and secret not in discord_alert.safe_reason("401 " + secret) and secret not in discord_alert.body_for("captcha " + secret, "https://example.test/run"), "the account issue uses a fixed sentence and drops the token")
+    opened = {"number": 4, "title": "Discord account needs attention", "body": discord_alert.body_for(stopped, "https://example.test/run")}
+    check(discord_alert.plan(True, stopped, [])["action"] == "open", "the first account failure opens one issue")
+    same = discord_alert.plan(True, stopped, [opened, {"number": 9, "title": "Discord account needs attention", "body": "dup"}])
+    check(same["action"] == "none" and same["extra"] == [9], "the same account issue is kept and a duplicate is closed")
+    check(discord_alert.plan(True, discord_alert.SENTENCES["captcha"], [opened])["action"] == "edit", "a new account failure updates the same issue")
+    check(discord_alert.plan(False, "", [opened])["action"] == "close" and discord_alert.plan(False, "", [])["action"] == "none", "a guild read that works again closes the account issue")
+    check(discord_alert.attention({"feeds": [{"id": "discord", "detail": stopped}]}) == ("paused", stopped), "an account stop in the sync report pauses Discord")
+    check(discord_alert.attention({"feeds": [{"id": "discord", "ok": "2026-10-21T00:00:00Z", "detail": ""}]}) == ("ok", ""), "a clean Discord row closes the account issue")
+    check(discord_alert.attention({"feeds": [{"id": "discord", "ok": "2026-10-21T00:00:00Z", "detail": "Discord rejected the bot token. Discord sync stopped for this run and will not retry."}]})[0] == "unknown", "a rejected bot token is not the user account issue")
+    check("issues: write" in (ROOT / ".github" / "workflows" / "discord-live.yml").read_text(encoding="utf-8"), "the live workflow can update the account issue")
     workflow_text = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy]" in workflow_text, "the sync uploads a report and keeps one problem issue")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "saveData" in app and "are not Never" in app and "threshold: [0, 0.6, 1]" in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app and "function scheduleIdleReload(" in app and 'box.id = "autoplay-debug"' in app and "function xRefresh(" in app and "onReady" in app and "reload-armed" in app, "one in-view video previews muted, a miss is explained, and an update reloads when idle")
@@ -2124,6 +2139,63 @@ def discord_checks() -> None:
             verify_result = merge_discord(verify_doc, stop_config, both_root / "verify", [], token="", user_token=account_token, transport=verify_transport, sleep=lambda _seconds: None, clock=lambda: 0, remote=False)
         check(verify_result["reason"] == "verification" and "verification" in verify_log.getvalue().lower(), "a verification challenge stops Discord")
 
+        guild_calls = []
+
+        def guild_block(url, headers):
+            guild_calls.append(url)
+            if "widget.json" in url:
+                return 200, {}, b"{}"
+            if "/guilds/" in url:
+                return 403, {}, ('{"message":"Missing Access","code":50001,"token":"%s"}' % account_token).encode()
+            raise AssertionError("a later read happened after a guild 403")
+
+        guild_doc = {"posts": [], "feeds": []}
+        guild_log = io.StringIO()
+        with contextlib.redirect_stdout(guild_log):
+            guild_result = merge_discord(guild_doc, stop_config, both_root / "guild403", [], token="", user_token=account_token, transport=guild_block, sleep=lambda _seconds: None, clock=lambda: 0, remote=False)
+        guild_index = json.loads((both_root / "guild403" / "discord" / "index.json").read_text(encoding="utf-8"))
+        guild_text = guild_log.getvalue() + json.dumps(guild_index)
+        check(guild_result.get("stopped") is True and guild_result.get("reason") == "forbidden" and guild_index.get("status") == "forbidden" and guild_index.get("detail", "").startswith("Discord returned 403") and account_token not in guild_text, "a guild 403 stops Discord and writes a paused index without the token")
+        check(all("/channels/" not in url for url in guild_calls), "a guild 403 does not read channels")
+
+        quiet_calls = []
+        quiet_id = "1540408515661926501"
+
+        def quiet_block(url, headers):
+            quiet_calls.append(url)
+            if "widget.json" in url:
+                return 200, {}, b"{}"
+            if "/guilds/" in url:
+                return 200, {}, json.dumps({"id": user_guild, "name": "Joined"}).encode()
+            if quiet_id in url:
+                return 403, {}, ('{"message":"nope","code":20016,"token":"%s"}' % account_token).encode()
+            if blocked in url and "/messages" in url:
+                return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([
+                    {"id": later_id, "channel_id": blocked, "type": 0, "content": "after quiet", "timestamp": "2024-05-02T00:00:00.000Z", "author": {"id": ada_id, "username": "ada", "global_name": "Ada"}}
+                ]).encode()
+            raise AssertionError(url)
+
+        quiet_config = {
+            "cap": 50,
+            "discord": [{
+                "id": user_guild,
+                "name": "Joined Server",
+                "auth": "user",
+                "channels": [
+                    {"id": quiet_id, "name": "boosters-chat", "mode": "messages"},
+                    {"id": blocked, "name": "later", "mode": "messages"},
+                ],
+            }],
+        }
+        quiet_doc = {"posts": [], "feeds": []}
+        quiet_log = io.StringIO()
+        with contextlib.redirect_stdout(quiet_log):
+            quiet_result = merge_discord(quiet_doc, quiet_config, both_root / "quiet403", [], token="", user_token=account_token, transport=quiet_block, sleep=lambda _seconds: None, clock=lambda: 0, remote=False)
+        quiet_index = json.loads((both_root / "quiet403" / "discord" / "index.json").read_text(encoding="utf-8"))
+        quiet_channels = quiet_index["servers"][0]["channels"]
+        quiet_row = next(item for item in quiet_channels if item["id"] == quiet_id)
+        check(quiet_result.get("stopped") is not True and any(blocked in url for url in quiet_calls) and quiet_row.get("inaccessible") is True and "will not retry" not in quiet_doc["sourceHealth"]["discord"].get("detail", "") and account_token not in quiet_log.getvalue(), "a 403 on a known-unreadable channel does not stop Discord")
+
     window_guild = "300000000000000001"
     window_channel = "300000000000000010"
     window_new = "300000000000000104"
@@ -2227,6 +2299,33 @@ if (D._ids(general).length) throw new Error("deleted");
 const page = D.page({ name: "messages", channel: general, query: new URLSearchParams("fixture=1") });
 if (!page.includes("Read-only channel") || !page.includes("general-chat") || !page.includes("peer-help") || !page.includes("dmsg-embed") || !page.includes("dmsg-rx")) throw new Error("page");
 if (page.includes("<script>")) throw new Error("page xss");
+if (!page.includes("Discord Town Hall") || !page.includes('aria-expanded="false"') || page.includes("dmsgs-srv open")) throw new Error("collapsed server");
+if (!page.includes("dmsgs-chev")) throw new Error("chevron");
+D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: ["169256939211980800"], pinnedChannels: ["889950993352110160"], mutedServers: [], mutedChannels: [] });
+const expanded = D.page({ name: "messages", channel: "169256939211980800", query: new URLSearchParams("fixture=1") });
+if (!expanded.includes('aria-expanded="true"') || !expanded.includes("dmsgs-srv open") || !expanded.includes('aria-pressed="true"')) throw new Error("expanded");
+const peerAt = expanded.indexOf('data-ch="889950993352110160"');
+const generalAt = expanded.indexOf('data-ch="169256939211980800"');
+if (peerAt < 0 || generalAt < 0 || peerAt > generalAt) throw new Error("pinned channel order");
+D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: ["169256939211980800"], mutedChannels: [] });
+const muted = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
+if (!muted.includes("dmsgs-srv open muted") || muted.includes("dmsgs-badge")) throw new Error("muted server " + (muted.includes("dmsgs-badge") ? "badge" : "class"));
+D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: ["889950993352110160"] });
+const partial = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
+if (!partial.includes('aria-label="1 unread"')) throw new Error("badge " + (partial.match(/aria-label="\\d+ unread"/) || []).join(","));
+D._setServers([
+  { id: "111111111111111111", name: "Alpha Guild", channels: [{ id: "111111111111111112", name: "alpha-room", mode: "messages" }] },
+  { id: "222222222222222222", name: "Beta Guild", channels: [{ id: "222222222222222223", name: "beta-room", mode: "messages" }] }
+]);
+D._setPrefs({ expanded: {}, pinnedServers: ["222222222222222222"], pinnedChannels: [], mutedServers: [], mutedChannels: [] });
+const ordered = D.page({ name: "messages", query: new URLSearchParams() });
+if (ordered.indexOf("Beta Guild") < 0 || ordered.indexOf("Beta Guild") > ordered.indexOf("Alpha Guild")) throw new Error("pinned server order");
+D._applyIndex({ status: "forbidden", detail: "raw secret body", servers: [] });
+const paused = D.page({ name: "messages", query: new URLSearchParams() });
+if (!paused.includes("Discord paused") || paused.includes("raw secret body")) throw new Error("paused");
+D._applyIndex({ status: "ok", servers: [] });
+const resumed = D.page({ name: "messages", query: new URLSearchParams() });
+if (resumed.includes("Discord paused")) throw new Error("resumed");
 """],
         cwd=ROOT,
         capture_output=True,

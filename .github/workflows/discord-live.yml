@@ -25,6 +25,7 @@ permissions:
   pages: write
   id-token: write
   actions: read
+  issues: write
 
 jobs:
   live:
@@ -52,6 +53,9 @@ jobs:
         env:
           DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           NODE_PATH: ${{ runner.temp }}/discord-live/node_modules
         run: |
           if [ -n "${DISCORD_USER_TOKEN:-}" ]; then

@@ -172,6 +172,16 @@ def main() -> int:
     decision = plan(lines, _list_open(repo))
     apply(decision, lines, run_url, repo)
     print(decision.get("action"))
+    try:
+        import discord_alert
+
+        kind, reason = discord_alert.attention(report)
+        if kind == "paused":
+            discord_alert.mark(True, reason)
+        elif kind == "ok":
+            discord_alert.mark(False, "")
+    except Exception:
+        print("[discord] could not update the account issue")
     return 0
 
 

@@ -10,9 +10,10 @@ User-token calls are read-only GETs: channel messages, one channel, one guild
 or its preview, and the public widget. They wait at least 1.5 seconds between
 requests, ask for a short page, and continue from the stored snowflake. A
 401, a captcha, or a verification challenge stops Discord for the run. A 403
-on one channel means that channel is not visible: it is skipped, and the
-other channels are still read. Rate-limit headers and HTTP 429 Retry-After
-are waited out, not ignored.
+on the guild read stops it too. A 403 on one channel means that channel is
+not visible: it is skipped, and the other channels are still read. Channels
+this guest cannot see are never an account failure. Rate-limit headers and
+HTTP 429 Retry-After are waited out, not ignored.
 
 Public ``widget.json`` and invite lookups fill the server header when the
 server exposes them. ``GET /guilds/{id}?with_counts=true`` fills an icon or
@@ -46,6 +47,15 @@ SNOWFLAKE = re.compile(r"^\d{1,22}$")
 INVITE_CODE = re.compile(r"^[A-Za-z0-9-]{2,32}$")
 PUBLISHED = re.compile(r"discord/(?:index|state|messages/\d{1,22})\.json$")
 USER_GET = re.compile(r"^/api/v10/(?:channels/\d{1,22}(?:/messages)?|guilds/\d{1,22}(?:/preview)?)$")
+CHANNEL_IN_PATH = re.compile(r"/channels/(\d{1,22})(?:/|$)")
+GUILD_READ = re.compile(r"/guilds/\d{1,22}(?:/preview)?$")
+# These channels 403 for this guest. That is not an account failure.
+QUIET_CHANNELS = frozenset({
+    "1218290760126828544",  # wfs-general
+    "1540408515661926501",  # boosters-chat
+    "1544030558017818644",  # boosters-apps
+    "1544031346077339790",  # fun-apps
+})
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".m4v"}
 USER_MESSAGE = {0, 19, 20, 23}
@@ -242,6 +252,19 @@ def channel_denied(status: int, body) -> bool:
 def user_get_allowed(url: str) -> bool:
     path = urllib.parse.urlparse(url).path or ""
     return bool(USER_GET.match(path))
+
+
+def channel_in_url(url: str) -> str:
+    match = CHANNEL_IN_PATH.search(urllib.parse.urlparse(url).path or "")
+    return match.group(1) if match else ""
+
+
+def guild_read(url: str) -> bool:
+    return bool(GUILD_READ.search(urllib.parse.urlparse(url).path or ""))
+
+
+def quiet_channel(url: str) -> bool:
+    return channel_in_url(url) in QUIET_CHANNELS
 
 
 def _positive(value):
@@ -876,7 +899,9 @@ class Client:
             block = account_block(status, body) if auth else ""
             if block in ("captcha", "verification"):
                 raise DiscordStop(block)
-            if self.auth_mode == "user" and status == 403 and channel_denied(status, body):
+            if self.auth_mode == "user" and status == 403 and quiet_channel(url):
+                return None
+            if self.auth_mode == "user" and status == 403 and channel_denied(status, body) and not guild_read(url):
                 return None
             if self.auth_mode == "user" and block in ("unauthorized", "forbidden"):
                 raise DiscordStop(block)
@@ -1373,6 +1398,72 @@ def _iso_now(now) -> str:
     return now.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+ACCOUNT_REASONS = ("unauthorized", "forbidden", "captcha", "verification")
+
+
+def _mark_quiet(servers) -> list:
+    marked = []
+    for server in servers or []:
+        if not isinstance(server, dict):
+            continue
+        channels = []
+        for channel in server.get("channels") or []:
+            if not isinstance(channel, dict):
+                continue
+            row = dict(channel)
+            if str(row.get("id") or "") in QUIET_CHANNELS:
+                row["inaccessible"] = True
+            channels.append(row)
+        copy = dict(server)
+        copy["channels"] = channels
+        marked.append(copy)
+    return marked
+
+
+def _configured_index(servers) -> list:
+    rows = []
+    for server in servers or []:
+        channels = []
+        for channel in server.get("channels") or []:
+            entry = {"id": channel["id"], "mode": channel["mode"]}
+            if channel.get("name"):
+                entry["name"] = channel["name"]
+            if channel.get("category"):
+                entry["category"] = channel["category"]
+            if channel["mode"] == "messages":
+                entry["file"] = f"discord/messages/{channel['id']}.json"
+            channels.append(entry)
+        rows.append(
+            {
+                "id": server["id"],
+                "name": server.get("name") or server["id"],
+                "handle": server["id"],
+                "auth": server.get("auth") or "",
+                "channels": channels,
+            }
+        )
+    return rows
+
+
+def _write_paused_index(root: Path, stopped: DiscordStop, index_servers, configured, secrets, now) -> None:
+    """Publish a paused index. The detail is a fixed sentence, never a response body."""
+    servers = index_servers
+    if not servers:
+        previous = _load_json(root / "discord" / "index.json")
+        if isinstance(previous, dict) and isinstance(previous.get("servers"), list) and previous["servers"]:
+            servers = previous["servers"]
+        else:
+            servers = _configured_index(configured)
+    reason = stopped.reason if stopped.reason in ACCOUNT_REASONS or stopped.reason == "rate-limit" else "forbidden"
+    payload = {
+        "fetchedAt": _iso_now(now),
+        "status": reason,
+        "detail": DiscordStop(stopped.reason).text,
+        "servers": _mark_quiet(servers),
+    }
+    _write_json(root / "discord" / "index.json", payload, secrets)
+
+
 def _note_health(doc: dict, ok: bool, detail: str, now) -> None:
     health = doc.get("sourceHealth")
     if not isinstance(health, dict):
@@ -1523,6 +1614,7 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
                         print(f"[discord] channel {channel['id']}: DISCORD_USER_TOKEN is not set")
                     else:
                         print(f"[discord] channel {channel['id']}: not readable")
+                    entry["inaccessible"] = True
                     index_channels.append(entry)
                     continue
                 cursor = _cursor(
@@ -1543,6 +1635,8 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
                 except Exception as exc:
                     print(public_error(exc))
                     messages = None
+                if messages is None:
+                    entry["inaccessible"] = True
                 if channel["mode"] == "messages":
                     if messages is None:
                         if previous_file:
@@ -1599,6 +1693,7 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
     except DiscordStop as stopped:
         print("[discord] " + stopped.text)
         _note_health(doc, False, stopped.text, now)
+        _write_paused_index(root, stopped, index_servers, servers, secrets, now)
         _apply_posts(doc, all_posts, previous_posts or [], feed_ids, cap)
         if profiles:
             doc["feeds"] = merge_profiles(doc.get("feeds") or [], profiles)

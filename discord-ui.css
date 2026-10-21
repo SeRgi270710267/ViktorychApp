@@ -73,6 +73,98 @@
 .dmsgs-server-copy { display: flex; flex-direction: column; min-width: 0; line-height: 20px; }
 .dmsgs-server-copy b { font-size: 15px; }
 .dmsgs-server-copy span { color: var(--muted); font-size: 13px; }
+.dmsgs-srv-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 4px;
+  border-radius: 16px;
+}
+.dmsgs-srv-row:hover { background: var(--hover-soft); }
+.dmsgs-srv-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 10px 4px 10px 6px;
+  cursor: pointer;
+}
+.dmsgs-chev { width: 16px; flex: none; }
+.dmsgs-chev svg { width: 16px; height: 16px; fill: var(--muted); display: block; transition: transform .15s ease; }
+.dmsgs-srv.open .dmsgs-chev svg { transform: rotate(90deg); }
+.dmsgs-srv-ico,
+.dmsgs-srv-ico img {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  flex: none;
+  object-fit: cover;
+}
+.dmsgs-srv-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #5865f2;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  overflow: hidden;
+}
+.dmsgs-srv-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 20px; }
+.dmsgs-srv-top { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.dmsgs-srv-top b { font-size: 15px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dmsgs-srv-top time { margin-left: auto; color: var(--muted); font-size: 13px; font-weight: 400; flex: none; }
+.dmsgs-srv-preview { color: var(--muted); font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dmsgs-badge {
+  min-width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 700;
+  text-align: center;
+  flex: none;
+}
+.dmsgs-srv.muted .dmsgs-srv-copy,
+.dmsgs-srv.muted .dmsgs-srv-ico,
+.dmsgs-ch-row.muted .dmsgs-ch { opacity: 0.45; }
+.dmsgs-srv.muted .dmsgs-badge { display: none; }
+.dmsgs-iconbtn {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+  flex: none;
+}
+.dmsgs-iconbtn svg { width: 16px; height: 16px; fill: currentColor; display: block; margin: 0 auto; }
+.dmsgs-iconbtn.on { color: var(--blue); }
+.dmsgs-iconbtn:hover { background: var(--hover); color: var(--text); }
+.dmsgs-sub { padding-bottom: 4px; }
+.dmsgs-srv:not(.open) .dmsgs-sub { display: none; }
+.dmsgs-channels.is-filtering .dmsgs-sub { display: block; }
+.dmsgs-ch-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 28px;
+  padding-right: 8px;
+}
+.dmsgs-ch-row .dmsgs-ch { flex: 1; min-width: 0; }
+.dmsgs-sub .dmsgs-cat { margin-left: 40px; }
 .dmsgs-channels {
   flex: 1;
   overflow: auto;
