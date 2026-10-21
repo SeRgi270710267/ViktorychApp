@@ -1102,7 +1102,7 @@ def retire_old(config: dict, state: dict, sleep=time.sleep) -> dict:
         if not _matches(urlopen, prev.get("url") or "", prev.get("digest") or ""):
             notes.append("[ia-backup] not deleting; a new copy failed the download check")
             return {"notes": notes, "deleted": 0}
-    if state.get("manifestUrl") and not _matches(urlopen, state.get("manifestUrl") or "", state.get("manifest") or ""):
+    if state.get("manifestUrl") and not _matches_soon(urlopen, state.get("manifestUrl") or "", state.get("manifest") or "", sleep):
         notes.append("[ia-backup] not deleting; the manifest copy failed the download check")
         return {"notes": notes, "deleted": 0}
     deleted = 0
