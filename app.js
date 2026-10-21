@@ -68,6 +68,7 @@
     drawer: false,
     headerHidden: false,
     confirm: null,
+    removeFeed: null,
     replies: {},
     liveUsers: {},
     replyUi: {},
@@ -5774,9 +5775,11 @@
 
   function accountRow(f, opts) {
     const remove = opts && opts.remove && f.configured
-      ? `<a class="remove-sync" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("unfollow", f.id))}">Remove</a>`
+      ? `<button type="button" class="follow remove-pill" data-act="ask-remove" data-id="${esc(f.id)}">Remove</button>`
       : "";
-    return `<div class="acct-row"><a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span></span></a>${followButtonClean(f.id)}${remove}</div>`;
+    const follow = followButtonClean(f.id);
+    const actions = remove ? `<span class="row-actions">${follow}${remove}</span>` : follow;
+    return `<div class="acct-row"><a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span></span></a>${actions}</div>`;
   }
 
   function feedsView() {
@@ -5913,7 +5916,19 @@
     </div></div>`;
   }
 
+  function removeFeedDialog() {
+    const pending = STATE.removeFeed;
+    if (!pending) return "";
+    const handle = String(pending.handle || "").replace(/^@/, "");
+    const title = handle ? "Remove @" + handle + "?" : "Remove this account?";
+    const body = handle
+      ? "@" + handle + " will be removed from the whole site, not just hidden from your feeds."
+      : "This account will be removed from the whole site, not just hidden from your feeds.";
+    return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">Remove</button><button type="button" class="remove-cancel" data-act="close-remove">Cancel</button></div></div>`;
+  }
+
   function modal() {
+    if (STATE.removeFeed) return removeFeedDialog();
     if (STATE.confirm) {
       return `<div class="modal-back"><div class="modal" role="dialog" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
         <div class="modal-body"><h2>Delete this List?</h2><p class="phandle">This can’t be undone.</p>
@@ -7104,7 +7119,22 @@
     if (act === "drawer") { STATE.drawer = true; render(); return; }
     if (act === "close-drawer") { STATE.drawer = false; render(); return; }
     if (act === "compose") { STATE.modal = "compose"; render(); return; }
-    if (act === "close-modal") { STATE.modal = null; STATE.confirm = null; render(); return; }
+    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.confirm = null; STATE.removeFeed = null; render(); return; }
+    if (act === "ask-remove") {
+      const id = el.dataset.id || "";
+      const feed = feedById(id);
+      STATE.removeFeed = { id: id, handle: (feed && feed.handle) || "" };
+      render();
+      return;
+    }
+    if (act === "confirm-remove") {
+      const pending = STATE.removeFeed;
+      const url = pending && pending.id ? followIssueUrlForId("unfollow", pending.id) : "";
+      STATE.removeFeed = null;
+      if (url) window.open(url, "_blank", "noopener,noreferrer");
+      render();
+      return;
+    }
     if (act === "compose-post") { STATE.modal = null; render(); toast("Posts come from your feeds"); return; }
     if (act === "close-tab-menu") {
       closeTabMenu();
@@ -7902,7 +7932,7 @@
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
-    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu)) {
+    if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed)) {
       STATE.modal = null;
       STATE.drawer = false;
       STATE.menu = null;
@@ -7911,6 +7941,7 @@
       STATE.tabMenu = null;
       STATE.bellMenu = null;
       STATE.confirm = null;
+      STATE.removeFeed = null;
       render();
     }
   });
