@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import base64
+import html as html_lib
 import json
 import os
 import sys
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -41,6 +43,7 @@ from adapters.x_replies import (  # noqa: E402
 )
 from meta_media import cdn_expiry, extract_cdn_urls, media_groups, needs_refresh  # noqa: E402
 from x_guard import assert_not_x_api, auth_cookie_header, conversation_search  # noqa: E402
+from share_pages import build as build_share_pages  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "scripts" / "fixtures"
@@ -702,6 +705,58 @@ def main() -> None:
     tab_menu_css = css[css.index(".menu.tab-menu"):css.index(".menu.tab-menu") + 1400]
     check("Manage tabs" in app and "Following options" in app and "Most recent" in app and "Popular" in app and "Scroll tabs left" in app and "followingSort" in app and "function syncTabArrows(" in app and "Unpin from Home" in app and "Edit list" in app and "list.sort" in app and "tabScrollRoute" in app and "top: auto !important" in tab_menu_css and "border-radius: 16px 16px 0 0" in tab_menu_css, "home tabs have a sort menu, a list menu, a manage button, and scroll arrows")
     check("pinned.slice" not in app and "lists.slice(0," not in app, "pinned home tabs are not capped")
+    check("function sharePostUrl(" in app and "function shareProfileUrl(" in app and "isn’t in the published snapshot" in app and 's/watch-"' in app and 's/" + (post.platform' in app and "function notePublished(" in app and "PUBLISHED.posts" in app, "share and copy use the static preview pages, and a live post outside the snapshot does not")
+    check('og:image" content="https://owner-account.github.io/rss-feeds/icons/icon-512.png"' in page and 'rel="canonical"' in page and 'og:site_name" content="Feeds"' in page, "the home page has Open Graph tags and the Feeds icon")
+    check("function shellDocument(" in worker and "/\\/(?:s|u)\\/" in worker, "a share-page navigation does not replace the cached app shell")
+    check("python3 scripts/share_pages.py --site _site" in workflow, "the deploy rebuilds share pages inside the artifact")
+    with tempfile.TemporaryDirectory() as share_dir:
+        share_root = Path(share_dir)
+        (share_root / "feeds.json").write_text(json.dumps({
+            "feeds": [{"platform": "x", "handle": "ada", "name": "Ada <script>", "avatar": "https://pbs.twimg.com/profile_images/a_400x400.jpg", "bio": "Hello & welcome"}],
+            "posts": [
+                {"platform": "x", "id": "100", "statusId": "100", "handle": "ada", "author": "Ada <script>", "text": "A <b>post</b> " + ("word " * 80), "url": "https://x.com/ada/status/100", "media": [{"type": "photo", "url": "https://pbs.twimg.com/media/abc.jpg?name=small", "width": 680, "height": 400}]},
+                {"platform": "youtube", "id": "abcdefghijk", "statusId": "abcdefghijk", "handle": "Chan", "author": "Chan", "title": "Watch me", "text": "", "url": "https://www.youtube.com/watch?v=abcdefghijk", "media": [{"type": "video", "url": "https://www.youtube.com/embed/abcdefghijk", "poster": "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", "width": 480, "height": 360}]},
+                {"platform": "instagram", "id": "https://www.instagram.com/p/AbC123/", "statusId": "https://www.instagram.com/p/AbC123/", "handle": "ada", "author": "Ada", "text": "photo", "url": "https://www.instagram.com/p/AbC123/"},
+            ],
+        }), encoding="utf-8")
+        archive = share_root / "archive"
+        archive.mkdir()
+        (archive / "2026-01.json").write_text(json.dumps([
+            {"p": "x", "id": "100", "h": "ada", "t": "should not replace the full post"},
+            {"p": "x", "id": "stub1", "h": "ada", "t": "old <i>note</i>"},
+        ]), encoding="utf-8")
+        (share_root / "s").mkdir()
+        (share_root / "s" / "stale.html").write_text("old", encoding="utf-8")
+        counts = build_share_pages(
+            share_root,
+            "https://owner-account.github.io/rss-feeds/",
+            thumb_probe=lambda url: "maxresdefault.jpg" in url,
+        )
+        post_html = (share_root / "s" / "x-100.html").read_text(encoding="utf-8")
+        watch_html = (share_root / "s" / "watch-abcdefghijk.html").read_text(encoding="utf-8")
+        ig_html = (share_root / "s" / "instagram-AbC123.html").read_text(encoding="utf-8")
+        stub_html = (share_root / "s" / "x-stub1.html").read_text(encoding="utf-8")
+        profile_html = (share_root / "u" / "x-ada.html").read_text(encoding="utf-8")
+        check(counts["posts"] == 3 and counts["watch"] == 1 and counts["profiles"] == 1 and counts["stubs"] == 1, "share pages cover posts, a watch page, a profile, and a new stub")
+        check(not (share_root / "s" / "stale.html").exists(), "rebuilding share pages removes pages from the previous deploy")
+        check("Ada &lt;script&gt;" in post_html and "<script>alert" not in post_html and "A &lt;b&gt;post&lt;/b&gt;" in post_html, "share page text is escaped")
+        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and 'og:site_name" content="Feeds"' in post_html and 'name="theme-color" content="#000000"' in post_html and 'rel="canonical"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL")
+        description = html_lib.unescape(post_html.split('og:description" content="', 1)[1].split('"', 1)[0])
+        check("name=large" in post_html and 'og:image:width" content="2048"' in post_html and 'twitter:card" content="summary_large_image"' in post_html and description.endswith("…") and len(description) <= 200, "a wide image is preferred and the description stays near 200 characters")
+        from share_pages import sized as size_share_image
+        original = size_share_image("https://pbs.twimg.com/media/abc.jpg", 4096, 2599, "image")
+        check(original["url"].endswith("?name=large") and original["width"] == 2048 and original["height"] == 1300, "a Twitter original is requested at the large rendition with matching dimensions")
+        check("maxresdefault.jpg" in watch_html and 'twitter:card" content="player"' in watch_html and "youtube.com/embed/abcdefghijk" in watch_html and "#/watch/youtube:abcdefghijk" in watch_html, "a YouTube video offers a player card and opens the watch route")
+        from share_pages import choose_youtube_thumb
+        wide = choose_youtube_thumb("abcdefghijk", lambda url: "maxresdefault.jpg" in url)
+        medium = choose_youtube_thumb("abcdefghijk", lambda url: "sddefault.jpg" in url)
+        small = choose_youtube_thumb("abcdefghijk", lambda url: False)
+        check(wide["width"] == 1280 and wide["height"] == 720 and wide["url"].endswith("maxresdefault.jpg"), "a YouTube poster prefers the 1280px image")
+        check(medium["width"] == 640 and "sddefault.jpg" in medium["url"] and small["width"] == 480 and small["url"].endswith("hqdefault.jpg"), "a missing wide poster falls back to a thumbnail that exists")
+        check("#/instagram/ada/status/https%3A%2F%2Fwww.instagram.com" in ig_html and "Open in Feeds" in ig_html, "an unsafe id still opens the post the app can find")
+        check("old &lt;i&gt;note&lt;/i&gt;" in stub_html and "should not replace" not in post_html, "a stub fills a missing post and does not replace a stored one")
+        check('og:type" content="profile"' in profile_html and "Hello &amp; welcome" in profile_html and 'icons/og-card.png' not in profile_html, "a profile page uses the account and keeps its bio")
+        check((share_root / "icons" / "og-card.png").is_file(), "the branded fallback card is written into the artifact")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "follow-request.yml").is_file() and (ROOT / ".github" / "ISSUE_TEMPLATE" / "unfollow-request.yml").is_file(), "follow and unfollow issue forms exist")
     import follow_request as follow_req
 

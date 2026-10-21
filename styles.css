@@ -1297,6 +1297,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .share-pop svg { width: 18.75px; height: 18.75px; fill: currentColor; flex: none; }
 .share-grab { display: none; }
 .share-rule { height: 1px; background: var(--line); margin: 4px 0; }
+.share-note { margin: 0; padding: 10px 16px 4px; color: var(--muted); font-size: 13px; line-height: 16px; white-space: normal; }
 @media (max-width: 499px) {
   .share-back { background: rgba(91, 112, 131, 0.4); }
   .share-pop {

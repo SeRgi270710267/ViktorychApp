@@ -33,8 +33,13 @@ Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHu
 | `#/feeds` | Every account in the snapshot |
 | `#/settings` | Export / import |
 | `#/notifications`, `#/messages` | Empty X-style states |
+| `/s/<platform>-<id>.html` | Share preview for a post. Crawlers read this file. People are sent to the post. |
+| `/s/watch-<youtubeId>.html` | Share preview for a YouTube watch page |
+| `/u/<platform>-<handle>.html` | Share preview for a profile in the snapshot |
 
 `?empty=1` shows the empty timeline. `?error=1` shows the load-failure state.
+
+Share and Copy link use the `/s/` and `/u/` pages. Each deploy rebuilds them from the current `feeds.json` posts, archive stubs, and accounts, and the previous set is deleted. Those files are not stored in git. A comment, a streamed profile, or any other post that is not in that snapshot shares the original platform URL instead, and the share sheet says why.
 
 ## What the page does
 

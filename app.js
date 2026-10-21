@@ -462,6 +462,72 @@
     return url.origin + url.pathname + clean;
   }
 
+  function shareRoot() {
+    const url = new URL(location.href);
+    let path = url.pathname;
+    if (path.endsWith("/index.html")) path = path.slice(0, -"index.html".length);
+    path = path.replace(/\/(?:s|u)\/[^/]+$/, "/");
+    if (!path.endsWith("/")) path += "/";
+    return url.origin + path;
+  }
+
+  function shareFileToken(post) {
+    const raw = String((post && (post.statusId || post.id)) || "");
+    if (/^[A-Za-z0-9_-]{1,120}$/.test(raw)) return raw;
+    const canon = canonicalId(post);
+    if (/^[A-Za-z0-9_-]{1,120}$/.test(canon)) return canon;
+    return "";
+  }
+
+  const PUBLISHED = { posts: new Set() };
+
+  function notePublished(doc) {
+    const next = new Set();
+    ((doc && doc.posts) || []).forEach((post) => {
+      const token = shareFileToken(post);
+      if (!token) return;
+      next.add((post.platform || "x") + ":" + token);
+    });
+    PUBLISHED.posts = next;
+  }
+
+  function postIsPublished(post) {
+    const token = shareFileToken(post);
+    if (!post || !token) return false;
+    const platform = post.platform || "x";
+    if (PUBLISHED.posts.has(platform + ":" + token)) return true;
+    if ((ARCHIVE.posts || []).some((row) => row && row.p === platform && String(row.id) === token)) return true;
+    return !!(post.stub && String(post.statusId || post.id) === token);
+  }
+
+  function profileIsPublished(feed) {
+    if (!feed || !feed.handle) return false;
+    const handle = String(feed.handle).replace(/^@/, "");
+    if (!/^[A-Za-z0-9._-]{1,80}$/.test(handle)) return false;
+    const platform = feed.platform || "x";
+    return feeds().some((item) => (item.platform || "x") === platform && String(item.handle || "").replace(/^@/, "").toLowerCase() === handle.toLowerCase());
+  }
+
+  function sharePostUrl(post, kind) {
+    const token = shareFileToken(post);
+    if (!token || !postIsPublished(post)) return "";
+    if (kind === "watch" && (post.platform || "") === "youtube" && /^[A-Za-z0-9_-]{11}$/.test(token)) return shareRoot() + "s/watch-" + token + ".html";
+    return shareRoot() + "s/" + (post.platform || "x") + "-" + token + ".html";
+  }
+
+  function shareProfileUrl(feed) {
+    if (!profileIsPublished(feed)) return "";
+    const handle = String(feed.handle).replace(/^@/, "");
+    return shareRoot() + "u/" + (feed.platform || "x") + "-" + handle + ".html";
+  }
+
+  function unpublishedNote(kind, platform, hasOriginal) {
+    const name = PLATFORM[platform] || "the original site";
+    const what = kind === "profile" ? "profile" : "post";
+    if (hasOriginal) return "This " + what + " isn’t in the published snapshot, so the link opens on " + name + ".";
+    return "This " + what + " isn’t in the published snapshot, so there is no preview page for it.";
+  }
+
   function findFeed(platform, handle) {
     const h = (handle || "").toLowerCase();
     return feeds().find((f) => f.platform === platform && (f.handle || "").toLowerCase() === h);
@@ -3974,7 +4040,9 @@
     const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
       ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? "Turn on reposts" : "Turn off reposts"}</button>`
       : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(sitePermalink(statusHash(post)))}">Copy link</button>${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
+    const shareLink = sharePostUrl(post, "post") || post.url || sitePermalink(statusHash(post));
+    const shareNote = sharePostUrl(post, "post") ? "" : unpublishedNote("post", post.platform, !!post.url);
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>Copy link</button>${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const eager = !!opts.eager;
@@ -5955,10 +6023,12 @@
       const feed = feedById(share.id) || liveProfileById(share.id) || profileStub(share.id);
       if (!feed || !feed.handle) return null;
       const original = externalProfile(feed);
-      const routeHandle = feed.platform === "youtube" && feed.channelId ? feed.channelId : feed.handle;
+      const page = shareProfileUrl(feed);
+      const publicOriginal = original && original !== "#" ? original : "";
       return {
-        permalink: sitePermalink(accountHash(feed.platform || "x", routeHandle)),
-        original: original && original !== "#" ? original : "",
+        permalink: page || publicOriginal || sitePermalink(accountHash(feed.platform || "x", feed.handle)),
+        original: publicOriginal,
+        note: page ? "" : unpublishedNote("profile", feed.platform, !!publicOriginal),
         title: feed.name || feed.handle || "",
         text: feed.bio || feed.name || "",
         platform: PLATFORM[feed.platform] || "web",
@@ -5968,9 +6038,11 @@
     const post = findAnyPost(share.id);
     if (!post) return null;
     const hash = share.kind === "watch" ? watchHash(post) : statusHash(post);
+    const page = sharePostUrl(post, share.kind);
     return {
-      permalink: sitePermalink(hash),
+      permalink: page || post.url || sitePermalink(hash),
       original: post.url || "",
+      note: page ? "" : unpublishedNote("post", post.platform, !!post.url),
       title: post.title || post.author || "",
       text: post.text || post.title || "",
       platform: PLATFORM[post.platform] || "web",
@@ -5995,15 +6067,17 @@
     if (!ctx || !STATE.share) return "";
     const canNative = typeof navigator.share === "function";
     const original = ctx.original && ctx.original !== ctx.permalink ? ctx.original : "";
-    const rows = 1 + (canNative ? 1 : 0) + (original ? 2 : 0);
+    const rows = 1 + (canNative ? 1 : 0) + (original ? 2 : 0) + (ctx.note ? 1 : 0);
     const place = STATE.share.anchor ? sharePlace(STATE.share.anchor, rows) : "top:72px;left:16px";
     const via = canNative ? `<button type="button" role="menuitem" data-act="native-share">${icon("share")} ${esc(ctx.via)}</button>` : "";
     const extra = original ? `<div class="share-rule"></div>
       <button type="button" role="menuitem" data-act="copy" data-copy="original" data-url="${esc(original)}">${icon("link")} Copy original link</button>
       <a role="menuitem" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(original)}">${icon("external")} Open original on ${esc(ctx.platform)}</a>` : "";
+    const note = ctx.note ? `<p class="share-note">${esc(ctx.note)}</p>` : "";
     return `<div class="share-back" data-act="close-share"><div class="share-pop" data-act="stop" role="menu" aria-label="Share" style="${place}">
       <div class="share-grab" aria-hidden="true"></div>
-      <button type="button" role="menuitem" data-act="copy" data-copy="site" data-url="${esc(ctx.permalink)}">${icon("link")} Copy link</button>
+      ${note}
+      <button type="button" role="menuitem" data-act="copy" data-copy="site" data-url="${esc(ctx.permalink)}"${ctx.note ? ` data-note="${esc(ctx.note)}"` : ""}>${icon("link")} Copy link</button>
       ${via}
       ${extra}
     </div></div>`;
@@ -6688,7 +6762,7 @@
       STATE.menu = null;
       STATE.share = null;
       render();
-      toast("Copied to clipboard");
+      toast(el.dataset.note || "Copied to clipboard");
       return;
     }
     if (act === "open-status") {
@@ -7829,6 +7903,7 @@
       });
       const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !current[String(post.id || "")]);
       if (apply || !STATE.data) {
+        notePublished(doc);
         STATE.data = withMemory(doc);
         STATE.error = null;
         STATE.pendingFeed = null;
@@ -8187,7 +8262,10 @@
     document.getElementById("new-posts").addEventListener("click", () => {
       const pending = STATE.pendingLive || [];
       if (!STATE.pendingFeed && !pending.length) { showPill([]); return; }
-      if (STATE.pendingFeed) STATE.data = STATE.pendingFeed;
+      if (STATE.pendingFeed) {
+        notePublished(STATE.pendingFeed);
+        STATE.data = STATE.pendingFeed;
+      }
       STATE.pendingFeed = null;
       if (pending.length) rememberTimeline(pending);
       STATE.pendingLive = [];
@@ -8358,6 +8436,7 @@
     loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
     const snap = loadTimelineSnap();
     if (snap) {
+      notePublished(snap);
       STATE.data = snap;
       STATE.loading = false;
       render({ reset: true });
@@ -8369,7 +8448,9 @@
     const params = new URLSearchParams(location.search);
     try {
       if (params.get("error") === "1") throw new Error("forced");
-      STATE.data = lockDocDates(await fetchFeeds(false));
+      const loaded = lockDocDates(await fetchFeeds(false));
+      notePublished(loaded);
+      STATE.data = loaded;
       saveTimelineSnap(STATE.data);
       STATE.settings = loadSettings();
       applyTheme();

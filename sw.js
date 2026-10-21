@@ -272,12 +272,16 @@ self.addEventListener("fetch", (event) => {
   if (request.headers.has("range")) return;
   if (request.mode === "navigate") {
     event.respondWith((async () => {
+      const home = shellDocument(url);
       try {
         const res = await fetch(request);
-        const cache = await caches.open(SHELL);
-        cache.put("./index.html", res.clone());
+        if (home && res && res.ok) {
+          const cache = await caches.open(SHELL);
+          cache.put("./index.html", res.clone());
+        }
         return res;
       } catch (err) {
+        if (!home) return Response.error();
         return (await caches.match("./index.html")) || (await caches.match("./")) || Response.error();
       }
     })());
@@ -321,6 +325,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
   }
 });
+
+function shellDocument(url) {
+  if (url.origin !== self.location.origin) return false;
+  const path = url.pathname;
+  if (/\/(?:s|u)\//.test(path)) return false;
+  return /\/(?:index\.html)?$/.test(path);
+}
 
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
