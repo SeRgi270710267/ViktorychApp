@@ -1853,10 +1853,11 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .center.route-in { animation: route-in 180ms ease; }
 @keyframes route-in { from { opacity: 0; } to { opacity: 1; } }
 
-.wco { display: none; }
+.wco { display: none; background: var(--bg); }
 @media (display-mode: window-controls-overlay) {
   .wco {
     display: block;
+    background: var(--bg);
     position: fixed;
     left: env(titlebar-area-x, 0);
     top: env(titlebar-area-y, 0);

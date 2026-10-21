@@ -54,6 +54,10 @@
         var colors = { default: "#ffffff", dim: "#15202b", lightsout: "#000000" };
         var meta = document.querySelector('meta[name="theme-color"]');
         if (meta) meta.setAttribute("content", colors[mode]);
+        var scheme = document.querySelector('meta[name="color-scheme"]');
+        if (scheme) scheme.setAttribute("content", mode === "default" ? "light" : "dark");
+        var bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+        if (bar) bar.setAttribute("content", mode === "default" ? "default" : "black-translucent");
       } catch (err) {}
     })();
   </script>

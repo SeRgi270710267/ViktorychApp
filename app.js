@@ -7228,6 +7228,10 @@
     document.documentElement.setAttribute("data-theme", theme);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", THEME_COLORS[theme]);
+    const scheme = document.querySelector('meta[name="color-scheme"]');
+    if (scheme) scheme.setAttribute("content", theme === "default" ? "light" : "dark");
+    const bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (bar) bar.setAttribute("content", theme === "default" ? "default" : "black-translucent");
   }
 
   function slimPost(post) {
