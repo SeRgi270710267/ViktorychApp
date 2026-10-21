@@ -271,6 +271,22 @@ The build refuses `api.x.com` and `api.twitter.com`. X replies are loaded by the
 
 The half-hour job does not commit `feeds.json`. It copies `index.html`, `app.js`, `styles.css`, `favicon.svg`, `manifest.webmanifest`, `sw.js`, `icons/`, `splash/`, `screenshots/`, `.nojekyll`, `feeds.json`, `archive/*.json`, and any `comments/*.json` into `_site`, stamps the commit SHA into `_site/sw.js`, prints the artifact size, and fails if that directory is over 200 MB. `actions/upload-pages-artifact` and `actions/deploy-pages` publish `_site`. `comments/`, `media/`, and `archive/` are gitignored, so `main` keeps the code and the `feeds.json` seed. At 06:17 UTC the workflow uploads `archive/` to the Internet Archive when the keys are set, then force-pushes one squashed commit to the orphan `data` branch. See Archive above.
 
+## Installed app
+
+A long-press on the icon opens Search, Bookmarks, Subscriptions, and Notifications. The manifest also has a description, phone and desktop screenshots, a maskable icon, and a monochrome icon. iOS startup images cover the common iPhone and iPad sizes. The theme color follows the appearance setting: white, dim (`#15202b`), or black.
+
+Sharing a link into the app is a GET share target. An X, Threads, Instagram, YouTube, VK, or RSS link opens the post when this site already has it, the YouTube watch page for a video id, or the live profile with Follow. Anything else opens the add-account screen.
+
+The app badge is the number of new posts from accounts you follow since the app was last open. It clears when the app comes to the foreground. Chromium can also set it from periodic background sync.
+
+Home keeps a separate scroll position for For you and Following. A horizontal swipe moves between those two tabs. A swipe from the left edge goes back. Timeline and post changes use the View Transitions API when the browser has it. Photos open in a viewer: pinch to zoom, swipe between images, swipe down to close. Videos keep playing in the background with the system media controls, and the watch page can go picture-in-picture. A short vibration fires on taps where `navigator.vibrate` exists. Buttons use `touch-action: manipulation`, chrome does not select text, and the page contains overscroll. The first load shows skeleton rows, then the last timeline saved on this device, then the fresh feed.
+
+Offline, that saved timeline and the posts you opened stay readable. A banner says you’re offline. A bookmark made offline is stored immediately, and its images are fetched the next time the device is online. The service worker also keeps the shell and a capped media cache.
+
+When a deploy activates a new service worker, the page shows **New version available** and Refresh.
+
+Periodic background sync is registered only after notifications are turned on, and only in browsers that implement it (Chromium). It refetches `feeds.json` about every 30 minutes and can raise the badge. iOS does not run that API. There is no push server in this repo. Web Push would need a VAPID private key in an Actions secret and a place to store each browser’s subscription endpoint. Those endpoints are credentials. GitHub Pages cannot accept the subscription POST, and writing the endpoints into this public repo would publish them. A repository secret cannot be updated by the page. Building that would need a new account or a private store, so it is not built. The in-app notification toggle and periodic sync stay the free path.
+
 ## GitHub Pages
 
 Pages has to be built by GitHub Actions (Settings → Pages → Build and deployment → Source: GitHub Actions). A deploy-from-branch source will not pick up this workflow. `.nojekyll` is in the artifact so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`), so the site works at `/` or under `/rss-feeds/`.

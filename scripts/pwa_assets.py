@@ -145,12 +145,31 @@ def write(path: Path, data: bytes) -> None:
     path.write_bytes(data)
 
 
+def draw_monochrome(size: int) -> bytearray:
+    """A single-color mark. Android uses the alpha channel for themed icons."""
+    buf = blank(size, size, (0, 0, 0, 0))
+    bar_w = int(size * 0.42)
+    bar_h = max(6, int(size * 0.055))
+    gap = int(size * 0.045)
+    left = (size - bar_w) // 2
+    top = int(size * 0.30)
+    radius = bar_h // 2
+    widths = (1, 0.72, 0.48)
+    ink = (255, 255, 255, 255)
+    for index, scale_by in enumerate(widths):
+        fill_round_rect(buf, size, size, left, top + index * (bar_h + gap), int(bar_w * scale_by), bar_h, radius, ink)
+    dot = max(8, int(size * 0.075))
+    fill_circle(buf, size, size, left + bar_w - dot // 2, top - int(size * 0.06), dot // 2, ink)
+    return buf
+
+
 def main() -> None:
     any_icon = draw_mark(512, BLACK, BLUE)
     mask_icon = draw_mark(512, BLUE, WHITE)
     write(ROOT / "icons" / "icon-512.png", png(512, 512, bytes(any_icon)))
     write(ROOT / "icons" / "icon-192.png", png(192, 192, bytes(scale(any_icon, 512, 512, 192))))
     write(ROOT / "icons" / "icon-maskable-512.png", png(512, 512, bytes(mask_icon)))
+    write(ROOT / "icons" / "icon-monochrome-512.png", png(512, 512, bytes(draw_monochrome(512))))
     write(ROOT / "icons" / "apple-touch-icon.png", png(180, 180, bytes(scale(any_icon, 512, 512, 180))))
     shots = {
         "narrow": (1080, 1920),

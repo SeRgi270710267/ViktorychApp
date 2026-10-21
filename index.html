@@ -10,7 +10,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Feeds">
   <meta name="referrer" content="no-referrer">
-  <meta name="description" content="An X-style home for posts from X, Threads, Instagram, YouTube, and RSS.">
+  <meta name="description" content="An X-style home for posts from X, Threads, Instagram, YouTube, VK, and RSS.">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Feeds">
   <meta property="og:description" content="Posts from X, Threads, Instagram, YouTube, and RSS.">
@@ -38,6 +38,10 @@
   <link rel="apple-touch-startup-image" media="screen and (device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/ipad-pro-11.png">
   <link rel="apple-touch-startup-image" media="screen and (device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/ipad-pro-12.png">
   <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://pbs.twimg.com" crossorigin>
+  <link rel="preconnect" href="https://video.twimg.com" crossorigin>
+  <link rel="preconnect" href="https://i.ytimg.com" crossorigin>
+  <link rel="preconnect" href="https://api.fxtwitter.com" crossorigin>
   <link rel="preload" href="feeds.json" as="fetch" crossorigin="anonymous">
   <script>
     (function () {
@@ -60,7 +64,9 @@
   <div id="hover"></div>
   <div id="pull" aria-hidden="true"><span class="spin"></span></div>
   <button id="new-posts" type="button" hidden>New posts</button>
-  <div id="offline" hidden>You're offline. Saved bookmarks are still available.</div>
+  <div id="offline" hidden>You're offline. Showing saved posts.</div>
+  <div id="update" hidden>New version available. <button type="button" id="update-go">Refresh</button></div>
+  <div id="viewer" hidden></div>
   <div id="toast" hidden></div>
   <script src="app.js" defer></script>
 </body>

@@ -283,6 +283,63 @@
     return out.sort(byStamp);
   }
 
+  const OPEN_KEY = "rss-feeds-opened-v1";
+  const SNAP_KEY = "rss-feeds-timeline-v1";
+  const QUEUE_KEY = "rss-feeds-bookmark-queue";
+
+  function openedList() {
+    if (STATE.opened) return STATE.opened;
+    try { STATE.opened = JSON.parse(localStorage.getItem(OPEN_KEY) || "[]"); }
+    catch (err) { STATE.opened = []; }
+    if (!Array.isArray(STATE.opened)) STATE.opened = [];
+    return STATE.opened;
+  }
+
+  function rememberOpened(post) {
+    const slim = slimPost(post);
+    if (!slim || !slim.id) return;
+    slim.kind = post.kind || "post";
+    if (post.repostedBy) slim.repostedBy = { handle: post.repostedBy.handle || "", name: post.repostedBy.name || "", avatar: post.repostedBy.avatar || "" };
+    const list = openedList().filter((item) => item && item.id !== slim.id);
+    list.unshift(slim);
+    STATE.opened = list.slice(0, 24);
+    try { localStorage.setItem(OPEN_KEY, JSON.stringify(STATE.opened)); } catch (err) { /* the snapshot is optional */ }
+  }
+
+  function openedPost(id) {
+    const key = String(id || "");
+    return openedList().find((item) => item && (item.id === key || String(item.statusId || "") === key)) || null;
+  }
+
+  function loadTimelineSnap() {
+    try {
+      const doc = JSON.parse(localStorage.getItem(SNAP_KEY) || "null");
+      if (!doc || !Array.isArray(doc.posts)) return null;
+      return doc;
+    } catch (err) { return null; }
+  }
+
+  function saveTimelineSnap(doc) {
+    if (!doc || !Array.isArray(doc.posts)) return;
+    const posts = doc.posts.slice(0, 40).map((post) => {
+      const row = slimPost(post);
+      if (!row) return null;
+      row.kind = post.kind || "post";
+      if (post.repostedBy) row.repostedBy = { handle: post.repostedBy.handle || "", name: post.repostedBy.name || "", avatar: post.repostedBy.avatar || "" };
+      if (post.replyingTo) row.replyingTo = { handle: post.replyingTo.handle || "", id: post.replyingTo.id || "" };
+      return row;
+    }).filter(Boolean);
+    const copy = { updated: doc.updated || "", feeds: doc.feeds || [], posts: posts };
+    try {
+      let text = JSON.stringify(copy);
+      if (text.length > 400000) {
+        copy.posts = copy.posts.slice(0, 20);
+        text = JSON.stringify(copy);
+      }
+      localStorage.setItem(SNAP_KEY, text);
+    } catch (err) { /* a full storage quota keeps the previous snapshot */ }
+  }
+
   function findPost(platform, handle, id) {
     const shared = STATE.shared[String(id)];
     if (shared) return shared;
@@ -307,7 +364,7 @@
         return reply;
       }
     }
-    return null;
+    return openedPost(id);
   }
 
   function stamp(post) { return post.sortDate || post.date || ""; }
@@ -546,6 +603,21 @@
     </div>`;
   }
 
+  function imageSrcset(url) {
+    const raw = String(url || "");
+    if (/pbs\.twimg\.com\/media\//.test(raw) && /[?&]name=/.test(raw)) {
+      const small = raw.replace(/([?&]name=)[^&]+/, "$1small");
+      const large = raw.replace(/([?&]name=)[^&]+/, "$1large");
+      return ` srcset="${esc(small)} 680w, ${esc(large)} 1280w" sizes="(max-width: 500px) 92vw, 500px"`;
+    }
+    if (/i\.ytimg\.com\/vi\//.test(raw) && /default\.jpg/.test(raw)) {
+      const mq = raw.replace(/\/(?:mq|hq|sd|maxres)default\.jpg/, "/mqdefault.jpg");
+      const hq = raw.replace(/\/(?:mq|hq|sd|maxres)default\.jpg/, "/hqdefault.jpg");
+      return ` srcset="${esc(mq)} 320w, ${esc(hq)} 480w" sizes="(max-width: 500px) 92vw, 480px"`;
+    }
+    return "";
+  }
+
   function mediaHtml(items, eager, post) {
     const list = (items || []).filter((m) => m && (m.url || m.poster || m.videoId || m.type === "embed" || m.type === "placeholder" || m.type === "video" || m.type === "animated_gif")).slice(0, 4);
     if (!list.length) return "";
@@ -569,7 +641,7 @@
       const src = m.url || m.poster || "";
       const loading = first ? "eager" : "lazy";
       const priority = first ? ` fetchpriority="high"` : "";
-      return `<div class="tile"><img src="${esc(src)}"${refresh} alt="${esc(m.alt || "")}" loading="${loading}"${priority} referrerpolicy="no-referrer">${alt}</div>`;
+      return `<div class="tile" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"><img src="${esc(src)}"${imageSrcset(src)}${refresh} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
     }).join("");
     return `<div class="media ${cls}">${tiles}</div>`;
   }
@@ -809,6 +881,21 @@
     video.addEventListener("error", fail);
     el.appendChild(video);
     el.classList.add("is-playing");
+    video.addEventListener("play", () => {
+      if (!navigator.mediaSession || video.muted) return;
+      const poster = video.poster || "";
+      const artwork = [{ src: new URL("icons/icon-512.png", location.href).href, sizes: "512x512", type: "image/png" }];
+      if (poster) artwork.unshift({ src: poster, sizes: "1280x720", type: "image/jpeg" });
+      try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+          title: (post && (post.title || String(post.text || "").slice(0, 80))) || "Video",
+          artist: (post && (post.author || post.handle)) || "Feeds",
+          artwork: artwork
+        });
+        navigator.mediaSession.setActionHandler("play", () => { video.play(); });
+        navigator.mediaSession.setActionHandler("pause", () => { video.pause(); });
+      } catch (err) { /* media session is optional */ }
+    });
     const start = () => {
       const at = Number(opts.resume) || 0;
       opts.resume = 0;
@@ -3779,6 +3866,7 @@
     if (post && post.tombstone) {
       return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>` + tombstoneCard(post);
     }
+    if (post) rememberOpened(post);
     if (!post) {
       const key = String(route.id);
       if (STATE.sharedState[key] !== "miss") {
@@ -3809,7 +3897,7 @@
             <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>
             <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
           </div>
-          <span style="margin-left:auto">${sourceBadge(post.platform)}</span>`;
+          <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${post.handle ? followButtonClean((post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
       ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(userHash(post.platform, post.handle))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
@@ -4285,7 +4373,7 @@
       const found = findComment(commentRows(bucket.doc).concat(bucket.replies || []), key);
       if (found) return found;
     }
-    return null;
+    return openedPost(key);
   }
 
   function shareContext() {
@@ -4595,32 +4683,38 @@
     const focusId = focus && focus.id;
     const caret = focus && typeof focus.selectionStart === "number" ? focus.selectionStart : null;
     rememberPlayback();
-    document.getElementById("app").innerHTML = shell(view(route), route);
-    const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
-    document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
-    if (opts && Object.prototype.hasOwnProperty.call(opts, "y")) window.scrollTo(0, opts.y);
-    else if (reset) window.scrollTo(0, 0);
-    else window.scrollTo(0, y);
-    if (focusId) {
-      const el = document.getElementById(focusId);
-      if (el) {
-        el.focus();
-        if (caret != null && el.setSelectionRange) {
-          try { el.setSelectionRange(caret, caret); } catch (err) { /* ignore */ }
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const transition = routeChanged && document.startViewTransition && !reduced;
+    const apply = () => {
+      document.getElementById("app").innerHTML = shell(view(route), route);
+      const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
+      document.title = (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1)) + " / Feeds";
+      if (opts && Object.prototype.hasOwnProperty.call(opts, "y")) window.scrollTo(0, opts.y);
+      else if (reset) window.scrollTo(0, 0);
+      else window.scrollTo(0, y);
+      if (focusId) {
+        const el = document.getElementById(focusId);
+        if (el) {
+          el.focus();
+          if (caret != null && el.setSelectionRange) {
+            try { el.setSelectionRange(caret, caret); } catch (err) { /* ignore */ }
+          }
         }
       }
-    }
-    document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden && window.innerWidth < 500));
-    STATE.scrollKey = nextKey;
-    lastKey = location.hash;
-    if (routeChanged) {
-      const center = document.querySelector(".center");
-      if (center) center.classList.add("route-in");
-    }
-    watchHydration();
-    syncMediaSession();
-    bindPlayers();
-    resumePlayback();
+      document.querySelectorAll(".topbar").forEach((el) => el.classList.toggle("is-hidden", STATE.headerHidden && window.innerWidth < 500));
+      STATE.scrollKey = nextKey;
+      lastKey = location.hash;
+      if (routeChanged && !transition) {
+        const center = document.querySelector(".center");
+        if (center) center.classList.add("route-in");
+      }
+      watchHydration();
+      syncMediaSession();
+      bindPlayers();
+      resumePlayback();
+    };
+    if (transition) document.startViewTransition(apply);
+    else apply();
   }
 
   function toast(message) {
@@ -4637,12 +4731,24 @@
     render();
   }
 
+  function tapHaptic() {
+    if (!navigator.vibrate) return;
+    try { navigator.vibrate(10); } catch (err) { /* haptics are optional */ }
+  }
+
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
+    if (act === "htab" || act === "like" || act === "bookmark" || act === "follow" || act === "back" || act === "view") tapHaptic();
+    if (act === "close-viewer") { closeViewer(); return; }
     if (act === "back") {
+      if (STATE.viewer) { closeViewer(); return; }
       if (history.length > 1) history.back();
       else location.hash = "#/";
+      return;
+    }
+    if (act === "view") {
+      openViewer(el.dataset.id, Number(el.dataset.mi) || 0);
       return;
     }
     if (act === "reload") { boot(); return; }
@@ -4703,7 +4809,10 @@
         if (act === "bookmark" && STATE.settings.savedPosts) delete STATE.settings.savedPosts[id];
       } else {
         STATE.settings[bucket][id] = true;
-        if (act === "bookmark") rememberBookmark(id);
+        if (act === "bookmark") {
+          rememberBookmark(id);
+          if (!navigator.onLine) toast("Saved. Images download when you’re back online.");
+        }
       }
       saveSettings();
       render();
@@ -5157,8 +5266,33 @@
       if (item.url) urls.push(item.url);
       if (item.poster) urls.push(item.poster);
     });
+    queueBookmarkMedia(urls);
+  }
+
+  function queueBookmarkMedia(urls) {
+    const list = (urls || []).filter((url) => /^https:/.test(url || ""));
+    if (!list.length) return;
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
-    if (worker) worker.postMessage({ type: "cache-bookmark", urls: urls });
+    if (worker && navigator.onLine) {
+      worker.postMessage({ type: "cache-bookmark", urls: list });
+      return;
+    }
+    let queued = [];
+    try { queued = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch (err) { queued = []; }
+    if (!Array.isArray(queued)) queued = [];
+    list.forEach((url) => { if (queued.indexOf(url) < 0 && queued.length < 80) queued.push(url); });
+    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(queued)); } catch (err) { /* the bookmark itself is already stored */ }
+  }
+
+  function flushBookmarkQueue() {
+    if (!navigator.onLine) return;
+    let queued = [];
+    try { queued = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch (err) { queued = []; }
+    if (!Array.isArray(queued) || !queued.length) return;
+    const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!worker) return;
+    worker.postMessage({ type: "cache-bookmark", urls: queued });
+    try { localStorage.removeItem(QUEUE_KEY); } catch (err) { /* retry on the next online event */ }
   }
 
   function followedSince(post, since) {
@@ -5543,14 +5677,141 @@
     if (!el) return;
     const was = !el.hidden;
     el.hidden = !offline;
-    if (was && !offline) toast("You're back online");
+    el.textContent = "You're offline. Showing saved posts.";
+    if (was && !offline) {
+      toast("You're back online");
+      flushBookmarkQueue();
+    }
+  }
+
+  function showUpdate() {
+    const el = document.getElementById("update");
+    if (el) el.hidden = false;
+  }
+
+  function photoList(post) {
+    return ((post && post.media) || []).filter((item) => item && item.type !== "video" && item.type !== "animated_gif" && item.type !== "embed" && (item.url || item.poster));
+  }
+
+  function paintViewer() {
+    const box = document.getElementById("viewer");
+    if (!box) return;
+    const view = STATE.viewer;
+    if (!view) { box.hidden = true; box.innerHTML = ""; return; }
+    const post = findAnyPost(view.id);
+    const photos = photoList(post);
+    const item = photos[view.index] || photos[0];
+    if (!item) { STATE.viewer = null; box.hidden = true; box.innerHTML = ""; return; }
+    box.hidden = false;
+    box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="Close">×</button><img id="viewer-img" alt="${esc(item.alt || "")}" src="${esc(item.url || item.poster)}" referrerpolicy="no-referrer" decoding="async" draggable="false"><div class="viewer-count">${photos.length > 1 ? (view.index + 1) + " / " + photos.length : ""}</div>`;
+    const img = document.getElementById("viewer-img");
+    if (img) img.style.transform = "translate3d(0,0,0) scale(1)";
+  }
+
+  function openViewer(id, index) {
+    const post = findAnyPost(id);
+    const photos = photoList(post);
+    if (!photos.length) return;
+    const at = Math.max(0, Math.min(photos.length - 1, index || 0));
+    STATE.viewer = { id: id, index: at, scale: 1, x: 0, y: 0 };
+    paintViewer();
+  }
+
+  function closeViewer() {
+    STATE.viewer = null;
+    paintViewer();
+  }
+
+  function shiftViewer(delta) {
+    const view = STATE.viewer;
+    if (!view) return;
+    const photos = photoList(findAnyPost(view.id));
+    if (photos.length < 2) return;
+    view.index = (view.index + delta + photos.length) % photos.length;
+    view.scale = 1;
+    view.x = 0;
+    view.y = 0;
+    paintViewer();
+  }
+
+  function parseSharedLink(raw) {
+    const found = String(raw || "").match(/https?:\/\/[^\s]+/);
+    const text = found ? found[0].replace(/[),.;]+$/, "") : "";
+    if (!text) return null;
+    let loc;
+    try { loc = new URL(text); } catch (err) { return null; }
+    const host = loc.hostname.replace(/^www\./, "").toLowerCase();
+    const parts = loc.pathname.split("/").filter(Boolean).map((part) => {
+      try { return decodeURIComponent(part); } catch (err) { return part; }
+    });
+    const skip = { home: 1, share: 1, intent: 1, search: 1, i: 1, explore: 1, stories: 1 };
+    const known = posts().find((post) => {
+      const url = String(post.url || "").split("?")[0].replace(/\/$/, "");
+      const clean = text.split("?")[0].replace(/\/$/, "");
+      return url && (url === clean || clean.indexOf(url) >= 0);
+    });
+    if (known && known.platform === "youtube" && (known.media || []).some((item) => item && item.type === "video")) return watchHash(known);
+    if (known) return statusHash(known);
+    if (host === "x.com" || host === "twitter.com" || host === "mobile.x.com" || host === "mobile.twitter.com") {
+      const handle = (parts[0] || "").replace(/^@/, "");
+      if (handle && parts[1] === "status" && parts[2]) return statusHash({ platform: "x", handle: handle, statusId: parts[2].split("?")[0] });
+      if (handle && !skip[handle]) return userHash("x", handle);
+    }
+    if (host === "threads.com" || host === "threads.net") {
+      const handle = (parts[0] || "").replace(/^@/, "");
+      if (handle && parts[1] === "post" && parts[2]) {
+        const hit = posts().find((post) => post.platform === "threads" && String(post.url || "").indexOf(parts[2]) >= 0);
+        return hit ? statusHash(hit) : userHash("threads", handle);
+      }
+      if (parts[0] === "t" && parts[1]) {
+        const hit = posts().find((post) => post.platform === "threads" && String(post.url || "").indexOf(parts[1]) >= 0);
+        if (hit) return statusHash(hit);
+      }
+      if (handle && !skip[handle]) return userHash("threads", handle);
+    }
+    if (host === "instagram.com") {
+      if ((parts[0] === "p" || parts[0] === "reel" || parts[0] === "tv") && parts[1]) {
+        const hit = posts().find((post) => post.platform === "instagram" && String(post.url || "").indexOf(parts[1]) >= 0);
+        if (hit) return statusHash(hit);
+        return "";
+      }
+      const handle = parts[0] || "";
+      if (handle && !skip[handle]) return userHash("instagram", handle);
+    }
+    if (host === "youtu.be" && parts[0]) return "#/watch/youtube:" + encodeURIComponent(parts[0]);
+    if (host === "youtube.com" || host === "m.youtube.com" || host === "music.youtube.com") {
+      if (parts[0] === "watch") {
+        const id = loc.searchParams.get("v") || "";
+        if (id) return "#/watch/youtube:" + encodeURIComponent(id);
+      }
+      if ((parts[0] === "shorts" || parts[0] === "embed" || parts[0] === "live") && parts[1]) return "#/watch/youtube:" + encodeURIComponent(parts[1]);
+      if (parts[0] === "post" && parts[1]) {
+        const hit = posts().find((post) => String(post.id) === parts[1] || String(post.url || "").indexOf(parts[1]) >= 0);
+        if (hit) return statusHash(hit);
+      }
+      if ((parts[0] || "").charAt(0) === "@") return userHash("youtube", parts[0].slice(1));
+      if (parts[0] === "channel" && parts[1]) return userHash("youtube", parts[1]);
+    }
+    if (host === "vk.com" || host === "m.vk.com" || host === "vk.ru") {
+      const wall = (parts[0] || "").match(/^wall(-?\d+_\d+)$/);
+      if (wall) {
+        const hit = posts().find((post) => String(post.statusId || post.id) === wall[1] || String(post.url || "").indexOf("wall" + wall[1]) >= 0 || String(post.url || "").indexOf("wall-" + wall[1].replace(/^-/, "")) >= 0);
+        if (hit) return statusHash(hit);
+      }
+      const handle = parts[0] || "";
+      if (handle && handle.indexOf("wall") !== 0 && !skip[handle]) return userHash("vk", handle);
+    }
+    const feed = feeds().find((item) => item.url && text.indexOf(item.url) === 0);
+    if (feed) return userHash(feed.platform, feed.channelId || feed.handle);
+    return "";
   }
 
   function consumeShareTarget() {
     const params = new URLSearchParams(location.search);
     if (!params.has("url") && !params.has("text") && !params.has("title")) return;
     STATE.incoming = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "" };
-    const hash = location.hash && location.hash !== "#/" && location.hash !== "#/home" ? location.hash : "#/incoming";
+    const shared = parseSharedLink([params.get("url"), params.get("text"), params.get("title")].filter(Boolean).join(" "));
+    const hash = shared || (location.hash && location.hash !== "#/" && location.hash !== "#/home" ? location.hash : "#/incoming");
     history.replaceState(null, "", location.pathname + hash);
   }
 
@@ -5605,6 +5866,16 @@
     window.addEventListener("online", () => setOffline(false));
     window.addEventListener("offline", () => setOffline(true));
     setOffline(!navigator.onLine);
+    const updateGo = document.getElementById("update-go");
+    if (updateGo) updateGo.addEventListener("click", () => location.reload());
+    if ("serviceWorker" in navigator) {
+      let hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        if (!hadController) { hadController = true; return; }
+        showUpdate();
+      });
+    }
+    bindGestures();
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       STATE.installPrompt = event;
@@ -5632,7 +5903,7 @@
     let pullStart = 0;
     let pulling = false;
     document.addEventListener("touchstart", (event) => {
-      if (window.scrollY > 2 || event.touches.length !== 1) { pulling = false; return; }
+      if (STATE.viewer || window.scrollY > 2 || event.touches.length !== 1) { pulling = false; return; }
       pullStart = event.touches[0].clientY;
       pulling = true;
     }, { passive: true });
@@ -5695,24 +5966,117 @@
     }
   }
 
+  function bindGestures() {
+    let swipe = null;
+    let pinch = null;
+    const viewerBox = () => document.getElementById("viewer");
+    document.addEventListener("touchstart", (event) => {
+      const box = viewerBox();
+      if (box && !box.hidden && event.target.closest("#viewer")) {
+        if (event.touches.length === 2 && STATE.viewer) {
+          const a = event.touches[0];
+          const b = event.touches[1];
+          pinch = { dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1, scale: STATE.viewer.scale || 1 };
+          swipe = null;
+          return;
+        }
+        if (event.touches.length === 1) {
+          swipe = { x: event.touches[0].clientX, y: event.touches[0].clientY, viewer: true };
+        }
+        return;
+      }
+      if (event.touches.length !== 1) return;
+      swipe = { x: event.touches[0].clientX, y: event.touches[0].clientY, viewer: false };
+    }, { passive: true });
+    document.addEventListener("touchmove", (event) => {
+      const view = STATE.viewer;
+      const img = document.getElementById("viewer-img");
+      if (!view || !img) return;
+      if (event.touches.length === 2 && pinch) {
+        const a = event.touches[0];
+        const b = event.touches[1];
+        const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) || 1;
+        view.scale = Math.max(1, Math.min(4, pinch.scale * (dist / pinch.dist)));
+        img.style.transform = "translate3d(" + (view.x || 0) + "px," + (view.y || 0) + "px,0) scale(" + view.scale + ")";
+        return;
+      }
+      if (!swipe || !swipe.viewer || event.touches.length !== 1) return;
+      const dx = event.touches[0].clientX - swipe.x;
+      const dy = event.touches[0].clientY - swipe.y;
+      if ((view.scale || 1) > 1.05) {
+        view.x = dx;
+        view.y = dy;
+      }
+      img.style.transform = "translate3d(" + dx + "px," + dy + "px,0) scale(" + (view.scale || 1) + ")";
+    }, { passive: true });
+    document.addEventListener("touchend", (event) => {
+      const view = STATE.viewer;
+      if (pinch && event.touches.length < 2) pinch = null;
+      if (!swipe) return;
+      const end = event.changedTouches[0];
+      const dx = end.clientX - swipe.x;
+      const dy = end.clientY - swipe.y;
+      const fromViewer = swipe.viewer;
+      const startX = swipe.x;
+      swipe = null;
+      if (fromViewer && view) {
+        if ((view.scale || 1) <= 1.05 && dy > 90 && Math.abs(dy) > Math.abs(dx)) { closeViewer(); return; }
+        if ((view.scale || 1) <= 1.05 && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) { shiftViewer(dx < 0 ? 1 : -1); return; }
+        view.scale = (view.scale || 1) < 1.05 ? 1 : view.scale;
+        view.x = 0;
+        view.y = 0;
+        const img = document.getElementById("viewer-img");
+        if (img) img.style.transform = "translate3d(0,0,0) scale(" + (view.scale || 1) + ")";
+        return;
+      }
+      if (Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.2) {
+        if (startX < 28 && dx > 72 && Math.abs(dy) < 80 && parseRoute().name !== "home") history.back();
+        return;
+      }
+      const route = parseRoute();
+      if (route.name !== "home") {
+        if (startX < 28 && dx > 72) history.back();
+        return;
+      }
+      const tab = route.tab === "following" ? "following" : "foryou";
+      if (dx < 0 && tab === "foryou") location.hash = "#/following";
+      else if (dx > 0 && tab === "following") location.hash = "#/";
+    }, { passive: true });
+  }
+
   async function boot() {
     consumeShareTarget();
     bindShell();
     registerSW();
-    STATE.loading = true;
     STATE.error = null;
     loadStatus();
     STATE.settings = loadSettings();
     applyTheme();
-    render();
+    const snap = loadTimelineSnap();
+    if (snap) {
+      STATE.data = snap;
+      STATE.loading = false;
+      render({ reset: true });
+    } else {
+      STATE.loading = true;
+      render();
+    }
+    flushBookmarkQueue();
     const params = new URLSearchParams(location.search);
     try {
       if (params.get("error") === "1") throw new Error("forced");
       STATE.data = await fetchFeeds(false);
+      saveTimelineSnap(STATE.data);
       STATE.settings = loadSettings();
       applyTheme();
       STATE.loading = false;
       saveSettings();
+      if (STATE.incoming && (location.hash === "#/incoming" || location.hash === "#/" || location.hash === "")) {
+        const shared = parseSharedLink([STATE.incoming.url, STATE.incoming.text, STATE.incoming.title].filter(Boolean).join(" "));
+        if (shared) {
+          history.replaceState(null, "", location.pathname + shared);
+        }
+      }
       render({ reset: true });
       loadNewestShard().then(() => revealArchive());
       const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
@@ -5733,8 +6097,14 @@
       }
     } catch (err) {
       STATE.loading = false;
-      STATE.error = err;
-      render({ reset: true });
+      if (STATE.data && Array.isArray(STATE.data.posts) && STATE.data.posts.length) {
+        STATE.error = null;
+        if (!navigator.onLine) setOffline(true);
+        render();
+      } else {
+        STATE.error = err;
+        render({ reset: true });
+      }
     }
   }
 
