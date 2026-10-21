@@ -665,6 +665,10 @@ def main() -> None:
     yt_loader = app[app.index("function ytStub("):app.index("function liveDuration(")]
     reply_bucket = app[app.index("function replyBucket("):app.index("function ivIso(")]
     check("ivThread(" in yt_loader and "ivCommunityThread(" in yt_loader and 'ownPack("yt_"' in yt_loader and 'snapshotDoc("yt_"' in yt_loader and 'ownPack("ytpost_"' in yt_loader and 'snapshotDoc("ytpost_"' in yt_loader and "pipedThread(" not in yt_loader and "loadYtComments(post)" in reply_bucket, "youtube comments share one loader on every surface")
+    profile_view = app[app.index("function profileView("):app.index("function statusView(")]
+    yt_channel = app[app.index("function ytProfileFromPiped("):app.index("function loadLimited(")]
+    check("function catalogAccount(" in app and "function accountHash(" in app and "accountHash(feed.platform, feed.channelId || feed.handle)" in app and "function stopWatchPlayback(" in app and "leavingWatch" in app and "Subscribers" in profile_view, "a followed channel opens its synced profile and the watch player stops")
+    check('"/channel/"' in yt_channel and "ytProfileFromPiped" in yt_channel and "filter=videos" in yt_channel, "a live YouTube channel uses the public channel fallback when Invidious misses")
     community_loader = app[app.index("function ivCommunityThread("):app.index("function ytStub(")]
     check("ucid=" in community_loader and "commentCount" in community_loader, "community comments pass the channel id and keep the source count")
     check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
