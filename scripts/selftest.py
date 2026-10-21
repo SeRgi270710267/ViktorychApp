@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
@@ -700,7 +701,16 @@ def main() -> None:
     check("fallback/" in ignore and "status.json" in ignore, "generated fallback files stay out of git")
 
     from datetime import datetime as dt
-    from own_fetch import extract_watch, parse_ig_oembed, parse_innertube_comments, parse_syndication, select_recent
+    from own_fetch import (
+        extract_watch,
+        next_page_token,
+        parse_ig_oembed,
+        parse_innertube_comments,
+        parse_syndication,
+        parse_thread_renderers,
+        reply_continuations,
+        select_recent,
+    )
     from health import build_status
 
     synd = parse_syndication(json.loads((FIX / "own" / "syndication.json").read_text(encoding="utf-8")))
@@ -711,6 +721,97 @@ def main() -> None:
     check(comments[0]["replies"][0]["text"] == "A reply under it." and comments[0]["replies"][0]["date"] == "2026-10-21T11:57:00Z", "a youtube reply stays under its parent")
     watch = extract_watch((FIX / "own" / "watch_snippet.html").read_text(encoding="utf-8"))
     check(watch["key"] == "AIzaSyTESTKEY" and watch["token"] == "Eg0S_TEST_TOKEN" and watch["version"] == "2.20251021.00.00", "the watch page yields the public innertube key and comment token")
+    panel = base64.urlsafe_b64encode(b"\x12\x01engagement-panel-comments-section").decode().rstrip("=")
+    section = base64.urlsafe_b64encode(b"\x12\x01comments-section").decode().rstrip("=")
+    modern = (
+        '<html><script>"panelIdentifier":"engagement-panel-comments-section"'
+        + (" " * 8000)
+        + '"continuationCommand":{"token":"' + section + '%3D"}'
+        + '"continuationCommand":{"token":"' + panel + '"}</script></html>'
+    )
+    modern_watch = extract_watch(modern)
+    check(modern_watch["token"] == panel, "a comments-panel token is used when the page omits the request field")
+    classic = {
+        "onResponseReceivedEndpoints": [
+            {
+                "reloadContinuationItemsCommand": {
+                    "continuationItems": [
+                        {
+                            "commentThreadRenderer": {
+                                "comment": {
+                                    "commentRenderer": {
+                                        "commentId": "Ugclassic",
+                                        "contentText": {"runs": [{"text": "Classic thread text."}]},
+                                        "authorText": {"simpleText": "@Cara"},
+                                        "likeCount": 3,
+                                        "replyCount": 2,
+                                        "publishedTimeText": {"runs": [{"text": "1 hour ago"}]},
+                                        "authorThumbnail": {"thumbnails": [{"url": "https://yt3.ggpht.com/a=s88"}]},
+                                    }
+                                },
+                                "replies": {
+                                    "commentRepliesRenderer": {
+                                        "contents": [
+                                            {
+                                                "commentRenderer": {
+                                                    "commentId": "Ugchild",
+                                                    "contentText": {"simpleText": "Inline child."},
+                                                    "authorText": {"simpleText": "Dan"},
+                                                    "publishedTimeText": {"simpleText": "5 minutes ago"},
+                                                }
+                                            },
+                                            {"continuationItemRenderer": {"continuationEndpoint": {"continuationCommand": {"token": "REPLYTOKEN"}}}},
+                                        ]
+                                    }
+                                },
+                            }
+                        },
+                        {"continuationItemRenderer": {"continuationEndpoint": {"continuationCommand": {"token": "PAGETOKEN", "request": "CONTINUATION_REQUEST_TYPE_WATCH_NEXT"}}}},
+                    ]
+                }
+            }
+        ]
+    }
+    classic_rows = parse_thread_renderers(classic, {"statusId": "videoid", "handle": "redacted_handle"}, moment)
+    check(
+        len(classic_rows) == 1
+        and classic_rows[0]["text"] == "Classic thread text."
+        and classic_rows[0]["handle"] == "Cara"
+        and classic_rows[0]["stats"]["likes"] == 3
+        and classic_rows[0]["date"] == "2026-10-21T11:00:00Z"
+        and classic_rows[0]["replies"][0]["text"] == "Inline child."
+        and classic_rows[0]["replies"][0]["replyingTo"]["id"] == "Ugclassic",
+        "older innertube threads keep the comment and its inline reply",
+    )
+    check(reply_continuations(classic) == {"Ugclassic": "REPLYTOKEN"} and next_page_token(classic) == "PAGETOKEN", "reply and next-page tokens stay on the public continuation")
+    siblings = parse_innertube_comments(
+        {
+            "frameworkUpdates": {
+                "entityBatchUpdate": {
+                    "mutations": [
+                        {"payload": {"commentEntityPayload": {"properties": {"commentId": "a", "content": {"content": "one"}, "replyLevel": 1}, "author": {"displayName": "A"}, "toolbar": {}}}},
+                        {"payload": {"commentEntityPayload": {"properties": {"commentId": "b", "content": {"content": "two"}, "replyLevel": 1}, "author": {"displayName": "B"}, "toolbar": {}}}},
+                    ]
+                }
+            }
+        },
+        {"statusId": "parent"},
+        as_siblings=True,
+    )
+    check(len(siblings) == 2 and siblings[0]["id"] == "a" and siblings[1]["id"] == "b" and "replies" not in siblings[0], "a reply page lists each reply on its own")
+    from adapters.youtube_community import posts_tab
+
+    home_params = base64.urlsafe_b64encode(b"\x12\x04home").decode().rstrip("=")
+    posts_params = base64.urlsafe_b64encode(b"\x12\x05posts").decode().rstrip("=")
+    tab_html = (
+        '{"browseEndpoint":{"browseId":"UChomechannelidxxxxxx","params":"'
+        + home_params
+        + '"}}{"browseEndpoint":{"browseId":"UCpostchannelidxxxxxx","params":"'
+        + posts_params
+        + '"}}'
+    )
+    tab = posts_tab(tab_html)
+    check(tab[0] == "UCpostchannelidxxxxxx" and tab[1] == posts_params, "the posts tab is the browse endpoint whose params name posts")
     oembed = parse_ig_oembed(json.loads((FIX / "own" / "ig_oembed.json").read_text(encoding="utf-8")), "DeZgzTEggQe")
     check("melon" in oembed["text"] and oembed["author"] == "redacted_handle" and oembed["replies"] == [] and oembed["media"][0]["url"].startswith("https://"), "instagram oembed keeps the caption and no comments")
     wrapped, wrapped_count = parse_threads_document(json.loads((FIX / "own" / "threads_wrapper.json").read_text(encoding="utf-8")), {"handle": "redacted_handle", "statusId": "DeZtp"})
