@@ -35,6 +35,8 @@
     check: "M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.222 1.261.27 1.894.139.634-.13 1.22-.435 1.689-.882.445-.47.749-1.055.878-1.688.132-.633.084-1.29-.139-1.896.586-.274 1.084-.705 1.438-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z",
     back: "M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z",
     close: "M10.59 12 4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z",
+    mic: "M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5.3-3a5.3 5.3 0 0 1-4.3 5.2V19h2v2h-6v-2h2v-2.8A5.3 5.3 0 0 1 6.7 11H8.3a3.7 3.7 0 0 0 7.4 0h1.6z",
+    clock: "M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2zm1 11h-4V7h2v4h2v2z",
     plus: "M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z",
     play: "M8 5v14l11-7z",
     vol: "M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 0 0-2.5-4.03v8.05A4.5 4.5 0 0 0 16.5 12zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z",
@@ -4820,6 +4822,10 @@
     return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${label}</span></a>`;
   }
 
+  function wordmarkSvg(cls) {
+    return '<svg class="' + (cls || "") + '" viewBox="0 0 9539.20 2079.00" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5774.2 1661 6315.2 171H 6535.2L 7083.2 1661H 6883.2L 6734.2 1245H 6120.2L 5976.2 1661ZM 6178.2 1079H 6675.2L 6567.2 777Q 6540.2 702 6506.2 593.5Q 6472.2 485 6424.2 323Q 6377.2 488 6342.2 598Q 6307.2 708 6283.2 777Z M 7293.2 2079V 543H 7467.2V 722H 7487.2Q 7506.2 692 7540.2 646.5Q 7574.2 601 7638.2 565Q 7702.2 529 7811.2 529Q 7951.2 529 8057.7 599Q 8164.2 669 8224.7 798.5Q 8285.2 928 8285.2 1105Q 8285.2 1283 8225.2 1413Q 8165.2 1543 8058.7 1614Q 7952.2 1685 7812.2 1685Q 7706.2 1685 7641.2 1648.5Q 7576.2 1612 7541.2 1565.5Q 7506.2 1519 7487.2 1488H 7473.2V 2079ZM 7785.2 1524Q 7890.2 1524 7960.7 1467.5Q 8031.2 1411 8066.7 1315.5Q 8102.2 1220 8102.2 1103Q 8102.2 987 8067.2 893.5Q 8032.2 800 7961.7 745Q 7891.2 690 7785.2 690Q 7631.2 690 7551.2 804Q 7471.2 918 7471.2 1103Q 7471.2 1290 7552.2 1407Q 7633.2 1524 7785.2 1524Z M 8547.2 2079V 543H 8721.2V 722H 8741.2Q 8760.2 692 8794.2 646.5Q 8828.2 601 8892.2 565Q 8956.2 529 9065.2 529Q 9205.2 529 9311.7 599Q 9418.2 669 9478.7 798.5Q 9539.2 928 9539.2 1105Q 9539.2 1283 9479.2 1413Q 9419.2 1543 9312.7 1614Q 9206.2 1685 9066.2 1685Q 8960.2 1685 8895.2 1648.5Q 8830.2 1612 8795.2 1565.5Q 8760.2 1519 8741.2 1488H 8727.2V 2079ZM 9039.2 1524Q 9144.2 1524 9214.7 1467.5Q 9285.2 1411 9320.7 1315.5Q 9356.2 1220 9356.2 1103Q 9356.2 987 9321.2 893.5Q 9286.2 800 9215.7 745Q 9145.2 690 9039.2 690Q 8885.2 690 8805.2 804Q 8725.2 918 8725.2 1103Q 8725.2 1290 8806.2 1407Q 8887.2 1524 9039.2 1524Z"/></svg>';
+  }
+
   function brandLink() {
     return `<a class="logo" href="#/" aria-label="SuperintelApp"><svg class="logo-full" viewBox="0 0 9539.20 2079.00" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5774.2 1661 6315.2 171H 6535.2L 7083.2 1661H 6883.2L 6734.2 1245H 6120.2L 5976.2 1661ZM 6178.2 1079H 6675.2L 6567.2 777Q 6540.2 702 6506.2 593.5Q 6472.2 485 6424.2 323Q 6377.2 488 6342.2 598Q 6307.2 708 6283.2 777Z M 7293.2 2079V 543H 7467.2V 722H 7487.2Q 7506.2 692 7540.2 646.5Q 7574.2 601 7638.2 565Q 7702.2 529 7811.2 529Q 7951.2 529 8057.7 599Q 8164.2 669 8224.7 798.5Q 8285.2 928 8285.2 1105Q 8285.2 1283 8225.2 1413Q 8165.2 1543 8058.7 1614Q 7952.2 1685 7812.2 1685Q 7706.2 1685 7641.2 1648.5Q 7576.2 1612 7541.2 1565.5Q 7506.2 1519 7487.2 1488H 7473.2V 2079ZM 7785.2 1524Q 7890.2 1524 7960.7 1467.5Q 8031.2 1411 8066.7 1315.5Q 8102.2 1220 8102.2 1103Q 8102.2 987 8067.2 893.5Q 8032.2 800 7961.7 745Q 7891.2 690 7785.2 690Q 7631.2 690 7551.2 804Q 7471.2 918 7471.2 1103Q 7471.2 1290 7552.2 1407Q 7633.2 1524 7785.2 1524Z M 8547.2 2079V 543H 8721.2V 722H 8741.2Q 8760.2 692 8794.2 646.5Q 8828.2 601 8892.2 565Q 8956.2 529 9065.2 529Q 9205.2 529 9311.7 599Q 9418.2 669 9478.7 798.5Q 9539.2 928 9539.2 1105Q 9539.2 1283 9479.2 1413Q 9419.2 1543 9312.7 1614Q 9206.2 1685 9066.2 1685Q 8960.2 1685 8895.2 1648.5Q 8830.2 1612 8795.2 1565.5Q 8760.2 1519 8741.2 1488H 8727.2V 2079ZM 9039.2 1524Q 9144.2 1524 9214.7 1467.5Q 9285.2 1411 9320.7 1315.5Q 9356.2 1220 9356.2 1103Q 9356.2 987 9321.2 893.5Q 9286.2 800 9215.7 745Q 9145.2 690 9039.2 690Q 8885.2 690 8805.2 804Q 8725.2 918 8725.2 1103Q 8725.2 1290 8806.2 1407Q 8887.2 1524 9039.2 1524Z"/></svg><svg class="logo-si" viewBox="0 0 1986.60 1680.80" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z"/></svg></a>`;
   }
@@ -6261,20 +6267,413 @@
     return `<div class="tg-comments"><iframe src="${esc(src)}" title="Telegram comments" loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
   }
 
-  function exploreView(route) {
-    const q = (route.query.get("q") || "").trim();
-    const lq = q.toLowerCase();
-    let body = emptyBlock("Search posts and accounts", "Try a name, @handle, or a word from a post.");
-    if (lq) {
-      const accounts = shownFeeds(feeds()).filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && (f.name + " " + f.handle + " " + (f.aliases || "") + " " + (f.bio || "")).toLowerCase().includes(lq));
-      const found = posts().filter((p) => !hiddenPost(p) && (p.text + " " + p.author + " " + p.handle + " " + ((p.article && ((p.article.title || "") + " " + (p.article.preview || ""))) || "") + " " + ((p.quoted && p.quoted.text) || "") + " " + ((p.quoted && p.quoted.article && p.quoted.article.title) || "")).toLowerCase().includes(lq)).sort(byStamp);
-      const acct = accounts.length ? `<section class="card"><h2>Accounts</h2>${accounts.map(accountRow).join("")}</section>` : "";
-      body = acct + (found.length ? found.map((p) => card(p)).join("") : emptyBlock("No results", "Nothing matched “" + q + "”."));
-    }
-    return `<div class="topbar explore-bar"><div class="page-head"><h1>Explore</h1></div>
-      <form data-act="search-form" class="explore-form"><label class="search"><span>${icon("search")}</span><input id="explore-q" value="${esc(q)}" placeholder="Search" aria-label="Search"></label></form></div>${body}`;
+  const SEARCH_KEY = "rss-feeds-searches-v1";
+  let trendCache = null;
+  let trendKey = "";
+  let exploreSuggestAt = -1;
+  let exploreSuggestQuiet = false;
+  let exploreMic = null;
+  const TREND_STOP = { this: 1, that: 1, with: 1, from: 1, have: 1, your: 1, just: 1, about: 1, they: 1, will: 1, what: 1, when: 1, were: 1, been: 1, them: 1, then: 1, than: 1, into: 1, over: 1, also: 1, more: 1, some: 1, like: 1, only: 1, there: 1, their: 1, which: 1, http: 1, https: 1, youtu: 1, www: 1, com: 1, today: 1, time: 1, video: 1, news: 1, everyone: 1, watch: 1, here: 1, after: 1, before: 1, would: 1, could: 1, should: 1, because: 1, these: 1, those: 1, other: 1, first: 1, still: 1, even: 1, much: 1, many: 1, very: 1, being: 1, where: 1, while: 1, through: 1, under: 1, again: 1, once: 1, each: 1, such: 1, most: 1, same: 1, down: 1, our: 1, you: 1, for: 1, and: 1, the: 1, not: 1, are: 1, was: 1, but: 1, all: 1, can: 1, has: 1, had: 1, its: 1, new: 1, now: 1, get: 1, got: 1, how: 1, who: 1, why: 1, did: 1, does: 1, done: 1, said: 1, says: 1, out: 1, off: 1, too: 1, any: 1, his: 1, her: 1, she: 1, him: 1, lets: 1, make: 1, made: 1, come: 1, came: 1, back: 1, want: 1, need: 1, know: 1, take: 1, year: 1, years: 1, just: 1 };
+
+  function recentSearches() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(SEARCH_KEY) || "[]");
+      if (!Array.isArray(raw)) return [];
+      return raw.map((item) => String(item || "").trim()).filter((item) => item && item.length < 120).slice(0, 8);
+    } catch (err) { return []; }
   }
 
+  function rememberSearch(q) {
+    const text = String(q || "").trim();
+    if (!text || text.length > 120) return;
+    const next = [text].concat(recentSearches().filter((item) => item.toLowerCase() !== text.toLowerCase())).slice(0, 8);
+    try { localStorage.setItem(SEARCH_KEY, JSON.stringify(next)); } catch (err) { /* storage can be blocked */ }
+  }
+
+  function forgetSearch(q) {
+    const text = String(q || "").trim().toLowerCase();
+    const next = recentSearches().filter((item) => item.toLowerCase() !== text);
+    try { localStorage.setItem(SEARCH_KEY, JSON.stringify(next)); } catch (err) { /* storage can be blocked */ }
+  }
+
+  function themeLabel(mode) {
+    if (mode === "dim") return "Dim";
+    if (mode === "default") return "Light";
+    if (mode === "auto") return "Auto";
+    return "Lights out";
+  }
+
+  function postHay(post) {
+    const article = post && post.article;
+    const quoted = post && post.quoted;
+    const quotedArticle = quoted && quoted.article;
+    return ((post && post.text) || "") + " " + ((post && post.title) || "") + " " + ((post && post.author) || "") + " " + ((post && post.handle) || "") + " " + ((article && article.title) || "") + " " + ((article && article.preview) || "") + " " + ((quoted && quoted.text) || "") + " " + ((quotedArticle && quotedArticle.title) || "");
+  }
+
+  function exploreHeat(post) {
+    const stats = (post && post.stats) || {};
+    return (Number(stats.likes) || 0) + (Number(stats.reposts) || 0) + (Number(stats.replies) || 0);
+  }
+
+  function exploreHits(q) {
+    const lq = String(q || "").trim().toLowerCase();
+    const accounts = lq ? shownFeeds(feeds()).filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && ((f.name || "") + " " + (f.handle || "") + " " + (f.aliases || "") + " " + (f.bio || "")).toLowerCase().includes(lq)) : [];
+    const found = lq ? posts().filter((p) => !hiddenPost(p) && postHay(p).toLowerCase().includes(lq)).sort(byStamp) : [];
+    const top = found.slice().sort((a, b) => exploreHeat(b) - exploreHeat(a) || byStamp(a, b));
+    return { accounts: accounts, posts: found, top: top };
+  }
+
+  function postHasVisual(post) {
+    return ((post && post.media) || []).some((item) => item && item.type !== "file" && item.type !== "audio" && (item.url || item.poster));
+  }
+
+  function trendTopics() {
+    const list = posts();
+    const key = list.length + ":" + ((list[0] && list[0].id) || "") + ":" + ((list[list.length - 1] && list[list.length - 1].id) || "");
+    if (trendCache && trendKey === key) return trendCache;
+    const tags = {};
+    const words = {};
+    list.forEach((post) => {
+      if (!post || hiddenPost(post)) return;
+      const text = postHay(post);
+      const seenTag = {};
+      const seenWord = {};
+      const tagRe = /#([0-9A-Za-z_]{2,40})/g;
+      let match;
+      while ((match = tagRe.exec(text))) {
+        const raw = match[1];
+        const id = raw.toLowerCase();
+        if (seenTag[id]) continue;
+        seenTag[id] = 1;
+        const row = tags[id] || (tags[id] = { label: "#" + raw, q: "#" + raw, n: 0 });
+        row.n += 1;
+      }
+      const wordRe = /[A-Za-z][A-Za-z0-9]{3,}/g;
+      while ((match = wordRe.exec(text))) {
+        const id = match[0].toLowerCase();
+        if (TREND_STOP[id] || seenWord[id]) continue;
+        seenWord[id] = 1;
+        const row = words[id] || (words[id] = { label: match[0], q: match[0], n: 0 });
+        row.n += 1;
+      }
+    });
+    const tagList = Object.keys(tags).map((id) => tags[id]).sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+    const wordList = Object.keys(words).map((id) => words[id]).filter((item) => item.n >= 2).sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+    const out = [];
+    const seen = {};
+    tagList.concat(wordList).forEach((item) => {
+      const id = item.q.toLowerCase();
+      if (seen[id] || out.length >= 12) return;
+      seen[id] = 1;
+      out.push(item);
+    });
+    trendCache = out;
+    trendKey = key;
+    return out;
+  }
+
+  function exploreSuggestHtml(raw) {
+    const q = String(raw || "").trim();
+    const folded = q.toLowerCase();
+    const recent = recentSearches().filter((item) => !q || item.toLowerCase().indexOf(folded) >= 0).slice(0, 5);
+    const accounts = q ? exploreHits(q).accounts.slice(0, 4) : [];
+    const accountNames = {};
+    accounts.forEach((f) => {
+      accountNames[String(f.handle || "").toLowerCase()] = 1;
+      accountNames[String(f.name || "").toLowerCase()] = 1;
+    });
+    const trends = q ? trendTopics().filter((item) => {
+      const id = item.q.toLowerCase();
+      if (accountNames[id]) return false;
+      return id.indexOf(folded) >= 0 || item.label.toLowerCase().indexOf(folded.replace(/^#/, "")) >= 0;
+    }).slice(0, 5) : [];
+    if (!recent.length && !accounts.length && !trends.length) return "";
+    let html = "";
+    if (recent.length) {
+      html += `<div class="gsuggest-label">Recent</div>`;
+      recent.forEach((item) => {
+        html += `<div class="gsuggest-row"><button type="button" class="gsuggest-pick" data-pick data-act="explore-pick" data-q="${esc(item)}"><span class="gsuggest-ico">${icon("clock")}</span><span class="gsuggest-text">${esc(item)}</span></button><button type="button" class="gsuggest-x" data-act="explore-forget" data-q="${esc(item)}" aria-label="Remove ${esc(item)}">${icon("close")}</button></div>`;
+      });
+    }
+    if (accounts.length) {
+      html += `<div class="gsuggest-label">Accounts</div>`;
+      accounts.forEach((f) => {
+        html += `<a class="gsuggest-pick" data-pick data-act="explore-account" data-q="${esc(f.handle || f.name || "")}" href="${esc(accountHash(f.platform, f.channelId || f.handle))}">${avatar(f.avatar, f.name)}<span class="gsuggest-copy"><span class="name">${esc(f.name || f.handle || "")}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle || "")}</span></span></a>`;
+      });
+    }
+    if (trends.length) {
+      html += `<div class="gsuggest-label">Trending</div>`;
+      trends.forEach((item) => {
+        const hash = item.q.charAt(0) === "#";
+        const mark = hash ? `<span class="gsuggest-hash">#</span>` : icon("spark");
+        html += `<button type="button" class="gsuggest-pick" data-pick data-act="explore-pick" data-q="${esc(item.q)}"><span class="gsuggest-ico">${mark}</span><span class="gsuggest-text">${esc(hash ? item.label.slice(1) : item.label)}</span></button>`;
+      });
+    }
+    return html;
+  }
+
+  function explorePicks() {
+    return Array.prototype.slice.call(document.querySelectorAll("#explore-suggest [data-pick]"));
+  }
+
+  function hideExploreSuggest() {
+    const panel = document.getElementById("explore-suggest");
+    const input = document.getElementById("explore-q");
+    exploreSuggestAt = -1;
+    if (panel) {
+      panel.hidden = true;
+      panel.innerHTML = "";
+    }
+    if (input) input.setAttribute("aria-expanded", "false");
+  }
+
+  function paintExploreSuggestOn() {
+    const picks = explorePicks();
+    const panel = document.getElementById("explore-suggest");
+    picks.forEach((el, index) => {
+      const on = index === exploreSuggestAt;
+      el.classList.toggle("on", on);
+      if (!on || !panel) return;
+      const top = el.offsetTop;
+      const bottom = top + el.offsetHeight;
+      if (top < panel.scrollTop) panel.scrollTop = top;
+      else if (bottom > panel.scrollTop + panel.clientHeight) panel.scrollTop = bottom - panel.clientHeight;
+    });
+  }
+
+  function syncExploreSuggest(input) {
+    if (!input) return;
+    const field = input.closest ? input.closest(".gsearch") : null;
+    const clear = field ? field.querySelector(".gsearch-clear") : null;
+    if (clear) clear.hidden = !String(input.value || "");
+    const panel = document.getElementById("explore-suggest");
+    if (!panel) return;
+    if (exploreSuggestQuiet) {
+      hideExploreSuggest();
+      return;
+    }
+    const html = exploreSuggestHtml(input.value);
+    if (!html) {
+      hideExploreSuggest();
+      return;
+    }
+    exploreSuggestAt = -1;
+    panel.innerHTML = html;
+    panel.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  }
+
+  function moveExploreSuggest(dir) {
+    const input = document.getElementById("explore-q");
+    if (!input) return;
+    const panel = document.getElementById("explore-suggest");
+    if (!panel || panel.hidden) syncExploreSuggest(input);
+    const picks = explorePicks();
+    if (!picks.length) return;
+    if (exploreSuggestAt < 0) exploreSuggestAt = dir > 0 ? 0 : picks.length - 1;
+    else exploreSuggestAt = (exploreSuggestAt + dir + picks.length) % picks.length;
+    paintExploreSuggestOn();
+  }
+
+  function visibleSearch() {
+    const ids = ["explore-q", "side-q"];
+    for (let i = 0; i < ids.length; i++) {
+      const el = document.getElementById(ids[i]);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 2 || rect.height < 2) continue;
+      return el;
+    }
+    return null;
+  }
+
+  function startExploreMic() {
+    const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const box = document.querySelector(".gsearch");
+    if (!Rec) {
+      toast("Voice search isn’t available in this browser");
+      return;
+    }
+    if (exploreMic) {
+      try { exploreMic.stop(); } catch (err) { /* already stopped */ }
+      exploreMic = null;
+      if (box) box.classList.remove("is-listening");
+      return;
+    }
+    let rec;
+    try { rec = new Rec(); }
+    catch (err) {
+      toast("Voice search isn’t available in this browser");
+      return;
+    }
+    rec.lang = navigator.language || "en-US";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (event) => {
+      const said = event.results && event.results[0] && event.results[0][0] ? event.results[0][0].transcript : "";
+      const text = String(said || "").trim();
+      if (!text) return;
+      rememberSearch(text);
+      exploreSuggestQuiet = true;
+      goHash("#/explore?q=" + encodeURIComponent(text));
+    };
+    rec.onerror = () => {
+      const live = document.querySelector(".gsearch");
+      if (live) live.classList.remove("is-listening");
+    };
+    rec.onend = () => {
+      exploreMic = null;
+      const live = document.querySelector(".gsearch");
+      if (live) live.classList.remove("is-listening");
+    };
+    exploreMic = rec;
+    if (box) box.classList.add("is-listening");
+    try { rec.start(); }
+    catch (err) {
+      exploreMic = null;
+      if (box) box.classList.remove("is-listening");
+      toast("Voice search isn’t available in this browser");
+    }
+  }
+
+  function onExploreAct(act, el) {
+    if (act === "explore-account") {
+      const saved = el.dataset.q || "";
+      if (saved) rememberSearch(saved);
+      exploreSuggestQuiet = true;
+      return;
+    }
+    if (act === "explore-forget") {
+      forgetSearch(el.dataset.q || "");
+      const input = document.getElementById("explore-q");
+      if (input) {
+        input.focus();
+        syncExploreSuggest(input);
+      }
+      return;
+    }
+    if (act === "explore-clear") {
+      const route = parseRoute();
+      const input = document.getElementById("explore-q");
+      if (route.name === "explore" && (route.query.get("q") || "").trim()) {
+        exploreSuggestQuiet = false;
+        goHash("#/explore");
+        return;
+      }
+      if (input) {
+        input.value = "";
+        input.focus();
+        syncExploreSuggest(input);
+      }
+      return;
+    }
+    if (act === "explore-mic") {
+      startExploreMic();
+      return;
+    }
+    if (act === "explore-lucky") {
+      const list = posts().filter((post) => post && post.id && !hiddenPost(post)).sort(byStamp).slice(0, 40);
+      if (!list.length) {
+        toast("No posts yet");
+        return;
+      }
+      goHash(statusHash(list[Math.floor(Math.random() * list.length)]));
+      return;
+    }
+    if (act === "explore-trends") {
+      STATE.exploreTrends = !STATE.exploreTrends;
+      const panel = document.querySelector(".gtrend-chips");
+      const btn = document.querySelector(".gtrend-toggle");
+      if (panel && btn) {
+        panel.hidden = !STATE.exploreTrends;
+        btn.setAttribute("aria-expanded", STATE.exploreTrends ? "true" : "false");
+        return;
+      }
+      render();
+      return;
+    }
+    if (act === "explore-theme") {
+      const order = ["lightsout", "dim", "default"];
+      const cur = (STATE.settings && STATE.settings.appearance) || "lightsout";
+      const at = order.indexOf(cur);
+      const next = order[(at + 1) % order.length];
+      STATE.settings.appearance = next;
+      saveSettings();
+      applyTheme();
+      const label = document.querySelector(".gtheme-label");
+      if (label) label.textContent = themeLabel(next);
+      else render();
+      return;
+    }
+    if (act === "explore-tab") {
+      const route = parseRoute();
+      const q = (route.query.get("q") || "").trim();
+      const tab = el.dataset.tab || "top";
+      exploreSuggestQuiet = true;
+      goHash("#/explore?q=" + encodeURIComponent(q) + (tab && tab !== "top" ? "&tab=" + encodeURIComponent(tab) : ""));
+      return;
+    }
+    if (act === "explore-pick") {
+      const q = String(el.dataset.q || "").trim();
+      if (!q) return;
+      rememberSearch(q);
+      exploreSuggestQuiet = true;
+      goHash("#/explore?q=" + encodeURIComponent(q));
+    }
+  }
+
+  function exploreSearchField(q) {
+    const text = q || "";
+    return `<div class="gform-box"><label class="search gsearch"><span class="gsearch-lead">${icon("search")}</span><input id="explore-q" type="text" value="${esc(text)}" placeholder="Search" aria-label="Search" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-autocomplete="list" aria-controls="explore-suggest" aria-expanded="false"><span class="gsearch-tools"><button class="gsearch-clear" type="button" data-act="explore-clear" aria-label="Clear"${text ? "" : " hidden"}>${icon("close")}</button><button class="gsearch-mic" type="button" data-act="explore-mic" aria-label="Search by voice">${icon("mic")}</button></span></label><div id="explore-suggest" class="gsuggest" role="listbox" aria-label="Suggestions" hidden></div></div>`;
+  }
+
+  function exploreHome() {
+    const mode = (STATE.settings && STATE.settings.appearance) || "lightsout";
+    const open = !!STATE.exploreTrends;
+    const trends = trendTopics().slice(0, 8);
+    const chips = trends.map((item) => `<button type="button" class="gchip" data-act="explore-pick" data-q="${esc(item.q)}">${esc(item.label)}</button>`).join("");
+    const trend = trends.length ? `<div class="gtrend"><button type="button" class="gtrend-toggle" data-act="explore-trends" aria-expanded="${open ? "true" : "false"}">Trending ${icon("caret")}</button><div class="gtrend-chips"${open ? "" : " hidden"}>${chips}</div></div>` : "";
+    return `<div class="ghome"><div class="ghome-mid"><div class="ghome-logo">${wordmarkSvg("ghome-mark")}</div><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField("")}</form><div class="gactions"><button class="gbtn fill" type="submit" form="explore-form">Search SIntelApp</button><button class="gbtn line" type="button" data-act="explore-lucky">Surprise me</button></div>${trend}</div><footer class="ghome-foot"><a href="#/settings">About</a><a href="#/settings">Settings</a><button type="button" data-act="explore-theme" aria-label="Theme"><span class="gtheme-label">${esc(themeLabel(mode))}</span></button></footer></div>`;
+  }
+
+  function exploreTabs(tab) {
+    const items = [["top", "Top"], ["latest", "Latest"], ["people", "People"], ["media", "Media"], ["videos", "Videos"]];
+    const buttons = items.map((pair) => `<button class="tab${tab === pair[0] ? " on" : ""}" type="button" role="tab" aria-selected="${tab === pair[0] ? "true" : "false"}" data-act="explore-tab" data-tab="${pair[0]}"><span>${pair[1]}</span></button>`).join("");
+    return `<div class="tabs-bar gresults-tabs"><div class="tabs" role="tablist" aria-label="Search results">${buttons}</div></div>`;
+  }
+
+  function exploreResults(route, q) {
+    const requested = (route.query.get("tab") || "top").toLowerCase();
+    const names = { top: 1, latest: 1, people: 1, media: 1, videos: 1 };
+    const tab = names[requested] ? requested : "top";
+    const pack = exploreHits(q);
+    let body = "";
+    const missed = "Nothing matched “" + q + "”.";
+    if (tab === "people") body = pack.accounts.length ? `<div class="gpeople">${pack.accounts.map((f) => accountRow(f)).join("")}</div>` : emptyBlock("No accounts", missed);
+    else if (tab === "media") {
+      const list = pack.posts.filter(postHasVisual);
+      body = list.length ? list.map((p) => card(p)).join("") : emptyBlock("No media", missed);
+    } else if (tab === "videos") {
+      const list = pack.posts.filter((p) => isVideoPost(p));
+      body = list.length ? list.map((p) => card(p)).join("") : emptyBlock("No videos", missed);
+    } else if (tab === "latest") body = pack.posts.length ? pack.posts.map((p) => card(p)).join("") : emptyBlock("No results", missed);
+    else {
+      const accounts = pack.accounts.length ? `<section class="card"><h2>Accounts</h2>${pack.accounts.map(accountRow).join("")}</section>` : "";
+      const list = pack.top.length ? pack.top.map((p) => card(p)).join("") : "";
+      body = (accounts + list) || emptyBlock("No results", missed);
+    }
+    return `<div class="gresults"><div class="gresults-head"><div class="gresults-row"><a class="gresults-logo" href="#/explore" aria-label="SIntelApp">${wordmarkSvg("gresults-mark")}</a><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField(q)}</form></div>${exploreTabs(tab)}</div><div class="gresults-list">${body}</div></div>`;
+  }
+
+  function exploreView(route) {
+    const q = (route.query.get("q") || "").trim();
+    if (q) {
+      rememberSearch(q);
+      return exploreResults(route, q);
+    }
+    exploreSuggestQuiet = false;
+    return exploreHome();
+  }
   function accountRow(f, opts) {
     const remove = opts && opts.remove && f.configured
       ? `<button type="button" class="follow remove-pill" data-act="ask-remove" data-id="${esc(f.id)}">Remove</button>`
@@ -7316,10 +7715,12 @@
 
   function shell(main, route) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages";
+    const explore = route.name === "explore";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
-    const top = (route.name === "messages" ? 0 : route.name === "explore" ? 124 : tall ? 106 : 53) + rowExtra;
-    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${wide ? " wide" : ""}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}`;
+    const top = (route.name === "messages" ? 0 : explore ? 0 : tall ? 106 : 53) + rowExtra;
+    const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
+    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${mode}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}`;
   }
 
   function watchHash(post) {
@@ -8596,6 +8997,7 @@
     const focus = document.activeElement;
     const focusId = focus && focus.id;
     const caret = focus && typeof focus.selectionStart === "number" ? focus.selectionStart : null;
+    const focusValue = focusId === "explore-q" ? focus.value : null;
     if (leavingWatch) stopWatchPlayback();
     rememberPlayback();
     if (leavingWatch) STATE.playing = null;
@@ -8618,11 +9020,13 @@
       const liveName = route.name === "user" ? ((STATE.liveUsers[liveKey(route.platform, route.handle)] || {}).profile || {}).name : "";
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
-      document.title = (discordTitle || personName || (route.name === "home" ? "Home" : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / SuperintelApp";
+      const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
+      document.title = (discordTitle || personName || (route.name === "home" ? "Home" : route.name === "explore" ? (exploreQ ? exploreQ + " - Explore" : "Explore") : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / SuperintelApp";
       window.scrollTo(0, y);
       if (focusId) {
         const el = document.getElementById(focusId);
         if (el) {
+          if (focusValue != null && el.id === "explore-q") el.value = focusValue;
           el.focus();
           if (caret != null && el.setSelectionRange) {
             try { el.setSelectionRange(caret, caret); } catch (err) { /* ignore */ }
@@ -8726,6 +9130,10 @@
     if (act === "skip") {
       const main = document.querySelector("main.center");
       if (main) main.focus();
+      return;
+    }
+    if (act === "explore-clear" || act === "explore-mic" || act === "explore-lucky" || act === "explore-trends" || act === "explore-theme" || act === "explore-tab" || act === "explore-pick" || act === "explore-forget" || act === "explore-account") {
+      onExploreAct(act, el);
       return;
     }
     if (act === "htab" || act === "like" || act === "bookmark" || act === "follow" || act === "back" || act === "view") tapHaptic();
@@ -9425,6 +9833,7 @@
       return;
     }
     const actEl = event.target.closest("[data-act]");
+    if (actEl && actEl.dataset.act === "search-form" && actEl.tagName === "FORM") return;
     if (actEl) {
       if (actEl.dataset.act !== "stop" && actEl.tagName !== "A") event.preventDefault();
       if (actEl.dataset.act !== "stop") event.stopPropagation();
@@ -9500,6 +9909,26 @@
     }
   }, true);
 
+  document.addEventListener("focusin", (event) => {
+    if (event.target && event.target.id === "explore-q") syncExploreSuggest(event.target);
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target || event.target.id !== "explore-q") return;
+    exploreSuggestQuiet = false;
+    syncExploreSuggest(event.target);
+  });
+  document.addEventListener("focusout", (event) => {
+    if (!event.target || event.target.id !== "explore-q") return;
+    setTimeout(() => {
+      const active = document.activeElement;
+      if (active && active.closest && active.closest(".gform-box")) return;
+      hideExploreSuggest();
+    }, 160);
+  });
+  document.addEventListener("mousedown", (event) => {
+    if (event.target && event.target.closest && event.target.closest(".gsuggest")) event.preventDefault();
+  });
+
   document.addEventListener("input", (event) => {
     const el = event.target;
     if (el.id === "compose-text") {
@@ -9510,6 +9939,11 @@
     if (el.id === "hist-q") {
       STATE.histQ = el.value;
       render();
+      return;
+    }
+    if (el.id === "explore-q") {
+      exploreSuggestQuiet = false;
+      syncExploreSuggest(el);
       return;
     }
     if (el.dataset && el.dataset.field) {
@@ -9572,6 +10006,10 @@
     event.preventDefault();
     const input = form.querySelector("input");
     const q = (input && input.value || "").trim();
+    if (input && (input.id === "explore-q" || input.id === "side-q")) {
+      exploreSuggestQuiet = !!q;
+      if (q) rememberSearch(q);
+    }
     goHash("#/explore" + (q ? "?q=" + encodeURIComponent(q) : ""));
   });
 
@@ -9630,6 +10068,41 @@
   });
 
   document.addEventListener("keydown", (event) => {
+    if (event.target && event.target.id === "explore-q") {
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveExploreSuggest(event.key === "ArrowDown" ? 1 : -1);
+        return;
+      }
+      if (event.key === "Escape") {
+        const panel = document.getElementById("explore-suggest");
+        if (panel && !panel.hidden) {
+          hideExploreSuggest();
+          event.preventDefault();
+          return;
+        }
+      }
+      if ((event.key === "Enter" || event.key === "NumpadEnter") && exploreSuggestAt >= 0) {
+        const pick = explorePicks()[exploreSuggestAt];
+        if (pick) {
+          event.preventDefault();
+          pick.click();
+          return;
+        }
+      }
+    }
+    if (event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey && !STATE.modal && !STATE.drawer && !STATE.viewer) {
+      const tag = event.target && event.target.tagName;
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (event.target && event.target.isContentEditable);
+      if (!typing) {
+        const box = visibleSearch();
+        if (box) {
+          event.preventDefault();
+          box.focus();
+          return;
+        }
+      }
+    }
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
     if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed)) {
       STATE.modal = null;
