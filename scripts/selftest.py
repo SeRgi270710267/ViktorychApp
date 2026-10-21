@@ -1972,6 +1972,7 @@ def discord_checks() -> None:
     bot_token = "bot-token-value"
     account_token = "account-token-value"
     check(user_get_allowed("https://discord.com/api/v10/channels/%s/messages" % visible), "user reads are limited to channel message gets")
+    check(user_get_allowed("https://discord.com/api/v10/channels/%s/pins" % visible), "user reads include one pins list per channel")
     check(not user_get_allowed("https://discord.com/api/v10/users/@me") and not user_get_allowed("https://discord.com/api/v10/channels/%s/messages/1/reactions" % visible), "user reads do not include the account or a reaction")
 
     refused = {"n": 0}
@@ -2081,6 +2082,8 @@ def discord_checks() -> None:
             check(auth == account_token and "Mozilla/5.0" in (headers.get("User-Agent") or ""), "the bot miss uses the user token and the browser user agent")
             check("limit=25" in url and "after=" not in url, "the first user page is small and has no cursor yet")
             return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([hidden_message]).encode()
+        if url.endswith("/pins"):
+            return 200, {"X-RateLimit-Remaining": "5"}, b"[]"
         raise AssertionError(url)
 
     both_config = {
@@ -2257,6 +2260,60 @@ def discord_checks() -> None:
         quiet_row = next(item for item in quiet_channels if item["id"] == quiet_id)
         check(quiet_result.get("stopped") is not True and any(blocked in url for url in quiet_calls) and quiet_row.get("inaccessible") is True and "will not retry" not in quiet_doc["sourceHealth"]["discord"].get("detail", "") and account_token not in quiet_log.getvalue(), "a 403 on a known-unreadable channel does not stop Discord")
 
+    pin_guild = "400000000000000001"
+    pin_ok = "400000000000000010"
+    pin_no = "400000000000000011"
+    pin_old = "400000000000000100"
+    pin_new = "400000000000000200"
+    pin_calls = []
+    pin_slept = []
+
+    def pin_transport(url, headers):
+        pin_calls.append(url)
+        if "widget.json" in url or "/invites/" in url:
+            return 200, {}, b"{}"
+        if "/guilds/" in url:
+            return 200, {}, json.dumps({"id": pin_guild, "name": "Pins"}).encode()
+        if url.endswith("/pins") and pin_ok in url:
+            return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([
+                {"id": pin_old, "content": "older " + account_token, "timestamp": "2024-05-01T00:00:01.000Z", "author": {"id": "1", "username": "ada", "global_name": "Ada"}},
+                {"id": pin_new, "content": "newer pin", "timestamp": "2024-05-01T00:00:02.000Z", "author": {"id": "1", "username": "ada", "global_name": "Ada"}},
+            ]).encode()
+        if url.endswith("/pins") and pin_no in url:
+            return 403, {}, b'{"message":"Missing Access","code":50001}'
+        if "/messages" in url:
+            return 200, {"X-RateLimit-Remaining": "5"}, json.dumps([
+                {"id": pin_new, "channel_id": pin_ok, "type": 0, "content": "hello", "timestamp": "2024-05-01T00:00:02.000Z", "author": {"id": "1", "username": "ada", "global_name": "Ada"}},
+            ]).encode()
+        raise AssertionError(url)
+
+    pin_config = {
+        "cap": 50,
+        "discord": [{
+            "id": pin_guild,
+            "name": "Pins",
+            "auth": "user",
+            "channels": [
+                {"id": pin_ok, "name": "general", "mode": "messages", "limit": 20},
+                {"id": pin_no, "name": "locked-pins", "mode": "messages", "limit": 20},
+            ],
+        }],
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        pin_root = Path(tmp)
+        pin_doc = {"posts": [], "feeds": []}
+        pin_log = io.StringIO()
+        with contextlib.redirect_stdout(pin_log):
+            pin_result = merge_discord(pin_doc, pin_config, pin_root, [], token="", user_token=account_token, transport=pin_transport, sleep=pin_slept.append, clock=lambda: 0, remote=False, now=datetime(2030, 1, 1, tzinfo=timezone.utc))
+        pin_urls = [url for url in pin_calls if url.endswith("/pins")]
+        pin_file = json.loads((pin_root / "discord" / "pins" / (pin_ok + ".json")).read_text(encoding="utf-8"))
+        pin_index = json.loads((pin_root / "discord" / "index.json").read_text(encoding="utf-8"))
+        pin_rows = {item["id"]: item for item in pin_index["servers"][0]["channels"]}
+        pin_text = pin_log.getvalue() + json.dumps(pin_file)
+        check(pin_result.get("stopped") is not True and pin_urls.count(next(url for url in pin_urls if pin_ok in url)) == 1 and len(pin_urls) == 2, "each channel's pins are read once and a forbidden pins list does not stop Discord")
+        check(pin_file["pins"][0]["id"] == pin_new and pin_file["forbidden"] is False and account_token not in pin_text and "[redacted]" in pin_text, "pin stubs are newest first and do not keep the token")
+        check(pin_rows[pin_no].get("pinsForbidden") is True and pin_rows[pin_ok].get("pinsForbidden") is not True and 1.5 in pin_slept, "a forbidden pins read hides that channel and stays on the same pace")
+
     window_guild = "300000000000000001"
     window_channel = "300000000000000010"
     window_new = "300000000000000104"
@@ -2304,6 +2361,7 @@ def discord_checks() -> None:
         check(window_ids == ["300000000000000104", "300000000000000103", "300000000000000102", "300000000000000101"], "a transcript keeps the rolling window, not just the fetch limit")
         window_index = json.loads((window_root / "discord" / "index.json").read_text(encoding="utf-8"))
         check(window_index["servers"][0]["channels"][0]["category"] == "General", "the index keeps the channel category")
+        check(window_index["servers"][0]["channels"][0].get("pinsForbidden") is not True, "a missing pins list does not hide the pin icon")
 
     source = (ROOT / "scripts" / "adapters" / "discord.py").read_text(encoding="utf-8")
     check('method="GET"' in source and "POST" not in source and "PUT" not in source and "PATCH" not in source and "DELETE" not in source, "the Discord client only issues GET requests")
@@ -2370,12 +2428,47 @@ if (!expanded.includes('aria-expanded="true"') || !expanded.includes("dmsgs-srv 
 const peerAt = expanded.indexOf('data-ch="889950993352110160"');
 const generalAt = expanded.indexOf('data-ch="169256939211980800"');
 if (peerAt < 0 || generalAt < 0 || peerAt > generalAt) throw new Error("pinned channel order");
+const peerChunk = expanded.split('data-ch="889950993352110160"')[1].split("</a>")[0];
+if (!peerChunk.includes("dmsgs-pinmark")) throw new Error("pin mark");
+D._openMenu("169256939211980800", false);
+const pinMenu = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
+if (!pinMenu.includes("Pin channel") || !pinMenu.includes("Mute channel")) throw new Error("pin menu");
+D._openMenu("889950993352110160", false);
+const unpinMenu = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
+if (!unpinMenu.includes("Unpin channel")) throw new Error("unpin");
+D._openMenu("169256939211980800", true);
+const durations = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
+if (!durations.includes("For 15 minutes") || !durations.includes("For 1 hour") || !durations.includes("For 8 hours") || !durations.includes("For 24 hours") || !durations.includes("Until I turn it back on")) throw new Error("durations");
+D._openPins("169256939211980800");
+const pins = D.page({ name: "messages", channel: "169256939211980800", query: new URLSearchParams("fixture=1") });
+const panel = pins.split('class="dmsgs-pinpanel"')[1] || "";
+const newerPin = panel.indexOf('data-mid="1530000000000000004"');
+const olderPin = panel.indexOf('data-mid="1530000000000000001"');
+if (!panel.includes("Pinned messages") || !panel.includes("Clyde") || newerPin < 0 || olderPin < 0 || newerPin > olderPin) throw new Error("pins panel");
 D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: ["169256939211980800"], mutedChannels: [] });
 const muted = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
 if (!muted.includes("dmsgs-srv open muted") || muted.includes("dmsgs-badge")) throw new Error("muted server " + (muted.includes("dmsgs-badge") ? "badge" : "class"));
-D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: ["889950993352110160"] });
+D._openMenu("", false);
+D._openPins("");
+D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: ["889950993352110160"], mutes: {} });
 const partial = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
 if (!partial.includes('aria-label="1 unread"')) throw new Error("badge " + (partial.match(/aria-label="\\d+ unread"/) || []).join(","));
+const peerBits = partial.split("dmsgs-ch-row");
+let peerRow = "";
+for (let i = 1; i < peerBits.length; i++) { if (peerBits[i].includes('data-ch="889950993352110160"')) peerRow = peerBits[i]; }
+if (!peerRow.startsWith(" muted") || !peerRow.includes("dmsgs-bell") || peerRow.split("</a>")[0].includes("dmsgs-dot")) throw new Error("muted channel");
+D._openMenu("889950993352110160", false);
+if (!D.page({ name: "messages", query: new URLSearchParams("fixture=1") }).includes("Unmute channel")) throw new Error("unmute");
+D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: [], mutes: { "169256939211980800": Date.now() - 1000 } });
+const expired = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
+const expiredBits = expired.split("dmsgs-ch-row");
+let expiredRow = "";
+for (let i = 1; i < expiredBits.length; i++) { if (expiredBits[i].includes('data-ch="169256939211980800"')) expiredRow = expiredBits[i]; }
+if (expiredRow.startsWith(" muted")) throw new Error("expired mute");
+D._applyIndex({ status: "ok", servers: [{ id: "169256939211980800", channels: [{ id: "169256939211980800", pinsForbidden: true }] }] });
+const hiddenPins = D.page({ name: "messages", channel: "169256939211980800", query: new URLSearchParams("fixture=1") });
+if (hiddenPins.includes("Pinned messages")) throw new Error("forbidden pins icon");
+D._applyIndex({ status: "ok", servers: [] });
 D._setServers([
   { id: "111111111111111111", name: "Alpha Guild", channels: [{ id: "111111111111111112", name: "alpha-room", mode: "messages" }] },
   { id: "222222222222222222", name: "Beta Guild", channels: [{ id: "222222222222222223", name: "beta-room", mode: "messages" }] }
@@ -2469,6 +2562,7 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
     live_script = (ROOT / "scripts" / "discord_live.py").read_text(encoding="utf-8")
     check("group: discord-live" in live_workflow and "cancel-in-progress: false" in live_workflow and "add-mask" in live_workflow and "timeout-minutes: 350" in live_workflow and 'cron: "*/5 * * * *"' in live_workflow, "the live workflow is one long job that does not cancel itself")
     check("owner-account.github.io/SuperintelApp/" in live_workflow and "rss-feeds" not in live_workflow and "rss-feeds" not in live_script, "the live job uses the renamed site and no old feed URL")
+    check("/pins" not in live_script, "the live poller does not read pins")
 
 
 def ia_backup_checks() -> None:

@@ -410,8 +410,30 @@ def forward(client: Client, channel_id: str, cursor: str):
     return found, gap
 
 
+def _kept_pin_blocks(root: Path) -> dict:
+    """Channel ids whose pin list the sync already marked forbidden. Local only."""
+    flags = {}
+    path = root / "discord" / "index.json"
+    if not path.is_file():
+        return flags
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return flags
+    if not isinstance(data, dict):
+        return flags
+    for server in data.get("servers") or []:
+        if not isinstance(server, dict):
+            continue
+        for channel in server.get("channels") or []:
+            if isinstance(channel, dict) and channel.get("pinsForbidden") and snowflake(channel.get("id")):
+                flags[str(channel["id"])] = True
+    return flags
+
+
 def write_tree(root: Path, server: dict, board: Board, icon: str, members, online: str, status: str, detail: str, token: str) -> None:
     fetched = iso_now()
+    blocked = _kept_pin_blocks(root)
     channels = []
     for channel in server["channels"]:
         entry = {"id": channel["id"], "name": channel["name"], "mode": "messages", "file": f"discord/messages/{channel['id']}.json"}
@@ -419,6 +441,8 @@ def write_tree(root: Path, server: dict, board: Board, icon: str, members, onlin
             entry["category"] = channel["category"]
         if channel["id"] in board.inaccessible:
             entry["inaccessible"] = True
+        if blocked.get(channel["id"]):
+            entry["pinsForbidden"] = True
         channels.append(entry)
         payload = {
             "platform": "discord",

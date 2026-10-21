@@ -6,8 +6,9 @@ may instead use ``DISCORD_USER_TOKEN``, the token from that person's own
 Discord account. That token is sent as itself, with no ``Bot`` prefix. Neither
 token is written to the site, the config, or the log.
 
-User-token calls are read-only GETs: channel messages, one channel, one guild
-or its preview, and the public widget. They wait at least 1.5 seconds between
+User-token calls are read-only GETs: channel messages, channel pins, one
+channel, one guild or its preview, and the public widget. They wait at least
+1.5 seconds between
 requests, ask for a short page, and continue from the stored snowflake. A
 401, a captcha, or a verification challenge stops Discord for the run. A 403
 on the guild read stops it too. A 403 on one channel means that channel is
@@ -51,9 +52,10 @@ USER_PAGE_SIZE = 25
 INVITE_PERMISSIONS = (1 << 10) | (1 << 16)
 SNOWFLAKE = re.compile(r"^\d{1,22}$")
 INVITE_CODE = re.compile(r"^[A-Za-z0-9-]{2,32}$")
-PUBLISHED = re.compile(r"discord/(?:index|state|messages/\d{1,22})\.json$")
-USER_GET = re.compile(r"^/api/v10/(?:channels/\d{1,22}(?:/messages)?|guilds/\d{1,22}(?:/preview)?)$")
+PUBLISHED = re.compile(r"discord/(?:index|state|messages/\d{1,22}|pins/\d{1,22})\.json$")
+USER_GET = re.compile(r"^/api/v10/(?:channels/\d{1,22}(?:/messages|/pins)?|guilds/\d{1,22}(?:/preview)?)$")
 CHANNEL_IN_PATH = re.compile(r"/channels/(\d{1,22})(?:/|$)")
+PINS_IN_PATH = re.compile(r"/channels/\d{1,22}/pins$")
 GUILD_READ = re.compile(r"/guilds/\d{1,22}(?:/preview)?$")
 # These channels 403 for this guest. That is not an account failure.
 QUIET_CHANNELS = frozenset({
@@ -271,6 +273,10 @@ def guild_read(url: str) -> bool:
 
 def quiet_channel(url: str) -> bool:
     return channel_in_url(url) in QUIET_CHANNELS
+
+
+def pins_read(url: str) -> bool:
+    return bool(PINS_IN_PATH.search(urllib.parse.urlparse(url).path or ""))
 
 
 def _positive(value):
@@ -907,6 +913,8 @@ class Client:
                 raise DiscordStop(block)
             if self.auth_mode == "user" and status == 403 and quiet_channel(url):
                 return None
+            if self.auth_mode == "user" and status == 403 and pins_read(url):
+                return None
             if self.auth_mode == "user" and status == 403 and channel_denied(status, body) and not guild_read(url):
                 return None
             if self.auth_mode == "user" and block in ("unauthorized", "forbidden"):
@@ -994,6 +1002,54 @@ class Client:
         except urllib.error.HTTPError as exc:
             payload = exc.read(2_000_000) if exc.fp else b""
             return exc.code, dict(exc.headers or {}), payload
+
+
+def _pin_stub(message: dict) -> dict | None:
+    """A short pin row. The message body is not stored."""
+    if not isinstance(message, dict):
+        return None
+    mid = snowflake(message.get("id"))
+    if not mid:
+        return None
+    author = message.get("author") if isinstance(message.get("author"), dict) else {}
+    name = display_name(author) or str(author.get("username") or "Someone")
+    text = clean_text(str(message.get("content") or ""))
+    text = re.sub(r"\s+", " ", text).strip()[:180]
+    return {"id": mid, "author": name[:80], "text": text, "date": message_time(message)}
+
+
+def fetch_pins(client: Client, channel_id: str):
+    """One read of the channel's pins. None when Discord did not return a list."""
+    data = client.get_json(f"/channels/{channel_id}/pins")
+    if not isinstance(data, list):
+        return None
+    stubs = []
+    for message in data[:50]:
+        stub = _pin_stub(message)
+        if stub:
+            stubs.append(stub)
+    stubs.sort(key=lambda row: int(row["id"]), reverse=True)
+    return stubs
+
+
+def _store_pins(reader, root: Path, channel_id: str, secrets, entry: dict, previous=None) -> None:
+    """Fetch pins once. A forbidden read hides the icon and does not stop the sync."""
+    stubs = fetch_pins(reader, channel_id)
+    dest = root / "discord" / "pins" / f"{channel_id}.json"
+    if stubs is None:
+        if getattr(reader, "last_status", 0) == 403:
+            entry["pinsForbidden"] = True
+            _write_json(dest, {"channelId": channel_id, "forbidden": True, "pins": []}, secrets)
+            return
+        if isinstance(previous, dict) and (previous.get("pins") or previous.get("forbidden")):
+            _write_json(dest, previous, secrets)
+        return
+    entry.pop("pinsForbidden", None)
+    _write_json(
+        dest,
+        {"channelId": channel_id, "forbidden": False, "pins": stubs},
+        secrets,
+    )
 
 
 def fetch_messages(client: Client, channel_id: str, cap: int, cursor: str | None = None):
@@ -1591,12 +1647,18 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
             index_channels = []
             for channel in server["channels"]:
                 previous_file = {}
+                previous_pins = None
                 if channel["mode"] == "messages":
                     previous_file = _load_json(root / "discord" / "messages" / f"{channel['id']}.json") or {}
                     if not previous_file and fetch_published:
                         remote_file = fetch_published(f"discord/messages/{channel['id']}.json")
                         if isinstance(remote_file, dict):
                             previous_file = remote_file
+                    previous_pins = _load_json(root / "discord" / "pins" / f"{channel['id']}.json")
+                    if not isinstance(previous_pins, dict) and fetch_published:
+                        remote_pins = fetch_published(f"discord/pins/{channel['id']}.json")
+                        if isinstance(remote_pins, dict):
+                            previous_pins = remote_pins
                 reader, probed = _channel_reader(server, channel, bot, user)
                 if probed and not channel["name"] and probed.get("name"):
                     channel["name"] = str(probed["name"])
@@ -1663,6 +1725,7 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
                         print(f"[discord] {server['name'] or server['id']} #{channel['name'] or channel['id']}: {len(kept)} messages")
                         if messages:
                             state["channels"][channel["id"]] = str(messages[0]["id"])
+                        _store_pins(reader, root, channel["id"], secrets, entry, previous_pins)
                 else:
                     if messages is None:
                         print(f"[discord] channel {channel['id']}: not readable")

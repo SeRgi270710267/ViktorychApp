@@ -4,6 +4,7 @@
   const TOPIC = "superintelmusic-discord-th-7f3a91c2";
   const SEEN_KEY = "rss-feeds-discord-seen-v1";
   const PREFS_KEY = "rss-feeds-discord-prefs-v1";
+  const SCROLL_KEY = "rss-feeds-discord-scroll-v1";
   const WINDOW = 300;
   const CATALOG_SERVERS = [
     {
@@ -50,6 +51,21 @@
     ]
   };
 
+  const FIXTURE_PINS = {
+    "169256939211980800": [
+      { id: "1530000000000000004", author: "Clyde", text: "Replying with a photo, a custom wave, and a link", date: "2026-10-21T16:48:00.000Z" },
+      { id: "1530000000000000001", author: "Ada", text: "Welcome in. The rules channel is the place to start.", date: "2026-10-21T16:40:00.000Z" }
+    ]
+  };
+
+  const MUTE_CHOICES = [
+    { label: "For 15 minutes", ms: 15 * 60 * 1000 },
+    { label: "For 1 hour", ms: 60 * 60 * 1000 },
+    { label: "For 8 hours", ms: 8 * 60 * 60 * 1000 },
+    { label: "For 24 hours", ms: 24 * 60 * 60 * 1000 },
+    { label: "Until I turn it back on", ms: 0 }
+  ];
+
   function msg(id, authorId, name, color, avatarIndex, date, body) {
     return {
       id: id,
@@ -92,7 +108,19 @@
     timer: 0,
     loadStarted: false,
     started: false,
-    bound: null
+    bound: null,
+    pinFiles: {},
+    pinLoading: {},
+    menu: null,
+    pinsOpen: "",
+    jump: "",
+    muteTimer: 0,
+    hold: 0,
+    suppressClick: "",
+    listHold: null,
+    winHold: null,
+    scrollLock: false,
+    holding: false
   };
 
   function copyChannel(ch, serverId) {
@@ -103,6 +131,7 @@
       mode: ch.mode,
       serverId: serverId,
       inaccessible: false,
+      pinsForbidden: false,
       file: ch.mode === "messages" ? "discord/messages/" + ch.id + ".json" : ""
     };
   }
@@ -505,9 +534,14 @@
     const parsed = validate(body, knownMap());
     if (!parsed || !accept(body)) return;
     if (typeof document === "undefined") return;
+    const ch = channelById(parsed.ch);
+    const quiet = !!(ch && channelMuted(ch));
+    rememberList();
     const log = document.querySelector(".dmsgs-log");
     if (log && state.open === parsed.ch) repaintLog();
-    else updateDots();
+    else if (!quiet) updateDots();
+    if (!quiet) paintNavBadge();
+    restoreList();
   }
 
   function quote(text) {
@@ -588,7 +622,7 @@
         : "";
       const gutter = fresh ? avatarHtml(row) : "";
       prev = row;
-      return day + '<article class="dmsg' + (fresh ? " group" : " cont") + '"><div class="dmsg-gutter">' + gutter + "</div>" +
+      return day + '<article class="dmsg' + (fresh ? " group" : " cont") + '" data-mid="' + esc(row.id) + '"><div class="dmsg-gutter">' + gutter + "</div>" +
         '<div class="dmsg-body">' + head + replyHtml(row, byId) +
         '<div class="dmsg-bubble"><div class="dmsg-text">' + format(row.body, row.emojis) + (row.edited ? ' <span class="dmsg-edited">(edited)</span>' : "") + "</div>" +
         mediaHtml(row) + embedHtml(row) + reactionHtml(row) +
@@ -629,7 +663,7 @@
   }
 
   function emptyPrefs() {
-    return { expanded: {}, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: [] };
+    return { expanded: {}, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: [], mutes: {} };
   }
 
   function cleanIds(list) {
@@ -653,12 +687,24 @@
           if (id && raw.expanded[key]) expanded[id] = true;
         });
       }
+      const mutes = {};
+      if (raw.mutes && typeof raw.mutes === "object") {
+        Object.keys(raw.mutes).forEach(function (key) {
+          const id = snowflake(key);
+          const until = Number(raw.mutes[key]);
+          if (id && (until === 0 || (isFinite(until) && until > Date.now()))) mutes[id] = until === 0 ? 0 : until;
+        });
+      }
+      cleanIds(raw.mutedChannels).forEach(function (id) {
+        if (!Object.prototype.hasOwnProperty.call(mutes, id)) mutes[id] = 0;
+      });
       return {
         expanded: expanded,
         pinnedServers: cleanIds(raw.pinnedServers),
         pinnedChannels: cleanIds(raw.pinnedChannels),
         mutedServers: cleanIds(raw.mutedServers),
-        mutedChannels: cleanIds(raw.mutedChannels)
+        mutedChannels: cleanIds(raw.mutedChannels),
+        mutes: mutes
       };
     } catch (err) {
       return empty;
@@ -675,7 +721,7 @@
   }
 
   function hasId(list, id) {
-    return list.indexOf(id) >= 0;
+    return (list || []).indexOf(id) >= 0;
   }
 
   function toggleId(list, id) {
@@ -693,7 +739,47 @@
   }
 
   function serverMuted(id) { return hasId(prefs().mutedServers, id); }
-  function channelMuted(ch) { return !!(ch && (serverMuted(ch.serverId) || hasId(prefs().mutedChannels, ch.id))); }
+
+  function muteUntil(id) {
+    const stored = prefs();
+    const table = stored.mutes || {};
+    let until = Object.prototype.hasOwnProperty.call(table, id) ? table[id] : null;
+    if (until == null && hasId(stored.mutedChannels || [], id)) until = 0;
+    if (until == null) return null;
+    if (until !== 0 && until <= Date.now()) {
+      delete table[id];
+      stored.mutes = table;
+      if (stored.mutedChannels) stored.mutedChannels = stored.mutedChannels.filter(function (item) { return item !== id; });
+      savePrefs();
+      return null;
+    }
+    return until;
+  }
+
+  function channelMuted(ch) {
+    return !!(ch && (serverMuted(ch.serverId) || muteUntil(ch.id) != null));
+  }
+
+  function armMuteTimer() {
+    if (state.muteTimer) clearTimeout(state.muteTimer);
+    state.muteTimer = 0;
+    if (typeof setTimeout !== "function") return;
+    let soon = 0;
+    const table = prefs().mutes || {};
+    const now = Date.now();
+    Object.keys(table).forEach(function (id) {
+      const until = table[id];
+      if (until > now && (!soon || until < soon)) soon = until;
+    });
+    if (!soon) return;
+    state.muteTimer = setTimeout(function () {
+      state.muteTimer = 0;
+      Object.keys(prefs().mutes || {}).forEach(muteUntil);
+      paintNavBadge();
+      if (onMessages()) refreshInbox();
+      else armMuteTimer();
+    }, Math.min(2147483647, Math.max(250, soon - Date.now() + 20)));
+  }
 
   function orderedCategories(channels) {
     const groups = [];
@@ -770,7 +856,69 @@
   function iconSvg(name) {
     if (name === "pin") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3H8v2l1 5-3 3v2h5v6l1 1 1-1v-6h5v-2l-3-3 1-5V3z"/></svg>';
     if (name === "mute") return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6V11a6 6 0 0 0-4.2-5.7L4.7 16.4 4 17v1h14.2A2 2 0 0 1 18 16zM5.1 4.3 3.7 5.7 18.3 20.3l1.4-1.4L5.1 4.3z"/></svg>';
+    if (name === "more") return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>';
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5 15 12 9 17.5"/></svg>';
+  }
+
+  function messagesUnread(route) {
+    let count = 0;
+    state.servers.forEach(function (server) {
+      count += unreadCount(server, route || { channel: state.open });
+    });
+    return count;
+  }
+
+  function paintNavBadge() {
+    if (typeof document === "undefined") return;
+    document.querySelectorAll("a[href='#/messages'] .dmsgs-tab-badge, a[href=\"#/messages\"] .dmsgs-tab-badge").forEach(function (el) { el.remove(); });
+    const count = messagesUnread();
+    if (!count) return;
+    const label = count > 99 ? "99+" : String(count);
+    document.querySelectorAll('a[href="#/messages"]').forEach(function (link) {
+      const host = link.querySelector(".nav-ico") || link;
+      if (host.querySelector(".dmsgs-tab-badge")) return;
+      const span = document.createElement("span");
+      span.className = "dmsgs-tab-badge";
+      span.textContent = label;
+      host.appendChild(span);
+    });
+  }
+
+  function setChannelMute(id, until) {
+    const stored = prefs();
+    stored.mutes = stored.mutes || {};
+    stored.mutes[id] = until;
+    stored.mutedChannels = (stored.mutedChannels || []).filter(function (item) { return item !== id; });
+    if (until === 0) stored.mutedChannels.unshift(id);
+    savePrefs();
+    armMuteTimer();
+  }
+
+  function clearChannelMute(id) {
+    const stored = prefs();
+    if (stored.mutes) delete stored.mutes[id];
+    stored.mutedChannels = (stored.mutedChannels || []).filter(function (item) { return item !== id; });
+    savePrefs();
+    armMuteTimer();
+  }
+
+  function channelMuteOnly(id) {
+    return muteUntil(id) != null;
+  }
+
+  function pinsBlocked(ch) {
+    if (!ch) return true;
+    const file = state.pinFiles[ch.id];
+    if (file) return !!file.forbidden;
+    return !!ch.pinsForbidden;
+  }
+
+  function pinRows(id) {
+    const file = state.pinFiles[id];
+    let rows = [];
+    if (file) rows = file.pins || [];
+    else if (state.fixture && FIXTURE_PINS[id]) rows = FIXTURE_PINS[id];
+    return rows.slice().sort(function (a, b) { return cmpId(b.id, a.id); });
   }
 
   function iconButton(kind, id, on, label) {
@@ -788,10 +936,11 @@
     return '<div class="dmsgs-ch-row' + (muted ? " muted" : "") + (pinned ? " pinned" : "") + '">' +
       '<a class="dmsgs-ch' + (on ? " on" : "") + (unread ? " unread" : "") + '" data-ch="' + esc(ch.id) + '" data-name="' + esc(ch.name) + '" data-cat="' + esc(category || ch.category || "") + '" href="' + channelHref(ch.id) + '">' +
       '<span class="dmsgs-hash" aria-hidden="true">#</span><span class="dmsgs-ch-name">' + esc(ch.name) + "</span>" +
+      (pinned ? '<span class="dmsgs-pinmark" aria-label="Pinned">' + iconSvg("pin") + "</span>" : "") +
+      (muted ? '<span class="dmsgs-bell" aria-label="Muted">' + iconSvg("mute") + "</span>" : "") +
       (unread ? '<span class="dmsgs-dot" aria-label="Unread"></span>' : "") +
       "</a>" +
-      iconButton("pin-channel", ch.id, pinned, "channel") +
-      iconButton("mute-channel", ch.id, hasId(prefs().mutedChannels, ch.id), "channel") +
+      '<button type="button" class="dmsgs-more" data-discord="menu" data-id="' + esc(ch.id) + '" aria-label="More">' + iconSvg("more") + "</button>" +
       "</div>";
   }
 
@@ -867,24 +1016,86 @@
     const face = who && who.avatar
       ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>'
       : '<span class="dmsgs-head-face initials" aria-hidden="true">' + esc((ch.name || "?").slice(0, 1).toUpperCase()) + "</span>";
+    const pinBtn = pinsBlocked(ch) ? "" : '<button type="button" class="dmsgs-iconbtn dmsgs-pins' + (state.pinsOpen === id ? " on" : "") + '" data-discord="pins" data-id="' + esc(id) + '" aria-label="Pinned messages" aria-expanded="' + (state.pinsOpen === id ? "true" : "false") + '">' + iconSvg("pin") + "</button>";
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a>' + face + '<div><b>' + esc(ch.name) + "</b><span>" + esc((server && server.name) || ch.category || "Discord") + "</span></div></header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a>' + face + '<div><b>' + esc(ch.name) + "</b><span>" + esc((server && server.name) || ch.category || "Discord") + "</span></div>" + pinBtn + "</header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
+      pinPanelHtml(id) +
       '<button type="button" class="dmsgs-jump" hidden>Jump to present</button>' +
       '<div class="dmsgs-compose"><div class="dmsgs-compose-box" role="textbox" aria-disabled="true" aria-label="Read-only channel"><span>Read-only channel</span></div></div>' +
       "</section>";
   }
 
+  function pinPanelHtml(id) {
+    if (state.pinsOpen !== id) return "";
+    const ch = channelById(id);
+    if (!ch || pinsBlocked(ch)) return "";
+    const rows = pinRows(id);
+    const waiting = !state.fixture && !state.pinFiles[id];
+    let body = "";
+    if (waiting) body = '<p class="dmsgs-pinempty">Loading pinned messages</p>';
+    else if (!rows.length) body = '<p class="dmsgs-pinempty">No pinned messages</p>';
+    else body = rows.map(function (row) {
+      const when = formatClock({ id: row.id, date: row.date });
+      return '<button type="button" class="dmsgs-pinrow" data-discord="jump" data-mid="' + esc(row.id) + '">' +
+        '<span class="dmsgs-pinrow-top"><b>' + esc(row.author || "Someone") + "</b>" + (when ? "<time>" + esc(when) + "</time>" : "") + "</span>" +
+        '<span class="dmsgs-pinrow-text">' + esc(row.text || "Pinned message") + "</span></button>";
+    }).join("");
+    return '<div class="dmsgs-pinpanel" role="dialog" aria-label="Pinned messages">' +
+      '<header class="dmsgs-pinhead"><span class="dmsgs-grab" aria-hidden="true"></span><b>Pinned messages</b><button type="button" class="dmsgs-iconbtn" data-discord="pins-close" aria-label="Close">×</button></header>' +
+      '<div class="dmsgs-pinlist">' + body + "</div></div>";
+  }
+
+  function menuHtml() {
+    const menu = state.menu;
+    if (!menu || !menu.id) return "";
+    const ch = channelById(menu.id);
+    if (!ch) return "";
+    const pinned = hasId(prefs().pinnedChannels, ch.id);
+    const muted = channelMuteOnly(ch.id);
+    let items = "";
+    if (menu.durations) {
+      items = '<div class="dmsgs-menu-title">Mute channel</div>' + MUTE_CHOICES.map(function (choice) {
+        return '<button type="button" role="menuitem" data-discord="mute-for" data-id="' + esc(ch.id) + '" data-ms="' + choice.ms + '">' + esc(choice.label) + "</button>";
+      }).join("");
+    } else {
+      items = '<button type="button" role="menuitem" data-discord="pin-channel" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("pin") + "</span>" + (pinned ? "Unpin channel" : "Pin channel") + "</button>" +
+        (muted
+          ? '<button type="button" role="menuitem" data-discord="unmute-channel" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + "</span>Unmute channel</button>"
+          : '<button type="button" role="menuitem" data-discord="mute-menu" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + "</span>Mute channel</button>");
+    }
+    const x = Math.round(Number(menu.x) || 16);
+    const y = Math.round(Number(menu.y) || 16);
+    return '<button type="button" class="dmsgs-scrim" data-discord="menu-close" aria-label="Close menu"></button>' +
+      '<div class="dmsgs-menu" role="menu" style="left:' + x + 'px;top:' + y + 'px"><span class="dmsgs-grab" aria-hidden="true"></span>' + items + "</div>";
+  }
+
   function page(route) {
     state.fixture = !!(route && route.query && typeof route.query.get === "function" && route.query.get("fixture") === "1");
-    if (state.fixture) adoptServers(CATALOG_SERVERS);
+    if (state.fixture && !state.holdServers) {
+      const kept = {};
+      state.channels.forEach(function (ch) {
+        if (ch.pinsForbidden || ch.inaccessible) kept[ch.id] = { pinsForbidden: !!ch.pinsForbidden, inaccessible: !!ch.inaccessible };
+      });
+      adoptServers(CATALOG_SERVERS);
+      state.channels.forEach(function (ch) {
+        const prev = kept[ch.id];
+        if (!prev) return;
+        if (prev.pinsForbidden) ch.pinsForbidden = true;
+        if (prev.inaccessible) ch.inaccessible = true;
+      });
+    }
     ensureLoad();
     const id = route && snowflake(route.channel);
-    if (id && !state.fixture) ensureChannel(id);
+    if (id && !state.fixture) {
+      ensureChannel(id);
+      ensurePins(id);
+    }
     const open = id ? " has-channel" : "";
     return '<div class="dmsgs' + open + '" data-discord-root>' +
       '<aside class="dmsgs-list">' + listHtml(route) + "</aside>" +
       conversationHtml(route) +
+      menuHtml() +
       "</div>";
   }
 
@@ -900,11 +1111,12 @@
 
   function onScroll() {
     const log = document.querySelector(".dmsgs-log");
-    if (!log) return;
+    if (!log || state.scrollLock) return;
     const near = nearBottom(log);
     state.stick = near;
     const jump = document.querySelector(".dmsgs-jump");
     if (jump) jump.hidden = near;
+    if (state.open) writeScroll("log:" + state.open, log.scrollTop);
     if (near && state.open) {
       markSeen(state.open);
       updateDots();
@@ -914,12 +1126,22 @@
   function repaintLog() {
     const log = document.querySelector(".dmsgs-log");
     if (!log || !state.open) return;
+    const list = listEl();
+    const listTop = list ? list.scrollTop : 0;
     const near = nearBottom(log) || state.stick;
-    log.innerHTML = logInner(state.open);
+    const rows = messagesFor(state.open).slice().reverse();
+    const have = Array.prototype.map.call(log.querySelectorAll(".dmsg[data-mid]"), function (el) { return el.getAttribute("data-mid"); });
+    const want = rows.map(function (row) { return row.id; });
+    const same = have.join(",") === want.join(",");
+    if (!same) log.innerHTML = logInner(state.open);
+    state.scrollLock = true;
     if (near) {
       log.scrollTop = log.scrollHeight;
       markSeen(state.open);
     }
+    if (list && Math.abs(list.scrollTop - listTop) > 1) list.scrollTop = listTop;
+    state.scrollLock = false;
+    if (state.open) writeScroll("log:" + state.open, log.scrollTop);
     const jump = document.querySelector(".dmsgs-jump");
     if (jump) jump.hidden = near;
     updateDots();
@@ -965,6 +1187,7 @@
         preview.textContent = state.paused ? "Discord paused" : (latest ? (latest.row.name + ": " + previewText(latest.row)) : "No messages yet");
       }
     });
+    paintNavBadge();
   }
 
   function applyFilter() {
@@ -997,11 +1220,277 @@
     });
   }
 
+  function scrollMap() {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(SCROLL_KEY) || "{}");
+      return raw && typeof raw === "object" ? raw : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function writeScroll(key, value) {
+    if (!key) return;
+    const map = scrollMap();
+    const n = Math.max(0, Math.round(Number(value) || 0));
+    map[String(key).slice(0, 80)] = n;
+    try { sessionStorage.setItem(SCROLL_KEY, JSON.stringify(map)); } catch (err) { /* private mode can refuse */ }
+  }
+
+  function readScroll(key) {
+    const n = Number(scrollMap()[key]);
+    return isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function listEl() {
+    return typeof document === "undefined" ? null : document.querySelector(".dmsgs-channels");
+  }
+
+  function logEl() {
+    return typeof document === "undefined" ? null : document.querySelector(".dmsgs-log");
+  }
+
+  function rememberList() {
+    const list = listEl();
+    if (!list || state.scrollLock) return;
+    if (state.holding && list.scrollTop < 2 && state.listHold > 20) return;
+    state.listHold = list.scrollTop;
+    writeScroll("list", list.scrollTop);
+    const open = document.querySelector(".dmsgs-srv.open");
+    const sid = open && open.getAttribute("data-server");
+    if (sid) writeScroll("server:" + sid, list.scrollTop);
+  }
+
+  function restoreList() {
+    const list = listEl();
+    if (!list) return;
+    const y = state.listHold != null ? state.listHold : readScroll("list");
+    state.scrollLock = true;
+    if (Math.abs(list.scrollTop - y) > 1) list.scrollTop = y;
+    state.scrollLock = false;
+    writeScroll("list", y);
+  }
+
+  function listHidden() {
+    const list = listEl();
+    return !!(list && list.offsetParent === null);
+  }
+
+  function rememberWindow() {
+    try {
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      if (state.holding && y < 2 && state.winHold > 20) return;
+      state.winHold = y;
+      writeScroll("window", y);
+    } catch (err) { /* no window */ }
+  }
+
+  function restoreWindow() {
+    const y = state.winHold != null ? state.winHold : readScroll("window");
+    try {
+      if (Math.abs((window.scrollY || 0) - y) > 1) window.scrollTo(0, y);
+    } catch (err) { /* ignore */ }
+  }
+
+  function bindList() {
+    const list = listEl();
+    if (!list || list.dataset.bound === "1") return;
+    list.dataset.bound = "1";
+    list.addEventListener("scroll", function () {
+      if (state.scrollLock) return;
+      rememberList();
+    }, { passive: true });
+  }
+
+  function bindLog(log) {
+    const node = log || logEl();
+    if (!node || node.dataset.bound === "1") return;
+    node.dataset.bound = "1";
+    node.addEventListener("scroll", onScroll, { passive: true });
+  }
+
+  function routeFromLocation() {
+    let hash = "#/messages";
+    try { hash = location.hash || "#/messages"; } catch (err) { /* node tests have no location */ }
+    const cut = hash.indexOf("?");
+    const path = (cut >= 0 ? hash.slice(0, cut) : hash).replace(/^#/, "");
+    const query = new URLSearchParams(cut >= 0 ? hash.slice(cut + 1) : "");
+    const parts = path.split("/").filter(Boolean);
+    const channel = parts[0] === "messages" && parts[1] === "discord" ? (parts[2] || "") : "";
+    return { name: "messages", channel: channel, query: query };
+  }
+
+  function placeLog(toNewest) {
+    const log = logEl();
+    if (!log || !state.open) return;
+    state.scrollLock = true;
+    if (toNewest) {
+      log.scrollTop = log.scrollHeight;
+      state.stick = true;
+      markSeen(state.open);
+    } else if (state.stick) {
+      log.scrollTop = log.scrollHeight;
+    } else {
+      log.scrollTop = readScroll("log:" + state.open) || log.scrollHeight;
+    }
+    state.scrollLock = false;
+    writeScroll("log:" + state.open, log.scrollTop);
+    const jump = document.querySelector(".dmsgs-jump");
+    if (jump) jump.hidden = !!state.stick;
+  }
+
+  function scrollLogToMessage(target) {
+    const log = logEl();
+    if (!log || !target) return;
+    const logBox = log.getBoundingClientRect();
+    const box = target.getBoundingClientRect();
+    state.scrollLock = true;
+    log.scrollTop = Math.max(0, log.scrollTop + (box.top - logBox.top) - (log.clientHeight - box.height) / 2);
+    state.scrollLock = false;
+    state.stick = false;
+    writeScroll("log:" + state.open, log.scrollTop);
+    target.classList.add("dmsg-flash");
+    const jump = document.querySelector(".dmsgs-jump");
+    if (jump) jump.hidden = false;
+  }
+
+  function markActive() {
+    const id = state.open || "";
+    document.querySelectorAll(".dmsgs-ch").forEach(function (el) {
+      el.classList.toggle("on", el.getAttribute("data-ch") === id);
+    });
+  }
+
+  function replaceConv(toNewest) {
+    const root = document.querySelector("[data-discord-root]");
+    const conv = root && root.querySelector(".dmsgs-conv");
+    if (!conv) return false;
+    const previous = logEl();
+    if (previous && state.open && !toNewest) writeScroll("log:" + state.open, previous.scrollTop);
+    rememberList();
+    conv.outerHTML = conversationHtml(routeFromLocation());
+    const host = document.querySelector("[data-discord-root]");
+    if (host) host.classList.toggle("has-channel", !!state.open);
+    bindLog();
+    placeLog(!!toNewest);
+    restoreList();
+    return true;
+  }
+
+  function repaintChannels() {
+    const host = listEl();
+    if (!host) return false;
+    rememberList();
+    const y = state.listHold != null ? state.listHold : host.scrollTop;
+    host.innerHTML = serverOrder().map(function (server) { return serverBlock(server, routeFromLocation()); }).join("");
+    state.scrollLock = true;
+    host.scrollTop = y;
+    state.scrollLock = false;
+    state.listHold = host.scrollTop;
+    writeScroll("list", host.scrollTop);
+    bindList();
+    applyFilter();
+    return true;
+  }
+
+  function repaintMenu() {
+    const root = document.querySelector("[data-discord-root]");
+    if (!root) return false;
+    root.querySelectorAll(".dmsgs-scrim, .dmsgs-menu").forEach(function (el) {
+      if (el.parentNode === root) el.remove();
+    });
+    if (state.menu) root.insertAdjacentHTML("beforeend", menuHtml());
+    return true;
+  }
+
+  function refreshInbox() {
+    if (typeof document === "undefined" || !document.querySelector("[data-discord-root]")) {
+      if (onMessages() && hooks().render) hooks().render();
+      return;
+    }
+    state.holding = true;
+    rememberList();
+    rememberWindow();
+    repaintChannels();
+    if (state.open) replaceConv(false);
+    repaintMenu();
+    restoreList();
+    restoreWindow();
+    state.holding = false;
+  }
+
+  function releaseHold() {
+    if (listHidden()) return;
+    state.holding = false;
+    state.listHold = null;
+  }
+
+  function syncFromHash() {
+    const route = routeFromLocation();
+    state.fixture = !!(route.query && typeof route.query.get === "function" && route.query.get("fixture") === "1");
+    const id = snowflake(route.channel);
+    const changed = state.open !== id;
+    state.open = id;
+    if (changed) {
+      state.stick = true;
+      state.menu = null;
+      state.pinsOpen = "";
+    }
+    const root = document.querySelector("[data-discord-root]");
+    if (!root) {
+      if (hooks().render) hooks().render();
+      return;
+    }
+    state.holding = true;
+    rememberList();
+    root.classList.toggle("has-channel", !!id);
+    markActive();
+    replaceConv(changed);
+    repaintMenu();
+    updateDots();
+    if (id && !state.fixture) {
+      ensureChannel(id);
+      ensurePins(id);
+    }
+    restoreList();
+    restoreWindow();
+    try {
+      const title = titleFor(route);
+      document.title = (title || "Messages") + " / Feeds";
+    } catch (err) { /* ignore */ }
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(function () {
+        restoreList();
+        restoreWindow();
+        releaseHold();
+      });
+    } else releaseHold();
+  }
+
+  function followHash(href) {
+    const next = href || "#/messages";
+    let here = "";
+    try { here = location.hash || "#/"; } catch (err) {}
+    if (here !== next) {
+      try { history.pushState(null, "", next); }
+      catch (err) {
+        try { location.hash = next; return; } catch (e2) { /* ignore */ }
+      }
+    }
+    if (hooks().noteHash) hooks().noteHash(next);
+    if (hooks().stay) hooks().stay();
+    syncFromHash();
+  }
+
   function mount(route) {
     const messages = route && route.name === "messages";
     if (!messages) {
       state.open = "";
+      state.menu = null;
+      state.pinsOpen = "";
       refreshLive();
+      paintNavBadge();
+      armMuteTimer();
       return;
     }
     const channel = snowflake(route.channel);
@@ -1009,16 +1498,34 @@
       state.open = channel;
       state.stick = true;
     }
-    const log = document.querySelector(".dmsgs-log");
-    if (log && state.stick) log.scrollTop = log.scrollHeight;
-    if (log && log.dataset.bound !== "1") {
-      log.dataset.bound = "1";
-      log.addEventListener("scroll", onScroll, { passive: true });
+    bindList();
+    bindLog();
+    const list = listEl();
+    if (list) {
+      const y = state.listHold != null ? state.listHold : readScroll("list");
+      state.scrollLock = true;
+      list.scrollTop = y;
+      state.scrollLock = false;
+      state.listHold = list.scrollTop;
     }
-    if (channel && state.stick) markSeen(channel);
+    const log = logEl();
+    if (state.jump) {
+      const target = document.querySelector('.dmsg[data-mid="' + state.jump + '"]');
+      if (target) scrollLogToMessage(target);
+      else if (log) log.scrollTop = log.scrollHeight;
+      state.jump = "";
+    } else if (log && state.open) {
+      state.scrollLock = true;
+      log.scrollTop = state.stick ? log.scrollHeight : (readScroll("log:" + state.open) || log.scrollHeight);
+      state.scrollLock = false;
+      if (state.stick) markSeen(state.open);
+    }
     applyFilter();
     const jump = document.querySelector(".dmsgs-jump");
     if (jump) jump.hidden = state.stick;
+    restoreWindow();
+    paintNavBadge();
+    armMuteTimer();
     refreshLive();
   }
 
@@ -1063,7 +1570,43 @@
         if (ch.category) channel.category = String(ch.category).slice(0, 80);
         if (ch.file && /^discord\/messages\/\d{1,22}\.json$/.test(ch.file)) channel.file = ch.file;
         channel.inaccessible = !!ch.inaccessible;
+        channel.pinsForbidden = !!ch.pinsForbidden;
       });
+    });
+  }
+
+  function ensurePins(id) {
+    const ch = channelById(id);
+    if (!ch || ch.mode !== "messages" || state.fixture || state.pinFiles[id] || state.pinLoading[id]) return;
+    if (typeof fetch !== "function") return;
+    state.pinLoading[id] = true;
+    fetch("discord/pins/" + id + ".json", { cache: "no-cache" }).then(function (res) {
+      return res && res.ok ? res.json() : { pins: [] };
+    }).then(function (doc) {
+      const forbidden = !!(doc && doc.forbidden);
+      const pins = [];
+      ((doc && doc.pins) || []).forEach(function (row) {
+        const mid = snowflake(row && row.id);
+        if (!mid) return;
+        pins.push({
+          id: mid,
+          author: String((row && row.author) || "Someone").slice(0, 80),
+          text: String((row && row.text) || "").slice(0, 180),
+          date: String((row && row.date) || "").slice(0, 40)
+        });
+      });
+      pins.sort(function (a, b) { return cmpId(b.id, a.id); });
+      state.pinFiles[id] = { forbidden: forbidden, pins: pins };
+      if (ch) ch.pinsForbidden = forbidden;
+    }).catch(function () {
+      state.pinFiles[id] = { forbidden: false, pins: [] };
+    }).then(function () {
+      state.pinLoading[id] = false;
+      if (state.open === id || state.pinsOpen === id) {
+        rememberList();
+        replaceConv(false);
+        restoreList();
+      }
     });
   }
 
@@ -1080,7 +1623,11 @@
       state.files[id] = { messages: [], authors: {} };
     }).then(function () {
       state.loading[id] = false;
-      if (hooks().render && state.open === id) hooks().render();
+      if (state.open !== id) return;
+      rememberList();
+      repaintLog();
+      bindLog();
+      restoreList();
     });
   }
 
@@ -1099,7 +1646,7 @@
       return index.then(function (res) { return res && res.ok ? res.json() : null; }).catch(function () { return null; });
     }).then(function (index) {
       if (index) applyIndex(index);
-      if (hooks().render && onMessages()) hooks().render();
+      if (onMessages()) refreshInbox();
     }).catch(function () {});
   }
 
@@ -1199,6 +1746,56 @@
     else stopLive();
   }
 
+  function clearHold() {
+    if (state.hold) clearTimeout(state.hold);
+    state.hold = 0;
+  }
+
+  function pageZoom() {
+    try {
+      if (typeof getComputedStyle !== "function" || !document.body) return 1;
+      const z = parseFloat(getComputedStyle(document.body).zoom);
+      return isFinite(z) && z > 0 ? z : 1;
+    } catch (err) {
+      return 1;
+    }
+  }
+
+  function openMenu(id, x, y, durations) {
+    const z = pageZoom();
+    state.menu = { id: id, durations: !!durations, x: x / z, y: y / z };
+    state.pinsOpen = "";
+    if (!repaintMenu() && hooks().render) hooks().render();
+    nudgeMenu();
+  }
+
+  function nudgeMenu() {
+    const menu = document.querySelector(".dmsgs-menu");
+    if (!menu) return;
+    try {
+      if (window.matchMedia && window.matchMedia("(max-width: 699px)").matches) return;
+    } catch (err) { /* keep the pointer position */ }
+    const z = pageZoom();
+    const box = menu.getBoundingClientRect();
+    const vw = window.innerWidth || 0;
+    const vh = window.innerHeight || 0;
+    let dx = 0;
+    let dy = 0;
+    if (box.right > vw - 8) dx = vw - 8 - box.right;
+    if (box.left + dx < 8) dx += 8 - (box.left + dx);
+    if (box.bottom > vh - 8) dy = vh - 8 - box.bottom;
+    if (box.top + dy < 8) dy += 8 - (box.top + dy);
+    if (!dx && !dy) return;
+    const left = (parseFloat(menu.style.left) || 0) + dx / z;
+    const top = (parseFloat(menu.style.top) || 0) + dy / z;
+    menu.style.left = Math.round(left) + "px";
+    menu.style.top = Math.round(top) + "px";
+    if (state.menu) {
+      state.menu.x = left;
+      state.menu.y = top;
+    }
+  }
+
   function start() {
     if (state.started) return;
     state.started = true;
@@ -1210,7 +1807,63 @@
       state.query = input.value || "";
       applyFilter();
     });
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      if (!state.menu && !state.pinsOpen) return;
+      state.menu = null;
+      state.pinsOpen = "";
+      if (hooks().render) hooks().render();
+    });
+    document.addEventListener("contextmenu", function (event) {
+      const row = event.target && event.target.closest && event.target.closest(".dmsgs-ch-row");
+      if (!row) return;
+      const link = row.querySelector(".dmsgs-ch");
+      const id = link && snowflake(link.getAttribute("data-ch"));
+      if (!id) return;
+      event.preventDefault();
+      openMenu(id, event.clientX, event.clientY, false);
+    });
+    document.addEventListener("touchstart", function (event) {
+      const row = event.target && event.target.closest && event.target.closest(".dmsgs-ch-row");
+      if (!row || (event.target.closest && event.target.closest(".dmsgs-more"))) return;
+      const link = row.querySelector(".dmsgs-ch");
+      const id = link && snowflake(link.getAttribute("data-ch"));
+      const touch = event.touches && event.touches[0];
+      if (!id || !touch) return;
+      const x = touch.clientX;
+      const y = touch.clientY;
+      clearHold();
+      state.hold = setTimeout(function () {
+        state.hold = 0;
+        state.suppressClick = id;
+        openMenu(id, x, y, false);
+      }, 500);
+    }, { passive: true });
+    document.addEventListener("touchend", clearHold);
+    document.addEventListener("touchmove", clearHold);
+    document.addEventListener("touchcancel", clearHold);
+    document.addEventListener("mousedown", function (event) {
+      if (event.button !== 0) return;
+      const el = event.target && event.target.closest && event.target.closest(".dmsgs-channels button");
+      if (!el) return;
+      event.preventDefault();
+    }, true);
     document.addEventListener("click", function (event) {
+      const nav = event.target && event.target.closest && event.target.closest("a.dmsgs-ch, a.dmsgs-back");
+      if (nav && nav.closest("[data-discord-root]")) {
+        if (state.suppressClick && nav.classList.contains("dmsgs-ch") && nav.getAttribute("data-ch") === state.suppressClick) {
+          state.suppressClick = "";
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault();
+        state.holding = true;
+        rememberList();
+        rememberWindow();
+        followHash(nav.getAttribute("href"));
+        return;
+      }
+      if (state.suppressClick) state.suppressClick = "";
       const jump = event.target && event.target.closest && event.target.closest(".dmsgs-jump");
       if (jump) {
         const log = document.querySelector(".dmsgs-log");
@@ -1223,29 +1876,112 @@
         return;
       }
       const btn = event.target && event.target.closest && event.target.closest("[data-discord]");
-      if (!btn) return;
+      if (!btn) {
+        if ((state.menu || state.pinsOpen) && !(event.target && event.target.closest && event.target.closest(".dmsgs-menu, .dmsgs-pinpanel"))) {
+          const pins = state.pinsOpen;
+          state.menu = null;
+          state.pinsOpen = "";
+          repaintMenu();
+          if (pins) replaceConv(false);
+        }
+        return;
+      }
       const kind = btn.getAttribute("data-discord");
+      if (kind === "menu-close" || kind === "pins-close") {
+        event.preventDefault();
+        if (kind === "menu-close") state.menu = null;
+        else state.pinsOpen = "";
+        repaintMenu();
+        if (kind === "pins-close") replaceConv(false);
+        return;
+      }
+      if (kind === "jump") {
+        event.preventDefault();
+        state.jump = snowflake(btn.getAttribute("data-mid"));
+        state.pinsOpen = "";
+        replaceConv(false);
+        const target = state.jump && document.querySelector('.dmsg[data-mid="' + state.jump + '"]');
+        state.jump = "";
+        if (target) scrollLogToMessage(target);
+        restoreList();
+        return;
+      }
       const id = snowflake(btn.getAttribute("data-id") || btn.getAttribute("data-server"));
       if (!id) return;
       event.preventDefault();
       const stored = prefs();
       if (kind === "toggle") {
+        const willOpen = !stored.expanded[id];
+        const list = listEl();
+        if (!willOpen && list) {
+          state.listHold = list.scrollTop;
+          writeScroll("list", list.scrollTop);
+          writeScroll("server:" + id, list.scrollTop);
+        }
         if (stored.expanded[id]) delete stored.expanded[id];
         else stored.expanded[id] = true;
+        savePrefs();
+        const section = document.querySelector('.dmsgs-srv[data-server="' + id + '"]');
+        if (section) {
+          const open = !!(stored.expanded[id] || state.query);
+          state.scrollLock = true;
+          state.holding = true;
+          section.classList.toggle("open", open);
+          const main = section.querySelector(".dmsgs-srv-main");
+          if (main) main.setAttribute("aria-expanded", open ? "true" : "false");
+          if (open) restoreList();
+          state.scrollLock = false;
+          if (typeof requestAnimationFrame === "function") {
+            requestAnimationFrame(function () {
+              if (stored.expanded[id] || state.query) restoreList();
+              else state.holding = false;
+            });
+          } else if (!open) state.holding = false;
+        } else if (!repaintChannels() && hooks().render) hooks().render();
+        return;
       } else if (kind === "pin-server") {
         toggleId(stored.pinnedServers, id);
+        savePrefs();
       } else if (kind === "mute-server") {
         toggleId(stored.mutedServers, id);
+        savePrefs();
+      } else if (kind === "menu") {
+        const rect = btn.getBoundingClientRect ? btn.getBoundingClientRect() : { left: 16, bottom: 64 };
+        openMenu(id, rect.left, rect.bottom + 4, false);
+        return;
       } else if (kind === "pin-channel") {
         toggleId(stored.pinnedChannels, id);
-      } else if (kind === "mute-channel") {
-        toggleId(stored.mutedChannels, id);
+        state.menu = null;
+        savePrefs();
+      } else if (kind === "mute-menu") {
+        if (!state.menu) state.menu = { id: id, durations: true, x: 16, y: 64 };
+        else { state.menu.durations = true; state.menu.id = id; }
+      } else if (kind === "mute-for") {
+        const ms = Number(btn.getAttribute("data-ms"));
+        if (ms === 0 || (isFinite(ms) && ms > 0)) setChannelMute(id, ms === 0 ? 0 : Date.now() + ms);
+        state.menu = null;
+      } else if (kind === "unmute-channel") {
+        clearChannelMute(id);
+        state.menu = null;
+      } else if (kind === "pins") {
+        state.pinsOpen = state.pinsOpen === id ? "" : id;
+        state.menu = null;
+        if (state.pinsOpen) ensurePins(id);
       } else {
         return;
       }
-      savePrefs();
-      if (hooks().render) hooks().render();
+      paintNavBadge();
+      rememberList();
+      if (!repaintChannels()) {
+        if (hooks().render) hooks().render();
+        return;
+      }
+      if (kind === "pins") replaceConv(false);
+      repaintMenu();
+      restoreList();
     });
+    armMuteTimer();
+    paintNavBadge();
     refreshLive();
   }
 
@@ -1264,8 +2000,12 @@
     _setChannels: function (channels) {
       adoptServers([{ id: "1", name: "Discord", channels: channels || [] }]);
     },
-    _setServers: function (servers) { adoptServers(servers); },
+    _setServers: function (servers) { state.holdServers = true; adoptServers(servers); },
     _setPrefs: function (next) { state.prefs = next || emptyPrefs(); },
-    _applyIndex: applyIndex
+    _applyIndex: applyIndex,
+    _openMenu: function (id, durations) { state.menu = { id: String(id || ""), durations: !!durations, x: 24, y: 72 }; },
+    _openPins: function (id) { state.pinsOpen = String(id || ""); state.menu = null; },
+    syncFromHash: syncFromHash,
+    _deliver: deliver
   };
 })(typeof window !== "undefined" ? window : globalThis);

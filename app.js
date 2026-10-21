@@ -7530,6 +7530,7 @@
   function routeScrollKey() {
     const route = parseRoute();
     if (route.name === "home") return "home:" + (route.tab || "foryou");
+    if (route.name === "messages") return "#/messages";
     return location.hash || "#/";
   }
 
@@ -8888,6 +8889,16 @@
     scrollFreeze = true;
   }, true);
   window.addEventListener("hashchange", () => {
+    const nextHash = location.hash || "#/";
+    const prevHash = lastKey || "";
+    if (/^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
+      lastKey = nextHash;
+      STATE.scrollKey = "#/messages";
+      routing = false;
+      scrollFreeze = false;
+      window.FeedsDiscord.syncFromHash();
+      return;
+    }
     routing = true;
     scrollFreeze = true;
     STATE.modal = null;
@@ -10427,7 +10438,15 @@
     window.FeedsPeople.start();
   }
   if (window.FeedsDiscord) {
-    window.FeedsDiscord.bind({ esc: esc, render: render });
+    window.FeedsDiscord.bind({
+      esc: esc,
+      render: render,
+      stay: () => { scrollFreeze = false; routing = false; },
+      noteHash: (hash) => {
+        lastKey = hash || (location.hash || "#/");
+        STATE.scrollKey = "#/messages";
+      }
+    });
     window.FeedsDiscord.start();
   }
   if (window.Spaces) {
