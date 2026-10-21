@@ -108,7 +108,7 @@
   };
   let previewAnchor = 0;
   const SCROLLS = {};
-  const THEME_COLORS = { default: "#ffffff", dim: "#15202b", lightsout: "#000000" };
+  const THEME_COLORS = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
 
   const icon = (name) => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${PATH[name]}"/></svg>`;
   const LINE = {
@@ -8189,12 +8189,12 @@
   function applyTheme() {
     const theme = resolvedTheme();
     document.documentElement.setAttribute("data-theme", theme);
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", THEME_COLORS[theme]);
+    const color = THEME_COLORS[theme] || "#000000";
+    document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
     const scheme = document.querySelector('meta[name="color-scheme"]');
     if (scheme) scheme.setAttribute("content", theme === "default" ? "light" : "dark");
     const bar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-    if (bar) bar.setAttribute("content", theme === "default" ? "default" : "black-translucent");
+    if (bar) bar.setAttribute("content", "black-translucent");
   }
 
   function slimPost(post) {
