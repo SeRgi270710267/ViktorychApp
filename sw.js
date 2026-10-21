@@ -21,16 +21,62 @@ const SHELL_FILES = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(SHELL).then((cache) => cache.addAll(SHELL_FILES)).then(() => self.skipWaiting()));
+  event.waitUntil((async () => {
+    const cache = await caches.open(SHELL);
+    await Promise.all(SHELL_FILES.map(async (path) => {
+      try {
+        const res = await fetch(new Request(path, { cache: "reload" }));
+        if (res && res.ok) await cache.put(path, res);
+      } catch (err) { /* one missing icon must not leave the previous worker in control */ }
+    }));
+    await self.skipWaiting();
+  })());
 });
+
+const armedClients = new Set();
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE).map((key) => caches.delete(key)));
     await self.clients.claim();
+    await takeOverClients();
   })());
 });
+
+// Pages that are already open keep their old script after claim. A hidden
+// window, or a window that never answers, is reloaded so the next open runs
+// this version. A page that posts reload-armed reloads itself when idle.
+async function takeOverClients() {
+  const started = Date.now();
+  const pass = async () => {
+    try {
+      const db = await idb();
+      const at = Number(await idbGet(db, "shell-reload-at") || 0);
+      if (at && Date.now() - at < 15000) return;
+    } catch (err) { /* a missed guard still reloads at most once per window */ }
+    const windows = await self.clients.matchAll({ type: "window" });
+    for (const client of windows) {
+      try { client.postMessage({ type: "reload-when-idle" }); } catch (err) { /* the page may already be closing */ }
+      const armed = armedClients.has(client.id);
+      const hidden = client.visibilityState === "hidden";
+      const stale = !armed && Date.now() - started > 4000;
+      if (armed || (!hidden && !stale)) continue;
+      if (!client.navigate) continue;
+      try {
+        const db = await idb();
+        await idbSet(db, "shell-reload-at", Date.now());
+        await client.navigate(client.url);
+      } catch (err) { /* navigate can fail for a closing window */ }
+      return;
+    }
+  };
+  await pass();
+  const timer = setInterval(() => {
+    if (Date.now() - started > 20000) { clearInterval(timer); return; }
+    pass().catch(() => {});
+  }, 500);
+}
 
 function isData(url) {
   if (/\/archive\/[^/]+\.json$/.test(url.pathname)) return true;
@@ -205,6 +251,7 @@ async function cacheBookmark(urls) {
 
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
   if (data.type === "cache-bookmark") event.waitUntil(cacheBookmark(data.urls));
   if (data.type === "seen" || data.type === "state") {
     event.waitUntil(idb().then(async (db) => {
@@ -250,10 +297,34 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(networkFirst(request, LIVE).catch(() => new Response("", { status: 504 })));
     return;
   }
+  if (request.cache === "reload") {
+    event.respondWith(fetch(request));
+    return;
+  }
+  if (isShell(url)) {
+    event.respondWith((async () => {
+      try {
+        const res = await fetch(request);
+        if (res && res.ok) {
+          const cache = await caches.open(SHELL);
+          cache.put(request, res.clone());
+        }
+        if (res) return res;
+      } catch (err) { /* offline falls back to the shell copied at install */ }
+      return (await caches.match(request)) || Response.error();
+    })());
+    return;
+  }
   if (url.origin === self.location.origin) {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
   }
 });
+
+function isShell(url) {
+  if (url.origin !== self.location.origin) return false;
+  const path = url.pathname;
+  return /\/(?:index\.html|app\.js|styles\.css|favicon\.svg|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+}
 
 function canonicalNotifyId(post) {
   if (!post) return "";

@@ -1087,7 +1087,7 @@
 
   function embedUrl(id, preview) {
     const base = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id);
-    const api = "&enablejsapi=1&origin=" + encodeURIComponent(location.origin);
+    const api = "&enablejsapi=1&origin=" + encodeURIComponent(location.origin) + "&widget_referrer=" + encodeURIComponent(location.origin + "/");
     if (preview) return base + "?autoplay=1&mute=1&playsinline=1&controls=0&rel=0" + api;
     return base + "?rel=0" + api;
   }
@@ -1264,23 +1264,39 @@
       }
       const frame = document.createElement("iframe");
       frame.id = "ytf" + gen;
-      if (/youtube-nocookie\.com|youtube\.com/.test(url || "")) frame.referrerPolicy = "strict-origin-when-cross-origin";
+      if (/youtube-nocookie\.com|youtube\.com/.test(url || "")) {
+        frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+        frame.referrerPolicy = "strict-origin-when-cross-origin";
+      }
       frame.src = url;
       frame.title = (post && (post.title || post.text)) || "Video";
       frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
       frame.allowFullscreen = !opts.preview;
-      const hello = () => {
+      const nudge = () => {
         if (el._gen !== gen || !frame.contentWindow) return;
+        const send = (func, args) => {
+          try {
+            frame.contentWindow.postMessage(JSON.stringify({ event: "command", func: func, args: args || [], id: frame.id, channel: "widget" }), "*");
+          } catch (err) { /* the embed answers with onReady */ }
+        };
         try {
           frame.contentWindow.postMessage(JSON.stringify({ event: "listening", id: frame.id, channel: "widget" }), "*");
-          if (opts.preview) frame.contentWindow.postMessage(JSON.stringify({ event: "command", func: "playVideo", args: [] }), "*");
-        } catch (err) { /* the embed answers with onStateChange */ }
+        } catch (err) { /* cross-origin until the widget loads */ }
+        send("addEventListener", ["onReady"]);
+        send("addEventListener", ["onStateChange"]);
+        if (opts.preview || opts.muted) {
+          send("mute", []);
+          send("playVideo", []);
+        }
       };
+      el._nudge = nudge;
       frame.addEventListener("load", () => {
         if (el._gen !== gen) return;
         if (!frame.src || frame.src === "about:blank") return;
-        hello();
-        setTimeout(hello, 500);
+        notePlay(el, "youtube-loaded");
+        nudge();
+        setTimeout(nudge, 250);
+        setTimeout(nudge, 700);
       });
       el.appendChild(frame);
       el.classList.add("is-playing");
@@ -1299,7 +1315,12 @@
       video.defaultMuted = true;
       video.setAttribute("muted", "");
     }
-    if (opts.loop || (media && media.type === "animated_gif")) { video.loop = true; video.muted = true; }
+    if (opts.loop || (media && media.type === "animated_gif")) {
+      video.loop = true;
+      video.muted = true;
+      video.defaultMuted = true;
+      video.setAttribute("muted", "");
+    }
     const poster = el.querySelector(".vposter") || el.querySelector("img");
     if (poster && poster.getAttribute("src") && !poster.classList.contains("face")) video.poster = poster.getAttribute("src");
     video.preload = opts.preview && visibleRatio(el) < 0.6 ? "metadata" : "auto";
@@ -1359,6 +1380,14 @@
       } catch (err) { /* media session is optional */ }
     });
     const start = () => {
+      if (opts.muted || opts.preview || opts.loop || (media && media.type === "animated_gif")) {
+        video.muted = true;
+        video.defaultMuted = true;
+        video.setAttribute("muted", "");
+      }
+      video.playsInline = true;
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
       const at = Number(opts.resume) || 0;
       opts.resume = 0;
       if (at > 0.3) {
@@ -1367,10 +1396,27 @@
         else video.addEventListener("loadedmetadata", seek, { once: true });
       }
       armStall(el, video, gen, fail);
-      video.play().catch((err) => {
-        if (err && err.name === "NotAllowedError") return;
-        fail();
-      });
+      const played = video.play();
+      notePlay(el, "play-called");
+      if (played && played.then) {
+        played.then(() => notePlay(el, "play-started")).catch((err) => {
+          const name = err && err.name ? err.name : "play-error";
+          notePlay(el, "play-rejected:" + name);
+          if (name !== "NotAllowedError") { fail(); return; }
+          video.muted = true;
+          video.defaultMuted = true;
+          video.setAttribute("muted", "");
+          video.setAttribute("playsinline", "");
+          video.playsInline = true;
+          const again = video.play();
+          if (again && again.then) {
+            again.then(() => notePlay(el, "play-started")).catch((err2) => {
+              const low = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? ":low-power-or-gesture" : "";
+              notePlay(el, "play-blocked:" + ((err2 && err2.name) || "NotAllowedError") + low);
+            });
+          }
+        });
+      }
     };
     if (source.kind === "hls") {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
@@ -1499,6 +1545,26 @@
     const gen = (el._gen || 0) + 1;
     el._gen = gen;
     const giveUp = () => recoverPreview(el, post, media, opts, gen);
+    if (previewing && yt) {
+      notePlay(el, "youtube-embed");
+      const fileOf = (list) => (list || []).find((row) => row && row.kind !== "iframe" && row.url);
+      const useFile = (file) => {
+        playSource(el, file, post, media, opts, gen, () => {
+          if (el._gen !== gen) return;
+          playSource(el, { kind: "iframe", url: embedUrl(yt, true) }, post, media, opts, gen, giveUp);
+        });
+      };
+      playSource(el, { kind: "iframe", url: embedUrl(yt, true) }, post, media, opts, gen, giveUp);
+      sourcesFor(post, media, 0).then((list) => {
+        if (el._gen === gen) el._sources = list;
+      }).catch(() => {});
+      setTimeout(() => {
+        if (el._gen !== gen || el.classList.contains("is-shown")) return;
+        const file = fileOf(el._sources);
+        if (file) useFile(file);
+      }, 1200);
+      return;
+    }
     if (opts.iframe && yt) {
       playSource(el, { kind: "iframe", url: embedUrl(yt, previewing) }, post, media, opts, gen, giveUp);
       return;
@@ -1534,12 +1600,25 @@
     }).catch(() => { if (el._gen === gen) giveUp(); });
   }
 
+  function xRefresh(post) {
+    const id = String((post && (post.statusId || post.id)) || "");
+    if (!/^\d{6,}$/.test(id)) return Promise.resolve(null);
+    return fxStatusPost(id).then((extra) => {
+      const row = extra && (extra.media || []).find((item) => item && (item.type === "video" || item.type === "animated_gif"));
+      const url = row && (pickMp4(row.variants || []) || row.url);
+      if (!url || !playableFile(url) || oePast(url)) return null;
+      return { url: url };
+    }).catch(() => null);
+  }
+
   function recoverPreview(el, post, media, opts, gen) {
     const platform = (post && post.platform) || "";
-    const can = platform === "vk" || platform === "instagram" || platform === "threads";
-    if (!can || el._recovered) { showVideoCard(el, post, media); return; }
+    const can = platform === "vk" || platform === "instagram" || platform === "threads" || platform === "x";
+    if (!can || el._recovered) { notePlay(el, "no-source"); showVideoCard(el, post, media); return; }
     el._recovered = 1;
-    const job = platform === "vk" ? vkRefresh(post, media) : metaRefresh(post);
+    el._sources = [];
+    notePlay(el, "refresh-" + platform);
+    const job = platform === "vk" ? vkRefresh(post, media) : platform === "x" ? xRefresh(post) : metaRefresh(post);
     job.then((fresh) => {
       if (el._gen !== gen) return;
       if (!fresh || !fresh.url || !playableFile(fresh.url) || oePast(fresh.url)) { showVideoCard(el, post, media); return; }
@@ -1562,27 +1641,136 @@
     if (left) left.hidden = true;
   }
 
-  function autoplayAllowed() {
-    const mode = (STATE.settings && STATE.settings.autoplay) || "all";
-    if (mode === "never") return false;
-    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  function connectionInfo() {
     const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-    if (conn && conn.saveData) return false;
-    if (mode === "wifi" && conn && conn.type === "cellular") return false;
-    return true;
+    return {
+      type: conn && typeof conn.type === "string" ? conn.type : "",
+      saveData: !!(conn && conn.saveData),
+      effectiveType: conn && conn.effectiveType ? String(conn.effectiveType) : ""
+    };
+  }
+
+  function autoplayBlockReason() {
+    const mode = (STATE.settings && STATE.settings.autoplay) || "all";
+    const chosen = mode === "wifi" || mode === "never" ? mode : "all";
+    if (chosen === "never") return "setting-never";
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return "reduced-motion";
+    const conn = connectionInfo();
+    // An unknown navigator.connection and saveData are not Never.
+    // Wi-Fi only pauses when the browser actually reports a cellular type.
+    if (chosen === "wifi" && conn.type === "cellular") return "cellular";
+    return "";
+  }
+
+  function autoplayAllowed() {
+    return !autoplayBlockReason();
+  }
+
+  function scrollBounds() {
+    const root = previewScrollRoot();
+    if (root && root.getBoundingClientRect) {
+      const rect = root.getBoundingClientRect();
+      return { top: rect.top, left: rect.left, bottom: rect.bottom, right: rect.right, height: rect.height || 0, width: rect.width || 0 };
+    }
+    return { top: 0, left: 0, bottom: window.innerHeight || 0, right: window.innerWidth || 0, height: window.innerHeight || 0, width: window.innerWidth || 0 };
+  }
+
+  function visibleMetrics(el) {
+    if (!el || !el.getBoundingClientRect) return { ratio: 0, cover: 0 };
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return { ratio: 0, cover: 0 };
+    const view = scrollBounds();
+    const top = Math.max(rect.top, view.top);
+    const bottom = Math.min(rect.bottom, view.bottom);
+    const left = Math.max(rect.left, view.left);
+    const right = Math.min(rect.right, view.right);
+    const w = Math.max(0, right - left);
+    const h = Math.max(0, bottom - top);
+    return {
+      ratio: (w * h) / (rect.width * rect.height),
+      cover: view.height > 0 ? h / view.height : 0
+    };
   }
 
   function visibleRatio(el) {
-    if (!el || !el.getBoundingClientRect) return 0;
-    const rect = el.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return 0;
-    const top = Math.max(rect.top, 0);
-    const bottom = Math.min(rect.bottom, window.innerHeight || 0);
-    const left = Math.max(rect.left, 0);
-    const right = Math.min(rect.right, window.innerWidth || 0);
-    const w = Math.max(0, right - left);
-    const h = Math.max(0, bottom - top);
-    return (w * h) / (rect.width * rect.height);
+    return visibleMetrics(el).ratio;
+  }
+
+  function previewEligible(el) {
+    const metrics = visibleMetrics(el);
+    return metrics.ratio >= 0.6 || metrics.cover >= 0.6;
+  }
+
+  function autoplayDebugOn() {
+    const blob = String(location.search || "") + "&" + String(location.hash || "");
+    if (/[?&]debug=autoplay\b/.test(blob)) return true;
+    try { return parseRoute().name === "sources"; } catch (err) { return false; }
+  }
+
+  function notePlay(el, reason) {
+    const id = el && el.dataset ? (el.dataset.pid || "") : "";
+    STATE.playLog = STATE.playLog || [];
+    const last = STATE.playLog[STATE.playLog.length - 1];
+    if (last && last.reason === reason && last.id === id) return;
+    STATE.playLog.push({ t: Date.now(), id: id, reason: reason || "" });
+    if (STATE.playLog.length > 40) STATE.playLog.shift();
+    if (el && el.dataset && reason) el.dataset.why = reason;
+    if (autoplayDebugOn()) paintAutoplayDebug();
+  }
+
+  function paintAutoplayDebug() {
+    if (!autoplayDebugOn()) {
+      const old = document.getElementById("autoplay-debug");
+      if (old) old.remove();
+      return;
+    }
+    let box = document.getElementById("autoplay-debug");
+    if (!box) {
+      box = document.createElement("aside");
+      box.id = "autoplay-debug";
+      box.setAttribute("aria-label", "Autoplay debug");
+      document.body.appendChild(box);
+    }
+    const conn = connectionInfo();
+    const lines = [];
+    lines.push("autoplay " + ((STATE.settings && STATE.settings.autoplay) || "all") + " block=" + (autoplayBlockReason() || "no"));
+    lines.push("connection type=" + (conn.type || "unknown") + " saveData=" + conn.saveData + " effective=" + (conn.effectiveType || "unknown"));
+    lines.push("reduced=" + !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches));
+    lines.push("sw=" + ((navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.scriptURL) || "none"));
+    lines.push("chosen " + ((STATE.autoEl && STATE.autoEl.dataset && STATE.autoEl.dataset.pid) || "none"));
+    document.querySelectorAll(".vplay[data-preview]").forEach((el) => {
+      const metrics = visibleMetrics(el);
+      if (metrics.ratio < 0.05 && metrics.cover < 0.05 && el !== STATE.autoEl) return;
+      const video = el.querySelector("video");
+      const frame = el.querySelector("iframe");
+      const time = video ? video.currentTime.toFixed(1) : frame ? "iframe" : "-";
+      const paused = video ? String(video.paused) : frame ? (el.classList.contains("is-shown") ? "playing" : "under-poster") : "-";
+      lines.push((el.dataset.pid || "?") + " r=" + metrics.ratio.toFixed(2) + " c=" + metrics.cover.toFixed(2) + " t=" + time + " " + paused + " " + (el.dataset.why || ""));
+    });
+    (STATE.playLog || []).slice(-6).forEach((row) => lines.push(row.reason + " " + row.id));
+    box.textContent = lines.join("\n");
+  }
+
+  function previewScrollRoot() {
+    const sample = document.querySelector(".vplay[data-preview]");
+    let node = sample && sample.parentElement;
+    while (node && node !== document.body && node !== document.documentElement) {
+      const style = getComputedStyle(node);
+      if ((style.overflowY === "auto" || style.overflowY === "scroll") && node.scrollHeight > node.clientHeight + 24) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  function bindPreviewScroll() {
+    if (STATE.previewScrollBound) return;
+    STATE.previewScrollBound = true;
+    const onScroll = () => schedulePreview();
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("scroll", onScroll, { passive: true });
+      window.visualViewport.addEventListener("resize", onScroll, { passive: true });
+    }
   }
 
   function subsDesktop() {
@@ -1643,16 +1831,23 @@
     const gif = !!el.querySelector(".gif-badge");
     const subs = el.dataset.preview === "subs";
     video.muted = gif || subs || !STATE.sound;
+    if (video.muted) {
+      video.defaultMuted = true;
+      video.setAttribute("muted", "");
+    }
     video.loop = gif;
     video.playsInline = true;
     video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
     video.controls = false;
     video.preload = "auto";
     el.dataset.want = "1";
     const pending = video.play();
     if (pending && pending.then) {
-      pending.then(() => { if (!video.paused) markShown(el); }).catch((err) => {
-        if (err && err.name === "NotAllowedError") return;
+      pending.then(() => { if (!video.paused) { markShown(el); notePlay(el, "play-started"); } }).catch((err) => {
+        const name = err && err.name ? err.name : "play-error";
+        notePlay(el, name === "NotAllowedError" ? "play-blocked:" + name : "play-rejected:" + name);
+        if (name === "NotAllowedError") return;
         delete el.dataset.want;
       });
     }
@@ -1668,32 +1863,22 @@
   }
 
   function choosePreview() {
-    if (!autoplayAllowed()) return null;
+    const blocked = autoplayBlockReason();
+    if (blocked) { notePlay(null, blocked); return null; }
     if (STATE.viewer && STATE.viewer.video) return null;
     const subs = document.querySelector(".vplay[data-preview='subs']");
-    if (subs) {
-      if (subsDesktop()) {
-        if (STATE.subsHover && document.body.contains(STATE.subsHover) && visibleRatio(STATE.subsHover) > 0) return STATE.subsHover;
-        return null;
-      }
-      let best = null;
-      let bestDist = Infinity;
-      const mid = (window.innerHeight || 0) / 2;
-      document.querySelectorAll(".vplay[data-preview='subs']").forEach((el) => {
-        if (el.classList.contains("is-failed")) return;
-        if (visibleRatio(el) < 0.6) return;
-        const rect = el.getBoundingClientRect();
-        const dist = Math.abs(rect.top + rect.height / 2 - mid);
-        if (dist < bestDist) { best = el; bestDist = dist; }
-      });
-      return best;
-    }
+    const nodes = subs
+      ? document.querySelectorAll(".vplay[data-preview='subs']")
+      : document.querySelectorAll(".vplay[data-preview='feed']");
+    if (subs && subsDesktop() && STATE.subsHover && document.body.contains(STATE.subsHover) && previewEligible(STATE.subsHover)) return STATE.subsHover;
     let best = null;
-    let bestRatio = 0;
-    document.querySelectorAll(".vplay[data-preview='feed']").forEach((el) => {
+    let bestScore = 0;
+    nodes.forEach((el) => {
       if (el.classList.contains("is-failed") || el.classList.contains("player")) return;
-      const ratio = visibleRatio(el);
-      if (ratio >= 0.6 && ratio > bestRatio) { best = el; bestRatio = ratio; }
+      const metrics = visibleMetrics(el);
+      if (metrics.ratio < 0.6 && metrics.cover < 0.6) return;
+      const score = Math.max(metrics.ratio, metrics.cover);
+      if (score > bestScore) { best = el; bestScore = score; }
     });
     return best;
   }
@@ -1713,16 +1898,20 @@
     if (!autoplayAllowed() || (STATE.viewer && STATE.viewer.video)) {
       if (STATE.autoEl) pausePreview(STATE.autoEl);
       STATE.autoEl = null;
+      paintAutoplayDebug();
       return;
     }
     const next = choosePreview();
     if (STATE.autoEl && STATE.autoEl !== next) pausePreview(STATE.autoEl);
-    if (!next) { STATE.autoEl = null; return; }
+    if (!next) { STATE.autoEl = null; paintAutoplayDebug(); return; }
     STATE.autoEl = next;
     if (next.dataset.want === "1" || (next.classList.contains("is-playing") && (next.querySelector("video") || next.querySelector("iframe:not([src='about:blank'])")))) {
       applyPreviewSound(next);
+      const frame = next.querySelector("iframe");
+      if (frame && !next.classList.contains("is-shown") && next._nudge) next._nudge();
       const current = next.querySelector("video");
       if (current && current.paused && !current.error) resumePreview(next);
+      paintAutoplayDebug();
       return;
     }
     const video = next.querySelector("video");
@@ -1734,18 +1923,20 @@
     const media = playMedia(next, post) || {};
     const gif = !!(media && media.type === "animated_gif");
     startPlayback(next, { preview: true, loop: gif, muted: gif || next.dataset.preview === "subs" || !STATE.sound });
+    paintAutoplayDebug();
   }
 
   function bindPlayers() {
     if (STATE.videoObserver) STATE.videoObserver.disconnect();
     STATE.autoEl = null;
     if (!("IntersectionObserver" in window)) { schedulePreview(); return; }
+    bindPreviewScroll();
     STATE.videoObserver = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) prefetchPreview(entry.target);
       });
       schedulePreview();
-    }, { rootMargin: "200px 0px", threshold: [0, 0.6, 1] });
+    }, { root: previewScrollRoot(), rootMargin: "200px 0px", threshold: [0, 0.6, 1] });
     document.querySelectorAll(".vplay[data-preview]").forEach((el) => STATE.videoObserver.observe(el));
     schedulePreview();
   }
@@ -6881,10 +7072,33 @@
       try { data = JSON.parse(data); } catch (err) { return; }
     }
     if (!data || typeof data !== "object") return;
-    const state = data.event === "onStateChange" ? data.info : (data.info && data.info.playerState);
-    if (state !== 1) return;
     document.querySelectorAll(".vplay iframe").forEach((frame) => {
-      if (frame.contentWindow === event.source) markShown(frame.closest(".vplay"));
+      if (frame.contentWindow !== event.source) return;
+      const tile = frame.closest(".vplay");
+      if (!tile) return;
+      if (data.event === "onReady" && tile._nudge) {
+        notePlay(tile, "youtube-ready");
+        tile._nudge();
+      }
+      const info = data.info;
+      let state = null;
+      if (data.event === "onStateChange") state = info;
+      else if (info && typeof info === "object" && info.playerState != null) state = info.playerState;
+      if (info && typeof info === "object" && info.videoData && info.videoData.errorCode && !tile.classList.contains("is-shown")) notePlay(tile, "youtube-" + info.videoData.errorCode);
+      if (state == null || state === "") return;
+      const stateNum = Number(state);
+      if (!isFinite(stateNum)) return;
+      const current = info && typeof info === "object" ? Number(info.currentTime || 0) : 0;
+      if (stateNum === 1 || current > 0.15) {
+        notePlay(tile, stateNum === 1 ? "youtube-playing" : "youtube-time");
+        markShown(tile);
+      } else if (stateNum === -1 || stateNum === 5) {
+        notePlay(tile, "youtube-state-" + stateNum);
+        tile._ytNudge = (tile._ytNudge || 0) + 1;
+        if (tile._ytNudge <= 2 && tile._nudge && tile.dataset.want === "1") tile._nudge();
+      } else if (stateNum === 0 || stateNum === 2 || stateNum === 3) {
+        notePlay(tile, "youtube-state-" + stateNum);
+      }
     });
   });
   window.addEventListener("scroll", () => {
@@ -7583,9 +7797,36 @@
     }
   }
 
+  function scheduleIdleReload() {
+    if (STATE.idleReload) return;
+    if (sessionStorage.getItem("rss-feeds-sw-reload") === "1") return;
+    STATE.idleReload = true;
+    let timer = 0;
+    const go = () => {
+      if (sessionStorage.getItem("rss-feeds-sw-reload") === "1") return;
+      const busy = [...document.querySelectorAll("video")].some((video) => video && !video.paused && !video.ended);
+      if (busy && document.visibilityState === "visible") {
+        timer = setTimeout(go, 4000);
+        return;
+      }
+      sessionStorage.setItem("rss-feeds-sw-reload", "1");
+      location.reload();
+    };
+    const bump = () => {
+      clearTimeout(timer);
+      timer = setTimeout(go, 1600);
+    };
+    ["pointerdown", "keydown", "touchstart", "wheel"].forEach((name) => window.addEventListener(name, bump, { passive: true }));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") go();
+    });
+    bump();
+  }
+
   function showUpdate() {
     const el = document.getElementById("update");
     if (el) el.hidden = false;
+    scheduleIdleReload();
   }
 
   function photoList(post) {
@@ -7815,6 +8056,7 @@
       const data = event.data || {};
       if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
       if (data.type === "feeds-updated") refreshFeeds(false);
+      if (data.type === "reload-when-idle" && STATE.swUpdate) showUpdate();
     });
   }
 
@@ -7827,10 +8069,20 @@
     setOffline(!navigator.onLine);
     const updateGo = document.getElementById("update-go");
     if (updateGo) updateGo.addEventListener("click", () => location.reload());
+    setTimeout(() => {
+      if (!STATE.idleReload) sessionStorage.removeItem("rss-feeds-sw-reload");
+    }, 8000);
     if ("serviceWorker" in navigator) {
+      const armServiceWorker = () => {
+        const worker = navigator.serviceWorker.controller;
+        if (worker) worker.postMessage({ type: "reload-armed" });
+      };
       let hadController = !!navigator.serviceWorker.controller;
+      armServiceWorker();
       navigator.serviceWorker.addEventListener("controllerchange", () => {
+        armServiceWorker();
         if (!hadController) { hadController = true; return; }
+        STATE.swUpdate = true;
         showUpdate();
       });
     }
