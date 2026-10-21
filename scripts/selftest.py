@@ -863,7 +863,7 @@ def main() -> None:
     check("New version available" in page and 'id="update-go"' in page and 'id="viewer"' in page, "the shell has an update prompt and a media viewer")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("beforeinstallprompt" in app and "Install app" in app and "pictureInPicture" in app and "mediaSession" in app, "install, picture in picture, and media session are in the page")
-    check("function creatorOf(" in app and "function repostBanner(" in app and "function countsAsUpload(" in app and "repostComment" in app, "video cards credit the original creator and keep a repost comment")
+    check("function creatorOf(" in app and "function repostBanner(" in app and "function countsAsUpload(" in app and "repostComment" in app and "function creditCarried(" in app and "function carriedBy(" in app and "postsCountIncludesReposts" in app and "countsAsOwn" in (ROOT / "people.js").read_text(encoding="utf-8"), "reposts keep the original author, name who reposted, and stay out of that account's post count")
     check("parseSharedLink" in app and "startViewTransition" in app and "rss-feeds-timeline-v1" in app and "rss-feeds-bookmark-queue" in app and "setAppBadge" in app and 'decoding="async"' in app and "navigator.vibrate" in app, "share targets, view transitions, offline snapshots, badges, and haptics are wired")
     check("requestPermission" in app and app.index("requestPermission") > app.index("data-act=\"notify\""), "notification permission is requested from the settings control")
     check("manifest.webmanifest" in workflow and "__SW_VERSION__" in workflow and "GITHUB_SHA" in workflow, "the deploy copies the app shell and stamps the service worker")
@@ -943,7 +943,10 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as share_dir:
         share_root = Path(share_dir)
         (share_root / "feeds.json").write_text(json.dumps({
-            "feeds": [{"platform": "x", "handle": "ada", "name": "Ada <script>", "avatar": "https://pbs.twimg.com/profile_images/a_400x400.jpg", "bio": "Hello & welcome"}],
+            "feeds": [
+                {"platform": "x", "handle": "ada", "name": "Ada <script>", "avatar": "https://pbs.twimg.com/profile_images/a_400x400.jpg", "bio": "Hello & welcome"},
+                {"id": "vk:vk", "platform": "vk", "handle": "vk", "name": "ВКонтакте"},
+            ],
             "posts": [
                 {"platform": "x", "id": "100", "statusId": "100", "handle": "ada", "author": "Ada <script>", "text": "A <b>post</b> " + ("word " * 80), "url": "https://x.com/ada/status/100", "media": [{"type": "photo", "url": "https://pbs.twimg.com/media/abc.jpg?name=small", "width": 680, "height": 400}]},
                 {"platform": "youtube", "id": "abcdefghijk", "statusId": "abcdefghijk", "handle": "Chan", "author": "Chan", "title": "Watch me", "text": "", "url": "https://www.youtube.com/watch?v=abcdefghijk", "media": [{"type": "video", "url": "https://www.youtube.com/embed/abcdefghijk", "poster": "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", "width": 480, "height": 360}]},
@@ -952,6 +955,7 @@ def main() -> None:
                 {"platform": "x", "id": "nitter", "statusId": "nitter", "handle": "ada", "author": "Ada", "text": "From nitter", "media": [{"type": "photo", "url": "http://nitter.example/pic/media%2Fabc.jpg"}]},
                 {"platform": "x", "id": "mp4", "statusId": "mp4", "handle": "ada", "author": "Ada", "text": "Clip", "media": [{"type": "video", "url": "http://video.twimg.com/amplify_video/1/vid/avc1/720x720/a.mp4", "poster": "https://pbs.twimg.com/amplify_video_thumb/1/img/a.jpg"}]},
                 {"platform": "x", "id": "cdn", "statusId": "cdn", "handle": "cdn", "author": "CDN", "text": "skip", "avatar": "https://cdn.jsdelivr.net/gh/owner-account/SuperintelApp@data/archive/x.jpg", "media": [{"type": "photo", "url": "https://raw.githubusercontent.com/owner-account/SuperintelApp/data/archive/x.jpg"}]},
+                {"platform": "vk", "id": "-220923985_58381", "statusId": "-220923985_58381", "feedId": "vk:vk", "handle": "vkfandomfest", "author": "Фандом Фест", "text": "Фестиваль", "kind": "repost", "repostedBy": {"name": "ВКонтакте", "handle": "vk", "platform": "vk", "feedId": "vk:vk"}},
             ],
         }), encoding="utf-8")
         archive = share_root / "archive"
@@ -972,7 +976,9 @@ def main() -> None:
         ig_html = (share_root / "s" / "instagram-AbC123.html").read_text(encoding="utf-8")
         stub_html = (share_root / "s" / "x-stub1.html").read_text(encoding="utf-8")
         profile_html = (share_root / "u" / "x-ada.html").read_text(encoding="utf-8")
-        check(counts["posts"] == 7 and counts["watch"] == 1 and counts["profiles"] == 1 and counts["stubs"] == 1 and counts["spaces"] == 1, "share pages cover posts, a watch page, a profile, a new stub, and a Space")
+        check(counts["posts"] == 8 and counts["watch"] == 1 and counts["profiles"] == 2 and counts["stubs"] == 1 and counts["spaces"] == 1, "share pages cover posts, a watch page, a profile, a new stub, and a Space")
+        vk_share = (share_root / "s" / "vk--220923985_58381.html").read_text(encoding="utf-8")
+        check('class="repost"' in vk_share and "ВКонтакте reposted" in vk_share and 'href="../u/vk-vk.html"' in vk_share and "Фандом Фест" in vk_share, "a share page names who reposted and keeps the original author")
         space_html = (share_root / "s" / "space-superintelmusic.html").read_text(encoding="utf-8")
         check('og:title" content="SuperintelMusic"' in space_html and 'og:description" content="Live Space"' in space_html and "#/spaces/superintelmusic" in space_html and "streamTitle" not in space_html and "rss-feeds" not in space_html and 'src="../icons/' in space_html, "a Space share page uses the station title and a relative cover, not a track name")
         discord_html = (share_root / "s" / "discord-discord-10-20.html").read_text(encoding="utf-8")
@@ -1147,15 +1153,30 @@ def main() -> None:
     from vk_remote import parse_web_client
 
     vk_doc = parse_vk(json.loads((FIX / "vk_wall_vk.json").read_text(encoding="utf-8")), {"id": "vk:vk", "platform": "vk", "handle": "vk"})
-    check(len(vk_doc["posts"]) == 3, "vk wall keeps the text post, the video, and the repost")
+    check(len(vk_doc["posts"]) == 4, "vk wall keeps the text post, the video, the copy, and the co-owned post")
     vk_text_post = vk_doc["posts"][0]
     check("запись в блоге" in vk_text_post["text"] and "away.php" not in vk_text_post["text"] and vk_text_post["media"][0]["url"].endswith("vk-large.jpg"), "vk markup becomes the label and the largest photo")
     check(vk_text_post["url"] == "https://vk.com/wall-22822305_1730797" and vk_text_post["stats"]["replies"] == 12, "vk post links to the wall and keeps the comment count")
     vk_video = vk_doc["posts"][1]
     check(vk_video["media"][0]["type"] == "video" and vk_video["media"][0]["poster"].endswith("vk-video.jpg") and vk_video["media"][0]["open"].startswith("https://vk.com/video"), "vk video keeps a poster and the watch page")
     vk_repost = vk_doc["posts"][2]
-    check(vk_repost["kind"] == "repost" and vk_repost["handle"] == "team" and vk_repost["repostedBy"]["handle"] == "vk" and "Исходная" in vk_repost["text"], "vk repost credits the community and shows the original")
-    check(vk_doc["profiles"][0]["name"] == "ВКонтакте" and vk_doc["profiles"][0]["followers"] == 14000000 and vk_doc["profiles"][0]["url"] == "https://vk.com/vk" and vk_doc["profiles"][0]["verifiedType"] == "business", "vk profile comes from the community")
+    check(vk_repost["kind"] == "repost" and vk_repost["handle"] == "team" and vk_repost["repostedBy"]["handle"] == "vk" and vk_repost["repostedBy"]["platform"] == "vk" and vk_repost["repostedBy"]["feedId"] == "vk:vk" and "Исходная" in vk_repost["text"], "vk repost credits the community and shows the original")
+    vk_wall = next(post for post in vk_doc["posts"] if post["id"] == "-220923985_58381")
+    check(vk_wall["kind"] == "repost" and vk_wall["author"] == "Фандом Фест" and vk_wall["handle"] == "vkfandomfest" and vk_wall["url"] == "https://vk.com/wall-220923985_58381" and vk_wall["repostedBy"]["name"] == "ВКонтакте" and vk_wall["repostedBy"]["handle"] == "vk" and vk_wall["repostedBy"]["feedId"] == "vk:vk" and "Фестиваль" in vk_wall["text"], "a co-owned wall post keeps the original author and names who reposted it")
+    owned_wall = parse_vk({"response": {"count": 2, "items": [
+        {"id": 9, "owner_id": -22822305, "from_id": -22822305, "date": 10, "post_type": "post", "text": "Своя запись", "header": {"title": {"source_id": -22822305, "source_ids": [-22822305, -9]}}, "coowners": {"list": [{"owner_id": -22822305}, {"owner_id": -9}]}},
+        {"id": 3, "owner_id": -22822305, "from_id": -22822305, "date": 9, "post_type": "copy", "text": "Смотрите", "copy_history": [{"id": 4, "owner_id": -1, "from_id": -1, "date": 8, "post_type": "post", "text": "Чужая запись"}]},
+    ], "groups": [{"id": 22822305, "name": "ВКонтакте", "screen_name": "vk"}, {"id": 1, "name": "Команда", "screen_name": "team"}]}}, {"id": "vk:vk", "platform": "vk", "handle": "vk"})
+    check(owned_wall["posts"][0]["kind"] == "post" and owned_wall["posts"][0]["handle"] == "vk" and not owned_wall["posts"][0].get("repostedBy"), "a post the community owns stays its own post")
+    check(owned_wall["posts"][1]["kind"] == "quote" and owned_wall["posts"][1]["handle"] == "vk" and owned_wall["posts"][1]["quoted"]["handle"] == "team", "a copy with commentary stays a quote")
+    check(vk_doc["profiles"][0]["name"] == "ВКонтакте" and vk_doc["profiles"][0]["followers"] == 14000000 and vk_doc["profiles"][0]["url"] == "https://vk.com/vk" and vk_doc["profiles"][0]["verifiedType"] == "business" and vk_doc["profiles"][0]["postsCountIncludesReposts"] is True, "vk profile comes from the community and its wall count includes reposts")
+    from adapters.common import credit_carried
+    stored = [
+        {"id": "-22822305_1", "statusId": "-22822305_1", "platform": "vk", "feedId": "vk:vk", "kind": "post", "author": "ВКонтакте", "handle": "vk", "text": "own"},
+        {"id": "-220923985_58381", "statusId": "-220923985_58381", "platform": "vk", "feedId": "vk:vk", "kind": "post", "author": "Фандом Фест", "handle": "vkfandomfest", "text": "kept"},
+        {"id": "19", "platform": "telegram", "feedId": "telegram:telegram", "kind": "post", "author": "Telegram News", "handle": "telegram", "text": "The original note.", "forwardedFrom": {"name": "Pavel Durov", "handle": "durov"}},
+    ]
+    check(credit_carried(stored, [{"id": "vk:vk", "platform": "vk", "handle": "vk", "name": "ВКонтакте"}, {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram", "name": "Telegram News"}]) == 2 and stored[1]["kind"] == "repost" and stored[1]["author"] == "Фандом Фест" and stored[1]["repostedBy"]["name"] == "ВКонтакте" and stored[0]["kind"] == "post" and stored[2]["kind"] == "repost" and stored[2]["author"] == "Pavel Durov" and stored[2]["handle"] == "durov" and stored[2]["repostedBy"]["handle"] == "telegram", "stored wall posts and forwards grow a repost line without taking the original author's name")
     vk_comments = parse_vk_comments(
         {"response": {"count": 1, "items": [{"id": 9, "from_id": 5, "owner_id": -22822305, "post_id": 1730797, "date": 1792307000, "text": "Привет", "likes": {"count": 3}, "thread": {"count": 0, "items": []}}], "profiles": [{"id": 5, "first_name": "Аня", "last_name": "Иванова", "screen_name": "anya"}]}},
         {"statusId": "-22822305_1730797", "handle": "vk"},
@@ -1185,7 +1206,7 @@ def main() -> None:
     check(tg_by["15"]["media"][0]["type"] == "audio" and tg_by["16"]["media"][0]["type"] == "file" and tg_by["16"]["media"][0]["title"] == "notes.pdf", "telegram voice and documents become attachment cards")
     check(tg_by["17"]["link"]["title"] == "Hello from the blog" and tg_by["17"]["link"]["image"].endswith("card.jpg") and not tg_by["17"]["media"], "a telegram link preview is a card, not another photo")
     check(tg_by["18"]["poll"]["question"] == "Which build?" and tg_by["18"]["poll"]["choices"][1]["percent"] == 38, "a telegram poll keeps the question and the percents")
-    check(tg_by["19"]["forwardedFrom"]["name"] == "Pavel Durov" and tg_by["19"]["forwardedFrom"]["handle"] == "durov" and tg_by["19"]["kind"] == "post", "a telegram forward stays on the channel and names the source")
+    check(tg_by["19"]["forwardedFrom"]["name"] == "Pavel Durov" and tg_by["19"]["forwardedFrom"]["handle"] == "durov" and tg_by["19"]["kind"] == "repost" and tg_by["19"]["author"] == "Pavel Durov" and tg_by["19"]["handle"] == "durov" and tg_by["19"]["repostedBy"]["name"] == "Telegram News" and tg_by["19"]["repostedBy"]["handle"] == "telegram" and tg_by["19"]["repostedBy"]["platform"] == "telegram", "a telegram forward keeps the original author and names the channel that reposted it")
     check(tg_by["20"]["replyParent"]["author"] == "Telegram News" and tg_by["20"]["replyingTo"]["id"] == "10" and tg_by["20"].get("discussion") is True and tg_by["20"]["kind"] == "post", "a telegram reply shows its parent and can open comments")
     quiet = parse_telegram(tg_html + '\n<div id="feeds-discussion" data-on="0"></div>', tg_feed)
     check(all(not post.get("discussion") for post in quiet["posts"]), "a channel without a discussion hides comments")
@@ -1616,6 +1637,19 @@ if (!P.filterTab(rows, "posts").some((post) => post.id === "7")) throw new Error
 if (!P.filterTab(rows, "videos").some((post) => post.id === "1")) throw new Error("x video missing");
 if (!P.filterTab(rows, "shorts").some((post) => post.id === "2")) throw new Error("short missing");
 if (P.filterTab(rows, "posts").some((post) => post.id === "4")) throw new Error("reply in posts");
+P.bind({
+  posts: () => posts,
+  formatCount: (n) => String(n),
+  card: (post, mode) => "CARD" + post.id + ":" + (mode || "show"),
+  esc: (value) => String(value == null ? "" : value),
+  icon: () => "",
+  avatar: () => "",
+  emptyBlock: () => ""
+});
+const profileHtml = P.page({ name: "person", id: "canadian-prepper", query: { get: () => "" } });
+if (!profileHtml || profileHtml.indexOf("4 posts") < 0) throw new Error("count " + (profileHtml || "").slice(0, 400));
+if (profileHtml.indexOf("CARD7:show") < 0) throw new Error("repost line hidden");
+if (profileHtml.indexOf("CARD1:author") < 0) throw new Error("own post " + profileHtml);
 const collapsed = P.collapse([
   { id: "youtube:redacted_handle", platform: "youtube", handle: "redacted_handle", name: "Canadian Prepper" },
   { id: "x:redacted_handle", platform: "x", handle: "redacted_handle", name: "Canadian Prepper" },

@@ -114,6 +114,31 @@
     return ids.length ? ids : (raw ? [raw] : []);
   }
 
+  function reposterMatch(post, person) {
+    const by = post && post.repostedBy;
+    if (!post || !person || !by || !(by.handle || by.name || by.feedId)) return false;
+    const platform = by.platform || post.platform || "x";
+    const handle = lower(by.handle);
+    return (person.accounts || []).some((account) => {
+      if (by.feedId && account.feedId && by.feedId === account.feedId) return true;
+      return (account.platform || "x") === platform && !!handle && handle === lower(account.handle);
+    });
+  }
+
+  function authorMatch(post, person) {
+    if (!post || !person) return false;
+    const platform = post.platform || "x";
+    const handle = lower(post.handle);
+    if (!handle) return false;
+    return (person.accounts || []).some((account) => (account.platform || "x") === platform && handle === lower(account.handle));
+  }
+
+  function countsAsOwn(post, person) {
+    if (!post || post.kind === "reply") return false;
+    if (reposterMatch(post, person) && !authorMatch(post, person)) return false;
+    return true;
+  }
+
   function owns(post, person) {
     if (!post || !person) return false;
     const platform = post.platform || "x";
@@ -342,7 +367,7 @@
     const requested = route.query && route.query.get ? (route.query.get("tab") || "") : "";
     const tab = tabs.some((pair) => pair[0] === requested) ? requested : "posts";
     const list = filterTab(all, tab);
-    const posted = all.filter((post) => post.kind !== "reply").length;
+    const posted = all.filter((post) => countsAsOwn(post, person)).length;
     const count = (h.formatCount ? h.formatCount(posted) : String(posted)) + " posts";
     const banner = person.banner
       ? `<img class="pbanner" src="${esc(person.banner)}" alt="">`
@@ -370,7 +395,7 @@
     const icon = h.icon || (() => "");
     let body = "";
     if (tab === "media") body = mediaGrid(list);
-    else if (list.length && h.card) body = list.map((post) => h.card(post)).join("");
+    else if (list.length && h.card) body = list.map((post) => h.card(post, reposterMatch(post, person) ? "" : "author")).join("");
     if (!body) {
       const copy = emptyCopy(tab);
       body = h.emptyBlock ? h.emptyBlock(copy[0], copy[1]) : "";

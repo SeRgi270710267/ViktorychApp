@@ -624,6 +624,21 @@ def _message(chunk: str, feed: dict, profile: dict, discussion: bool | None) -> 
         post["link"] = link
     if forwarded is not None:
         post["forwardedFrom"] = forwarded
+        source = (forwarded.get("handle") or "").lstrip("@").lower()
+        mine = (feed.get("handle") or channel or "").lstrip("@").lower()
+        if (forwarded.get("name") or forwarded.get("handle")) and source != mine:
+            post["repostedBy"] = {
+                "name": author,
+                "handle": feed.get("handle") or channel,
+                "avatar": avatar,
+                "platform": "telegram",
+                "feedId": post.get("feedId") or "",
+            }
+            post["author"] = forwarded.get("name") or forwarded.get("handle") or author
+            post["handle"] = (forwarded.get("handle") or "").lstrip("@")
+            post["avatar"] = forwarded.get("avatar") or ""
+            post["verifiedType"] = None
+            post["kind"] = "repost"
     if parent:
         post["replyParent"] = parent
     if edited:

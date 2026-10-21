@@ -641,6 +641,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     health = prune_health(health, configured_ids)
     posts = dedupe_posts(collected, cap=int(config.get("cap") or 300))
     try:
+        from adapters.common import credit_carried
+
+        credited = credit_carried(posts, profiles)
+        if credited:
+            print(f"[reposts] {credited} carried posts")
+    except Exception as exc:
+        print(f"[reposts] {exc}", file=sys.stderr)
+    try:
         from people import stamp_cross_posts
 
         stamped = stamp_cross_posts(posts, config, fetch=not use_fixtures)

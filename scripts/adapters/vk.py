@@ -178,6 +178,62 @@ def _wall_url(owner_id, post_id) -> str:
     return f"https://vk.com/wall{owner_id}_{post_id}"
 
 
+def _followed_id(people: dict, feed: dict):
+    wanted = str(feed.get("handle") or "").lstrip("@").lower()
+    if not wanted:
+        return None
+    for key, person in people.items():
+        try:
+            owner = int(key)
+        except (TypeError, ValueError):
+            continue
+        if owner < 0 and str(person.get("handle") or "").lower() == wanted:
+            return owner
+    return None
+
+
+def _reposter(people: dict, owner_id, feed: dict) -> dict:
+    person = _person(people, owner_id)
+    return {
+        "name": person.get("name") or feed.get("handle") or "",
+        "handle": person.get("handle") or feed.get("handle") or "",
+        "avatar": person.get("avatar") or "",
+        "platform": feed.get("platform") or "vk",
+        "feedId": feed.get("id") or "",
+    }
+
+
+def _carried_on_wall(item: dict, followed) -> bool:
+    """Another community's post placed on this wall, without copy_history."""
+    if followed is None:
+        return False
+    try:
+        owner = int(item.get("owner_id"))
+    except (TypeError, ValueError):
+        return False
+    if owner == followed:
+        return False
+    found = []
+    co = item.get("coowners") if isinstance(item.get("coowners"), dict) else {}
+    for row in co.get("list") or []:
+        if isinstance(row, dict) and row.get("owner_id") is not None:
+            found.append(row.get("owner_id"))
+    co_post = co.get("coowner_post_id") if isinstance(co.get("coowner_post_id"), dict) else {}
+    if co_post.get("owner_id") is not None:
+        found.append(co_post.get("owner_id"))
+    header = item.get("header") if isinstance(item.get("header"), dict) else {}
+    title = header.get("title") if isinstance(header.get("title"), dict) else {}
+    for raw in title.get("source_ids") or []:
+        found.append(raw)
+    for raw in found:
+        try:
+            if int(raw) == followed:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def _one(item: dict, feed: dict, people: dict, nested: bool = False) -> dict | None:
     if not isinstance(item, dict):
         return None
@@ -200,22 +256,21 @@ def _one(item: dict, feed: dict, people: dict, nested: bool = False) -> dict | N
     reposted = None
     quoted = None
     if original and not nested:
-        if text:
+        same = text.strip() == str(original.get("text") or "").strip()
+        if text and not same:
             kind = "quote"
             quoted = original
         else:
             kind = "repost"
-            reposter = _person(people, owner_id)
-            reposted = {
-                "name": reposter.get("name") or feed.get("handle") or "",
-                "handle": reposter.get("handle") or feed.get("handle") or "",
-                "avatar": reposter.get("avatar") or "",
-            }
+            reposted = _reposter(people, owner_id, feed)
             text = original.get("text") or ""
             links = original.get("links") or links
             media = original.get("media") or media
             author = {"name": original.get("author") or "", "handle": original.get("handle") or "", "avatar": original.get("avatar") or ""}
             handle = author.get("handle") or handle
+    elif not nested and kind == "post" and _carried_on_wall(item, _followed_id(people, feed)):
+        kind = "repost"
+        reposted = _reposter(people, _followed_id(people, feed), feed)
     status_id = f"{owner_id}_{post_id}"
     return post_shell(
         id=status_id,
@@ -266,6 +321,8 @@ def _profile(group: dict, feed: dict, post_count) -> dict:
         profile["followers"] = group.get("members_count")
     if post_count is not None:
         profile["postsCount"] = post_count
+        # wall.get counts copies and co-owned posts along with the community's own.
+        profile["postsCountIncludesReposts"] = True
     return profile
 
 

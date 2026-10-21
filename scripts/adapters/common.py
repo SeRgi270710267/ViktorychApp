@@ -436,6 +436,92 @@ def earlier_iso(left, right) -> str:
     return ""
 
 
+def _person_named(row) -> bool:
+    return isinstance(row, dict) and bool(str(row.get("name") or row.get("handle") or "").strip())
+
+
+def _vk_wall_owner(value) -> str:
+    text = str(value or "")
+    if "_" not in text:
+        return ""
+    return text.rsplit("_", 1)[0]
+
+
+def credit_carried(posts, feeds) -> int:
+    """Name the account that carried a post when the source already names the original.
+
+    Telegram forwards store that original on forwardedFrom. A VK wall item whose
+    id belongs to another community was placed on the followed wall. The card
+    author stays the original. repostedBy is the account that carried it.
+    """
+    by_id = {}
+    for feed in feeds or []:
+        if isinstance(feed, dict) and feed.get("id"):
+            by_id[feed["id"]] = feed
+    owners = {}
+    for post in posts or []:
+        if not isinstance(post, dict) or (post.get("platform") or "") != "vk":
+            continue
+        feed = by_id.get(post.get("feedId") or "")
+        if not feed:
+            continue
+        if str(post.get("handle") or "").lstrip("@").lower() != str(feed.get("handle") or "").lstrip("@").lower():
+            continue
+        owner = _vk_wall_owner(post.get("statusId") or post.get("id"))
+        if owner:
+            owners.setdefault(feed["id"], set()).add(owner)
+    changed = 0
+    for post in posts or []:
+        if not isinstance(post, dict) or _person_named(post.get("repostedBy")):
+            continue
+        feed = by_id.get(post.get("feedId") or "")
+        if _credit_forward(post, feed) or _credit_vk_wall(post, feed, owners):
+            changed += 1
+    return changed
+
+
+def _credit_forward(post: dict, feed) -> bool:
+    forwarded = post.get("forwardedFrom")
+    if not _person_named(forwarded):
+        return False
+    feed = feed or {}
+    post["repostedBy"] = {
+        "name": feed.get("name") or post.get("author") or "",
+        "handle": str(feed.get("handle") or post.get("handle") or "").lstrip("@"),
+        "avatar": feed.get("avatar") or post.get("avatar") or "",
+        "platform": feed.get("platform") or post.get("platform") or "",
+        "feedId": post.get("feedId") or feed.get("id") or "",
+    }
+    post["author"] = forwarded.get("name") or forwarded.get("handle") or ""
+    post["handle"] = str(forwarded.get("handle") or "").lstrip("@")
+    post["avatar"] = forwarded.get("avatar") or ""
+    post["verifiedType"] = None
+    post["kind"] = "repost"
+    return True
+
+
+def _credit_vk_wall(post: dict, feed, owners: dict) -> bool:
+    if not feed or (post.get("platform") or "") != "vk" or post.get("kind") in ("reply", "quote", "repost"):
+        return False
+    handle = str(post.get("handle") or "").lstrip("@").lower()
+    wall = str(feed.get("handle") or "").lstrip("@").lower()
+    if not handle or handle == wall:
+        return False
+    owner = _vk_wall_owner(post.get("statusId") or post.get("id"))
+    known = owners.get(feed.get("id") or "") or set()
+    if not owner or not known or owner in known:
+        return False
+    post["repostedBy"] = {
+        "name": feed.get("name") or wall,
+        "handle": str(feed.get("handle") or "").lstrip("@"),
+        "avatar": feed.get("avatar") or "",
+        "platform": "vk",
+        "feedId": feed.get("id") or post.get("feedId") or "",
+    }
+    post["kind"] = "repost"
+    return True
+
+
 def canonical_status_id(post: dict) -> str:
     """One id per video or post, whichever source spelled it."""
     if not isinstance(post, dict):

@@ -4542,6 +4542,8 @@
   function forwardLine(post) {
     const from = post && post.forwardedFrom;
     if (!from) return "";
+    const by = post.repostedBy;
+    if (by && (by.name || by.handle)) return "";
     const name = String(from.name || "").trim();
     const handle = String(from.handle || "").trim();
     if (!name && !handle) return `<div class="repost-line">${icon("repost")}<span>Forwarded</span></div>`;
@@ -4553,6 +4555,7 @@
   }
 
   function card(post, mode, opts) {
+    creditCarried(post);
     if (bridgeErrorPost(post)) return "";
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
@@ -5982,6 +5985,7 @@
   }
 
   function profileView(route) {
+    posts().forEach(creditCarried);
     if (window.FeedsPeople) {
       const merged = window.FeedsPeople.page(route);
       if (merged) return merged;
@@ -5996,13 +6000,19 @@
     if (feed.platform === "youtube") ensureYtSubs(feed);
     const youtube = feed.platform === "youtube";
     const tab = route.query.get("tab") || "posts";
-    let list = postsFor(feed);
+    const loaded = postsFor(feed);
+    const carriedOnly = loaded.filter((post) => carriedBy(post, feed) && !sameAuthor(post, feed)).length;
+    const own = loaded.filter((post) => post.kind !== "reply" && !(carriedBy(post, feed) && !sameAuthor(post, feed))).length;
+    let total = own;
+    if (feed.postsCount != null && !feed.postsCountIncludesReposts) total = Number(feed.postsCount);
+    else if (feed.postsCount != null) total = Math.max(own, Number(feed.postsCount) - carriedOnly);
+    let list = loaded.slice();
     if (youtube && tab === "videos") list = list.filter((post) => isVideoPost(post) && !isRepost(post));
     else if (youtube && tab === "community") list = list.filter((p) => p.kind === "community");
     else if (tab === "replies") list = list.filter((p) => p.kind === "reply");
     else if (tab === "media") list = list.filter((p) => (p.media || []).length);
     else list = list.filter((p) => p.kind !== "reply");
-    const count = feed.postsCount != null ? formatCount(feed.postsCount) : formatCount(postsFor(feed).length);
+    const count = formatCount(total);
     const banner = feed.banner ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : feed.bannerColor ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : `<div class="pbanner"></div>`;
     const meta = [
       feed.location ? `<span>${icon("loc")}${esc(feed.location)}</span>` : "",
@@ -6046,8 +6056,7 @@
     ${window.Spaces && window.Spaces.profileCard ? window.Spaces.profileCard(feed.platform, feed.handle) : ""}
     <div class="tabs ptabs" role="tablist" aria-label="Profile">${tabs}</div>
     ${list.length ? list.map((p) => {
-      const byThis = p.repostedBy && (p.repostedBy.handle || "").toLowerCase() === (feed.handle || "").toLowerCase();
-      return card(p, byThis ? "" : "author");
+      return card(p, carriedBy(p, feed) ? "" : "author");
     }).join("") : emptyBlock(
       tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : tab === "videos" ? "No videos yet" : tab === "community" ? "No community posts yet" : "No posts yet",
       tab === "replies" ? "Replies by this account will show up here." : tab === "community" ? "Community posts from this channel will show up here." : "Posts from this account will show up here."
@@ -6067,7 +6076,10 @@
     if (post && post.tombstone) {
       return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>` + tombstoneCard(post);
     }
-    if (post) rememberOpened(post);
+    if (post) {
+      creditCarried(post);
+      rememberOpened(post);
+    }
     if (!post) {
       const key = String(route.id);
       if (STATE.sharedState[key] !== "miss") {
@@ -6109,6 +6121,7 @@
       : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
     return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
       ${ancestorBlock(post, chain)}
+      ${repostBanner(post)}
       ${article}
       ${talk == null ? composer(threaded) + replyList(post) : talk}`;
   }
@@ -6457,6 +6470,74 @@
     };
   }
 
+  function vkWallOwner(id) {
+    const text = String(id || "");
+    const cut = text.lastIndexOf("_");
+    return cut > 0 ? text.slice(0, cut) : "";
+  }
+
+  function creditCarried(post) {
+    if (!post) return post;
+    const named = post.repostedBy && (post.repostedBy.name || post.repostedBy.handle);
+    if (named) return post;
+    const from = post.forwardedFrom;
+    if (from && typeof from === "object" && (from.name || from.handle)) {
+      const feed = feedOf(post);
+      post.repostedBy = {
+        name: post.author || feed.name || "",
+        handle: String(post.handle || feed.handle || "").replace(/^@/, ""),
+        avatar: post.avatar || feed.avatar || "",
+        platform: post.platform || feed.platform || "",
+        feedId: post.feedId || feed.id || ""
+      };
+      post.author = from.name || from.handle || "";
+      post.handle = String(from.handle || "").replace(/^@/, "");
+      post.avatar = from.avatar || "";
+      post.verifiedType = "";
+      if (!post.kind || post.kind === "post") post.kind = "repost";
+      return post;
+    }
+    if ((post.platform || "") !== "vk" || post.kind === "reply" || post.kind === "quote" || post.kind === "repost") return post;
+    const feed = feedById(post.feedId);
+    if (!feed) return post;
+    const handle = String(post.handle || "").replace(/^@/, "").toLowerCase();
+    const wall = String(feed.handle || "").replace(/^@/, "").toLowerCase();
+    if (!handle || handle === wall) return post;
+    const owner = vkWallOwner(post.statusId || post.id);
+    if (!owner) return post;
+    let known = false;
+    let sawWall = false;
+    posts().forEach((row) => {
+      if (!row || row.feedId !== feed.id || row.platform !== "vk") return;
+      if (String(row.handle || "").replace(/^@/, "").toLowerCase() !== wall) return;
+      const id = vkWallOwner(row.statusId || row.id);
+      if (!id) return;
+      sawWall = true;
+      if (id === owner) known = true;
+    });
+    if (!sawWall || known) return post;
+    post.repostedBy = {
+      name: feed.name || feed.handle || "",
+      handle: feed.handle || "",
+      avatar: feed.avatar || "",
+      platform: "vk",
+      feedId: feed.id || ""
+    };
+    if (!post.kind || post.kind === "post") post.kind = "repost";
+    return post;
+  }
+
+  function carriedBy(post, feed) {
+    if (!post || !feed) return false;
+    creditCarried(post);
+    if (!isRepost(post)) return false;
+    const by = post.repostedBy || {};
+    if (by.feedId && by.feedId === feed.id) return true;
+    const handle = String(by.handle || "").replace(/^@/, "").toLowerCase();
+    const platform = by.platform || post.platform || "";
+    return !!(handle && handle === String(feed.handle || "").replace(/^@/, "").toLowerCase() && platform === (feed.platform || ""));
+  }
+
   function repostBanner(post, mode) {
     if (!post || mode === "author" || mode === "status" || !isRepost(post)) return "";
     const by = post.repostedBy || {};
@@ -6664,6 +6745,7 @@
   }
 
   function ytCard(post, layout) {
+    creditCarried(post);
     ensureYtMeta(post);
     const creator = creatorOf(post);
     const title = post.title || post.text || "";
@@ -6946,6 +7028,7 @@
   function watchView(route) {
     const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id)) || STATE.shared[String(route.id)];
     if (!post) return pageHead("Watch", "", true) + emptyBlock("Not in this snapshot", "This video isn’t in the current snapshot.");
+    creditCarried(post);
     const creator = creatorOf(post);
     ensureYtMeta(post);
     ensureYtSubs(creator);

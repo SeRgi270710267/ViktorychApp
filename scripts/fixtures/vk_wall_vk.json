@@ -73,6 +73,19 @@
             "attachments": []
           }
         ]
+      },
+      {
+        "id": 58381,
+        "owner_id": -220923985,
+        "from_id": -220923985,
+        "date": 1791900000,
+        "post_type": "post",
+        "text": "Фестиваль прошёл",
+        "coowners": {
+          "coowner_post_id": {"owner_id": -22822305, "post_id": 1732681},
+          "list": [{"owner_id": -220923985}, {"owner_id": -22822305}]
+        },
+        "header": {"title": {"source_id": -220923985, "source_ids": [-22822305, -220923985]}}
       }
     ],
     "groups": [
@@ -93,6 +106,12 @@
         "name": "Команда ВКонтакте",
         "screen_name": "team",
         "photo_200": "https://sun1.userapi.com/team.jpg"
+      },
+      {
+        "id": 220923985,
+        "name": "Фандом Фест",
+        "screen_name": "vkfandomfest",
+        "photo_200": "https://sun1.userapi.com/fest.jpg"
       }
     ]
   }

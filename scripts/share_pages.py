@@ -20,6 +20,7 @@ import zlib
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
+from adapters.common import credit_carried
 from archive import canonical_id
 from site_paths import pages_base
 
@@ -287,6 +288,22 @@ def title_for(author: str, handle: str, platform: str) -> str:
     return f"{name} on {where}"
 
 
+def repost_html(post: dict) -> str:
+    """The same '<name> reposted' line the app shows above a carried post."""
+    by = post.get("repostedBy") if isinstance(post.get("repostedBy"), dict) else None
+    if not by:
+        return ""
+    name = str(by.get("name") or by.get("handle") or "").strip()
+    if not name:
+        return ""
+    label = esc(name) + " reposted"
+    handle = str(by.get("handle") or "").lstrip("@")
+    platform = str(by.get("platform") or post.get("platform") or "")
+    if handle and SAFE_HANDLE.match(handle):
+        return f'<p class="repost"><a href="../u/{esc(platform)}-{esc(handle)}.html">{label}</a></p>'
+    return f'<p class="repost">{label}</p>'
+
+
 def rank(post: dict, token: str) -> tuple:
     own = str(post.get("id") or "") == token
     repost = str(post.get("kind") or "") == "repost"
@@ -416,6 +433,8 @@ def page_html(page: dict) -> str:
   body {{ margin: 0; background: #000; color: #e7e9ea; font: 16px/22px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
   article {{ max-width: 600px; margin: 0 auto; padding: 24px 16px 48px; }}
   .banner {{ width: 100%; height: 160px; object-fit: cover; border-radius: 16px; background: #16181c; }}
+  .repost {{ margin: 16px 0 0; color: #71767b; font-size: 13px; font-weight: 700; }}
+  .repost a {{ color: inherit; text-decoration: none; }}
   .who {{ display: flex; gap: 12px; align-items: center; margin: 16px 0; }}
   .avatar {{ width: 48px; height: 48px; border-radius: 999px; object-fit: cover; background: #2f3336; }}
   h1 {{ font-size: 18px; line-height: 22px; margin: 0; }}
@@ -428,6 +447,7 @@ def page_html(page: dict) -> str:
 <body>
 <article>
   {banner}
+  {page.get("repost_html") or ""}
   <div class="who">{avatar}<div><h1>{esc(page.get("author") or page["title"])}</h1><p class="handle">{esc(page.get("byline") or "")}</p></div></div>
   {f'<p class="text">{esc(text)}</p>' if text else ''}
   {media}
@@ -489,6 +509,7 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
     if not isinstance(doc, dict):
         doc = load_json(ROOT / "feeds.json") or {}
     feeds = [feed for feed in (doc.get("feeds") or []) if isinstance(feed, dict)]
+    credit_carried(doc.get("posts") or [], feeds)
     posts = collect_posts(doc)
     counts = {"posts": 0, "watch": 0, "profiles": 0, "stubs": 0}
 
@@ -519,6 +540,7 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
             "byline": (f"@{handle} · {platform_name(platform)}") if handle else platform_name(platform),
             "avatar": https((feed or {}).get("avatar") or post.get("avatar")),
             "body": re.sub(r"\s+\n", "\n", str(post.get("text") or post.get("title") or "")).strip()[:2000],
+            "repost_html": repost_html(post),
         }
         write_page(site / "s", f"{platform}-{token}.html", page)
         seen.add(platform + ":" + token)
