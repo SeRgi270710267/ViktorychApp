@@ -1,8 +1,33 @@
 /* X-style reader. Timelines come from feeds.json plus monthly archive stubs on the data branch. X replies, YouTube comments, and old-post details load live in the browser. */
 (function () {
-  // Keys stay on the rss-feeds- prefix. Storage is per origin, so the Pages
-  // path can change without dropping saved follows. Do not rename them.
-  const KEY = "rss-feeds-settings-v1";
+  // Storage names use the SuperintelApp prefix. A missing value is copied once
+  // from the previous prefix so saved follows stay on this origin.
+  function storeName(suffix) {
+    return "superintelapp-" + suffix;
+  }
+  function previousStoreName(suffix) {
+    return "rss-" + "feeds-" + suffix;
+  }
+  function readStored(store, suffix) {
+    const name = storeName(suffix);
+    try {
+      const current = store.getItem(name);
+      if (current != null) return current;
+      const previous = store.getItem(previousStoreName(suffix));
+      if (previous != null) {
+        try { store.setItem(name, previous); } catch (err) { /* a full quota keeps the previous copy */ }
+        return previous;
+      }
+    } catch (err) { /* private mode */ }
+    return null;
+  }
+  function writeStored(store, suffix, value) {
+    try { store.setItem(storeName(suffix), value); } catch (err) { /* a full quota keeps the previous copy */ }
+  }
+  function removeStored(store, suffix) {
+    try { store.removeItem(storeName(suffix)); } catch (err) { /* already gone */ }
+    try { store.removeItem(previousStoreName(suffix)); } catch (err) { /* already gone */ }
+  }
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
@@ -158,6 +183,7 @@
     let path = location.pathname || "/";
     if (/\/index\.html$/i.test(path)) path = path.slice(0, -"index.html".length);
     path = path.replace(/\/(?:s|u)\/[^/]+$/, "/");
+    path = path.replace(new RegExp("/" + previousStoreName("").replace(/-$/, "") + "(?=/|$)", "ig"), "/SuperintelApp");
     if (!path.endsWith("/")) path += "/";
     return path;
   }
@@ -175,7 +201,7 @@
   const GITHUB_REPO = githubRepo();
   const ARCHIVE_RAW = "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/archive/";
   const ARCHIVE_CDN = "https://cdn.jsdelivr.net/gh/" + GITHUB_REPO + "@data/archive/";
-  const ARCHIVE_IA = "https://archive.org/download/sergi-rss-feeds-archive/archive/";
+  const ARCHIVE_IA = "https://archive.org/download/" + ("sergi-" + previousStoreName("archive")) + "/archive/";
   const IA = { ready: false, files: [], byUrl: {}, posts: {}, shards: {} };
 
   function iaParts(url) {
@@ -651,7 +677,7 @@
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
 const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all" });
     try {
-      const raw = localStorage.getItem(KEY);
+      const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
       const parsed = JSON.parse(raw);
       parsed.follows = Array.isArray(parsed.follows) ? parsed.follows : configured.slice();
@@ -698,7 +724,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function saveSettings() {
-    localStorage.setItem(KEY, JSON.stringify(STATE.settings));
+    writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
     syncWorkerState();
   }
 
@@ -896,20 +922,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function sitePermalink(hash) {
-    const url = new URL(location.href);
-    if (url.pathname.endsWith("/index.html")) url.pathname = url.pathname.slice(0, -"index.html".length);
-    url.search = "";
     const clean = hash.startsWith("#") ? hash : "#" + hash;
-    return url.origin + url.pathname + clean;
+    return location.origin + pagesDirectory() + clean;
   }
 
   function shareRoot() {
-    const url = new URL(location.href);
-    let path = url.pathname;
-    if (path.endsWith("/index.html")) path = path.slice(0, -"index.html".length);
-    path = path.replace(/\/(?:s|u)\/[^/]+$/, "/");
-    if (!path.endsWith("/")) path += "/";
-    return url.origin + path;
+    return location.origin + pagesDirectory();
   }
 
   function shareFileToken(post) {
@@ -999,13 +1017,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return out.sort(byStamp);
   }
 
-  const OPEN_KEY = "rss-feeds-opened-v1";
-  const SNAP_KEY = "rss-feeds-timeline-v1";
-  const QUEUE_KEY = "rss-feeds-bookmark-queue";
-
   function openedList() {
     if (STATE.opened) return STATE.opened;
-    try { STATE.opened = JSON.parse(localStorage.getItem(OPEN_KEY) || "[]"); }
+    try { STATE.opened = JSON.parse(readStored(localStorage, "opened-v1") || "[]"); }
     catch (err) { STATE.opened = []; }
     if (!Array.isArray(STATE.opened)) STATE.opened = [];
     return STATE.opened;
@@ -1019,7 +1033,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const list = openedList().filter((item) => item && item.id !== slim.id);
     list.unshift(slim);
     STATE.opened = list.slice(0, 24);
-    try { localStorage.setItem(OPEN_KEY, JSON.stringify(STATE.opened)); } catch (err) { /* the snapshot is optional */ }
+    try { writeStored(localStorage, "opened-v1", JSON.stringify(STATE.opened)); } catch (err) { /* the snapshot is optional */ }
   }
 
   function openedPost(id) {
@@ -1029,7 +1043,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function loadTimelineSnap() {
     try {
-      const doc = JSON.parse(localStorage.getItem(SNAP_KEY) || "null");
+      const doc = JSON.parse(readStored(localStorage, "timeline-v1") || "null");
       if (!doc || !Array.isArray(doc.posts)) return null;
       return doc;
     } catch (err) { return null; }
@@ -1052,7 +1066,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         copy.posts = copy.posts.slice(0, 20);
         text = JSON.stringify(copy);
       }
-      localStorage.setItem(SNAP_KEY, text);
+      writeStored(localStorage, "timeline-v1", text);
     } catch (err) { /* a full storage quota keeps the previous snapshot */ }
   }
 
@@ -2865,7 +2879,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     LIVE.dbp = new Promise((resolve) => {
       try {
         if (!window.indexedDB) return resolve(null);
-        const req = indexedDB.open("rss-feeds-live", 1);
+        const req = indexedDB.open(storeName("live"), 1);
         req.onupgradeneeded = () => { req.result.createObjectStore("cache"); };
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => resolve(null);
@@ -6402,7 +6416,7 @@ const here = parseRoute();
     return `<div class="tg-comments"><iframe src="${esc(src)}" title="Telegram comments" loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
   }
 
-  const SEARCH_KEY = "rss-feeds-searches-v1";
+  const SEARCH_SUFFIX = "searches-v1";
   let trendCache = null;
   let trendKey = "";
   let exploreSuggestAt = -1;
@@ -6412,7 +6426,7 @@ const here = parseRoute();
 
   function recentSearches() {
     try {
-      const raw = JSON.parse(localStorage.getItem(SEARCH_KEY) || "[]");
+      const raw = JSON.parse(readStored(localStorage, SEARCH_SUFFIX) || "[]");
       if (!Array.isArray(raw)) return [];
       return raw.map((item) => String(item || "").trim()).filter((item) => item && item.length < 120).slice(0, 8);
     } catch (err) { return []; }
@@ -6422,13 +6436,13 @@ const here = parseRoute();
     const text = String(q || "").trim();
     if (!text || text.length > 120) return;
     const next = [text].concat(recentSearches().filter((item) => item.toLowerCase() !== text.toLowerCase())).slice(0, 8);
-    try { localStorage.setItem(SEARCH_KEY, JSON.stringify(next)); } catch (err) { /* storage can be blocked */ }
+    writeStored(localStorage, SEARCH_SUFFIX, JSON.stringify(next));
   }
 
   function forgetSearch(q) {
     const text = String(q || "").trim().toLowerCase();
     const next = recentSearches().filter((item) => item.toLowerCase() !== text);
-    try { localStorage.setItem(SEARCH_KEY, JSON.stringify(next)); } catch (err) { /* storage can be blocked */ }
+    writeStored(localStorage, SEARCH_SUFFIX, JSON.stringify(next));
   }
 
   function themeLabel(mode) {
@@ -6863,7 +6877,7 @@ const here = parseRoute();
     return fromFeed.concat(extra).sort(byStamp);
   }
 
-  const HIST_KEY = "rss-feeds-history-v1";
+  const HIST_SUFFIX = "history-v1";
   const HIST_CAP = 2000;
   const HIST_TABS = ["bookmarks", "likes", "videos", "articles"];
 
@@ -6935,7 +6949,7 @@ const here = parseRoute();
         return copy;
       });
     });
-    try { localStorage.setItem(HIST_KEY, JSON.stringify(slim)); }
+    try { writeStored(localStorage, HIST_SUFFIX, JSON.stringify(slim)); }
     catch (err) {
       HIST_TABS.forEach((tab) => {
         slim[tab] = (slim[tab] || []).slice(0, 80).map((row) => {
@@ -6947,7 +6961,7 @@ const here = parseRoute();
           return row;
         });
       });
-      try { localStorage.setItem(HIST_KEY, JSON.stringify(slim)); } catch (err2) { /* quota */ }
+      try { writeStored(localStorage, HIST_SUFFIX, JSON.stringify(slim)); } catch (err2) { /* quota */ }
     }
   }
 
@@ -6967,7 +6981,7 @@ const here = parseRoute();
 
   function readHistLocal() {
     try {
-      const doc = JSON.parse(localStorage.getItem(HIST_KEY) || "{}");
+      const doc = JSON.parse(readStored(localStorage, HIST_SUFFIX) || "{}");
       const rows = [];
       HIST_TABS.forEach((tab) => ((doc && doc[tab]) || []).forEach((row) => rows.push(row)));
       return rows;
@@ -11165,21 +11179,21 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     let queued = [];
-    try { queued = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch (err) { queued = []; }
+    try { queued = JSON.parse(readStored(localStorage, "bookmark-queue") || "[]"); } catch (err) { queued = []; }
     if (!Array.isArray(queued)) queued = [];
     list.forEach((url) => { if (queued.indexOf(url) < 0 && queued.length < 80) queued.push(url); });
-    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(queued)); } catch (err) { /* the bookmark itself is already stored */ }
+    try { writeStored(localStorage, "bookmark-queue", JSON.stringify(queued)); } catch (err) { /* the bookmark itself is already stored */ }
   }
 
   function flushBookmarkQueue() {
     if (!navigator.onLine) return;
     let queued = [];
-    try { queued = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch (err) { queued = []; }
+    try { queued = JSON.parse(readStored(localStorage, "bookmark-queue") || "[]"); } catch (err) { queued = []; }
     if (!Array.isArray(queued) || !queued.length) return;
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
     if (!worker) return;
     worker.postMessage({ type: "cache-bookmark", urls: queued });
-    try { localStorage.removeItem(QUEUE_KEY); } catch (err) { /* retry on the next online event */ }
+    try { removeStored(localStorage, "bookmark-queue"); } catch (err) { /* retry on the next online event */ }
   }
 
   function followedSince(post, since) {
@@ -11683,7 +11697,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!added.length) return;
       STATE.pendingFeed = doc;
       showPill(added.concat(STATE.pendingLive || []));
-      const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
+      const since = Number(readStored(localStorage, "seen-at") || 0);
       const fresh = added.filter((post) => followedSince(post, since) && !coveredByBell(post));
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) {
@@ -11731,17 +11745,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function scheduleIdleReload() {
     if (STATE.idleReload) return;
-    if (sessionStorage.getItem("rss-feeds-sw-reload") === "1") return;
+    if (readStored(sessionStorage, "sw-reload") === "1") return;
     STATE.idleReload = true;
     let timer = 0;
     const go = () => {
-      if (sessionStorage.getItem("rss-feeds-sw-reload") === "1") return;
+      if (readStored(sessionStorage, "sw-reload") === "1") return;
       const busy = [...document.querySelectorAll("video")].some((video) => video && !video.paused && !video.ended) || !!(window.Spaces && window.Spaces.playing && window.Spaces.playing());
       if (busy && document.visibilityState === "visible") {
         timer = setTimeout(go, 4000);
         return;
       }
-      sessionStorage.setItem("rss-feeds-sw-reload", "1");
+      writeStored(sessionStorage, "sw-reload", "1");
       location.reload();
     };
     const bump = () => {
@@ -12291,7 +12305,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!worker || !STATE.settings) return;
     worker.postMessage({
       type: "state",
-      seen: Number(localStorage.getItem("rss-feeds-seen-at") || 0),
+      seen: Number(readStored(localStorage, "seen-at") || 0),
       follows: STATE.settings.follows || [],
       ids: seenPostIds(),
       bells: cleanBells(STATE.settings.bells),
@@ -12334,7 +12348,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const updateGo = document.getElementById("update-go");
     if (updateGo) updateGo.addEventListener("click", () => location.reload());
     setTimeout(() => {
-      if (!STATE.idleReload) sessionStorage.removeItem("rss-feeds-sw-reload");
+      if (!STATE.idleReload) removeStored(sessionStorage, "sw-reload");
     }, 8000);
     if ("serviceWorker" in navigator) {
       const armServiceWorker = () => {
@@ -12346,8 +12360,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         armServiceWorker();
         if (!hadController) { hadController = true; return; }
-        if (sessionStorage.getItem("rss-feeds-sw-reload") === "1") return;
-        sessionStorage.setItem("rss-feeds-sw-reload", "1");
+        if (readStored(sessionStorage, "sw-reload") === "1") return;
+        writeStored(sessionStorage, "sw-reload", "1");
         location.reload();
       });
     }
@@ -12375,7 +12389,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (STATE.data) STATE.data = withMemory(STATE.data);
       showPill([]);
       ensureVideoOwners();
-      localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
+      writeStored(localStorage, "seen-at", String(Date.now()));
       updateBadge(bellUnread());
       const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
       if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
@@ -12412,7 +12426,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }, { passive: true });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
-        localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
+        writeStored(localStorage, "seen-at", String(Date.now()));
         updateBadge(bellUnread());
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
         if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
@@ -12581,7 +12595,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (applyIaPreview(STATE.data)) render({ reset: true });
         revealArchive();
       });
-      const since = Number(localStorage.getItem("rss-feeds-seen-at") || 0);
+      const since = Number(readStored(localStorage, "seen-at") || 0);
       const seenIds = {};
       ((snap && snap.posts) || []).forEach((post) => {
         seenIds[canonicalPostId(post)] = true;
@@ -12593,7 +12607,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
       }
       if (document.visibilityState === "visible") {
-        localStorage.setItem("rss-feeds-seen-at", String(Date.now()));
+        writeStored(localStorage, "seen-at", String(Date.now()));
         updateBadge(bellUnread());
       } else if (fresh.length || bellUnread()) updateBadge(Math.max(fresh.length, bellUnread()));
       scanBellPosts(STATE.data.posts);

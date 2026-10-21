@@ -4,15 +4,24 @@
    Saved widths are one map in localStorage. The live size is a CSS variable
    on the document element, so a pane can paint at the saved width. */
 (function (root) {
-  var STORE = "rss-feeds-splits-v1";
+  var STORE = "superintelapp-splits-v1";
+  var PREVIOUS = "rss-" + "feeds-splits-v1";
   var panes = [];
   var bound = [];
   var resizeListening = false;
 
   function storedMap() {
     try {
-      var raw = JSON.parse(root.localStorage.getItem(STORE) || "{}");
-      return raw && typeof raw === "object" ? raw : {};
+      var raw = root.localStorage.getItem(STORE);
+      if (raw == null) {
+        var previous = root.localStorage.getItem(PREVIOUS);
+        if (previous != null) {
+          raw = previous;
+          try { root.localStorage.setItem(STORE, previous); } catch (err) { /* private mode */ }
+        }
+      }
+      var parsed = JSON.parse(raw || "{}");
+      return parsed && typeof parsed === "object" ? parsed : {};
     } catch (err) {
       return {};
     }

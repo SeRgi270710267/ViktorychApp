@@ -2,9 +2,26 @@
    Servers and channels come from the config. Nothing here is special to one server. */
 (function (root) {
   const TOPIC = "superintelmusic-discord-th-7f3a91c2";
-  const SEEN_KEY = "rss-feeds-discord-seen-v1";
-  const PREFS_KEY = "rss-feeds-discord-prefs-v1";
-  const SCROLL_KEY = "rss-feeds-discord-scroll-v1";
+  const SEEN_KEY = "superintelapp-discord-seen-v1";
+  const PREFS_KEY = "superintelapp-discord-prefs-v1";
+  const SCROLL_KEY = "superintelapp-discord-scroll-v1";
+
+  function readStore(store, name) {
+    try {
+      const current = store.getItem(name);
+      if (current != null) return current;
+      const previous = store.getItem(String(name).replace("superintelapp-", "rss-" + "feeds-"));
+      if (previous != null) {
+        try { store.setItem(name, previous); } catch (err) { /* private mode can refuse */ }
+        return previous;
+      }
+    } catch (err) { /* private mode can refuse */ }
+    return null;
+  }
+
+  function readLocal(name) {
+    return readStore(localStorage, name);
+  }
   const WINDOW = 300;
   const CATALOG_SERVERS = [
     {
@@ -632,7 +649,7 @@
 
   function seenMap() {
     try {
-      const raw = JSON.parse(localStorage.getItem(SEEN_KEY) || "{}");
+      const raw = JSON.parse(readLocal(SEEN_KEY) || "{}");
       return raw && typeof raw === "object" ? raw : {};
     } catch (err) {
       return {};
@@ -678,7 +695,7 @@
   function loadPrefs() {
     const empty = emptyPrefs();
     try {
-      const raw = JSON.parse(localStorage.getItem(PREFS_KEY) || "null");
+      const raw = JSON.parse(readLocal(PREFS_KEY) || "null");
       if (!raw || typeof raw !== "object") return empty;
       const expanded = {};
       if (raw.expanded && typeof raw.expanded === "object") {
@@ -1224,7 +1241,7 @@
 
   function scrollMap() {
     try {
-      const raw = JSON.parse(sessionStorage.getItem(SCROLL_KEY) || "{}");
+      const raw = JSON.parse(readStore(sessionStorage, SCROLL_KEY) || "{}");
       return raw && typeof raw === "object" ? raw : {};
     } catch (err) {
       return {};

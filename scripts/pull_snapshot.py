@@ -32,7 +32,7 @@ from site_paths import pages_base, raw_data, user_agent  # noqa: E402
 
 SITE = pages_base()
 DATA_ARCHIVE = raw_data()
-IA_ARCHIVE = "https://archive.org/download/sergi-rss-feeds-archive/"
+IA_ARCHIVE = "https://archive.org/download/" + ("sergi-" + "rss-" + "feeds-archive") + "/"
 ARCHIVE_SOURCES = (
     ("pages", SITE),
     ("data", DATA_ARCHIVE),

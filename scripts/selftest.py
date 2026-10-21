@@ -856,9 +856,9 @@ def main() -> None:
         if not path.is_file() or "fixtures" in path.parts or path.suffix not in {".js", ".py", ".html", ".yml", ".md", ".webmanifest", ".css", ".json"}:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        if stale_re.search(text):
+        if stale_re.search(text) or old_repo in text:
             stale.append(str(path.relative_to(ROOT)))
-    check(not stale, "old rss-feeds URLs are gone: " + ", ".join(stale))
+    check(not stale, "the previous site name is gone: " + ", ".join(stale))
     check(str(manifest["start_url"]).endswith("#/home"), "the manifest opens the home timeline")
     check("window-controls-overlay" in manifest["display_override"], "desktop installs can use the window controls overlay")
     purposes = [icon.get("purpose") for icon in manifest["icons"]]
@@ -876,7 +876,7 @@ def main() -> None:
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("beforeinstallprompt" in app and "Install app" in app and "pictureInPicture" in app and "mediaSession" in app, "install, picture in picture, and media session are in the page")
     check("function creatorOf(" in app and "function repostBanner(" in app and "function countsAsUpload(" in app and "repostComment" in app and "function creditCarried(" in app and "function carriedBy(" in app and "postsCountIncludesReposts" in app and "countsAsOwn" in (ROOT / "people.js").read_text(encoding="utf-8"), "reposts keep the original author, name who reposted, and stay out of that account's post count")
-    check("parseSharedLink" in app and "startViewTransition" in app and "rss-feeds-timeline-v1" in app and "rss-feeds-bookmark-queue" in app and "setAppBadge" in app and 'decoding="async"' in app and "navigator.vibrate" in app, "share targets, view transitions, offline snapshots, badges, and haptics are wired")
+    check("parseSharedLink" in app and "startViewTransition" in app and 'readStored(localStorage, "timeline-v1")' in app and 'readStored(localStorage, "bookmark-queue")' in app and "setAppBadge" in app and 'decoding="async"' in app and "navigator.vibrate" in app, "share targets, view transitions, offline snapshots, badges, and haptics are wired")
     check("requestPermission" in app and app.index("requestPermission") > app.index("data-act=\"notify\""), "notification permission is requested from the settings control")
     check("manifest.webmanifest" in workflow and "__SW_VERSION__" in workflow and "GITHUB_SHA" in workflow, "the deploy copies the app shell and stamps the service worker")
     check('ranking_mode: "recency"' in app, "fxtwitter conversations also request newest replies")
@@ -956,8 +956,8 @@ def main() -> None:
     check(".tabs-bar.notes-tabs" in css and ".tab-count" in css and ".tab-grip" in css and ".tab-switch" in css, "notification tabs keep the scrolling underline bar, badges, and drag handles")
     check("pinned.slice" not in app and "lists.slice(0," not in app, "pinned home tabs are not capped")
     check("function sharePostUrl(" in app and "function shareProfileUrl(" in app and "isn’t in the published snapshot" in app and 's/watch-"' in app and 's/" + (post.platform' in app and "function notePublished(" in app and "PUBLISHED.posts" in app, "share and copy use the static preview pages, and a live post outside the snapshot does not")
-    check('og:image" content="__SITE_BASE__icons/icon-512.png?v=6"' in page and 'rel="canonical" href="__SITE_BASE__"' in page and 'og:site_name" content="SuperintelApp"' in page and "<title>Home / SuperintelApp</title>" in page and 'apple-mobile-web-app-title" content="SIntelApp"' in page and "manifest.webmanifest?v=6" in page and "favicon.ico?v=6" in page and '" / SuperintelApp"' in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'class="logo-full"' in app and 'class="logo-si"' in app and "function githubRepo(" in app and "rss-feeds-settings-v1" in app, "the home page names SuperintelApp, the shortcut label is SIntelApp, and the repository URL is derived")
-    check("Search SIntelApp" in app and "Surprise me" in app and "explore-mode" in app and "rss-feeds-searches-v1" in app and 'id="explore-q"' in app and "function exploreHome(" in app and "function wordmarkSvg(" in app and '["videos", "Videos"]' in app and "ghome-logo" in css and "html[data-theme=\"default\"] .ghome-logo" in css, "explore is a search home with themed wordmark, suggestions, and result tabs")
+    check('og:image" content="__SITE_BASE__icons/icon-512.png?v=6"' in page and 'rel="canonical" href="__SITE_BASE__"' in page and 'og:site_name" content="SuperintelApp"' in page and "<title>Home / SuperintelApp</title>" in page and 'apple-mobile-web-app-title" content="SIntelApp"' in page and "manifest.webmanifest?v=6" in page and "favicon.ico?v=6" in page and '" / SuperintelApp"' in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'class="logo-full"' in app and 'class="logo-si"' in app and "function githubRepo(" in app and "superintelapp-settings-v1" in page and 'readStored(localStorage, "settings-v1")' in app and "function shareRoot(" in app and "function pagesDirectory(" in app, "the home page names SuperintelApp, the shortcut label is SIntelApp, and copied links stay on this site")
+    check("Search SIntelApp" in app and "Surprise me" in app and "explore-mode" in app and 'const SEARCH_SUFFIX = "searches-v1"' in app and "readStored(localStorage, SEARCH_SUFFIX)" in app and 'id="explore-q"' in app and "function exploreHome(" in app and "function wordmarkSvg(" in app and '["videos", "Videos"]' in app and "ghome-logo" in css and 'html[data-theme="default"] .ghome-logo' in css, "explore is a search home with themed wordmark, suggestions, and result tabs")
     check("function shellDocument(" in worker and "/\\/(?:s|u)\\/" in worker, "a share-page navigation does not replace the cached app shell")
     check("python3 scripts/share_pages.py --site _site" in workflow, "the deploy rebuilds share pages inside the artifact")
     with tempfile.TemporaryDirectory() as share_dir:
@@ -1000,12 +1000,12 @@ def main() -> None:
         vk_share = (share_root / "s" / "vk--220923985_58381.html").read_text(encoding="utf-8")
         check('class="repost"' in vk_share and "ВКонтакте reposted" in vk_share and 'href="../u/vk-vk.html"' in vk_share and "Фандом Фест" in vk_share, "a share page names who reposted and keeps the original author")
         space_html = (share_root / "s" / "space-superintelmusic.html").read_text(encoding="utf-8")
-        check('og:title" content="SuperintelMusic"' in space_html and 'og:description" content="Live Space"' in space_html and "#/spaces/superintelmusic" in space_html and "streamTitle" not in space_html and "rss-feeds" not in space_html and 'src="../icons/' in space_html, "a Space share page uses the station title and a relative cover, not a track name")
+        check('og:title" content="SuperintelMusic"' in space_html and 'og:description" content="Live Space"' in space_html and "#/spaces/superintelmusic" in space_html and "streamTitle" not in space_html and old_repo not in space_html and 'src="../icons/' in space_html and 'og:url" content="https://owner-account.github.io/SuperintelApp/s/space-superintelmusic.html"' in space_html, "a Space share page uses the station title, the new site URL, and a relative cover")
         discord_html = (share_root / "s" / "discord-discord-10-20.html").read_text(encoding="utf-8")
         check('og:title" content="Ada (@ada) on Discord"' in discord_html and "#/discord/ada/status/discord%3A10%3A20" in discord_html, "an id with colons still gets a share page and opens that post")
         check(not (share_root / "s" / "stale.html").exists(), "rebuilding share pages removes pages from the previous deploy")
         check("Ada &lt;script&gt;" in post_html and "<script>alert" not in post_html and "A &lt;b&gt;post&lt;/b&gt;" in post_html, "share page text is escaped")
-        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and 'og:site_name" content="SuperintelApp"' in post_html and 'name="theme-color" content="#000000"' in post_html and 'rel="canonical"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL")
+        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and 'og:site_name" content="SuperintelApp"' in post_html and 'name="theme-color" content="#000000"' in post_html and 'rel="canonical" href="https://owner-account.github.io/SuperintelApp/s/x-100.html"' in post_html and 'og:url" content="https://owner-account.github.io/SuperintelApp/s/x-100.html"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL on this site")
         description = html_lib.unescape(post_html.split('og:description" content="', 1)[1].split('"', 1)[0])
         check("name=large" in post_html and 'og:image:width" content="2048"' in post_html and 'twitter:card" content="summary_large_image"' in post_html and description.endswith("…") and len(description) <= 200, "a wide image is preferred and the description stays near 200 characters")
         from share_pages import sized as size_share_image
@@ -2414,7 +2414,7 @@ def discord_checks() -> None:
     messages_css = (ROOT / "discord-ui.css").read_text(encoding="utf-8")
     messages_ui = (ROOT / "discord-ui.js").read_text(encoding="utf-8")
     publish = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
-    check("FeedsSplit" in split_js and "rss-feeds-splits-v1" in split_js and "requestAnimationFrame" in split_js and "function bind(" in split_js and 'role="separator"' in messages_ui and "FeedsSplit.bind" in messages_ui and "--dmsgs-list, 440px" in messages_css and "col-resize" in messages_css and "min-width: 300px" in messages_css and "max-width: 60%" in messages_css and ".dmsgs-split { display: none; }" in messages_css and "split.js" in workflow and '"split.js"' in publish, "the message list divider drags between 300px and 60 percent and remembers the width")
+    check("FeedsSplit" in split_js and "superintelapp-splits-v1" in split_js and '"rss-" + "feeds-splits-v1"' in split_js and "requestAnimationFrame" in split_js and "function bind(" in split_js and 'role="separator"' in messages_ui and "FeedsSplit.bind" in messages_ui and "--dmsgs-list, 440px" in messages_css and "col-resize" in messages_css and "min-width: 300px" in messages_css and "max-width: 60%" in messages_css and ".dmsgs-split { display: none; }" in messages_css and "split.js" in workflow and '"split.js"' in publish, "the message list divider drags between 300px and 60 percent and remembers the width")
     ui_check = subprocess.run(
         ["node", "--input-type=module", "-e", r"""
 import fs from "fs";
@@ -2601,7 +2601,8 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
     live_workflow = (ROOT / ".github" / "workflows" / "discord-live.yml").read_text(encoding="utf-8")
     live_script = (ROOT / "scripts" / "discord_live.py").read_text(encoding="utf-8")
     check("group: discord-live" in live_workflow and "cancel-in-progress: false" in live_workflow and "add-mask" in live_workflow and "timeout-minutes: 350" in live_workflow and 'cron: "*/5 * * * *"' in live_workflow, "the live workflow is one long job that does not cancel itself")
-    check("owner-account.github.io/SuperintelApp/" in live_workflow and "rss-feeds" not in live_workflow and "rss-feeds" not in live_script, "the live job uses the renamed site and no old feed URL")
+    old_site = "rss-" + "feeds"
+    check("owner-account.github.io/SuperintelApp/" in live_workflow and old_site not in live_workflow and old_site not in live_script, "the live job uses the renamed site and no old feed URL")
     check("/pins" not in live_script, "the live poller does not read pins")
 
 
@@ -2619,7 +2620,8 @@ def ia_backup_checks() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ia-backup.yml").read_text(encoding="utf-8")
     sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
-    check("rss-feeds" not in source and "rss-feeds" not in workflow, "the new backup does not hard-code the old site path")
+    old_site = "rss-" + "feeds"
+    check(old_site not in source and old_site not in workflow, "the new backup does not hard-code the old site path")
     check("token_hex" in source and "x-archive-meta-noindex" in source and "Authorization" in source and "LOW" in source, "backup items are random, unlisted, and use LOW auth")
     check("group: ia-backup" in workflow and "workflow_dispatch" in workflow and 'cron: "47 7 * * *"' in workflow, "the backup workflow is scheduled, manual, and in its own group")
     check("group: pages" not in workflow and "echo \"$IA_" not in workflow and "echo $IA_" not in workflow, "the backup workflow does not take the pages lock or print the keys")

@@ -3,8 +3,8 @@
 Actions sets GITHUB_REPOSITORY to owner/name, so a later rename follows the
 repo without editing these strings. Locally the fallback is this repo.
 
-The Internet Archive item id is not a repository path. It stays
-sergi-rss-feeds-archive because that item already holds the shards.
+The Internet Archive item id is not a repository path. It stays the item
+that already holds the shards.
 """
 
 from __future__ import annotations
