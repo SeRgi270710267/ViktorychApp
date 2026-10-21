@@ -242,7 +242,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all" });
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [] });
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return fresh();
@@ -256,6 +256,9 @@
       if (!parsed.appearance) parsed.appearance = "lightsout";
       if (parsed.notify !== true) parsed.notify = false;
       if (parsed.autoplay !== "wifi" && parsed.autoplay !== "never") parsed.autoplay = "all";
+      parsed.mutedWords = Array.isArray(parsed.mutedWords) ? parsed.mutedWords : [];
+      parsed.mutedAccounts = Array.isArray(parsed.mutedAccounts) ? parsed.mutedAccounts : [];
+      parsed.repostOff = Array.isArray(parsed.repostOff) ? parsed.repostOff : [];
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
@@ -1690,6 +1693,46 @@
   function inTimeline(post) {
     if (!post || post.kind !== "reply") return true;
     return !isSelfReply(post);
+  }
+
+  function muteKey(item) {
+    return String(item || "").replace(/^@/, "").trim().toLowerCase();
+  }
+
+  function matchesMute(list, handle, platform, feedId) {
+    const handleKey = String(handle || "").replace(/^@/, "").toLowerCase();
+    const id = String(feedId || "").toLowerCase();
+    const prefixed = (platform || "x") + ":" + handleKey;
+    return (list || []).some((item) => {
+      const key = muteKey(item);
+      return !!key && (key === handleKey || key === id || key === prefixed);
+    });
+  }
+
+  function wordMuted(text) {
+    const sample = String(text || "");
+    return ((STATE.settings && STATE.settings.mutedWords) || []).some((word) => {
+      const raw = String(word || "").trim();
+      if (!raw) return false;
+      if (/^[a-z0-9]+$/i.test(raw)) {
+        const escaped = raw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return new RegExp("(?:^|[^a-z0-9])" + escaped + "(?:[^a-z0-9]|$)", "i").test(sample);
+      }
+      return sample.toLowerCase().indexOf(raw.toLowerCase()) >= 0;
+    });
+  }
+
+  function repostsOff(post) {
+    if (!post || !post.repostedBy) return false;
+    const by = post.repostedBy;
+    return matchesMute((STATE.settings && STATE.settings.repostOff) || [], by.handle, by.platform || post.platform || "x", by.feedId || post.feedId);
+  }
+
+  function hiddenPost(post) {
+    if (!post) return false;
+    if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) return true;
+    if (wordMuted(post.text)) return true;
+    return repostsOff(post);
   }
 
   function sameThread(parent, child) {
@@ -3328,7 +3371,7 @@
     const clean = all.filter((reply) => !reply.spam);
     const junk = all.filter((reply) => reply.spam && isDirect(post, reply));
     const pool = ui.spam ? clean.concat(junk) : clean;
-    let directs = pool.filter((reply) => isDirect(post, reply));
+    let directs = pool.filter((reply) => isDirect(post, reply) && !hiddenPost(reply));
     const sort = replySortMode();
     let shown;
     if (sort === "recent") shown = directs.slice().sort(byRecent);
@@ -3437,6 +3480,7 @@
         inline = reply.replies.filter((child) => child && String(child.text || "").trim()).slice(0, 20);
       }
       if (!inline.length) inline = inlineChildren(reply, pool);
+      inline = inline.filter((child) => child && !hiddenPost(child));
       if (!inline.length) {
         const op = inlineOp(reply, pool, root);
         if (op) inline = [op];
@@ -3520,7 +3564,11 @@
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
     const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const context = mode !== "status" && post.kind === "reply" && post.replyParent ? contextCard(post.replyParent) : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(sitePermalink(statusHash(post)))}">Copy link</button><a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
+    const repostFeed = feedOf(post);
+    const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
+      ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? "Turn on reposts" : "Turn off reposts"}</button>`
+      : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(sitePermalink(statusHash(post)))}">Copy link</button>${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const eager = !!opts.eager;
@@ -3699,7 +3747,7 @@
       const found = STATE.settings.lists.find((l) => l.id === tab.slice(5));
       list = found ? listMembersPosts(found) : [];
     }
-    list = list.filter(inTimeline);
+    list = list.filter((post) => inTimeline(post) && !hiddenPost(post));
     const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       tab === "following" ? "Nothing to see here — yet" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
       tab === "following" ? "When you follow accounts, their posts show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
@@ -4728,6 +4776,7 @@
     const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const body = `${replyLine}
         ${textBlock(post, post.id, true, "status-text")}
+        ${hiddenPost(post) ? `<p class="phandle">Muted on this device.</p>` : ""}
         ${pollHtml(post)}
         ${mediaHtml(post.media, false, post)}
         ${quoteCard(post.quoted)}
@@ -4756,8 +4805,8 @@
     const lq = q.toLowerCase();
     let body = emptyBlock("Search posts and accounts", "Try a name, @handle, or a word from a post.");
     if (lq) {
-      const accounts = feeds().filter((f) => (f.name + " " + f.handle + " " + (f.bio || "")).toLowerCase().includes(lq));
-      const found = posts().filter((p) => (p.text + " " + p.author + " " + p.handle + " " + ((p.quoted && p.quoted.text) || "")).toLowerCase().includes(lq)).sort(byStamp);
+      const accounts = feeds().filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && (f.name + " " + f.handle + " " + (f.bio || "")).toLowerCase().includes(lq));
+      const found = posts().filter((p) => !hiddenPost(p) && (p.text + " " + p.author + " " + p.handle + " " + ((p.quoted && p.quoted.text) || "")).toLowerCase().includes(lq)).sort(byStamp);
       const acct = accounts.length ? `<section class="card"><h2>Accounts</h2>${accounts.map(accountRow).join("")}</section>` : "";
       body = acct + (found.length ? found.map((p) => card(p)).join("") : emptyBlock("No results", "Nothing matched “" + q + "”."));
     }
@@ -4792,7 +4841,7 @@
   function listView(route) {
     const list = STATE.settings.lists.find((l) => l.id === route.id);
     if (!list) return pageHead("List", "", true) + emptyBlock("List not found", "It may have been deleted.");
-    const items = listMembersPosts(list).filter(inTimeline);
+    const items = listMembersPosts(list).filter((post) => inTimeline(post) && !hiddenPost(post));
     return `<div class="topbar"><div class="page-head">
         <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
         <div class="head-text grow"><div class="pt-name">${esc(list.name)}</div><div class="pt-count">${(list.members || []).length} members</div></div>
@@ -4858,6 +4907,13 @@
         ${autoBtn("never", "Never")}
       </div>
       ${installControl()}
+      <h2>Privacy</h2>
+      <h3>Mute and block</h3>
+      <p class="phandle">Muted words, muted accounts, and reposts you turn off stay on this device.</p>
+      <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="Word or phrase" aria-label="Mute a word" maxlength="80"></label><button class="follow" type="submit">Add</button></form>
+      ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">Remove</button></div>`).join("")}
+      <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="@handle" aria-label="Mute an account" maxlength="80"></label><button class="follow" type="submit">Add</button></form>
+      ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">Remove</button></div>`).join("")}
       <button class="primary" type="button" data-act="notify">${notifyOn ? "Notifications on" : "Notify me about new posts"}</button>
       <button class="primary" data-act="export">Export settings</button>
       <label class="primary import-btn">Import settings<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
@@ -5653,6 +5709,25 @@
       else if (tab.startsWith("list:")) location.hash = "#/tab/" + tab.slice(5);
       return;
     }
+    if (act === "repost-off") {
+      const id = el.dataset.id;
+      const list = STATE.settings.repostOff || (STATE.settings.repostOff = []);
+      const index = list.indexOf(id);
+      if (index >= 0) list.splice(index, 1);
+      else if (id) list.push(id);
+      STATE.menu = null;
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "unmute-word" || act === "unmute-account") {
+      const key = act === "unmute-word" ? "mutedWords" : "mutedAccounts";
+      const value = act === "unmute-word" ? el.dataset.word : el.dataset.account;
+      STATE.settings[key] = (STATE.settings[key] || []).filter((item) => item !== value);
+      saveSettings();
+      render();
+      return;
+    }
     if (act === "translate") { translateNow(el.dataset.key); return; }
     if (act === "show-original") {
       STATE.originalShown[el.dataset.key] = true;
@@ -5943,7 +6018,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all" }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [] }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -5985,6 +6060,30 @@
   });
 
   document.addEventListener("submit", (event) => {
+    const muteForm = event.target.closest("form.mute-form");
+    if (muteForm) {
+      event.preventDefault();
+      const input = muteForm.querySelector("input");
+      const raw = input ? input.value.trim() : "";
+      if (!raw) return;
+      const kind = muteForm.dataset.mute === "account" ? "mutedAccounts" : "mutedWords";
+      let value = raw.replace(/^@/, "");
+      if (kind === "mutedAccounts") {
+        const parsed = parseAccountInput(raw);
+        if (parsed && /^https?:/i.test(parsed.account)) {
+          value = parsed.platform + ":" + (parsed.account.split("/").filter(Boolean).pop() || "").replace(/^@/, "");
+        } else if (parsed) {
+          const account = parsed.account.replace(/^@/, "");
+          value = account.toLowerCase().indexOf(parsed.platform + ":") === 0 ? account : parsed.platform + ":" + account;
+        }
+      }
+      value = value.trim();
+      const list = STATE.settings[kind] || (STATE.settings[kind] = []);
+      if (value && !list.some((item) => item.toLowerCase() === value.toLowerCase())) list.push(value);
+      saveSettings();
+      render();
+      return;
+    }
     const addForm = event.target.closest("form.add-account");
     if (addForm) {
       event.preventDefault();
@@ -6023,6 +6122,9 @@
         if (Array.isArray(data.seenFeeds)) STATE.settings.seenFeeds = data.seenFeeds;
         if (data.appearance) STATE.settings.appearance = data.appearance;
         if (data.autoplay === "all" || data.autoplay === "wifi" || data.autoplay === "never") STATE.settings.autoplay = data.autoplay;
+        if (Array.isArray(data.mutedWords)) STATE.settings.mutedWords = data.mutedWords;
+        if (Array.isArray(data.mutedAccounts)) STATE.settings.mutedAccounts = data.mutedAccounts;
+        if (Array.isArray(data.repostOff)) STATE.settings.repostOff = data.repostOff;
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();

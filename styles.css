@@ -1225,6 +1225,12 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .save:hover:not(:disabled) { background: var(--fill-hover); }
 .save:disabled { opacity: 0.5; cursor: default; }
 .modal-body { padding: 8px 16px 24px; }
+.modal-body h3 { margin: 4px 0 8px; font-size: 17px; line-height: 20px; }
+.mute-form { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 8px 0 4px; }
+.mute-form .search { min-width: 0; }
+.mute-form .follow { align-self: flex-start; }
+.mute-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15px; }
+.mute-row button { border: 0; background: none; color: var(--red); font-weight: 700; font-size: 13px; }
 .field { display: block; margin: 16px 0; }
 .field span { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
 .field input, .field textarea, .member-search, .explore-search input {
@@ -1364,6 +1370,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   .topbar { padding-top: env(safe-area-inset-top); }
   .center { padding-top: calc(var(--top) + env(safe-area-inset-top)); overscroll-behavior: contain; }
   .center { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+  .modal-body { padding-bottom: 72px; }
   .mhead {
     display: flex;
     align-items: center;
