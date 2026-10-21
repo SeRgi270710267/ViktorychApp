@@ -1,0 +1,26 @@
+name: Unfollow request
+description: Remove a synced account from feeds.config.json
+title: "Unfollow request: "
+labels: []
+body:
+  - type: input
+    id: account
+    attributes:
+      label: Account
+      description: The profile URL, @handle, or platform:handle already in the feeds.
+      placeholder: x:nasa
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - x
+        - threads
+        - instagram
+        - youtube
+        - vk
+        - rss
+    validations:
+      required: true

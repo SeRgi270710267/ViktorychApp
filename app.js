@@ -318,6 +318,46 @@
     return `#/${encodeURIComponent(platform)}/${encodeURIComponent(handle)}/status/${encodeURIComponent(id)}`;
   }
 
+  const GITHUB_REPO = "owner-account/rss-feeds";
+
+  function parseAccountInput(raw) {
+    const text = String(raw || "").trim();
+    if (!text || text.length > 300) return null;
+    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss):(\S+)$/i);
+    if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
+    if (/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}\/?$/i.test(text)) return { platform: "x", account: text };
+    if (/^@?[A-Za-z0-9_]{1,15}$/.test(text)) return { platform: "x", account: text.replace(/^@/, "") };
+    if (/threads\.(?:com|net)\/@/i.test(text)) return { platform: "threads", account: text };
+    if (/instagram\.com\/[A-Za-z0-9._]+/i.test(text)) return { platform: "instagram", account: text };
+    if (/(?:youtube\.com|youtu\.be)\//i.test(text)) return { platform: "youtube", account: text };
+    if (/vk\.com\/[A-Za-z0-9_.]+/i.test(text)) return { platform: "vk", account: text };
+    if (/^https:\/\/\S+$/i.test(text)) return { platform: "rss", account: text };
+    return null;
+  }
+
+  function followIssueUrl(kind, account, platform) {
+    const template = kind === "unfollow" ? "unfollow-request.yml" : "follow-request.yml";
+    const title = (kind === "unfollow" ? "Unfollow request: " : "Follow request: ") + platform + " " + account;
+    const params = new URLSearchParams({ template: template, title: title, account: account, platform: platform });
+    return "https://github.com/" + GITHUB_REPO + "/issues/new?" + params.toString();
+  }
+
+  function configuredFeed(id) {
+    const direct = feedById(id);
+    if (direct && direct.configured) return direct;
+    const parts = String(id || "").split(":");
+    const known = catalogAccount(parts[0], parts.slice(1).join(":"));
+    return known && known.configured ? known : null;
+  }
+
+  function followIssueUrlForId(kind, id) {
+    const feed = feedById(id) || configuredFeed(id);
+    const platform = (feed && feed.platform) || String(id || "").split(":")[0] || "x";
+    const handle = (feed && (feed.handle || feed.channelId)) || String(id || "").split(":").slice(1).join(":");
+    const account = (feed && feed.url) || (platform + ":" + handle);
+    return followIssueUrl(kind, account, platform);
+  }
+
   function sitePermalink(hash) {
     const url = new URL(location.href);
     if (url.pathname.endsWith("/index.html")) url.pathname = url.pathname.slice(0, -"index.html".length);
@@ -1470,6 +1510,9 @@
   function followButtonClean(id, large) {
     if (isFollowed(id)) {
       return `<button class="follow following${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}"><span class="f">Following</span><span class="u">Unfollow</span></button>`;
+    }
+    if (!configuredFeed(id)) {
+      return `<a class="follow${large ? " lg" : ""}" data-act="follow-request" data-id="${esc(id)}" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("follow", id))}">Follow</a>`;
     }
     return `<button class="follow${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}">Follow</button>`;
   }
@@ -4607,13 +4650,17 @@
       <form data-act="search-form" class="explore-form"><label class="search"><span>${icon("search")}</span><input id="explore-q" value="${esc(q)}" placeholder="Search" aria-label="Search"></label></form></div>${body}`;
   }
 
-  function accountRow(f) {
-    return `<div class="acct-row"><a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span></span></a>${followButtonClean(f.id)}</div>`;
+  function accountRow(f, opts) {
+    const remove = opts && opts.remove && f.configured
+      ? `<a class="remove-sync" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("unfollow", f.id))}">Remove</a>`
+      : "";
+    return `<div class="acct-row"><a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span></span></a>${followButtonClean(f.id)}${remove}</div>`;
   }
 
   function feedsView() {
     const list = feeds().slice().sort((a, b) => Number(b.configured) - Number(a.configured) || (a.name || "").localeCompare(b.name || ""));
-    return pageHead("Feeds") + (list.length ? `<div>${list.map(accountRow).join("")}</div>` : emptyBlock("No accounts", "Add sources in feeds.config.json."));
+    const box = `<form class="add-account"><label class="search"><span>${icon("search")}</span><input id="add-account" placeholder="Add account URL or @handle" aria-label="Add account"></label><button class="follow" type="submit">Add</button></form>`;
+    return pageHead("Feeds") + box + (list.length ? `<div>${list.map((f) => accountRow(f, { remove: true })).join("")}</div>` : emptyBlock("No accounts", "Paste a profile URL or @handle above."));
   }
 
   function listsView() {
@@ -5490,16 +5537,18 @@
       else if (tab.startsWith("list:")) location.hash = "#/tab/" + tab.slice(5);
       return;
     }
+    if (act === "follow-request") {
+      const id = el.dataset.id;
+      if (id && STATE.settings.follows.indexOf(id) < 0) STATE.settings.follows.push(id);
+      saveSettings();
+      toast("Follow request opened. Submit it on GitHub and the next sync will add this account.");
+      return;
+    }
     if (act === "follow") {
       const id = el.dataset.id;
       const i = STATE.settings.follows.indexOf(id);
       if (i >= 0) STATE.settings.follows.splice(i, 1);
-      else {
-        STATE.settings.follows.push(id);
-        const known = feedById(id) || liveProfileById(id);
-        const configured = known && (known.configured || (catalogFeed(known) && catalogFeed(known).configured));
-        if (!configured) toast("Saved on this device. Add it to feeds.config.json and sync for the home timeline.");
-      }
+      else STATE.settings.follows.push(id);
       saveSettings();
       render();
       return;
@@ -5814,6 +5863,19 @@
   });
 
   document.addEventListener("submit", (event) => {
+    const addForm = event.target.closest("form.add-account");
+    if (addForm) {
+      event.preventDefault();
+      const input = addForm.querySelector("input");
+      const parsed = parseAccountInput(input && input.value);
+      if (!parsed) {
+        toast("Use a profile URL, @handle, or an https feed");
+        return;
+      }
+      window.open(followIssueUrl("follow", parsed.account, parsed.platform), "_blank", "noopener,noreferrer");
+      toast("Follow request opened. Submit it on GitHub and the next sync will add this account.");
+      return;
+    }
     const form = event.target.closest("[data-act='search-form']");
     if (!form) return;
     event.preventDefault();

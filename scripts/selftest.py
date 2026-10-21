@@ -680,6 +680,69 @@ def main() -> None:
     check("flex-shrink: 100" in css and "white-space: nowrap" in actions, "the display name keeps its room and the profile link stays one line")
     check("--fill:" in css and "--hover:" in css and ".watch-main { padding: 0; min-width: 0; }" in css and "function deadMediaUrl(" in app and "function collapseSameUrl(" in app and "Skip to content" in app and 'class="vh">Home' in app and 'aria-current="page"' in app and 'role="tab" aria-selected="' in app, "themes, watch width, dead posters, and control names stay in place")
     check('data-act="autoplay"' in app and "On cellular and Wi-Fi" in app and "Wi-Fi only" in app and 'autoplay: "all"' in app, "settings can keep autoplay on, limit it to Wi-Fi, or turn it off")
+    check("follow-request.yml" in app and "unfollow-request.yml" in app and 'class="add-account"' in app and "form.add-account" in app and "function parseAccountInput(" in app and 'data-act="follow-request"' in app, "follow and unfollow open a prefilled issue")
+    follows_workflow = (ROOT / ".github" / "workflows" / "follows.yml").read_text(encoding="utf-8")
+    check("github.actor == github.repository_owner" in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow, "follow issues from anyone but the owner are ignored")
+    check((ROOT / ".github" / "ISSUE_TEMPLATE" / "follow-request.yml").is_file() and (ROOT / ".github" / "ISSUE_TEMPLATE" / "unfollow-request.yml").is_file(), "follow and unfollow issue forms exist")
+    import follow_request as follow_req
+
+    check(not follow_req.allowed("stranger", "owner-account") and follow_req.allowed("owner-account", "owner-account") and not follow_req.allowed("", "owner-account"), "only the repository owner can change follows")
+    parsed_follow = follow_req.parse_issue("Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n")
+    check(parsed_follow == {"kind": "follow", "account": "nasa", "platform": "x"}, "a follow issue form is read")
+    x_spec = follow_req.normalize("https://x.com/nasa", "x")
+    check(x_spec["platform"] == "x" and x_spec["handle"] == "nasa" and x_spec["url"] == "https://x.com/nasa", "an x profile URL becomes a handle")
+    bare_spec = follow_req.normalize("@nasa", "")
+    check(bare_spec["platform"] == "x" and bare_spec["handle"] == "nasa", "a bare @handle is an X account")
+    yt_spec = follow_req.normalize("https://www.youtube.com/@LinusTechTips", "youtube")
+    check(yt_spec["handle"] == "LinusTechTips" and yt_spec["channelId"] == "", "a youtube @handle is kept")
+    yt_channel_spec = follow_req.normalize("https://www.youtube.com/channel/UCXuqSBlHAE6Xw-yeJA0Tunw", "youtube")
+    check(yt_channel_spec["channelId"] == "UCXuqSBlHAE6Xw-yeJA0Tunw", "a youtube channel id is kept")
+    check(follow_req.normalize("https://vk.com/vk", "vk")["handle"] == "vk", "a vk profile URL is a handle")
+    check(follow_req.normalize("https://www.threads.net/@redacted_handle", "threads")["handle"] == "redacted_handle", "a threads URL is a handle")
+    check(follow_req.normalize("https://www.instagram.com/redacted_handle/", "instagram")["handle"] == "redacted_handle", "an instagram URL is a handle")
+    rss_spec = follow_req.normalize("https://example.com/feed.xml", "rss")
+    check(rss_spec["platform"] == "rss" and rss_spec["url"] == "https://example.com/feed.xml", "an https feed is an rss follow")
+    http_rejected = False
+    try:
+        follow_req.normalize("http://example.com/feed.xml", "rss")
+    except follow_req.Reject:
+        http_rejected = True
+    check(http_rejected, "an http feed is rejected")
+    public_ok = follow_req.host_is_public("one.one.one.one", lambda host: ["1.1.1.1"])
+    loopback = follow_req.host_is_public("local.test", lambda host: ["127.0.0.1"])
+    private_net = follow_req.host_is_public("lan.test", lambda host: ["10.1.2.3"])
+    link_local = follow_req.host_is_public("meta.test", lambda host: ["169.254.169.254"])
+    check(public_ok and not loopback and not private_net and not link_local, "only public addresses can be fetched")
+
+    def fake_follow_fetch(url):
+        if "fxtwitter.com/nasa" in url:
+            return 200, '{"user":"nasa"}'
+        if "youtube.com/@" in url:
+            return 200, 'href="https://www.youtube.com/channel/UCXuqSBlHAE6Xw-yeJA0Tunw"'
+        if "videos.xml" in url:
+            return 200, "<feed></feed>"
+        if "example.com" in url:
+            return 200, "<rss><channel></channel></rss>"
+        return 404, ""
+
+    public_resolve = lambda host: ["1.1.1.1"]
+    confirmed_yt = follow_req.confirm_source(dict(yt_spec), fake_follow_fetch, public_resolve)
+    check(confirmed_yt["channelId"] == "UCXuqSBlHAE6Xw-yeJA0Tunw", "a youtube page supplies the channel id")
+    follow_config = {"feeds": []}
+    added, follow_config = follow_req.run("owner-account", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    added_row = follow_config["feeds"][0]
+    check(added.startswith("Added x:nasa") and added_row["adapter"] == "fxtwitter" and added_row["fallbacks"][0]["adapter"] == "nitter_rss", "a follow adds the fxtwitter source and nitter fallbacks")
+    duplicate_rejected = False
+    try:
+        follow_req.run("owner-account", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    except follow_req.Reject:
+        duplicate_rejected = True
+    check(duplicate_rejected, "a duplicate follow is rejected")
+    removed, follow_config = follow_req.run("owner-account", "owner-account", "Unfollow request: x nasa", "### Account\n\nx:nasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    check(removed.startswith("Removed x:nasa") and follow_config["feeds"] == [], "an unfollow removes the account")
+    untouched = {"feeds": [{"id": "x:keep"}]}
+    ignored, same_config = follow_req.run("someone", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
+    check(ignored == "" and same_config["feeds"] == [{"id": "x:keep"}], "an issue from anyone else is ignored")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "saveData" in app and "threshold: [0, 0.5, 0.75, 1]" in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app, "one in-view video previews muted until the reader unmutes it")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
