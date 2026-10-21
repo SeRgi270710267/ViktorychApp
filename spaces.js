@@ -70,9 +70,36 @@
     return null;
   }
 
-  function audioFromStatus(status, allow) {
+  const STATUS_MAX_AGE = 2 * 60 * 1000;
+
+  function statusStale(status, now) {
+    if (!status || typeof status !== "object") return false;
+    if (typeof status.updated !== "string" || !status.updated.trim()) return false;
+    const then = Date.parse(status.updated);
+    if (!Number.isFinite(then)) return true;
+    const clock = typeof now === "number" ? now : Date.now();
+    return clock - then > STATUS_MAX_AGE;
+  }
+
+  function remoteStatusUrl(raw, allow, now) {
+    const value = String(raw == null ? "" : raw).trim();
+    if (!value || /[\s\\]/.test(value) || !/^https:\/\//i.test(value)) return "";
+    let url;
+    try {
+      url = new URL(value);
+    } catch (err) {
+      return "";
+    }
+    if (url.protocol !== "https:" || url.username || url.password) return "";
+    if (!hostAllowed(url.hostname, allow)) return "";
+    url.searchParams.set("_", String(typeof now === "number" ? now : Date.now()));
+    return url.href;
+  }
+
+  function audioFromStatus(status, allow, now) {
     const empty = { live: false, url: "", listeners: null, scheduled: false };
     if (!status || typeof status !== "object") return empty;
+    if (statusStale(status, now)) return empty;
     const scheduled = status.scheduled === true || status.state === "scheduled";
     const base = typeof status.base === "string" ? status.base : "";
     const hls = status.hls && typeof status.hls === "object" ? status.hls : null;
@@ -93,7 +120,9 @@
     allowedAudio: allowedAudio,
     marqueePlan: marqueePlan,
     listenersOf: listenersOf,
-    audioFromStatus: audioFromStatus
+    audioFromStatus: audioFromStatus,
+    statusStale: statusStale,
+    remoteStatusUrl: remoteStatusUrl
   };
 
   if (typeof document === "undefined") {
@@ -193,7 +222,10 @@
     const base = doc && typeof doc === "object" ? Object.assign({}, doc) : {};
     const demo = demoFor(space);
     if (!demo) return base;
-    if (typeof demo.live === "boolean") base.live = demo.live;
+    if (typeof demo.live === "boolean") {
+      base.live = demo.live;
+      if (demo.live) base.updated = new Date().toISOString();
+    }
     if (typeof demo.base === "string") base.base = demo.base;
     if (typeof demo.audio === "string") {
       const hls = base.hls && typeof base.hls === "object" ? Object.assign({}, base.hls) : {};
@@ -223,6 +255,13 @@
     } catch (err) {
       return "";
     }
+  }
+
+  function resolveStatusUrl(statusUrl, allow) {
+    const raw = String(statusUrl || "").trim();
+    if (!raw) return "";
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.indexOf("//") === 0) return remoteStatusUrl(raw, allow);
+    return sameOriginStatus(raw);
   }
 
   function hostFace(space) {
@@ -998,6 +1037,7 @@
       source: {
         type: item.source && item.source.type ? String(item.source.type) : "",
         statusUrl: item.source && item.source.statusUrl ? String(item.source.statusUrl) : "",
+        fallback: item.source && item.source.fallback ? String(item.source.fallback) : "",
         url: item.source && item.source.url ? String(item.source.url) : "",
         server: item.source && item.source.server ? String(item.source.server) : "",
         channelId: item.source && item.source.channelId ? String(item.source.channelId) : "",
@@ -1007,15 +1047,26 @@
     }));
   }
 
+  async function fetchStatusDoc(url) {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error("status");
+    return await res.json();
+  }
+
   async function loadStatus(space) {
     const source = space.source || {};
     let doc = null;
     if (source.statusUrl) {
-      const url = sameOriginStatus(source.statusUrl);
-      if (!url) throw new Error("status");
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw new Error("status");
-      doc = await res.json();
+      const allow = effectiveAllow(space);
+      const url = resolveStatusUrl(source.statusUrl, allow);
+      try {
+        if (!url) throw new Error("status");
+        doc = await fetchStatusDoc(url);
+      } catch (err) {
+        const fallback = source.fallback ? resolveStatusUrl(source.fallback, allow) : "";
+        if (!fallback || fallback === url) throw err;
+        doc = await fetchStatusDoc(fallback);
+      }
     } else if (source.type === "owncast" && source.server) {
       const allow = effectiveAllow(space);
       const statusUrl = allowedAudio(String(source.server).replace(/\/$/, "") + "/api/status", "", allow);

@@ -91,8 +91,25 @@ function isMedia(url) {
   return /(^|\.)pbs\.twimg\.com$/.test(host) || /(^|\.)video\.twimg\.com$/.test(host) || host === "i.ytimg.com" || /(^|\.)ggpht\.com$/.test(host) || /(^|\.)googleusercontent\.com$/.test(host) || /(^|\.)cdninstagram\.com$/.test(host) || /(^|\.)fbcdn\.net$/.test(host);
 }
 
+const SPACE_HOSTS = ["nadjnizsdaskttxahclp.supabase.co", "r2.dev", "trycloudflare.com"];
+
+function spaceHost(hostname) {
+  const host = String(hostname || "").toLowerCase().replace(/\.+$/, "");
+  if (!host) return false;
+  for (let i = 0; i < SPACE_HOSTS.length; i++) {
+    const rule = SPACE_HOSTS[i];
+    if (!rule) continue;
+    if (host === rule || host.endsWith("." + rule)) return true;
+  }
+  return false;
+}
+
 function isSpaceStatus(url) {
   return url.origin === self.location.origin && /\/live\/[^/]+\.json$/.test(url.pathname);
+}
+
+function isSpaceAsset(url) {
+  return spaceHost(url.hostname);
 }
 
 function isLive(url) {
@@ -292,6 +309,10 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (isSpaceStatus(url) || isSpaceAsset(url)) {
+    event.respondWith(fetch(new Request(request, { cache: "no-store" })));
+    return;
+  }
   if (request.headers.has("range")) return;
   if (request.mode === "navigate") {
     event.respondWith((async () => {
@@ -342,10 +363,6 @@ self.addEventListener("fetch", (event) => {
       } catch (err) { /* offline falls back to the shell copied at install */ }
       return (await caches.match(request)) || Response.error();
     })());
-    return;
-  }
-  if (isSpaceStatus(url)) {
-    event.respondWith(fetch(new Request(request, { cache: "no-store" })));
     return;
   }
   if (url.origin === self.location.origin) {

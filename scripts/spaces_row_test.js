@@ -43,20 +43,55 @@ const relative = L.allowedAudio("audio.m3u8", "https://abc.trycloudflare.com/rad
 assert.strictEqual(relative, "https://abc.trycloudflare.com/radio/audio.m3u8");
 assert.strictEqual(L.allowedAudio("audio.m3u8", "http://abc.trycloudflare.com/radio/", allow), "");
 
+const at = Date.parse("2026-10-21T20:00:00.000Z");
 const parsed = L.audioFromStatus({
   live: true,
   title: "Some Song",
   artist: "Someone",
   base: "https://abc.trycloudflare.com/radio/",
   hls: { audio: "a.m3u8" },
-  listeners: 4
-}, allow);
+  listeners: 4,
+  updated: "2026-10-21T20:00:00.000Z"
+}, allow, at);
 assert.strictEqual(parsed.live, true);
 assert.strictEqual(parsed.url, "https://abc.trycloudflare.com/radio/a.m3u8");
 assert.strictEqual(parsed.listeners, 4);
 assert.strictEqual(parsed.title, undefined);
 assert.strictEqual(L.audioFromStatus({ live: true, base: "", hls: { audio: "" } }, allow).live, false);
 assert.strictEqual(L.listenersOf({}), null);
+assert.strictEqual(L.audioFromStatus({
+  live: true,
+  base: "https://abc.trycloudflare.com/radio/",
+  hls: { audio: "a.m3u8" },
+  updated: "2026-10-21T20:00:00.000Z"
+}, allow, at + 2 * 60 * 1000).live, true);
+const stale = L.audioFromStatus({
+  live: true,
+  base: "https://abc.trycloudflare.com/radio/",
+  hls: { audio: "a.m3u8" },
+  listeners: 4,
+  updated: "2026-10-21T20:00:00.000Z"
+}, allow, at + 2 * 60 * 1000 + 1);
+assert.strictEqual(stale.live, false);
+assert.strictEqual(stale.url, "");
+assert.strictEqual(L.statusStale({ updated: "nope" }, at), true);
+assert.strictEqual(L.statusStale({ live: true }, at), false);
+
+const radioAllow = ["nadjnizsdaskttxahclp.supabase.co", "r2.dev", "trycloudflare.com"];
+const statusUrl = "https://nadjnizsdaskttxahclp.supabase.co/storage/v1/object/public/live/status.json";
+const playlist = "https://nadjnizsdaskttxahclp.supabase.co/storage/v1/object/public/live/hls/stream.m3u8";
+assert.strictEqual(L.remoteStatusUrl(statusUrl, radioAllow, 42), statusUrl + "?_=42");
+assert.ok(L.remoteStatusUrl(statusUrl + "?x=1", radioAllow, 9).includes("_=9"));
+assert.strictEqual(L.remoteStatusUrl(statusUrl, ["trycloudflare.com"], 1), "");
+assert.strictEqual(L.remoteStatusUrl("http://nadjnizsdaskttxahclp.supabase.co/live/status.json", radioAllow, 1), "");
+assert.strictEqual(L.remoteStatusUrl("//nadjnizsdaskttxahclp.supabase.co/live/status.json", radioAllow, 1), "");
+assert.strictEqual(L.remoteStatusUrl("https://user:pass@nadjnizsdaskttxahclp.supabase.co/live/status.json", radioAllow, 1), "");
+assert.strictEqual(L.remoteStatusUrl("live/superintelmusic.json", radioAllow, 1), "");
+assert.strictEqual(L.allowedAudio(playlist, "", radioAllow), playlist);
+assert.strictEqual(L.allowedAudio("https://nadjnizsdaskttxahclp.supabase.co/storage/v1/object/public/live/hls/seg.ts", playlist, radioAllow).endsWith("/seg.ts"), true);
+assert.strictEqual(L.allowedAudio("https://nadjnizsdaskttxahclp.supabase.co/storage/v1/object/public/live/hls/key.key", playlist, radioAllow).endsWith("/key.key"), true);
+assert.strictEqual(L.allowedAudio("https://evil.example/seg.ts", playlist, radioAllow), "");
+assert.ok(L.allowedAudio("https://pub-abc.r2.dev/live/seg.m4s", "", radioAllow).includes(".r2.dev/"));
 
 const still = L.marqueePlan(0, false);
 assert.strictEqual(still.animate, false);
@@ -77,6 +112,10 @@ assert.ok(src.includes("spaces-demo"));
 assert.ok(src.includes('host !== "localhost"') && src.includes('"127.0.0.1"'));
 assert.ok(src.includes("https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"));
 assert.ok(src.includes("https://www.youtube-nocookie.com/embed/live_stream?channel="));
+assert.ok(src.includes("xhrSetup: (xhr, requestUrl)"));
+assert.ok(src.includes("allowedAudio(requestUrl, url, allow)"));
+assert.ok(src.includes("source.fallback"));
+assert.ok(src.includes("STATUS_MAX_AGE = 2 * 60 * 1000"));
 
 const status = JSON.parse(fs.readFileSync("live/superintelmusic.json", "utf8"));
 assert.strictEqual(status.live, false);
@@ -92,8 +131,9 @@ const space = config.spaces.find((item) => item.id === "superintelmusic");
 assert.strictEqual(space.title, "SuperintelMusic");
 assert.strictEqual(space.host.followId, "telegram:redacted_handle");
 assert.strictEqual(space.source.type, "hls");
-assert.strictEqual(space.source.statusUrl, "live/superintelmusic.json");
-assert.deepStrictEqual(space.source.allow, ["trycloudflare.com"]);
+assert.strictEqual(space.source.statusUrl, "https://nadjnizsdaskttxahclp.supabase.co/storage/v1/object/public/live/status.json");
+assert.strictEqual(space.source.fallback, "live/superintelmusic.json");
+assert.deepStrictEqual(space.source.allow, ["nadjnizsdaskttxahclp.supabase.co", "r2.dev", "trycloudflare.com"]);
 assert.ok(!space.source.url);
 
 const worker = fs.readFileSync("sw.js", "utf8");
@@ -101,5 +141,14 @@ assert.ok(worker.includes('VERSION = "superintel8-__SW_VERSION__"'));
 assert.ok(worker.includes("./spaces.js") && worker.includes("./spaces.css"));
 assert.ok(!worker.includes("superintelmusic.json"));
 assert.ok(worker.includes("isSpaceStatus"));
+assert.ok(worker.includes("function isSpaceAsset(url)"));
+assert.ok(worker.includes("isSpaceStatus(url) || isSpaceAsset(url)"));
+space.source.allow.forEach((host) => {
+  assert.ok(worker.includes('"' + host + '"'), host);
+});
+const branchAt = worker.indexOf("if (isSpaceStatus(url) || isSpaceAsset(url))");
+const branch = worker.slice(branchAt, branchAt + 180);
+assert.ok(branch.includes('cache: "no-store"'));
+assert.ok(!branch.includes("cache.put") && !branch.includes("caches.open"));
 
 console.log("spaces row tests ok");
