@@ -147,6 +147,7 @@ jobs:
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}
           TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
+          VK_SERVICE_TOKEN: ${{ secrets.VK_SERVICE_TOKEN }}
         run: python3 scripts/update_feeds.py
 
       - name: Assemble the site and check its size

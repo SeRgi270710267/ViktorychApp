@@ -425,21 +425,30 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             except OSError as exc:
                 errors.append(str(exc))
         else:
+            if feed.get("adapter") == "vk":
+                try:
+                    from vk_remote import wall_payload
+
+                    payload = wall_payload(feed.get("handle") or "", int(feed.get("limit") or 8))
+                    adapter = "vk"
+                except Exception as exc:
+                    errors.append(f"vk: {exc}")
             if feed.get("adapter") == "x_api_v2":
                 print(f"[keep] {feed['id']}: x_api_v2 parses fixtures only and does not call the X API", file=sys.stderr)
                 collected.extend(old_by_feed.get(feed["id"], []))
                 continue
-            for source in feed.get("source_urls") or []:
-                url = expand(source, config, feed)
-                if not url:
-                    continue
-                try:
-                    payload = read_source(url)
-                    source_url = url
-                    adapter = feed.get("adapter")
-                    break
-                except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-                    errors.append(f"{url}: {exc}")
+            if payload is None:
+                for source in feed.get("source_urls") or []:
+                    url = expand(source, config, feed)
+                    if not url:
+                        continue
+                    try:
+                        payload = read_source(url)
+                        source_url = url
+                        adapter = feed.get("adapter")
+                        break
+                    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+                        errors.append(f"{url}: {exc}")
             if payload is None:
                 for fallback in feed.get("fallbacks") or []:
                     if fallback.get("adapter") == "x_api_v2":

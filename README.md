@@ -1,8 +1,10 @@
 # rss-feeds
 
-An X-style home for posts from X, Threads, Instagram, YouTube, and other RSS sources. The page is a static site (`index.html`, `styles.css`, `app.js`). GitHub Actions builds the timeline and publishes it. The repository keeps the code, the config, and a small `feeds.json` seed. X replies and YouTube comments load in the browser when a post opens.
+An X-style home for posts from X, Threads, Instagram, YouTube, VK, and other RSS sources. The page is a static site (`index.html`, `styles.css`, `app.js`). GitHub Actions builds the timeline and publishes it. The repository keeps the code, the config, and a small `feeds.json` seed. X replies and YouTube comments load in the browser when a post opens.
 
 The preview snapshot in this repo is real public posts converted by the adapters (about six to eight newest items per configured account). X images stay on `pbs.twimg.com`. Instagram and Threads images stay on the Meta CDN, with each URL's expiry stored next to it.
+
+VK's official community (`vk.com/vk`) is a followed account. Sync calls `wall.get` for that public wall. A `VK_SERVICE_TOKEN` repository secret is used when it is set. Otherwise the sync reads the anonymous client id and secret from the JavaScript vk.com already ships to browsers, exchanges them for a short-lived token, and discards it. The token is not written into the site. Recent comments are stored with the other synced replies. The browser shows those saved posts on the profile, because `api.vk.com` does not allow this page to read the API directly.
 
 ## Run it
 
@@ -22,6 +24,8 @@ Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHu
 | `#/threads/<handle>` | Threads profile |
 | `#/instagram/<handle>` | Instagram profile |
 | `#/rss/<handle>` | Other RSS profile |
+| `#/vk/<handle>` | VK profile from the synced wall |
+| `#/u/vk/<handle>` | VK profile, with the synced posts when the browser cannot call VK |
 | `#/explore?q=` | Search posts and accounts |
 | `#/lists` | Your Lists |
 | `#/lists/<id>` | List timeline |

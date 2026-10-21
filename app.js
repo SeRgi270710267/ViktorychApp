@@ -4,7 +4,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK" };
 
   const PATH = {
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
@@ -41,6 +41,7 @@
     ig: "M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm5 4.2A4.8 4.8 0 1 0 16.8 12 4.8 4.8 0 0 0 12 7.2zm6.3-.8a1.15 1.15 0 1 0 1.15 1.15A1.15 1.15 0 0 0 18.3 6.4zM12 9.3A2.7 2.7 0 1 1 9.3 12 2.7 2.7 0 0 1 12 9.3z",
     threads: "M12.2 3C7.8 3 4.6 6.2 4.6 10.8c0 2.3.8 4.3 2.2 5.8l-1 3.2 3.3-1.2c.9.3 1.9.5 2.9.5 4.5 0 7.8-3.2 7.8-7.6C19.8 6.4 16.6 3 12.2 3zm0 2.2c3.2 0 5.4 2.3 5.4 5.5 0 1.5-.5 2.8-1.4 3.8-.3-2.3-1.8-4-4-4.6.8-.4 1.3-1.1 1.3-2 0-1.3-1.1-2.2-2.6-2.2-1.7 0-2.9 1.1-3.1 2.7H6.2c.3-2.6 2.6-4.6 5.9-4.6-.1 0 .1 0 .1 1.4zm-.4 4.2c1.6.2 2.8 1.3 3.1 3-.6.5-1.4.8-2.3.8-1.5 0-2.6-.8-3-2 .7-.3 1.4-.6 2.2-.8z",
     rss: "M6 17.5A1.5 1.5 0 1 1 4.5 16 1.5 1.5 0 0 1 6 17.5zM4 11a7 7 0 0 1 7 7h-2a5 5 0 0 0-5-5v-2zm0-4a11 11 0 0 1 11 11h-2A9 9 0 0 0 4 9V7z",
+    vk: "M3.2 6h3.1l2.7 6.6L11.7 6h3.1L10.4 15H7.6L3.2 6zm9.4 0H21v2.2h-5.2v1.6H20v2.1h-4.2v1.7H21V15h-8.4V6z",
     feather: "M22 3.2c-5.8 0-9.4 2.2-12 5.6C8.2 11.4 7.2 15 7 19h2.1c.2-2.6.8-4.8 2-6.2 1 .2 2.1.5 3.2.9l-2.1 3.1h2.2l1.5-2.2c1.7.4 3.4.7 5.2 1 .2-.7.4-1.4.5-2.1-.9-.2-1.7-.4-2.5-.6 2-1.5 3.8-3.5 5-5.9-.3 0-.6-.1-1-.1z",
     pip: "M4 6.5C4 5.12 5.12 4 6.5 4h11C18.88 4 20 5.12 20 6.5v11c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 20 4 18.88 4 17.5v-11zM6.5 6A.5.5 0 0 0 6 6.5v11c0 .28.22.5.5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11zM10 12h8v6h-8v-6z"
   };
@@ -132,6 +133,7 @@
       if (String(id).length !== 11) return "https://www.youtube.com/post/" + id;
       return "https://www.youtube.com/watch?v=" + id;
     }
+    if (platform === "vk" && id) return "https://vk.com/wall" + id;
     return "";
   }
 
@@ -182,13 +184,12 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
+    const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false });
     try {
       const raw = localStorage.getItem(KEY);
-      if (!raw) {
-        return { version: 1, initialized: true, follows: configured, lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false };
-      }
+      if (!raw) return fresh();
       const parsed = JSON.parse(raw);
-      parsed.follows = Array.isArray(parsed.follows) ? parsed.follows : configured;
+      parsed.follows = Array.isArray(parsed.follows) ? parsed.follows : configured.slice();
       parsed.lists = Array.isArray(parsed.lists) ? parsed.lists : [];
       parsed.likes = parsed.likes || {};
       parsed.bookmarks = parsed.bookmarks || {};
@@ -197,12 +198,26 @@
       if (!parsed.appearance) parsed.appearance = "lightsout";
       if (parsed.notify !== true) parsed.notify = false;
       if (!parsed.initialized) {
-        parsed.follows = configured;
+        parsed.follows = configured.slice();
+        parsed.seenFeeds = configured.slice();
         parsed.initialized = true;
+      }
+      if (!Array.isArray(parsed.seenFeeds)) {
+        // Existing follows stay as the reader left them. vk:vk is new in this
+        // version, so it joins Following once. Later accounts use seenFeeds.
+        parsed.seenFeeds = configured.slice();
+        if (configured.indexOf("vk:vk") >= 0 && parsed.follows.indexOf("vk:vk") < 0) parsed.follows.push("vk:vk");
+      } else {
+        configured.forEach((id) => {
+          if (parsed.seenFeeds.indexOf(id) < 0) {
+            parsed.seenFeeds.push(id);
+            if (parsed.follows.indexOf(id) < 0) parsed.follows.push(id);
+          }
+        });
       }
       return parsed;
     } catch (err) {
-      return { version: 1, initialized: true, follows: configured, lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false };
+      return fresh();
     }
   }
 
@@ -369,7 +384,7 @@
 
   function sourceBadge(platform) {
     if (!platform || platform === "x") return "";
-    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : "rss";
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : "rss";
     return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
   }
 
@@ -379,6 +394,7 @@
     if (feed.platform === "threads") return "https://www.threads.com/@" + feed.handle;
     if (feed.platform === "instagram") return "https://www.instagram.com/" + feed.handle + "/";
     if (feed.platform === "youtube") return "https://www.youtube.com/@" + feed.handle;
+    if (feed.platform === "vk") return "https://vk.com/" + feed.handle;
     return feed.url || "#";
   }
 
@@ -391,6 +407,7 @@
     const clean = encodeURIComponent(tag);
     if (platform === "instagram") return "https://www.instagram.com/explore/tags/" + clean + "/";
     if (platform === "threads") return "https://www.threads.com/search?q=" + encodeURIComponent("#" + tag);
+    if (platform === "vk") return "https://vk.com/feed?section=search&q=" + encodeURIComponent("#" + tag);
     return "https://x.com/hashtag/" + clean;
   }
 
@@ -431,7 +448,7 @@
         i += mention[0].length;
         continue;
       }
-      const hash = src.slice(i).match(/^#([A-Za-z0-9_]{1,50})/);
+      const hash = src.slice(i).match(platform === "vk" ? /^#([\p{L}\p{N}_]{1,50})/u : /^#([A-Za-z0-9_]{1,50})/);
       if (hash && (i === 0 || /\s/.test(src[i - 1]))) {
         html += `<a class="entity" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(hashHref(hash[1], platform))}">#${esc(hash[1])}</a>`;
         i += hash[0].length;
@@ -486,6 +503,7 @@
     if (platform === "threads") return "Watch on Threads";
     if (platform === "youtube") return "Watch on YouTube";
     if (platform === "x") return "Watch on X";
+    if (platform === "vk") return "Watch on VK";
     return "Open original";
   }
 
@@ -2813,7 +2831,7 @@
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
-    } else if (["x", "threads", "instagram", "rss", "youtube"].includes(parts[0])) {
+    } else if (["x", "threads", "instagram", "rss", "youtube", "vk"].includes(parts[0])) {
       platform = parts[0];
       handle = parts[1] || "";
       rest = parts.slice(2);
@@ -3469,6 +3487,27 @@
     return Promise.resolve();
   }
 
+  function loadVkSaved(row, handle) {
+    const feed = findFeed("vk", handle);
+    const profile = limitedProfile("vk", handle);
+    if (feed) {
+      ["name", "avatar", "banner", "bio", "location", "website", "joined", "verifiedType", "url"].forEach((key) => {
+        if (feed[key]) profile[key] = feed[key];
+      });
+      if (feed.followers != null) profile.followers = feed.followers;
+      if (feed.following != null) profile.following = feed.following;
+      if (feed.postsCount != null) profile.postsCount = feed.postsCount;
+      profile.id = feed.id || profile.id;
+    }
+    row.profile = profile;
+    row.posts = [];
+    absorbSaved(row);
+    row.limited = !(row.posts || []).length;
+    if ((row.posts || []).length) row.saved = false;
+    row.fetchedAt = Date.now();
+    return Promise.resolve();
+  }
+
   function ensureLiveHeader(platform, handle) {
     const key = liveKey(platform, handle);
     const row = STATE.liveUsers[key] || (STATE.liveUsers[key] = blankLive(platform, handle));
@@ -3476,6 +3515,7 @@
     if (row.headerTask) return row.headerTask;
     const clean = String(handle || "").replace(/^@/, "");
     const job = platform === "youtube" ? loadYtChannel(clean).then((data) => (data && data.authorId ? ytProfileFromChannel(data, clean) : null))
+      : platform === "vk" ? Promise.resolve(limitedProfile("vk", clean))
       : (platform === "instagram" || platform === "threads") ? Promise.resolve(limitedProfile(platform, clean))
       : fxHeader(clean);
     row.headerTask = job.then((profile) => {
@@ -3496,6 +3536,7 @@
     row.loading = !row.profile;
     const clean = String(handle || "").replace(/^@/, "");
     const job = platform === "youtube" ? loadYtLive(row, clean)
+      : platform === "vk" ? loadVkSaved(row, clean)
       : (platform === "instagram" || platform === "threads") ? loadLimited(row, platform, clean)
       : loadXLive(row, clean);
     row.pageTask = job.then(() => {
@@ -4862,7 +4903,7 @@
       return;
     }
     if (act === "export") {
-      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify }, null, 2)], { type: "application/json" });
+      const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "rss-feeds-settings.json";
@@ -4926,6 +4967,7 @@
         STATE.settings.bookmarks = data.bookmarks || {};
         STATE.settings.reposts = data.reposts || {};
         STATE.settings.savedPosts = data.savedPosts || STATE.settings.savedPosts || {};
+        if (Array.isArray(data.seenFeeds)) STATE.settings.seenFeeds = data.seenFeeds;
         if (data.appearance) STATE.settings.appearance = data.appearance;
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
@@ -5370,6 +5412,7 @@
   function livePostsForFeed(feed, config) {
     const platform = feed.platform || "";
     if (platform === "x") return liveX(feed);
+    if (platform === "vk") return Promise.resolve([]);
     if (platform === "youtube") return liveYoutube(feed).then((rows) => {
       if (rows && rows.length) return rows;
       return liveConfigured(feed, config);

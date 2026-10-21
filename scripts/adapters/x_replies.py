@@ -83,7 +83,7 @@ def _payload(payload):
 
 
 def comments_kept(post: dict, now=None) -> bool:
-    """Instagram, Threads, and comment RSS younger than 7 days are stored.
+    """Instagram, Threads, VK, and comment RSS younger than 7 days are stored.
 
     X and YouTube are loaded in the browser. A post with no date is not stored.
     """
@@ -92,7 +92,7 @@ def comments_kept(post: dict, now=None) -> bool:
     platform = post.get("platform") or ""
     if platform in ("x", "youtube"):
         return False
-    if platform not in ("instagram", "threads") and not post.get("commentRss"):
+    if platform not in ("instagram", "threads", "vk") and not post.get("commentRss"):
         return False
     posted = _epoch(post.get("date") or "")
     if posted is None:

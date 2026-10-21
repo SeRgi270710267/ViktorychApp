@@ -464,6 +464,8 @@ def profile_url(platform: str, handle: str) -> str:
         return f"https://www.threads.com/@{handle}"
     if platform == "instagram":
         return f"https://www.instagram.com/{handle}/"
+    if platform == "vk":
+        return f"https://vk.com/{handle}"
     return ""
 
 

@@ -3,7 +3,7 @@
 
 The git checkout only has the seed feeds.json. This copies the live Pages
 feeds.json over that seed, then copies comment files for Instagram, Threads,
-and comment-RSS posts under 7 days old. X and YouTube comments are not
+VK, and comment-RSS posts under 7 days old. X and YouTube comments are not
 downloaded. It also merges archive/index.json and every shard that index
 lists, and only when all of those downloads parse. Pages, the raw data
 branch, and the Internet Archive are merged in that order. A partial

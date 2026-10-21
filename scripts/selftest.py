@@ -671,6 +671,30 @@ def main() -> None:
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
     community_src = (ROOT / "scripts" / "adapters" / "youtube_community.py").read_text(encoding="utf-8")
     check("rsshub.rssforever.com" not in config_text and "rsshub.pseudoyu.com" not in config_text and "hub.slarker.me" not in config_text, "public RSSHub mirrors are not feed sources")
+    check('"id": "vk:vk"' in config_text and '"platform": "vk"' in config_text, "the official VK community is a configured follow")
+    from adapters.vk import parse as parse_vk
+    from adapters.vk import parse_comments as parse_vk_comments
+    from vk_remote import parse_web_client
+
+    vk_doc = parse_vk(json.loads((FIX / "vk_wall_vk.json").read_text(encoding="utf-8")), {"id": "vk:vk", "platform": "vk", "handle": "vk"})
+    check(len(vk_doc["posts"]) == 3, "vk wall keeps the text post, the video, and the repost")
+    vk_text_post = vk_doc["posts"][0]
+    check("запись в блоге" in vk_text_post["text"] and "away.php" not in vk_text_post["text"] and vk_text_post["media"][0]["url"].endswith("vk-large.jpg"), "vk markup becomes the label and the largest photo")
+    check(vk_text_post["url"] == "https://vk.com/wall-22822305_1730797" and vk_text_post["stats"]["replies"] == 12, "vk post links to the wall and keeps the comment count")
+    vk_video = vk_doc["posts"][1]
+    check(vk_video["media"][0]["type"] == "video" and vk_video["media"][0]["poster"].endswith("vk-video.jpg") and vk_video["media"][0]["open"].startswith("https://vk.com/video"), "vk video keeps a poster and the watch page")
+    vk_repost = vk_doc["posts"][2]
+    check(vk_repost["kind"] == "repost" and vk_repost["handle"] == "team" and vk_repost["repostedBy"]["handle"] == "vk" and "Исходная" in vk_repost["text"], "vk repost credits the community and shows the original")
+    check(vk_doc["profiles"][0]["name"] == "ВКонтакте" and vk_doc["profiles"][0]["followers"] == 14000000 and vk_doc["profiles"][0]["url"] == "https://vk.com/vk" and vk_doc["profiles"][0]["verifiedType"] == "business", "vk profile comes from the community")
+    vk_comments = parse_vk_comments(
+        {"response": {"count": 1, "items": [{"id": 9, "from_id": 5, "owner_id": -22822305, "post_id": 1730797, "date": 1792307000, "text": "Привет", "likes": {"count": 3}, "thread": {"count": 0, "items": []}}], "profiles": [{"id": 5, "first_name": "Аня", "last_name": "Иванова", "screen_name": "anya"}]}},
+        {"statusId": "-22822305_1730797", "handle": "vk"},
+    )
+    check(len(vk_comments) == 1 and vk_comments[0]["text"] == "Привет" and vk_comments[0]["handle"] == "anya" and vk_comments[0]["replyingTo"]["id"] == "-22822305_1730797", "vk comments keep the author and the parent")
+    vk_client = parse_web_client('{clientSecret:L,clientId:R,authClientId:D}=(j=111,P="publicsecretvalue1",O=1);mG:"5.289"')
+    check(vk_client == ("111", "publicsecretvalue1", "5.289"), "the public web bundle yields the anonymous client")
+    check("6287487" not in (ROOT / "scripts" / "vk_remote.py").read_text(encoding="utf-8"), "vk client credentials are parsed from vk.com, not copied into the repo")
+    check("loadVkSaved" in app and "Watch on VK" in app and "seenFeeds" in app and 'platform === "vk"' in app, "vk profiles use the synced wall and a new follow is picked up once")
     check("RSSHUB_MIRRORS" not in community_src and "rssforever" not in community_src, "community posts use the local RSSHub container")
     ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     check("fallback/" in ignore and "status.json" in ignore, "generated fallback files stay out of git")

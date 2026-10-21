@@ -1,0 +1,99 @@
+{
+  "response": {
+    "count": 1142,
+    "items": [
+      {
+        "id": 1730797,
+        "owner_id": -22822305,
+        "from_id": -22822305,
+        "date": 1792306845,
+        "post_type": "post",
+        "text": "Новая [https://vk.com/away.php?to=https%3A%2F%2Fvk.com%2Fblog|запись в блоге] про ленту.\n#вконтакте",
+        "comments": {"count": 12},
+        "likes": {"count": 340},
+        "reposts": {"count": 15},
+        "views": {"count": 9000},
+        "attachments": [
+          {
+            "type": "photo",
+            "photo": {
+              "id": 457239001,
+              "owner_id": -22822305,
+              "text": "Обложка",
+              "sizes": [
+                {"width": 200, "height": 200, "url": "https://sun1.userapi.com/vk-small.jpg"},
+                {"width": 1280, "height": 720, "url": "https://sun1.userapi.com/vk-large.jpg"}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": 1730700,
+        "owner_id": -22822305,
+        "from_id": -22822305,
+        "date": 1792200000,
+        "post_type": "post",
+        "text": "",
+        "comments": {"count": 2},
+        "likes": {"count": 80},
+        "reposts": {"count": 1},
+        "views": {"count": 1200},
+        "attachments": [
+          {
+            "type": "video",
+            "video": {
+              "id": 456239100,
+              "owner_id": -22822305,
+              "title": "Как устроена лента",
+              "duration": 95,
+              "image": [
+                {"width": 320, "height": 180, "url": "https://sun1.userapi.com/vk-video-small.jpg"},
+                {"width": 1280, "height": 720, "url": "https://sun1.userapi.com/vk-video.jpg"}
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": 1730600,
+        "owner_id": -22822305,
+        "from_id": -22822305,
+        "date": 1792100000,
+        "post_type": "copy",
+        "text": "",
+        "copy_history": [
+          {
+            "id": 55,
+            "owner_id": -1,
+            "from_id": -1,
+            "date": 1792000000,
+            "post_type": "post",
+            "text": "Исходная запись команды",
+            "attachments": []
+          }
+        ]
+      }
+    ],
+    "groups": [
+      {
+        "id": 22822305,
+        "name": "ВКонтакте",
+        "screen_name": "vk",
+        "type": "page",
+        "is_closed": 0,
+        "photo_200": "https://sun1.userapi.com/vk-avatar.jpg",
+        "members_count": 14000000,
+        "verified": 1,
+        "description": "Официальная страница ВКонтакте.",
+        "site": "https://vk.com"
+      },
+      {
+        "id": 1,
+        "name": "Команда ВКонтакте",
+        "screen_name": "team",
+        "photo_200": "https://sun1.userapi.com/team.jpg"
+      }
+    ]
+  }
+}

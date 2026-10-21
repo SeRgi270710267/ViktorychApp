@@ -4,7 +4,8 @@ X replies and YouTube comments are loaded in the browser, so this refresh
 skips those platforms. Instagram tries the logged-out GraphQL post query, the
 captioned embed, and public viewers before INSTAGRAM_COOKIE. Threads tries
 the public mobile post page, then the local RSSHub post route, then
-THREADS_COOKIE. RSS uses wfw:commentRss. Only posts under 7 days old are
+THREADS_COOKIE. VK uses wall.getComments with the same token the wall sync
+already obtained. RSS uses wfw:commentRss. Only posts under 7 days old are
 stored. A failed fetch keeps the previous comment file. Nothing here invents
 a reply. Own-fetcher copies for the browser live in fallback/, not here.
 """
@@ -536,6 +537,34 @@ def _refresh_subthreads(parent: dict, replies: list, use_fixtures: bool, already
         write_comments(child, rows[:NEST_CAP], source, NEST_CAP)
 
 
+def fetch_vk(post: dict):
+    status_id = str(post.get("statusId") or post.get("id") or "")
+    if "_" not in status_id:
+        return None
+    owner_id, post_id = status_id.rsplit("_", 1)
+    if not owner_id or not post_id:
+        return None
+    try:
+        from adapters.vk import parse_comments
+        from vk_remote import comments_document
+
+        payload = comments_document(owner_id, post_id, 20)
+    except Exception as exc:
+        print(f"[replies] vk:{status_id} {exc}", file=sys.stderr)
+        return None
+    replies = parse_comments(payload, post)
+    count = None
+    response = payload.get("response") if isinstance(payload, dict) else None
+    if isinstance(response, dict) and response.get("count") is not None:
+        try:
+            count = int(response["count"])
+        except (TypeError, ValueError):
+            count = None
+    if replies or count is not None:
+        return replies, "vk", count
+    return None
+
+
 def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> None:
     seen = set()
     missed = {"instagram": 0, "threads": 0}
@@ -555,6 +584,8 @@ def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> No
                 found = fetch_instagram(post)
             elif platform == "threads":
                 found = fetch_threads(post)
+            elif platform == "vk":
+                found = fetch_vk(post)
             elif post.get("commentRss"):
                 found = fetch_rss(post)
         if found is None:

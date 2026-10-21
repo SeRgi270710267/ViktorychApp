@@ -189,6 +189,20 @@ def probe_own_instagram() -> dict:
     return {"id": "own:instagram", "group": "Instagram", "up": bool(pack and pack.get("text")), "detail": detail}
 
 
+def probe_own_vk() -> dict:
+    try:
+        from vk_remote import wall_document
+
+        document = wall_document("vk", 1)
+        items = ((document.get("response") or {}).get("items") or [])
+        up = bool(items)
+        detail = "public wall" if up else "wall.get returned no posts"
+    except Exception as exc:
+        up = False
+        detail = _snip(str(exc))
+    return {"id": "own:vk", "group": "VK", "up": up, "detail": detail}
+
+
 def probe_own_threads() -> dict:
     try:
         pack = fetch_threads_post(SAMPLE_THREADS)
@@ -218,7 +232,7 @@ def _rsshub_base() -> str:
 
 
 def collect() -> list:
-    jobs = [probe_fxtwitter, probe_own_x, probe_own_youtube, probe_own_instagram, probe_own_threads]
+    jobs = [probe_fxtwitter, probe_own_x, probe_own_youtube, probe_own_instagram, probe_own_threads, probe_own_vk]
     for base in NITTER_HOSTS:
         jobs.append(lambda base=base: probe_nitter(base))
     for base in IV_SEEDS:
