@@ -400,6 +400,10 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     collected = []
     configured_ids = set()
     fresh_ids: set[tuple[str, str]] = set()
+    from sync_health import prune_health, record_source
+
+    health = {key: dict(value) for key, value in (existing.get("sourceHealth") or {}).items() if isinstance(value, dict)}
+    stamp = now_iso()
 
     for feed in config.get("feeds") or []:
         configured_ids.add(feed["id"])
@@ -435,6 +439,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     errors.append(f"vk: {exc}")
             if feed.get("adapter") == "x_api_v2":
                 print(f"[keep] {feed['id']}: x_api_v2 parses fixtures only and does not call the X API", file=sys.stderr)
+                record_source(health, feed["id"], False, stamp, "x_api_v2 parses fixtures only")
                 collected.extend(old_by_feed.get(feed["id"], []))
                 continue
             if payload is None:
@@ -467,13 +472,16 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     if payload is not None:
                         break
         if payload is None:
-            print(f"[keep] {feed['id']}: {errors[-1] if errors else 'no source'}", file=sys.stderr)
+            detail = errors[-1] if errors else "no source"
+            print(f"[keep] {feed['id']}: {detail}", file=sys.stderr)
+            record_source(health, feed["id"], False, stamp, detail)
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
         try:
             result = run_adapter(adapter, payload, feed)
         except Exception as exc:  # keep last good snapshot if a parser breaks
             print(f"[keep] {feed['id']}: parse failed: {exc}", file=sys.stderr)
+            record_source(health, feed["id"], False, stamp, "parse failed: " + str(exc))
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
         posts = result.get("posts") or []
@@ -526,6 +534,10 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             post["platform"] = feed.get("platform") or post.get("platform")
             post["_fresh"] = True
             fresh_ids.add((feed["id"], str(post.get("id") or "")))
+        if posts:
+            record_source(health, feed["id"], True, stamp)
+        else:
+            record_source(health, feed["id"], False, stamp, "empty")
         new_ids = {str(post.get("id") or "") for post in posts}
         for old in old_by_feed.get(feed["id"], []):
             if str(old.get("id") or "") not in new_ids:
@@ -550,6 +562,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     for profile in profiles:
         if profile.get("id") in configured_ids:
             profile["configured"] = True
+    health = prune_health(health, configured_ids)
     posts = dedupe_posts(collected, cap=int(config.get("cap") or 300))
     if download:
         print("[media] --download-media no longer copies Meta CDN files; URLs stay hotlinked", file=sys.stderr)
@@ -568,6 +581,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         "preview": True,
         "feeds": profiles,
         "posts": posts,
+        "sourceHealth": health,
         "_archive_posts": list(existing.get("posts") or []) + list(collected),
         "_video_ok": video_ok,
         "_video_failed": video_failed,
@@ -594,6 +608,9 @@ def main() -> None:
     media_dir = ROOT / "media"
     removed = prune_media(media_dir, doc)
     save_document(out, doc)
+    from sync_health import write_report
+
+    write_report(doc)
     count, total = media_bytes(media_dir)
     print(f"wrote {out} ({len(doc['posts'])} posts, {len(doc['feeds'])} profiles)")
     print(f"media {count} files, {total / 1024 / 1024:.2f} MB" + (f", pruned {removed}" if removed else ""))

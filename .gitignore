@@ -6,3 +6,4 @@ archive/
 _site/
 fallback/
 status.json
+sync-report.json

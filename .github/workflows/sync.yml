@@ -193,6 +193,15 @@ jobs:
         with:
           path: _site
 
+      - name: Upload the sync report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-report
+          path: sync-report.json
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Upload archive shards for the daily backup
         if: github.event_name == 'schedule' && github.event.schedule == '17 6 * * *'
         uses: actions/upload-artifact@v4
@@ -259,6 +268,38 @@ jobs:
           fi
           git commit -m "Archive stubs"
           git push --force origin HEAD:data
+
+  # One issue for a failed sync, a source that has returned nothing for six
+  # hours, or a failed Pages deploy. Editing the body does not send another
+  # email. The issue closes itself once the next run is healthy.
+  alert:
+    needs: [gate, build, deploy]
+    if: always() && needs.gate.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: sync-report
+          path: .
+
+      - name: Open or close the sync problem
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/sync_health.py
 
   deploy:
     needs: [gate, build]

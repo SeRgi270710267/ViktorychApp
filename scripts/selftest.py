@@ -743,6 +743,29 @@ def main() -> None:
     untouched = {"feeds": [{"id": "x:keep"}]}
     ignored, same_config = follow_req.run("someone", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
     check(ignored == "" and same_config["feeds"] == [{"id": "x:keep"}], "an issue from anyone else is ignored")
+    import sync_health
+
+    clock = {}
+    sync_health.record_source(clock, "vk:vk", False, "2026-10-21T06:00:00Z", "no source")
+    sync_health.record_source(clock, "vk:vk", False, "2026-10-21T07:00:00Z", "no source")
+    check(clock["vk:vk"]["emptySince"] == "2026-10-21T06:00:00Z", "an empty source starts the clock once")
+    sync_health.record_source(clock, "vk:vk", True, "2026-10-21T08:00:00Z")
+    check(clock["vk:vk"].get("ok") == "2026-10-21T08:00:00Z" and "emptySince" not in clock["vk:vk"], "posts from a source clear the empty clock")
+    quiet = {"feeds": [{"id": "x:redacted_handle", "emptySince": "", "ok": "2026-10-21T11:00:00Z"}, {"id": "vk:vk", "emptySince": "2026-10-21T06:00:00Z", "detail": "no source"}]}
+    check(sync_health.problems(quiet, "2026-10-21T11:00:00Z") == [], "five hours of nothing does not alert, and a quiet account that still returns posts is healthy")
+    stale = sync_health.problems(quiet, "2026-10-21T12:00:00Z")
+    check(len(stale) == 1 and stale[0].startswith("vk:vk has returned nothing since 2026-10-21T06:00:00Z"), "six hours of nothing is a sync problem")
+    check(sync_health.problems(None, "2026-10-21T12:00:00Z", "failure", "skipped") == ["The sync failed."], "a failed sync opens a problem without a report")
+    check(sync_health.problems({"feeds": []}, "2026-10-21T12:00:00Z", "success", "failure") == ["The Pages deploy failed."], "a failed Pages deploy is a sync problem")
+    same_body = sync_health.body_for(stale, "https://example.test/1")
+    check(sync_health.plan([], [])["action"] == "none", "a healthy sync with no issue does nothing")
+    check(sync_health.plan([], [{"number": 7, "title": "Sync problem", "body": same_body}])["action"] == "close", "a healthy sync closes the open problem")
+    check(sync_health.plan(stale, [])["action"] == "open", "the first problem opens one issue")
+    check(sync_health.plan(stale, [{"number": 7, "title": "Sync problem", "body": same_body}])["action"] == "none", "the same problem does not edit the issue")
+    check(sync_health.plan(stale, [{"number": 7, "title": "Sync problem", "body": "The sync is not healthy.\n\n- something else\n"}])["action"] == "edit", "a changed problem edits the same issue")
+    check(sync_health.plan(stale, [{"number": 3, "title": "Follow request: x nasa", "body": ""}])["action"] == "open", "a follow request is not the sync problem issue")
+    workflow_text = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy]" in workflow_text, "the sync uploads a report and keeps one problem issue")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "saveData" in app and "threshold: [0, 0.5, 0.75, 1]" in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app, "one in-view video previews muted until the reader unmutes it")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
