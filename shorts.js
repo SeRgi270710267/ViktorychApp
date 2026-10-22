@@ -193,10 +193,14 @@
     var media = videoOf(post);
     var profile = "#/" + encodeURIComponent(post.platform || "tiktok") + "/" + encodeURIComponent(post.handle || "");
     var caption = String(post.text || "");
+    var still = socialApi().stillKey ? socialApi().stillKey(post, media) : "";
+    var posterAttr = still && hooks.token()
+      ? ' data-tg="' + hooks.esc(still) + '" data-tg-first="1" data-fallback-src="' + hooks.esc(media.poster || "") + '"'
+      : (media.poster ? ' src="' + hooks.esc(media.poster) + '"' : "");
     return '<article class="shorts-slide" data-id="' + hooks.esc(post.id || "") + '" data-kind="video">' +
       '<div class="shorts-stage">' +
       '<video playsinline loop preload="none"' + (media.poster ? ' poster="' + hooks.esc(media.poster) + '"' : "") + ' muted></video>' +
-      (media.poster ? '<img class="shorts-poster" alt="" src="' + hooks.esc(media.poster) + '" referrerpolicy="no-referrer">' : "") +
+      (media.poster || still ? '<img class="shorts-poster" alt=""' + posterAttr + ' referrerpolicy="no-referrer">' : "") +
       '<button class="shorts-hit" type="button" data-shorts="stage" aria-label="' + hooks.esc(tr("Pause")) + '"></button>' +
       rail(post) +
       '<div class="shorts-meta"><a class="shorts-author" href="' + hooks.esc(profile) + '">@' + hooks.esc(post.handle || "") + "</a>" +
@@ -272,19 +276,20 @@
     });
   }
 
-  function playHls(video, url, authed) {
+  function playHls(video, url, authed, autoplay) {
+    var start = autoplay !== false;
     return loadHls().then(function (Hls) {
       destroyHls();
       if (!authed && video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
         video.muted = !sound;
-        return video.play();
+        return start ? video.play() : Promise.resolve();
       }
       if (!Hls || !Hls.isSupported()) {
         if (authed) throw new Error("hls");
         video.src = url;
         video.muted = !sound;
-        return video.play();
+        return start ? video.play() : Promise.resolve();
       }
       var player = new Hls({
         enableWorker: true,
@@ -302,8 +307,37 @@
           if (data && data.fatal) reject(new Error("hls"));
         });
         player.on(Hls.Events.MANIFEST_PARSED, function () {
+          if (!start) { resolve(); return; }
           video.play().then(resolve).catch(reject);
         });
+      });
+    });
+  }
+
+  function tgUrl(key) {
+    var api = apiBase();
+    if (!api || !key) return "";
+    return api + "/tg/" + String(key).split("/").map(function (part) { return encodeURIComponent(part); }).join("/");
+  }
+
+  function socialApi() {
+    return window.ViktorychSocial || {};
+  }
+
+  function playTelegramFile(video, key, preload) {
+    var base = tgUrl(key);
+    if (!base || !hooks.token()) return Promise.reject(new Error("tg"));
+    var autoplay = preload === "auto";
+    return playHls(video, base + "/index.m3u8", true, autoplay).catch(function () {
+      return fetch(base, { headers: authHeaders() }).then(function (res) {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.blob();
+      }).then(function (blob) {
+        destroyHls();
+        video.preload = preload || "metadata";
+        video.src = URL.createObjectURL(blob);
+        video.muted = !sound;
+        return autoplay ? video.play() : Promise.resolve();
       });
     });
   }
@@ -369,11 +403,61 @@
     return best;
   }
 
+  function armStored(video, post, preload) {
+    if (video.dataset.tgArm === "1") return;
+    var media = videoOf(post);
+    var key = post.platform === "tiktok"
+      ? (socialApi().fileKey ? socialApi().fileKey(post, media) : "")
+      : (socialApi().fileKey ? socialApi().fileKey(post, media) : "");
+    var original = post.platform === "tiktok" ? playSrc(post) : ((media && media.url) || "");
+    var r2 = media && media.url && /r2\.dev|workers\.dev/.test(media.url) ? media.url : "";
+    if (!key || !hooks.token()) {
+      if (!original && !r2) return;
+      video.preload = preload;
+      if (video.getAttribute("src") !== (r2 || original)) video.src = r2 || original;
+      return;
+    }
+    video.dataset.tgArm = "1";
+    playTelegramFile(video, key, preload).catch(function () {
+      if (r2) {
+        destroyHls();
+        video.src = r2;
+        return preload === "auto" ? video.play() : Promise.resolve();
+      }
+      throw new Error("r2");
+    }).catch(function () {
+      var direct = post.platform === "tiktok" ? "" : ((media && media.url) || "");
+      if (direct && direct !== r2) {
+        destroyHls();
+        video.src = direct;
+        return preload === "auto" ? video.play() : Promise.resolve();
+      }
+      if (post.platform === "tiktok" && original) {
+        destroyHls();
+        video.preload = preload;
+        video.src = original;
+        return preload === "auto" ? video.play() : Promise.resolve();
+      }
+      throw new Error("origin");
+    }).catch(function () {
+      video.dataset.tgArm = "";
+      if (video.getAttribute("src")) {
+        video.removeAttribute("src");
+        try { video.load(); } catch (err) { /* the poster stays */ }
+      }
+    });
+  }
+
   function armSlide(slideEl, preload) {
     var video = slideEl.querySelector("video");
     if (!video || slideEl.getAttribute("data-kind") === "live") return;
     var post = postById(slideEl.getAttribute("data-id") || "");
-    var src = post && post.platform === "tiktok" ? playSrc(post) : ((videoOf(post).url) || "");
+    if (!post) return;
+    if (post.platform === "tiktok" || (socialApi().fileKey && socialApi().fileKey(post, videoOf(post)))) {
+      armStored(video, post, preload);
+      return;
+    }
+    var src = (videoOf(post).url) || "";
     if (!src) return;
     video.preload = preload;
     if (video.getAttribute("src") !== src) video.src = src;
@@ -383,6 +467,8 @@
     var video = slideEl.querySelector("video");
     if (!video || slideEl.getAttribute("data-kind") === "live") return;
     video.pause();
+    video.dataset.tgArm = "";
+    if (hls && hls.media === video) destroyHls();
     if (video.getAttribute("src")) {
       video.removeAttribute("src");
       try { video.load(); } catch (err) { /* the element is going away */ }
