@@ -783,6 +783,15 @@ def tiktok_selector(formats) -> str:
     return vid + "+ba/" + YTDLP_FORMAT
 
 
+def cdn_fallback_ok(role: str, source_url: str = "") -> bool:
+    """A video stays on the yt-dlp remux. A resized photo is not the original."""
+    if role == "video":
+        return False
+    if role == "photo" and "name=" in (source_url or "").lower() and "name=orig" not in (source_url or "").lower():
+        return False
+    return True
+
+
 def video_format_arg(platform: str, formats=None) -> str:
     if platform == "tiktok":
         return tiktok_selector(formats or [])
@@ -928,6 +937,7 @@ def plan_social(docs: list, present_keys) -> list:
                         "original": original,
                         "photo_ordinal": photo_ordinal if role == "photo" else 0,
                         "info": info,
+                        "posted": str((post or {}).get("date") or ""),
                         "uploaded": "",
                     })
     return items
@@ -1057,7 +1067,7 @@ def fetch_ytdlp(obj: dict, dest: Path, directory: Path):
     work.mkdir(parents=True)
     code, out, err = run_captured(base + ytdlp_download_args(page, work, selector), 300)
     text = out + "\n" + err
-    if platform == "tiktok" and runner_blocked(text):
+    if runner_blocked(text):
         shutil.rmtree(work, ignore_errors=True)
         return "blocked"
     if "does not pass filter" in text.lower() or "live event" in text.lower():
@@ -1093,7 +1103,7 @@ def fetch_gallery(obj: dict, dest: Path, directory: Path):
     ordinal = int(obj.get("photo_ordinal") or 1)
     code, out, err = run_captured(base + gallery_download_args(page, work, ordinal), 180)
     text = out + "\n" + err
-    if str(obj.get("platform") or "") == "tiktok" and runner_blocked(text):
+    if runner_blocked(text):
         shutil.rmtree(work, ignore_errors=True)
         return "blocked"
     images = [
@@ -1577,6 +1587,7 @@ def send_document(api_base: str, token: str, channel: str, path: Path, caption: 
             "message_id": int(result.get("message_id") or 0),
             "file_id": file_id,
             "file_size": int(document.get("file_size") or path.stat().st_size),
+            "date": int(result.get("date") or 0),
         }
     raise RuntimeError("telegram rate limit did not clear")
 
@@ -1705,6 +1716,9 @@ def upload_path(api_base: str, token: str, channel: str, path: Path, caption: st
     sent = send_document(api_base, token, channel, path, caption, state)
     if int(sent.get("file_size") or 0) != path.stat().st_size:
         raise RuntimeError("telegram reported a different size")
+    when = int(sent.get("date") or 0)
+    if when > int(state.get("newest") or 0):
+        state["newest"] = when
     part = {
         "role": role,
         "index": index,
@@ -1803,7 +1817,38 @@ def upload_summary(state: dict) -> str:
     for name in sorted(kinds):
         parts.append("%s %s/%s" % (name, kinds[name], sizes.get(name) or 0))
     detail = (", ".join(parts)) if parts else "none"
-    return "[telegram-backup] uploaded %s files, %s bytes (%s)" % (state.get("files") or 0, state.get("bytes") or 0, detail)
+    line = "[telegram-backup] uploaded %s files, %s bytes (%s)" % (state.get("files") or 0, state.get("bytes") or 0, detail)
+    newest = int(state.get("newest") or 0)
+    if newest > 0:
+        line += " newest " + time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(newest))
+    return line
+
+
+def log_d1_newest(cf: dict) -> None:
+    """Count telegram_files and the newest updated_at. No ids or tokens."""
+    database = str((cf or {}).get("database") or "")
+    if not database:
+        return
+    try:
+        url = "https://api.cloudflare.com/client/v4/accounts/%s/d1/database/%s/query" % (cf["account"], database)
+        payload = json.dumps({
+            "sql": "SELECT COUNT(*) AS n, MAX(updated_at) AS newest FROM telegram_files",
+            "params": [],
+        }).encode("utf-8")
+        body = cf_json("POST", url, cf["token"], payload, "application/json")
+    except Exception as err:
+        log("[telegram-backup] d1 count unavailable")
+        log(scrub(str(err), current_secrets()))
+        return
+    result = body.get("result") or []
+    row = {}
+    if isinstance(result, list) and result and isinstance(result[0], dict):
+        rows = result[0].get("results") or []
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
+            row = rows[0]
+    newest = int(row.get("newest") or 0)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(newest)) if newest > 0 else "none"
+    log("[telegram-backup] d1 files %s newest %s" % (int(row.get("n") or 0), stamp))
 
 
 def needs_local(objects: list) -> bool:
@@ -2019,27 +2064,32 @@ def process_cdn(obj: dict, manifest: dict, cf: dict, state: dict, directory: Pat
     src = directory / "cdn.bin"
     src.unlink(missing_ok=True)
     fetched = None
+    role = str(obj.get("role") or "")
     if obj.get("original"):
         outcome = fetch_original(obj, src, directory)
-        if outcome == "blocked":
-            src.unlink(missing_ok=True)
-            log("[telegram-backup] skipped_blocked %s" % obj["key"])
-            return "blocked"
         if outcome == "live":
             src.unlink(missing_ok=True)
             log("[telegram-backup] skipped_live %s" % obj["key"])
+            return "blocked"
+        if outcome == "blocked" and role == "video":
+            src.unlink(missing_ok=True)
+            log("[telegram-backup] skipped_blocked %s" % obj["key"])
             return "blocked"
         if isinstance(outcome, dict):
             fetched = outcome
             if outcome.get("info"):
                 obj["info"] = outcome["info"]
+        elif outcome == "blocked":
+            src.unlink(missing_ok=True)
+            log("[telegram-backup] page_blocked %s" % obj["key"])
         else:
             log("[telegram-backup] original_unavailable %s" % obj["key"])
-    if not fetched:
+    if not fetched and cdn_fallback_ok(role, str(obj.get("source_url") or "")):
         fetched = fetch_allowed(str(obj.get("source_url") or ""), src)
     if not fetched:
         src.unlink(missing_ok=True)
-        log("[telegram-backup] skipped_cdn %s" % obj["key"])
+        if role != "video":
+            log("[telegram-backup] skipped_cdn %s" % obj["key"])
         return "skip"
     obj["size"] = int(fetched["size"])
     obj["content_type"] = fetched["content_type"]
@@ -2320,6 +2370,7 @@ def backup(loop_only: bool = False) -> int:
             state.get("tiktok_bytes") or 0,
         ))
         log(upload_summary(state))
+        log_d1_newest(cf)
         if loop_only:
             log("[telegram-backup] loop mirror stored %s segments, largest %s bytes" % (state.get("loop_segments") or 0, state.get("loop_max") or 0))
         return 0
@@ -2465,7 +2516,16 @@ def selftest() -> int:
     check("wrangler secret put TELEGRAM_BOT_TOKEN" in secret_workflow and "printf '%s'" in secret_workflow, "the Worker secret is copied from stdin")
     check('echo "$TELEGRAM' not in secret_workflow and "echo ${{ secrets" not in secret_workflow, "the Worker secret workflow does not print secrets")
     check(".github/telegram-worker-secret" in secret_workflow and ".github/telegram-worker-secret" in doc, "pushing the marker copies the Worker secret")
-    check('cron: "17 11 * * *"' in workflow and "workflow_dispatch" in workflow and "actions/cache@v4" in workflow and "--local" in workflow, "the workflow is scheduled, manual, cached, and can start the local server")
+    check('cron: "17 11 * * *"' in workflow and 'cron: "*/30 * * * *"' in workflow and "workflow_dispatch" in workflow and "actions/cache@v4" in workflow and "--local" in workflow, "the workflow is scheduled, manual, cached, and can start the local server")
+    check("cancel-in-progress: false" in workflow, "an upload that is already running is not cancelled")
+    sync_workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    check("telegram-backup.yml" in sync_workflow and "media-extract.yml" in sync_workflow and "loop_only" in sync_workflow, "a finished sync dispatches the backup and the extract")
+    check(cdn_fallback_ok("video", "https://video.twimg.com/a.mp4") is False, "a video does not fall back to a CDN rendition")
+    check(cdn_fallback_ok("photo", "https://pbs.twimg.com/media/a.jpg?name=orig") is True, "a full-size photo may use the original CDN file")
+    check(cdn_fallback_ok("photo", "https://pbs.twimg.com/media/a.jpg?name=small") is False, "a resized photo is not the original")
+    check(cdn_fallback_ok("thumb", "https://i.ytimg.com/vi/x/hqdefault.jpg") is True, "a thumbnail still uses its CDN file")
+    summary = upload_summary({"files": 2, "bytes": 9, "kinds": {"small": 2}, "kind_bytes": {"small": 9}, "newest": 1761157560})
+    check(summary.startswith("[telegram-backup] uploaded 2 files, 9 bytes") and "newest " in summary, "the summary names the newest sendDocument time")
     check('echo "$TELEGRAM' not in workflow and "echo ${{ secrets" not in workflow, "the workflow does not print secrets")
     check('path.startsWith("/tg/")' in worker and "TELEGRAM_BOT_TOKEN" in worker and "not_configured" in worker, "the Worker serves /tg and returns 503 without its secret")
     check("function telegramSecretKey(" in worker and "function ownerOnlyMedia(" in worker and "function hiddenAvatar(" in worker, "the Worker keeps keys, hidden avatars, and owner-only Shorts off anonymous playback")

@@ -461,6 +461,60 @@ def run_tool(cmd: list, timeout: int) -> tuple:
     return code, out, err
 
 
+def photos_allowed(video_status: str) -> bool:
+    """A blocked video does not skip photos. The next run retries the video."""
+    del video_status
+    return True
+
+
+def catalog_queue(items: list) -> list:
+    """Newest synced posts first. A Telegram channel is not extracted."""
+    rows = [item for item in items if str((item or {}).get("platform") or "") not in {"telegram", "rss"}]
+    rows.sort(key=lambda item: str((item or {}).get("posted") or ""), reverse=True)
+    return rows
+
+
+def store_catalog(cf, manifest, state, directory, links, limit, stored, pause) -> int:
+    """Upload public originals for posts the sync already stored. Blocked items are retried later."""
+    present = set()
+    for row in (manifest.get("files") or []):
+        if isinstance(row, dict) and row.get("key"):
+            present.add(row["key"])
+    for row in links or []:
+        if isinstance(row, dict) and row.get("key"):
+            present.add(row["key"])
+    docs = tb.social_catalogs(cf, directory, tb.bucket_names(cf["token"], cf["account"]))
+    items = catalog_queue(tb.plan_social(docs, present))
+    log("[media-extract] catalog %s pending" % len(items))
+    attempted = False
+    for item in items:
+        if stored >= limit:
+            log("[media-extract] reached the run cap")
+            return stored
+        prior = tb.find_entry(manifest, item.get("bucket") or "cdn", item.get("key") or "")
+        if prior and prior.get("verified") and (prior.get("parts") or []):
+            continue
+        if attempted and pause:
+            time.sleep(pause)
+        attempted = True
+        before = int(state.get("files") or 0)
+        result = tb.process_cdn(item, manifest, cf, state, directory)
+        if result == "stop":
+            log("[media-extract] reached the run cap")
+            return limit
+        if result == "ok" and int(state.get("files") or 0) > before:
+            stored += 1
+            links.append({
+                "key": item.get("key") or "",
+                "platform": item.get("platform") or "",
+                "handle": "",
+                "id": "",
+                "stats": item.get("info") or {},
+            })
+            log("[media-extract] linked %s" % item.get("key"))
+    return stored
+
+
 def extract() -> int:
     config_path = ROOT / "feeds.config.json"
     try:
@@ -505,7 +559,7 @@ def extract() -> int:
         each = per_account()
         pause = pace_seconds()
         visited = 0
-        stored = 0
+        stored = store_catalog(cf, manifest, state, directory, links, limit, 0, pause)
         for offset, account in enumerate(rotate(accounts, start)):
             if stored >= limit:
                 break
@@ -524,11 +578,9 @@ def extract() -> int:
                 _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for(account["platform"]), room), 600)
                 text = out + "\n" + err
                 status = "blocked" if tb.runner_blocked(text) else "ok"
-            if status == "blocked":
+            videos_blocked = status == "blocked"
+            if videos_blocked:
                 log("[media-extract] skipped_blocked %s/%s" % (account["platform"], account["handle"]))
-                shutil.rmtree(work, ignore_errors=True)
-                put_text(cf, bucket, ARCHIVE_KEY, text_file(archive))
-                continue
             present = set()
             for row in (manifest.get("files") or []):
                 if isinstance(row, dict) and row.get("key"):
@@ -536,32 +588,34 @@ def extract() -> int:
             for row in links:
                 if row.get("key"):
                     present.add(row["key"])
-            for item in video_posts(work, account, catalog):
-                if stored >= limit:
-                    break
-                candidates = tb.social_key_candidates(item["post"], "video", 0)
-                if any(key in present for key in candidates):
-                    log("[media-extract] already stored %s/%s" % (account["platform"], account["handle"]))
-                    continue
-                item["key"] = candidates[0] if candidates else item["key"]
-                result = publish_file(item["video"], item["key"], "video", item["stats"], cf, manifest, state, directory)
-                if result == "stop":
-                    log("[media-extract] reached the run cap")
-                    stored = limit
-                    break
-                if result == "ok":
-                    stored += 1
-                    links.append({"key": item["key"], "platform": account["platform"], "handle": account["handle"], "id": item["post"].get("statusId") or "", "probe": tb.probe_saved(item["video"]), "stats": item["stats"]})
-                    log("[media-extract] linked %s" % item["key"])
-                if item["thumb"] and result == "ok":
-                    role = "poster" if account["platform"] == "tiktok" else "thumb"
-                    thumb_keys = tb.social_key_candidates(item["post"], role, 0)
-                    if not any(key in present for key in thumb_keys):
-                        thumb_key = thumb_keys[0] if thumb_keys else tb.social_object_key(item["post"], role, 0)
-                        publish_file(item["thumb"], thumb_key, role, item["stats"], cf, manifest, state, directory)
+            gained = stored
+            if not videos_blocked:
+                for item in video_posts(work, account, catalog):
+                    if stored >= limit:
+                        break
+                    candidates = tb.social_key_candidates(item["post"], "video", 0)
+                    if any(key in present for key in candidates):
+                        log("[media-extract] already stored %s/%s" % (account["platform"], account["handle"]))
+                        continue
+                    item["key"] = candidates[0] if candidates else item["key"]
+                    result = publish_file(item["video"], item["key"], "video", item["stats"], cf, manifest, state, directory)
+                    if result == "stop":
+                        log("[media-extract] reached the run cap")
+                        stored = limit
+                        break
+                    if result == "ok":
+                        stored += 1
+                        links.append({"key": item["key"], "platform": account["platform"], "handle": account["handle"], "id": item["post"].get("statusId") or "", "probe": tb.probe_saved(item["video"]), "stats": item["stats"]})
+                        log("[media-extract] linked %s" % item["key"])
+                    if item["thumb"] and result == "ok":
+                        role = "poster" if account["platform"] == "tiktok" else "thumb"
+                        thumb_keys = tb.social_key_candidates(item["post"], role, 0)
+                        if not any(key in present for key in thumb_keys):
+                            thumb_key = thumb_keys[0] if thumb_keys else tb.social_object_key(item["post"], role, 0)
+                            publish_file(item["thumb"], thumb_key, role, item["stats"], cf, manifest, state, directory)
             photo_dir = work / "photos"
             photo_dir.mkdir(parents=True)
-            if account["platform"] != "youtube" and stored < limit:
+            if photos_allowed(status) and account["platform"] != "youtube" and stored < limit:
                 _code, out, err = run_tool(gallery + photo_args(account["url"], photo_dir, photos, min(each, limit - stored)), 300)
                 if tb.runner_blocked(out + "\n" + err):
                     log("[media-extract] skipped_blocked %s/%s" % (account["platform"], account["handle"]))
@@ -582,6 +636,8 @@ def extract() -> int:
                             stored += 1
                             links.append({"key": item["key"], "platform": account["platform"], "handle": account["handle"], "id": item["post"].get("statusId") or "", "stats": item["stats"]})
                             log("[media-extract] linked %s" % item["key"])
+            if stored == gained and not videos_blocked:
+                log("[media-extract] no file %s/%s" % (account["platform"], account["handle"]))
             shutil.rmtree(work, ignore_errors=True)
             put_text(cf, bucket, ARCHIVE_KEY, text_file(archive))
             put_file(cf, bucket, GALLERY_KEY, photos)
@@ -594,6 +650,7 @@ def extract() -> int:
         put_text(cf, bucket, CURSOR_KEY, str((start + visited) % max(len(accounts), 1)))
         log("[media-extract] stored %s files, visited %s added accounts" % (stored, visited))
         log(tb.upload_summary(state))
+        tb.log_d1_newest(cf)
         return 0
     except Exception as err:
         log("[media-extract] extract failed")
@@ -648,7 +705,16 @@ def selftest() -> int:
     check(cap_of() >= 1 and per_account() >= 1 and pace_seconds() >= 3, "the run has a cap and a pause")
     check(tb.runner_blocked("HTTP Error 403: Forbidden") and tb.runner_blocked("captcha") and not tb.runner_blocked("private account"), "a 403 or captcha is a skip")
     workflow = (ROOT / ".github" / "workflows" / "media-extract.yml").read_text(encoding="utf-8")
-    check('cron: "17 */3 * * *"' in workflow and "workflow_dispatch" in workflow and "yt-dlp==2026.10.21" in workflow and "gallery-dl==1.32.17" in workflow, "the workflow is scheduled every 3 hours and pins the tools")
+    check('cron: "17 */3 * * *"' in workflow and 'cron: "*/30 * * * *"' in workflow and "workflow_dispatch" in workflow and "yt-dlp==2026.10.21" in workflow and "gallery-dl==1.32.17" in workflow, "the workflow is scheduled every 3 hours and pins the tools")
+    check("cancel-in-progress: false" in workflow, "an upload that is already running is not cancelled")
+    check(photos_allowed("blocked") is True, "a blocked video does not skip photos")
+    queued = catalog_queue([
+        {"platform": "x", "posted": "2026-10-22T16:00:00Z", "key": "old"},
+        {"platform": "telegram", "posted": "2026-10-22T23:00:00Z", "key": "tg"},
+        {"platform": "x", "posted": "2026-10-22T22:54:26.000Z", "key": "new"},
+        {"platform": "tiktok", "posted": "2026-10-22T18:00:00Z", "key": "tt"},
+    ])
+    check([row["key"] for row in queued] == ["new", "tt", "old"], "newest synced posts are first and a Telegram channel is not extracted")
     check('echo "$TELEGRAM' not in workflow and "IG_SESSION" not in workflow and "--cookies" not in workflow and "COOKIES" not in workflow, "the workflow does not print secrets or pass cookies")
     doc = (ROOT / "docs" / "telegram-backup.md").read_text(encoding="utf-8")
     check("archive.txt" in doc and "user_id" in doc and "sec_uid" in doc and "17 */3 * * *" in doc, "the docs describe the archive, the catalog, and the schedule")

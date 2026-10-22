@@ -732,6 +732,19 @@ def upload_owner(path: Path) -> None:
         print("[tiktok] live status upload failed")
 
 
+def publish_live_catalogs(feeds: Path, owner: Path) -> None:
+    """Put the synced feeds where media extract reads them. Values are not printed."""
+    token, account = cloudflare_env()
+    if not token or not account:
+        return
+    ok = True
+    if feeds.is_file():
+        ok = r2_put("feeds.json", feeds.read_bytes()) and ok
+    if owner.is_file():
+        ok = r2_put("owner/tiktok.json", owner.read_bytes()) and ok
+    print("[tiktok] catalogs stored" if ok else "[tiktok] catalog upload failed")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     live_only = "--live-only" in args
@@ -775,6 +788,9 @@ def main(argv: list[str] | None = None) -> int:
         upload_owner(owner_path)
     except Exception:
         print("[tiktok] " + BLOCKED)
+    finally:
+        if not live_only:
+            publish_live_catalogs(ROOT / "feeds.json", owner_path)
     return 0
 
 

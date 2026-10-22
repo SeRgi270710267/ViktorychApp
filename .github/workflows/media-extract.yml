@@ -10,7 +10,15 @@ on:
   schedule:
     # Minute 17 of every third hour. GitHub may delay a slot.
     - cron: "17 */3 * * *"
+    # Sync feeds also dispatches this workflow. This cron is the fallback
+    # when that dispatch is missed. GitHub may delay or drop a slot.
+    - cron: "*/30 * * * *"
   workflow_dispatch:
+    inputs:
+      cap:
+        description: Max new files this run
+        required: false
+        default: "8"
   pull_request:
   push:
     branches:
@@ -23,8 +31,11 @@ on:
 permissions:
   contents: read
 
+# A pull request only runs the self-test. It must not replace a queued upload.
+# cancel-in-progress is false so the running upload finishes; a newer waiting
+# run takes the single queue slot.
 concurrency:
-  group: media-extract
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && 'test' || 'upload' }}
   cancel-in-progress: false
 
 jobs:
@@ -106,7 +117,7 @@ jobs:
           TG_WORKER_URL: ${{ vars.TG_WORKER_URL }}
           TG_MAX_MB: ${{ vars.TG_MAX_MB }}
           TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
-          MEDIA_EXTRACT_CAP: "8"
+          MEDIA_EXTRACT_CAP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cap || '8' }}
           MEDIA_EXTRACT_PER: "2"
           MEDIA_EXTRACT_PACE: "8"
           PYTHONUNBUFFERED: "1"
