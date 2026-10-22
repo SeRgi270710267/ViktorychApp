@@ -135,11 +135,23 @@ def read_gate(site: Path) -> dict:
     return {"api": api, "gate": "gate: true" in text, "turnstileSiteKey": turnstile}
 
 
+def read_audience(site: Path) -> str:
+    path = site / "accounts.config.js"
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    found = re.search(r'tiktokAudience:\s*"([^"]*)"', text)
+    if found and found.group(1) in ("owner", "all"):
+        return found.group(1)
+    return "owner"
+
+
 def lock_shell(site: Path, api: str, turnstile: str) -> None:
     config = site / "accounts.config.js"
     config.write_text(
         "window.VIKTORYCH_ACCOUNTS = "
-        + json.dumps({"api": api, "gate": True, "turnstileSiteKey": turnstile}, ensure_ascii=True)
+        + json.dumps(
+            {"api": api, "gate": True, "turnstileSiteKey": turnstile, "tiktokAudience": read_audience(site)},
+            ensure_ascii=True,
+        )
         + ";\n",
         encoding="utf-8",
     )
@@ -179,6 +191,12 @@ def strip(site: Path) -> None:
     card = site / "icons" / "og-card.png"
     if card.is_file():
         card.unlink()
+    leaked = site / "owner" / "tiktok.json"
+    if leaked.is_file():
+        leaked.unlink()
+    owner_dir = site / "owner"
+    if owner_dir.is_dir() and not any(owner_dir.iterdir()):
+        owner_dir.rmdir()
 
 
 def mark_wall() -> None:
@@ -209,6 +227,9 @@ def publish(site: Path, source: Path) -> int:
     try:
         for key in sorted(files):
             upload(key, files[key].read_bytes())
+        owner = source / "owner" / "tiktok.json"
+        if owner.is_file():
+            upload("owner/tiktok.json", owner.read_bytes())
     except (urllib.error.URLError, TimeoutError, OSError):
         print("data upload failed; publishing the public site.")
         return 0

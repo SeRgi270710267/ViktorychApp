@@ -728,5 +728,10 @@ SI18n.addPack("ru", {
   "Could not save that photo.": "Не удалось сохранить фото.",
   "Something went wrong. Try again.": "Что-то пошло не так. Попробуйте ещё раз.",
   "© {year} {app}": "© {year} г. {app}",
-  "Keep this file private. This number is the only way back into the account.": "Храните этот файл в тайне. Только этот номер открывает аккаунт."
+  "Keep this file private. This number is the only way back into the account.": "Храните этот файл в тайне. Только этот номер открывает аккаунт.",
+  "Live": "Эфир",
+  "Open on TikTok": "Открыть в TikTok",
+  "Not live right now": "Сейчас не в эфире",
+  "Last live {time}": "Последний эфир {time}",
+  "{count} watching": "{count} смотрят"
 });

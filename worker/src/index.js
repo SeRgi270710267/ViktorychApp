@@ -1,4 +1,5 @@
 import { OWNER_HANDLE, inspectHandle } from "../../shared/handle-skeleton.js";
+import { parseRoomId, pickStreams } from "../../shared/tiktok-live.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -440,11 +441,15 @@ function dataKey(pathname) {
   return DATA_KEY.test(key) ? key : "";
 }
 
-function ownerOnlyItem(item) {
+function tiktokPublic(env) {
+  return String((env && env.TIKTOK_AUDIENCE) || "owner") === "all";
+}
+
+function ownerOnlyItem(item, env) {
   if (!item || typeof item !== "object" || Array.isArray(item)) return false;
   if (item.ownerOnly === true) return true;
   const platform = String(item.platform || "").toLowerCase();
-  if (platform === "tiktok") return true;
+  if (platform === "tiktok" && !tiktokPublic(env)) return true;
   const kind = String(item.kind || item.type || "").toLowerCase();
   if (kind === "short" || kind === "shorts") return true;
   if (item.short === true || item.isShort === true) return true;
@@ -452,19 +457,19 @@ function ownerOnlyItem(item) {
   return /\/shorts\//i.test(blob);
 }
 
-function stripOwnerOnly(value) {
+function stripOwnerOnly(value, env) {
   if (Array.isArray(value)) {
     const out = [];
     for (let i = 0; i < value.length; i++) {
       const item = value[i];
-      if (item && typeof item === "object" && !Array.isArray(item) && ownerOnlyItem(item)) continue;
-      out.push(stripOwnerOnly(item));
+      if (item && typeof item === "object" && !Array.isArray(item) && ownerOnlyItem(item, env)) continue;
+      out.push(stripOwnerOnly(item, env));
     }
     return out;
   }
   if (value && typeof value === "object") {
     const out = {};
-    Object.keys(value).forEach((key) => { out[key] = stripOwnerOnly(value[key]); });
+    Object.keys(value).forEach((key) => { out[key] = stripOwnerOnly(value[key], env); });
     return out;
   }
   return value;
@@ -485,7 +490,175 @@ async function handleData(request, env, pathname) {
   let parsed = null;
   try { parsed = JSON.parse(text); }
   catch (err) { return json(502, { error: "bad_json" }); }
-  return json(200, stripOwnerOnly(parsed));
+  return json(200, stripOwnerOnly(parsed, env));
+}
+
+const TIKTOK_HANDLE = /^[A-Za-z0-9._]{2,24}$/;
+const MEDIA_HOST = /(?:^|\.)(?:tiktokcdn(?:-us|-eu)?\.com|tiktokv\.com|bytefcdn(?:-oversea)?\.com|muscdn\.com|tiktok\.com|ibytedtos\.com|ibyteimg\.com)$/i;
+
+function mediaHostOk(hostname) {
+  return MEDIA_HOST.test(String(hostname || ""));
+}
+
+async function requireTiktok(request, env) {
+  const row = await sessionAccount(env, request);
+  if (!row) return { error: json(401, { error: "unauthorized" }) };
+  if (!tiktokPublic(env) && row.owner !== 1) return { error: json(403, { error: "forbidden" }) };
+  return { row };
+}
+
+async function readOwnerDoc(env) {
+  if (!env.DATA) return null;
+  const object = await env.DATA.get("owner/tiktok.json");
+  if (!object) return null;
+  try { return JSON.parse(await object.text()); }
+  catch (err) { return null; }
+}
+
+async function handleOwnerTiktok(request, env) {
+  const gate = await requireTiktok(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const object = await env.DATA.get("owner/tiktok.json");
+  if (!object) return json(404, { error: "not_found" });
+  return new Response(await object.text(), {
+    status: 200,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "private, no-store", "x-content-type-options": "nosniff" }
+  });
+}
+
+async function fetchPublic(url) {
+  const res = await fetch(url, {
+    headers: { "user-agent": "Mozilla/5.0", "accept": "text/html,application/json" },
+    redirect: "follow"
+  });
+  return { status: res.status, text: await res.text() };
+}
+
+function stamp() {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+async function rememberLive(env, handle, info) {
+  if (!env.DATA || !info) return;
+  try {
+    const doc = await readOwnerDoc(env);
+    if (!doc || typeof doc !== "object") return;
+    if (!doc.live || typeof doc.live !== "object") doc.live = {};
+    const prev = doc.live[handle] && typeof doc.live[handle] === "object" ? doc.live[handle] : {};
+    const when = stamp();
+    doc.live[handle] = {
+      handle,
+      live: !!info.live,
+      viewers: info.live ? (info.viewers || 0) : 0,
+      title: info.live ? (info.title || "") : "",
+      roomId: info.roomId || prev.roomId || "",
+      lastLiveAt: info.live ? when : (info.lastLiveAt || prev.lastLiveAt || ""),
+      checkedAt: when,
+      detail: info.detail || ""
+    };
+    await env.DATA.put("owner/tiktok.json", JSON.stringify(doc));
+  } catch (err) { /* the player still gets this response */ }
+}
+
+async function handleOwnerLive(request, env, rawHandle) {
+  const gate = await requireTiktok(request, env);
+  if (gate.error) return gate.error;
+  let handle = rawHandle;
+  try { handle = decodeURIComponent(rawHandle); } catch (err) { /* keep the raw segment */ }
+  if (!TIKTOK_HANDLE.test(handle)) return json(400, { error: "bad_handle" });
+  const stored = await readOwnerDoc(env);
+  const prev = stored && stored.live && stored.live[handle] ? stored.live[handle] : {};
+  const livePage = await fetchPublic("https://www.tiktok.com/@" + handle + "/live");
+  if (livePage.status === 403 || livePage.status === 429 || livePage.status === 503) {
+    return json(200, { handle, live: !!prev.live, blocked: true, detail: "TikTok blocked the runner", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "" });
+  }
+  let roomId = parseRoomId(livePage.text);
+  if (!roomId) {
+    const profile = await fetchPublic("https://www.tiktok.com/@" + handle);
+    if (profile.status === 403 || profile.status === 429 || profile.status === 503) {
+      return json(200, { handle, live: !!prev.live, blocked: true, detail: "TikTok blocked the runner", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "" });
+    }
+    roomId = parseRoomId(profile.text);
+  }
+  if (!roomId) {
+    const info = { live: false, roomId: "", viewers: 0, title: "", detail: "TikTok did not include a room id", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "" };
+    await rememberLive(env, handle, info);
+    return json(200, Object.assign({ handle, blocked: false }, info));
+  }
+  const room = await fetchPublic("https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=" + encodeURIComponent(roomId));
+  if (room.status === 403 || room.status === 429 || room.status === 503) {
+    return json(200, { handle, live: !!prev.live, blocked: true, roomId, detail: "TikTok blocked the runner", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "" });
+  }
+  let parsed = {};
+  try { parsed = JSON.parse(room.text); } catch (err) { parsed = {}; }
+  const picked = pickStreams(parsed);
+  const info = {
+    live: !!picked.live,
+    viewers: picked.viewers || 0,
+    title: picked.title || "",
+    roomId,
+    quality: picked.quality || "",
+    hls: picked.hls || "",
+    flv: picked.flv || "",
+    lastLiveAt: picked.live ? stamp() : (prev.lastLiveAt || ""),
+    detail: ""
+  };
+  await rememberLive(env, handle, info);
+  return json(200, Object.assign({ handle, blocked: false }, info));
+}
+
+function rewritePlaylist(text, base, request) {
+  const origin = new URL(request.url).origin;
+  const proxied = (value) => {
+    try {
+      const abs = new URL(value, base).toString();
+      return origin + "/v1/owner/media?url=" + encodeURIComponent(abs);
+    } catch (err) { return value; }
+  };
+  return String(text || "").split("\n").map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+    if (trimmed.charAt(0) === "#") return line.replace(/URI="([^"]+)"/g, (all, uri) => 'URI="' + proxied(uri) + '"');
+    return proxied(trimmed);
+  }).join("\n");
+}
+
+async function handleOwnerMedia(request, env, url) {
+  const gate = await requireTiktok(request, env);
+  if (gate.error) return gate.error;
+  const target = url.searchParams.get("url") || "";
+  let parsed = null;
+  try { parsed = new URL(target); } catch (err) { parsed = null; }
+  if (!parsed || parsed.protocol !== "https:" || parsed.username || parsed.password || !mediaHostOk(parsed.hostname)) {
+    return json(400, { error: "bad_url" });
+  }
+  const upstream = await fetch(parsed.toString(), {
+    headers: { "user-agent": "Mozilla/5.0", "accept": "*/*" },
+    redirect: "follow"
+  });
+  let finalHost = "";
+  try { finalHost = new URL(upstream.url).hostname; } catch (err) { finalHost = ""; }
+  if (!mediaHostOk(finalHost)) return json(400, { error: "bad_url" });
+  const length = Number(upstream.headers.get("content-length") || 0);
+  if (length > 8000000) return json(413, { error: "too_large" });
+  const bytes = await upstream.arrayBuffer();
+  if (bytes.byteLength > 8000000) return json(413, { error: "too_large" });
+  const type = upstream.headers.get("content-type") || "application/octet-stream";
+  const asText = parsed.pathname.endsWith(".m3u8") || /mpegurl|m3u8/i.test(type);
+  if (asText) {
+    const text = new TextDecoder().decode(bytes);
+    if (text.indexOf("#EXTM3U") >= 0) {
+      return new Response(rewritePlaylist(text, upstream.url || parsed.toString(), request), {
+        status: upstream.status,
+        headers: { "content-type": "application/vnd.apple.mpegurl", "cache-control": "no-store" }
+      });
+    }
+  }
+  return new Response(bytes, {
+    status: upstream.status,
+    headers: { "content-type": type, "cache-control": "no-store" }
+  });
 }
 
 async function handleHandle(env, url) {
@@ -506,6 +679,10 @@ async function route(request, env) {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET });
   }
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path);
+  if (path === "/v1/owner/tiktok" && request.method === "GET") return handleOwnerTiktok(request, env);
+  if (path === "/v1/owner/media" && request.method === "GET") return handleOwnerMedia(request, env, url);
+  const ownerLive = path.match(/^\/v1\/owner\/live\/([^/]+)$/);
+  if (ownerLive && request.method === "GET") return handleOwnerLive(request, env, ownerLive[1]);
   if (path === "/v1/signup" && request.method === "POST") return handleSignup(request, env);
   if (path === "/v1/login" && request.method === "POST") return handleLogin(request, env);
   if (path === "/v1/logout" && request.method === "POST") return handleLogout(request, env, false);

@@ -6,6 +6,9 @@ workers_dev = true
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io"
 PBKDF2_ITERATIONS = "8000"
+# One flag. "owner" hides TikTok and Shorts except for the owner account.
+# "all" shows them to everyone. Keep this in step with accounts.config.js.
+TIKTOK_AUDIENCE = "owner"
 
 [[d1_databases]]
 binding = "DB"

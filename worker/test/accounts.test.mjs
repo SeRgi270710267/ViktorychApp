@@ -267,3 +267,67 @@ test("a worker without a pepper is not ready", async () => {
     await bare.dispose();
   }
 });
+
+test("owner tiktok data requires the owner session", async () => {
+  await bindings.DATA.put("owner/tiktok.json", JSON.stringify({ posts: [{ id: "tiktok:1", text: "secret-clip" }], live: {} }));
+  const anon = await call("/v1/owner/tiktok", { ip: "203.0.113.91" });
+  assert.equal(anon.status, 401);
+  const reader = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.92",
+    body: { displayName: "Bea", handle: "bea_t" }
+  });
+  assert.equal(reader.status, 201);
+  const hidden = await call("/v1/owner/tiktok", { ip: "203.0.113.93", token: reader.body.token });
+  assert.equal(hidden.status, 403);
+  const liveHidden = await call("/v1/owner/live/gabii_g5", { ip: "203.0.113.94", token: reader.body.token });
+  assert.equal(liveHidden.status, 403);
+  const mediaAnon = await call("/v1/owner/media?url=https://v16.tiktokcdn.com/a.m3u8", { ip: "203.0.113.95" });
+  assert.equal(mediaAnon.status, 401);
+
+  const minted = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.96",
+    body: { displayName: "Owner session", handle: "own96" }
+  });
+  assert.equal(minted.status, 201);
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(minted.body.token));
+  const hex = [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  const listed = await bindings.DB.prepare("SELECT public_id FROM accounts WHERE owner = 1").first();
+  await bindings.DB.prepare("UPDATE sessions SET public_id = ? WHERE token_hash = ?").bind(listed.public_id, hex).run();
+  const seen = await call("/v1/owner/tiktok", { ip: "203.0.113.97", token: minted.body.token });
+  assert.equal(seen.status, 200);
+  assert.equal(seen.body.posts[0].text, "secret-clip");
+  const bad = await call("/v1/owner/media?url=https://example.com/a.m3u8", { ip: "203.0.113.98", token: minted.body.token });
+  assert.equal(bad.status, 400);
+  const userinfo = await call("/v1/owner/media?url=https://user:pass@v16.tiktokcdn.com/a.m3u8", { ip: "203.0.113.99", token: minted.body.token });
+  assert.equal(userinfo.status, 400);
+});
+
+test("audience all keeps tiktok posts and still hides youtube shorts", async () => {
+  const open = new Miniflare(workerOptions({ TIKTOK_AUDIENCE: "all" }));
+  try {
+    const data = await open.getBindings();
+    await data.DATA.put("feeds.json", JSON.stringify({
+      posts: [
+        { id: "1", platform: "x", text: "public" },
+        { id: "2", platform: "tiktok", text: "clip" },
+        { id: "3", platform: "youtube", url: "https://www.youtube.com/shorts/abc", text: "short" }
+      ]
+    }));
+    const created = await open.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "content-type": "application/json", "CF-Connecting-IP": "203.0.113.110" },
+      body: JSON.stringify({ displayName: "All", handle: "all_u" })
+    });
+    const body = await created.json();
+    assert.equal(created.status, 201);
+    const res = await open.dispatchFetch("https://accounts.test/v1/data/feeds.json", {
+      headers: { Authorization: "Bearer " + body.token, "CF-Connecting-IP": "203.0.113.111" }
+    });
+    const seen = await res.json();
+    assert.deepEqual(seen.posts.map((post) => post.id), ["1", "2"]);
+  } finally {
+    await open.dispose();
+  }
+});

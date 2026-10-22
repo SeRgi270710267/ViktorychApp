@@ -1,0 +1,35 @@
+name: TikTok live
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refresh live status
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "Cloudflare credentials are not set; skipping the live poll."
+            exit 0
+          fi
+          mkdir -p owner
+          code=$(curl -sS -o owner/tiktok.json -w "%{http_code}" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/r2/buckets/viktorych-data/objects/owner/tiktok.json" || echo 000)
+          if [ "$code" != "200" ]; then
+            echo "owner TikTok data is not uploaded yet; skipping."
+            rm -f owner/tiktok.json
+            exit 0
+          fi
+          python3 scripts/tiktok_sync.py --live-only

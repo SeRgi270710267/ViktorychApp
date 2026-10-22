@@ -27,6 +27,8 @@ SITE_FILES = (
     "accounts.js",
     "accounts.css",
     "accounts.config.js",
+    "shorts.js",
+    "shorts.css",
     "marks.js",
     "app.js",
     "styles.css",

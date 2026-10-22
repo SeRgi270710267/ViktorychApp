@@ -248,6 +248,8 @@ jobs:
                   print("::add-mask::" + match.group(1), flush=True)
           PY
           python3 scripts/update_feeds.py
+          python3 -m pip install --disable-pip-version-check -q yt-dlp
+          python3 scripts/tiktok_sync.py
 
       - name: Upload feeds.config.json
         uses: actions/upload-artifact@v4
@@ -269,7 +271,7 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html app.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js accounts.css accounts.config.js hls-1.7.3.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html app.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js accounts.css accounts.config.js shorts.js shorts.css hls-1.7.3.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
           mkdir -p _site/shared
           cp shared/handle-skeleton.js _site/shared/
           mkdir -p _site/i18n

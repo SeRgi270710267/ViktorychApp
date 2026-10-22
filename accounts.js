@@ -781,6 +781,14 @@
     drawerHead: drawerHead,
     settingsHtml: settingsHtml,
     onLocalChange: onLocalChange,
-    requestRender: null
+    requestRender: null,
+    account: function () {
+      var session = readSession();
+      return session && session.account ? session.account : null;
+    },
+    token: function () {
+      var session = readSession();
+      return session && session.token ? session.token : "";
+    }
   };
 })();

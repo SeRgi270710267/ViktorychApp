@@ -61,7 +61,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok" };
 
   const PATH = {
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
@@ -70,6 +70,8 @@
     bell: "M19.993 9.042C19.48 5.017 16.054 2 11.996 2s-7.49 3.021-7.999 7.051L2.866 18H7.1c.463 2.282 2.481 4 4.9 4s4.437-1.718 4.9-4h4.236l-1.143-8.958zM12 20c-1.306 0-2.417-.835-2.829-2h5.658c-.412 1.165-1.523 2-2.829 2zm-6.866-4l.847-6.698C6.364 6.272 8.941 4 11.996 4s5.627 2.268 6.013 5.295L18.864 16H5.134z",
     bellOn: "M19.993 9.042C19.48 5.017 16.054 2 11.996 2s-7.49 3.021-7.999 7.051L2.866 18H7.1c.463 2.282 2.481 4 4.9 4s4.437-1.718 4.9-4h4.236l-1.143-8.958z",
     video: "M4 6.5C4 5.12 5.12 4 6.5 4h8c1.38 0 2.5 1.12 2.5 2.5v11c0 1.38-1.12 2.5-2.5 2.5h-8C5.12 20 4 18.88 4 17.5v-11zM15.2 8.4l4.3-2.2v11.6l-4.3-2.2V8.4z",
+    shorts: "M8 2.5C8 1.12 9.12 0 10.5 0h3C14.88 0 16 1.12 16 2.5v19c0 1.38-1.12 2.5-2.5 2.5h-3C9.12 24 8 22.88 8 21.5v-19zM10.5 2c-.28 0-.5.22-.5.5v19c0 .28.22.5.5.5h3c.28 0 .5-.22.5-.5v-19c0-.28-.22-.5-.5-.5h-3z",
+    tiktok: "M14 3v10.55A4 4 0 1 1 12 10V6.2A6.2 6.2 0 0 0 16.2 8V5.4A3.6 3.6 0 0 1 14 3z",
     mail: "M1.998 5.5c0-1.381 1.119-2.5 2.5-2.5h15c1.381 0 2.5 1.119 2.5 2.5v13c0 1.381-1.119 2.5-2.5 2.5h-15c-1.381 0-2.5-1.119-2.5-2.5v-13zm2.5-.5c-.276 0-.5.224-.5.5v2.764l8 3.638 8-3.636V5.5c0-.276-.224-.5-.5-.5h-15zm15.5 5.463l-8 3.636-8-3.638V18.5c0 .276.224.5.5.5h15c.276 0 .5-.224.5-.5v-8.037z",
     spark: "M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z",
     lists: "M3 5.5C3 4.12 4.12 3 5.5 3h13C19.88 3 21 4.12 21 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-13zM5.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-13zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h7v2H7v-2z",
@@ -1190,7 +1192,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function sourceBadge(platform) {
     if (!platform || platform === "x") return "";
-    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : "rss";
+    const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : "rss";
     return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
   }
 
@@ -1202,6 +1204,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (feed.platform === "youtube") return "https://www.youtube.com/@" + feed.handle;
     if (feed.platform === "vk") return "https://vk.com/" + feed.handle;
     if (feed.platform === "telegram") return "https://t.me/" + feed.handle;
+    if (feed.platform === "tiktok") return "https://www.tiktok.com/@" + feed.handle + "/";
     return feed.url || "#";
   }
 
@@ -1482,6 +1485,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (platform === "x") return tr("Watch on X");
     if (platform === "vk") return tr("Watch on VK");
     if (platform === "telegram") return tr("Watch on Telegram");
+    if (platform === "tiktok") return tr("Open on TikTok");
     return tr("Open original");
   }
 
@@ -3220,7 +3224,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function playableFile(url) {
     const raw = String(url || "");
     if (/instagram\.com\/[^?\s]+\/media/i.test(raw)) return false;
-    return /\.(mp4|webm|mov|m3u8)(\?|$)/i.test(raw.split("?")[0]);
+    if (/\.(mp4|webm|mov|m3u8)(\?|$)/i.test(raw.split("?")[0])) return true;
+    try {
+      const host = new URL(raw).hostname;
+      if (/(?:^|\.)tiktokcdn(?:-us|-eu)?\.com$/i.test(host)) return true;
+      if (/(?:^|\.)(?:tiktokv|muscdn|bytefcdn|bytefcdn-oversea)\.com$/i.test(host)) return true;
+      if (/webapp[\w.-]*\.tiktok\.com$/i.test(host)) return true;
+    } catch (err) { /* not a URL */ }
+    return false;
   }
 
   function oePast(url) {
@@ -4976,6 +4987,7 @@ const here = parseRoute();
     if (parts[0] === "article" && parts[1]) return { name: "article", id: parts.slice(1).join("/"), query };
     if (parts[0] === "bookmarks" && parts.length === 1) return { name: "history", tab: "bookmarks", query };
     if (parts[0] === "music") return { name: "music", section: parts[1] || "home", id: parts.slice(2).join("/"), query };
+    if (parts[0] === "shorts") return { name: "shorts", live: parts[1] === "live", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
@@ -4986,7 +4998,7 @@ const here = parseRoute();
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
-    } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord", "telegram"].includes(parts[0])) {
+    } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord", "telegram", "tiktok"].includes(parts[0])) {
       platform = parts[0];
       handle = parts[1] || "";
       rest = parts.slice(2);
@@ -5037,6 +5049,7 @@ const here = parseRoute();
         ${navItem("#/lists", "lists", tr("Lists"), name === "lists" || name === "list")}
         ${navItem("#/history", "clock", tr("History"), name === "history")}
         ${navItem("#/music", "muNote", tr("Music"), false)}
+        ${window.ViktorychShorts && window.ViktorychShorts.visible() ? navItem("#/shorts", "shorts", tr("Shorts"), name === "shorts") : ""}
         ${navItem(subsHash(STATE.settings.subsGroup), "subs", tr("Subscriptions"), name === "subscriptions")}
         ${navItem("#/settings", "more", tr("More"), name === "settings")}`;
     const post = music
@@ -5095,6 +5108,7 @@ const here = parseRoute();
       ${item("#/feeds", "spark", tr("Feeds"), route.name === "feeds")}
       ${item("#/notifications", "bell", tr("Notifications"), route.name === "notifications")}
       ${item("#/messages", "mail", tr("Messages"), route.name === "messages")}
+      ${window.ViktorychShorts && window.ViktorychShorts.visible() ? item("#/shorts", "shorts", tr("Shorts"), route.name === "shorts") : ""}
     </nav>
     <button class="fab" data-act="compose" aria-label="${tr("Post")}">${icon("plus")}</button>`;
   }
@@ -6269,6 +6283,7 @@ const here = parseRoute();
     if (platform === "instagram") return tr("Open on Instagram");
     if (platform === "threads") return tr("Open on Threads");
     if (platform === "youtube") return tr("View on YouTube");
+    if (platform === "tiktok") return tr("Open on TikTok");
     if (platform === "x") return tr("View on X");
     return tr("View on {platform}", { platform: PLATFORM[platform] || tr("Web") });
   }
@@ -8232,7 +8247,8 @@ const here = parseRoute();
         sources: tr("Sources"),
         profile: tr("Profile"),
         person: tr("Profile"),
-        spaces: tr("Space")
+        spaces: tr("Space"),
+        shorts: tr("Shorts")
       };
       key = map[route.name] || "";
     }
@@ -8360,6 +8376,7 @@ const here = parseRoute();
       <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} ${tr("Subscriptions")}</a>
       <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
       <a href="#/music">${icon("muNote")} ${tr("Music")}</a>
+      ${window.ViktorychShorts && window.ViktorychShorts.visible() ? `<a href="#/shorts">${icon("shorts")} ${tr("Shorts")}</a>` : ""}
       <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>${tr("You")}</b><div class="phandle">@reader</div></div></div>`}
@@ -8496,18 +8513,42 @@ if (STATE.histClear) {
   }
 
   function shell(main, route) {
-    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages";
+    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts";
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const top = (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
+    const top = route.name === "shorts" ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
 
+  function toggleReaction(act, id) {
+    const bucket = act === "like" ? "likes" : act === "bookmark" ? "bookmarks" : "reposts";
+    if (!id || !STATE.settings || !STATE.settings[bucket]) return false;
+    if (STATE.settings[bucket][id]) {
+      delete STATE.settings[bucket][id];
+      if (act === "bookmark" && STATE.settings.savedPosts) delete STATE.settings.savedPosts[id];
+      if (act === "like") histRemove("likes", id);
+      if (act === "bookmark") histRemove("bookmarks", id);
+    } else {
+      STATE.settings[bucket][id] = Date.now();
+      const likedPost = findAnyPost(id);
+      if (act === "bookmark") {
+        rememberBookmark(id);
+        histUpsert("bookmarks", likedPost || findAnyPost(id), { id: id });
+        if (!navigator.onLine) toast(tr("Saved. Images download when you’re back online."));
+      }
+      if (act === "like") histUpsert("likes", likedPost, { id: id });
+    }
+    saveSettings();
+    if (parseRoute().name !== "shorts") render();
+    return !!STATE.settings[bucket][id];
+  }
+
   function watchHash(post) {
+    if (post && post.platform === "tiktok") return "#/shorts?v=" + encodeURIComponent(post.statusId || post.id || "");
     return "#/watch/" + (post.platform || "x") + ":" + (post.statusId || post.id);
   }
 
@@ -9548,6 +9589,7 @@ if (STATE.histClear) {
 
   function view(route) {
     if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
+    if (route.name === "shorts") return (window.ViktorychShorts && window.ViktorychShorts.visible() && window.ViktorychShorts.page(route)) || pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
@@ -9828,6 +9870,10 @@ if (STATE.histClear) {
       else if (STATE.holdY != null) y = STATE.holdY;
       else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
       document.getElementById("app").innerHTML = shell(view(route), route);
+      if (window.ViktorychShorts) {
+        if (route.name === "shorts") window.ViktorychShorts.mount(route);
+        else window.ViktorychShorts.unmount();
+      }
       if (route.name === "article" && STATE.scrollKey !== nextKey) {
         const saved = articleScroll(route.id);
         if (saved > 0.02) {
@@ -10183,25 +10229,7 @@ if (STATE.histClear) {
       return;
     }
     if (act === "like" || act === "bookmark" || act === "repost") {
-      const bucket = act === "like" ? "likes" : act === "bookmark" ? "bookmarks" : "reposts";
-      const id = el.dataset.id;
-      if (STATE.settings[bucket][id]) {
-        delete STATE.settings[bucket][id];
-        if (act === "bookmark" && STATE.settings.savedPosts) delete STATE.settings.savedPosts[id];
-        if (act === "like") histRemove("likes", id);
-        if (act === "bookmark") histRemove("bookmarks", id);
-      } else {
-        STATE.settings[bucket][id] = Date.now();
-        const likedPost = findAnyPost(id);
-        if (act === "bookmark") {
-          rememberBookmark(id);
-          histUpsert("bookmarks", likedPost || findAnyPost(id), { id: id });
-          if (!navigator.onLine) toast(tr("Saved. Images download when you’re back online."));
-        }
-        if (act === "like") histUpsert("likes", likedPost, { id: id });
-      }
-      saveSettings();
-      render();
+      toggleReaction(act, el.dataset.id);
       return;
     }
     if (act === "open-article") {
@@ -12068,6 +12096,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (apply || !STATE.data || (feedsChanged && !added.length)) {
         notePublished(doc);
         STATE.data = withMemory(doc);
+        if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
+        if (window.ViktorychShorts && window.ViktorychShorts.visible()) await window.ViktorychShorts.pull();
         STATE.error = null;
         STATE.pendingFeed = null;
         if (!(STATE.pendingLive || []).length) showPill([]);
@@ -12959,6 +12989,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (snap) {
       notePublished(snap);
       STATE.data = snap;
+      if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
       ensureVideoOwners();
@@ -12973,7 +13004,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const loaded = lockDocDates(await fetchFeeds(false));
       notePublished(loaded);
       STATE.data = loaded;
+      if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       saveTimelineSnap(STATE.data);
+      if (window.ViktorychShorts && window.ViktorychShorts.visible()) await window.ViktorychShorts.pull();
       ensureVideoOwners();
       applyIaPreview(STATE.data);
       STATE.settings = loadSettings();
@@ -13017,6 +13050,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
     } catch (err) {
       STATE.loading = false;
+      if (window.ViktorychShorts && window.ViktorychShorts.visible()) {
+        if (!STATE.data) STATE.data = { posts: [], feeds: [] };
+        try { await window.ViktorychShorts.pull(); } catch (ignore) { /* shorts keeps the last copy */ }
+      }
       if (STATE.data && Array.isArray(STATE.data.posts) && STATE.data.posts.length) {
         STATE.error = null;
         if (!navigator.onLine) setOffline(true);
@@ -13090,6 +13127,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       toast: toast,
       go: goHash,
       repo: function () { return GITHUB_REPO; }
+    });
+  }
+  if (window.ViktorychShorts && window.ViktorychShorts.bind) {
+    window.ViktorychShorts.bind({
+      icon: icon,
+      esc: esc,
+      avatar: avatar,
+      formatCount: formatCount,
+      fullTime: fullTime,
+      posts: posts,
+      data: function () { return STATE.data; },
+      settings: function () { return STATE.settings; },
+      save: saveSettings,
+      toggle: toggleReaction,
+      token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
+      productName: function () { return productName("app"); },
+      logo: function () { return markSvg("app", "logo-full") + markSvg("appShort", "logo-short"); }
     });
   }
   if (window.ViktorychAccounts) window.ViktorychAccounts.requestRender = function () { render(); };

@@ -728,5 +728,10 @@ SI18n.addPack("en", {
   "Could not save that photo.": "Could not save that photo.",
   "Something went wrong. Try again.": "Something went wrong. Try again.",
   "© {year} {app}": "© {year} {app}",
-  "Keep this file private. This number is the only way back into the account.": "Keep this file private. This number is the only way back into the account."
+  "Keep this file private. This number is the only way back into the account.": "Keep this file private. This number is the only way back into the account.",
+  "Live": "Live",
+  "Open on TikTok": "Open on TikTok",
+  "Not live right now": "Not live right now",
+  "Last live {time}": "Last live {time}",
+  "{count} watching": "{count} watching"
 });

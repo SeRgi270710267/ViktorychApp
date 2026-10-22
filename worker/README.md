@@ -62,6 +62,18 @@ npm run dev
 
 CORS allows `https://viktorychgroup.github.io`. The example file also allows `http://127.0.0.1:8080` and `http://localhost:8080` for local screenshots.
 
+## TikTok and Shorts
+
+`tiktokAudience` in `accounts.config.js` and `TIKTOK_AUDIENCE` in `wrangler.toml` are the same flag. `owner` (the default) shows TikTok posts and the Shorts page only to the signed-in owner, and only after the login wall is on. `all` stops stripping `platform: "tiktok"` and shows Shorts to everyone. YouTube Shorts stay owner-only either way.
+
+The sync writes `owner/tiktok.json` (gitignored). It is uploaded to the private R2 key `owner/tiktok.json` when `/v1/health` is ready, and it is not copied to Pages, the data branch, or the Internet Archive. `GET /v1/owner/tiktok` requires an owner session while the flag is `owner`.
+
+Live playback does not store signed stream URLs. `GET /v1/owner/live/:handle` reads the public room page, then `webcast/room/info`, and returns a fresh HLS URL (origin, then uhd, then hd). The browser plays that URL directly when CORS allows. Safari can use the video element. Chrome needs hls.js, and TikTok’s playlist usually sends `Access-Control-Allow-Origin: https://www.tiktok.com`, so direct XHR fails. The owner session then retries through `GET /v1/owner/media`, which passes the playlist and segments through without saving them. FLV-only rooms are not played; the page links out to TikTok.
+
+A proxied live refreshes the playlist about every two seconds and also requests each segment. That is on the order of 600 Worker requests per 10 minutes. The free tier is about 100,000 requests a day, so a few hours of one owner-only live fits and an all-day stream can use the day’s quota. The script time is the Worker CPU, not the time spent waiting on TikTok. VOD files are not proxied.
+
+If TikTok returns 403, 429, or 503, the sync and the live route keep the previous status and report that TikTok blocked the runner. There is no cookie, impersonation package, or captcha bypass. A missing room id is treated as offline.
+
 ## What stays reachable
 
 After the wall is on, these are still technically public:

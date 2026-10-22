@@ -1,6 +1,6 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a2-__SW_VERSION__";
+const VERSION = "viktorych-a3-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
@@ -64,6 +64,8 @@ const SHELL_FILES = [
   "./accounts.js",
   "./accounts.css",
   "./accounts.config.js",
+  "./shorts.js",
+  "./shorts.css",
   "./shared/handle-skeleton.js",
   "./hls-1.7.3.min.js",
   "./favicon.svg",
@@ -171,8 +173,12 @@ function isAppJson(url) {
   return /\/(?:feeds\.config|status)\.json$/.test(url.pathname) || /\/fallback\/[^/]+\.json$/.test(url.pathname);
 }
 
+function isOwnerTiktok(url) {
+  return url.origin === self.location.origin && /\/owner\/tiktok\.json$/.test(url.pathname);
+}
+
 function privateData(url) {
-  return isData(url) || isAppJson(url) || isMedia(url) || isLive(url) || isCommentApi(url) || isSpaceStatus(url) || isSpaceAsset(url) || isCatalogMedia(url);
+  return isData(url) || isAppJson(url) || isMedia(url) || isLive(url) || isCommentApi(url) || isSpaceStatus(url) || isSpaceAsset(url) || isCatalogMedia(url) || isOwnerTiktok(url);
 }
 
 function isLive(url) {
