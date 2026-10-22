@@ -2,6 +2,7 @@ import { OWNER_HANDLE, inspectHandle } from "../../shared/handle-skeleton.js";
 import { parseRoomId, pickStreams } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
+import { buildPlaylist, parseRange, safeTelegramPath } from "./telegram.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -135,7 +136,8 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS sessions_account ON sessions(public_id)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS sync_state (public_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at INTEGER NOT NULL)"),
-      env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket TEXT PRIMARY KEY, hits INTEGER NOT NULL, reset_at INTEGER NOT NULL)")
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket TEXT PRIMARY KEY, hits INTEGER NOT NULL, reset_at INTEGER NOT NULL)"),
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_files (object_key TEXT NOT NULL, kind TEXT NOT NULL, part_index INTEGER NOT NULL, bucket TEXT NOT NULL DEFAULT '', file_id TEXT NOT NULL, message_id INTEGER NOT NULL DEFAULT 0, size INTEGER NOT NULL, sha256 TEXT NOT NULL, mime TEXT NOT NULL DEFAULT 'application/octet-stream', duration REAL NOT NULL DEFAULT 0, serve INTEGER NOT NULL DEFAULT 0, verified INTEGER NOT NULL DEFAULT 0, encrypted INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (object_key, kind, part_index))")
     ]).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
       schemaReady = null;
       throw err;
@@ -1153,13 +1155,182 @@ async function handleAccountMedia(request, env, kind, publicId, file) {
   return new Response(object.body, { status: 200, headers });
 }
 
+const TG_PATH_TTL_MS = 50 * 60 * 1000;
+const TG_USER_LIMIT = 1200;
+const TG_VERIFY_LIMIT = 4000;
+const TG_ANON_LIMIT = 60;
+const TG_WINDOW_MS = 60 * 60 * 1000;
+
+function bearerIsBot(env, request) {
+  const token = bearer(request);
+  const secret = String(env.TELEGRAM_BOT_TOKEN || "");
+  if (!token || !secret || token.length > 200 || secret.length > 200) return false;
+  return timingEqual(token, secret);
+}
+
+async function telegramRows(env, key) {
+  const listed = await env.DB.prepare("SELECT object_key, kind, part_index, file_id, size, sha256, mime, duration, serve, encrypted FROM telegram_files WHERE object_key = ? AND serve = 1 AND encrypted = 0").bind(key).all();
+  return (listed && listed.results) || [];
+}
+
+async function telegramFilePath(env, fileId) {
+  const cache = caches.default;
+  const cacheKey = new Request("https://tg-cache.internal/path/" + encodeURIComponent(fileId));
+  const hit = await cache.match(cacheKey);
+  if (hit) {
+    const fetched = Number(hit.headers.get("x-fetched-at") || 0);
+    if (fetched && Date.now() - fetched < TG_PATH_TTL_MS) {
+      try {
+        const body = await hit.json();
+        const path = safeTelegramPath(body && body.path);
+        if (path) return path;
+      } catch (err) { /* refresh a bad cache entry */ }
+    }
+  }
+  const res = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/getFile?file_id=" + encodeURIComponent(fileId));
+  let data = null;
+  try { data = await res.json(); }
+  catch (err) { data = null; }
+  const path = safeTelegramPath(data && data.ok && data.result && data.result.file_path);
+  if (!path) return "";
+  const stored = new Response(JSON.stringify({ path: path }), {
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "public, max-age=3000",
+      "x-fetched-at": String(Date.now())
+    }
+  });
+  try { await cache.put(cacheKey, stored); }
+  catch (err) { /* the path can still be used for this request */ }
+  return path;
+}
+
+async function telegramBody(env, row) {
+  const cache = caches.default;
+  const cacheKey = new Request("https://tg-cache.internal/body/" + row.sha256);
+  const hit = await cache.match(cacheKey);
+  if (hit) return hit;
+  const path = await telegramFilePath(env, row.file_id);
+  if (!path) return null;
+  const upstream = await fetch("https://api.telegram.org/file/bot" + env.TELEGRAM_BOT_TOKEN + "/" + path);
+  if (!upstream.ok) return null;
+  const bytes = await upstream.arrayBuffer();
+  if (Number(row.size) > 0 && bytes.byteLength !== Number(row.size)) return null;
+  const stored = new Response(bytes, {
+    headers: {
+      "content-type": row.mime || "application/octet-stream",
+      "content-length": String(bytes.byteLength),
+      "cache-control": "public, max-age=31536000",
+      "x-content-type-options": "nosniff"
+    }
+  });
+  try { await cache.put(cacheKey, stored.clone()); }
+  catch (err) { /* this response is still returned */ }
+  return stored;
+}
+
+function mediaResponse(bytes, mime, status, extra) {
+  const headers = {
+    "content-type": mime || "application/octet-stream",
+    "content-length": String(bytes.byteLength),
+    "accept-ranges": "bytes",
+    "cache-control": "private, max-age=31536000",
+    "x-content-type-options": "nosniff"
+  };
+  if (extra) Object.keys(extra).forEach((name) => { headers[name] = extra[name]; });
+  return new Response(bytes, { status: status, headers: headers });
+}
+
+async function rangedTelegram(request, env, row) {
+  const full = await telegramBody(env, row);
+  if (!full) return json(502, { error: "unavailable" });
+  const bytes = await full.arrayBuffer();
+  const mime = row.mime || full.headers.get("content-type") || "application/octet-stream";
+  const span = parseRange(request.headers.get("Range"), bytes.byteLength);
+  if (span === false) {
+    return new Response(null, {
+      status: 416,
+      headers: { "content-range": "bytes */" + bytes.byteLength, "cache-control": "no-store" }
+    });
+  }
+  if (!span) return mediaResponse(bytes, mime, 200);
+  const slice = bytes.slice(span.start, span.end + 1);
+  return mediaResponse(slice, mime, 206, {
+    "content-range": "bytes " + span.start + "-" + span.end + "/" + bytes.byteLength
+  });
+}
+
+async function handleTelegram(request, env, path) {
+  if (!env.DB) return json(503, { error: "not_configured" });
+  const viewer = await sessionAccount(env, request);
+  const verify = !viewer && bearerIsBot(env, request);
+  if (!viewer && !verify) {
+    const anon = await rateHit(env, "tg-anon:" + clientIp(request), TG_ANON_LIMIT, TG_WINDOW_MS);
+    if (!anon.ok) return limited(anon);
+    return json(401, { error: "unauthorized" });
+  }
+  if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
+  const budget = await rateHit(env, verify ? "tg-verify" : "tg:" + clientIp(request), verify ? TG_VERIFY_LIMIT : TG_USER_LIMIT, TG_WINDOW_MS);
+  if (!budget.ok) return limited(budget);
+  const raw = path.replace(/^\/tg\/?/, "");
+  let decoded = raw;
+  try { decoded = raw.split("/").map((part) => decodeURIComponent(part)).join("/"); }
+  catch (err) { return json(404, { error: "not_found" }); }
+  if (!decoded || decoded.indexOf("..") >= 0 || decoded.charAt(0) === "/" || decoded.indexOf("\\") >= 0) return json(404, { error: "not_found" });
+  let key = decoded;
+  let mode = "file";
+  let index = 0;
+  if (decoded.endsWith("/index.m3u8")) {
+    key = decoded.slice(0, -"/index.m3u8".length);
+    mode = "playlist";
+  } else if (decoded.endsWith("/init")) {
+    key = decoded.slice(0, -"/init".length);
+    mode = "init";
+  } else {
+    const exact = await env.DB.prepare("SELECT kind FROM telegram_files WHERE object_key = ? AND kind = 'single' AND serve = 1 AND encrypted = 0").bind(decoded).first();
+    if (!exact) {
+      const nested = decoded.match(/^(.*)\/(\d+)$/);
+      if (nested) {
+        const parent = await env.DB.prepare("SELECT part_index FROM telegram_files WHERE object_key = ? AND kind = 'segment' AND part_index = ? AND serve = 1 AND encrypted = 0").bind(nested[1], Number(nested[2])).first();
+        if (parent) {
+          key = nested[1];
+          index = Number(nested[2]);
+          mode = "segment";
+        }
+      }
+    }
+  }
+  if (!key) return json(404, { error: "not_found" });
+  if (mode === "playlist") {
+    const rows = await telegramRows(env, key);
+    const text = buildPlaylist(rows, key, new URL(request.url).origin);
+    if (!text) return json(404, { error: "not_found" });
+    return new Response(text, {
+      status: 200,
+      headers: {
+        "content-type": "application/vnd.apple.mpegurl",
+        "cache-control": "private, max-age=60",
+        "x-content-type-options": "nosniff"
+      }
+    });
+  }
+  const kind = mode === "init" ? "init" : mode === "segment" ? "segment" : "single";
+  const partIndex = mode === "segment" ? index : mode === "init" ? -1 : 0;
+  const row = await env.DB.prepare("SELECT object_key, kind, part_index, file_id, size, sha256, mime, duration, serve, encrypted FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? AND serve = 1 AND encrypted = 0").bind(key, kind, partIndex).first();
+  if (!row || !row.file_id) return json(404, { error: "not_found" });
+  return rangedTelegram(request, env, row);
+}
+
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   await ensureSchema(env);
   if (path === "/v1/health" && request.method === "GET") {
-    return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET });
+    return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });
+  }
+  if ((path === "/tg" || path.startsWith("/tg/")) && (request.method === "GET" || request.method === "HEAD")) {
+    return handleTelegram(request, env, path);
   }
   const archiveMedia = path.match(/^\/v1\/archive\/([a-f0-9]{64}\.[a-z0-9]{1,8})$/);
   if (archiveMedia && (request.method === "GET" || request.method === "HEAD")) return handleArchive(request, env, archiveMedia[1]);

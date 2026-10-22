@@ -58,6 +58,21 @@ def check(cond, message):
     print("ok", message)
 
 
+def telegram_checks() -> None:
+    import subprocess
+
+    proc = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "telegram_backup.py"), "--selftest"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        sys.stdout.write(proc.stdout)
+        sys.stdout.write(proc.stderr)
+    check(proc.returncode == 0, "the telegram backup self-test passes")
+
+
 def main() -> None:
     elon = parse_x((FIX / "x_api_v2_elon.json").read_text(encoding="utf-8"), {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"})
     posts = elon["posts"]
@@ -842,6 +857,7 @@ def main() -> None:
     check("sentinel-secret-value" not in combined and "IA_SECRET_KEY" not in combined, "the skip path does not print a secret")
     ia_backup_checks()
     gdrive_checks()
+    telegram_checks()
 
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))

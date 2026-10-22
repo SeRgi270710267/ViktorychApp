@@ -17,6 +17,7 @@ Add these in the GitHub repository settings. Do not commit them, and do not put 
 | `TURNSTILE_SECRET` | GitHub Actions secret, then Worker secret | no |
 | `TURNSTILE_SITEKEY` | GitHub Actions secret | no; set it only together with `TURNSTILE_SECRET` |
 | `ACCOUNTS_API` | GitHub Actions variable | no; the workflow discovers `https://viktorych-accounts.<account-subdomain>.workers.dev` |
+| `TELEGRAM_BOT_TOKEN` | Worker secret | no; `GET /tg/…` stays 503 until it is set. From `worker/`: `npx wrangler secret put TELEGRAM_BOT_TOKEN` |
 
 `OWNER_CLAIM_CODE` and `ACCOUNT_PEPPER` should be long random strings. The Accounts workflow writes them with `wrangler secret put` and does not print them. An empty value is skipped, not stored.
 

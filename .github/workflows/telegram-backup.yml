@@ -1,0 +1,196 @@
+# Private Telegram backup. Scheduled and scripted. No assistant at runtime.
+# TELEGRAM_BOT_TOKEN and TELEGRAM_CHANNEL_ID are required.
+# TELEGRAM_API_ID and TELEGRAM_API_HASH start the local server only when a
+# non-video file needs a part larger than the public getFile limit.
+# A missing required secret skips the backup and exits 0. Values are never printed.
+# See docs/telegram-backup.md.
+
+name: Telegram backup
+
+on:
+  schedule:
+    # 11:17 UTC, after the 09:17 UTC Drive backup. GitHub may delay a slot.
+    - cron: "17 11 * * *"
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/telegram-probe"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: telegram-backup
+  cancel-in-progress: false
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Self-test
+        run: python3 scripts/telegram_backup.py --selftest
+
+  probe:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the bot and upload one file
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/telegram_probe.py
+
+  backup:
+    needs: selftest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Skip when a required secret is missing
+        id: secrets
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHANNEL_ID}" ]; then
+            echo "[telegram-backup] TELEGRAM_BOT_TOKEN or TELEGRAM_CHANNEL_ID is not set; skipping the upload"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "[telegram-backup] CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set; skipping the upload"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.present == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.secrets.outputs.present == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        if: steps.secrets.outputs.present == 'true'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Preflight
+        id: preflight
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TG_BACKUP_KEY: ${{ secrets.TG_BACKUP_KEY }}
+          TG_MAX_MB: ${{ vars.TG_MAX_MB }}
+          TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/telegram_backup.py --preflight
+
+      - name: Cache telegram-bot-api
+        if: steps.secrets.outputs.present == 'true' && steps.preflight.outputs.local == 'true'
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/telegram-bot-api
+          key: telegram-bot-api-e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1
+
+      - name: Build telegram-bot-api
+        if: steps.secrets.outputs.present == 'true' && steps.preflight.outputs.local == 'true' && steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake gperf libssl-dev zlib1g-dev git
+          rm -rf /tmp/telegram-bot-api
+          git init /tmp/telegram-bot-api
+          git -C /tmp/telegram-bot-api remote add origin https://github.com/tdlib/telegram-bot-api.git
+          git -C /tmp/telegram-bot-api fetch --depth 1 origin e3e9dd8e5b3d7ab8537cd5a10dc31d5ffa8f82d1
+          git -C /tmp/telegram-bot-api checkout --detach FETCH_HEAD
+          git -C /tmp/telegram-bot-api submodule update --init --depth 1
+          cmake -S /tmp/telegram-bot-api -B /tmp/telegram-bot-api/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/telegram-bot-api/build --target telegram-bot-api -j2
+          mkdir -p "$HOME/.cache/telegram-bot-api"
+          install -m 0755 /tmp/telegram-bot-api/build/telegram-bot-api "$HOME/.cache/telegram-bot-api/telegram-bot-api"
+
+      - name: Back up private files
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TG_BACKUP_KEY: ${{ secrets.TG_BACKUP_KEY }}
+          TG_MAX_MB: ${{ vars.TG_MAX_MB }}
+          TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
+          TG_WORKER_URL: ${{ vars.TG_WORKER_URL }}
+          TELEGRAM_LOCAL: ${{ steps.preflight.outputs.local == 'true' && '1' || '0' }}
+          PYTHONUNBUFFERED: "1"
+        run: |
+          set -euo pipefail
+          cleanup() {
+            if [ -f /tmp/telegram-bot-api.pid ]; then
+              kill "$(cat /tmp/telegram-bot-api.pid)" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup EXIT
+          if [ "${TELEGRAM_LOCAL}" = "1" ]; then
+            mkdir -p "$HOME/.cache/telegram-bot-api/data" "$HOME/.cache/telegram-bot-api/tmp"
+            nohup "$HOME/.cache/telegram-bot-api/telegram-bot-api" \
+              --local \
+              --http-port=8081 \
+              --dir="$HOME/.cache/telegram-bot-api/data" \
+              --temp-dir="$HOME/.cache/telegram-bot-api/tmp" \
+              >/tmp/telegram-bot-api.log 2>&1 &
+            echo $! > /tmp/telegram-bot-api.pid
+            ready=0
+            for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60; do
+              if bash -c 'echo >/dev/tcp/127.0.0.1/8081' >/dev/null 2>&1; then
+                ready=1
+                break
+              fi
+              sleep 1
+            done
+            if [ "$ready" != 1 ]; then
+              echo "[telegram-backup] local Bot API server did not open port 8081"
+              exit 1
+            fi
+          fi
+          python3 scripts/telegram_backup.py
+
+      - name: Stop the local Bot API server
+        if: always()
+        run: |
+          if [ -f /tmp/telegram-bot-api.pid ]; then
+            kill "$(cat /tmp/telegram-bot-api.pid)" || true
+          fi
