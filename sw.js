@@ -1,6 +1,6 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a10-__SW_VERSION__";
+const VERSION = "viktorych-a11-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -69,6 +69,8 @@ const SHELL_FILES = [
   "./shorts.css",
   "./drive.js",
   "./drive.css",
+  "./games.js",
+  "./games.css",
   "./shared/drive-crypto.js",
   "./shared/drive-photos.js",
   "./shared/handle-skeleton.js",
@@ -457,6 +459,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (isGameHost(url)) return;
   if (isArchiveStore(url)) return;
   if (isOwnerPlay(url) || isAccountMedia(url)) {
     event.respondWith((async () => {
@@ -551,7 +554,11 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|hls-1\.7\.3\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|hls-1\.7\.3\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+}
+
+function isGameHost(url) {
+  return url.hostname === "nzlay.com";
 }
 
 function canonicalNotifyId(post) {

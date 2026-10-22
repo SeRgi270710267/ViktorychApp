@@ -77,6 +77,7 @@
     lists: "M3 5.5C3 4.12 4.12 3 5.5 3h13C19.88 3 21 4.12 21 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-13zM5.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-13zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h7v2H7v-2z",
     bookmark: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z",
     storage: "M12 5c3.2 0 5.7 2 6.4 4.6 2.4.4 4.1 2.4 4.1 4.8 0 2.7-2.2 4.8-4.9 4.8H7C4.4 19.2 2.3 17.1 2.3 14.5c0-2.3 1.6-4.2 3.8-4.7C6.9 7 9.2 5 12 5zm0 2c-2.2 0-3.9 1.5-4.5 3.6l-.3.8-.8.2c-1.6.4-2.7 1.8-2.7 3.4 0 1.9 1.5 3.4 3.4 3.4h10.5c1.6 0 2.9-1.3 2.9-2.9 0-1.5-1.1-2.7-2.5-2.9l-.8-.1-.2-.8C16 8.4 14.2 7 12 7z",
+    games: "M8 8.5h8c1.9 0 3.5 1.3 3.9 3.1l.7 3.6c.2 1.1-.6 2.1-1.7 2.1-.5 0-1-.2-1.3-.6L16.4 15H7.6l-1.2 1.7c-.3.4-.8.6-1.3.6-1.1 0-1.9-1-1.7-2.1l.7-3.6C4.5 9.8 6.1 8.5 8 8.5zm.2 1.7c-1.1 0-2 .8-2.2 1.8l-.7 3.6c-.1.4.2.7.6.7.2 0 .3-.1.4-.2l1.3-1.6h7.8l1.3 1.6c.1.1.2.2.4.2.4 0 .7-.3.6-.7l-.7-3.6c-.2-1-1.1-1.8-2.2-1.8H8.2zM9 11.6h1.1v1.1h1.1v1.1H10.1v1.1H9v-1.1H7.9v-1.1H9v-1.1zm5.6.9a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7zm1.7-.9a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7z",
     subs: "M4 5.5C4 4.12 5.12 3 6.5 3h11C18.88 3 20 4.12 20 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 21 4 19.88 4 18.5v-13zM6.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h11c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-11zM10 8.2v7.6l6-3.8-6-3.8z",
     grid: "M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z",
     rows: "M4 5h16v3H4V5zm0 5.5h16v3H4v-3zM4 16h16v3H4v-3z",
@@ -149,6 +150,7 @@
     tabContext: null,
     repostMenu: null,
     quoteTarget: "",
+    composeSeed: "",
     shared: {},
     sharedState: {},
     chain: {},
@@ -5408,6 +5410,7 @@ const here = parseRoute();
     if (parts[0] === "bookmarks" && parts.length === 1) return { name: "history", tab: "bookmarks", query };
     if (parts[0] === "music") return { name: "music", section: parts[1] || "home", id: parts.slice(2).join("/"), query };
     if (parts[0] === "shorts") return { name: "shorts", live: parts[1] === "live", query };
+    if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "storage" || parts[0] === "drive") {
       if (parts[1] === "trash") return { name: "drive", section: "files", trash: true, folder: "", view: "", album: "", query };
       if (parts[1] === "folder" && parts[2]) return { name: "drive", section: "files", trash: false, folder: parts[2], view: "", album: "", query };
@@ -5481,6 +5484,7 @@ const here = parseRoute();
         ${navItem("#/history", "clock", tr("History"), name === "history")}
         ${navItem("#/music", "muNote", tr("Music"), false)}
         ${window.ViktorychShorts && window.ViktorychShorts.visible() ? navItem("#/shorts", "shorts", tr("Shorts"), name === "shorts") : ""}
+        ${navItem("#/games", "games", tr("Games"), name === "games")}
         ${navItem(subsHash(STATE.settings.subsGroup), "subs", tr("Subscriptions"), name === "subscriptions")}
         ${navItem("#/settings", "more", tr("More"), name === "settings")}`;
     const post = music
@@ -8817,6 +8821,7 @@ const here = parseRoute();
         person: tr("Profile"),
         spaces: tr("Space"),
         shorts: tr("Shorts"),
+        games: route.game === "regone" ? "ReGone" : tr("Games"),
         drive: route.section === "photos" ? tr("Photos") : tr("brand.storage")
       };
       key = map[route.name] || "";
@@ -8962,6 +8967,7 @@ const here = parseRoute();
       <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
       <a href="#/music">${icon("muNote")} ${tr("Music")}</a>
       ${window.ViktorychShorts && window.ViktorychShorts.visible() ? `<a href="#/shorts">${icon("shorts")} ${tr("Shorts")}</a>` : ""}
+      <a href="#/games">${icon("games")} ${tr("Games")}</a>
       ${window.ViktorychDrive && window.ViktorychDrive.visible() ? `<a href="#/storage">${icon("storage")} ${tr("brand.storage")}</a>` : ""}
       <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
@@ -9022,8 +9028,8 @@ if (STATE.histClear) {
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div></div>
         <div class="modal-body" style="display:flex;gap:12px">
           <span class="ava initials">Y</span>
-          <div style="flex:1"><textarea id="compose-text" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none"></textarea>
-          <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post" disabled>${tr("Post")}</button></div>
+          <div style="flex:1"><textarea id="compose-text" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div>
           <p class="phandle">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p></div>
         </div></div></div>`;
     }
@@ -9109,10 +9115,11 @@ if (STATE.histClear) {
   }
 
   function shell(main, route) {
-    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive";
+    const gamePlay = route.name === "games" && !!route.game;
+    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const top = route.name === "shorts" ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
@@ -10457,6 +10464,7 @@ if (STATE.histClear) {
     if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
     if (route.name === "shorts") return (window.ViktorychShorts && window.ViktorychShorts.visible() && window.ViktorychShorts.page(route)) || pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     if (route.name === "drive" && window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
+    if (route.name === "games") return (window.ViktorychGames && window.ViktorychGames.page(route)) || pageHead(tr("Games")) + emptyBlock(tr("Games"), tr("Reload the page."));
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
@@ -10526,6 +10534,7 @@ if (STATE.histClear) {
   function navSection(name) {
     if (name === "list") return "lists";
     if (name === "bookmarks") return "history";
+    if (name === "games") return "games";
     if (name === "home" || name === "explore" || name === "notifications" || name === "messages" || name === "feeds" || name === "lists" || name === "history" || name === "settings" || name === "subscriptions") return name;
     return "";
   }
@@ -10540,6 +10549,7 @@ if (STATE.histClear) {
 
   function sameNavSection(route, href) {
     if (route && route.name === "music" && window.SIntelMusic && window.SIntelMusic.sameSection) return window.SIntelMusic.sameSection(route, href);
+    if (route && route.name === "games" && route.game) return false;
     const here = navSection(route && route.name);
     const there = hrefSection(href);
     return !!here && here === there;
@@ -10752,6 +10762,10 @@ if (STATE.histClear) {
         if (route.name === "drive") window.ViktorychDrive.mount(route);
         else window.ViktorychDrive.unmount();
       }
+      if (window.ViktorychGames) {
+        if (route.name === "games" && route.game === "regone") window.ViktorychGames.mount(route);
+        else window.ViktorychGames.unmount();
+      }
       if (route.name === "article" && STATE.scrollKey !== nextKey) {
         const saved = articleScroll(route.id);
         if (saved > 0.02) {
@@ -10911,8 +10925,14 @@ if (STATE.histClear) {
     if (act === "reload") { boot(); return; }
     if (act === "drawer") { STATE.drawer = true; render(); return; }
     if (act === "close-drawer") { STATE.drawer = false; render(); return; }
-    if (act === "compose") { STATE.modal = "compose"; render(); return; }
-    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; render(); return; }
+    if (act === "compose") { STATE.composeSeed = ""; STATE.modal = "compose"; render(); return; }
+    if (act === "game-share") {
+      STATE.composeSeed = window.ViktorychGames && window.ViktorychGames.shareText ? window.ViktorychGames.shareText() : "";
+      STATE.modal = "compose";
+      render();
+      return;
+    }
+    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; render(); return; }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
       const feed = feedById(id);
@@ -10928,7 +10948,7 @@ if (STATE.histClear) {
       render();
       return;
     }
-    if (act === "compose-post") { STATE.modal = null; render(); toast(tr("Posts come from your feeds")); return; }
+    if (act === "compose-post") { STATE.modal = null; STATE.composeSeed = ""; render(); toast(tr("Posts come from your feeds")); return; }
     if (act === "close-tab-menu") {
       closeTabMenu();
       return;

@@ -1,0 +1,177 @@
+.games-rail h2 {
+  margin: 0;
+  padding: 16px 16px 8px;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 800;
+}
+.games-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 0 16px 4px;
+  scroll-snap-type: x mandatory;
+}
+.games-row .game-card { flex: 0 0 180px; scroll-snap-align: start; }
+.games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  padding: 0 16px 28px;
+}
+.games-empty {
+  margin: 0;
+  padding: 0 16px 8px;
+  color: var(--muted);
+  font-size: 15px;
+}
+.game-card {
+  position: relative;
+  min-width: 0;
+}
+.game-open {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.game-open:hover { background: var(--hover-soft); }
+.game-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 16 / 10;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(29, 155, 240, 0.45), transparent 42%),
+    linear-gradient(160deg, #15202b, #000);
+}
+.game-art svg { width: 42px; height: 42px; fill: #fff; }
+.game-copy { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px 12px; min-width: 0; }
+.game-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-meta {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-heart {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.game-heart svg { width: 18px; height: 18px; fill: currentColor; }
+.game-heart.on { color: var(--pink); }
+.game-heart:hover { background: rgba(0, 0, 0, 0.75); }
+.game-stage {
+  height: calc(100vh - var(--top) - 12px);
+  background: #000;
+}
+#game-host {
+  position: fixed;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  background: #000;
+  color: #fff;
+}
+#game-host[hidden] { display: none !important; }
+.game-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 8px;
+  flex: none;
+}
+.game-grow { flex: 1; }
+.game-back, .game-tool {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.game-back:hover, .game-tool:hover { background: rgba(255, 255, 255, 0.2); }
+.game-back svg, .game-tool svg { width: 20px; height: 20px; fill: currentColor; }
+.game-share { height: 32px; padding: 0 12px; color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+.game-frame { position: relative; flex: 1; min-height: 0; }
+.game-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+.game-loading, .game-fail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 48px;
+  bottom: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #000;
+  text-align: center;
+  padding: 16px;
+}
+.game-loading p, .game-fail h2 { margin: 0; font-size: 17px; }
+#game-host.is-loaded .game-loading { display: none; }
+.game-fail { display: none; }
+#game-host.is-failed .game-loading { display: none; }
+#game-host.is-failed .game-fail { display: flex; }
+#game-host.is-failed .game-frame { visibility: hidden; }
+.game-credit {
+  margin: 0;
+  height: 32px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  flex: none;
+}
+.game-credit a { color: #fff; text-decoration: underline; }
+#game-host:fullscreen, #game-host:-webkit-full-screen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+@media (max-width: 499px) {
+  .game-stage { height: calc(100vh - var(--top) - 53px - env(safe-area-inset-bottom)); }
+  .games-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .game-share { font-size: 13px; padding: 0 10px; }
+}
