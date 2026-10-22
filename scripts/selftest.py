@@ -2868,6 +2868,7 @@ def ia_backup_checks() -> None:
                 {
                     "platform": "x",
                     "id": "20",
+                    "adapter": "fxtwitter",
                     "handle": "ada",
                     "date": "2026-10-12T00:00:00Z",
                     "text": "public",
@@ -2890,8 +2891,10 @@ def ia_backup_checks() -> None:
                 },
             ],
             {"2026-10": [
-                {"p": "x", "id": "20", "h": "ada", "d": "2026-10-12T00:00:00Z", "t": "public"},
+                {"p": "x", "id": "20", "s": "fxtwitter", "h": "ada", "d": "2026-10-12T00:00:00Z", "t": "public"},
                 {"p": "discord", "id": "abc", "t": "discord secret words"},
+                {"p": "tiktok", "id": "1", "h": "gabii_g5", "t": "not public"},
+                {"p": "vk", "id": "2", "t": "token wall"},
             ]},
             sleep=lambda delay: sleeps.append(delay),
         )
@@ -2904,7 +2907,15 @@ def ia_backup_checks() -> None:
     check(all(row[2] == "LOW test-access:test-secret-value" for row in puts), "uploads send the LOW authorization header")
     check("test-secret-value" not in joined and "test-access" not in joined, "upload notes do not print the keys")
     check(not any(path.endswith("/discord.jpg") for _method, path, _auth in gets), "Discord media is not downloaded")
-    check(b"discord secret words" not in bodies, "Discord message text is not uploaded")
+    check(b"discord secret words" not in bodies and b"not public" not in bodies and b"token wall" not in bodies, "Discord, TikTok, and VK text are not uploaded")
+    ia_policy = ia_backup.load_ia_policy()
+    widened = ia_backup.load_ia_policy({"public_sources": ["discord", "fxtwitter", "vk"], "tiktok_allow": ["gabii_g5"]})
+    check("gabii_g5" not in ia_policy["tiktok"] and ia_policy["tiktok"] == set() and "vk" not in ia_policy["sources"] and "nitter_rss" not in ia_policy["sources"] and "discord" not in ia_policy["sources"], "the TikTok allowlist is empty and token or cookie sources are not public")
+    check("discord" not in widened["sources"] and "vk" not in widened["sources"] and "fxtwitter" in widened["sources"] and "gabii_g5" in widened["tiktok"], "config cannot add a source the code has not audited")
+    check(ia_backup.ia_source_for_post({"platform": "tiktok", "handle": "gabii_g5"}, ia_policy) == "", "gabii_g5 is not an allowlisted TikTok handle")
+    check(ia_backup.ia_source_for_post({"platform": "x"}, ia_policy) == "", "an X post with no recorded source is denied")
+    check(ia_backup.ia_source_for_post({"platform": "youtube", "feedId": "youtube:redacted_handle"}, ia_policy) == "youtube_rss", "a YouTube feed with only a public source is allowed")
+    check(not ia_backup.ia_url_ok("https://pub-example.r2.dev/music/song/cover.png", "youtube_rss") and not ia_backup.ia_url_ok("https://pub-example.r2.dev/loop/current.json", "telegram"), "music covers and radio audio are denied")
     hidden_name = re.compile(r"/x[0-9a-f]{32}/[0-9a-f]{20}\.")
     check(puts and all(hidden_name.search(row[1]) for row in puts), "item and file names are unguessable")
     check(all(row[3] == "data" and row[8] == "true" and row[9] == "files" and row[10] == "files" and not row[4] and not row[11] and not row[12] for row in puts), "uploads are unlisted data with a generic title and no owner tag")

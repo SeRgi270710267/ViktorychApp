@@ -642,6 +642,9 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                 extra, source = [], ""
                 print(f"[keep] {feed['id']}: community posts: {exc}", file=sys.stderr)
             if extra:
+                for post in extra:
+                    if isinstance(post, dict):
+                        post["iaSource"] = "youtube_community"
                 posts.extend(extra)
                 print(f"[ok] {feed['id']}: {len(extra)} community posts via {source}")
             else:
@@ -661,6 +664,8 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         for post in posts:
             post["feedId"] = feed["id"]
             post["platform"] = feed.get("platform") or post.get("platform")
+            if not post.get("iaSource"):
+                post["iaSource"] = adapter or ""
             post["_fresh"] = True
             fresh_ids.add((feed["id"], str(post.get("id") or "")))
         if posts:

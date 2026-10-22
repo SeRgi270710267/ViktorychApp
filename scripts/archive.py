@@ -112,6 +112,9 @@ def stub_from_post(post: dict) -> dict | None:
         stub["k"] = kind[:16]
     if text:
         stub["t"] = text
+    source = str(post.get("iaSource") or "").strip()
+    if re.fullmatch(r"[a-z0-9_]{1,40}", source):
+        stub["s"] = source
     stub.update(_author_fields(post))
     return stub
 
@@ -193,6 +196,9 @@ def _stub_row(row: dict) -> dict | None:
         stub["k"] = kind[:16]
     if text:
         stub["t"] = text
+    source = str(row.get("s") or "").strip()
+    if re.fullmatch(r"[a-z0-9_]{1,40}", source):
+        stub["s"] = source
     stub.update(_author_fields(row))
     return stub
 

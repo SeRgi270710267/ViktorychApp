@@ -5,7 +5,8 @@ Item identifiers are x plus 32 hex characters, the same scheme as the media
 backup, and they are reused from archive/ia-state.json. The month for each
 identifier is recorded only in archive/ia-manifest.json. Items use mediatype
 data, noindex, and the title and description "files". The upload does not
-send an owner, a subject, or a collection.
+send an owner, a subject, or a collection. Shards are filtered by the same
+default-deny source list as the media backup.
 
 IA_ACCESS_KEY and IA_SECRET_KEY come from the environment. When either is
 empty this exits 0 and uploads nothing. The keys are never printed.
