@@ -1701,9 +1701,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const refresh = m.fallback ? ` data-refresh="${esc(m.fallback)}"` : "";
       const first = eager && index === 0;
       const src = m.url || m.poster || "";
+      const tgKey = r2ObjectKey(src);
+      const sourceUrl = m.fallback && !r2ObjectKey(m.fallback) ? m.fallback : "";
+      const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"` : "";
+      const sourceAttr = sourceUrl ? ` data-source="${esc(sourceUrl)}"` : "";
       const loading = first ? "eager" : "lazy";
       const priority = first ? ` fetchpriority="high"` : "";
-      return `<div class="tile" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"><img src="${esc(src)}"${imageSrcset(src)}${refresh} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
+      return `<div class="tile" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"><img src="${esc(src)}"${imageSrcset(src)}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
     }).join("");
     return `<div class="media ${cls}">${tiles}</div>` + files;
   }
@@ -1836,11 +1840,70 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return chain;
   }
 
+  function accountsApi() {
+    return String((window.VIKTORYCH_ACCOUNTS && window.VIKTORYCH_ACCOUNTS.api) || "").replace(/\/$/, "");
+  }
+
+  function accountToken() {
+    return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : "";
+  }
+
+  function r2ObjectKey(url) {
+    let parsed;
+    try { parsed = new URL(String(url || "")); }
+    catch (err) { return ""; }
+    const host = parsed.hostname.toLowerCase();
+    let path = parsed.pathname.replace(/^\/+/, "");
+    try { path = path.split("/").map((part) => decodeURIComponent(part)).join("/"); }
+    catch (err) { return ""; }
+    if (!path || path.indexOf("..") >= 0 || path.indexOf("\\") >= 0) return "";
+    if (host === "r2.dev" || host.endsWith(".r2.dev")) return path;
+    if (host.endsWith(".r2.cloudflarestorage.com")) {
+      const parts = path.split("/");
+      if (parts.length < 2) return "";
+      return parts.slice(1).join("/");
+    }
+    return "";
+  }
+
+  function tgMediaUrl(key) {
+    const api = accountsApi();
+    const raw = String(key || "");
+    if (!api || !raw || raw.indexOf("..") >= 0) return "";
+    if (/^(?:music|covers|loop|radio|owner|backup)\//.test(raw)) return "";
+    return api + "/tg/" + raw.split("/").map((part) => encodeURIComponent(part)).join("/");
+  }
+
+  function workerHost() {
+    const api = accountsApi();
+    if (!api) return "";
+    try { return new URL(api).host; }
+    catch (err) { return ""; }
+  }
+
   function fileSources(post, media) {
     const out = [];
     const picked = pickMp4((media && media.variants) || []);
+    const raw = [];
     [picked, media && media.url, media && media.fallback, media && media.hls].forEach((url) => {
       if (!url || !playableFile(url) || oePast(url)) return;
+      raw.push(url);
+    });
+    raw.forEach((url) => {
+      if (!r2ObjectKey(url)) return;
+      pushSource(out, { kind: /\.m3u8(\?|$)/i.test(url) ? "hls" : "mp4", url: url });
+    });
+    let key = "";
+    raw.concat([media && media.url, media && media.fallback, media && media.hls]).forEach((url) => {
+      if (!key) key = r2ObjectKey(url);
+    });
+    const telegram = tgMediaUrl(key);
+    if (telegram) {
+      pushSource(out, { kind: "hls", url: telegram + "/index.m3u8", telegram: true });
+      pushSource(out, { kind: "tg", url: telegram, telegram: true });
+    }
+    raw.forEach((url) => {
+      if (r2ObjectKey(url)) return;
       pushSource(out, { kind: /\.m3u8(\?|$)/i.test(url) ? "hls" : "mp4", url: url });
     });
     [media && media.url, media && media.fallback].forEach((url) => {
@@ -1914,6 +1977,18 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       document.head.appendChild(script);
     });
     return STATE.hlsP;
+  }
+
+  function loadTelegramHls() {
+    if (STATE.hlsTgP) return STATE.hlsTgP;
+    STATE.hlsTgP = new Promise((resolve) => {
+      const script = document.createElement("script");
+      script.src = "hls-1.7.3.min.js";
+      script.onload = () => resolve(window.Hls || null);
+      script.onerror = () => resolve(null);
+      document.head.appendChild(script);
+    });
+    return STATE.hlsTgP;
   }
 
   function clearPlayer(el) {
@@ -2155,13 +2230,38 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         });
       }
     };
+    if (source.kind === "tg") {
+      const auth = accountToken();
+      if (!auth) { fail(); return; }
+      fetch(source.url, { headers: { Authorization: "Bearer " + auth } }).then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.blob();
+      }).then((blob) => {
+        if (el._gen !== gen || el._src !== token) return;
+        video.src = URL.createObjectURL(blob);
+        start();
+      }).catch(() => fail());
+      return;
+    }
     if (source.kind === "hls") {
-      const native = video.canPlayType("application/vnd.apple.mpegurl");
+      const telegram = !!source.telegram;
+      const native = !telegram && video.canPlayType("application/vnd.apple.mpegurl");
       if (native) { video.src = source.url; start(); return; }
-      loadHls().then((Hls) => {
+      const ready = telegram ? loadTelegramHls() : loadHls();
+      ready.then((Hls) => {
         if (el._gen !== gen || el._src !== token) return;
         if (!Hls || !Hls.isSupported) { fail(); return; }
-        const hls = new Hls();
+        const hlsOpts = {};
+        if (telegram) {
+          hlsOpts.xhrSetup = (xhr, url) => {
+            try {
+              if (new URL(url, location.href).host !== workerHost()) return;
+              const auth = accountToken();
+              if (auth) xhr.setRequestHeader("Authorization", "Bearer " + auth);
+            } catch (err) { /* leave a non-worker request alone */ }
+          };
+        }
+        const hls = new Hls(hlsOpts);
         el._hls = hls;
         const wait = setTimeout(() => fail(), 5000);
         hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -11435,11 +11535,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
   });
 
-  document.addEventListener("error", (event) => {
-    const img = event.target;
-    if (!img || (img.tagName !== "IMG" && img.tagName !== "VIDEO")) return;
-    // Shorts keeps the video when TikTok refuses the file, so the slide can show what TikTok returned.
-    if (img.tagName === "VIDEO" && img.closest(".shorts-slide")) return;
+  function finishTelegramImage(img) {
+    if (!img || !img.isConnected) return;
+    if (img.tagName === "IMG" && img.dataset.tgTried === "1" && img.dataset.source && img.dataset.sourceTried !== "1") {
+      img.dataset.sourceTried = "1";
+      img.dataset.tried = "1";
+      img.removeAttribute("data-refresh");
+      img.src = img.dataset.source;
+      return;
+    }
     if (img.dataset.fallback === "avatar") {
       if (useArchiveMedia(img)) return;
       finishMediaError(img);
@@ -11466,6 +11570,31 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (useArchiveMedia(img)) return;
     finishMediaError(img);
+  }
+
+  document.addEventListener("error", (event) => {
+    const img = event.target;
+    if (!img || (img.tagName !== "IMG" && img.tagName !== "VIDEO")) return;
+    // Shorts and the feed player choose their own video sources. A poster image can still fall through.
+    if (img.tagName === "VIDEO" && (img.closest(".shorts-slide") || img.closest(".vplay"))) return;
+    if (img.tagName === "IMG" && img.dataset.fallback !== "avatar" && img.dataset.tgTried !== "1") {
+      const key = img.dataset.tg || r2ObjectKey(img.getAttribute("src") || "");
+      const url = tgMediaUrl(key);
+      const auth = accountToken();
+      if (url && auth) {
+        img.dataset.tgTried = "1";
+        fetch(url, { headers: { Authorization: "Bearer " + auth } }).then((res) => {
+          if (!res.ok) throw new Error(String(res.status));
+          return res.blob();
+        }).then((blob) => {
+          if (img.isConnected) img.src = URL.createObjectURL(blob);
+        }).catch(() => {
+          if (img.isConnected) finishTelegramImage(img);
+        });
+        return;
+      }
+    }
+    finishTelegramImage(img);
   }, true);
 
   let lastY = 0;

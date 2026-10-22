@@ -3,6 +3,8 @@ main = "src/index.js"
 compatibility_date = "2026-01-15"
 workers_dev = true
 
+# TELEGRAM_BOT_TOKEN is a Worker secret, not a var:
+# npx wrangler secret put TELEGRAM_BOT_TOKEN
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io"
 PBKDF2_ITERATIONS = "8000"
