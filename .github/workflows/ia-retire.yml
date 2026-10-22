@@ -2,6 +2,13 @@ name: Retire named Internet Archive items
 
 on:
   workflow_dispatch:
+  # One push, limited to the marker file, so this run can start without a
+  # dispatch token. The marker and this push trigger are removed after it.
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/ia-retire.once
 
 permissions:
   contents: write
