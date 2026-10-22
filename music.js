@@ -18,6 +18,7 @@
     pause: "M6 4h4v16H6zM14 4h4v16h-4z",
     prev: "M6 5h2.2v14H6zM19.5 5.5 10 12l9.5 6.5z",
     next: "M15.8 5H18v14h-2.2zM4.5 5.5 14 12 4.5 18.5z",
+    save: "M12 3.2v9.1l-3.2-3.2-1.3 1.3L12 15.9l4.5-4.5-1.3-1.3-3.2 3.2V3.2H12zM5 18.2h14v1.8H5z",
     shuffle: "M4 7h2.8l2.4 2.6L11.6 7H15l-2.6 3.2L15 13.4h-3.4l-2.4-2.6L6.8 13.4H4l2.6-3.2L4 7zm11.2 0H20v2.1h-3.1L16.2 7h-1zm1.1 6.3H20V15.4h-2.4l-.6-1.2h-.7z",
     repeat: "M7 7h8.2L13.6 5.4 15 4l4 4-4 4-1.4-1.4L15.2 9H7v3.2H5V9c0-1.1.9-2 2-2zm10 10H8.8l1.6 1.6L9 20l-4-4 4-4 1.4 1.4L8.8 15H17v-3.2h2V17c0 1.1-.9 2-2 2z",
     vol: "M4 9.2v5.6h3.4L12 19.5V4.5L7.4 9.2H4zm9.2 2.8a3.6 3.6 0 0 0-2-3.2v6.4a3.6 3.6 0 0 0 2-3.2z",
@@ -109,6 +110,86 @@
     return { ok: true, kind: "audio", url: relative ? raw.replace(/^\.\//, "") : url.href, publish: !relative };
   }
 
+  function classifyStream(input) {
+    var raw = String(input || "").trim();
+    if (!raw) return { ok: false, reason: "empty" };
+    var url;
+    try { url = new URL(raw); } catch (err) { return { ok: false, reason: "url" }; }
+    if (url.protocol !== "https:") return { ok: false, reason: "https" };
+    if (url.username || url.password) return { ok: false, reason: "auth" };
+    if (localHost(url.hostname)) return { ok: false, reason: "local" };
+    if (!/\.m3u8$/i.test(url.pathname)) return { ok: false, reason: "type" };
+    return { ok: true, url: url.href };
+  }
+
+  function streamReady(song) {
+    return classifyStream(song && song.stream).ok;
+  }
+
+  function absoluteHttps(ref, base) {
+    var target;
+    var rootUrl;
+    try {
+      target = new URL(String(ref || "").trim(), base);
+      rootUrl = new URL(base);
+    } catch (err) { return ""; }
+    if (target.protocol !== "https:" || target.username || target.password) return "";
+    if (localHost(target.hostname) || target.host !== rootUrl.host) return "";
+    return target.href;
+  }
+
+  function tagUri(line) {
+    var quoted = String(line || "").match(/URI="([^"]+)"/i);
+    if (quoted) return quoted[1];
+    var raw = String(line || "").match(/URI=([^,\s]+)/i);
+    return raw ? raw[1] : "";
+  }
+
+  function hlsAssets(text, base) {
+    var lines = String(text || "").split(/\r?\n/);
+    var playlists = [];
+    var files = [];
+    var expectPlaylist = false;
+    function push(list, ref) {
+      var abs = absoluteHttps(ref, base);
+      if (abs && list.indexOf(abs) < 0) list.push(abs);
+    }
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      if (line.indexOf("#EXT-X-STREAM-INF") === 0) { expectPlaylist = true; continue; }
+      if (line.indexOf("#EXT-X-I-FRAME-STREAM-INF") === 0) { expectPlaylist = false; continue; }
+      if (line.indexOf("#EXT-X-MEDIA") === 0) {
+        var media = tagUri(line);
+        if (/\.m3u8(\?|#|$)/i.test(media)) push(playlists, media);
+        continue;
+      }
+      if (line.indexOf("#EXT-X-KEY") === 0) {
+        if (/METHOD=NONE/i.test(line)) continue;
+        push(files, tagUri(line));
+        continue;
+      }
+      if (line.indexOf("#EXT-X-MAP") === 0) {
+        push(files, tagUri(line));
+        continue;
+      }
+      if (line.charAt(0) === "#") continue;
+      if (expectPlaylist || /\.m3u8(\?|#|$)/i.test(line)) push(playlists, line);
+      else push(files, line);
+      expectPlaylist = false;
+    }
+    return { playlists: playlists, files: files };
+  }
+
+  function formatReleased(value) {
+    var parts = String(value || "").split("-");
+    if (parts.length !== 3) return "";
+    var months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    var month = months[Number(parts[1]) - 1];
+    if (!month || !parts[0] || !parts[2]) return "";
+    return month + " " + Number(parts[2]) + ", " + parts[0];
+  }
+
   function formatTime(sec) {
     var total = Math.max(0, Math.floor(Number(sec) || 0));
     var hours = Math.floor(total / 3600);
@@ -130,7 +211,7 @@
   }
 
   function copySong(song) {
-    return {
+    var copy = {
       id: String(song.id || ""),
       title: String(song.title || ""),
       artist: String(song.artist || ""),
@@ -141,6 +222,15 @@
       duration: Number(song.duration) || 0,
       license: String(song.license || "")
     };
+    if (song.stream) copy.stream = String(song.stream);
+    if (song.released) copy.released = String(song.released);
+    if (song.genre) copy.genre = String(song.genre);
+    if (song.style) copy.style = String(song.style);
+    if (song.mood) copy.mood = String(song.mood);
+    if (song.bpm) copy.bpm = Number(song.bpm) || 0;
+    if (song.language) copy.language = String(song.language);
+    if (song.lossless) copy.lossless = true;
+    return copy;
   }
 
   function mergeLibrary(remote, local) {
@@ -205,6 +295,7 @@
 
   function publishable(songs) {
     return (songs || []).filter(function (song) {
+      if (song && song.kind === "hls" && streamReady(song)) return true;
       var kind = classifySource(song && song.source);
       return kind.ok && kind.publish && (kind.kind === "audio" || kind.kind === "youtube");
     }).map(copySong);
@@ -234,9 +325,13 @@
     parseHash: parseHash,
     youtubeId: youtubeId,
     classifySource: classifySource,
+    classifyStream: classifyStream,
+    streamReady: streamReady,
+    hlsAssets: hlsAssets,
     mergeLibrary: mergeLibrary,
     publishable: publishable,
     formatTime: formatTime,
+    formatReleased: formatReleased,
     reorder: reorder,
     sameKey: sectionKey,
     sameSection: sameSection
@@ -249,13 +344,19 @@
     repo: function () { return "owner-account/SuperintelApp"; }
   };
   var remote = { songs: [], playlists: [] };
-  var local = { songs: [], edits: {}, hidden: [], order: [], playlists: [], playlistTouched: false, likes: [], volume: 1, shuffle: false, repeat: "off", view: "grid" };
-  var ui = { q: "", draft: {}, now: false, confirm: "", plName: "" };
+  var local = { songs: [], edits: {}, hidden: [], order: [], playlists: [], playlistTouched: false, likes: [], offline: {}, volume: 1, shuffle: false, repeat: "off", view: "grid" };
+  var ui = { q: "", draft: {}, now: false, confirm: "", plName: "", offline: null };
   var play = { queue: [], index: -1, playing: false, lastVolume: 1 };
   var audio = null;
   var yt = null;
   var ytReady = false;
   var ytPending = "";
+  var hls = null;
+  var musicHls = null;
+  var playToken = 0;
+  var paintedOffline = "\0";
+  var HLS_SRC = "hls-1.7.3.min.js";
+  var OFFLINE_CACHE = "sintel-music-offline";
   var active = false;
   var poll = 0;
   var blobUrls = {};
@@ -295,6 +396,7 @@
       local.playlists = Array.isArray(data.playlists) ? data.playlists : [];
       local.playlistTouched = !!data.playlistTouched;
       local.likes = Array.isArray(data.likes) ? data.likes : [];
+      local.offline = data.offline && typeof data.offline === "object" && !Array.isArray(data.offline) ? data.offline : {};
       local.volume = typeof data.volume === "number" ? data.volume : 1;
       local.shuffle = !!data.shuffle;
       local.repeat = data.repeat === "one" || data.repeat === "all" ? data.repeat : "off";
@@ -398,10 +500,63 @@
     return '<span class="' + cls + '">' + img + '<span class="mu-letter">' + letter(song) + "</span></span>";
   }
 
+  function offlineState(id) {
+    if (ui.offline && ui.offline.id === id) return "busy";
+    var saved = local.offline && local.offline[id];
+    if (Array.isArray(saved) && saved.length) return "ready";
+    return "idle";
+  }
+
+  function offlineText(id) {
+    var state = offlineState(id);
+    if (state === "busy" && ui.offline && ui.offline.total) return "Downloading " + ui.offline.done + "/" + ui.offline.total;
+    if (state === "busy") return "Downloading";
+    if (state === "ready") return "Downloaded";
+    return "Download";
+  }
+
+  function offlineAria(id) {
+    var state = offlineState(id);
+    if (state === "busy") return offlineText(id);
+    if (state === "ready") return "Remove download";
+    return "Download for offline";
+  }
+
+  function offlineButton(song, withLabel) {
+    if (!song || song.kind !== "hls" || !song.id) return "";
+    var state = offlineState(song.id);
+    var cls = "mu-save" + (state === "ready" ? " is-saved" : "") + (state === "busy" ? " is-busy" : "");
+    return '<button type="button" class="' + cls + '" data-act="music-offline" data-id="' + esc(song.id) + '" aria-label="' + esc(offlineAria(song.id)) + '"' + (state === "busy" ? ' aria-busy="true"' : "") + ">" + svg(CTRL.save) + (withLabel ? "<span>" + esc(offlineText(song.id)) + "</span>" : "") + "</button>";
+  }
+
+  function releases() {
+    return songs().filter(function (song) { return song && song.released; }).sort(function (a, b) {
+      return String(b.released).localeCompare(String(a.released));
+    });
+  }
+
+  function releaseHtml(song) {
+    var when = formatReleased(song && song.released);
+    var meta = [];
+    if (song && song.duration) meta.push(formatTime(song.duration));
+    if (song && song.genre) meta.push(song.genre);
+    if (when) meta.push(when);
+    return '<article class="mu-release" data-mu-id="' + esc(song.id) + '">' +
+      '<button class="mu-release-play" type="button" data-act="music-play" data-id="' + esc(song.id) + '" aria-label="Play ' + esc(song.title || "song") + '">' + art(song, "mu-release-cover") + "</button>" +
+      '<div class="mu-release-copy"><p class="mu-kicker">New release</p><h2>' + esc(song.title || "Untitled") + "</h2>" +
+      '<p class="mu-by">' + esc(song.artist || "Unknown artist") + "</p>" +
+      (song && song.style ? '<p class="mu-style">' + esc(song.style) + "</p>" : "") +
+      '<p class="mu-meta">' + esc(meta.join(" · ")) + "</p>" +
+      '<div class="mu-pills">' + (song && song.lossless ? '<span class="mu-badge">Lossless</span>' : "") + "</div>" +
+      '<div class="mu-release-actions"><button class="mu-play-pill" type="button" data-act="music-play" data-id="' + esc(song.id) + '">Play</button>' + offlineButton(song, true) + "</div></div></article>";
+  }
+
   function tile(song) {
     var on = currentSong() && currentSong().id === song.id;
     return '<button class="mu-tile' + (on ? " is-current" : "") + '" type="button" data-act="music-play" data-id="' + esc(song.id) + '" data-mu-id="' + esc(song.id) + '">' +
-      art(song, "mu-cover") + "<b>" + esc(song.title || "Untitled") + "</b><span>" + esc(song.artist || "Unknown artist") + "</span></button>";
+      art(song, "mu-cover") + "<b>" + esc(song.title || "Untitled") + "</b><span>" + esc(song.artist || "Unknown artist") + "</span>" +
+      '<span class="mu-sub">' + esc(song.duration ? formatTime(song.duration) : "") + "</span>" +
+      (song.lossless ? '<span class="mu-badge">Lossless</span>' : "") + "</button>";
   }
 
   function row(song, listName) {
@@ -411,7 +566,8 @@
       '<button class="mu-open" type="button" data-act="music-play" data-id="' + esc(song.id) + '">' + art(song, "mu-art") +
       '<span class="mu-copy"><b>' + esc(song.title || "Untitled") + "</b><span>" + esc(song.artist || "Unknown artist") + "</span></span></button>" +
       eq + '<span class="mu-dur">' + esc(song.duration ? formatTime(song.duration) : "") + "</span>" +
-      '<span class="mu-actions"><button class="icon-btn mu-like' + (liked(song.id) ? " on" : "") + '" type="button" data-act="music-like" data-id="' + esc(song.id) + '" aria-label="Liked songs">' + svg(liked(song.id) ? HEART_ON : HEART) + "</button>" +
+      (song.lossless ? '<span class="mu-badge">Lossless</span>' : "") +
+      '<span class="mu-actions">' + offlineButton(song, false) + '<button class="icon-btn mu-like' + (liked(song.id) ? " on" : "") + '" type="button" data-act="music-like" data-id="' + esc(song.id) + '" aria-label="Liked songs">' + svg(liked(song.id) ? HEART_ON : HEART) + "</button>" +
       '<button class="icon-btn" type="button" data-act="music-up" data-id="' + esc(song.id) + '" data-list="' + esc(listName || "library") + '" aria-label="Move up">' + svg(CTRL.up) + "</button>" +
       '<button class="icon-btn" type="button" data-act="music-down" data-id="' + esc(song.id) + '" data-list="' + esc(listName || "library") + '" aria-label="Move down">' + svg(CTRL.down) + "</button>" +
       '<a class="icon-btn" href="#/music/edit/' + encodeURIComponent(song.id) + '" aria-label="Edit song">Edit</a>' +
@@ -457,7 +613,7 @@
       '<label class="field"><span>Album</span><input id="mu-album" value="' + esc(value("mu-album", song && song.album)) + '" maxlength="200"></label>' +
       '<label class="field"><span>Cover URL</span><input id="mu-cover-url" type="url" inputmode="url" placeholder="https://" value="' + esc(value("mu-cover-url", song && song.cover && song.cover.indexOf("https://") === 0 ? song.cover : "")) + '"></label>' +
       '<label class="mu-file">Cover file<input id="mu-cover-file" type="file" accept="image/*"></label>' +
-      '<label class="field"><span>Audio URL</span><input id="mu-audio-url" type="url" inputmode="url" placeholder="https:// or a YouTube link" value="' + esc(value("mu-audio-url", song && song.source && song.source.indexOf("idb:") !== 0 ? song.source : "")) + '"></label>' +
+      '<label class="field"><span>Audio URL</span><input id="mu-audio-url" type="url" inputmode="url" placeholder="https:// or a YouTube link" value="' + esc(value("mu-audio-url", song && song.kind !== "hls" && song.source && song.source.indexOf("idb:") !== 0 ? song.source : "")) + '"></label>' +
       '<label class="mu-file">Audio file<input id="mu-audio-file" type="file" accept="audio/*,.mp3,.m4a,.ogg,.opus,.aac,.wav"></label>' +
       (song ? '<input type="hidden" id="mu-edit-id" value="' + esc(song.id) + '">' : "") +
       '<p class="mu-note">A file stays on this device. A direct https link can be published to the site by the owner. Radio shuffles this library. No paid catalog is used.</p>' +
@@ -504,11 +660,13 @@
     if (section === "radio") {
       return head("Radio") + '<div class="mu-form"><p class="mu-note">Radio shuffles every song in this library. Nothing is recommended by a paid service.</p><button class="save" type="button" data-act="music-radio"' + (all.length ? "" : " disabled") + ">Start radio</button></div>" + (all.length ? songList(all, "library") : empty("No songs yet", "Add a song before starting radio."));
     }
+    var fresh = releases();
     var recent = all.slice(0, 12);
     var pl = playlists().slice(0, 8).map(function (list) {
       return '<a class="mu-card" href="#/music/playlist/' + encodeURIComponent(list.id) + '">' + art({ title: list.name }, "mu-cover") + "<b>" + esc(list.name) + "</b><span>" + esc(String((list.songIds || []).length) + " songs") + "</span></a>";
     }).join("");
     return head(BRAND) +
+      (fresh.length ? shelf("New release", fresh.map(function (song) { return releaseHtml(song); }).join("")) : "") +
       (recent.length ? shelf("Songs", '<div class="mu-hscroll">' + recent.map(tile).join("") + "</div>") : empty("No songs yet", "Add a song with a direct audio link, a YouTube link, or a file on this device.")) +
       (pl ? shelf("Playlists", '<div class="mu-hscroll">' + pl + "</div>") : "") +
       shelf("Library", '<div class="mu-grid"><a class="mu-tile" href="#/music/library">' + art({ title: "Library" }, "mu-cover") + "<b>Your Library</b><span>" + esc(String(all.length) + " songs") + '</span></a><a class="mu-tile" href="#/music/liked">' + art({ title: "Liked" }, "mu-cover") + "<b>Liked songs</b><span>" + esc(String((local.likes || []).length)) + "</span></a></div>");
@@ -688,12 +846,15 @@
       }
     }
     if (!audioFile && sourceText) {
-      var kind = classifySource(sourceText);
+      var streamKind = classifyStream(sourceText);
+      var kind = streamKind.ok ? { ok: true, kind: "hls", url: streamKind.url } : classifySource(sourceText);
       if (!kind.ok) { hooks.toast("Use an https audio, YouTube, or Archive link"); return; }
       if (kind.kind === "archive") {
         ready = resolveArchive(kind.id).then(function (url) {
           return { source: url, kind: "audio", cover: coverText };
         });
+      } else if (kind.kind === "hls") {
+        ready = Promise.resolve({ source: "", kind: "hls", stream: kind.url, cover: coverText });
       } else {
         ready = Promise.resolve({ source: kind.url, kind: kind.kind === "youtube" ? "youtube" : "audio", cover: coverText });
       }
@@ -723,7 +884,7 @@
       }
       return store;
     }).then(function (next) {
-      writeSong({
+      var stored = {
         id: id,
         title: title,
         artist: field("mu-artist"),
@@ -733,7 +894,17 @@
         kind: next.kind || "audio",
         duration: existing ? existing.duration : 0,
         license: existing ? existing.license : ""
-      });
+      };
+      var keptStream = next.stream || (existing && !sourceText && !audioFile ? existing.stream : "");
+      if (keptStream) stored.stream = keptStream;
+      if (existing && existing.released) stored.released = existing.released;
+      if (existing && existing.genre) stored.genre = existing.genre;
+      if (existing && existing.style) stored.style = existing.style;
+      if (existing && existing.mood) stored.mood = existing.mood;
+      if (existing && existing.bpm) stored.bpm = existing.bpm;
+      if (existing && existing.language) stored.language = existing.language;
+      if ((existing && existing.lossless) || stored.kind === "hls") stored.lossless = true;
+      writeSong(stored);
       ui.draft = {};
       hooks.toast("Saved on this device");
       hooks.go("#/music/library");
@@ -745,7 +916,25 @@
     var list = publishable(songs()).map(function (song) {
       kept[song.id] = true;
       var cover = song.cover.indexOf("https://") === 0 ? song.cover : "";
-      return { id: song.id, title: song.title, artist: song.artist, album: song.album, cover: cover, source: song.source, kind: song.kind === "youtube" ? "youtube" : "audio", duration: song.duration || 0 };
+      var row = {
+        id: song.id,
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        cover: cover,
+        source: song.kind === "hls" ? "" : song.source,
+        kind: song.kind === "youtube" ? "youtube" : song.kind === "hls" ? "hls" : "audio",
+        duration: song.duration || 0
+      };
+      if (song.stream) row.stream = song.stream;
+      if (song.released) row.released = song.released;
+      if (song.genre) row.genre = song.genre;
+      if (song.style) row.style = song.style;
+      if (song.mood) row.mood = song.mood;
+      if (song.bpm) row.bpm = song.bpm;
+      if (song.language) row.language = song.language;
+      if (song.lossless) row.lossless = true;
+      return row;
     });
     var lists = playlists().map(function (item) {
       return { id: item.id, name: item.name, songIds: (item.songIds || []).filter(function (id) { return kept[id]; }) };
@@ -794,8 +983,10 @@
 
   function startCurrent(fromUser) {
     var song = currentSong();
+    playToken += 1;
     if (!song) { pauseAll(); paint(); return; }
-    if (song.kind === "youtube" || classifySource(song.source).kind === "youtube") startYouTube(song, fromUser);
+    if (song.kind === "hls" || streamReady(song)) startHls(song, fromUser, playToken);
+    else if (song.kind === "youtube" || classifySource(song.source).kind === "youtube") startYouTube(song, fromUser);
     else startAudio(song, fromUser);
   }
 
@@ -814,8 +1005,148 @@
     return Promise.resolve(song.source);
   }
 
+  function loadMusicHls() {
+    if (musicHls) return Promise.resolve(musicHls);
+    if (loadMusicHls.promise) return loadMusicHls.promise;
+    loadMusicHls.promise = new Promise(function (resolve) {
+      var previous = root.Hls;
+      var script = document.createElement("script");
+      script.src = HLS_SRC;
+      script.onload = function () {
+        musicHls = root.Hls || null;
+        if (previous) root.Hls = previous;
+        else {
+          try { delete root.Hls; } catch (err) { root.Hls = undefined; }
+        }
+        resolve(musicHls);
+      };
+      script.onerror = function () { resolve(null); };
+      document.head.appendChild(script);
+    });
+    return loadMusicHls.promise;
+  }
+
+  function destroyHls() {
+    if (hls && hls.destroy) {
+      try { hls.destroy(); } catch (err) { /* already gone */ }
+    }
+    hls = null;
+  }
+
+  function cacheLoader(HlsCtor) {
+    var Xhr = HlsCtor.DefaultConfig.loader;
+    function OfflineLoader(config) {
+      this.xhr = new Xhr(config);
+      this.stats = this.xhr.stats;
+      this.context = null;
+    }
+    OfflineLoader.prototype.load = function (context, config, callbacks) {
+      var self = this;
+      this.context = context;
+      this.stats = this.xhr.stats;
+      readCached(context).then(function (hit) {
+        if (hit == null) {
+          self.xhr.load(context, config, callbacks);
+          return;
+        }
+        var now = root.performance && root.performance.now ? root.performance.now() : Date.now();
+        var bytes = hit && hit.byteLength ? hit.byteLength : (hit && hit.length) || 0;
+        self.stats = {
+          aborted: false,
+          loaded: bytes,
+          retry: 0,
+          total: bytes,
+          chunkCount: 1,
+          bwEstimate: 0,
+          loading: { start: now, first: now, end: now },
+          parsing: { start: 0, end: 0 },
+          buffering: { start: now, first: now, end: now }
+        };
+        callbacks.onSuccess({ url: context.url, data: hit, code: 200 }, self.stats, context, null);
+      }).catch(function () {
+        self.xhr.load(context, config, callbacks);
+      });
+    };
+    OfflineLoader.prototype.abort = function () { if (this.xhr && this.xhr.abort) this.xhr.abort(); };
+    OfflineLoader.prototype.destroy = function () { if (this.xhr && this.xhr.destroy) this.xhr.destroy(); };
+    return OfflineLoader;
+  }
+
+  function readCached(context) {
+    if (!root.caches || !context || !context.url) return Promise.resolve(null);
+    return caches.open(OFFLINE_CACHE).then(function (cache) {
+      return cache.match(context.url);
+    }).then(function (res) {
+      if (!res) return null;
+      if (context.responseType === "arraybuffer") return res.arrayBuffer();
+      if (context.responseType === "json") return res.json();
+      return res.text();
+    });
+  }
+
+  function clearMedia() {
+    destroyHls();
+    if (!audio) return;
+    try { audio.pause(); } catch (err) { /* already paused */ }
+    audio.removeAttribute("src");
+    try { audio.load(); } catch (err) { /* detached */ }
+  }
+
+  function startHls(song, fromUser, token) {
+    stopYouTube();
+    var url = classifyStream(song && song.stream).url || "";
+    if (!url) {
+      play.playing = false;
+      hooks.toast("That song isn’t available");
+      paint();
+      return;
+    }
+    clearMedia();
+    loadMusicHls().then(function (HlsCtor) {
+      if (token !== playToken) return;
+      if (!currentSong() || currentSong().id !== song.id) return;
+      if (!audio) return;
+      if (HlsCtor && HlsCtor.isSupported()) {
+        var player = new HlsCtor({ enableWorker: false, lowLatencyMode: false, loader: cacheLoader(HlsCtor) });
+        hls = player;
+        player.on(HlsCtor.Events.ERROR, function (_evt, data) {
+          if (!data || !data.fatal || token !== playToken) return;
+          play.playing = false;
+          hooks.toast("Couldn’t play that song");
+          paint();
+        });
+        player.on(HlsCtor.Events.MANIFEST_PARSED, function () {
+          if (token !== playToken) return;
+          var attempt = audio.play();
+          if (attempt && attempt.catch) attempt.catch(function () { play.playing = false; paint(); });
+        });
+        player.attachMedia(audio);
+        player.loadSource(url);
+        play.playing = true;
+        paint();
+        session(song);
+        return;
+      }
+      if (audio.canPlayType("application/vnd.apple.mpegurl") || audio.canPlayType("application/x-mpegURL")) {
+        audio.src = url;
+        audio.volume = local.volume;
+        var attempt = audio.play();
+        if (attempt && attempt.catch) attempt.catch(function () { play.playing = false; paint(); });
+        play.playing = true;
+        paint();
+        session(song);
+        return;
+      }
+      play.playing = false;
+      hooks.toast("Couldn’t play that song");
+      paint();
+    });
+    if (!fromUser) paint();
+  }
+
   function startAudio(song, fromUser) {
     stopYouTube();
+    destroyHls();
     sourceUrl(song).then(function (url) {
       if (!audio) return;
       if (audio.getAttribute("data-src") !== url) {
@@ -853,6 +1184,7 @@
   }
 
   function startYouTube(song, fromUser) {
+    destroyHls();
     if (audio) { audio.pause(); }
     var id = youtubeId(song.source);
     if (!id) { hooks.toast("That YouTube link has no video id"); return; }
@@ -909,7 +1241,11 @@
       return;
     }
     if (play.playing) { pauseAll(); clearSessionIfIdle(); paint(); return; }
-    if ((song.kind === "youtube" || classifySource(song.source).kind === "youtube") && yt && yt.playVideo) {
+    if (song.kind === "hls" && hls && audio) {
+      var hlsAttempt = audio.play();
+      if (hlsAttempt && hlsAttempt.catch) hlsAttempt.catch(function () {});
+      play.playing = true;
+    } else if ((song.kind === "youtube" || classifySource(song.source).kind === "youtube") && yt && yt.playVideo) {
       yt.playVideo();
       play.playing = true;
     } else if (audio && audio.src) {
@@ -961,7 +1297,12 @@
     if (!navigator.mediaSession || !song || !active) return;
     try {
       var artworks = [];
-      if (song.cover && song.cover.indexOf("https://") === 0) artworks.push({ src: song.cover, sizes: "512x512", type: "image/jpeg" });
+      if (song.cover && song.cover.indexOf("https://") === 0) {
+        var artType = "image/jpeg";
+        if (/\.png(\?|$)/i.test(song.cover)) artType = "image/png";
+        else if (/\.webp(\?|$)/i.test(song.cover)) artType = "image/webp";
+        artworks.push({ src: song.cover, sizes: "512x512", type: artType });
+      }
       navigator.mediaSession.metadata = new MediaMetadata({ title: song.title || BRAND, artist: song.artist || BRAND, album: song.album || "", artwork: artworks });
       var set = function (name, fn) { try { navigator.mediaSession.setActionHandler(name, fn); } catch (err) { /* unsupported */ } };
       set("play", function () { if (!play.playing) toggle(); });
@@ -1044,7 +1385,16 @@
       paintedId = artId;
       paintArt("mu-dock-art", song);
       paintArt("mu-now-art", song);
+      var pills = document.getElementById("mu-now-pills");
+      if (pills) pills.innerHTML = song && song.lossless ? '<span class="mu-badge">Lossless</span>' : "";
     }
+    var offlineBtn = document.getElementById("mu-now-offline");
+    if (offlineBtn) {
+      var showOffline = !!(song && song.kind === "hls");
+      offlineBtn.hidden = !showOffline;
+      if (showOffline) offlineBtn.setAttribute("data-id", song.id);
+    }
+    paintOfflineButtons();
     if (navigator.mediaSession && navigator.mediaSession.setPositionState && pos.dur) {
       try { navigator.mediaSession.setPositionState({ duration: pos.dur, playbackRate: 1, position: Math.min(pos.cur, pos.dur) }); } catch (err) { /* optional */ }
     }
@@ -1084,13 +1434,17 @@
     now.id = "mu-now";
     now.className = "mu-now";
     now.hidden = true;
-    now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="Close">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + BRAND + '</div><span></span></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">Not playing</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="Previous">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="Play">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="Next">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="Volume">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="Volume"></div>';
+    now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="Close">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + BRAND + '</div><button id="mu-now-offline" class="mu-save" type="button" data-act="music-offline" hidden aria-label="Download for offline">' + svg(CTRL.save) + '</button></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">Not playing</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-pills" id="mu-now-pills"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="Previous">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="Play">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="Next">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="Volume">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="Volume"></div>';
     var host = document.createElement("div");
     host.id = "mu-yt-host";
     host.innerHTML = '<div id="mu-yt"></div>';
     audio = document.createElement("audio");
     audio.id = "mu-audio";
     audio.preload = "metadata";
+    audio.controls = false;
+    audio.setAttribute("controlsList", "nodownload");
+    audio.setAttribute("playsinline", "");
+    audio.addEventListener("contextmenu", function (event) { event.preventDefault(); });
     document.body.appendChild(dock);
     document.body.appendChild(now);
     document.body.appendChild(host);
@@ -1100,18 +1454,22 @@
     audio.addEventListener("loadedmetadata", function () {
       var song = currentSong();
       if (!song || !audio.duration || !isFinite(audio.duration)) return;
-      var dur = Math.round(audio.duration);
-      if (song.duration === dur) return;
-      song.duration = dur;
+      if (song.duration && Math.abs(song.duration - audio.duration) < 0.75) return;
+      song.duration = Math.round(audio.duration);
       writeSong(song);
     });
     audio.addEventListener("play", function () { play.playing = true; paint(); });
     audio.addEventListener("pause", function () { if (active && !ytPending) { play.playing = false; paint(); } });
+    document.addEventListener("contextmenu", function (event) {
+      var node = event.target;
+      if (node && node.closest && node.closest("#mu-dock, #mu-now, #mu-audio, .mu-release")) event.preventDefault();
+    });
   }
 
   function enter() {
     active = true;
     document.documentElement.classList.add("music-on");
+    loadMusicHls();
     var dock = document.getElementById("mu-dock");
     if (dock) dock.hidden = false;
     paint();
@@ -1126,6 +1484,7 @@
     if (poll) { root.clearInterval(poll); poll = 0; }
     if (typeof document !== "undefined") document.documentElement.classList.remove("music-on");
     pauseAll();
+    if (hls && hls.stopLoad) { try { hls.stopLoad(); } catch (err) { /* already stopped */ } }
     var dock = typeof document !== "undefined" ? document.getElementById("mu-dock") : null;
     var now = typeof document !== "undefined" ? document.getElementById("mu-now") : null;
     if (dock) dock.hidden = true;
@@ -1281,7 +1640,138 @@
     }
     if (act === "music-now") { ui.now = true; paint(); return true; }
     if (act === "music-now-close") { ui.now = false; paint(); return true; }
+    if (act === "music-offline") {
+      var target = songById(id) || currentSong();
+      if (!target) return true;
+      if (offlineState(target.id) === "busy") return true;
+      if (offlineState(target.id) === "ready") removeOffline(target);
+      else saveOffline(target);
+      return true;
+    }
     return true;
+  }
+
+  function paintOfflineButtons() {
+    if (typeof document === "undefined") return;
+    document.querySelectorAll("[data-act='music-offline']").forEach(function (btn) {
+      var id = btn.getAttribute("data-id") || "";
+      if (!id) return;
+      var state = offlineState(id);
+      btn.classList.toggle("is-saved", state === "ready");
+      btn.classList.toggle("is-busy", state === "busy");
+      btn.setAttribute("aria-label", offlineAria(id));
+      if (state === "busy") btn.setAttribute("aria-busy", "true");
+      else btn.removeAttribute("aria-busy");
+      var label = btn.querySelector("span");
+      if (label) label.textContent = offlineText(id);
+    });
+  }
+
+  function fetchText(url) {
+    return fetch(url, { mode: "cors", credentials: "omit", cache: "no-store" }).then(function (res) {
+      if (!res.ok) throw new Error("offline");
+      return res.text().then(function (text) {
+        var type = res.headers.get("Content-Type") || "application/vnd.apple.mpegurl";
+        return caches.open(OFFLINE_CACHE).then(function (cache) {
+          return cache.put(url, new Response(text, { status: 200, headers: { "Content-Type": type } })).then(function () { return text; });
+        });
+      });
+    });
+  }
+
+  function cacheFile(url) {
+    return fetch(url, { mode: "cors", credentials: "omit", cache: "no-store" }).then(function (res) {
+      if (!res.ok) throw new Error("offline");
+      return caches.open(OFFLINE_CACHE).then(function (cache) {
+        return cache.put(url, res);
+      });
+    });
+  }
+
+  function mapPool(items, limit, worker) {
+    var cursor = 0;
+    var active = 0;
+    var failed = false;
+    return new Promise(function (resolve, reject) {
+      if (!items.length) { resolve(); return; }
+      function kick() {
+        if (failed) return;
+        if (cursor >= items.length && active === 0) { resolve(); return; }
+        while (!failed && active < limit && cursor < items.length) {
+          var item = items[cursor];
+          cursor += 1;
+          active += 1;
+          Promise.resolve(worker(item)).then(function () {
+            active -= 1;
+            kick();
+          }, function (err) {
+            if (failed) return;
+            failed = true;
+            reject(err);
+          });
+        }
+      }
+      kick();
+    });
+  }
+
+  function gatherStream(url, seen, lists, files) {
+    if (seen[url]) return Promise.resolve();
+    seen[url] = true;
+    lists.push(url);
+    return fetchText(url).then(function (text) {
+      var parsed = hlsAssets(text, url);
+      parsed.files.forEach(function (file) {
+        if (!seen[file]) { seen[file] = true; files.push(file); }
+      });
+      return parsed.playlists.reduce(function (chain, item) {
+        return chain.then(function () { return gatherStream(item, seen, lists, files); });
+      }, Promise.resolve());
+    });
+  }
+
+  function saveOffline(song) {
+    var url = classifyStream(song && song.stream).url || "";
+    if (!url || !root.caches) { hooks.toast("Offline save isn’t available for this song"); return; }
+    ui.offline = { id: song.id, done: 0, total: 0 };
+    paintOfflineButtons();
+    var lists = [];
+    var files = [];
+    gatherStream(url, {}, lists, files).then(function () {
+      ui.offline = { id: song.id, done: lists.length, total: lists.length + files.length };
+      paintOfflineButtons();
+      return mapPool(files, 4, function (file) {
+        return cacheFile(file).then(function () {
+          if (!ui.offline || ui.offline.id !== song.id) return;
+          ui.offline.done += 1;
+          paintOfflineButtons();
+        });
+      }).then(function () { return lists.concat(files); });
+    }).then(function (urls) {
+      if (!local.offline || typeof local.offline !== "object") local.offline = {};
+      local.offline[song.id] = urls;
+      ui.offline = null;
+      save();
+      hooks.toast("Saved for offline");
+      hooks.render();
+    }).catch(function () {
+      ui.offline = null;
+      paintOfflineButtons();
+      hooks.toast("Couldn’t save that song for offline");
+    });
+  }
+
+  function removeOffline(song) {
+    var urls = (local.offline && local.offline[song.id]) || [];
+    if (local.offline) delete local.offline[song.id];
+    save();
+    var done = root.caches ? caches.open(OFFLINE_CACHE).then(function (cache) {
+      return Promise.all(urls.map(function (url) { return cache.delete(url); }));
+    }) : Promise.resolve();
+    done.then(function () {
+      hooks.toast("Removed from this device");
+      hooks.render();
+    }).catch(function () { hooks.render(); });
   }
 
   function bind(next) {
@@ -1304,6 +1794,7 @@
     });
   }
 
+  logic.releaseHtml = releaseHtml;
   root.MusicLogic = logic;
   root.SIntelMusic = {
     install: install,

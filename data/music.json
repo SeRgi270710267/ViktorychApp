@@ -1,5 +1,24 @@
 {
-  "updated": "2026-10-21T19:40:00Z",
-  "songs": [],
+  "updated": "2026-10-22T05:23:00Z",
+  "songs": [
+    {
+      "id": "america-dont-sit-still",
+      "title": "America Don't Sit Still",
+      "artist": "SuperintelMusic",
+      "album": "America Don't Sit Still",
+      "cover": "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/music/america-dont-sit-still/cover.png",
+      "source": "",
+      "stream": "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/music/50c1862ca9927cdd5731d34f80d42669/index.m3u8",
+      "kind": "hls",
+      "duration": 222.11,
+      "released": "2026-10-22",
+      "genre": "Rock",
+      "style": "American rock anthem",
+      "mood": "driving, energetic, bold",
+      "bpm": 83,
+      "language": "en",
+      "lossless": true
+    }
+  ],
   "playlists": []
 }

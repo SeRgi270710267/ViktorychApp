@@ -71,7 +71,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mu-cover, .mu-art {
+.mu-cover, .mu-art, .mu-release-cover {
   width: 100%;
   aspect-ratio: 1;
   border-radius: 8px;
@@ -80,7 +80,90 @@
   position: relative;
   display: block;
 }
-.mu-cover img, .mu-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mu-cover img, .mu-art img, .mu-release-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mu-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  flex: none;
+  white-space: nowrap;
+}
+.mu-tile .mu-badge, .mu-row .mu-badge { align-self: flex-start; }
+.mu-sub { color: var(--muted); font-size: 13px; line-height: 16px; }
+.mu-release {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 14px;
+  margin: 0 16px 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.mu-release-play {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 12px;
+}
+.mu-release-cover { width: 148px; border-radius: 12px; }
+.mu-kicker, .mu-style, .mu-meta, .mu-release .mu-by {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 18px;
+}
+.mu-kicker { font-weight: 700; }
+.mu-release h2 {
+  margin: 2px 0 0;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 800;
+}
+.mu-release .mu-by { color: var(--text); font-size: 15px; line-height: 20px; margin-top: 2px; }
+.mu-pills { display: flex; gap: 6px; margin-top: 8px; }
+.mu-release-actions { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.mu-play-pill {
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--on-fill);
+  font: inherit;
+  font-weight: 700;
+}
+.mu-save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 14px;
+}
+.mu-actions .mu-save, #mu-now-offline {
+  width: 36px;
+  padding: 0;
+  border: 0;
+}
+.mu-save svg { width: 18px; height: 18px; fill: currentColor; }
+.mu-save.is-saved { color: var(--green); }
+.mu-save.is-busy { opacity: 0.7; }
+.mu-now .mu-pills { margin: 0 0 8px; }
 .mu-letter {
   position: absolute;
   inset: 0;
@@ -312,17 +395,27 @@ html.music-on .center { padding-bottom: 96px; }
 .mu-now .mu-vol { justify-content: center; margin-top: 16px; }
 
 @media (max-width: 899px) {
-  .mu-bar { grid-template-columns: minmax(0, 1fr) auto; height: 64px; }
-  .mu-seek, .mu-vol, .mu-transport .mu-shuffle, .mu-transport .mu-rep { display: none; }
+  .mu-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
+    height: auto;
+    min-height: 64px;
+    padding-top: 6px;
+    padding-bottom: 8px;
+  }
+  .mu-vol, .mu-transport .mu-shuffle, .mu-transport .mu-rep { display: none; }
+  .mu-seek { display: flex; grid-column: 1 / -1; min-height: 28px; }
 }
 @media (max-width: 499px) {
   html.music-on .topbar:not(.tall) { border-bottom: 1px solid var(--line); }
-  html.music-on .center { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
+  html.music-on .center { padding-bottom: calc(196px + env(safe-area-inset-bottom)); }
   html.music-on .mu-dock { bottom: calc(53px + env(safe-area-inset-bottom)); }
-  html.music-on .fab { bottom: calc(128px + env(safe-area-inset-bottom)); }
-  .mu-bar { height: 56px; padding-bottom: 0; }
+  html.music-on .fab { bottom: calc(156px + env(safe-area-inset-bottom)); }
+  .mu-bar { height: auto; min-height: 56px; padding-bottom: 8px; }
   .mu-id .mu-art { width: 40px; height: 40px; }
   .mu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mu-release { grid-template-columns: 1fr; }
+  .mu-release-cover, .mu-release-play { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) {
   .mu-eq i { animation: none; height: 8px; }
