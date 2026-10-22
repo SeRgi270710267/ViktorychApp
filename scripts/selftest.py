@@ -3264,6 +3264,45 @@ def ia_backup_checks() -> None:
     check(actions["pic.jpg"] == "copy" and actions["new.mp4"] == "shrink" and actions["old.mp4"] == "drop", "a tight R2 budget keeps the photo, shrinks the newest video, and drops the old one")
     copy_wf = (ROOT / ".github" / "workflows" / "ia-to-r2.yml").read_text(encoding="utf-8")
     check("ia-to-r2.once" in copy_wf and "IA_ACCESS_KEY" not in copy_wf and "IA_SECRET_KEY" not in copy_wf and 'echo "$CLOUDFLARE' not in copy_wf and "schedule:" not in copy_wf, "the R2 copy is a push, does not use the Internet Archive keys, and does not print the token")
+    import ia_empty
+    anon = "x" + ("ab" * 16)
+    chosen = ia_empty.collect_ids(
+        {"items": {"stub:2026-10": anon}, "files": [{"ia": "https://archive.org/download/" + anon + "/pic.jpg"}]},
+        {"noindexBlocked": {"superintelapp-2026-10": "readonly"}},
+    )
+    check(anon in chosen and "superintelapp-2026-10" in chosen and "not-an-item" not in chosen, "the empty run covers anonymous items and the named items")
+    check(ia_empty.files_to_remove({"files": [{"name": "pic.jpg"}, {"name": anon + "_meta.xml"}, {"name": "_archive.torrent"}, {"name": anon + "_files.xml"}, {"name": anon + "_meta.sqlite"}]}) == ["pic.jpg", "_archive.torrent"], "catalog files stay and every other file is removed")
+    store = {anon: ["pic.jpg", anon + "_meta.xml", "_archive.torrent"]}
+    class Resp:
+        def __init__(self, status, body):
+            self.status = status
+            self.body = body
+        def read(self):
+            return self.body
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return False
+    def urlopen(request, timeout=60):
+        item = request.full_url.rstrip("/").split("/")[-1]
+        body = json.dumps({"files": [{"name": name} for name in store.get(item, [])]}).encode()
+        return Resp(200, body)
+    class Opener:
+        def open(self, request, timeout=60):
+            parts = request.full_url.rstrip("/").split("/")
+            item, name = parts[-2], parts[-1]
+            if name in store.get(item, []):
+                store[item].remove(name)
+            return Resp(204, b"")
+    os.environ["IA_UPLOADS_ENABLED"] = "true"
+    try:
+        emptied = ia_empty.empty_items([anon], urlopen=urlopen, opener=Opener(), access="k", secret="sentinel-secret-value", endpoint="http://127.0.0.1", metadata_base="http://127.0.0.1/metadata", sleep=lambda delay: None, pace=0)
+    finally:
+        os.environ.pop("IA_UPLOADS_ENABLED", None)
+    check(emptied["empty"] == [anon] and emptied["holding"] == {} and store[anon] == [anon + "_meta.xml"] and emptied["deleted"] == 2, "a file delete leaves the catalog file and reports the item empty")
+    check(ia_empty.main() == 0, "the empty script does nothing unless uploads are enabled")
+    empty_wf = (ROOT / ".github" / "workflows" / "ia-empty.yml").read_text(encoding="utf-8")
+    check("ia-empty.once" in empty_wf and "IA_UPLOADS_ENABLED" in empty_wf and "schedule:" not in empty_wf and 'echo "$IA_' not in empty_wf and "echo $IA_" not in empty_wf, "the empty workflow is a push, turns writes on for that job, and does not print the keys")
     os.environ.pop("IA_UPLOADS_ENABLED", None)
     class Boom:
         def open(self, *args, **kwargs):
