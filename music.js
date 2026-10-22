@@ -461,7 +461,7 @@
       navItem("#/music/liked", "muHeart", tr("Liked songs"), section === "liked") +
       navItem("#/music/add", "muAdd", tr("Add song"), section === "add" || section === "edit") +
       navItem("#/music/radio", "muRadio", tr("Radio"), section === "radio") +
-      navItem("#/", "muBack", tr("Back to {app}", { app: productName("app") }), false, tr("Back to {app}", { app: productName("app") }));
+      navItem("#/", "muBack", tr("Back to {app}", { app: productName("pwa") }), false, tr("Back to {app}", { app: productName("pwa") }));
   }
 
   function drawerLinks(icon) {
@@ -472,7 +472,7 @@
       '<a href="#/music/liked">' + icon("muHeart") + " " + tr("Liked songs") + "</a>" +
       '<a href="#/music/add">' + icon("muAdd") + " " + tr("Add song") + "</a>" +
       '<a href="#/music/radio">' + icon("muRadio") + " " + tr("Radio") + "</a>" +
-      '<a href="#/">' + icon("muBack") + " " + tr("Back to {app}", { app: productName("app") }) + "</a>";
+      '<a href="#/">' + icon("muBack") + " " + tr("Back to {app}", { app: productName("pwa") }) + "</a>";
   }
 
   function bottomHtml(route, icon) {
@@ -480,7 +480,7 @@
     var item = function (href, name, label, on) {
       return '<a href="' + href + '" class="' + (on ? "on" : "") + '" aria-label="' + esc(label) + '"' + (on ? ' aria-current="page"' : "") + '><span class="nav-ico">' + icon(name) + "</span></a>";
     };
-    return '<nav class="bottom-nav" aria-label="' + productName("music") + '">' +
+    return '<nav class="bottom-nav" aria-label="' + productName("musicShort") + '">' +
       item("#/music", section === "home" ? "muHomeOn" : "muHome", tr("Home"), section === "home") +
       item("#/music/search", section === "search" ? "muSearchOn" : "muSearch", tr("Search"), section === "search") +
       item("#/music/library", section === "library" ? "muLibraryOn" : "muLibrary", tr("Your Library"), section === "library") +
@@ -507,7 +507,7 @@
   }
 
   function head(title, tools) {
-    var logo = '<div class="mhead"><button class="m-ava" data-act="drawer" aria-label="' + tr("Menu") + '"><span class="ava initials">Y</span></button><a class="m-logo" href="#/" aria-label="' + productName("music") + '">' + wordmark("logo-full", "music") + wordmark("logo-short", "musicShort") + "</a></div>";
+    var logo = '<div class="mhead"><button class="m-ava" data-act="drawer" aria-label="' + tr("Menu") + '"><span class="ava initials">Y</span></button><a class="m-logo" href="#/" aria-label="' + productName("musicShort") + '">' + wordmark("logo-full", "music") + wordmark("logo-short", "musicShort") + "</a></div>";
     // Home already shows the music logo. A second heading would repeat it.
     if (title === productName("music")) return '<div class="topbar"><h1 class="vh">' + esc(title) + "</h1>" + logo + "</div>";
     return '<div class="topbar tall">' + logo + '<div class="page-head"><div class="head-text grow"><h1>' + esc(title) + "</h1></div>" + (tools || "") + "</div></div>";
@@ -523,6 +523,37 @@
     var blob = song && blobUrls[song.id + ":cover"];
     var img = cover || blob ? '<img src="' + esc(cover || blob) + '" alt="" referrerpolicy="no-referrer">' : "";
     return '<span class="' + cls + '">' + img + '<span class="mu-letter">' + letter(song) + "</span></span>";
+  }
+
+  function coverBox(node) {
+    var box = node && node.parentNode;
+    if (!box || !box.classList) return null;
+    if (box.classList.contains("mu-cover") || box.classList.contains("mu-art") || box.classList.contains("mu-release-cover") || box.classList.contains("mu-now-art")) return box;
+    return null;
+  }
+
+  function markCover(img) {
+    var box = coverBox(img);
+    if (!box) return;
+    if (img.complete && img.naturalWidth) box.classList.add("has-img");
+    else box.classList.remove("has-img");
+  }
+
+  function onCoverEvent(event) {
+    var img = event.target;
+    if (!img || img.tagName !== "IMG" || !coverBox(img)) return;
+    if (event.type === "error") {
+      var box = coverBox(img);
+      if (box) box.classList.remove("has-img");
+      return;
+    }
+    markCover(img);
+  }
+
+  function settleCovers(root) {
+    var scope = root && root.querySelectorAll ? root : document;
+    if (!scope || !scope.querySelectorAll) return;
+    scope.querySelectorAll(".mu-cover img, .mu-art img, .mu-release-cover img, .mu-now-art img").forEach(markCover);
   }
 
   function offlineState(id) {
@@ -1333,7 +1364,7 @@
         else if (/\.webp(\?|$)/i.test(song.cover)) artType = "image/webp";
         artworks.push({ src: song.cover, sizes: "512x512", type: artType });
       }
-      navigator.mediaSession.metadata = new MediaMetadata({ title: song.title || productName("music"), artist: song.artist || productName("music"), album: song.album || "", artwork: artworks });
+      navigator.mediaSession.metadata = new MediaMetadata({ title: song.title || productName("musicShort"), artist: song.artist || productName("musicShort"), album: song.album || "", artwork: artworks });
       var set = function (name, fn) { try { navigator.mediaSession.setActionHandler(name, fn); } catch (err) { /* unsupported */ } };
       set("play", function () { if (!play.playing) toggle(); });
       set("pause", function () { if (play.playing) toggle(); });
@@ -1368,7 +1399,7 @@
     var dock = document.getElementById("mu-dock");
     if (dock) dock.hidden = false;
     text("mu-dock-title", song ? (song.title || tr("Untitled")) : tr("Not playing"));
-    text("mu-dock-artist", song ? (song.artist || "") : productName("music"));
+    text("mu-dock-artist", song ? (song.artist || "") : productName("musicShort"));
     text("mu-now-title", song ? (song.title || tr("Untitled")) : tr("Not playing"));
     text("mu-now-artist", song ? (song.artist || "") : "");
     var pos = position();
@@ -1448,6 +1479,7 @@
     var el = document.getElementById(id);
     if (!el) return;
     el.innerHTML = art(song || { title: productName("music") }, "mu-art");
+    settleCovers(el);
   }
 
   function mount() {
@@ -1456,7 +1488,7 @@
     dock.id = "mu-dock";
     dock.className = "mu-dock";
     dock.hidden = true;
-    dock.innerHTML = ("<div class=\"mu-bar\"><button class=\"mu-id\" type=\"button\" data-act=\"music-now\" " + "aria-label=\"" + tr("Now playing") + "\"" + "><span id=\"mu-dock-art\"></span><span class=\"mu-copy\"><b id=\"mu-dock-title\"" + ">" + tr("Not playing") + "<" + "/b><span id=\"mu-dock-artist\">") + productName("music") + '</span></span></button>' +
+    dock.innerHTML = ("<div class=\"mu-bar\"><button class=\"mu-id\" type=\"button\" data-act=\"music-now\" " + "aria-label=\"" + tr("Now playing") + "\"" + "><span id=\"mu-dock-art\"></span><span class=\"mu-copy\"><b id=\"mu-dock-title\"" + ">" + tr("Not playing") + "<" + "/b><span id=\"mu-dock-artist\">") + productName("musicShort") + '</span></span></button>' +
       ("<div class=\"mu-transport\"><button type=\"button\" class=\"mu-shuffle\" data-act=\"music-shuffle\" " + "aria-label=\"" + tr("Shuffle") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.shuffle) + ("</button><button type=\"button\" data-act=\"music-prev\" " + "aria-label=\"" + tr("Previous") + "\"" + ">") + svg(CTRL.prev) + ("</button><button id=\"mu-play\" class=\"mu-play\" type=\"button\" data-act=\"music-toggle\" " + "aria-label=\"" + tr("Play") + "\"" + ">") + svg(CTRL.play) + ("</button><button type=\"button\" data-act=\"music-next\" " + "aria-label=\"" + tr("Next") + "\"" + ">") + svg(CTRL.next) + ("</button><button type=\"button\" class=\"mu-rep\" data-act=\"music-repeat\" " + "aria-label=\"" + tr("Repeat") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.repeat) + '<i></i></button></div>' +
       ("<div class=\"mu-seek\"><span class=\"mu-time\" id=\"mu-time\">0:00</span><input id=\"mu-seek\" class=\"mu-range\" type=\"range\" min=\"0\" max=\"0\" value=\"0\" step=\"0.1\" " + "aria-label=\"" + tr("Seek") + "\"" + "><span class=\"mu-time\" id=\"mu-end\">0:00</span></div>") +
       ("<div class=\"mu-vol\"><button type=\"button\" " + "aria-label=\"" + tr("Volume") + "\"" + ">") + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + ("\" " + "aria-label=\"" + tr("Volume") + "\"" + "></div></div>");
@@ -1464,7 +1496,7 @@
     now.id = "mu-now";
     now.className = "mu-now";
     now.hidden = true;
-    now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="' + tr("Close") + '">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + productName("music") + '</div><button id="mu-now-offline" class="mu-save" type="button" data-act="music-offline" hidden aria-label="' + tr("Download for offline") + '">' + svg(CTRL.save) + '</button></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">' + tr("Not playing") + '</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-pills" id="mu-now-pills"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + tr("Seek") + '"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="' + tr("Previous") + '">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="' + tr("Play") + '">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="' + tr("Next") + '">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="' + tr("Volume") + '">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="' + tr("Volume") + '"></div>';
+    now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="' + tr("Close") + '">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + productName("musicShort") + '</div><button id="mu-now-offline" class="mu-save" type="button" data-act="music-offline" hidden aria-label="' + tr("Download for offline") + '">' + svg(CTRL.save) + '</button></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">' + tr("Not playing") + '</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-pills" id="mu-now-pills"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + tr("Seek") + '"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="' + tr("Previous") + '">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="' + tr("Play") + '">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="' + tr("Next") + '">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="' + tr("Volume") + '">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="' + tr("Volume") + '"></div>';
     var host = document.createElement("div");
     host.id = "mu-yt-host";
     host.innerHTML = '<div id="mu-yt"></div>';
@@ -1525,6 +1557,7 @@
   function afterRender(route) {
     if (route && route.name === "music") enter();
     else leave(route);
+    if (typeof document !== "undefined") settleCovers(document);
   }
 
   function onInput(event) {
@@ -1533,7 +1566,10 @@
     if (target.id === "mu-q") {
       ui.q = target.value;
       var box = document.querySelector(".mu-results");
-      if (box) box.innerHTML = ui.q ? songList(filtered(ui.q), "library") : empty(tr("Search {music}", { music: productName("music") }), tr("Find a song by title, artist, or album."));
+      if (box) {
+        box.innerHTML = ui.q ? songList(filtered(ui.q), "library") : empty(tr("Search {music}", { music: productName("music") }), tr("Find a song by title, artist, or album."));
+        settleCovers(box);
+      }
       return;
     }
     if (target.id === "mu-title" || target.id === "mu-artist" || target.id === "mu-album" || target.id === "mu-cover-url" || target.id === "mu-audio-url" || target.id === "mu-pl-name") {
@@ -1814,6 +1850,8 @@
     restore();
     mount();
     loadRemote();
+    document.addEventListener("load", onCoverEvent, true);
+    document.addEventListener("error", onCoverEvent, true);
     document.addEventListener("input", onInput);
     document.addEventListener("dragstart", onDragStart);
     document.addEventListener("dragover", onDragOver);

@@ -1821,10 +1821,6 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   .side { display: block; width: 320px; flex: 0 0 320px; padding-left: 16px; }
   .center { width: auto; flex: 1 1 auto; max-width: 600px; }
 }
-@media (max-width: 359px) {
-  .m-logo .logo-full { display: none; }
-  .m-logo .logo-short { display: block; height: 22px; width: auto; }
-}
 @media (max-width: 499px) {
   .nav, .side { display: none; }
   .app { max-width: none; }
@@ -1865,8 +1861,8 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
     color: #fff;
     text-decoration: none;
   }
-  .m-logo .logo-short { display: none; }
-  .m-logo svg { display: block; height: 22px; width: auto; max-width: 70vw; }
+  .m-logo .logo-full { display: none; }
+  .m-logo .logo-short { display: block; height: 22px; width: auto; max-width: 70vw; }
   .m-ava { width: 32px; height: 32px; padding: 0; }
   .m-ava .ava, .m-ava .initials { width: 32px; height: 32px; font-size: 14px; }
   .bottom-nav {
@@ -3331,6 +3327,8 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 .tab-edit-row .tab-dot { margin-right: 8px; }
 
 .nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav-item.nav-back { gap: 10px; padding-left: 8px; padding-right: 8px; }
+.nav-item.nav-back .nav-label { letter-spacing: -0.01em; }
 .nav-item { overflow: hidden; }
 .page-head h1, .head-text h1 { overflow-wrap: anywhere; }
 .page-head.settings-head { height: auto; min-height: 53px; padding-top: 8px; padding-bottom: 8px; }

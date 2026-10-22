@@ -4979,7 +4979,8 @@ const here = parseRoute();
     const glyph = icon(on && PATH[onName] && (name === "home" || name.indexOf("mu") === 0) ? onName : name);
     const badge = name === "bell" ? bellBadgeHtml() : "";
     const accessible = aria || label;
-    return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(accessible)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${esc(label)}</span></a>`;
+    const tight = name === "muBack" ? " nav-back" : "";
+    return `<a class="nav-item${on ? " on" : ""}${tight}" href="${href}" aria-label="${esc(accessible)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${esc(label)}</span></a>`;
   }
 
   function wordmarkSvg(cls) {
@@ -6880,7 +6881,7 @@ const here = parseRoute();
       const list = pack.top.length ? pack.top.map((p) => card(p)).join("") : "";
       body = (accounts + list) || emptyBlock(tr("No results"), missed);
     }
-    return `<div class="gresults"><div class="gresults-head"><div class="gresults-row"><a class="gresults-logo" href="#/explore" aria-label="${productName("app")}">${wordmarkSvg("gresults-mark")}</a><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField(q)}</form></div>${exploreTabs(tab)}</div><div class="gresults-list">${body}</div></div>`;
+    return `<div class="gresults"><div class="gresults-head"><div class="gresults-row"><a class="gresults-logo" href="#/explore" aria-label="${productName("pwa")}">${markSvg("appShort", "gresults-mark")}</a><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField(q)}</form></div>${exploreTabs(tab)}</div><div class="gresults-list">${body}</div></div>`;
   }
 
   function exploreView(route) {
