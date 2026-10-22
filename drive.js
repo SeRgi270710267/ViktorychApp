@@ -206,16 +206,20 @@ function title() {
   }
   var chain = crumbs();
   if (chain.length) return chain[chain.length - 1].meta.name || tr("Folder");
-  return tr("Drive");
+  return tr("brand.storage");
+}
+function headingHtml(text) {
+  if (text !== tr("brand.storage")) return esc(text);
+  return '<span class="storage-name"><span class="storage-full">' + esc(tr("brand.storage")) + '</span><span class="storage-short">' + esc(tr("brand.storageShort")) + "</span></span>";
 }
 function backHref() {
-  if (state.route && state.route.trash) return "#/drive";
-  if (section() === "photos" && photoView() === "album") return "#/drive/photos/albums";
+  if (state.route && state.route.trash) return "#/storage";
+  if (section() === "photos" && photoView() === "album") return "#/storage/photos/albums";
   if (section() === "photos") return "";
   var chain = crumbs();
   if (!chain.length) return "";
-  if (chain.length === 1) return "#/drive";
-  return "#/drive/folder/" + encodeURIComponent(chain[chain.length - 2].id);
+  if (chain.length === 1) return "#/storage";
+  return "#/storage/folder/" + encodeURIComponent(chain[chain.length - 2].id);
 }
 
 function idb() {
@@ -865,12 +869,12 @@ function warnBlock() {
 }
 function lockHtml() {
   var setup = state.mode === "setup";
-  return '<div class="drive-lock"><h2>' + esc(setup ? tr("Set a Drive passphrase") : tr("Drive is locked.")) + "</h2>" + warnBlock() +
+  return '<div class="drive-lock"><h2>' + esc(setup ? tr("Set a ViktorychStorage passphrase") : tr("ViktorychStorage is locked.")) + "</h2>" + warnBlock() +
     (state.error ? '<p class="drive-error">' + esc(state.error) + "</p>" : "") +
     '<form data-drive-form="unlock"><label class="field"><span>' + esc(tr("Passphrase")) + '</span><input id="drive-pass" type="password" autocomplete="' + (setup ? "new-password" : "current-password") + '"></label>' +
     (setup ? '<label class="field"><span>' + esc(tr("Confirm passphrase")) + '</span><input id="drive-pass2" type="password" autocomplete="new-password"></label>' : "") +
     '<label class="drive-check"><input id="drive-remember" type="checkbox"> <span>' + esc(tr("Remember the unlocked key on this device")) + "</span></label>" +
-    '<button class="save" type="submit"' + (state.busy ? " disabled" : "") + ">" + esc(setup ? tr("Create Drive") : tr("Unlock Drive")) + "</button></form></div>";
+    '<button class="save" type="submit"' + (state.busy ? " disabled" : "") + ">" + esc(setup ? tr("Create ViktorychStorage") : tr("Unlock ViktorychStorage")) + "</button></form></div>";
 }
 function itemFace(item) {
   if (item.thumbUrl) return '<span class="drive-thumb"><img alt="" src="' + esc(item.thumbUrl) + '"></span>';
@@ -886,7 +890,7 @@ function itemOpen(item) {
   var name = esc(item.meta && item.meta.name || tr("File"));
   var inner = itemFace(item) + '<span class="drive-copy"><span class="drive-name">' + name + '</span><span class="drive-meta">' + itemMeta(item) + "</span></span>";
   if (item.kind === "folder" && !(state.route && state.route.trash)) {
-    return '<a class="drive-open" href="#/drive/folder/' + encodeURIComponent(item.id) + '" data-act="stop">' + inner + "</a>";
+    return '<a class="drive-open" href="#/storage/folder/' + encodeURIComponent(item.id) + '" data-act="stop">' + inner + "</a>";
   }
   return '<button class="drive-open" type="button" data-act="stop" data-drive="open" data-id="' + esc(item.id) + '">' + inner + "</button>";
 }
@@ -1048,7 +1052,7 @@ function albumCards() {
     var cover = "";
     photos.forEach(function (item) { if (!cover && item.thumbUrl) cover = item.thumbUrl; });
     var face = cover ? '<img alt="" src="' + esc(cover) + '">' : svg(ICO.folder);
-    return '<a class="album-card" href="#/drive/photos/album/' + encodeURIComponent(album.id) + '" data-act="stop"><span class="album-cover">' + face + "</span><h3>" + esc(album.meta.name || tr("Album")) + "</h3><p>" + esc(tn("drivePhotos", photos.length)) + "</p></a>";
+    return '<a class="album-card" href="#/storage/photos/album/' + encodeURIComponent(album.id) + '" data-act="stop"><span class="album-cover">' + face + "</span><h3>" + esc(album.meta.name || tr("Album")) + "</h3><p>" + esc(tn("drivePhotos", photos.length)) + "</p></a>";
   }).join("") + "</div>";
 }
 function photoTools() {
@@ -1064,7 +1068,7 @@ function photoTools() {
   if (view !== "albums") buttons += '<button class="outline" type="button" data-act="stop" data-drive="pick-toggle">' + esc(state.pick ? tr("Cancel") : tr("Select")) + "</button>";
   return '<div class="drive-bar">' + buttons +
     '<label class="drive-search">' + svg(ICO.search) + '<input id="drive-q" type="search" value="' + esc(state.query) + '" placeholder="' + esc(tr("Search by name")) + '" aria-label="' + esc(tr("Search by name")) + '"></label>' +
-    '<a class="outline" href="#/drive/trash" data-act="stop">' + esc(tr("Trash")) + '</a><span class="drive-used">' + esc(tr("Storage used {size}", { size: formatSize(state.stored) })) + "</span></div>";
+    '<a class="outline" href="#/storage/trash" data-act="stop">' + esc(tr("Trash")) + '</a><span class="drive-used">' + esc(tr("Storage used {size}", { size: formatSize(state.stored) })) + "</span></div>";
 }
 function selectBar() {
   if (!state.pick || photoView() === "albums") return "";
@@ -1176,7 +1180,7 @@ function readyHtml() {
     transfer = '<div class="drive-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><p>' + esc(label) + '</p><div class="drive-progress-bar"><i style="width:' + pct + '%"></i></div></div>';
   }
   return warnBlock() +
-    '<div class="drive-bar"><button class="save" type="button" data-act="stop" data-drive="pick"' + (state.busy ? " disabled" : "") + ">" + esc(tr("Upload files")) + '</button><button class="outline" type="button" data-act="stop" data-drive="ask-folder"' + (state.busy ? " disabled" : "") + ">" + esc(tr("New folder")) + '</button><label class="drive-search">' + svg(ICO.search) + '<input id="drive-q" type="search" value="' + esc(state.query) + '" placeholder="' + esc(tr("Search by name")) + '" aria-label="' + esc(tr("Search by name")) + '"></label><div class="drive-views"><button class="icon-btn' + (state.view === "grid" ? " on" : "") + '" type="button" data-act="stop" data-drive="grid" aria-label="' + esc(tr("Grid view")) + '">' + svg(ICO.grid) + '</button><button class="icon-btn' + (state.view === "list" ? " on" : "") + '" type="button" data-act="stop" data-drive="list" aria-label="' + esc(tr("List view")) + '">' + svg(ICO.rows) + '</button></div><a class="outline" href="' + ((state.route && state.route.trash) ? "#/drive" : "#/drive/trash") + '" data-act="stop">' + esc((state.route && state.route.trash) ? tr("Back to Drive") : tr("Trash")) + '</a><span class="drive-used">' + esc(tr("Storage used {size}", { size: formatSize(state.stored) })) + "</span></div>" +
+    '<div class="drive-bar"><button class="save" type="button" data-act="stop" data-drive="pick"' + (state.busy ? " disabled" : "") + ">" + esc(tr("Upload files")) + '</button><button class="outline" type="button" data-act="stop" data-drive="ask-folder"' + (state.busy ? " disabled" : "") + ">" + esc(tr("New folder")) + '</button><label class="drive-search">' + svg(ICO.search) + '<input id="drive-q" type="search" value="' + esc(state.query) + '" placeholder="' + esc(tr("Search by name")) + '" aria-label="' + esc(tr("Search by name")) + '"></label><div class="drive-views"><button class="icon-btn' + (state.view === "grid" ? " on" : "") + '" type="button" data-act="stop" data-drive="grid" aria-label="' + esc(tr("Grid view")) + '">' + svg(ICO.grid) + '</button><button class="icon-btn' + (state.view === "list" ? " on" : "") + '" type="button" data-act="stop" data-drive="list" aria-label="' + esc(tr("List view")) + '">' + svg(ICO.rows) + '</button></div><a class="outline" href="' + ((state.route && state.route.trash) ? "#/storage" : "#/storage/trash") + '" data-act="stop">' + esc((state.route && state.route.trash) ? tr("Back to Drive") : tr("Trash")) + '</a><span class="drive-used">' + esc(tr("Storage used {size}", { size: formatSize(state.stored) })) + "</span></div>" +
     (state.error ? '<p class="drive-error" style="padding:0 16px">' + esc(state.error) + "</p>" : "") +
     '<input id="drive-file" type="file" multiple hidden>' +
     '<div class="drive-drop">' + body + "</div>" + transfer + dialogHtml();
@@ -1187,13 +1191,13 @@ function tabLink(href, on, label) {
 function sectionTabs() {
   if (state.mode !== "ready") return "";
   var photos = section() === "photos" && !(state.route && state.route.trash);
-  var main = '<div class="tabs-bar drive-tabs"><div class="tabs" role="tablist">' + tabLink("#/drive", !photos, tr("Drive")) + tabLink("#/drive/photos", photos, tr("Photos")) + "</div></div>";
+  var main = '<div class="tabs-bar drive-tabs"><div class="tabs" role="tablist">' + tabLink("#/storage", !photos, tr("Drive")) + tabLink("#/storage/photos", photos, tr("Photos")) + "</div></div>";
   if (!photos) return main;
   var view = photoView();
   return main + '<div class="tabs-bar drive-sub"><div class="tabs" role="tablist">' +
-    tabLink("#/drive/photos", view === "timeline", tr("Photos")) +
-    tabLink("#/drive/photos/albums", view === "albums" || view === "album", tr("Albums")) +
-    tabLink("#/drive/photos/favorites", view === "favorites", tr("Favorites")) +
+    tabLink("#/storage/photos", view === "timeline", tr("Photos")) +
+    tabLink("#/storage/photos/albums", view === "albums" || view === "album", tr("Albums")) +
+    tabLink("#/storage/photos/favorites", view === "favorites", tr("Favorites")) +
     "</div></div>";
 }
 function routeKey(route) {
@@ -1215,12 +1219,12 @@ function page(route) {
   var photos = section() === "photos" && !(state.route && state.route.trash);
   var head = '<div class="topbar tall"><div class="mhead"><button class="m-ava" type="button" data-act="drawer" aria-label="' + esc(tr("Menu")) + '"><span class="ava initials">Y</span></button></div><div class="page-head">' +
     (back ? '<a class="icon-btn" href="' + back + '" data-act="stop" aria-label="' + esc(tr("Back")) + '">' + svg("M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z") + "</a>" : "") +
-    '<div class="head-text grow"><h1>' + esc(state.mode === "ready" ? title() : tr("Drive")) + "</h1></div>" +
-    (state.mode === "ready" ? '<button class="icon-btn" type="button" data-act="stop" data-drive="lock" aria-label="' + esc(tr("Lock Drive")) + '">' + svg(ICO.lock) + "</button>" : "") +
+    '<div class="head-text grow"><h1>' + headingHtml(state.mode === "ready" ? title() : tr("brand.storage")) + "</h1></div>" +
+    (state.mode === "ready" ? '<button class="icon-btn" type="button" data-act="stop" data-drive="lock" aria-label="' + esc(tr("Lock ViktorychStorage")) + '">' + svg(ICO.lock) + "</button>" : "") +
     "</div>" + sectionTabs() + "</div>";
   var main = "";
   if (state.mode === "loading") main = '<div class="drive-empty"></div>';
-  else if (state.mode === "offline") main = '<div class="drive-empty"><h2>' + esc(tr("Drive is not available on this copy.")) + "</h2></div>";
+  else if (state.mode === "offline") main = '<div class="drive-empty"><h2>' + esc(tr("ViktorychStorage is not available on this copy.")) + "</h2></div>";
   else if (state.mode === "setup" || state.mode === "locked") main = lockHtml();
   else main = readyHtml();
   return '<div class="drive' + (photos ? " drive-photos" : " drive-files") + (state.drag ? " is-drag" : "") + '" data-drop="' + esc(photos ? tr("Drop photos to back up") : tr("Drop files to upload")) + '">' + head + main + "</div>";
@@ -1263,7 +1267,7 @@ async function onUnlock(form) {
       master = await unlockVault(pass, row.salt, row.iterations, row.verifier, row.verifierIv);
       if (!master) {
         state.busy = false;
-        state.error = tr("That passphrase did not unlock Drive.");
+        state.error = tr("That passphrase did not unlock ViktorychStorage.");
         paint();
         return;
       }
@@ -1387,7 +1391,7 @@ function bind(root) {
     if (act === "open" && item) {
       state.menu = "";
       if (item.kind === "folder") {
-        if (!(state.route && state.route.trash)) location.hash = "#/drive/folder/" + encodeURIComponent(item.id);
+        if (!(state.route && state.route.trash)) location.hash = "#/storage/folder/" + encodeURIComponent(item.id);
         return;
       }
       var view = kindOf(item.meta);

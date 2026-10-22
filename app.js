@@ -76,6 +76,7 @@
     spark: "M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z",
     lists: "M3 5.5C3 4.12 4.12 3 5.5 3h13C19.88 3 21 4.12 21 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-13zM5.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-13zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h7v2H7v-2z",
     bookmark: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z",
+    storage: "M12 5c3.2 0 5.7 2 6.4 4.6 2.4.4 4.1 2.4 4.1 4.8 0 2.7-2.2 4.8-4.9 4.8H7C4.4 19.2 2.3 17.1 2.3 14.5c0-2.3 1.6-4.2 3.8-4.7C6.9 7 9.2 5 12 5zm0 2c-2.2 0-3.9 1.5-4.5 3.6l-.3.8-.8.2c-1.6.4-2.7 1.8-2.7 3.4 0 1.9 1.5 3.4 3.4 3.4h10.5c1.6 0 2.9-1.3 2.9-2.9 0-1.5-1.1-2.7-2.5-2.9l-.8-.1-.2-.8C16 8.4 14.2 7 12 7z",
     subs: "M4 5.5C4 4.12 5.12 3 6.5 3h11C18.88 3 20 4.12 20 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 21 4 19.88 4 18.5v-13zM6.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h11c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-11zM10 8.2v7.6l6-3.8-6-3.8z",
     grid: "M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z",
     rows: "M4 5h16v3H4V5zm0 5.5h16v3H4v-3zM4 16h16v3H4v-3z",
@@ -5407,7 +5408,7 @@ const here = parseRoute();
     if (parts[0] === "bookmarks" && parts.length === 1) return { name: "history", tab: "bookmarks", query };
     if (parts[0] === "music") return { name: "music", section: parts[1] || "home", id: parts.slice(2).join("/"), query };
     if (parts[0] === "shorts") return { name: "shorts", live: parts[1] === "live", query };
-    if (parts[0] === "drive") {
+    if (parts[0] === "storage" || parts[0] === "drive") {
       if (parts[1] === "trash") return { name: "drive", section: "files", trash: true, folder: "", view: "", album: "", query };
       if (parts[1] === "folder" && parts[2]) return { name: "drive", section: "files", trash: false, folder: parts[2], view: "", album: "", query };
       if (parts[1] === "photos") {
@@ -8816,7 +8817,7 @@ const here = parseRoute();
         person: tr("Profile"),
         spaces: tr("Space"),
         shorts: tr("Shorts"),
-        drive: route.section === "photos" ? tr("Photos") : tr("Drive")
+        drive: route.section === "photos" ? tr("Photos") : tr("brand.storage")
       };
       key = map[route.name] || "";
     }
@@ -8961,7 +8962,7 @@ const here = parseRoute();
       <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
       <a href="#/music">${icon("muNote")} ${tr("Music")}</a>
       ${window.ViktorychShorts && window.ViktorychShorts.visible() ? `<a href="#/shorts">${icon("shorts")} ${tr("Shorts")}</a>` : ""}
-      ${window.ViktorychDrive && window.ViktorychDrive.visible() ? `<a href="#/drive">${icon("bookmark")} ${tr("Drive")}</a>` : ""}
+      ${window.ViktorychDrive && window.ViktorychDrive.visible() ? `<a href="#/storage">${icon("storage")} ${tr("brand.storage")}</a>` : ""}
       <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>${tr("You")}</b><div class="phandle">@reader</div></div></div>`}
@@ -10669,9 +10670,13 @@ if (STATE.histClear) {
       STATE.splitRender = opts || STATE.splitRender || {};
       return;
     }
-    const bare = (location.hash || "#/").split("?")[0];
+    const hashNow = location.hash || "#/";
+    const qCut = hashNow.indexOf("?");
+    const bare = qCut >= 0 ? hashNow.slice(0, qCut) : hashNow;
     if (bare === "#/bookmarks" || bare === "#/history") {
       history.replaceState(null, "", location.pathname + location.search + "#/history/bookmarks");
+    } else if (bare === "#/drive" || bare.startsWith("#/drive/")) {
+      history.replaceState(null, "", location.pathname + location.search + "#/storage" + bare.slice("#/drive".length) + (qCut >= 0 ? hashNow.slice(qCut) : ""));
     }
     const gen = (STATE.renderGen = (STATE.renderGen || 0) + 1);
     let route = parseRoute();
