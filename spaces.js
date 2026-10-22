@@ -189,6 +189,24 @@
     };
   }
 
+  // FLAC is the loop's primary playlist. fallback is AAC for browsers that
+  // cannot play audio/mp4; codecs="flac". A missing fallback keeps the primary.
+  function loopPlayChoice(status, allow, flacOk) {
+    const parsed = loopFromDoc(status, allow);
+    const raw = status && typeof status.fallback === "string" ? status.fallback : "";
+    const fallback = parsed.live ? allowedAudio(raw, "", allow) : "";
+    const useFallback = flacOk === false && !!fallback;
+    return {
+      live: parsed.live,
+      url: useFallback ? fallback : parsed.url,
+      primary: parsed.url,
+      fallback: fallback,
+      version: parsed.version,
+      duration: parsed.duration,
+      epoch: parsed.epoch
+    };
+  }
+
   // current.json is the only liveness source for the static loop. A site or
   // R2 status.json (live:false, no loop url) is not a manifest.
   function loopManifestDoc(doc) {
@@ -205,7 +223,7 @@
     return reason === "fatal" || reason === "stall" || reason === "watch" || reason === "network" || reason === "ended" || reason === "unsupported";
   }
 
-  function loopRecovery(loaded, manifest, allow, reason, httpStatus) {
+  function loopRecovery(loaded, manifest, allow, reason, httpStatus, flacOk) {
     const refresh = loopNeedsRefresh(reason, httpStatus);
     const keep = loaded && loaded.live && loaded.url ? loaded : null;
     if (!loopManifestDoc(manifest)) {
@@ -218,7 +236,7 @@
         seek: false
       };
     }
-    const next = loopFromDoc(manifest, allow);
+    const next = loopPlayChoice(manifest, allow, flacOk);
     if (!next.live || !next.url) {
       return { refresh: refresh, live: false, swap: false, url: "", version: "", seek: false };
     }
@@ -270,6 +288,7 @@
     loopDrift: loopDrift,
     loopSeek: loopSeek,
     loopFromDoc: loopFromDoc,
+    loopPlayChoice: loopPlayChoice,
     loopManifestDoc: loopManifestDoc,
     loopNeedsRefresh: loopNeedsRefresh,
     loopRecovery: loopRecovery,
@@ -330,6 +349,7 @@
     waitTimer: 0,
     watch: 0,
     recoverFails: 0,
+    flacBlocked: false,
     mediaFixes: 0,
     softLoads: 0,
     progressAt: 0,
@@ -463,6 +483,24 @@
     };
   }
 
+  function flacInMp4() {
+    try {
+      if (root.MediaSource && typeof root.MediaSource.isTypeSupported === "function" && root.MediaSource.isTypeSupported('audio/mp4; codecs="flac"')) return true;
+    } catch (err) { /* this browser has no MediaSource check */ }
+    try {
+      const audio = root.Audio ? new root.Audio() : null;
+      if (!audio || !audio.canPlayType) return false;
+      const kind = audio.canPlayType('audio/mp4; codecs="flac"');
+      return kind === "probably" || kind === "maybe";
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function loopFlacOk() {
+    return player.flacBlocked ? false : flacInMp4();
+  }
+
   function playbackOf(space) {
     const source = (space && space.source) || {};
     const allow = effectiveAllow(space);
@@ -476,8 +514,8 @@
       return { kind: "youtube", live: live && !scheduled, url: "", listeners: listenersOf(status), scheduled: scheduled, allow: allow, channelId: String(source.channelId), forced: known };
     }
     if (source.loopUrl || type === "loop") {
-      const parsed = loopFromDoc(status || {}, allow);
-      return { kind: "loop", live: parsed.live, url: parsed.url, listeners: parsed.listeners, scheduled: false, allow: allow, channelId: "", forced: !!row.fetched || !!demoFor(space), reconnecting: false, version: parsed.version, duration: parsed.duration, epoch: parsed.epoch };
+      const parsed = loopPlayChoice(status || {}, allow, loopFlacOk());
+      return { kind: "loop", live: parsed.live, url: parsed.url, fallback: parsed.fallback, listeners: parsed.listeners, scheduled: false, allow: allow, channelId: "", forced: !!row.fetched || !!demoFor(space), reconnecting: false, version: parsed.version, duration: parsed.duration, epoch: parsed.epoch };
     }
     if (source.statusUrl) {
       const parsed = audioFromStatus(status || {}, allow);
@@ -519,6 +557,7 @@
       state: state,
       listeners: play.listeners,
       playUrl: play.url || "",
+      fallbackUrl: play.fallback || "",
       version: play.version || "",
       duration: play.duration || 0,
       epoch: Number.isFinite(play.epoch) ? play.epoch : 0,
@@ -845,6 +884,10 @@
         const response = data.response || null;
         const httpStatus = response ? Number(response.code || response.status) || 0 : (data.networkDetails && Number(data.networkDetails.status)) || 0;
         const missing = httpStatus === 404 || httpStatus === 410;
+        if (loop && (details === "manifestIncompatibleCodecsError" || (data.fatal && data.type === "mediaError"))) {
+          const current = spaceModel(player.spaceId);
+          if (current && current.fallbackUrl && current.fallbackUrl !== current.playUrl) player.flacBlocked = true;
+        }
         if (!data.fatal) {
           if (loop && missing) {
             scheduleRecover("network", httpStatus);
@@ -1144,7 +1187,8 @@
           (runtime[player.spaceId] && runtime[player.spaceId].status) || null,
           item.allow || [],
           reason,
-          httpStatus
+          httpStatus,
+          loopFlacOk()
         );
         if (plan.swap) {
           player.recoverFails += 1;

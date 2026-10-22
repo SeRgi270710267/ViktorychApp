@@ -951,6 +951,12 @@ def main() -> None:
     check(music["source"].get("type") == "loop" and music["source"].get("loopUrl") == "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/current.json" and "statusUrl" not in music["source"] and "fallback" not in music["source"] and music["source"]["allow"] == ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev"] and "url" not in music["source"], "ViktorychMusic plays the static loop and does not read the box status")
     check("function loopFromDoc(" in spaces_js and "LOOP_RECHECK_MS = 3 * 60 * 1000" in spaces_js and "LOOP_DRIFT_S = 5" in spaces_js and "startPosition:" in spaces_js and "cache: \"no-store\"" in spaces_js, "the loop player joins the shared clock and refreshes the bed every three minutes")
     check("function loopRecovery(" in spaces_js and "function refreshLoopSource(" in spaces_js and "function loopManifestDoc(" in spaces_js and "function loopNeedsRefresh(" in spaces_js and "function isLoopPointer(" in worker and "function isLoopVersionMedia(" in worker and "function forgetLoopCaches(" in worker and "loop/current.json" in worker, "a deleted loop version refetches current.json and status.json cannot mark the loop offline")
+    check("function loopPlayChoice(" in spaces_js and "function flacInMp4(" in spaces_js and 'audio/mp4; codecs="flac"' in spaces_js and "MediaSource.isTypeSupported" in spaces_js and ".canPlayType(" in spaces_js, "the loop plays FLAC in mp4 and falls back when that codec is missing")
+    check("drive.google.com" not in spaces_js and "download" not in spaces_js.lower(), "the Space player does not offer the radio or its masters as a download")
+    radio_py = (ROOT / "scripts" / "radio_loop.py").read_text(encoding="utf-8")
+    check("archive.org" not in radio_py and "-c:a\", \"flac\"" in radio_py and "-b:a\", \"256k\"" in radio_py, "the loop builder stays off the Internet Archive and encodes FLAC plus 256 kbps AAC")
+    radio_check = subprocess.run([sys.executable, "scripts/radio_loop.py", "--self-check"], cwd=ROOT, capture_output=True, text=True)
+    check(radio_check.returncode == 0, "the loop manifest grid matches the health check\n" + radio_check.stdout + radio_check.stderr)
     banned = re.compile("supa" + "base|sb_" + "publishable|nadjniz" + "sdaskttxahclp", re.I)
     banned_hits = []
     for path in ROOT.rglob("*"):
@@ -2753,6 +2759,7 @@ def ia_backup_checks() -> None:
     check("127.0.0.1" in preview and "localhost" in preview and "ia-deleted" in preview, "the deleted-post preview stays on localhost")
     check(ia_backup.public_media_url("https://pbs.twimg.com/media/abc.jpg"), "public X images are eligible")
     check(not ia_backup.public_media_url("https://cdn.discordapp.com/attachments/1/a.png"), "Discord files are not eligible")
+    check(not ia_backup.public_media_url("https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/v1/seg_0000.m4s") and not ia_backup.public_media_url("https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/v1/seg_0000.ts") and not ia_backup.public_media_url("https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/v1/index.m3u8"), "radio audio is not eligible for the Internet Archive")
     check(not ia_backup.public_media_url("https://www.youtube-nocookie.com/embed/abcdefghijk"), "embed pages are not eligible")
     check(ia_backup.archive_download_url("superintelapp-img-2026-10", "abc.jpg") == "https://archive.org/download/superintelapp-img-2026-10/abc.jpg", "download URLs use the archive.org download host")
     check(ia_backup.archive_cors_url("superintelapp-img-2026-10", "abc.jpg") == "https://cors.archive.org/cors/superintelapp-img-2026-10/abc.jpg", "playback can fall back to the CORS host")
