@@ -3111,8 +3111,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function relativeLabel(text) {
     const label = String(text || "").trim().toLowerCase();
     if (!label) return false;
-    if (label === "just now" || label === "now" || label === "yesterday") return true;
-    return /(?:(?:streamed|premiered)\s+)?(?:\d+\s+(?:second|minute|hour|day|week|month|year)s?|\d+\s*[smhdwy])\s+ago\b/i.test(label);
+    if (label === "just now" || label === "now" || label === "today" || label === "yesterday") return true;
+    if (/^(?:streamed|premiered)\s+(?:just now|today|yesterday)$/.test(label)) return true;
+    if (/^(?:(?:streamed|premiered)\s+)?(?:an?\s+)(?:second|minute|hour|day|week|month|year)\s+ago$/.test(label)) return true;
+    if (/(?:(?:streamed|premiered)\s+)?\d+\s*[smhdwy]\s+ago\b/.test(label)) return true;
+    return /(?:(?:streamed|premiered)\s+)?\d+\s+(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|wks?|months?|mos?|years?|yrs?)\s+ago\b/.test(label);
   }
 
   function timeMs(value) {
@@ -3140,13 +3143,30 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return new Date(stamp).toISOString().replace(/\.\d{3}Z$/, ".000Z");
   }
 
-  function ivPublish(item) {
+  // A mirror that says "published" within this long of the fetch is reporting
+  // the fetch, not the upload. Three minutes was too short: a cached "now"
+  // still looked new ten minutes later.
+  const LIVE_STAMP_MS = 36 * 60 * 60 * 1000;
+
+  function liveStamp(iso, nowMs) {
+    const at = timeMs(iso);
+    if (!at) return false;
+    return Math.abs((nowMs || Date.now()) - at) < LIVE_STAMP_MS;
+  }
+
+  function staleLiveVideoDate(date, inRss, rssNewestMs) {
+    if (inRss || !rssNewestMs) return false;
+    const ms = timeMs(date);
+    return !!ms && ms >= rssNewestMs;
+  }
+
+  function ivPublish(item, nowMs) {
     if (!item) return "";
     const label = String(item.publishedText || "").trim();
     if (relativeLabel(label)) return "";
     const day = calendarDate(label);
     const iso = ivIso(item.published);
-    if (iso && Math.abs(Date.now() - timeMs(iso)) < 180000) return day || "";
+    if (iso && liveStamp(iso, nowMs)) return day || "";
     if (day && iso) {
       const start = timeMs(day);
       const at = timeMs(iso);
@@ -3155,6 +3175,17 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     if (day) return day;
     return iso || "";
+  }
+
+  function livePublishDate(post, rssIso, rssNewestMs, nowMs) {
+    const rss = rssIso || "";
+    if (rss) return rss;
+    if (!post || post.dateFrom === "relative" || relativeLabel(post.date)) return "";
+    const incoming = post.date || "";
+    if (!incoming) return "";
+    if (liveStamp(incoming, nowMs)) return "";
+    if (post.watch && staleLiveVideoDate(incoming, false, rssNewestMs)) return "";
+    return incoming;
   }
 
   function seenDates() {
@@ -3166,6 +3197,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
   }
 
+  // Fetch time lives in seen-dates only. It is not a publish time, and
+  // nothing may copy it onto post.date.
   function rememberSeen(id) {
     const key = String(id || "");
     if (!key) return "";
@@ -11838,17 +11871,33 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   }
 
+  let liveDateScrubbed = false;
+
   function mergeLiveYoutube(feed, incoming, rssRows) {
     const rssDate = {};
+    let rssNewest = 0;
     (rssRows || []).forEach((post) => {
       const id = canonicalPostId(post);
-      if (id && post.date) rssDate[id] = earlierIso(rssDate[id], post.date);
+      if (!id || !post.date) return;
+      rssDate[id] = earlierIso(rssDate[id], post.date);
+      const ms = timeMs(rssDate[id]);
+      if (ms > rssNewest) rssNewest = ms;
     });
     const stored = {};
     posts().forEach((post) => {
       if (!belongsToFeed(post, feed)) return;
       const id = canonicalPostId(post);
-      if (id) stored[id] = earlierIso(stored[id], post.date);
+      if (!id) return;
+      const inRss = !!rssDate[id];
+      if ((post.platform || "") === "youtube" && post.watch && staleLiveVideoDate(post.date, inRss, rssNewest)) {
+        post.date = "";
+        liveDateScrubbed = true;
+      }
+      if ((post.platform || "") === "youtube" && post.watch && staleLiveVideoDate(post.sortDate, inRss, rssNewest)) {
+        post.sortDate = "";
+        liveDateScrubbed = true;
+      }
+      stored[id] = earlierIso(stored[id], post.date);
     });
     const seen = {};
     const out = [];
@@ -11862,8 +11911,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       copy.statusId = id;
       copy.feedId = feed.id;
       copy.platform = "youtube";
-      copy.date = earlierIso(stored[id], earlierIso(rssDate[id], copy.date || ""));
-      if (!copy.date && copy.dateFrom !== "relative") copy.date = seenDates()[id] || rememberSeen(id);
+      const trusted = livePublishDate(copy, rssDate[id] || "", rssNewest);
+      copy.date = earlierIso(stored[id], trusted);
+      if (copy.watch && staleLiveVideoDate(copy.date, !!rssDate[id], rssNewest)) copy.date = "";
+      if (copy.watch && staleLiveVideoDate(copy.sortDate, !!rssDate[id], rssNewest)) delete copy.sortDate;
       delete copy.dateFrom;
       out.push(copy);
     });
@@ -11949,6 +12000,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (liveRefreshFlight) return liveRefreshFlight;
     const job = loadCatalog().then((config) => {
       const selected = followedFeeds();
+      liveDateScrubbed = false;
       return mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => [])).then((lists) => {
         let incoming = [];
         lists.forEach((list, index) => {
@@ -11957,6 +12009,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           settlePublishTimes(feed, list || []);
           incoming = incoming.concat(takeFresh(feed, list || []));
         });
+        if (liveDateScrubbed) render();
         if (!incoming.length) return;
         return attachParents(incoming).then(() => {
           const route = parseRoute();

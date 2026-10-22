@@ -1512,7 +1512,7 @@ def main() -> None:
     from adapters.common import dates_moved_later, lock_publish_time, publish_date_from_html, relative_label
     from adapters.youtube_rss import backfill_youtube_dates
 
-    check(relative_label("0 seconds ago") and relative_label("1 day ago") and relative_label("Streamed 1 week ago") and relative_label("Premiered 3 hours ago") and relative_label("2d ago") and not relative_label("2026-10-11T00:00:00Z"), "relative publish labels are recognized")
+    check(relative_label("0 seconds ago") and relative_label("1 day ago") and relative_label("Streamed 1 week ago") and relative_label("Premiered 3 hours ago") and relative_label("2d ago") and relative_label("10 min ago") and relative_label("1 hr ago") and relative_label("2 hrs ago") and relative_label("5 mins ago") and not relative_label("2026-10-11T00:00:00Z") and not relative_label("Oct 3, 2026"), "relative publish labels are recognized")
     restamped = {"id": "yt:video:Iuvm-HKIMg8", "platform": "youtube", "kind": "post", "date": "2026-10-21T13:35:36Z", "url": "https://www.youtube.com/watch?v=Iuvm-HKIMg8"}
     lock_publish_time({"id": "Iuvm-HKIMg8", "date": "2026-10-11T00:00:00Z"}, restamped)
     check(restamped["id"] == "Iuvm-HKIMg8" and restamped["statusId"] == "Iuvm-HKIMg8" and restamped["date"] == "2026-10-11T00:00:00Z", "a later sync cannot move a video's publish time forward")
@@ -1528,7 +1528,8 @@ def main() -> None:
     exact = publish_date_from_html('{"publishDate":"2026-03-15T17:37:27.463301-07:00"}')
     day = publish_date_from_html('{"publishDate":{"simpleText":"Oct 11, 2026"}}')
     uploaded = publish_date_from_html('{"uploadDate":"2026-10-11T21:31:32+00:00","datePublished":"2026-10-11T21:31:32+00:00"}')
-    check(exact == "2026-03-16T00:37:27.000Z" and day == "2026-10-11T00:00:00.000Z" and uploaded == "2026-10-11T21:31:32.000Z", "watch and community pages yield the real publish date")
+    grocery_day = publish_date_from_html('{"views":{"simpleText":"190,347 views"},"publishDate":{"simpleText":"Oct 3, 2026"},"comment":{"dateCreated":"2026-10-03T17:28:30-07:00"}}')
+    check(exact == "2026-03-16T00:37:27.000Z" and day == "2026-10-11T00:00:00.000Z" and uploaded == "2026-10-11T21:31:32.000Z" and grocery_day == "2026-10-03T00:00:00.000Z", "watch and community pages yield the real publish date")
     drifted = """<?xml version="1.0"?>
     <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
     <title>Canadian Prepper</title><yt:channelId>UCfgtuaUadGgOA-91geQ8Qog</yt:channelId>
@@ -1573,12 +1574,19 @@ def main() -> None:
     check(not dates_moved_later(locked_first, second_pass), "no item date moves later between syncs")
     by_second = {post["id"]: post for post in second_pass}
     check(by_second["Iuvm-HKIMg8"]["date"].startswith("2026-10-11") and by_second["Sl0xhb6STQ0"]["date"].startswith("2026-10-10"), "stored youtube dates stay on the original upload")
-    check(by_second["nodate"]["date"] == locked_first[2]["date"] == "2026-10-21T20:24:18.000Z" and by_second["nodate"].get("seenAt") == by_second["nodate"]["date"], "a post with no real date keeps the first time it was seen")
+    check(by_second["nodate"]["date"] == locked_first[2]["date"] == "" and "seenAt" not in by_second["nodate"] and "20:24:18" not in by_second["nodate"]["date"], "a post with no real date is not stamped with the time it was fetched")
     check(by_second["kept-empty"]["date"] == "", "a post already stored without a date is not restamped on a later sync")
-    check("function calendarDate(" in app and "seen-dates" in app and "180000" in app and '["published", "pubdate"]' in app, "live youtube dates come from a real publish time, not a fresh clock time")
+    invented = {"id": "7t8Llz1hszQ", "platform": "youtube", "kind": "post", "date": "2026-10-22T07:26:00Z", "seenAt": "2026-10-22T07:26:00Z"}
+    lock_publish_time({"id": "7t8Llz1hszQ", "date": "2026-10-22T07:26:00Z", "seenAt": "2026-10-22T07:26:00Z"}, invented, now=later_sync)
+    check(invented["date"] == "", "a date that is only the first fetch time is dropped")
+    merge_src = app.split("function mergeLiveYoutube", 1)[1].split("function liveYoutube", 1)[0]
+    check("function calendarDate(" in app and "function livePublishDate(" in app and "LIVE_STAMP_MS" in app and "rememberSeen(" not in merge_src and '["published", "pubdate"]' in app, "live youtube dates come from a real publish time, not a fresh clock time")
     check("function canonicalPostId(" in app and "function relativeLabel(" in app and "seenPostIds" in app and "seen-ids" in worker and "def lock_publish_time(" in (ROOT / "scripts" / "adapters" / "common.py").read_text(encoding="utf-8") and "def dates_moved_later(" in (ROOT / "scripts" / "adapters" / "common.py").read_text(encoding="utf-8"), "publish times stay on the original post and new posts are unseen ids")
 
     import subprocess
+
+    live_dates = subprocess.run(["node", "scripts/live_date_test.js"], cwd=ROOT, capture_output=True, text=True)
+    check(live_dates.returncode == 0, "live youtube publish times stay on the original upload\n" + live_dates.stdout + live_dates.stderr)
 
     import people
 

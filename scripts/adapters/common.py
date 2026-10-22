@@ -397,7 +397,10 @@ def to_iso(value) -> str:
 
 
 _RELATIVE = re.compile(
-    r"(?:(?:streamed|premiered)\s+)?(?:\d+\s+(?:second|minute|hour|day|week|month|year)s?|\d+\s*[smhdwy])\s+ago\b",
+    r"(?:(?:streamed|premiered)\s+)?"
+    r"(?:an?\s+(?:second|minute|hour|day|week|month|year)"
+    r"|\d+\s+(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|weeks?|wks?|months?|mos?|years?|yrs?)"
+    r"|\d+\s*[smhdwy])\s+ago\b",
     re.I,
 )
 _YOUTUBE_ID = re.compile(r"(?:[?&]v=|youtu\.be/|shorts/|embed/)([A-Za-z0-9_-]{11})")
@@ -410,11 +413,13 @@ _PUBLISH_CONTENT = re.compile(
 
 
 def relative_label(text: str) -> bool:
-    """True when a source only knows '2 days ago' or 'Streamed 1 week ago'."""
+    """True when a source only knows '2 days ago', '10 min ago', or 'Streamed 1 week ago'."""
     label = (text or "").strip().lower()
     if not label:
         return False
-    if label in ("just now", "now", "yesterday"):
+    if label in ("just now", "now", "today", "yesterday"):
+        return True
+    if label in ("streamed just now", "streamed today", "streamed yesterday", "premiered just now", "premiered today", "premiered yesterday"):
         return True
     return _RELATIVE.search(label) is not None
 
@@ -619,10 +624,11 @@ def dates_moved_later(before, after) -> list:
 def lock_publish_time(previous: dict | None, post: dict, now: datetime | None = None) -> None:
     """Keep the earliest trusted publish time and one canonical id.
 
-    A later sync, a relative label turned into 'now', or a second source
-    must not move that time forward. A post with no real date records the
-    first time it was seen and never replaces that with a later clock time.
+    A later sync, a relative label, or a second source must not move that
+    time forward. The clock time of a fetch is not a publish time: a post
+    with no real date stays undated so it is not shown as new.
     """
+    del now
     if not isinstance(post, dict):
         return
     old = previous or {}
@@ -637,23 +643,15 @@ def lock_publish_time(previous: dict | None, post: dict, now: datetime | None = 
     stored = old.get("date") or ""
     if relative_label(str(stored)):
         stored = ""
-    chosen = earlier_iso(stored, incoming)
+    # A previous sync may have stored the fetch time in seenAt and copied it
+    # onto date. That stamp is not an upload time, so drop it on both sides.
     seen = old.get("seenAt") or ""
-    if not chosen:
-        if trusted_time(seen):
-            chosen = seen if isinstance(seen, str) else format_time(trusted_time(seen))
-            post["seenAt"] = chosen
-        elif not old:
-            moment = now or datetime.now(timezone.utc)
-            if moment.tzinfo is None:
-                moment = moment.replace(tzinfo=timezone.utc)
-            chosen = format_time(moment)
-            post["seenAt"] = chosen
-        else:
-            chosen = ""
-    elif old.get("seenAt"):
-        post["seenAt"] = old["seenAt"]
-    post["date"] = chosen
+    if seen:
+        if stored == seen:
+            stored = ""
+        if incoming == seen:
+            incoming = ""
+    post["date"] = earlier_iso(stored, incoming)
     if old.get("sortDate") and post.get("kind") == "repost":
         post["sortDate"] = old["sortDate"]
 
