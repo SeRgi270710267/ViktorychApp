@@ -287,6 +287,37 @@ const turnedOff = L.loopRecovery(loop, { ...nextBed, live: false }, [pubHost], "
 assert.strictEqual(turnedOff.live, false);
 assert.strictEqual(turnedOff.swap, false);
 assert.strictEqual(turnedOff.url, "");
+const flacBed = {
+  ...nextBed,
+  codec: "flac",
+  sample_rate: 44100,
+  bits: 16,
+  fallback: "https://" + pubHost + "/loop/v202610220909/aac/index.m3u8"
+};
+const primaryChoice = L.loopPlayChoice(flacBed, [pubHost], true);
+assert.strictEqual(primaryChoice.url, flacBed.url);
+assert.strictEqual(primaryChoice.primary, flacBed.url);
+assert.strictEqual(primaryChoice.fallback, flacBed.fallback);
+const aacChoice = L.loopPlayChoice(flacBed, [pubHost], false);
+assert.strictEqual(aacChoice.live, true);
+assert.strictEqual(aacChoice.url, flacBed.fallback);
+assert.strictEqual(aacChoice.version, flacBed.version);
+const keepPrimary = L.loopPlayChoice(nextBed, [pubHost], false);
+assert.strictEqual(keepPrimary.url, nextBed.url);
+const foreignFallback = L.loopPlayChoice({ ...flacBed, fallback: "https://evil.example/aac.m3u8" }, [pubHost], false);
+assert.strictEqual(foreignFallback.url, flacBed.url);
+const swappedAac = L.loopRecovery({ live: true, url: bed.url, version: bed.version }, flacBed, [pubHost], "fatal", 0, false);
+assert.strictEqual(swappedAac.swap, true);
+assert.strictEqual(swappedAac.seek, true);
+assert.strictEqual(swappedAac.url, flacBed.fallback);
+const stayAac = L.loopRecovery({ live: true, url: flacBed.fallback, version: flacBed.version }, flacBed, [pubHost], "unsupported", 0, false);
+assert.strictEqual(stayAac.swap, false);
+assert.strictEqual(stayAac.url, flacBed.fallback);
+assert.ok(src.includes("function loopPlayChoice("));
+assert.ok(src.includes("function flacInMp4("));
+assert.ok(src.includes('audio/mp4; codecs="flac"'));
+assert.ok(src.includes("MediaSource.isTypeSupported"));
+assert.ok(src.includes(".canPlayType("));
 assert.strictEqual(src.includes('"/hls/stream.m3u8"'), src.includes('server + "/hls/stream.m3u8"'));
 
 const worker = fs.readFileSync("sw.js", "utf8");
