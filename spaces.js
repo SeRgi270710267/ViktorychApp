@@ -274,6 +274,47 @@
     return { animate: true, duration: 20, easing: "linear", from: "0%", to: "-100%" };
   }
 
+  // Telegram mirror of one published loop playlist. The version and the AAC
+  // tree are taken from the R2 URL so the fallback is the same rendition.
+  function loopTelegramUrl(r2Url, api) {
+    const match = String(r2Url || "").match(/\/loop\/([A-Za-z0-9._-]{1,80})(\/aac)?\/index\.m3u8(?:[?#]|$)/i);
+    if (!match) return "";
+    const base = String(api || "").replace(/\/$/, "");
+    if (!/^https:\/\//i.test(base)) return "";
+    try {
+      const url = new URL(base);
+      if (url.protocol !== "https:" || url.username || url.password) return "";
+    } catch (err) {
+      return "";
+    }
+    return base + "/tg/loop/" + match[1] + (match[2] ? "/aac" : "") + "/index.m3u8";
+  }
+
+  // R2 stays primary. After one failed retry (failures >= 2) of a network
+  // error or an HTTP 4xx/5xx, the same version continues from position.
+  // A different nextVersion returns to R2. An empty API never switches.
+  function loopMirrorPlan(input) {
+    const src = input && typeof input === "object" ? input : {};
+    const version = String(src.version || "");
+    const nextVersion = src.nextVersion == null ? "" : String(src.nextVersion);
+    const seek = Number.isFinite(src.position) && src.position > 0 ? src.position : 0;
+    const r2 = String(src.r2Url || "");
+    if (nextVersion && nextVersion !== version) {
+      return { via: "r2", url: r2, switched: false, seek: seek };
+    }
+    const telegram = loopTelegramUrl(r2, src.api);
+    if (src.via === "telegram" && telegram) {
+      return { via: "telegram", url: telegram, switched: false, seek: seek };
+    }
+    const failures = Number(src.failures) || 0;
+    const status = Number(src.status) || 0;
+    const failed = !!src.network || (status >= 400 && status <= 599);
+    if (failures >= 2 && failed && telegram && version) {
+      return { via: "telegram", url: telegram, switched: true, seek: seek };
+    }
+    return { via: "r2", url: r2, switched: false, seek: seek };
+  }
+
   const logic = {
     homePills: homePills,
     profileLive: profileLive,
@@ -293,7 +334,9 @@
     loopNeedsRefresh: loopNeedsRefresh,
     loopRecovery: loopRecovery,
     playlistJumped: playlistJumped,
-    recoverPlan: recoverPlan
+    recoverPlan: recoverPlan,
+    loopTelegramUrl: loopTelegramUrl,
+    loopMirrorPlan: loopMirrorPlan
   };
 
   if (typeof document === "undefined") {
@@ -358,6 +401,9 @@
     loopClock: 0,
     generation: 0,
     ignoreErrorUntil: 0,
+    loadedMirror: "",
+    loopMirrorVersion: "",
+    loopMirrorPlayUrl: "",
     recoveredFor: 0,
     noAnalyser: false,
     returnHash: "",
@@ -810,6 +856,118 @@
     };
   }
 
+  function loopRetryPolicy() {
+    return {
+      maxNumRetry: 1,
+      retryDelayMs: 400,
+      maxRetryDelayMs: 800,
+      shouldRetry: function (_config, retryCount, isTimeout, response) {
+        if (retryCount >= 1) return false;
+        if (isTimeout) return true;
+        const code = response ? Number(response.code || response.status) || 0 : 0;
+        if (!code) return true;
+        return code >= 400 && code <= 599;
+      }
+    };
+  }
+
+  function loopLoadPolicy() {
+    return {
+      default: {
+        maxTimeToFirstByteMs: 4000,
+        maxLoadTimeMs: 8000,
+        timeoutRetry: loopRetryPolicy(),
+        errorRetry: loopRetryPolicy()
+      }
+    };
+  }
+
+  function accountsApi() {
+    const bag = root.VIKTORYCH_ACCOUNTS || {};
+    return String(bag.api || "").replace(/\/$/, "");
+  }
+
+  function telegramLoopRequest(requestUrl) {
+    const api = accountsApi();
+    if (!api) return false;
+    let request;
+    let home;
+    try {
+      request = new URL(requestUrl, api);
+      home = new URL(api);
+    } catch (err) {
+      return false;
+    }
+    if (request.protocol !== "https:" || request.hostname !== home.hostname) return false;
+    return request.pathname.indexOf("/tg/loop/") === 0;
+  }
+
+  function mirrorSource(item) {
+    if (!loopItem(item) || !player.loadedMirror) return "";
+    if ((player.loopMirrorVersion || "") !== (item.version || "")) return "";
+    if ((player.loopMirrorPlayUrl || "") !== item.playUrl) return "";
+    return player.loadedMirror;
+  }
+
+  function clearLoopMirror() {
+    player.loadedMirror = "";
+    player.loopMirrorVersion = "";
+    player.loopMirrorPlayUrl = "";
+  }
+
+  function applyLoopMirror(item, plan) {
+    player.loadedMirror = plan.url;
+    player.loopMirrorVersion = item.version || "";
+    player.loopMirrorPlayUrl = item.playUrl;
+    player.loadedUrl = item.playUrl;
+    player.loadedVersion = item.version || "";
+    player.ignoreErrorUntil = Date.now() + 1500;
+  }
+
+  function engageLoopMirror(item, position, httpStatus) {
+    if (!loopItem(item) || player.flacBlocked || player.loadedMirror) return false;
+    const status = Number(httpStatus) || 0;
+    const plan = loopMirrorPlan({
+      r2Url: item.playUrl,
+      api: accountsApi(),
+      version: item.version || "",
+      via: "r2",
+      failures: 2,
+      network: !status,
+      status: status,
+      position: position
+    });
+    if (!plan.switched) return false;
+    applyLoopMirror(item, plan);
+    const seek = plan.seek > 0 ? plan.seek : loopSeek(item);
+    const hls = player.hls;
+    if (hls) {
+      try {
+        if (typeof hls.stopLoad === "function") hls.stopLoad();
+        hls.config.startPosition = seek;
+        hls.loadSource(plan.url);
+        hls.startLoad(seek);
+        return true;
+      } catch (err) {
+        clearLoopMirror();
+        return false;
+      }
+    }
+    const audio = player.audio;
+    if (!audio) return false;
+    audio.src = plan.url;
+    const generation = player.generation;
+    const onMeta = () => {
+      audio.removeEventListener("loadedmetadata", onMeta);
+      if (generation !== player.generation || !player.active) return;
+      try { audio.currentTime = seek; } catch (err) { /* not seekable yet */ }
+      kickPlay(audio);
+    };
+    audio.addEventListener("loadedmetadata", onMeta);
+    try { audio.load(); } catch (err) { /* the element will still try src */ }
+    return true;
+  }
+
   function loopItem(item) {
     return !!(item && item.kind === "loop" && item.duration > 0 && Number.isFinite(item.epoch));
   }
@@ -848,6 +1006,9 @@
     audio.preload = "auto";
     const playlist = isPlaylistItem(item);
     const loop = loopItem(item);
+    const mirror = loop ? mirrorSource(item) : "";
+    if (loop && !mirror) clearLoopMirror();
+    const held = audio.currentTime > 0 ? audio.currentTime : 0;
     const Hls = root.Hls;
     if (playlist && Hls && Hls.isSupported()) {
       const generation = player.generation;
@@ -856,14 +1017,24 @@
         maxBufferLength: 60,
         backBufferLength: 30,
         xhrSetup: (xhr, requestUrl) => {
+          if (telegramLoopRequest(requestUrl)) {
+            const token = root.ViktorychAccounts && root.ViktorychAccounts.token ? root.ViktorychAccounts.token() : "";
+            if (token) {
+              try { xhr.setRequestHeader("Authorization", "Bearer " + token); } catch (err) { /* optional on the public loop */ }
+            }
+            return;
+          }
           if (allowedAudio(requestUrl, url, allow)) return;
           xhr.send = function () {};
           try { xhr.abort(); } catch (err) { /* blocked host */ }
         }
       };
       const hls = new Hls(loop ? Object.assign({
-        startPosition: loopSeek(item),
-        maxBufferHole: 0.5
+        startPosition: mirror ? (held || loopSeek(item)) : loopSeek(item),
+        maxBufferHole: 0.5,
+        manifestLoadPolicy: loopLoadPolicy(),
+        playlistLoadPolicy: loopLoadPolicy(),
+        fragLoadPolicy: loopLoadPolicy()
       }, shared) : Object.assign({
         lowLatencyMode: false,
         liveSyncDurationCount: 3,
@@ -880,6 +1051,7 @@
       }, shared));
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (generation !== player.generation || !data) return;
+        if (Date.now() < player.ignoreErrorUntil) return;
         const details = data.details || "";
         const response = data.response || null;
         const httpStatus = response ? Number(response.code || response.status) || 0 : (data.networkDetails && Number(data.networkDetails.status)) || 0;
@@ -889,14 +1061,19 @@
           if (current && current.fallbackUrl && current.fallbackUrl !== current.playUrl) player.flacBlocked = true;
         }
         if (!data.fatal) {
-          if (loop && missing) {
+          if (loop && missing && player.loadedMirror) {
             scheduleRecover("network", httpStatus);
             return;
           }
+          if (loop && missing) return;
           if ((details === "bufferStalledError" || details === "bufferSeekOverHole" || details === "bufferNudgeOnStall") && Date.now() - player.progressAt > 7000) {
             scheduleRecover("stall", httpStatus);
           }
           return;
+        }
+        if (loop && data.type === "networkError") {
+          const position = audio.currentTime > 0 ? audio.currentTime : loopSeek(item);
+          if (engageLoopMirror(item, position, httpStatus)) return;
         }
         if (data.type === "mediaError") scheduleRecover("media", httpStatus);
         else if (data.type === "networkError") scheduleRecover("network", httpStatus);
@@ -914,25 +1091,29 @@
       });
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (generation !== player.generation || !player.active || player.pausedByUser) return;
-        if (loop) seekLoopClock(audio, item);
+        if (loop && !player.loadedMirror) seekLoopClock(audio, item);
         kickPlay(audio);
       });
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
         if (generation !== player.generation) return;
         player.fragOk = true;
       });
-      hls.loadSource(bust ? bustUrl(url) : url);
+      hls.loadSource(mirror ? mirror : (bust ? bustUrl(url) : url));
       hls.attachMedia(audio);
       player.hls = hls;
       return;
     }
     if (playlist && nativeHls(audio)) {
-      audio.src = bust ? bustUrl(url) : url;
+      audio.src = mirror ? mirror : (bust ? bustUrl(url) : url);
       if (loop) {
         const generation = player.generation;
         const onMeta = () => {
           audio.removeEventListener("loadedmetadata", onMeta);
           if (generation !== player.generation || !player.active) return;
+          if (mirror && held) {
+            try { audio.currentTime = held; } catch (err) { /* not seekable yet */ }
+            return;
+          }
           seekLoopClock(audio, item);
         };
         audio.addEventListener("loadedmetadata", onMeta);
@@ -1257,6 +1438,9 @@
         player.noAnalyser = true;
         audio.crossOrigin = null;
       }
+      if (player.hls) return;
+      const position = audio && audio.currentTime > 0 ? audio.currentTime : loopSeek(item);
+      if (engageLoopMirror(item, position, 0)) return;
       scheduleRecover("network");
       return;
     }
