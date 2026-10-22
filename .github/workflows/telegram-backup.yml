@@ -131,10 +131,6 @@ jobs:
           sudo install -m 755 "$probe" /usr/local/bin/ffprobe
           ffmpeg -version | head -n 2
 
-      - name: Install yt-dlp and gallery-dl
-        if: steps.secrets.outputs.present == 'true'
-        run: python3 -m pip install --disable-pip-version-check -q yt-dlp gallery-dl
-
       - name: Preflight
         id: preflight
         if: steps.secrets.outputs.present == 'true'

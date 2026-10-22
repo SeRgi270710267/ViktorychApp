@@ -1,0 +1,113 @@
+# Download new public posts and store the original file on Telegram.
+# Every 3 hours, and when this workflow, its script, or feeds.config.json
+# is pushed to main. A push of the site from the sync job does not start it.
+# Public pages only. No cookies, no captcha bypass, no viewbots.
+# See docs/telegram-backup.md.
+
+name: Media extract
+
+on:
+  schedule:
+    # Minute 17 of every third hour. GitHub may delay a slot.
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/media-extract.yml"
+      - "scripts/media_extract.py"
+      - "feeds.config.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-extract
+  cancel-in-progress: false
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Self-test
+        run: python3 scripts/media_extract.py --selftest
+
+  extract:
+    needs: selftest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Skip when a required secret is missing
+        id: secrets
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${TELEGRAM_BOT_TOKEN}" ] || [ -z "${TELEGRAM_CHANNEL_ID}" ]; then
+            echo "[media-extract] TELEGRAM_BOT_TOKEN or TELEGRAM_CHANNEL_ID is not set; skipping the download"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "[media-extract] CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID is not set; skipping the download"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.present == 'true'
+
+      - uses: actions/setup-python@v5
+        if: steps.secrets.outputs.present == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        if: steps.secrets.outputs.present == 'true'
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ffmpeg-dist
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/ffmpeg.tar.xz \
+            https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+          tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-dist
+          bin=$(find /tmp/ffmpeg-dist -type f -path '*/bin/ffmpeg' | head -n 1)
+          probe=$(find /tmp/ffmpeg-dist -type f -path '*/bin/ffprobe' | head -n 1)
+          test -n "$bin"
+          test -n "$probe"
+          sudo install -m 755 "$bin" /usr/local/bin/ffmpeg
+          sudo install -m 755 "$probe" /usr/local/bin/ffprobe
+          ffmpeg -version | head -n 2
+          ffprobe -version | head -n 1
+
+      - name: Install yt-dlp and gallery-dl
+        if: steps.secrets.outputs.present == 'true'
+        run: python3 -m pip install --disable-pip-version-check 'yt-dlp==2026.10.21' 'gallery-dl==1.32.17'
+
+      - name: Download new public posts
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TG_WORKER_URL: ${{ vars.TG_WORKER_URL }}
+          TG_MAX_MB: ${{ vars.TG_MAX_MB }}
+          TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
+          MEDIA_EXTRACT_CAP: "8"
+          MEDIA_EXTRACT_PER: "2"
+          MEDIA_EXTRACT_PACE: "8"
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/media_extract.py

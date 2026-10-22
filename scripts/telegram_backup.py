@@ -1339,8 +1339,7 @@ def probe_saved(path: Path) -> dict:
     proc = subprocess.run(
         [
             "ffprobe", "-v", "error",
-            "-show_entries", "stream=codec_type,codec_name,width,height,bit_rate",
-            "-show_entries", "format=bit_rate",
+            "-show_entries", "stream=codec_type,codec_name,width,height,bit_rate:format=bit_rate,duration",
             "-of", "json", str(path),
         ],
         capture_output=True, text=True,
@@ -1378,15 +1377,24 @@ def probe_saved(path: Path) -> dict:
             break
     if not codec and width <= 0:
         return {}
-    return {"width": width, "height": height, "codec": codec, "bitrate": bitrate}
+    duration = 0.0
+    if isinstance(container, dict):
+        try:
+            duration = float(container.get("duration") or 0)
+        except (TypeError, ValueError):
+            duration = 0.0
+    if duration < 0:
+        duration = 0.0
+    return {"width": width, "height": height, "codec": codec, "bitrate": bitrate, "duration": round(duration, 3)}
 
 
 def log_probe(key: str, probe: dict) -> None:
     if not probe:
         log("[telegram-backup] probe %s unavailable" % key)
         return
-    log("[telegram-backup] probe %s %sx%s %s %s" % (
-        key, probe.get("width") or 0, probe.get("height") or 0, probe.get("codec") or "", probe.get("bitrate") or 0,
+    log("[telegram-backup] probe %s %sx%s %s %s %ss" % (
+        key, probe.get("width") or 0, probe.get("height") or 0, probe.get("codec") or "",
+        probe.get("bitrate") or 0, probe.get("duration") or 0,
     ))
 
 
@@ -2189,32 +2197,13 @@ def backup(loop_only: bool = False) -> int:
             return (first, -int(obj.get("size") or 0), str(obj.get("uploaded") or ""), key)
 
         stopped = False
-        handled = set()
         if not loop_only:
-            present = {str(row.get("key") or "") for row in rows}
-            paired = {str(row.get("key") or ""): row for row in rows}
-            for item in plan_social(social_catalogs(cf, directory, bucket_names(cf["token"], cf["account"])), present):
-                match = paired.get(item["key"])
-                if match:
-                    item["r2_bucket"] = match["bucket"]
-                    item["r2_key"] = match["key"]
-                try:
-                    result = process_cdn(item, manifest, cf, state, directory)
-                except Exception as err:
-                    log("[telegram-backup] failed cdn/%s" % item["key"])
-                    log(scrub(str(err), current_secrets()))
-                    save_manifest(cf, manifest, directory)
-                    return 1
-                if result in {"ok", "skip", "blocked", "stop"}:
-                    handled.add(item["key"])
-                if result == "stop":
-                    stopped = True
-                    log("[telegram-backup] reached the run cap")
-                    break
+            log("[telegram-backup] social originals are downloaded by media-extract")
         for obj in sort_objects(rows, rank):
             if stopped:
                 break
-            if str(obj.get("key") or "") in handled:
+            owned = find_entry(manifest, "cdn", str(obj.get("key") or ""))
+            if owned and owned.get("parts") and str(obj.get("key") or "").startswith(("tiktok/", "social/")):
                 continue
             if structural_role(obj["key"]) == "manifest":
                 continue
@@ -2364,7 +2353,7 @@ def selftest() -> int:
             check(transcoded is False and bool(segs_only) and segments_under(folder / "copy", names_only, SMALL_BYTES), "copy-only HLS keeps the original codecs")
             if shutil.which("ffprobe"):
                 probed = probe_saved(src)
-                check(probed.get("width") == 160 and probed.get("height") == 120 and probed.get("codec") == "h264" and int(probed.get("bitrate") or 0) > 0, "ffprobe records width, height, codec, and bitrate")
+                check(probed.get("width") == 160 and probed.get("height") == 120 and probed.get("codec") == "h264" and int(probed.get("bitrate") or 0) > 0 and float(probed.get("duration") or 0) > 0, "ffprobe records width, height, codec, bitrate, and duration")
 
     doc = (ROOT / "docs" / "telegram-backup.md").read_text(encoding="utf-8")
     workflow = (ROOT / ".github" / "workflows" / "telegram-backup.yml").read_text(encoding="utf-8")
@@ -2470,10 +2459,16 @@ process.stdout.write([
     check("TikTok media loads from /tg" in doc, "TikTok playback from Telegram is documented")
     check("bv*+ba/b" in doc and "--merge-output-format mp4" in doc and "--remux-video mp4" in doc, "the docs name the yt-dlp remux")
     check("gallery-dl" in doc and "-c copy" in doc and "bytevc1" in doc, "the docs name full-size photos, copy-only HLS, and the TikTok codec")
-    check("yt-dlp" in workflow and "gallery-dl" in workflow and "ffprobe" in workflow, "the backup installs yt-dlp, gallery-dl, and ffprobe")
+    extract_workflow = (ROOT / ".github" / "workflows" / "media-extract.yml").read_text(encoding="utf-8")
+    check("yt-dlp==2026.10.21" in extract_workflow and "gallery-dl==1.32.17" in extract_workflow and "ffprobe" in extract_workflow and 'cron: "17 */3 * * *"' in extract_workflow, "media-extract is scheduled and pins yt-dlp, gallery-dl, and ffprobe")
     spaces = (ROOT / "spaces.js").read_text(encoding="utf-8")
     check("function loopMirrorPlan(" in spaces and "maxNumRetry: 1" in spaces, "the player falls back after one R2 retry")
     check("function loopPrimaryName(" in spaces and "loopPrimaryChanged(" in spaces, "the player reads the loop primary field")
+    extracted = subprocess.run([sys.executable, str(ROOT / "scripts" / "media_extract.py"), "--selftest"], capture_output=True, text=True, check=False)
+    if extracted.returncode != 0:
+        print(extracted.stdout)
+        print(extracted.stderr)
+    check(extracted.returncode == 0, "the media-extract self-test passes")
     probed = subprocess.run([sys.executable, str(ROOT / "scripts" / "telegram_probe.py"), "--selftest"], capture_output=True, text=True, check=False)
     check(probed.returncode == 0, "the probe self-test passes")
     restored = subprocess.run([sys.executable, str(ROOT / "scripts" / "telegram_restore.py"), "--selftest"], capture_output=True, text=True, check=False)
