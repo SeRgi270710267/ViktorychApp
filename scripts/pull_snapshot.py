@@ -6,8 +6,8 @@ feeds.json over that seed, then copies comment files for Instagram, Threads,
 VK, and comment-RSS posts under 7 days old. X and YouTube comments are not
 downloaded. It also merges archive/index.json and every shard that index
 lists, and only when all of those downloads parse. Pages, the raw data
-branch, and the Internet Archive are merged in that order. A partial
-download leaves the local shards alone. A source that lists fewer months
+branch, and the anonymous Internet Archive copies named in the manifest
+are merged in that order. A partial download leaves the local shards alone. A source that lists fewer months
 does not delete the others. A network miss leaves the seed in place and
 does not fail the run.
 """
@@ -32,12 +32,11 @@ from site_paths import pages_base, raw_data, user_agent  # noqa: E402
 
 SITE = pages_base()
 DATA_ARCHIVE = raw_data()
-IA_ARCHIVE = "https://archive.org/download/" + ("sergi-" + "rss-" + "feeds-archive") + "/"
 ARCHIVE_SOURCES = (
     ("pages", SITE),
     ("data", DATA_ARCHIVE),
-    ("ia", IA_ARCHIVE),
 )
+_ANON_SHARD = re.compile(r"^https://archive\.org/download/x[0-9a-f]{32}/[^/?#]+$")
 UA = user_agent()
 
 
@@ -96,6 +95,58 @@ def _complete_rows(fetch):
     return rows
 
 
+def ia_shard_url(manifest: dict, rel: str) -> str:
+    """Download URL for one archive file, from the anonymous manifest map."""
+    name = str(rel or "").rsplit("/", 1)[-1]
+    stem = name[:-5] if name.endswith(".json") else name
+    shards = manifest.get("shards") if isinstance(manifest, dict) else None
+    if not isinstance(shards, dict):
+        return ""
+    url = str(shards.get(name) or shards.get(stem) or "")
+    if not _ANON_SHARD.match(url):
+        return ""
+    return url
+
+
+def _remote_manifest() -> dict | None:
+    """Manifest from disk, the data branch, or Pages. Misses stay None."""
+    local = ROOT / "archive" / "ia-manifest.json"
+    bodies = []
+    if local.is_file():
+        try:
+            bodies.append(local.read_bytes())
+        except OSError:
+            pass
+    for base in (DATA_ARCHIVE, SITE):
+        if base:
+            body = _get(base + "archive/ia-manifest.json")
+            if body:
+                bodies.append(body)
+    for body in bodies:
+        try:
+            parsed = json.loads(body.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            continue
+        if isinstance(parsed, dict) and isinstance(parsed.get("shards"), dict) and parsed["shards"]:
+            return parsed
+    return None
+
+
+def pull_ia_archive(root: Path) -> str:
+    """Merge shards from the anonymous items named in the manifest."""
+    manifest = _remote_manifest()
+    if not manifest:
+        return "kept"
+
+    def fetch(rel: str):
+        url = ia_shard_url(manifest, rel)
+        if not url:
+            return None
+        return _get(url)
+
+    return pull_archive(root, fetch)
+
+
 def pull_archive(root: Path, fetch) -> str:
     """Merge a complete remote archive into root/archive.
 
@@ -125,7 +176,7 @@ def pull_ia_sidecars(root: Path) -> None:
     """
     dest = root / "archive"
     dest.mkdir(parents=True, exist_ok=True)
-    sources = (("data", DATA_ARCHIVE), ("pages", SITE), ("ia", IA_ARCHIVE))
+    sources = (("data", DATA_ARCHIVE), ("pages", SITE))
     for name in ("ia-manifest.json", "ia-state.json"):
         body = None
         for _label, base in sources:
@@ -169,6 +220,7 @@ def main() -> None:
         for label, base in ARCHIVE_SOURCES:
             result = pull_archive(ROOT, lambda rel, base=base: _get(base + rel))
             print(f"[snapshot] archive {label} {result}")
+        print(f"[snapshot] archive ia {pull_ia_archive(ROOT)}")
         try:
             pull_ia_sidecars(ROOT)
         except (OSError, urllib.error.URLError, TimeoutError):

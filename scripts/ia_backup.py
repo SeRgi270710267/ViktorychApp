@@ -845,7 +845,14 @@ def migrate_copies(config: dict, state: dict, sleep=time.sleep) -> dict:
                 print(notes[-1], flush=True)
                 failures += 1
                 continue
-            copied[key] = {"item": new_item, "name": new_name, "digest": digest, "url": url, "slot": slot}
+            copied[key] = {
+                "item": new_item,
+                "name": new_name,
+                "digest": digest,
+                "url": url,
+                "slot": slot,
+                "size": len(body),
+            }
             _rewrite_pointer(state, item, name, url, digest, slot)
             notes.append(f"[ia-backup] copied {key}")
             print(notes[-1], flush=True)
@@ -1152,6 +1159,313 @@ def retire_old(config: dict, state: dict, sleep=time.sleep) -> dict:
         ok, detail = _write_hidden(item, "", "", access, secret, urlopen, opener, metadata_base)
         notes.append(f"[ia-backup] retired metadata {item}" if ok else f"[ia-backup] could not retire metadata {item} ({detail})")
     return {"notes": [scrub(line, [access, secret]) for line in notes], "deleted": deleted}
+
+
+def _safe_remote_name(name: str) -> bool:
+    if not name or name.startswith("/") or "\\" in name:
+        return False
+    parts = name.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        return False
+    return all(re.fullmatch(r"[A-Za-z0-9._~-]{1,180}", part) for part in parts)
+
+
+def _is_system_file(name: str) -> bool:
+    return name == "__ia_thumb.jpg" or name.endswith(DERIVED_NAMES)
+
+
+def _delete_any(endpoint: str, item: str, name: str, access: str, secret: str, opener) -> bool:
+    """Delete one file, including a derived file, without keeping an old version."""
+    if not ITEM_RE.match(item) or not _safe_remote_name(name):
+        return False
+    quoted = "/".join(urllib.parse.quote(part) for part in name.split("/"))
+    url = endpoint.rstrip("/") + "/" + urllib.parse.quote(item) + "/" + quoted
+    request = urllib.request.Request(
+        url,
+        method="DELETE",
+        headers={
+            "Authorization": f"LOW {access}:{secret}",
+            "User-Agent": UA,
+            "x-archive-cascade-delete": "1",
+            "x-archive-keep-old-version": "0",
+        },
+    )
+    try:
+        with opener.open(request, timeout=60) as response:
+            return getattr(response, "status", 200) in {200, 202, 204}
+    except urllib.error.HTTPError as err:
+        return err.code in {200, 202, 204, 404}
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def _body_matches(urlopen, url: str, digest: str, size: int | None = None) -> bool:
+    status, body = _http_bytes(url, urlopen)
+    if status != 200 or not body:
+        return False
+    if hashlib.sha256(body).hexdigest() != digest:
+        return False
+    if size is not None and len(body) != int(size):
+        return False
+    return True
+
+
+def _replacement_ready(state: dict) -> bool:
+    """True when the manifest already points at anonymous shard or media copies."""
+    for url in (state.get("shardUrls") or {}).values():
+        if str(url or "").startswith("https://archive.org/download/x"):
+            return True
+    if str(state.get("manifestUrl") or "").startswith("https://archive.org/download/x"):
+        return True
+    for row in (state.get("byHash") or {}).values():
+        if str((row or {}).get("a") or "").startswith("https://archive.org/download/x"):
+            return True
+    return False
+
+
+def _blank_one(item: str, field: str, value: str | None, access: str, secret: str, urlopen, opener, metadata_base: str) -> str:
+    """Set or remove one metadata field. A refusal is reported and does not raise."""
+    current = _item_metadata(item, metadata_base, urlopen)
+    if value is None:
+        if field not in current or current.get(field) in (None, "", [], {}):
+            return "absent"
+        ok, _detail = _patch_metadata(item, {}, (field,), access, secret, urlopen, opener, metadata_base)
+        return "removed" if ok else "refused"
+    if str(current.get(field) or "") == value:
+        return "already"
+    ok, _detail = _patch_metadata(item, {field: value}, (), access, secret, urlopen, opener, metadata_base)
+    return "set" if ok else "refused"
+
+
+def _metadata_outcome(before: dict, after: dict, field: str, attempted: str) -> str:
+    """Prefer the value IA is serving after the write. A task can refuse quietly."""
+    after_value = after.get(field) if isinstance(after, dict) else None
+    before_value = before.get(field) if isinstance(before, dict) else None
+    if field == "noindex":
+        return "set" if _noindex_set(after) else ("already" if _noindex_set(before) else "refused")
+    if field in {"title", "description"}:
+        if str(after_value or "") == "files":
+            return "already" if str(before_value or "") == "files" else "set"
+        if before_value in (None, "", [], {}) and after_value in (None, "", [], {}):
+            return "absent"
+        return "refused"
+    if after_value in (None, "", [], {}):
+        if before_value in (None, "", [], {}):
+            return "absent"
+        return "removed"
+    if attempted == "refused":
+        return "refused"
+    return "refused"
+
+
+def empty_named_items(config: dict, state: dict, sleep=time.sleep) -> dict:
+    """Copy any user file still on a named item, check the copy, then delete the old files.
+
+    Derived catalog files are deleted too. Internet Archive keeps `_meta.xml`
+    and `_files.xml` on some items; that refusal is recorded and is not a
+    failed copy. Metadata writes are one field at a time so a refused
+    collection or uploader does not undo a title change.
+    """
+    notes = []
+    access = config["access"]
+    secret = config["secret"]
+    log_secrets = [access, secret]
+    before_ids = {str(value) for value in (state.get("items") or {}).values() if valid_item_id(str(value))}
+    urlopen = config.get("urlopen") or urllib.request.urlopen
+    opener = config.get("opener") or _opener()
+    endpoint = config.get("endpoint") or S3_ENDPOINT
+    metadata_base = (config.get("metadata_base") or METADATA_BASE).rstrip("/")
+    pace = float(config.get("pace") if config.get("pace") is not None else 1.5)
+    moved = migrate_copies(config, state, sleep=sleep)
+    notes.extend(moved["notes"])
+    failures = int(moved["failures"])
+    if failures:
+        notes.append("[ia-empty] not deleting; a copy failed")
+        return {"notes": [scrub(line, log_secrets) for line in notes], "failures": failures, "items": {}, "deleted": 0, "new_items": 0}
+
+    copied = state.get("copied") or {}
+    old_items = list(config["old_items"]) if "old_items" in config else discover_old_items(urlopen)
+    pending = {(str(row.get("item") or ""), str(row.get("name") or "")) for row in (state.get("oldManifestFiles") or [])}
+    replacement = _replacement_ready(state)
+    ready = []
+    listed = {}
+    for item in old_items:
+        if not old_slot(item):
+            continue
+        doc = _http_json(metadata_base + "/" + urllib.parse.quote(item), urlopen) or {}
+        names = []
+        for row in doc.get("files") or []:
+            name = str((row or {}).get("name") or "")
+            if name:
+                names.append(name)
+        listed[item] = names
+        blocked = []
+        for name in names:
+            if _is_system_file(name):
+                continue
+            key = item + "/" + name
+            if key in copied:
+                continue
+            if (item, name) in pending and replacement:
+                continue
+            blocked.append(name)
+        if blocked:
+            notes.append(f"[ia-empty] keeping {item}; {len(blocked)} files are not copied yet")
+            failures += 1
+            continue
+        ready.append(item)
+    if failures:
+        notes.append("[ia-empty] not deleting; a named item still has a file without a checked copy")
+        return {"notes": [scrub(line, log_secrets) for line in notes], "failures": failures, "items": {}, "deleted": 0, "new_items": 0}
+
+    for item in ready:
+        for name in listed.get(item) or []:
+            if _is_system_file(name):
+                continue
+            if (item, name) in pending and replacement:
+                continue
+            row = copied.get(item + "/" + name) or {}
+            size = row.get("size")
+            if not _body_matches(urlopen, row.get("url") or "", row.get("digest") or "", int(size) if isinstance(size, int) else None):
+                notes.append(f"[ia-empty] copy check failed {item}/{name}")
+                failures += 1
+    if failures:
+        notes.append("[ia-empty] not deleting; a copied file failed the size or hash check")
+        return {"notes": [scrub(line, log_secrets) for line in notes], "failures": failures, "items": {}, "deleted": 0, "new_items": 0}
+
+    original = {item: list(names) for item, names in listed.items()}
+    deleted = 0
+    for item in ready:
+        for name in listed.get(item) or []:
+            if _delete_any(endpoint, item, name, access, secret, opener):
+                deleted += 1
+                notes.append(f"[ia-empty] removed {item}/{name}")
+            else:
+                notes.append(f"[ia-empty] could not remove {item}/{name}")
+            if pace:
+                sleep(pace)
+        if pending:
+            state["oldManifestFiles"] = [
+                row for row in (state.get("oldManifestFiles") or [])
+                if str(row.get("item") or "") != item
+            ]
+
+    # Deletes land on a task queue. Read the file list again before deciding an item is empty.
+    delay = 2.0
+    for _attempt in range(5):
+        lingering = False
+        for item in ready:
+            doc = _http_json(metadata_base + "/" + urllib.parse.quote(item), urlopen) or {}
+            names = [str((row or {}).get("name") or "") for row in (doc.get("files") or [])]
+            names = [name for name in names if name]
+            extra = [name for name in names if name not in (listed.get(item) or [])]
+            still = [name for name in names if not name.endswith(("_meta.xml", "_files.xml"))]
+            if extra or still:
+                lingering = True
+                for name in extra + still:
+                    if name in (listed.get(item) or []) and name.endswith(("_meta.xml", "_files.xml")):
+                        continue
+                    _delete_any(endpoint, item, name, access, secret, opener)
+        if not lingering:
+            break
+        sleep(delay)
+        delay = min(delay * 2, 20)
+
+    reports = {}
+    final_failures = 0
+    for item in ready:
+        doc = _http_json(metadata_base + "/" + urllib.parse.quote(item), urlopen) or {}
+        names = [str((row or {}).get("name") or "") for row in (doc.get("files") or [])]
+        names = [name for name in names if name]
+        user_left = [name for name in names if not _is_system_file(name)]
+        system_left = [name for name in names if name.endswith(("_meta.xml", "_files.xml"))]
+        other_left = [name for name in names if name not in user_left and name not in system_left]
+        if user_left or other_left:
+            final_failures += 1
+            notes.append(f"[ia-empty] {item} still has {len(user_left) + len(other_left)} files")
+        before = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else _item_metadata(item, metadata_base, urlopen)
+        attempted = {}
+        for field in ("creator", "subject", "collection", "uploader"):
+            attempted[field] = _blank_one(item, field, None, access, secret, urlopen, opener, metadata_base)
+            if pace:
+                sleep(min(pace, 1.0))
+        for field in ("title", "description"):
+            attempted[field] = _blank_one(item, field, NEUTRAL_TITLE, access, secret, urlopen, opener, metadata_base)
+            if pace:
+                sleep(min(pace, 1.0))
+        attempted["noindex"] = _blank_one(item, "noindex", "true", access, secret, urlopen, opener, metadata_base)
+        sleep(1)
+        after = _item_metadata(item, metadata_base, urlopen)
+        outcome = {
+            field: _metadata_outcome(before, after, field, attempted.get(field) or "")
+            for field in ("title", "description", "creator", "subject", "collection", "uploader", "noindex")
+        }
+        outcome["identifier"] = "unchanged"
+        reports[item] = {
+            "deleted": sum(1 for name in (original.get(item) or []) if name not in names),
+            "kept": system_left,
+            "user_left": user_left,
+            "other_left": other_left,
+            "metadata": outcome,
+        }
+        kept_note = ",".join(sorted({name.rsplit("_", 1)[-1] for name in system_left})) or "none"
+        meta_note = " ".join(f"{key}={value}" for key, value in outcome.items())
+        notes.append(f"[ia-empty] {item} kept={kept_note} {meta_note}")
+    new_items = {
+        str(row.get("item") or "")
+        for row in copied.values()
+        if valid_item_id(str(row.get("item") or ""))
+    }
+    failures += final_failures
+    created = {
+        str(value)
+        for value in (state.get("items") or {}).values()
+        if valid_item_id(str(value)) and str(value) not in before_ids
+    }
+    notes.append(f"[ia-empty] created-this-run {len(created)}")
+    if final_failures:
+        notes.append("[ia-empty] finished with files still listed")
+    else:
+        notes.append(f"[ia-empty] anonymous-destinations {len(new_items)}")
+    return {
+        "notes": [scrub(line, log_secrets) for line in notes],
+        "failures": failures,
+        "items": reports,
+        "deleted": deleted,
+        "new_items": len(created),
+        "destinations": len(new_items),
+    }
+
+
+def stamp_uploaded(config: dict, uploaded: list, sleep=time.sleep) -> dict:
+    """Write the anonymous title onto items this run created or updated."""
+    urlopen = config.get("urlopen") or urllib.request.urlopen
+    opener = config.get("opener") or _opener()
+    metadata_base = (config.get("metadata_base") or METADATA_BASE).rstrip("/")
+    notes = []
+    failures = 0
+    seen = []
+    for row in uploaded or []:
+        item = str(row or "").split("/", 1)[0]
+        if valid_item_id(item) and item not in seen:
+            seen.append(item)
+    for item in seen:
+        ok, detail = _write_hidden(
+            item,
+            NEUTRAL_TITLE,
+            NEUTRAL_DESCRIPTION,
+            config["access"],
+            config["secret"],
+            urlopen,
+            opener,
+            metadata_base,
+        )
+        if ok:
+            notes.append("[ia-backup] stamped an item")
+        else:
+            failures += 1
+            notes.append(f"[ia-backup] could not stamp an item ({detail})")
+    return {"notes": [scrub(line, [config.get("access") or "", config.get("secret") or ""]) for line in notes], "failures": failures}
 
 
 def main() -> int:

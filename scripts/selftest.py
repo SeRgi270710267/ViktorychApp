@@ -2744,6 +2744,16 @@ def ia_backup_checks() -> None:
     sidecar = snap[snap.index("def pull_ia_sidecars"):]
     check(sidecar.index('("data", DATA_ARCHIVE)') < sidecar.index('("pages", SITE)'), "the media manifest is taken from the data branch before the live site")
     check('new URL("archive/"' in app and "function installIaManifest(" in app and "archive.org/download/superintelapp-" not in app and "superintelapp-manifest" not in app and "cors.archive.org/cors/" in app and "function applyIaPreview(" in app and "IA.shards" in app, "the page loads archive media from a relative manifest and archive.org")
+    archive_src = (ROOT / "scripts" / "ia_archive.py").read_text(encoding="utf-8")
+    empty_src = (ROOT / "scripts" / "ia_empty_old.py").read_text(encoding="utf-8")
+    empty_workflow = (ROOT / ".github" / "workflows" / "ia-empty-old.yml").read_text(encoding="utf-8")
+    loader = app[app.index("async function loadNewestShard("):app.index("function revealArchive(")]
+    check("internetarchive" not in archive_src and "opensource" not in archive_src and "GITHUB_REPOSITORY_OWNER" not in archive_src and "sergi-" not in archive_src, "shard upload does not name an owner, a collection, or an item")
+    check("workflow_dispatch" in empty_workflow and "schedule:" not in empty_workflow and 'echo "$IA_' not in empty_workflow and "echo $IA_" not in empty_workflow and "group: ia-empty-old" in empty_workflow, "the old-item workflow is manual and does not print the keys")
+    check("secrets.IA_ACCESS_KEY" in empty_workflow and "secrets.IA_SECRET_KEY" in empty_workflow and "ia_empty_old.py" in empty_workflow, "the old-item workflow uses the archive keys")
+    check(loader.index("ia-manifest.json") < loader.index("index.json") and "ARCHIVE_IA" not in app and "sergi-" not in app, "the page loads the manifest before the index and has no named item")
+    check("def ia_shard_url(" in snap and "pull_ia_archive" in snap and "sergi-" not in snap and "internetarchive" not in sync, "snapshot shards come from the manifest")
+    check("_ITEM_ID" in empty_src and "skipping the empty" in empty_src, "the empty script redacts anonymous ids and skips without keys")
     preview = app[app.index("function applyIaPreview("):app.index("function applyIaPreview(") + 700]
     check("127.0.0.1" in preview and "localhost" in preview and "ia-deleted" in preview, "the deleted-post preview stays on localhost")
     check(ia_backup.public_media_url("https://pbs.twimg.com/media/abc.jpg"), "public X images are eligible")
@@ -3170,6 +3180,194 @@ def ia_backup_checks() -> None:
     check(first_refuse["failures"] == 1 and still_open, "one rejected s3 header is retried later")
     check(second_refuse["failures"] == 1 and refused_state["noindexBlocked"].get("superintelapp-img-2026-10") == "readonly", "a second rejection records that noindex is read-only")
     check(len(refused_puts) == puts_after_lock and any("stays listed" in line for line in third_refuse["notes"]), "later runs do not upload another probe once noindex is known read-only")
+
+    from pull_snapshot import ia_shard_url
+    anon = "x" + ("ab" * 16)
+    other = "x" + ("cd" * 16)
+    shard_manifest = {
+        "shards": {
+            "2026-10": f"https://archive.org/download/{anon}/abcd.json",
+            "index.json": f"https://archive.org/download/{other}/ef.json",
+        }
+    }
+    check(ia_shard_url(shard_manifest, "archive/2026-10.json").endswith("/abcd.json"), "a month shard resolves through the manifest")
+    check(ia_shard_url(shard_manifest, "archive/index.json").endswith("/ef.json"), "the index resolves through the manifest")
+    check(ia_shard_url({"shards": {"2026-10": "https://archive.org/download/superintelapp-2026-10/a.json"}}, "archive/2026-10.json") == "", "a named item is not a shard source")
+
+    import ia_archive
+    shard_puts = []
+
+    def shard_open(request, timeout=None):
+        header_map = {key.lower(): value for key, value in request.header_items()}
+        shard_puts.append((
+            urllib.parse.urlparse(request.full_url).path,
+            header_map.get("x-archive-meta-title"),
+            header_map.get("x-archive-meta-description"),
+            header_map.get("x-archive-meta-noindex"),
+            header_map.get("x-archive-meta-mediatype"),
+            header_map.get("x-archive-meta-creator"),
+            header_map.get("x-archive-meta-collection"),
+            header_map.get("x-archive-meta-subject"),
+            header_map.get("authorization"),
+        ))
+        return Resp(200, b"")
+
+    archived = ia_archive.upload_archive(
+        {
+            "access": "test-access",
+            "secret": "test-secret-value",
+            "endpoint": "http://ia.test",
+            "download_base": "https://archive.org/download",
+            "pace": 0,
+            "backoff": 0,
+            "max_uploads": 5,
+            "opener": type("Opener", (), {"open": staticmethod(shard_open)})(),
+        },
+        {"2026-10": [{"p": "x", "id": "1", "t": "hi"}]},
+        sleep=lambda delay: None,
+    )
+    check(shard_puts and all(ia_backup.valid_item_id(row[0].split("/")[1]) and re.search(r"/[0-9a-f]{20}\.json$", row[0]) for row in shard_puts), "shard uploads use a random item and a hashed file name")
+    check(all(row[1] == "files" and row[2] == "files" and row[3] == "true" and row[4] == "data" and row[5] is None and row[6] is None and row[7] is None for row in shard_puts), "shard uploads are unlisted files with no owner, subject, or collection")
+    check("test-secret-value" not in " ".join(archived["notes"]) and all(row[8] == "LOW test-access:test-secret-value" for row in shard_puts), "shard uploads send LOW auth and the notes do not print the keys")
+    check(ia_backup.valid_item_id(archived["manifest"]["items"].get("stub:2026-10")) and archived["manifest"]["shards"]["2026-10"].startswith("https://archive.org/download/x"), "the shard manifest points at the anonymous item")
+
+    empty_env = os.environ.copy()
+    empty_env.pop("IA_ACCESS_KEY", None)
+    empty_env["IA_SECRET_KEY"] = "sentinel-secret-value"
+    empty_skipped = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "ia_empty_old.py")],
+        capture_output=True,
+        text=True,
+        env=empty_env,
+        check=False,
+        cwd=ROOT,
+    )
+    empty_out = empty_skipped.stdout + empty_skipped.stderr
+    check(empty_skipped.returncode == 0 and "skipping the empty" in empty_skipped.stdout, "missing keys skip the old-item empty")
+    check("sentinel-secret-value" not in empty_out, "the empty skip path does not print a secret")
+
+    jpeg_left = b"\xff\xd8\xffold"
+    left_digest = hashlib.sha256(jpeg_left).hexdigest()
+    left_name = left_digest[:20] + ".jpg"
+    old_item = "superintelapp-img-2026-10"
+    meta_name = old_item + "_meta.xml"
+    files_name = old_item + "_files.xml"
+    torrent_name = old_item + "_archive.torrent"
+    catalog = {
+        "files": [left_name, meta_name, files_name, torrent_name],
+        "metadata": {
+            "identifier": old_item,
+            "title": old_item,
+            "creator": "owner-account",
+            "description": "Public backup",
+            "collection": "opensource",
+            "uploader": "person@example.com",
+        },
+    }
+    stored = {}
+    removed = []
+
+    def empty_open(request, timeout=None):
+        method = request.get_method()
+        path = urllib.parse.urlparse(request.full_url).path
+        if method == "PUT":
+            stored[path] = request.data
+            return Resp(200, b"")
+        if method == "DELETE":
+            removed.append(path)
+            if path.endswith("_meta.xml") or path.endswith("_files.xml"):
+                return Resp(403, b"system file")
+            leaf = path.rsplit("/", 1)[-1]
+            if leaf in catalog["files"]:
+                catalog["files"].remove(leaf)
+            return Resp(204, b"")
+        if method == "POST":
+            fields = urllib.parse.parse_qs(request.data.decode("utf-8"))
+            patch = fields.get("-patch", [""])[0]
+            if '"/creator"' in patch and "remove" in patch:
+                catalog["metadata"].pop("creator", None)
+                return Resp(200, b'{"success":true}')
+            if '"/title"' in patch or '"/description"' in patch:
+                catalog["metadata"]["title"] = "files"
+                catalog["metadata"]["description"] = "files"
+                return Resp(200, b'{"success":true}')
+            if '"/noindex"' in patch or '"/collection"' in patch or '"/uploader"' in patch:
+                return Resp(400, b'{"success":false,"error":"read-only"}')
+            return Resp(200, b'{"success":true}')
+        if path == "/metadata/" + old_item:
+            return Resp(200, json.dumps({"metadata": dict(catalog["metadata"]), "files": [{"name": name} for name in catalog["files"]]}).encode())
+        if path == "/download/" + old_item + "/" + left_name:
+            return Resp(200, jpeg_left)
+        if path.startswith("/download/x") and path.endswith("/" + left_name):
+            item = path.split("/")[2]
+            saved = stored.get("/" + item + "/" + left_name)
+            if saved == jpeg_left:
+                return Resp(200, saved)
+            return Resp(404, b"")
+        return Resp(404, b"")
+
+    empty_state = {"v": 1, "shards": {}, "byHash": {}, "byUrl": {}, "posts": {}, "items": {}}
+    emptied = ia_backup.empty_named_items(
+        {
+            "access": "test-access",
+            "secret": "test-secret-value",
+            "endpoint": "http://ia.test",
+            "download_base": "http://ia.test/download",
+            "metadata_base": "http://ia.test/metadata",
+            "old_items": [old_item],
+            "pace": 0,
+            "backoff": 0,
+            "urlopen": empty_open,
+            "opener": type("Opener", (), {"open": staticmethod(empty_open)})(),
+        },
+        empty_state,
+        sleep=lambda delay: None,
+    )
+    empty_notes = " ".join(emptied["notes"])
+    report = emptied["items"][old_item]
+    check(emptied["failures"] == 0 and left_name not in catalog["files"] and torrent_name not in catalog["files"], "a named item's files are deleted after the copy checks out")
+    check(meta_name in catalog["files"] and files_name in catalog["files"], "system catalog files stay when the archive refuses the delete")
+    check(report["metadata"]["creator"] == "removed" and report["metadata"]["title"] == "set" and report["metadata"]["collection"] == "refused" and report["metadata"]["uploader"] == "refused" and report["metadata"]["identifier"] == "unchanged", "creator and title change, and a refused collection or uploader is kept")
+    copied_row = next(iter(empty_state["copied"].values()))
+    check(ia_backup.valid_item_id(copied_row["item"]) and copied_row["size"] == len(jpeg_left) and emptied["new_items"] == 1, "the copy lands on one new anonymous item and records its size")
+    check("test-secret-value" not in empty_notes and not re.search(r"x[0-9a-f]{32}", empty_notes), "empty notes do not print the keys or the new item id")
+    check(any(path.endswith("/" + left_name) for path in removed) and meta_name in report["kept"] and files_name in report["kept"], "the user file is deleted and the refused system files are reported")
+
+    refused_removed = []
+
+    def refuse_copy(request, timeout=None):
+        method = request.get_method()
+        path = urllib.parse.urlparse(request.full_url).path
+        if method == "DELETE":
+            refused_removed.append(path)
+            return Resp(204, b"")
+        if method == "PUT":
+            return Resp(200, b"")
+        if path == "/metadata/" + old_item:
+            return Resp(200, json.dumps({"metadata": {"identifier": old_item, "creator": "owner-account"}, "files": [{"name": left_name}]}).encode())
+        if path == "/download/" + old_item + "/" + left_name:
+            return Resp(200, jpeg_left)
+        if path.startswith("/download/x"):
+            return Resp(200, b"not-the-bytes")
+        return Resp(404, b"")
+
+    refused_empty = ia_backup.empty_named_items(
+        {
+            "access": "test-access",
+            "secret": "test-secret-value",
+            "endpoint": "http://ia.test",
+            "download_base": "http://ia.test/download",
+            "metadata_base": "http://ia.test/metadata",
+            "old_items": [old_item],
+            "pace": 0,
+            "backoff": 0,
+            "urlopen": refuse_copy,
+            "opener": type("Opener", (), {"open": staticmethod(refuse_copy)})(),
+        },
+        {"v": 1, "shards": {}, "byHash": {}, "byUrl": {}, "posts": {}, "items": {}},
+        sleep=lambda delay: None,
+    )
+    check(refused_empty["failures"] > 0 and refused_empty["deleted"] == 0 and not refused_removed, "a failed hash check deletes nothing")
 
     story_checks()
 

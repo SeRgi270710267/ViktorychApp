@@ -511,12 +511,15 @@ jobs:
         env:
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          PYTHONUNBUFFERED: "1"
         run: |
-          if [ -z "$IA_ACCESS_KEY" ] || [ -z "$IA_SECRET_KEY" ]; then
-            python3 scripts/ia_archive.py
-            exit 0
+          if [ -f archive/archive/index.json ]; then
+            mv archive/archive/*.json archive/
+            rm -rf archive/archive
           fi
-          python3 -m pip install --disable-pip-version-check -q internetarchive
+          rm -f archive/ia-manifest.json archive/ia-state.json
+          git fetch -q --depth=1 origin data || true
+          git checkout origin/data -- archive/ia-manifest.json archive/ia-state.json 2>/dev/null || true
           python3 scripts/ia_archive.py
 
       - name: Publish the squashed data branch
@@ -527,7 +530,13 @@ jobs:
             rm -rf archive/archive
           fi
           git fetch -q --depth=1 origin data || true
-          git checkout origin/data -- archive/ia-manifest.json archive/ia-state.json stories.json 2>/dev/null || true
+          if [ ! -f archive/ia-manifest.json ]; then
+            git checkout origin/data -- archive/ia-manifest.json 2>/dev/null || true
+          fi
+          if [ ! -f archive/ia-state.json ]; then
+            git checkout origin/data -- archive/ia-state.json 2>/dev/null || true
+          fi
+          git checkout origin/data -- stories.json 2>/dev/null || true
           if [ ! -f archive/index.json ]; then
             echo "no archive index; not updating data"
             exit 1
