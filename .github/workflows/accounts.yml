@@ -38,12 +38,36 @@ jobs:
           fi
           cd worker
           npm ci
+          # The committed database_id is a placeholder. Wrangler treats any
+          # value as the real id, so clear it and look the database up by name.
+          python3 - <<'PY'
+          import pathlib, re
+          path = pathlib.Path("wrangler.toml")
+          text = path.read_text(encoding="utf-8")
+          text = re.sub(
+              r'database_id = "00000000-0000-0000-0000-000000000001"',
+              'database_id = ""',
+              text,
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
           set +e
           npx wrangler d1 info viktorych-accounts > /tmp/d1.txt 2>&1
           info_code=$?
           set -e
           if [ "$info_code" -ne 0 ]; then
-            npx wrangler d1 create viktorych-accounts > /tmp/d1.txt
+            cp /tmp/d1.txt /tmp/d1-info.txt
+            set +e
+            npx wrangler d1 create viktorych-accounts > /tmp/d1.txt 2>&1
+            create_code=$?
+            set -e
+            if [ "$create_code" -ne 0 ]; then
+              echo "d1 info failed and d1 create failed"
+              cat /tmp/d1-info.txt
+              echo "----"
+              cat /tmp/d1.txt
+              exit "$create_code"
+            fi
           fi
           python3 - <<'PY'
           import pathlib, re, sys
