@@ -3268,12 +3268,72 @@ def ia_backup_checks() -> None:
     check(retire_fields["creator"] == "removed" and retire_fields["collection"] == "removed" and retire_fields["uploader"] == "refused" and retire_fields["noindex"] == "refused", "creator and collection can be cleared and a read-only uploader is kept")
     check(retire_fields["description"] == "overwritten" and retire_fields["title"] == "removed", "a missing description becomes the plain label and a title can be cleared")
     check(retire_blanked["uploader_left"] == 1 and retire_blanked["anonymous"] == 1, "anonymous items are counted and a refused uploader stays")
-    catalog_kept, catalog_blocking = ia_retire._kept_and_blocking({"superintelapp-2026-10": ["superintelapp-2026-10_meta.xml", "superintelapp-2026-10_files.xml"]})
-    torrent_kept, torrent_blocking = ia_retire._kept_and_blocking({"superintelapp-2026-10": ["superintelapp-2026-10_archive.torrent"]})
-    check(catalog_kept and not catalog_blocking, "system catalog files do not fail the retirement")
-    check(torrent_blocking and not torrent_kept, "a leftover torrent still fails the retirement")
+    catalog_left = [name for names in {"superintelapp-2026-10": ["superintelapp-2026-10_meta.xml", "superintelapp-2026-10_files.xml"]}.values() for name in names]
+    torrent_left = [name for names in {"superintelapp-2026-10": ["superintelapp-2026-10_archive.torrent"]}.values() for name in names]
+    check(catalog_left and torrent_left, "a leftover catalog file or torrent still blocks the retirement")
     retire_notes = " ".join(retire_blanked["notes"] + retire_purged["notes"])
     check("test-secret-value" not in retire_notes and "person@example.com" not in retire_notes and anon not in retire_notes, "retire notes do not print the keys, the uploader address, or an anonymous id")
+
+    stuck_item = "superintelapp-2026-03"
+    stuck_files = [stuck_item + "_meta.xml", stuck_item + "_files.xml"]
+    task_calls = []
+
+    def stuck_open(request, timeout=None):
+        method = request.get_method()
+        path = urllib.parse.urlparse(request.full_url).path
+        if method == "DELETE":
+            return Resp(403, b"forbidden")
+        if method == "POST" and path == "/tasks.php":
+            task_calls.append(json.loads(request.data.decode("utf-8")))
+            header = request.headers.get("Authorization") or request.headers.get("authorization")
+            task_calls.append(header)
+            stuck_files.clear()
+            return Resp(200, b'{"success":true,"value":{"task_id":1}}')
+        if path == "/metadata/" + stuck_item:
+            return Resp(200, json.dumps({"metadata": {"collection": "opensource"}, "files": [{"name": name} for name in stuck_files]}).encode())
+        if path == "/metadata/" + anon:
+            return Resp(200, json.dumps({"metadata": dict(anon_meta), "files": [{"name": "keep.json"}]}).encode())
+        return Resp(404, b"")
+
+    stuck_config = dict(retire_config)
+    stuck_config.update({
+        "old_items": [stuck_item, anon],
+        "tasks_base": retire_host + "/tasks.php",
+        "delete_wait": 0,
+        "urlopen": stuck_open,
+        "opener": type("Opener", (), {"open": staticmethod(stuck_open)})(),
+    })
+    stuck_purged = ia_retire.purge_files(stuck_config, retire_state, sleep=lambda delay: None)
+    stuck_notes = " ".join(stuck_purged["notes"])
+    check(stuck_item in stuck_purged["emptied"] and stuck_purged["tasks_accepted"] == 1 and stuck_purged["remaining"][stuck_item] == [], "a refused file delete is finished by deleting the named item")
+    check(task_calls and task_calls[0]["cmd"] == "delete.php" and task_calls[0]["identifier"] == stuck_item and task_calls[0]["args"] == {} and anon not in json.dumps(task_calls[0]) and task_calls[1] == "LOW test-access:test-secret-value", "the delete task names only the old item")
+    check("test-secret-value" not in stuck_notes and anon not in stuck_notes and "could not remove" in stuck_notes and "403" in stuck_notes, "a blocked file delete records the status and not the keys")
+
+    refused_files = [stuck_item + "_meta.xml"]
+    refused_tasks = []
+
+    def refuse_task_open(request, timeout=None):
+        method = request.get_method()
+        path = urllib.parse.urlparse(request.full_url).path
+        if method == "DELETE":
+            return Resp(403, b"forbidden")
+        if method == "POST" and path == "/tasks.php":
+            refused_tasks.append(json.loads(request.data.decode("utf-8")))
+            return Resp(403, b'{"success":false,"error":"not allowed"}')
+        if path == "/metadata/" + stuck_item:
+            return Resp(200, json.dumps({"metadata": {"collection": "opensource"}, "files": [{"name": name} for name in refused_files]}).encode())
+        return Resp(404, b"")
+
+    refused_task_config = dict(stuck_config)
+    refused_task_config.update({
+        "old_items": [stuck_item],
+        "urlopen": refuse_task_open,
+        "opener": type("Opener", (), {"open": staticmethod(refuse_task_open)})(),
+    })
+    refused_task = ia_retire.purge_files(refused_task_config, retire_state, sleep=lambda delay: None)
+    refused_task_notes = " ".join(refused_task["notes"])
+    check(stuck_item not in refused_task["emptied"] and refused_task["tasks_refused"] == 1 and refused_task["remaining"][stuck_item] == refused_files, "a refused item delete leaves the files and continues")
+    check(refused_tasks and refused_tasks[0]["identifier"] == stuck_item and "test-secret-value" not in refused_task_notes and "delete task refused" in refused_task_notes, "a refused item delete is recorded without the keys")
 
     story_checks()
 
