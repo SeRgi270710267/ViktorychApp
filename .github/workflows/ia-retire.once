@@ -1,2 +1,4 @@
 Run the named-item retirement once.
 The delete step stays on the code checkout.
+
+Retry the delete step.
