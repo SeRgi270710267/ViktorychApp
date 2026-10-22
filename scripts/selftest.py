@@ -3320,7 +3320,7 @@ def ia_backup_checks() -> None:
     stuck_purged = ia_retire.purge_files(stuck_config, retire_state, sleep=lambda delay: None)
     stuck_notes = " ".join(stuck_purged["notes"])
     check(stuck_item in stuck_purged["emptied"] and stuck_purged["tasks_accepted"] == 1 and stuck_purged["remaining"][stuck_item] == [], "a refused file delete is finished by deleting the named item")
-    check(task_calls and task_calls[0]["cmd"] == "delete.php" and task_calls[0]["identifier"] == stuck_item and task_calls[0]["args"] == {} and anon not in json.dumps(task_calls[0]) and task_calls[1] == "LOW test-access:test-secret-value", "the delete task names only the old item")
+    check(task_calls and task_calls[0]["cmd"] == "delete.php" and task_calls[0]["identifier"] == stuck_item and "args" not in task_calls[0] and anon not in json.dumps(task_calls[0]) and task_calls[1] == "LOW test-access:test-secret-value", "the delete task names only the old item")
     check("test-secret-value" not in stuck_notes and anon not in stuck_notes and "could not remove" in stuck_notes and "403" in stuck_notes, "a blocked file delete records the status and not the keys")
 
     refused_files = [stuck_item + "_meta.xml"]

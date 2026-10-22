@@ -6,3 +6,5 @@ Retry the delete step.
 Direct retry.
 
 Delete the named items.
+
+Submit the item delete without an empty args object.
