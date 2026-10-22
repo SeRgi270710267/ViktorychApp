@@ -5408,9 +5408,15 @@ const here = parseRoute();
     if (parts[0] === "music") return { name: "music", section: parts[1] || "home", id: parts.slice(2).join("/"), query };
     if (parts[0] === "shorts") return { name: "shorts", live: parts[1] === "live", query };
     if (parts[0] === "drive") {
-      if (parts[1] === "trash") return { name: "drive", trash: true, folder: "", query };
-      if (parts[1] === "folder" && parts[2]) return { name: "drive", trash: false, folder: parts[2], query };
-      return { name: "drive", trash: false, folder: "", query };
+      if (parts[1] === "trash") return { name: "drive", section: "files", trash: true, folder: "", view: "", album: "", query };
+      if (parts[1] === "folder" && parts[2]) return { name: "drive", section: "files", trash: false, folder: parts[2], view: "", album: "", query };
+      if (parts[1] === "photos") {
+        if (parts[2] === "albums") return { name: "drive", section: "photos", trash: false, folder: "", view: "albums", album: "", query };
+        if (parts[2] === "album" && parts[3]) return { name: "drive", section: "photos", trash: false, folder: "", view: "album", album: parts[3], query };
+        if (parts[2] === "favorites") return { name: "drive", section: "photos", trash: false, folder: "", view: "favorites", album: "", query };
+        return { name: "drive", section: "photos", trash: false, folder: "", view: "timeline", album: "", query };
+      }
+      return { name: "drive", section: "files", trash: false, folder: "", view: "", album: "", query };
     }
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
@@ -8810,7 +8816,7 @@ const here = parseRoute();
         person: tr("Profile"),
         spaces: tr("Space"),
         shorts: tr("Shorts"),
-        drive: tr("Drive")
+        drive: route.section === "photos" ? tr("Photos") : tr("Drive")
       };
       key = map[route.name] || "";
     }

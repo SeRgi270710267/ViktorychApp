@@ -274,7 +274,7 @@ jobs:
           cp index.html 404.html app.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css hls-1.7.3.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
           mkdir -p _site/shared
           cp shared/handle-skeleton.js shared/reposts.js _site/shared/
-          cp shared/drive-crypto.js _site/shared/
+          cp shared/drive-crypto.js shared/drive-photos.js _site/shared/
           mkdir -p _site/i18n
           cp i18n/*.js _site/i18n/
           if [ -f data/music.json ]; then mkdir -p _site/data; cp data/music.json _site/data/; fi

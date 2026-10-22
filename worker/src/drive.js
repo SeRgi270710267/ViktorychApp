@@ -220,9 +220,10 @@ async function handleItemPost(env, request, deps) {
   if (!budget.ok) return deps.limited(budget);
   const body = await deps.readJson(request, 80000);
   if (body.error) return deps.json(400, { error: body.error });
-  const kind = body.kind === "folder" || body.kind === "file" ? body.kind : "";
+  const kind = body.kind === "folder" || body.kind === "file" || body.kind === "album" ? body.kind : "";
   const parentId = body.parentId ? cleanId(body.parentId) : "";
   if (body.parentId && !parentId) return deps.json(400, { error: "bad_parent" });
+  if (kind === "album" && parentId) return deps.json(400, { error: "bad_parent" });
   const wrappedKey = cleanB64(body.wrappedKey, 200);
   const wrapIv = cleanB64(body.wrapIv, 80);
   const meta = cleanB64(body.meta, 8000);
@@ -260,6 +261,7 @@ async function handleItemPatch(env, request, deps, id) {
     return deps.json(200, { ok: true });
   }
   let parentId = item.parent_id || "";
+  if (item.kind === "album" && body.parentId) return deps.json(400, { error: "bad_parent" });
   if (Object.prototype.hasOwnProperty.call(body, "parentId")) {
     parentId = body.parentId ? cleanId(body.parentId) : "";
     if (body.parentId && !parentId) return deps.json(400, { error: "bad_parent" });

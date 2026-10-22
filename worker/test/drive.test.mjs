@@ -111,6 +111,9 @@ test("drive routes stay closed unless the session is the owner", async () => {
     assert.equal(deniedWrite.status, 403);
     const hidden = await call(mf, "/v1/drive/nope", { ip: "203.0.113.15", token: other.body.token });
     assert.equal(hidden.status, 403);
+    const deniedAlbum = await call(mf, "/v1/drive/items", { method: "POST", ip: "203.0.113.16", token: other.body.token, json: { kind: "album" } });
+    assert.equal(deniedAlbum.status, 403);
+    assert.equal(deniedAlbum.body.error, "forbidden");
   } finally {
     await mf.dispose();
   }
@@ -218,6 +221,43 @@ test("the owner uploads ciphertext, downloads it, and deletion removes the chann
     const pub = await call(mf, "/tg/documents/DRV1", { ip: "203.0.113.29", token });
     assert.equal(pub.status, 404);
     assert.equal(Buffer.from(pub.bytes).equals(Buffer.from(files.get("DRV1"))), false);
+
+    const albumKey = await newItemKey(vault.key);
+    const albumMeta = await encryptJson(albumKey.key, { name: "secret-album-name", album: true, mime: "album", size: 0, created: 9 });
+    const album = await call(mf, "/v1/drive/items", {
+      method: "POST",
+      ip: "203.0.113.40",
+      token,
+      json: {
+        kind: "album",
+        parentId: "",
+        wrappedKey: albumKey.wrappedKey,
+        wrapIv: albumKey.wrapIv,
+        meta: albumMeta.ciphertext,
+        metaIv: albumMeta.iv
+      }
+    });
+    assert.equal(album.status, 201);
+    const nested = await call(mf, "/v1/drive/items", {
+      method: "POST",
+      ip: "203.0.113.41",
+      token,
+      json: {
+        kind: "album",
+        parentId: "abcdefghijklmnop",
+        wrappedKey: albumKey.wrappedKey,
+        wrapIv: albumKey.wrapIv,
+        meta: albumMeta.ciphertext,
+        metaIv: albumMeta.iv
+      }
+    });
+    assert.equal(nested.status, 400);
+    const withAlbum = await call(mf, "/v1/drive/items", { ip: "203.0.113.42", token });
+    assert.equal(withAlbum.body.items.length, 2);
+    assert.equal(JSON.stringify(withAlbum.body).includes("secret-album-name"), false);
+    const removedAlbum = await call(mf, "/v1/drive/items/" + album.body.id + "?forever=1", { method: "DELETE", ip: "203.0.113.43", token });
+    assert.equal(removedAlbum.status, 200);
+    assert.equal(deleted.length, 0);
 
     const trashed = await call(mf, "/v1/drive/items/" + item.body.id, { method: "DELETE", ip: "203.0.113.30", token });
     assert.equal(trashed.status, 200);

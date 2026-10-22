@@ -3890,7 +3890,9 @@ def story_checks() -> None:
     check("stories.js" in worker and "stories.css" in worker and "viktorych-a9-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     check(page.index('src="shorts.js"') < page.index('src="app.js"') and 'href="shorts.css"' in page and "shorts.js" in worker and "shorts.css" in worker, "the page and the service worker load Shorts")
     check(page.index('src="drive.js"') < page.index('src="app.js"') and 'href="drive.css"' in page and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker, "the page and the service worker load Drive")
-    check("drive.js" in workflow and "drive.css" in workflow and "drive-crypto.js" in workflow, "the sync publishes the Drive shell")
+    check("drive.js" in workflow and "drive.css" in workflow and "drive-crypto.js" in workflow and "drive-photos.js" in workflow, "the sync publishes the Drive shell")
+    check('parts[1] === "photos"' in app and 'tr("Photos")' in (ROOT / "drive.js").read_text(encoding="utf-8") and 'tr("Back up photos")' in (ROOT / "drive.js").read_text(encoding="utf-8"), "Photos is an owner Drive section")
+    check("drive-photos.js" in worker, "the service worker precaches the Photos library")
     nav_fn = app.split("function nav(route)", 1)[1].split("function shownFeeds", 1)[0]
     bottom_fn = app.split("function bottom(route)", 1)[1].split("function listSortOf", 1)[0]
     check("#/drive" not in nav_fn and "#/drive" not in bottom_fn, "Drive stays out of the main nav")
