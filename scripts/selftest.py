@@ -3889,6 +3889,14 @@ def story_checks() -> None:
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
     check("stories.js" in worker and "stories.css" in worker and "viktorych-a9-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     check(page.index('src="shorts.js"') < page.index('src="app.js"') and 'href="shorts.css"' in page and "shorts.js" in worker and "shorts.css" in worker, "the page and the service worker load Shorts")
+    check(page.index('src="drive.js"') < page.index('src="app.js"') and 'href="drive.css"' in page and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker, "the page and the service worker load Drive")
+    check("drive.js" in workflow and "drive.css" in workflow and "drive-crypto.js" in workflow, "the sync publishes the Drive shell")
+    nav_fn = app.split("function nav(route)", 1)[1].split("function shownFeeds", 1)[0]
+    bottom_fn = app.split("function bottom(route)", 1)[1].split("function listSortOf", 1)[0]
+    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn, "Drive stays out of the main nav")
+    check('href="#/drive"' in app and "ViktorychDrive.visible" in app, "Drive opens from the owner account menu")
+    drive_crypto = subprocess.run(["node", "scripts/drive_test.mjs"], cwd=ROOT, capture_output=True, text=True)
+    check(drive_crypto.returncode == 0, "drive crypto round-trip\n" + drive_crypto.stdout + drive_crypto.stderr)
     check('img.closest(".shorts-slide")' in app, "a refused Shorts video stays in the slide so the TikTok detail can show")
     check("shorts.js" in workflow and "shorts.css" in workflow and "python3 scripts/tiktok_sync.py" in workflow, "the sync fetches TikTok and publishes the Shorts shell")
     accounts_cfg = (ROOT / "accounts.config.js").read_text(encoding="utf-8")

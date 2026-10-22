@@ -18,6 +18,7 @@ Add these in the GitHub repository settings. Do not commit them, and do not put 
 | `TURNSTILE_SITEKEY` | GitHub Actions secret | no; set it only together with `TURNSTILE_SECRET` |
 | `ACCOUNTS_API` | GitHub Actions variable | no; the workflow discovers `https://viktorych-accounts.<account-subdomain>.workers.dev` |
 | `TELEGRAM_BOT_TOKEN` | Worker secret | no; `GET /tg/…` stays 503 until it is set. From `worker/`: `npx wrangler secret put TELEGRAM_BOT_TOKEN` |
+| `TELEGRAM_CHANNEL_ID` | GitHub Actions secret, then Worker secret | no; Drive uploads need it. The Accounts workflow copies it with `wrangler secret put` when the GitHub secret is set, and does not print it |
 
 `OWNER_CLAIM_CODE` and `ACCOUNT_PEPPER` should be long random strings. The Accounts workflow writes them with `wrangler secret put` and does not print them. An empty value is skipped, not stored.
 
@@ -57,6 +58,12 @@ Watch and read history syncs as `history`: at most 300 of the newest video and a
 Avatars and banners are not stored in D1. The browser crops an avatar to 400×400 WebP at 60 KB or less and a banner to 1500×500 WebP at 150 KB or less, then `PATCH /v1/profile` sends that file. The Worker writes it to the private R2 bucket `viktorych-data` at `media/avatars/<account id>/<sha256>.webp` or `media/banners/<account id>/<sha256>.webp`, deletes the previous object, and stores only that key in D1. `GET /v1/media/...` requires a session. The response is `private` with `cdn-cache-control: no-store`, so the edge does not keep a shared copy. A data-URL already in D1, including the owner account, is copied to R2 on the first request after deploy and the column is replaced with the key. Neither photo is required. Removing one deletes the R2 object. The account then chooses `default` (grey banner or silhouette) or `none` (no strip and no column). Hide my profile picture is the same pair of choices while the file stays in R2: other people get no avatar URL, and `GET /v1/media/...` for that avatar is 404 unless the request is the account itself.
 
 On the free plan that is at most 210 KB of R2 per account (60 KB + 150 KB). The shared R2 allowance is 10 GB, together with the public music bucket, so a thousand accounts with both photos are about 210 MB. D1 keeps a short key instead of a data URL that used to be up to about 150 KB plus 280 KB of text. The account row itself is a few kilobytes. The sync payload, including history, is capped at 350 KB, and the D1 database allowance used here is 500 MB. A full account is about 0.6 MB, almost all of it in R2. A typical account is a few kilobytes in D1 and at most 210 KB in R2.
+
+## Drive
+
+Drive is a private file store for the owner account only. The browser encrypts each file with AES-256-GCM. A random file key is wrapped by a master key from the owner’s passphrase (PBKDF2-SHA256, 600000 iterations). The passphrase and the master key stay on the device. The Worker stores wrapped keys and ciphertext in D1 and sends each chunk to the backup channel with `sendDocument`. Those rows are not `telegram_files`, and `GET /tg/…` does not serve them.
+
+A missing session gets 404. Any other session gets 403. Chunks stay under 19 MB. A file can be up to 2 GiB. The browser waits about 1.1 seconds between Telegram calls.
 
 ## Local checks
 
