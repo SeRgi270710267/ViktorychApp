@@ -122,22 +122,35 @@ def _song(raw, seen: set) -> dict:
     album = str(raw.get("album") or "").strip()
     if len(artist) > 200 or len(album) > 200:
         raise Reject("artist and album stay under 200 characters")
-    source = _https(str(raw.get("source") or ""), "audio")
     kind = str(raw.get("kind") or "")
+    stream = ""
+    if kind == "hls":
+        stream = _https(str(raw.get("stream") or ""), "stream")
+        if not urlparse(stream).path.lower().endswith(".m3u8"):
+            raise Reject("an hls song needs an https m3u8 stream")
+        source = ""
+    else:
+        source = _https(str(raw.get("source") or ""), "audio")
     if kind == "youtube":
         if not _youtube(source):
             raise Reject("a YouTube song needs a YouTube link")
     elif kind == "audio":
         if not _audio(source):
             raise Reject("audio needs an mp3, m4a, ogg, opus, aac, wav, or Archive download link")
-    else:
-        raise Reject("kind must be audio or youtube")
+    elif kind != "hls":
+        raise Reject("kind must be audio, hls, or youtube")
     cover = str(raw.get("cover") or "").strip()
     if cover:
         cover = _https(cover, "cover")
     duration = raw.get("duration") or 0
     if isinstance(duration, bool) or not isinstance(duration, (int, float)) or duration < 0 or duration > 86400:
         raise Reject("duration is seconds")
+    if isinstance(duration, float):
+        duration = round(duration, 3)
+        if duration == int(duration):
+            duration = int(duration)
+    else:
+        duration = int(duration)
     license_name = str(raw.get("license") or "").strip()
     if len(license_name) > 120:
         raise Reject("license is too long")
@@ -149,10 +162,31 @@ def _song(raw, seen: set) -> dict:
         "cover": cover,
         "source": source,
         "kind": kind,
-        "duration": int(duration),
+        "duration": duration,
     }
     if license_name:
         song["license"] = license_name
+    if stream:
+        song["stream"] = stream
+    released = str(raw.get("released") or "").strip()
+    if released:
+        if len(released) != 10 or released[4] != "-" or released[7] != "-":
+            raise Reject("released must be YYYY-MM-DD")
+        song["released"] = released
+    for key, limit in (("genre", 80), ("style", 120), ("mood", 120), ("language", 16)):
+        text = str(raw.get(key) or "").strip()
+        if not text:
+            continue
+        if len(text) > limit:
+            raise Reject(key + " is too long")
+        song[key] = text
+    if raw.get("bpm"):
+        bpm = raw.get("bpm")
+        if isinstance(bpm, bool) or not isinstance(bpm, (int, float)) or bpm < 1 or bpm > 400:
+            raise Reject("bpm is out of range")
+        song["bpm"] = int(bpm)
+    if raw.get("lossless") is True or kind == "hls":
+        song["lossless"] = True
     return song
 
 
@@ -246,6 +280,27 @@ def _selftest() -> None:
     youtube["songs"] = [dict(good["songs"][0], source="https://www.youtube.com/watch?v=dQw4w9WgXcQ", kind="youtube")]
     youtube["playlists"] = []
     assert clean_catalog(youtube)["songs"][0]["kind"] == "youtube"
+    hls = {
+        "songs": [{
+            "id": "america-dont-sit-still",
+            "title": "America Don't Sit Still",
+            "artist": "SuperintelMusic",
+            "album": "America Don't Sit Still",
+            "cover": "https://cdn.example/cover.png",
+            "source": "",
+            "stream": "https://cdn.example/music/index.m3u8",
+            "kind": "hls",
+            "duration": 222.11,
+            "released": "2026-10-22",
+            "genre": "Rock",
+            "lossless": True,
+        }],
+        "playlists": [],
+    }
+    kept = clean_catalog(hls)
+    assert kept["songs"][0]["stream"].endswith("index.m3u8")
+    assert kept["songs"][0]["duration"] == 222.11
+    assert kept["songs"][0]["source"] == ""
     for bad in (
         {"songs": [dict(good["songs"][0], source="http://archive.org/download/example/tone.mp3")]},
         {"songs": [dict(good["songs"][0], source="https://user:pass@archive.org/download/example/tone.mp3")]},

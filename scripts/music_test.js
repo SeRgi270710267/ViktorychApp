@@ -23,8 +23,26 @@ assert.ok(src.includes("11430.20"), "the wordmark keeps the SI cap height");
 assert.ok(src.includes("SIntelMusic"));
 assert.ok(!src.includes("SuperintelMusic"));
 assert.ok(!css.includes("SuperintelMusic"));
-assert.ok(!data.includes("SuperintelMusic"));
 assert.ok(!logo.includes("SuperintelMusic"));
+const catalog = JSON.parse(data);
+const credited = data.replace(/"artist": "SuperintelMusic"/g, '"artist": "SIntelMusic"');
+assert.ok(!credited.includes("SuperintelMusic"));
+const release = catalog.songs.find((song) => song.id === "america-dont-sit-still");
+assert.ok(release, "the release is in the catalog");
+assert.strictEqual(release.title, "America Don't Sit Still");
+assert.strictEqual(release.artist, "SuperintelMusic");
+assert.strictEqual(release.kind, "hls");
+assert.strictEqual(release.lossless, true);
+assert.strictEqual(release.duration, 222.11);
+assert.strictEqual(release.released, "2026-10-22");
+assert.ok(release.stream.endsWith("/index.m3u8"));
+assert.ok(!src.includes(release.stream));
+assert.ok(!src.includes("50c1862ca9927cdd5731d34f80d42669"));
+assert.ok(!src.includes("download="));
+assert.ok(src.includes('controlsList", "nodownload"') || src.includes('controlsList", "nodownload"'));
+assert.ok(src.includes("nodownload"));
+assert.ok(src.includes("hls-1.7.3.min.js"));
+assert.ok(src.includes("sintel-music-offline"));
 assert.ok(logo.includes('aria-label="SIntelMusic"'));
 
 assert.strictEqual(L.classifySource("http://example.com/a.mp3").ok, false);
@@ -55,9 +73,73 @@ assert.strictEqual(localLists.playlists[0].id, "mine");
 assert.strictEqual(localLists.playlists[1].id, "p");
 assert.strictEqual(L.reorder(["a", "b", "c"], "a", "c").join(","), "b,c,a");
 assert.strictEqual(L.formatTime(65), "1:05");
+assert.strictEqual(L.formatTime(222.11), "3:42");
+assert.strictEqual(L.formatReleased("2026-10-22"), "Oct 22, 2026");
+assert.strictEqual(L.streamReady({ stream: "" }), false);
+assert.strictEqual(L.streamReady({ stream: "https://localhost/a.m3u8" }), false);
+assert.strictEqual(L.streamReady({ stream: "http://cdn.example/a.m3u8" }), false);
+assert.strictEqual(L.streamReady({ stream: "https://cdn.example/music/index.m3u8" }), true);
+const sample = [
+  "#EXTM3U",
+  "#EXT-X-VERSION:7",
+  "#EXT-X-MAP:URI=\"init.mp4\"",
+  "#EXT-X-KEY:METHOD=AES-128,URI=\"key.bin\",IV=0x1",
+  "#EXTINF:6.0,",
+  "a.m4s",
+  "#EXTINF:6.0,",
+  "b.m4s",
+  "#EXT-X-ENDLIST"
+].join("\n");
+const assets = L.hlsAssets(sample, "https://cdn.example/music/x/index.m3u8");
+assert.strictEqual(assets.playlists.length, 0);
+assert.strictEqual(assets.files.slice().sort().join("\n"), [
+  "https://cdn.example/music/x/a.m4s",
+  "https://cdn.example/music/x/b.m4s",
+  "https://cdn.example/music/x/init.mp4",
+  "https://cdn.example/music/x/key.bin"
+].join("\n"));
+const foreign = L.hlsAssets('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="https://evil.example/key.bin"\nseg.m4s\n', "https://cdn.example/music/x/index.m3u8");
+assert.strictEqual(foreign.files.join("\n"), "https://cdn.example/music/x/seg.m4s");
+const master = L.hlsAssets("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\naudio.m3u8\n", "https://cdn.example/music/x/index.m3u8");
+assert.strictEqual(master.playlists.join("\n"), "https://cdn.example/music/x/audio.m3u8");
+const card = L.releaseHtml({
+  id: "america-dont-sit-still",
+  title: "America Don't Sit Still",
+  artist: "SuperintelMusic",
+  cover: "https://cdn.example/cover.png",
+  stream: "https://cdn.example/music/secret/index.m3u8",
+  kind: "hls",
+  duration: 222.11,
+  released: "2026-10-22",
+  genre: "Rock",
+  style: "American rock anthem",
+  lossless: true
+});
+assert.ok(card.includes("New release"));
+assert.ok(card.includes("Lossless"));
+assert.ok(card.includes("America Don"));
+assert.ok(card.includes("3:42"));
+assert.ok(card.includes("Download"));
+assert.ok(!card.includes("index.m3u8"));
+assert.ok(!card.includes("secret"));
+assert.ok(!card.includes("download="));
+const hlsSong = { id: "h", title: "H", artist: "A", source: "", stream: "https://cdn.example/music/index.m3u8", kind: "hls", duration: 222.11, lossless: true };
+assert.strictEqual(L.publishable([hlsSong]).length, 1);
+assert.strictEqual(L.publishable([hlsSong])[0].stream, hlsSong.stream);
 assert.strictEqual(L.sameSection({ name: "music", section: "home", id: "" }, "#/music"), true);
 assert.strictEqual(L.sameSection({ name: "music", section: "home", id: "" }, "#/music/search"), false);
 assert.strictEqual(L.sameSection({ name: "music", section: "home", id: "" }, "#/"), false);
 assert.strictEqual(L.publishable(merged.songs).length, 1);
+
+const worker = fs.readFileSync("sw.js", "utf8");
+assert.ok(worker.includes('VERSION = "superintel13-__SW_VERSION__"'));
+assert.ok(worker.includes("sintel-music-offline"));
+assert.ok(worker.includes("function isCatalogMedia(url)"));
+const fetchAt = worker.indexOf('self.addEventListener("fetch"');
+const catalogAt = worker.indexOf("if (isCatalogMedia(url)) return;");
+const spaceAt = worker.indexOf("if (isSpaceStatus(url) || isSpaceAsset(url))");
+assert.ok(fetchAt >= 0 && catalogAt > fetchAt && catalogAt < spaceAt);
+assert.ok(worker.includes("key !== OFFLINE_MUSIC"));
+assert.ok(!card.includes(release.stream));
 
 console.log("music tests ok");

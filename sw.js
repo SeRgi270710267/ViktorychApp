@@ -1,9 +1,10 @@
-/* SuperintelApp service worker. Cache names are superintel12- plus the deploy SHA. */
-const VERSION = "superintel12-__SW_VERSION__";
+/* SuperintelApp service worker. Cache names are superintel13- plus the deploy SHA. */
+const VERSION = "superintel13-__SW_VERSION__";
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
 const LIVE = "live-" + VERSION;
+const OFFLINE_MUSIC = "sintel-music-offline";
 const MEDIA_LIMIT = 150 * 1024 * 1024;
 const MEDIA_TTL = 7 * 24 * 60 * 60 * 1000;
 const SHELL_FILES = [
@@ -26,6 +27,7 @@ const SHELL_FILES = [
   "./stories.css",
   "./music.js",
   "./music.css",
+  "./hls-1.7.3.min.js",
   "./favicon.svg",
   "./favicon.ico",
   "./manifest.webmanifest",
@@ -54,7 +56,7 @@ const armedClients = new Set();
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE).map((key) => caches.delete(key)));
+    await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC).map((key) => caches.delete(key)));
     await self.clients.claim();
     await takeOverClients();
   })());
@@ -114,6 +116,13 @@ function isSpaceStatus(url) {
 
 function isSpaceAsset(url) {
   return spaceHost(url.hostname);
+}
+
+// SIntelMusic catalog audio (HLS playlist, key, init, segments, cover) is not
+// handled here. The page streams it directly and, only after Download, stores
+// an offline copy in sintel-music-offline. That cache is not this worker's.
+function isCatalogMedia(url) {
+  return spaceHost(url.hostname) && url.pathname.toLowerCase().indexOf("/music/") !== -1;
 }
 
 function isLive(url) {
@@ -313,6 +322,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (isCatalogMedia(url)) return;
   if (isSpaceStatus(url) || isSpaceAsset(url)) {
     event.respondWith(fetch(new Request(request, { cache: "no-store" })));
     return;
@@ -384,7 +394,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|favicon\.svg|favicon\.ico|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|hls-1\.7\.3\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
 }
 
 function canonicalNotifyId(post) {
