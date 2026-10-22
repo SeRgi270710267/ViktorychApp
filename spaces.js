@@ -71,14 +71,31 @@
   }
 
   const STATUS_MAX_AGE = 2 * 60 * 1000;
+  const STATUS_OFFLINE_AGE = 8 * 60 * 1000;
+
+  function statusUpdatedAt(status) {
+    if (!status || typeof status !== "object") return null;
+    if (typeof status.updated !== "string" || !status.updated.trim()) return null;
+    const then = Date.parse(status.updated);
+    return Number.isFinite(then) ? then : NaN;
+  }
 
   function statusStale(status, now) {
-    if (!status || typeof status !== "object") return false;
-    if (typeof status.updated !== "string" || !status.updated.trim()) return false;
-    const then = Date.parse(status.updated);
+    const then = statusUpdatedAt(status);
+    if (then == null) return false;
     if (!Number.isFinite(then)) return true;
     const clock = typeof now === "number" ? now : Date.now();
     return clock - then > STATUS_MAX_AGE;
+  }
+
+  function statusOffline(status, now) {
+    if (!status || typeof status !== "object") return false;
+    if (status.live === false) return true;
+    const then = statusUpdatedAt(status);
+    if (then == null) return false;
+    if (!Number.isFinite(then)) return true;
+    const clock = typeof now === "number" ? now : Date.now();
+    return clock - then > STATUS_OFFLINE_AGE;
   }
 
   function remoteStatusUrl(raw, allow, now) {
@@ -97,16 +114,37 @@
   }
 
   function audioFromStatus(status, allow, now) {
-    const empty = { live: false, url: "", listeners: null, scheduled: false };
+    const empty = { live: false, url: "", listeners: null, scheduled: false, reconnecting: false };
     if (!status || typeof status !== "object") return empty;
-    if (statusStale(status, now)) return empty;
     const scheduled = status.scheduled === true || status.state === "scheduled";
+    const listeners = listenersOf(status);
+    if (status.live !== true || statusOffline(status, now)) {
+      return { live: false, url: "", listeners: listeners, scheduled: scheduled && status.live !== true, reconnecting: false };
+    }
     const base = typeof status.base === "string" ? status.base : "";
     const hls = status.hls && typeof status.hls === "object" ? status.hls : null;
     const raw = hls && typeof hls.audio === "string" ? hls.audio : "";
     const url = allowedAudio(raw, base, allow);
-    const live = status.live === true && !!url;
-    return { live: live, url: url, listeners: listenersOf(status), scheduled: scheduled && !live };
+    if (!url) return { live: false, url: "", listeners: listeners, scheduled: false, reconnecting: false };
+    return { live: true, url: url, listeners: listeners, scheduled: false, reconnecting: statusStale(status, now) };
+  }
+
+  function playlistJumped(prevSn, nextSn, fragCount) {
+    if (prevSn == null || nextSn == null) return false;
+    if (!Number.isFinite(prevSn) || !Number.isFinite(nextSn)) return false;
+    const span = Number.isFinite(fragCount) && fragCount > 0 ? fragCount : 3;
+    if (nextSn < prevSn) return true;
+    return nextSn > prevSn + span + 1;
+  }
+
+  function recoverPlan(reason, fixes) {
+    const mediaFixes = fixes && fixes.mediaFixes || 0;
+    const softLoads = fixes && fixes.softLoads || 0;
+    const hasHls = !!(fixes && fixes.hasHls);
+    if (!hasHls || reason === "jump" || reason === "fatal" || reason === "unsupported" || reason === "ended" || reason === "stall" || reason === "watch") return "recreate";
+    if (reason === "media" && mediaFixes < 1) return "media";
+    if (softLoads < 1) return "reload";
+    return "recreate";
   }
 
   function marqueePlan(overflow, reduced) {
@@ -122,7 +160,10 @@
     listenersOf: listenersOf,
     audioFromStatus: audioFromStatus,
     statusStale: statusStale,
-    remoteStatusUrl: remoteStatusUrl
+    statusOffline: statusOffline,
+    remoteStatusUrl: remoteStatusUrl,
+    playlistJumped: playlistJumped,
+    recoverPlan: recoverPlan
   };
 
   if (typeof document === "undefined") {
@@ -166,11 +207,21 @@
     active: false,
     spaceId: "",
     loadedUrl: "",
-    broken: false,
-    playErrors: 0,
-    retryAt: 0,
+    linkDown: false,
     pausedByUser: false,
     corsRetried: false,
+    recoverTimer: 0,
+    waitTimer: 0,
+    watch: 0,
+    recoverFails: 0,
+    mediaFixes: 0,
+    softLoads: 0,
+    progressAt: 0,
+    lastTime: 0,
+    lastSn: null,
+    generation: 0,
+    ignoreErrorUntil: 0,
+    recoveredFor: 0,
     noAnalyser: false,
     returnHash: "",
     dockKey: ""
@@ -184,6 +235,17 @@
 
   function svg(path) {
     return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + path + '"/></svg>';
+  }
+
+  function ui(english) {
+    const fn = hooks && typeof hooks.t === "function" ? hooks.t : (typeof root.t === "function" ? root.t : null);
+    if (fn) {
+      try {
+        const value = fn(english);
+        if (typeof value === "string" && value) return value;
+      } catch (err) { /* keep the English string */ }
+    }
+    return english;
   }
 
   function isFollowed(id) {
@@ -298,7 +360,7 @@
     }
     if (source.statusUrl) {
       const parsed = audioFromStatus(status || {}, allow);
-      return { kind: "hls", live: parsed.live, url: parsed.url, listeners: parsed.listeners, scheduled: parsed.scheduled, allow: allow, channelId: "", forced: !!row.fetched || !!demoFor(space) };
+      return { kind: "hls", live: parsed.live, url: parsed.url, listeners: parsed.listeners, scheduled: parsed.scheduled, allow: allow, channelId: "", forced: !!row.fetched || !!demoFor(space), reconnecting: !!parsed.reconnecting };
     }
     if (type === "owncast" && source.server) {
       const server = String(source.server || "").replace(/\/$/, "");
@@ -316,11 +378,12 @@
 
   function toModel(space) {
     const play = playbackOf(space);
-    const broken = !!(player.broken && player.spaceId === space.id);
+    const down = !!(player.linkDown && player.active && player.spaceId === space.id);
     let state = "loading";
     if (play.forced) {
       if (play.scheduled) state = "scheduled";
-      else if (play.live && !broken) state = "live";
+      else if (play.live && (play.reconnecting || down)) state = "reconnecting";
+      else if (play.live) state = "live";
       else state = "ended";
     }
     const face = hostFace(space);
@@ -331,7 +394,7 @@
       cover: space.cover || face.avatar || "",
       followId: face.followId,
       host: { name: face.name, handle: face.handle, platform: face.platform, avatar: face.avatar },
-      live: state === "live",
+      live: state === "live" || state === "reconnecting",
       state: state,
       listeners: play.listeners,
       playUrl: play.url || "",
@@ -379,7 +442,7 @@
 
   function signature() {
     return models().map((item) => [item.id, item.live, item.state, item.playUrl, item.listeners, item.title].join("~")).join("|")
-      + "|" + (player.broken ? "1" : "0") + "|" + player.spaceId;
+      + "|" + (player.linkDown ? "1" : "0") + "|" + player.spaceId;
   }
 
   function maybeRender() {
@@ -420,12 +483,14 @@
       const label = /live/i.test(item.title || "") ? item.title : (item.title || "LIVE") + " LIVE";
       return '<a class="sp-pill sp-pill-video" href="' + esc(item.href || "#/") + '"><span class="sp-pill-text">' + marquee(label) + '</span><span class="sp-dot" aria-hidden="true"></span></a>';
     }
-    return '<a class="sp-pill" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '">' + stack(item) + '<span class="sp-pill-text">' + marquee(item.title) + "</span></a>";
+    const reconnect = item.state === "reconnecting";
+    return '<a class="sp-pill' + (reconnect ? " is-reconnect" : "") + '" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '" data-space-state="' + esc(item.state || "") + '">' + stack(item) + '<span class="sp-pill-text">' + marquee(item.title) + "</span>" + (reconnect ? '<span class="sp-reconnect-dot" aria-hidden="true"></span>' : "") + "</a>";
   }
 
   function cardHtml(item) {
     const count = countLabel(item.listeners);
-    return '<a class="sp-card" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '"><span class="sp-card-top"><span class="sp-live-pill">LIVE</span><span class="sp-eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span></span><span class="sp-card-title">' + esc(item.title) + '</span><span class="sp-card-foot">' + stack(item) + (count ? '<span class="sp-count">' + esc(count) + "</span>" : "") + "</span></a>";
+    const reconnect = item.state === "reconnecting";
+    return '<a class="sp-card' + (reconnect ? " is-reconnect" : "") + '" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '" data-space-state="' + esc(item.state || "") + '"><span class="sp-card-top"><span class="sp-live-pill">LIVE</span>' + (reconnect ? '<span class="sp-reconnect-dot" aria-hidden="true"></span>' : "") + '<span class="sp-eq' + (reconnect ? " is-quiet" : "") + '" aria-hidden="true"><i></i><i></i><i></i><i></i></span></span><span class="sp-card-title">' + esc(item.title) + '</span><span class="sp-card-foot">' + stack(item) + (count ? '<span class="sp-count">' + esc(count) + "</span>" : "") + "</span></a>";
   }
 
   function homeRow() {
@@ -467,7 +532,7 @@
     const state = item.state || "ended";
     const host = item.host || {};
     const hostLink = host.handle ? "#/" + encodeURIComponent(host.platform || "x") + "/" + encodeURIComponent(host.handle) : "";
-    const speaking = player.active && player.spaceId === item.id && state === "live";
+    const speaking = player.active && player.spaceId === item.id && (state === "live" || state === "reconnecting");
     const pulse = speaking && player.noAnalyser ? " pulse" : "";
     let body = "";
     if (state === "ended") body = '<div class="sp-notice"><h2>This Space has ended</h2></div>';
@@ -484,11 +549,13 @@
         + '<section class="sp-listeners"><h2>Listeners</h2>' + (count ? "<p>" + esc(count) + "</p>" : "") + "</section></div>";
     }
     const joined = player.active && player.spaceId === item.id;
-    const controls = state !== "live" ? "" : joined
+    const tunable = state === "live" || state === "reconnecting";
+    const controls = !tunable ? "" : joined
       ? '<div class="sp-controls"><button class="sp-round" type="button" data-space-act="mic" aria-label="Request to speak">' + svg(ICON.mic) + '</button><button class="sp-round sp-emoji-btn" type="button" data-space-act="emoji" aria-label="React">' + EMOJIS[0] + '</button><button class="sp-round" type="button" data-space-act="share" aria-label="Share">' + svg(ICON.share) + '</button><button class="sp-round" type="button" data-space-act="comment" aria-label="Comment">' + svg(ICON.comment) + "</button></div>"
       : '<div class="sp-controls"><button class="sp-start" type="button" data-space-act="listen">Start listening</button></div>';
     const reactions = EMOJIS.map((emoji) => '<button type="button" data-space-act="react" data-emoji="' + emoji + '">' + emoji + "</button>").join("");
-    return '<div class="sp-sheet" data-space-id="' + esc(item.id || "") + '"><header class="sp-sheet-bar"><button class="sp-icon" type="button" data-space-act="min" aria-label="Minimize">' + svg(ICON.down) + '</button><button class="sp-icon" type="button" data-space-act="more" aria-label="More">' + svg(ICON.more) + '</button><button class="sp-leave" type="button" data-space-act="leave">Leave</button></header><div class="sp-more" hidden><button type="button" data-space-act="copy">Copy link</button></div><div class="sp-react" hidden>' + reactions + '</div><h1 class="sp-sheet-title">' + esc(item.title || "Space") + "</h1>" + body + controls + "</div>";
+    const reconnect = state === "reconnecting" ? '<p class="sp-reconnect" role="status">' + esc(ui("Reconnecting…")) + "</p>" : "";
+    return '<div class="sp-sheet' + (state === "reconnecting" ? " is-reconnect" : "") + '" data-space-id="' + esc(item.id || "") + '" data-space-state="' + esc(state) + '"><header class="sp-sheet-bar"><button class="sp-icon" type="button" data-space-act="min" aria-label="Minimize">' + svg(ICON.down) + '</button><button class="sp-icon" type="button" data-space-act="more" aria-label="More">' + svg(ICON.more) + '</button><button class="sp-leave" type="button" data-space-act="leave">Leave</button></header><div class="sp-more" hidden><button type="button" data-space-act="copy">Copy link</button></div><div class="sp-react" hidden>' + reactions + '</div><h1 class="sp-sheet-title">' + esc(item.title || "Space") + "</h1>" + reconnect + body + controls + "</div>";
   }
 
   function page(route) {
@@ -517,6 +584,10 @@
     audio.setAttribute("aria-hidden", "true");
     audio.addEventListener("error", onAudioError);
     audio.addEventListener("playing", onPlaying);
+    audio.addEventListener("waiting", onMediaWait);
+    audio.addEventListener("stalled", onMediaWait);
+    audio.addEventListener("ended", onMediaEnded);
+    audio.addEventListener("timeupdate", onMediaTime);
     document.body.appendChild(audio);
     player.audio = audio;
     return audio;
@@ -536,13 +607,45 @@
   }
 
   function destroyHls() {
+    player.generation += 1;
     if (player.hls && player.hls.destroy) {
       try { player.hls.destroy(); } catch (err) { /* already gone */ }
     }
     player.hls = null;
   }
 
-  function attach(item) {
+  function isPlaylistItem(item) {
+    const url = item && item.playUrl || "";
+    return !item || item.kind !== "audio" || /\.m3u8(\?|#|$)/i.test(url);
+  }
+
+  function nativeHls(audio) {
+    return !!(audio && (audio.canPlayType("application/vnd.apple.mpegurl") || audio.canPlayType("application/x-mpegURL")));
+  }
+
+  function bustUrl(url) {
+    const hashAt = url.indexOf("#");
+    const base = hashAt >= 0 ? url.slice(0, hashAt) : url;
+    const hash = hashAt >= 0 ? url.slice(hashAt) : "";
+    return base + (base.indexOf("?") >= 0 ? "&" : "?") + "_r=" + Date.now() + hash;
+  }
+
+  function retryPolicy() {
+    return { maxNumRetry: 2, retryDelayMs: 400, maxRetryDelayMs: 1500, backoff: "linear" };
+  }
+
+  function loadPolicy(firstByte, total) {
+    return {
+      default: {
+        maxTimeToFirstByteMs: firstByte,
+        maxLoadTimeMs: total,
+        timeoutRetry: retryPolicy(),
+        errorRetry: retryPolicy()
+      }
+    };
+  }
+
+  function attach(item, bust) {
     const audio = ensureAudio();
     const url = item.playUrl;
     const allow = item.allow || [];
@@ -550,11 +653,30 @@
     const frame = document.getElementById("space-yt");
     if (frame) frame.remove();
     player.loadedUrl = url;
-    const playlist = item.kind !== "audio" || /\.m3u8(\?|#|$)/i.test(url);
+    player.lastSn = null;
+    player.lastTime = 0;
+    player.progressAt = Date.now();
+    audio.preload = "auto";
+    const playlist = isPlaylistItem(item);
     const Hls = root.Hls;
     if (playlist && Hls && Hls.isSupported()) {
+      const generation = player.generation;
       const hls = new Hls({
         enableWorker: false,
+        lowLatencyMode: false,
+        liveSyncDurationCount: 3,
+        liveMaxLatencyDurationCount: 10,
+        maxBufferLength: 60,
+        maxMaxBufferLength: 120,
+        backBufferLength: 30,
+        maxBufferHole: 0.5,
+        nudgeOffset: 0.1,
+        nudgeMaxRetry: 8,
+        highBufferWatchdogPeriod: 2,
+        liveDurationInfinity: true,
+        manifestLoadPolicy: loadPolicy(4000, 8000),
+        playlistLoadPolicy: loadPolicy(4000, 8000),
+        fragLoadPolicy: loadPolicy(6000, 12000),
         xhrSetup: (xhr, requestUrl) => {
           if (allowedAudio(requestUrl, url, allow)) return;
           xhr.send = function () {};
@@ -562,22 +684,52 @@
         }
       });
       hls.on(Hls.Events.ERROR, (_evt, data) => {
-        if (data && data.fatal) markBroken();
+        if (generation !== player.generation || !data) return;
+        const details = data.details || "";
+        if (!data.fatal) {
+          if ((details === "bufferStalledError" || details === "bufferSeekOverHole" || details === "bufferNudgeOnStall") && Date.now() - player.progressAt > 7000) {
+            scheduleRecover("stall");
+          }
+          return;
+        }
+        if (data.type === "mediaError") scheduleRecover("media");
+        else if (data.type === "networkError") scheduleRecover("network");
+        else scheduleRecover("fatal");
+      });
+      hls.on(Hls.Events.LEVEL_UPDATED, (_evt, data) => {
+        if (generation !== player.generation) return;
+        const details = data && data.details;
+        if (!details) return;
+        const seq = details.startSN;
+        const count = details.fragments && details.fragments.length;
+        const prev = player.lastSn;
+        player.lastSn = seq;
+        if (playlistJumped(prev, seq, count)) scheduleRecover("jump");
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (generation !== player.generation || !player.active || player.pausedByUser) return;
+        kickPlay(audio);
+      });
+      hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        if (generation !== player.generation) return;
+        player.fragOk = true;
       });
       hls.loadSource(url);
       hls.attachMedia(audio);
       player.hls = hls;
       return;
     }
-    if (playlist && (audio.canPlayType("application/vnd.apple.mpegurl") || audio.canPlayType("application/x-mpegURL"))) {
-      audio.src = url;
+    if (playlist && nativeHls(audio)) {
+      audio.src = bust ? bustUrl(url) : url;
+      try { audio.load(); } catch (err) { /* the element will still try src */ }
       return;
     }
     if (!playlist) {
       audio.src = url;
+      try { audio.load(); } catch (err) { /* ignore */ }
       return;
     }
-    markBroken();
+    scheduleRecover("unsupported");
   }
 
   function mountYoutube(channelId) {
@@ -680,6 +832,7 @@
       };
       setHandler("play", () => resume());
       setHandler("pause", () => pause());
+      navigator.mediaSession.playbackState = player.pausedByUser ? "paused" : "playing";
     } catch (err) { /* metadata is optional */ }
   }
 
@@ -687,24 +840,110 @@
     if (!navigator.mediaSession) return;
     try {
       navigator.mediaSession.metadata = null;
+      navigator.mediaSession.playbackState = "none";
       navigator.mediaSession.setActionHandler("play", null);
       navigator.mediaSession.setActionHandler("pause", null);
     } catch (err) { /* ignore */ }
   }
 
-  function markBroken() {
-    if (!player.active || player.broken) return;
-    player.broken = true;
-    player.playErrors += 1;
-    const steps = [8000, 20000, 45000];
-    player.retryAt = Date.now() + steps[Math.min(player.playErrors - 1, 2)];
-    if (player.audio && !player.audio.paused) player.audio.pause();
+  function noteReconnecting() {
+    if (!player.active || player.linkDown) return;
+    player.linkDown = true;
+    player.dockKey = "";
+    syncSession();
     maybeRender();
-    armNext();
+  }
+
+  function clearRecover() {
+    clearTimeout(player.recoverTimer);
+    player.recoverTimer = 0;
+    clearTimeout(player.waitTimer);
+    player.waitTimer = 0;
+  }
+
+  function scheduleRecover(reason) {
+    if (!player.active || player.pausedByUser) return;
+    noteReconnecting();
+    player.recoveredFor = 0;
+    player.fragOk = false;
+    if (player.recoverTimer) return;
+    const delay = [1200, 3000, 5000, 8000, 12000][Math.min(player.recoverFails, 4)];
+    player.recoverTimer = setTimeout(() => {
+      player.recoverTimer = 0;
+      recoverPlayback(reason);
+    }, delay);
+  }
+
+  function kickPlay(audio) {
+    if (!audio || !player.active || player.pausedByUser) return;
+    const pending = audio.play();
+    if (pending && pending.catch) {
+      pending.catch((err) => {
+        if (err && err.name === "NotAllowedError") {
+          noteReconnecting();
+          return;
+        }
+        scheduleRecover("play");
+      });
+    }
+    if (player.ctx && player.ctx.state === "suspended") player.ctx.resume().catch(() => {});
+  }
+
+  function markProgress() {
+    player.progressAt = Date.now();
+    const wasDown = player.linkDown || player.recoverFails || player.mediaFixes || player.softLoads;
+    player.linkDown = false;
+    player.recoverFails = 0;
+    player.mediaFixes = 0;
+    player.softLoads = 0;
+    player.recoveredFor = 0;
+    clearTimeout(player.waitTimer);
+    player.waitTimer = 0;
+    if (!wasDown) return;
+    player.dockKey = "";
+    syncSession();
+    maybeRender();
+  }
+
+  function recoverPlayback(reason) {
+    if (!player.active || player.pausedByUser) return;
+    const item = spaceModel(player.spaceId);
+    if (!item || item.kind === "youtube" || !item.live || !item.playUrl) return;
+    const audio = ensureAudio();
+    player.recoverFails += 1;
+    noteReconnecting();
+    const plan = recoverPlan(reason, {
+      hasHls: !!player.hls,
+      mediaFixes: player.mediaFixes,
+      softLoads: player.softLoads
+    });
+    if (plan === "media" && player.hls) {
+      player.mediaFixes += 1;
+      try {
+        player.hls.recoverMediaError();
+        kickPlay(audio);
+        return;
+      } catch (err) { /* fall through to a fresh player */ }
+    } else if (plan === "reload" && player.hls) {
+      player.softLoads += 1;
+      try {
+        player.hls.stopLoad();
+        player.hls.startLoad(-1);
+        kickPlay(audio);
+        return;
+      } catch (err) { /* fall through to a fresh player */ }
+    }
+    player.mediaFixes = 0;
+    player.softLoads = 0;
+    player.lastSn = null;
+    player.loadedUrl = "";
+    player.ignoreErrorUntil = Date.now() + 800;
+    attach(item, true);
+    kickPlay(audio);
   }
 
   function onAudioError() {
-    if (!player.active || player.pausedByUser) return;
+    if (!player.active || player.pausedByUser || Date.now() < player.ignoreErrorUntil) return;
     const audio = player.audio;
     if (audio && !player.corsRetried && audio.crossOrigin) {
       player.corsRetried = true;
@@ -713,34 +952,98 @@
       const item = spaceModel(player.spaceId);
       if (item && item.playUrl) {
         player.loadedUrl = "";
-        attach(item);
-        const pending = audio.play();
-        if (pending && pending.catch) pending.catch(() => markBroken());
+        attach(item, true);
+        kickPlay(audio);
         return;
       }
     }
-    markBroken();
+    scheduleRecover(player.hls ? "media" : "network");
+  }
+
+  function onMediaWait() {
+    if (!player.active || player.pausedByUser || player.waitTimer) return;
+    player.waitTimer = setTimeout(() => {
+      player.waitTimer = 0;
+      if (!player.active || player.pausedByUser) return;
+      if (Date.now() - player.progressAt < 7000) return;
+      scheduleRecover("stall");
+    }, 7000);
+  }
+
+  function onMediaEnded() {
+    if (!player.active || player.pausedByUser || Date.now() < player.ignoreErrorUntil) return;
+    scheduleRecover("ended");
+  }
+
+  function noteTime(t) {
+    const backwards = player.lastTime > 1 && t + 1 < player.lastTime;
+    if (!backwards && t <= player.lastTime + 0.12) return;
+    const delta = backwards ? 1 : t - player.lastTime;
+    player.lastTime = t;
+    const recovering = !!(player.linkDown || player.recoverFails || player.mediaFixes || player.softLoads);
+    if (recovering && !player.fragOk && player.hls) return;
+    player.progressAt = Date.now();
+    clearTimeout(player.waitTimer);
+    player.waitTimer = 0;
+    if (!recovering) return;
+    player.recoveredFor += delta;
+    if (player.recoveredFor < 1) return;
+    player.recoveredFor = 0;
+    player.fragOk = false;
+    markProgress();
+  }
+
+  function onMediaTime() {
+    const audio = player.audio;
+    if (!audio || !player.active || audio.paused) return;
+    noteTime(audio.currentTime || 0);
   }
 
   function onPlaying() {
     if (!player.active) return;
-    player.broken = false;
-    player.playErrors = 0;
-    player.retryAt = 0;
+    player.progressAt = Date.now();
+    if (!player.hls) player.fragOk = true;
+    if (player.audio) player.lastTime = Math.max(player.lastTime, player.audio.currentTime || 0);
     ensureAnalyser();
     startLevel();
     syncSession();
     fillDock();
-    maybeRender();
+  }
+
+  function watchPlayback() {
+    if (!player.active || player.pausedByUser) return;
+    const item = spaceModel(player.spaceId);
+    if (!item || item.kind === "youtube" || !item.live || !item.playUrl) return;
+    const audio = player.audio;
+    if (!audio) return;
+    const t = audio.currentTime || 0;
+    if (!audio.paused && !audio.ended && (t > player.lastTime + 0.12 || (player.lastTime > 1 && t + 1 < player.lastTime))) {
+      noteTime(t);
+      return;
+    }
+    if (Date.now() - player.progressAt < 8000) return;
+    scheduleRecover(audio.ended ? "ended" : "watch");
+  }
+
+  function nudgeIfQuiet() {
+    if (!player.active || player.pausedByUser) return;
+    const audio = player.audio;
+    const quiet = !audio || audio.paused || audio.ended || Date.now() - player.progressAt > 8000;
+    if (quiet) scheduleRecover("resume");
   }
 
   function listen(id) {
     const item = spaceModel(id);
-    if (!item || item.state !== "live") return;
+    if (!item || (item.state !== "live" && item.state !== "reconnecting")) return;
     player.active = true;
     player.spaceId = id;
     player.pausedByUser = false;
-    player.broken = false;
+    player.linkDown = false;
+    player.recoverFails = 0;
+    player.mediaFixes = 0;
+    player.softLoads = 0;
+    player.progressAt = Date.now();
+    clearRecover();
     if (item.kind === "youtube") {
       if (!item.channelId) return;
       mountYoutube(item.channelId);
@@ -750,52 +1053,63 @@
     }
     if (!item.playUrl || !allowedAudio(item.playUrl, "", item.allow)) return;
     const audio = ensureAudio();
-    const playlist = item.kind !== "audio" || /\.m3u8(\?|#|$)/i.test(item.playUrl);
+    const playlist = isPlaylistItem(item);
     const ready = () => {
       if (!player.active || player.spaceId !== id) return;
-      if (player.loadedUrl !== item.playUrl) attach(item);
-      const pending = audio.play();
-      if (pending && pending.catch) pending.catch(() => markBroken());
-      if (player.ctx && player.ctx.state === "suspended") player.ctx.resume().catch(() => {});
+      if (player.loadedUrl !== item.playUrl) attach(item, false);
+      kickPlay(audio);
       startLevel();
       syncSession();
       fillDock();
     };
-    const native = audio.canPlayType("application/vnd.apple.mpegurl") || audio.canPlayType("application/x-mpegURL");
-    if (playlist && !(root.Hls && root.Hls.isSupported()) && !native) {
+    if (playlist && !(root.Hls && root.Hls.isSupported()) && !nativeHls(audio)) {
       loadHls().then(ready);
       return;
     }
     ready();
+    if (Date.now() - lastPoll > 15000) arm(500);
   }
 
   function pause() {
     player.pausedByUser = true;
+    clearRecover();
     if (player.audio) player.audio.pause();
+    syncSession();
     fillDock();
   }
 
   function resume() {
     if (!player.active) return;
     player.pausedByUser = false;
+    player.progressAt = Date.now();
     const item = spaceModel(player.spaceId);
-    if (!item || item.kind === "youtube") return;
-    if (player.audio) {
-      const pending = player.audio.play();
-      if (pending && pending.catch) pending.catch(() => markBroken());
+    if (!item || item.kind === "youtube") {
+      syncSession();
+      fillDock();
+      return;
     }
-    if (player.ctx && player.ctx.state === "suspended") player.ctx.resume().catch(() => {});
+    if (!item.live || !item.playUrl) return;
+    const audio = ensureAudio();
+    if (player.loadedUrl !== item.playUrl) attach(item, false);
+    kickPlay(audio);
     startLevel();
+    syncSession();
     fillDock();
   }
 
   function stopPlayback() {
     player.active = false;
     player.pausedByUser = false;
-    player.broken = false;
+    player.linkDown = false;
     player.loadedUrl = "";
     player.dockKey = "";
-    player.retryAt = 0;
+    player.recoverFails = 0;
+    player.mediaFixes = 0;
+    player.softLoads = 0;
+    player.lastSn = null;
+    player.lastTime = 0;
+    player.progressAt = 0;
+    clearRecover();
     destroyHls();
     const frame = document.getElementById("space-yt");
     if (frame) frame.remove();
@@ -806,7 +1120,10 @@
     }
     clearSession();
     const dock = document.getElementById("space-dock");
-    if (dock) dock.hidden = true;
+    if (dock) {
+      dock.hidden = true;
+      dock.classList.remove("is-reconnect");
+    }
     document.body.classList.remove("space-docked");
   }
 
@@ -814,11 +1131,14 @@
     const dock = ensureDock();
     const item = player.active ? spaceModel(player.spaceId) : null;
     if (!item) { dock.hidden = true; return; }
-    const key = item.id + "|" + item.title + "|" + ((item.host && item.host.avatar) || "") + "|" + (player.audio && player.audio.paused ? "1" : "0");
+    const reconnect = item.state === "reconnecting";
+    const key = item.id + "|" + item.state + "|" + item.title + "|" + ((item.host && item.host.avatar) || "") + "|" + (player.audio && player.audio.paused ? "1" : "0");
     if (player.dockKey === key && dock.childElementCount) return;
     player.dockKey = key;
     const playing = player.audio && !player.audio.paused;
-    dock.innerHTML = '<a class="sp-dock-open" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '">' + stack(item) + '<span class="sp-dock-title">' + marquee(item.title) + '</span></a><button class="sp-icon" type="button" data-space-act="' + (playing ? "pause" : "play") + '" aria-label="' + (playing ? "Pause" : "Play") + '">' + svg(playing ? ICON.pause : ICON.play) + '</button><button class="sp-icon" type="button" data-space-open="' + esc(item.id) + '" aria-label="Expand">' + svg(ICON.up) + "</button>";
+    dock.classList.toggle("is-reconnect", reconnect);
+    const status = reconnect ? '<span class="sp-reconnect sp-reconnect-dock">' + esc(ui("Reconnecting…")) + "</span>" : "";
+    dock.innerHTML = '<a class="sp-dock-open" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '">' + stack(item) + '<span class="sp-dock-copy"><span class="sp-dock-title">' + marquee(item.title) + "</span>" + status + "</span></a><button class=\"sp-icon\" type=\"button\" data-space-act=\"" + (playing ? "pause" : "play") + '" aria-label="' + (playing ? "Pause" : "Play") + '">' + svg(playing ? ICON.pause : ICON.play) + '</button><button class="sp-icon" type="button" data-space-open="' + esc(item.id) + '" aria-label="Expand">' + svg(ICON.up) + "</button>";
     bindMarquees(dock);
   }
 
@@ -898,7 +1218,7 @@
     const id = el.getAttribute("data-space-open") || "";
     if ((location.hash || "").indexOf("#/spaces/") !== 0) player.returnHash = location.hash || "#/";
     const item = spaceModel(id);
-    if (item && item.state === "live") listen(id);
+    if (item && (item.state === "live" || item.state === "reconnecting")) listen(id);
     const hash = "#/spaces/" + encodeURIComponent(id);
     if ((location.hash || "") !== hash) location.hash = hash;
     else if (hooks.render) hooks.render();
@@ -1007,12 +1327,15 @@
     if (!configOk) { arm(configErrors ? [8000, 20000, 45000][Math.min(configErrors - 1, 2)] : 8000); return; }
     const now = Date.now();
     let wait = document.hidden ? 120000 : 35000;
+    let hot = !!(player.active && !player.pausedByUser);
     Object.keys(runtime).forEach((id) => {
       const row = runtime[id];
       if (row && row.nextAt) wait = Math.min(wait, Math.max(0, row.nextAt - now));
+      const doc = row && row.status;
+      if (doc && doc.live === true && statusStale(doc, now) && !statusOffline(doc, now)) hot = true;
     });
-    if (player.broken && player.retryAt) wait = Math.min(wait, Math.max(0, player.retryAt - now));
-    if (document.hidden) wait = Math.max(wait, 120000);
+    if (hot) wait = Math.min(wait, 20000);
+    else if (document.hidden) wait = Math.max(wait, 120000);
     arm(wait < 1000 ? 1000 : wait);
   }
 
@@ -1085,25 +1408,14 @@
     const item = spaceModel(player.spaceId);
     if (!item || item.kind === "youtube") return;
     if (!item.live || !item.playUrl) {
+      clearRecover();
       if (player.audio && !player.audio.paused) player.audio.pause();
+      syncSession();
       return;
     }
-    if (player.broken) {
-      if (player.retryAt && Date.now() >= player.retryAt) {
-        player.broken = false;
-        player.corsRetried = false;
-        player.loadedUrl = "";
-        attach(item);
-        const pending = player.audio.play();
-        if (pending && pending.catch) pending.catch(() => markBroken());
-      }
-      return;
-    }
-    if (item.playUrl !== player.loadedUrl) {
-      attach(item);
-      const pending = player.audio.play();
-      if (pending && pending.catch) pending.catch(() => markBroken());
-    }
+    const audio = ensureAudio();
+    if (player.loadedUrl !== item.playUrl) attach(item, false);
+    if ((audio.paused || audio.ended) && !player.recoverTimer) kickPlay(audio);
   }
 
   async function refreshAll() {
@@ -1118,7 +1430,9 @@
         row.status = await loadStatus(space);
         row.fetched = true;
         row.errors = 0;
-        row.nextAt = Date.now() + (document.hidden ? 120000 : 35000);
+        const listening = player.active && player.spaceId === space.id && !player.pausedByUser;
+        const grace = row.status && row.status.live === true && statusStale(row.status) && !statusOffline(row.status);
+        row.nextAt = Date.now() + ((listening || grace) ? 20000 : (document.hidden ? 120000 : 35000));
       } catch (err) {
         row.fetched = true;
         row.errors += 1;
@@ -1154,12 +1468,9 @@
     syncDock(route || null);
     if (player.active) {
       const item = spaceModel(player.spaceId);
-      if (item && item.kind !== "youtube" && item.playUrl && item.playUrl !== player.loadedUrl && !player.pausedByUser && !player.broken) {
-        attach(item);
-        if (player.audio && player.audio.paused) {
-          const pending = player.audio.play();
-          if (pending && pending.catch) pending.catch(() => {});
-        }
+      if (item && item.kind !== "youtube" && item.playUrl && item.playUrl !== player.loadedUrl && !player.pausedByUser && item.live) {
+        attach(item, false);
+        if (player.audio && (player.audio.paused || player.audio.ended)) kickPlay(player.audio);
       }
       syncSession();
       startLevel();
@@ -1214,7 +1525,14 @@
 
   document.addEventListener("visibilitychange", () => {
     pauseMarquees();
-    if (!document.hidden && Date.now() - lastPoll > 15000) arm(1000);
+    if (document.hidden) return;
+    nudgeIfQuiet();
+    if (Date.now() - lastPoll > 15000) arm(1000);
+  });
+
+  document.addEventListener("resume", () => {
+    nudgeIfQuiet();
+    arm(500);
   });
 
   document.addEventListener("keydown", (event) => {
@@ -1229,6 +1547,7 @@
     ensureAudio();
     ensureDock();
     loadHls();
+    if (!player.watch) player.watch = setInterval(watchPlayback, 3000);
     runPoll();
   }
 

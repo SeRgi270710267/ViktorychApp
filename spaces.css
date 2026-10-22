@@ -294,6 +294,52 @@ a.sp-live-wrap { position: relative; display: inline-block; text-decoration: non
   text-align: center;
 }
 .sp-notice h2 { margin: 0; font-size: 28px; line-height: 32px; font-weight: 800; }
+.sp-reconnect {
+  margin: 0 24px 8px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.88);
+}
+.sp-sheet .sp-reconnect::before,
+.sp-reconnect-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f5c451;
+  box-shadow: 0 0 0 0 rgba(245, 196, 81, 0.55);
+  animation: sp-reconnect-dot 1.4s ease-out infinite;
+}
+.sp-sheet .sp-reconnect::before {
+  content: "";
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: 1px;
+}
+.sp-reconnect-dot { display: inline-block; flex: none; }
+.sp-reconnect-dock {
+  display: block;
+  margin: 0;
+  text-align: left;
+  font-size: 12px;
+  line-height: 14px;
+  font-weight: 700;
+  color: #f5c451;
+}
+.sp-reconnect-dock::before { display: none; }
+.sp-dock-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.sp-eq.is-quiet i { animation: none; opacity: 0.45; }
+@keyframes sp-reconnect-dot {
+  70% { box-shadow: 0 0 0 6px rgba(245, 196, 81, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 196, 81, 0); }
+}
 .sp-controls {
   display: flex;
   align-items: center;
@@ -384,5 +430,5 @@ body.space-docked .center { padding-bottom: 72px; }
   .sp-live-badge { bottom: 2px; font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sp-marquee-track, .sp-eq i, .sp-speak.pulse .sp-ring, .sp-burst { animation: none; }
+  .sp-marquee-track, .sp-eq i, .sp-speak.pulse .sp-ring, .sp-burst, .sp-reconnect::before, .sp-reconnect-dot { animation: none; }
 }

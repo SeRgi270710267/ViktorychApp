@@ -65,6 +65,12 @@ assert.strictEqual(L.audioFromStatus({
   hls: { audio: "a.m3u8" },
   updated: "2026-10-21T20:00:00.000Z"
 }, allow, at + 2 * 60 * 1000).live, true);
+assert.strictEqual(L.audioFromStatus({
+  live: true,
+  base: "https://abc.trycloudflare.com/radio/",
+  hls: { audio: "a.m3u8" },
+  updated: "2026-10-21T20:00:00.000Z"
+}, allow, at + 2 * 60 * 1000).reconnecting, false);
 const stale = L.audioFromStatus({
   live: true,
   base: "https://abc.trycloudflare.com/radio/",
@@ -72,10 +78,52 @@ const stale = L.audioFromStatus({
   listeners: 4,
   updated: "2026-10-21T20:00:00.000Z"
 }, allow, at + 2 * 60 * 1000 + 1);
-assert.strictEqual(stale.live, false);
-assert.strictEqual(stale.url, "");
+assert.strictEqual(stale.live, true);
+assert.strictEqual(stale.reconnecting, true);
+assert.strictEqual(stale.url, "https://abc.trycloudflare.com/radio/a.m3u8");
+assert.strictEqual(stale.listeners, 4);
+const held = L.audioFromStatus({
+  live: true,
+  base: "https://abc.trycloudflare.com/radio/",
+  hls: { audio: "a.m3u8" },
+  updated: "2026-10-21T20:00:00.000Z"
+}, allow, at + 8 * 60 * 1000);
+assert.strictEqual(held.live, true);
+assert.strictEqual(held.reconnecting, true);
+const offline = L.audioFromStatus({
+  live: true,
+  base: "https://abc.trycloudflare.com/radio/",
+  hls: { audio: "a.m3u8" },
+  updated: "2026-10-21T20:00:00.000Z"
+}, allow, at + 8 * 60 * 1000 + 1);
+assert.strictEqual(offline.live, false);
+assert.strictEqual(offline.url, "");
+assert.strictEqual(offline.reconnecting, false);
+assert.strictEqual(L.audioFromStatus({
+  live: false,
+  base: "https://abc.trycloudflare.com/radio/",
+  hls: { audio: "a.m3u8" },
+  updated: "2026-10-21T20:00:00.000Z"
+}, allow, at).live, false);
 assert.strictEqual(L.statusStale({ updated: "nope" }, at), true);
 assert.strictEqual(L.statusStale({ live: true }, at), false);
+assert.strictEqual(L.statusOffline({ live: false, updated: "2026-10-21T20:00:00.000Z" }, at), true);
+assert.strictEqual(L.statusOffline({ live: true, updated: "2026-10-21T20:00:00.000Z" }, at + 3 * 60 * 1000), false);
+assert.strictEqual(L.statusOffline({ live: true, updated: "2026-10-21T20:00:00.000Z" }, at + 8 * 60 * 1000 + 1), true);
+assert.strictEqual(L.playlistJumped(null, 10, 6), false);
+assert.strictEqual(L.playlistJumped(10, 11, 6), false);
+assert.strictEqual(L.playlistJumped(10, 17, 6), false);
+assert.strictEqual(L.playlistJumped(10, 18, 6), true);
+assert.strictEqual(L.playlistJumped(20, 10, 6), true);
+assert.strictEqual(L.recoverPlan("media", { hasHls: true, mediaFixes: 0, softLoads: 0 }), "media");
+assert.strictEqual(L.recoverPlan("media", { hasHls: true, mediaFixes: 1, softLoads: 0 }), "reload");
+assert.strictEqual(L.recoverPlan("network", { hasHls: true, mediaFixes: 0, softLoads: 0 }), "reload");
+assert.strictEqual(L.recoverPlan("stall", { hasHls: true, mediaFixes: 0, softLoads: 0 }), "recreate");
+assert.strictEqual(L.recoverPlan("watch", { hasHls: true, mediaFixes: 0, softLoads: 0 }), "recreate");
+assert.strictEqual(L.recoverPlan("network", { hasHls: true, mediaFixes: 0, softLoads: 1 }), "recreate");
+assert.strictEqual(L.recoverPlan("jump", { hasHls: true, mediaFixes: 0, softLoads: 0 }), "recreate");
+assert.strictEqual(L.recoverPlan("ended", { hasHls: true, mediaFixes: 0, softLoads: 0 }), "recreate");
+assert.strictEqual(L.recoverPlan("network", { hasHls: false, mediaFixes: 0, softLoads: 0 }), "recreate");
 
 const pubHost = "pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev";
 const radioAllow = [pubHost, "r2.dev", "trycloudflare.com"];
@@ -122,6 +170,13 @@ assert.ok(src.includes("xhrSetup: (xhr, requestUrl)"));
 assert.ok(src.includes("allowedAudio(requestUrl, url, allow)"));
 assert.ok(src.includes("source.fallback"));
 assert.ok(src.includes("STATUS_MAX_AGE = 2 * 60 * 1000"));
+assert.ok(src.includes("STATUS_OFFLINE_AGE = 8 * 60 * 1000"));
+assert.ok(src.includes("liveSyncDurationCount: 3"));
+assert.ok(src.includes("maxBufferLength: 60"));
+assert.ok(src.includes("recoverMediaError"));
+assert.ok(src.includes("startLoad"));
+assert.ok(src.includes("Reconnecting…"));
+assert.ok(src.includes("mediaSession.playbackState"));
 
 const status = JSON.parse(fs.readFileSync("live/superintelmusic.json", "utf8"));
 assert.strictEqual(status.live, false);
@@ -143,7 +198,7 @@ assert.deepStrictEqual(space.source.allow, ["pub-bf9b5e3ebb2b421aa49e7af484f3c22
 assert.ok(!space.source.url);
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "superintel11-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "superintel12-__SW_VERSION__"'));
 assert.ok(worker.includes("./spaces.js") && worker.includes("./spaces.css"));
 assert.ok(!worker.includes("superintelmusic.json"));
 assert.ok(worker.includes("isSpaceStatus"));
