@@ -2198,7 +2198,7 @@ def backup(loop_only: bool = False) -> int:
 
         stopped = False
         if not loop_only:
-            log("[telegram-backup] social originals are downloaded by media-extract")
+            log("[telegram-backup] social originals for added accounts are downloaded by media-extract")
         for obj in sort_objects(rows, rank):
             if stopped:
                 break

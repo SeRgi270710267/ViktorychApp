@@ -4,7 +4,7 @@
 # Public pages only. No cookies, no captcha bypass, no viewbots.
 # See docs/telegram-backup.md.
 
-name: Media extract
+name: Extract added accounts
 
 on:
   schedule:

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Download new public posts and store the original files on Telegram.
+"""Download new public posts from added accounts and store the original files on Telegram.
 
-The GitHub Actions workflow runs this on a schedule. It does not use cookies,
-a captcha solver, a WAF bypass, or anything that would add views. A 403 or a
-captcha skips that account and the run continues. TikTok lives are not recorded.
+Added accounts are the profiles in feeds.config.json (cuentas añadidas,
+добавленные аккаунты). The GitHub Actions workflow runs this on a schedule.
+It does not use cookies, a captcha solver, a WAF bypass, or anything that
+would add views. A 403 or a captcha skips that added account and the run
+continues. TikTok lives are not recorded.
 """
 
 from __future__ import annotations
@@ -86,6 +88,7 @@ def account_url(platform: str, handle: str, channel_id: str = "") -> str:
 
 
 def accounts_from(config: dict, tiktok_handles: list) -> list:
+    """Added accounts from feeds.config.json, plus TikTok handles the sync already follows."""
     rows = []
     seen = set()
     for handle in tiktok_handles or []:
@@ -412,7 +415,7 @@ def extract() -> int:
             if work.exists():
                 shutil.rmtree(work, ignore_errors=True)
             work.mkdir(parents=True)
-            log("[media-extract] %s %s" % (account["platform"], account["handle"]))
+            log("[media-extract] added account %s %s" % (account["platform"], account["handle"]))
             _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for(account["platform"]), room), 600)
             text = out + "\n" + err
             if tb.runner_blocked(text):
@@ -495,7 +498,7 @@ def selftest() -> int:
     check("https://x.com/redacted_handle" in urls and "https://www.instagram.com/redacted_handle/" in urls, "X and Instagram use the public profile")
     check(all("t.me" not in row["url"] for row in rows), "a Telegram channel is not extracted")
     turned = rotate([{"handle": "a"}, {"handle": "b"}, {"handle": "c"}], 1)
-    check([row["handle"] for row in turned] == ["b", "c", "a"], "accounts rotate so a later run reaches the rest")
+    check([row["handle"] for row in turned] == ["b", "c", "a"], "added accounts rotate so a later run reaches the rest")
     args = video_args("https://www.youtube.com/watch?v=xtrFOsncOeo", Path("out"), Path("archive.txt"), tb.YTDLP_FORMAT, 2)
     check(args[args.index("-f") + 1] == "bv*+ba/b" and args[args.index("--merge-output-format") + 1] == "mp4" and args[args.index("--remux-video") + 1] == "mp4", "videos are remuxed with bv*+ba/b")
     check("--write-info-json" in args and "--write-thumbnail" in args and "--download-archive" in args and str(Path("archive.txt")) in args, "the video command writes info, a thumbnail, and archive.txt")
@@ -513,7 +516,7 @@ def selftest() -> int:
     check('echo "$TELEGRAM' not in workflow and "IG_SESSION" not in workflow and "--cookies" not in workflow and "COOKIES" not in workflow, "the workflow does not print secrets or pass cookies")
     doc = (ROOT / "docs" / "telegram-backup.md").read_text(encoding="utf-8")
     check("archive.txt" in doc and "user_id" in doc and "sec_uid" in doc and "17 */3 * * *" in doc, "the docs describe the archive, the catalog, and the schedule")
-    check("added account" in doc and "tracked account" not in doc and "added accounts" in workflow, "added accounts is the name for profiles in feeds.config.json")
+    check("added account" in doc and "tracked account" not in doc and "name: Extract added accounts" in workflow, "added accounts is the name for profiles in feeds.config.json")
     print("media extract selftest ok")
     return 0
 
