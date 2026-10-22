@@ -61,7 +61,7 @@ On the free plan that is at most 210 KB of R2 per account (60 KB + 150 KB). The 
 
 ## Drive
 
-Drive is a private file store for the owner account only. The browser encrypts each file with AES-256-GCM. A random file key is wrapped by a master key from the owner’s passphrase (PBKDF2-SHA256, 600000 iterations). The passphrase and the master key stay on the device. The Worker stores wrapped keys and ciphertext in D1 and sends each chunk to the backup channel with `sendDocument`. Those rows are not `telegram_files`, and `GET /tg/…` does not serve them.
+Drive is a private file store for the owner account only. The Photos section uses the same vault, the same trash, and the same storage total. Albums are drive rows with no plaintext name. The browser encrypts each file with AES-256-GCM. A random file key is wrapped by a master key from the owner’s passphrase (PBKDF2-SHA256, 600000 iterations). The passphrase and the master key stay on the device. The Worker stores wrapped keys and ciphertext in D1 and sends each chunk to the backup channel with `sendDocument`. Those rows are not `telegram_files`, and `GET /tg/…` does not serve them.
 
 A missing session gets 404. Any other session gets 403. Chunks stay under 19 MB. A file can be up to 2 GiB. The browser waits about 1.1 seconds between Telegram calls.
 

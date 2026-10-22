@@ -18,6 +18,14 @@ import {
   unlockVault,
   verifyMaster
 } from "./shared/drive-crypto.js";
+import {
+  captureFromParts,
+  createSha256,
+  duplicateHash,
+  groupPhotos,
+  isMediaFile,
+  scrubFromGroups
+} from "./shared/drive-photos.js";
 
 var master = null;
 var lastTg = 0;
@@ -34,8 +42,13 @@ var state = {
   error: "",
   transfer: null,
   preview: null,
+  viewer: null,
+  pick: false,
+  picked: {},
+  note: "",
   busy: false,
-  route: { trash: false, folder: "" }
+  route: { trash: false, folder: "" },
+  routeKey: ""
 };
 
 try {
@@ -45,6 +58,9 @@ try {
 
 function tr(key, vars) {
   return window.t ? window.t(key, vars) : key;
+}
+function tn(key, n) {
+  return window.tn ? window.tn(key, n) : String(n);
 }
 function esc(value) {
   return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
@@ -95,7 +111,16 @@ var ICO = {
   rows: "M4 5h16v3H4V5zm0 5.5h16v3H4v-3zM4 16h16v3H4v-3z",
   more: "M3 12c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm9 2c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm7 0c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2z",
   search: "M10.25 3.75c-3.59 0-6.5 2.91-6.5 6.5s2.91 6.5 6.5 6.5 6.5-2.91 6.5-6.5-2.91-6.5-6.5-6.5zm0 11c-2.48 0-4.5-2.02-4.5-4.5s2.02-4.5 4.5-4.5 4.5 2.02 4.5 4.5-2.02 4.5-4.5 4.5zM16.2 15.3l4.2 4.2-1.4 1.4-4.2-4.2 1.4-1.4z",
-  lock: "M8 10V7.5a4 4 0 0 1 8 0V10h1.5A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10H8zm2 0h4V7.5a2 2 0 0 0-4 0V10z"
+  lock: "M8 10V7.5a4 4 0 0 1 8 0V10h1.5A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10H8zm2 0h4V7.5a2 2 0 0 0-4 0V10z",
+  heart: "M12.1 18.55 12 18.65l-.1-.1C7.14 14.24 4 11.39 4 8.5 4 6.5 5.5 5 7.5 5c1.54 0 3.04.99 3.57 2.36h1.87C13.46 5.99 14.96 5 16.5 5 18.5 5 20 6.5 20 8.5c0 2.89-3.14 5.74-7.9 10.05z",
+  heartOn: "M12 21s-6.7-4.35-9.33-8.05C.8 10.4 1.2 6.7 4.4 5.4 6.5 4.5 8.7 5.2 12 8.4c3.3-3.2 5.5-3.9 7.6-3 3.2 1.3 3.6 5 1.73 7.55C18.7 16.65 12 21 12 21z",
+  play: "M8 5.14v13.72L19 12 8 5.14z",
+  check: "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z",
+  info: "M12 2a10 10 0 1 0 .01 20.01A10 10 0 0 0 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z",
+  close: "M10.59 12 4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z",
+  chevL: "M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12l4.58-4.59z",
+  chevR: "M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z",
+  trash: "M6 7h12l-1 14H7L6 7zm3-3h6l1 2H8l1-2zM4 7h16v2H4V7z"
 };
 
 function formatSize(n) {
@@ -150,6 +175,7 @@ function visibleItems() {
   var rows = state.items.filter(function (item) {
     var deleted = Number(item.deletedAt) > 0;
     if (trash !== deleted) return false;
+    if (!trash && (item.kind === "album" || (item.meta && item.meta.photo))) return false;
     if (q) return String(item.meta && item.meta.name || "").toLowerCase().indexOf(q) >= 0;
     if (trash) return trashRoot(item);
     return (item.parentId || "") === folder;
@@ -160,14 +186,32 @@ function visibleItems() {
   });
   return rows;
 }
+function section() {
+  return state.route && state.route.section === "photos" ? "photos" : "files";
+}
+function photoView() {
+  return (state.route && state.route.view) || "timeline";
+}
 function title() {
   if (state.route && state.route.trash) return tr("Trash");
+  if (section() === "photos") {
+    var view = photoView();
+    if (view === "albums") return tr("Albums");
+    if (view === "favorites") return tr("Favorites");
+    if (view === "album") {
+      var album = byId(state.route.album);
+      return (album && album.meta && album.meta.name) || tr("Album");
+    }
+    return tr("Photos");
+  }
   var chain = crumbs();
   if (chain.length) return chain[chain.length - 1].meta.name || tr("Folder");
   return tr("Drive");
 }
 function backHref() {
   if (state.route && state.route.trash) return "#/drive";
+  if (section() === "photos" && photoView() === "album") return "#/drive/photos/albums";
+  if (section() === "photos") return "";
   var chain = crumbs();
   if (!chain.length) return "";
   if (chain.length === 1) return "#/drive";
@@ -339,6 +383,22 @@ function sampleThumb() {
   var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200"><rect width="320" height="200" fill="#1d3a5f"/><circle cx="250" cy="54" r="22" fill="#f5d76e"/><path d="M0 150 L90 88 L150 128 L210 72 L320 156 V200 H0Z" fill="#3d7a5a"/></svg>';
   return "data:image/svg+xml," + encodeURIComponent(svg);
 }
+function colorThumb(sky, hill) {
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480"><rect width="480" height="480" fill="' + sky + '"/><circle cx="360" cy="84" r="36" fill="#f5d76e"/><path d="M0 330 L150 180 L240 250 L330 150 L480 300 V480 H0Z" fill="' + hill + '"/></svg>';
+  return "data:image/svg+xml," + encodeURIComponent(svg);
+}
+function previewShot(id, name, mime, size, month, day, favorite, albums, sky, hill) {
+  var when = new Date(2026, month - 1, day, 15, 4).getTime();
+  return {
+    id: id,
+    parentId: "",
+    kind: "file",
+    meta: { name: name, mime: mime, size: size, created: when, photo: true, captured: when, width: mime.indexOf("video/") === 0 ? 1920 : 4032, height: mime.indexOf("video/") === 0 ? 1080 : 3024, favorite: !!favorite, hash: id, albums: albums || [] },
+    chunks: [{ index: 0, size: size, iv: "" }],
+    deletedAt: 0,
+    thumbUrl: colorThumb(sky, hill)
+  };
+}
 function previewItems() {
   var thumb = sampleThumb();
   return [
@@ -347,7 +407,14 @@ function previewItems() {
     { id: "previewfile000002", parentId: "", kind: "file", meta: { name: "Brief.pdf", mime: "application/pdf", size: 840000, created: 3 }, chunks: [{ index: 0, size: 1, iv: "" }], deletedAt: 0, thumbUrl: "" },
     { id: "previewfile000003", parentId: "", kind: "file", meta: { name: "Clip.mp4", mime: "video/mp4", size: 18000000, created: 4 }, chunks: [{ index: 0, size: 1, iv: "" }], deletedAt: 0, thumbUrl: "" },
     { id: "previewfile000004", parentId: "", kind: "file", meta: { name: "Voice.m4a", mime: "audio/mp4", size: 1600000, created: 5 }, chunks: [{ index: 0, size: 1, iv: "" }], deletedAt: 0, thumbUrl: "" },
-    { id: "previewfile000005", parentId: "", kind: "file", meta: { name: "Notes.txt", mime: "text/plain", size: 4096, created: 6 }, chunks: [{ index: 0, size: 1, iv: "" }], deletedAt: 0, thumbUrl: "" }
+    { id: "previewfile000005", parentId: "", kind: "file", meta: { name: "Notes.txt", mime: "text/plain", size: 4096, created: 6 }, chunks: [{ index: 0, size: 1, iv: "" }], deletedAt: 0, thumbUrl: "" },
+    previewShot("previewphoto00001", "Shore.jpg", "image/jpeg", 2400000, 10, 22, true, ["previewalbum00001"], "#7eb6d9", "#2f6b4f"),
+    previewShot("previewphoto00002", "Market.jpg", "image/jpeg", 3100000, 10, 22, false, [], "#d98a4a", "#6b4a2f"),
+    previewShot("previewphoto00003", "Clip.mp4", "video/mp4", 18000000, 10, 18, false, [], "#1d3a5f", "#3d7a5a"),
+    previewShot("previewphoto00004", "Ridge.jpg", "image/jpeg", 2800000, 9, 2, false, ["previewalbum00001"], "#9bb7c9", "#5c6b73"),
+    previewShot("previewphoto00005", "Lake.jpg", "image/jpeg", 2600000, 9, 2, false, [], "#4f86c6", "#1e4d3a"),
+    previewShot("previewphoto00006", "Snow.jpg", "image/jpeg", 1900000, 1, 14, true, [], "#d5dde6", "#8aa0b4"),
+    { id: "previewalbum00001", parentId: "", kind: "album", meta: { name: "Trips", mime: "album", size: 0, created: 7, album: true }, chunks: [], deletedAt: 0, thumbUrl: "" }
   ];
 }
 async function boot() {
@@ -390,7 +457,40 @@ async function boot() {
   paint();
 }
 
+async function videoFrame(file) {
+  return new Promise(function (resolve) {
+    var url = URL.createObjectURL(file);
+    var video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    var finish = function (bytes) {
+      URL.revokeObjectURL(url);
+      resolve(bytes);
+    };
+    video.onerror = function () { finish(null); };
+    video.onloadeddata = function () {
+      try { video.currentTime = Math.min(0.2, (video.duration || 0.2)); }
+      catch (err) { finish(null); }
+    };
+    video.onseeked = function () {
+      try {
+        var scale = Math.min(1, 320 / Math.max(video.videoWidth || 1, video.videoHeight || 1));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round((video.videoWidth || 1) * scale));
+        canvas.height = Math.max(1, Math.round((video.videoHeight || 1) * scale));
+        canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) {
+          if (!blob) { finish(null); return; }
+          blob.arrayBuffer().then(function (buf) { finish(new Uint8Array(buf)); }).catch(function () { finish(null); });
+        }, "image/jpeg", 0.72);
+      } catch (err) { finish(null); }
+    };
+    video.src = url;
+  });
+}
 async function thumbOf(file) {
+  if (file.type && file.type.indexOf("video/") === 0) return videoFrame(file);
   if (!file.type || file.type.indexOf("image/") !== 0 || !window.createImageBitmap) return null;
   try {
     var bmp = await createImageBitmap(file);
@@ -425,21 +525,23 @@ function findResume(file, parentId) {
   }
   return null;
 }
-async function uploadOne(file) {
+async function uploadOne(file, spec) {
+  spec = spec || {};
   if (file.size > DRIVE_MAX_FILE) {
     state.error = tr("That file is too large.");
     return;
   }
-  var parentId = (state.route && state.route.folder) || "";
+  var parentId = spec.parentId != null ? spec.parentId : ((state.route && state.route.folder) || "");
   var need = partCount(file.size);
-  var existing = findResume(file, parentId);
+  var existing = spec.resume || findResume(file, parentId);
+  var label = (spec.meta && spec.meta.name) || file.name || tr("File");
   var id = existing && existing.id;
   var key = existing && existing.key;
   var have = {};
   if (!existing) {
     var made = await newItemKey(master);
     key = made.key;
-    var meta = await encryptJson(key, {
+    var meta = await encryptJson(key, spec.meta || {
       name: file.name || tr("File"),
       mime: file.type || "application/octet-stream",
       size: file.size,
@@ -471,12 +573,12 @@ async function uploadOne(file) {
   var done = Object.keys(have).length;
   for (var n = 0; n < need; n++) {
     if (have[n]) continue;
-    state.transfer = { name: file.name, done: done, total: need, kind: "upload" };
+    state.transfer = { name: label, done: done, total: need, kind: spec.kind || "upload" };
     paint();
     var packed = await encryptSlice(key, file, n);
     await putChunk(id, n, packed.iv, packed.ciphertext, 0);
     done += 1;
-    state.transfer = { name: file.name, done: done, total: need, kind: "upload" };
+    state.transfer = { name: label, done: done, total: need, kind: spec.kind || "upload" };
     paint();
   }
 }
@@ -489,6 +591,110 @@ async function uploadFiles(list) {
   try {
     for (var i = 0; i < files.length; i++) await uploadOne(files[i]);
     state.transfer = null;
+    await loadItems();
+  } catch (err) {
+    state.transfer = null;
+    state.error = tr("Could not upload.");
+    try { await loadItems(); } catch (again) { /* keep the error */ }
+  }
+  state.busy = false;
+  paint();
+}
+async function hashFile(file) {
+  var hasher = createSha256();
+  var step = 1024 * 1024;
+  var at = 0;
+  if (!file.size) return hasher.hex();
+  while (at < file.size) {
+    var blob = file.slice(at, Math.min(file.size, at + step));
+    hasher.update(new Uint8Array(await blob.arrayBuffer()));
+    at += step;
+    state.transfer = { name: file.name, done: Math.min(at, file.size), total: file.size, kind: "backup" };
+    paint();
+  }
+  return hasher.hex();
+}
+async function readCapture(file) {
+  var cap = 512 * 1024;
+  var head = new Uint8Array(await file.slice(0, Math.min(file.size, cap)).arrayBuffer());
+  var tail = file.size > cap ? new Uint8Array(await file.slice(Math.max(0, file.size - cap)).arrayBuffer()) : new Uint8Array(0);
+  return captureFromParts(head, tail);
+}
+async function mediaSize(file) {
+  if (file.type && file.type.indexOf("image/") === 0 && window.createImageBitmap) {
+    try {
+      var bmp = await createImageBitmap(file);
+      var size = { width: bmp.width || 0, height: bmp.height || 0 };
+      if (bmp.close) bmp.close();
+      return size;
+    } catch (err) { return { width: 0, height: 0 }; }
+  }
+  if (file.type && file.type.indexOf("video/") === 0) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(file);
+      var video = document.createElement("video");
+      video.preload = "metadata";
+      video.muted = true;
+      var done = function (width, height) {
+        URL.revokeObjectURL(url);
+        resolve({ width: width || 0, height: height || 0 });
+      };
+      video.onloadedmetadata = function () { done(video.videoWidth, video.videoHeight); };
+      video.onerror = function () { done(0, 0); };
+      video.src = url;
+    });
+  }
+  return { width: 0, height: 0 };
+}
+async function backupFiles(list) {
+  if (state.busy || state.mode !== "ready" || previewOn()) return;
+  var files = Array.prototype.slice.call(list || []).filter(isMediaFile);
+  if (!files.length) return;
+  state.busy = true;
+  state.error = "";
+  state.note = "";
+  var skipped = 0;
+  var albumId = photoView() === "album" ? ((state.route && state.route.album) || "") : "";
+  try {
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      if (file.size > DRIVE_MAX_FILE) {
+        state.error = tr("That file is too large.");
+        continue;
+      }
+      state.transfer = { name: file.name, done: 0, total: file.size || 1, kind: "backup" };
+      paint();
+      var hash = await hashFile(file);
+      var known = duplicateHash(state.items, hash);
+      if (known && (known.chunks || []).length >= partCount(known.meta && known.meta.size)) {
+        skipped += 1;
+        continue;
+      }
+      var info = await readCapture(file);
+      var box = info.width ? info : await mediaSize(file);
+      var albums = (known && known.meta && known.meta.albums) ? known.meta.albums.slice() : [];
+      if (albumId && albums.indexOf(albumId) < 0) albums.push(albumId);
+      await uploadOne(file, {
+        parentId: "",
+        resume: known && known.key ? known : null,
+        kind: "backup",
+        meta: {
+          name: file.name || tr("File"),
+          mime: file.type || "application/octet-stream",
+          size: file.size,
+          created: Date.now(),
+          photo: true,
+          captured: info.captured || file.lastModified || Date.now(),
+          width: box.width || info.width || 0,
+          height: box.height || info.height || 0,
+          favorite: !!(known && known.meta && known.meta.favorite),
+          hash: hash,
+          albums: albums
+        }
+      });
+    }
+    state.transfer = null;
+    state.note = skipped ? tn("driveBacked", skipped) : "";
     await loadItems();
   } catch (err) {
     state.transfer = null;
@@ -554,6 +760,35 @@ async function downloadItem(item, previewOnly) {
   state.busy = false;
   paint();
 }
+async function saveMeta(item, meta) {
+  if (previewOn()) {
+    item.meta = meta;
+    return;
+  }
+  var packed = await encryptJson(item.key, meta);
+  var res = await apiJson("/v1/drive/items/" + encodeURIComponent(item.id), {
+    method: "PATCH",
+    body: { meta: packed.ciphertext, metaIv: packed.iv }
+  });
+  if (res.status !== 200) throw new Error("upload");
+  item.meta = meta;
+}
+async function createAlbum(name) {
+  var made = await newItemKey(master);
+  var meta = await encryptJson(made.key, { name: name, mime: "album", size: 0, created: Date.now(), album: true });
+  var created = await apiJson("/v1/drive/items", {
+    method: "POST",
+    body: {
+      kind: "album",
+      parentId: "",
+      wrappedKey: made.wrappedKey,
+      wrapIv: made.wrapIv,
+      meta: meta.ciphertext,
+      metaIv: meta.iv
+    }
+  });
+  if (created.status !== 201) throw new Error("upload");
+}
 async function createFolder(name) {
   var made = await newItemKey(master);
   var meta = await encryptJson(made.key, { name: name, mime: "folder", size: 0, created: Date.now() });
@@ -598,10 +833,15 @@ async function restoreItem(item) {
   });
   if (res.status !== 200) throw new Error("upload");
 }
+function closeViewer() {
+  if (state.viewer && state.viewer.owned && state.viewer.url && state.viewer.url.indexOf("blob:") === 0) URL.revokeObjectURL(state.viewer.url);
+  state.viewer = null;
+}
 async function afterChange() {
   state.dialog = null;
   state.menu = "";
   await loadItems();
+  if (state.viewer && !byId(state.viewer.id)) closeViewer();
   state.busy = false;
   paint();
 }
@@ -706,26 +946,233 @@ function dialogHtml() {
   var d = state.dialog;
   if (!d) return menuHtml();
   var item = d.id ? byId(d.id) : null;
-  if (d.type === "folder" || d.type === "rename") {
+  if (d.type === "folder" || d.type === "rename" || d.type === "album") {
     var value = d.type === "rename" && item ? item.meta.name : "";
-    return '<div class="drive-modal"><div class="drive-panel" data-act="stop" role="dialog"><div class="modal-head"><h2>' + esc(d.type === "folder" ? tr("New folder") : tr("Rename")) + '</h2></div><form class="modal-body" data-drive-form="' + d.type + '"><label class="field"><span>' + esc(tr("Name")) + '</span><input id="drive-name" value="' + esc(value) + '" maxlength="180"></label><button class="save" type="submit">' + esc(tr("Save")) + '</button><button class="outline" type="button" data-act="stop" data-drive="dismiss">' + esc(tr("Cancel")) + "</button></form></div></div>";
+    var heading = d.type === "folder" ? tr("New folder") : d.type === "album" ? tr("New album") : tr("Rename");
+    var field = d.type === "album" ? tr("Album name") : tr("Name");
+    return '<div class="drive-modal"><div class="drive-panel" data-act="stop" role="dialog"><div class="modal-head"><h2>' + esc(heading) + '</h2></div><form class="modal-body" data-drive-form="' + d.type + '"><label class="field"><span>' + esc(field) + '</span><input id="drive-name" value="' + esc(value) + '" maxlength="180"></label><button class="save" type="submit">' + esc(tr("Save")) + '</button><button class="outline" type="button" data-act="stop" data-drive="dismiss">' + esc(tr("Cancel")) + "</button></form></div></div>";
+  }
+  if (d.type === "add-album") {
+    var albums = state.items.filter(function (row) { return row.kind === "album" && !row.deletedAt; });
+    var choices = albums.map(function (row) {
+      return '<button class="drive-choice" type="button" data-act="stop" data-drive="album-to" data-parent="' + esc(row.id) + '">' + esc(row.meta.name || tr("Album")) + "</button>";
+    }).join("");
+    return '<div class="drive-modal"><div class="drive-panel" data-act="stop" role="dialog"><div class="modal-head"><h2>' + esc(tr("Move to album")) + '</h2></div><div class="modal-body">' + choices + '<button class="drive-choice" type="button" data-act="stop" data-drive="ask-album">' + esc(tr("New album")) + '</button><button class="outline" type="button" data-act="stop" data-drive="dismiss">' + esc(tr("Cancel")) + "</button></div></div></div>";
+  }
+  if (d.type === "delete-many") {
+    return '<div class="drive-modal"><div class="drive-panel" data-act="stop" role="dialog"><div class="modal-head"><h2>' + esc(tr("Delete")) + '</h2></div><div class="modal-body"><p class="drive-note">' + esc(tr("Files stay in the trash for 30 days.")) + '</p><button class="drive-danger" type="button" data-act="stop" data-drive="delete-many">' + esc(tr("Delete")) + '</button><button class="outline" type="button" data-act="stop" data-drive="dismiss">' + esc(tr("Cancel")) + "</button></div></div></div>";
   }
   if (d.type === "move" && item) {
     return '<div class="drive-modal"><div class="drive-panel" data-act="stop" role="dialog"><div class="modal-head"><h2>' + esc(tr("Move to folder")) + '</h2></div><div class="modal-body">' + folderChoices(item) + '<button class="outline" type="button" data-act="stop" data-drive="dismiss">' + esc(tr("Cancel")) + "</button></div></div></div>";
   }
   if ((d.type === "delete" || d.type === "forever") && item) {
-    return '<div class="drive-modal"><div class="drive-panel" data-act="stop" role="dialog"><div class="modal-head"><h2>' + esc(item.meta.name || tr("File")) + '</h2></div><div class="modal-body"><p class="drive-note">' + esc(d.type === "forever" ? tr("Delete forever?") : tr("Files stay in the trash for 30 days.")) + '</p><button class="drive-danger" type="button" data-act="stop" data-drive="' + (d.type === "forever" ? "forever" : "delete") + '" data-id="' + esc(item.id) + '">' + esc(d.type === "forever" ? tr("Delete forever") : tr("Delete")) + '</button><button class="outline" type="button" data-act="stop" data-drive="dismiss">' + esc(tr("Cancel")) + "</button></div></div></div>";
+    var albumNote = item.kind === "album" && d.type !== "forever" ? '<p class="drive-note">' + esc(tr("Photos in this album stay in your library.")) + "</p>" : "";
+    return '<div class="drive-modal"><div class="drive-panel" data-act="stop" role="dialog"><div class="modal-head"><h2>' + esc(item.meta.name || tr("File")) + '</h2></div><div class="modal-body"><p class="drive-note">' + esc(d.type === "forever" ? tr("Delete forever?") : tr("Files stay in the trash for 30 days.")) + "</p>" + albumNote + '<button class="drive-danger" type="button" data-act="stop" data-drive="' + (d.type === "forever" ? "forever" : "delete") + '" data-id="' + esc(item.id) + '">' + esc(d.type === "forever" ? tr("Delete forever") : tr("Delete")) + '</button><button class="outline" type="button" data-act="stop" data-drive="dismiss">' + esc(tr("Cancel")) + "</button></div></div></div>";
   }
   return "";
 }
+function lang() {
+  return (document.documentElement && document.documentElement.lang) || "en";
+}
+function pickedIds() {
+  return Object.keys(state.picked || {}).filter(function (id) { return state.picked[id] && byId(id); });
+}
+function libraryPhotos() {
+  var q = state.query.trim().toLowerCase();
+  var view = photoView();
+  var album = (state.route && state.route.album) || "";
+  var rows = state.items.filter(function (item) {
+    if (item.deletedAt || item.kind !== "file" || !item.meta || !item.meta.photo) return false;
+    if (q && String(item.meta.name || "").toLowerCase().indexOf(q) < 0) return false;
+    if (view === "favorites") return !!item.meta.favorite;
+    if (view === "album") return (item.meta.albums || []).indexOf(album) >= 0;
+    return view !== "albums";
+  });
+  rows.sort(function (a, b) { return (b.meta.captured || b.meta.created || 0) - (a.meta.captured || a.meta.created || 0); });
+  return rows;
+}
+function dayLabel(group) {
+  try { return new Date(group.year, group.month - 1, group.day).toLocaleDateString(lang(), { day: "numeric", month: "long", year: "numeric" }); }
+  catch (err) { return group.key; }
+}
+function monthShort(year, month) {
+  try { return new Date(year, month - 1, 1).toLocaleDateString(lang(), { month: "short" }); }
+  catch (err) { return String(month); }
+}
+function photoCell(item) {
+  var on = !!state.picked[item.id];
+  var video = String((item.meta && item.meta.mime) || "").indexOf("video/") === 0;
+  var img = item.thumbUrl ? '<img alt="" src="' + esc(item.thumbUrl) + '">' : '<span class="photo-missing">' + svg(video ? ICO.play : ICO.file) + "</span>";
+  var heart = item.meta && item.meta.favorite ? '<span class="photo-heart">' + svg(ICO.heartOn) + "</span>" : "";
+  var play = video ? '<span class="photo-play">' + svg(ICO.play) + "</span>" : "";
+  var check = state.pick ? '<span class="photo-check' + (on ? " on" : "") + '">' + (on ? svg(ICO.check) : "") + "</span>" : "";
+  return '<button class="photo-cell' + (on ? " on" : "") + '" type="button" data-act="stop" data-drive="photo" data-id="' + esc(item.id) + '">' + img + heart + play + check + "</button>";
+}
+function scrubHtml(groups) {
+  var marks = scrubFromGroups(groups);
+  if (marks.length < 2) return "";
+  var html = '<div class="photo-scrub">';
+  marks.forEach(function (mark) {
+    var label = mark.kind === "year" ? String(mark.year) : monthShort(mark.year, mark.month);
+    html += '<button type="button" data-act="stop" data-photo-jump="photo-' + esc(mark.key) + '">' + esc(label) + "</button>";
+  });
+  return html + "</div>";
+}
+function timelineHtml(rows) {
+  if (!rows.length) {
+    var empty = state.query.trim() ? tr("No matching files.") : (photoView() === "favorites" ? tr("No favorites yet.") : (photoView() === "album" ? tr("This album is empty.") : tr("No photos yet.")));
+    return '<div class="drive-empty"><h2>' + esc(empty) + '</h2><p class="drive-note">' + esc(tr("Back up from your gallery or camera.")) + "</p></div>";
+  }
+  var groups = groupPhotos(rows, function (item) { return item.meta.captured || item.meta.created || 0; });
+  var html = '<div class="photo-wrap"><div class="photo-timeline">';
+  groups.forEach(function (group) {
+    html += '<section class="photo-group" id="photo-' + esc(group.key) + '"><h2 class="photo-day">' + esc(dayLabel(group)) + '</h2><div class="photo-grid">';
+    group.rows.forEach(function (item) { html += photoCell(item); });
+    html += "</div></section>";
+  });
+  return html + "</div>" + scrubHtml(groups) + "</div>";
+}
+function albumCards() {
+  var q = state.query.trim().toLowerCase();
+  var albums = state.items.filter(function (item) {
+    if (item.kind !== "album" || item.deletedAt) return false;
+    if (q && String(item.meta.name || "").toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  albums.sort(function (a, b) { return String(a.meta.name || "").localeCompare(String(b.meta.name || "")); });
+  if (!albums.length) return '<div class="drive-empty"><h2>' + esc(q ? tr("No matching files.") : tr("No albums yet.")) + "</h2></div>";
+  return '<div class="album-grid">' + albums.map(function (album) {
+    var photos = state.items.filter(function (item) {
+      return item.kind === "file" && item.meta && item.meta.photo && !item.deletedAt && (item.meta.albums || []).indexOf(album.id) >= 0;
+    });
+    var cover = "";
+    photos.forEach(function (item) { if (!cover && item.thumbUrl) cover = item.thumbUrl; });
+    var face = cover ? '<img alt="" src="' + esc(cover) + '">' : svg(ICO.folder);
+    return '<a class="album-card" href="#/drive/photos/album/' + encodeURIComponent(album.id) + '" data-act="stop"><span class="album-cover">' + face + "</span><h3>" + esc(album.meta.name || tr("Album")) + "</h3><p>" + esc(tn("drivePhotos", photos.length)) + "</p></a>";
+  }).join("") + "</div>";
+}
+function photoTools() {
+  var view = photoView();
+  var buttons = '<button class="save" type="button" data-act="stop" data-drive="backup"' + (state.busy ? " disabled" : "") + ">" + esc(tr("Back up photos")) + "</button>";
+  buttons += '<button class="outline" type="button" data-act="stop" data-drive="camera"' + (state.busy ? " disabled" : "") + ">" + esc(tr("Camera")) + "</button>";
+  if (view === "albums") buttons += '<button class="outline" type="button" data-act="stop" data-drive="ask-album"' + (state.busy ? " disabled" : "") + ">" + esc(tr("New album")) + "</button>";
+  if (view === "album") {
+    var albumId = (state.route && state.route.album) || "";
+    buttons += '<button class="outline" type="button" data-act="stop" data-drive="ask-rename" data-id="' + esc(albumId) + '">' + esc(tr("Rename")) + "</button>";
+    buttons += '<button class="outline" type="button" data-act="stop" data-drive="ask-delete" data-id="' + esc(albumId) + '">' + esc(tr("Delete")) + "</button>";
+  }
+  if (view !== "albums") buttons += '<button class="outline" type="button" data-act="stop" data-drive="pick-toggle">' + esc(state.pick ? tr("Cancel") : tr("Select")) + "</button>";
+  return '<div class="drive-bar">' + buttons +
+    '<label class="drive-search">' + svg(ICO.search) + '<input id="drive-q" type="search" value="' + esc(state.query) + '" placeholder="' + esc(tr("Search by name")) + '" aria-label="' + esc(tr("Search by name")) + '"></label>' +
+    '<a class="outline" href="#/drive/trash" data-act="stop">' + esc(tr("Trash")) + '</a><span class="drive-used">' + esc(tr("Storage used {size}", { size: formatSize(state.stored) })) + "</span></div>";
+}
+function selectBar() {
+  if (!state.pick || photoView() === "albums") return "";
+  var ids = pickedIds();
+  var fav = ids.length > 0 && ids.every(function (id) { var item = byId(id); return item && item.meta && item.meta.favorite; });
+  var off = ids.length ? "" : " disabled";
+  return '<div class="photo-bar"><span class="drive-used">' + esc(tn("driveSelected", ids.length)) + "</span>" +
+    '<button class="outline" type="button" data-act="stop" data-drive="download-many"' + off + ">" + esc(tr("Download")) + "</button>" +
+    '<button class="outline" type="button" data-act="stop" data-drive="ask-album-add"' + off + ">" + esc(tr("Move to album")) + "</button>" +
+    (photoView() === "album" ? '<button class="outline" type="button" data-act="stop" data-drive="album-remove"' + off + ">" + esc(tr("Remove from album")) + "</button>" : "") +
+    '<button class="outline" type="button" data-act="stop" data-drive="favorite-many" data-on="' + (fav ? "0" : "1") + '"' + off + ">" + esc(fav ? tr("Remove from favorites") : tr("Favorite")) + "</button>" +
+    '<button class="drive-danger" type="button" data-act="stop" data-drive="ask-delete-many"' + off + ">" + esc(tr("Delete")) + "</button></div>";
+}
+function infoHtml(item) {
+  var when = item.meta.captured || item.meta.created || 0;
+  var date = "";
+  try { date = when ? new Date(when).toLocaleString(lang(), { dateStyle: "medium", timeStyle: "short" }) : ""; }
+  catch (err) { date = ""; }
+  var dims = item.meta.width && item.meta.height ? String(item.meta.width) + " × " + String(item.meta.height) : "";
+  return '<div class="photo-info"><h2>' + esc(item.meta.name || tr("File")) + '</h2><div><span>' + esc(tr("Capture date")) + "</span><b>" + esc(date) + '</b></div><div><span>' + esc(tr("Size")) + "</span><b>" + esc(formatSize(item.meta.size)) + "</b></div>" +
+    (dims ? '<div><span>' + esc(tr("Dimensions")) + "</span><b>" + esc(dims) + "</b></div>" : "") +
+    '<p class="drive-note">' + esc(tr("Decrypted on this device.")) + "</p></div>";
+}
+function viewerHtml() {
+  var view = state.viewer;
+  if (!view) return "";
+  var item = byId(view.id);
+  var name = item && item.meta ? item.meta.name : tr("File");
+  var media = view.kind === "video"
+    ? '<video class="photo-media" controls playsinline src="' + esc(view.url) + '"></video>'
+    : '<img class="photo-media" alt="" src="' + esc(view.url) + '" style="transform:translate(' + Number(view.x || 0) + "px," + Number(view.y || 0) + "px) scale(" + Number(view.scale || 1) + ')">';
+  var fav = item && item.meta && item.meta.favorite;
+  return '<div class="photo-view" role="dialog" aria-label="' + esc(name) + '"><div class="photo-tools"><button class="icon-btn" type="button" data-act="stop" data-drive="close-viewer" aria-label="' + esc(tr("Close")) + '">' + svg(ICO.close) + '</button><div class="photo-tools-mid">' +
+    '<button class="icon-btn" type="button" data-act="stop" data-drive="viewer-fav" aria-label="' + esc(fav ? tr("Remove from favorites") : tr("Favorite")) + '">' + svg(fav ? ICO.heartOn : ICO.heart) + "</button>" +
+    (view.kind === "image" ? '<button class="icon-btn" type="button" data-act="stop" data-drive="zoom-in" aria-label="' + esc(tr("Zoom in")) + '">+</button><button class="icon-btn" type="button" data-act="stop" data-drive="zoom-out" aria-label="' + esc(tr("Zoom out")) + '">−</button>' : "") +
+    '<button class="icon-btn" type="button" data-act="stop" data-drive="viewer-info" aria-label="' + esc(tr("Info")) + '">' + svg(ICO.info) + '</button><button class="icon-btn" type="button" data-act="stop" data-drive="download" data-id="' + esc(view.id) + '" aria-label="' + esc(tr("Download")) + '">' + svg(ICO.file) + '</button><button class="icon-btn" type="button" data-act="stop" data-drive="ask-delete" data-id="' + esc(view.id) + '" aria-label="' + esc(tr("Delete")) + '">' + svg(ICO.trash) + "</button></div></div>" +
+    '<div class="photo-stage"><button class="photo-nav prev" type="button" data-act="stop" data-drive="viewer-step" data-dir="-1" aria-label="' + esc(tr("Previous photo")) + '">' + svg(ICO.chevL) + "</button>" + media +
+    '<button class="photo-nav next" type="button" data-act="stop" data-drive="viewer-step" data-dir="1" aria-label="' + esc(tr("Next photo")) + '">' + svg(ICO.chevR) + "</button></div>" +
+    (view.info && item ? infoHtml(item) : "") + "</div>";
+}
+function transferHtml() {
+  if (!state.transfer) return "";
+  var pct = state.transfer.total ? Math.max(4, Math.round(100 * state.transfer.done / state.transfer.total)) : 4;
+  var label = state.transfer.kind === "download" ? tr("Downloading {name}", { name: state.transfer.name }) : state.transfer.kind === "backup" ? tr("Backing up {name}", { name: state.transfer.name }) : tr("Uploading {name}", { name: state.transfer.name });
+  return '<div class="drive-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><p>' + esc(label) + '</p><div class="drive-progress-bar"><i style="width:' + pct + '%"></i></div></div>';
+}
+function photosReady() {
+  var body = photoView() === "albums" ? albumCards() : timelineHtml(libraryPhotos());
+  return warnBlock() + photoTools() +
+    '<p class="drive-note">' + esc(tr("Originals stay at full quality.")) + " " + esc(tr("Thumbnails leave out location.")) + "</p>" +
+    (state.note ? '<p class="drive-note">' + esc(state.note) + "</p>" : "") +
+    (state.error ? '<p class="drive-error" style="padding:0 16px">' + esc(state.error) + "</p>" : "") +
+    '<input id="drive-backup" type="file" accept="image/*,video/*" multiple hidden><input id="drive-camera" type="file" accept="image/*,video/*" capture="environment" hidden>' +
+    body + selectBar() + transferHtml() + dialogHtml() + viewerHtml();
+}
+async function openViewer(item) {
+  if (!item || state.busy) return;
+  if (previewOn()) {
+    closeViewer();
+    state.viewer = { id: item.id, url: item.thumbUrl || "", kind: kindOf(item.meta) || "image", scale: 1, info: false, owned: false, x: 0, y: 0 };
+    paint();
+    return;
+  }
+  state.busy = true;
+  state.error = "";
+  paint();
+  try {
+    var bytes = await readPlain(item);
+    var type = item.meta.mime || "application/octet-stream";
+    var url = URL.createObjectURL(new Blob([bytes], { type: type }));
+    closeViewer();
+    state.viewer = { id: item.id, url: url, kind: kindOf(item.meta) || "image", scale: 1, info: false, owned: true, x: 0, y: 0 };
+  } catch (err) {
+    state.error = tr("Could not open that file.");
+  }
+  state.transfer = null;
+  state.busy = false;
+  paint();
+}
+function stepViewer(dir) {
+  if (!state.viewer || state.busy) return;
+  var rows = libraryPhotos();
+  var index = -1;
+  rows.forEach(function (row, i) { if (row.id === state.viewer.id) index = i; });
+  var next = rows[index + dir];
+  if (next) openViewer(next);
+}
+async function withPicked(work) {
+  var ids = pickedIds();
+  if (!ids.length) return;
+  await runChange(async function () {
+    for (var i = 0; i < ids.length; i++) {
+      var item = byId(ids[i]);
+      if (item) await work(item);
+    }
+    state.pick = false;
+    state.picked = {};
+  });
+}
 function readyHtml() {
+  if (section() === "photos" && !(state.route && state.route.trash)) return photosReady();
   var rows = visibleItems();
   var empty = state.route && state.route.trash ? tr("The trash is empty.") : (state.query.trim() ? tr("No matching files.") : tr("This folder is empty."));
   var body = rows.length ? '<div class="' + (state.view === "list" ? "drive-list" : "drive-grid") + '">' + rows.map(itemCard).join("") + "</div>" : '<div class="drive-empty"><h2>' + esc(empty) + "</h2></div>";
   var transfer = "";
   if (state.transfer) {
     var pct = state.transfer.total ? Math.max(4, Math.round(100 * state.transfer.done / state.transfer.total)) : 4;
-    var label = state.transfer.kind === "download" ? tr("Downloading {name}", { name: state.transfer.name }) : tr("Uploading {name}", { name: state.transfer.name });
+    var label = state.transfer.kind === "download" ? tr("Downloading {name}", { name: state.transfer.name }) : state.transfer.kind === "backup" ? tr("Backing up {name}", { name: state.transfer.name }) : tr("Uploading {name}", { name: state.transfer.name });
     transfer = '<div class="drive-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><p>' + esc(label) + '</p><div class="drive-progress-bar"><i style="width:' + pct + '%"></i></div></div>';
   }
   return warnBlock() +
@@ -734,20 +1181,49 @@ function readyHtml() {
     '<input id="drive-file" type="file" multiple hidden>' +
     '<div class="drive-drop">' + body + "</div>" + transfer + dialogHtml();
 }
+function tabLink(href, on, label) {
+  return '<a class="tab' + (on ? " on" : "") + '" href="' + href + '" role="tab" data-act="stop" aria-selected="' + (on ? "true" : "false") + '"><span>' + esc(label) + "</span></a>";
+}
+function sectionTabs() {
+  if (state.mode !== "ready") return "";
+  var photos = section() === "photos" && !(state.route && state.route.trash);
+  var main = '<div class="tabs-bar drive-tabs"><div class="tabs" role="tablist">' + tabLink("#/drive", !photos, tr("Drive")) + tabLink("#/drive/photos", photos, tr("Photos")) + "</div></div>";
+  if (!photos) return main;
+  var view = photoView();
+  return main + '<div class="tabs-bar drive-sub"><div class="tabs" role="tablist">' +
+    tabLink("#/drive/photos", view === "timeline", tr("Photos")) +
+    tabLink("#/drive/photos/albums", view === "albums" || view === "album", tr("Albums")) +
+    tabLink("#/drive/photos/favorites", view === "favorites", tr("Favorites")) +
+    "</div></div>";
+}
+function routeKey(route) {
+  route = route || {};
+  return [route.section || "", route.view || "", route.album || "", route.folder || "", route.trash ? "1" : ""].join("|");
+}
 function page(route) {
+  var nextKey = routeKey(route);
+  if (state.routeKey !== nextKey) {
+    state.routeKey = nextKey;
+    state.pick = false;
+    state.picked = {};
+    state.menu = "";
+    state.dialog = null;
+    closeViewer();
+  }
   state.route = route || { trash: false, folder: "" };
   var back = backHref();
+  var photos = section() === "photos" && !(state.route && state.route.trash);
   var head = '<div class="topbar tall"><div class="mhead"><button class="m-ava" type="button" data-act="drawer" aria-label="' + esc(tr("Menu")) + '"><span class="ava initials">Y</span></button></div><div class="page-head">' +
     (back ? '<a class="icon-btn" href="' + back + '" data-act="stop" aria-label="' + esc(tr("Back")) + '">' + svg("M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z") + "</a>" : "") +
     '<div class="head-text grow"><h1>' + esc(state.mode === "ready" ? title() : tr("Drive")) + "</h1></div>" +
     (state.mode === "ready" ? '<button class="icon-btn" type="button" data-act="stop" data-drive="lock" aria-label="' + esc(tr("Lock Drive")) + '">' + svg(ICO.lock) + "</button>" : "") +
-    "</div></div>";
+    "</div>" + sectionTabs() + "</div>";
   var main = "";
   if (state.mode === "loading") main = '<div class="drive-empty"></div>';
   else if (state.mode === "offline") main = '<div class="drive-empty"><h2>' + esc(tr("Drive is not available on this copy.")) + "</h2></div>";
   else if (state.mode === "setup" || state.mode === "locked") main = lockHtml();
   else main = readyHtml();
-  return '<div class="drive' + (state.drag ? " is-drag" : "") + '" data-drop="' + esc(tr("Drop files to upload")) + '">' + head + main + "</div>";
+  return '<div class="drive' + (photos ? " drive-photos" : " drive-files") + (state.drag ? " is-drag" : "") + '" data-drop="' + esc(photos ? tr("Drop photos to back up") : tr("Drop files to upload")) + '">' + head + main + "</div>";
 }
 
 async function onUnlock(form) {
@@ -826,6 +1302,9 @@ function bind(root) {
     }
     if (act === "lock") {
       master = null;
+      closeViewer();
+      state.pick = false;
+      state.picked = {};
       state.mode = state.vault ? "locked" : "setup";
       state.dialog = null;
       state.menu = "";
@@ -833,6 +1312,71 @@ function bind(root) {
       forgetKey().then(function () { paint(); });
       return;
     }
+    if (act === "backup" || act === "camera") {
+      var picker = document.getElementById(act === "camera" ? "drive-camera" : "drive-backup");
+      if (picker) picker.click();
+      return;
+    }
+    if (act === "pick-toggle") { state.pick = !state.pick; state.picked = {}; paint(); return; }
+    if (act === "ask-album") { state.menu = ""; state.dialog = { type: "album" }; paint(); return; }
+    if (act === "ask-album-add") { state.dialog = { type: "add-album" }; paint(); return; }
+    if (act === "ask-delete-many") { state.dialog = { type: "delete-many" }; paint(); return; }
+    if (act === "photo" && item) {
+      if (swallowPhoto) { swallowPhoto = false; return; }
+      if (state.pick) {
+        if (state.picked[item.id]) delete state.picked[item.id];
+        else state.picked[item.id] = true;
+        paint();
+        return;
+      }
+      openViewer(item);
+      return;
+    }
+    if (act === "close-viewer") { closeViewer(); paint(); return; }
+    if (act === "viewer-step") { stepViewer(Number(el.getAttribute("data-dir")) || 1); return; }
+    if (act === "viewer-info" && state.viewer) { state.viewer.info = !state.viewer.info; paint(); return; }
+    if (act === "zoom-in" && state.viewer) { state.viewer.scale = Math.min(4, (state.viewer.scale || 1) + 0.5); paint(); return; }
+    if (act === "zoom-out" && state.viewer) {
+      state.viewer.scale = Math.max(1, (state.viewer.scale || 1) - 0.5);
+      if (state.viewer.scale === 1) { state.viewer.x = 0; state.viewer.y = 0; }
+      paint();
+      return;
+    }
+    if (act === "viewer-fav" && state.viewer) {
+      var current = byId(state.viewer.id);
+      if (!current) return;
+      var next = Object.assign({}, current.meta, { favorite: !current.meta.favorite });
+      if (previewOn()) { current.meta = next; paint(); return; }
+      runChange(function () { return saveMeta(current, next); });
+      return;
+    }
+    if (act === "favorite-many") {
+      var mark = el.getAttribute("data-on") !== "0";
+      withPicked(function (row) { return saveMeta(row, Object.assign({}, row.meta, { favorite: mark })); });
+      return;
+    }
+    if (act === "album-to") {
+      var albumId = el.getAttribute("data-parent") || "";
+      withPicked(function (row) {
+        var albums = (row.meta.albums || []).slice();
+        if (albums.indexOf(albumId) < 0) albums.push(albumId);
+        return saveMeta(row, Object.assign({}, row.meta, { albums: albums }));
+      });
+      return;
+    }
+    if (act === "album-remove") {
+      var currentAlbum = (state.route && state.route.album) || "";
+      withPicked(function (row) {
+        var albums = (row.meta.albums || []).filter(function (album) { return album !== currentAlbum; });
+        return saveMeta(row, Object.assign({}, row.meta, { albums: albums }));
+      });
+      return;
+    }
+    if (act === "delete-many") {
+      withPicked(function (row) { return removeItem(row, false); });
+      return;
+    }
+    if (act === "download-many") { downloadMany(); return; }
     if (act === "ask-folder") { state.menu = ""; state.dialog = { type: "folder" }; paint(); return; }
     if (act === "menu" && item) { state.dialog = null; state.menu = item.id; paint(); return; }
     if (act === "dismiss") { state.dialog = null; state.menu = ""; paint(); return; }
@@ -874,6 +1418,7 @@ function bind(root) {
     var name = String((form.querySelector("#drive-name") || {}).value || "").replace(/\s+/g, " ").trim();
     if (!name) return;
     if (kind === "folder") runChange(function () { return createFolder(name); });
+    if (kind === "album") runChange(function () { return createAlbum(name); });
     if (kind === "rename" && state.dialog) {
       var item = byId(state.dialog.id);
       if (item) runChange(function () { return renameItem(item, name); });
@@ -885,10 +1430,16 @@ function bind(root) {
     paint();
   });
   root.addEventListener("change", function (event) {
-    if (event.target.id !== "drive-file") return;
     var files = event.target.files;
-    event.target.value = "";
-    uploadFiles(files);
+    if (!files) return;
+    if (event.target.id === "drive-file") {
+      event.target.value = "";
+      uploadFiles(files);
+    }
+    if (event.target.id === "drive-backup" || event.target.id === "drive-camera") {
+      event.target.value = "";
+      backupFiles(files);
+    }
   });
   root.addEventListener("dragover", function (event) {
     if (state.mode !== "ready") return;
@@ -907,8 +1458,138 @@ function bind(root) {
     event.preventDefault();
     state.drag = false;
     root.classList.remove("is-drag");
-    if (event.dataTransfer && event.dataTransfer.files) uploadFiles(event.dataTransfer.files);
+    if (event.dataTransfer && event.dataTransfer.files) {
+      if (section() === "photos" && !(state.route && state.route.trash)) backupFiles(event.dataTransfer.files);
+      else uploadFiles(event.dataTransfer.files);
+    }
   });
+  root.addEventListener("click", function (event) {
+    var jump = event.target.closest("[data-photo-jump]");
+    if (!jump || !root.contains(jump)) return;
+    var node = document.getElementById(jump.getAttribute("data-photo-jump") || "");
+    if (node) node.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  root.addEventListener("dblclick", function (event) {
+    if (!state.viewer || !event.target.closest(".photo-media")) return;
+    state.viewer.scale = (state.viewer.scale || 1) > 1 ? 1 : 2;
+    if (state.viewer.scale === 1) { state.viewer.x = 0; state.viewer.y = 0; }
+    paint();
+  });
+  root.addEventListener("wheel", function (event) {
+    if (!state.viewer || state.viewer.kind !== "image" || !event.target.closest(".photo-stage")) return;
+    event.preventDefault();
+    var next = (state.viewer.scale || 1) + (event.deltaY < 0 ? 0.25 : -0.25);
+    state.viewer.scale = Math.max(1, Math.min(4, next));
+    if (state.viewer.scale === 1) { state.viewer.x = 0; state.viewer.y = 0; }
+    paint();
+  }, { passive: false });
+  var pointers = {};
+  var gesture = null;
+  function pinchDist() {
+    var pts = Object.keys(pointers).map(function (key) { return pointers[key]; });
+    if (pts.length < 2) return 0;
+    var dx = pts[0].x - pts[1].x;
+    var dy = pts[0].y - pts[1].y;
+    return Math.sqrt(dx * dx + dy * dy) || 1;
+  }
+  function jumpScrub(scrub, clientY) {
+    var buttons = scrub.querySelectorAll("[data-photo-jump]");
+    if (!buttons.length) return;
+    var rect = scrub.getBoundingClientRect();
+    var ratio = (clientY - rect.top) / Math.max(1, rect.height);
+    var index = Math.max(0, Math.min(buttons.length - 1, Math.floor(ratio * buttons.length)));
+    var id = buttons[index].getAttribute("data-photo-jump");
+    var node = id && document.getElementById(id);
+    if (node) node.scrollIntoView({ block: "start" });
+  }
+  root.addEventListener("pointerdown", function (event) {
+    var scrub = event.target.closest(".photo-scrub");
+    if (scrub && root.contains(scrub)) {
+      gesture = { type: "scrub", scrub: scrub };
+      jumpScrub(scrub, event.clientY);
+      return;
+    }
+    var cell = event.target.closest("[data-drive='photo']");
+    if (cell && !state.pick && !state.viewer) {
+      gesture = {
+        type: "hold",
+        id: cell.getAttribute("data-id") || "",
+        x: event.clientX,
+        y: event.clientY,
+        timer: setTimeout(function () {
+          state.pick = true;
+          state.picked = {};
+          state.picked[gesture.id] = true;
+          swallowPhoto = true;
+          gesture = null;
+          paint();
+        }, 480)
+      };
+      return;
+    }
+    if (state.viewer && event.target.closest(".photo-stage")) {
+      pointers[event.pointerId] = { x: event.clientX, y: event.clientY };
+      gesture = { type: Object.keys(pointers).length > 1 ? "pinch" : "pan", x: event.clientX, y: event.clientY, scale: state.viewer.scale || 1, ox: state.viewer.x || 0, oy: state.viewer.y || 0, dist: pinchDist() };
+    }
+  });
+  root.addEventListener("pointermove", function (event) {
+    if (pointers[event.pointerId]) pointers[event.pointerId] = { x: event.clientX, y: event.clientY };
+    if (!gesture) return;
+    if (gesture.type === "scrub") { jumpScrub(gesture.scrub, event.clientY); return; }
+    if (gesture.type === "hold" && (Math.abs(event.clientX - gesture.x) > 8 || Math.abs(event.clientY - gesture.y) > 8)) {
+      clearTimeout(gesture.timer);
+      gesture = null;
+      return;
+    }
+    if (!state.viewer) return;
+    if (gesture.type === "pinch" && gesture.dist) {
+      state.viewer.scale = Math.max(1, Math.min(4, gesture.scale * (pinchDist() / gesture.dist)));
+      paint();
+      return;
+    }
+    if (gesture.type === "pan" && (state.viewer.scale || 1) > 1) {
+      state.viewer.x = gesture.ox + (event.clientX - gesture.x);
+      state.viewer.y = gesture.oy + (event.clientY - gesture.y);
+      paint();
+    }
+  });
+  root.addEventListener("pointerup", function (event) {
+    delete pointers[event.pointerId];
+    if (!gesture) return;
+    if (gesture.type === "hold") clearTimeout(gesture.timer);
+    if (gesture.type === "pan" && state.viewer && (state.viewer.scale || 1) === 1) {
+      var dx = event.clientX - gesture.x;
+      var dy = event.clientY - gesture.y;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) stepViewer(dx < 0 ? 1 : -1);
+    }
+    gesture = null;
+  });
+  root.addEventListener("pointercancel", function (event) {
+    delete pointers[event.pointerId];
+    if (gesture && gesture.timer) clearTimeout(gesture.timer);
+    gesture = null;
+  });
+}
+
+var swallowPhoto = false;
+async function downloadMany() {
+  if (state.busy || previewOn()) return;
+  var ids = pickedIds();
+  state.busy = true;
+  state.error = "";
+  try {
+    for (var i = 0; i < ids.length; i++) {
+      var item = byId(ids[i]);
+      if (!item || item.kind !== "file") continue;
+      var bytes = await readPlain(item);
+      saveBlob(new Blob([bytes], { type: (item.meta && item.meta.mime) || "application/octet-stream" }), item.meta && item.meta.name);
+    }
+  } catch (err) {
+    state.error = tr("Could not download.");
+  }
+  state.transfer = null;
+  state.busy = false;
+  paint();
 }
 
 var booted = false;

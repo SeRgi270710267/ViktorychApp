@@ -70,6 +70,7 @@ const SHELL_FILES = [
   "./drive.js",
   "./drive.css",
   "./shared/drive-crypto.js",
+  "./shared/drive-photos.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./hls-1.7.3.min.js",
