@@ -1896,11 +1896,23 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return "";
   }
 
+  function tgBlockedKey(key) {
+    const raw = String(key || "");
+    const name = (raw.split("/").pop() || "").toLowerCase();
+    if (!raw || raw.indexOf("..") >= 0) return true;
+    if (/^(?:owner|backup)\//.test(raw) || raw === "loop/current.json") return true;
+    if (name === "key.bin" || name === "key" || name.endsWith(".key")) return true;
+    if (raw.indexOf("music/") === 0 && name.endsWith(".bin")) return true;
+    if (name.indexOf("token") >= 0 || name.indexOf("secret") >= 0) return true;
+    if (/^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$/.test(raw)) return true;
+    if (raw === "data/music.json") return true;
+    return false;
+  }
+
   function tgMediaUrl(key) {
     const api = accountsApi();
     const raw = String(key || "");
-    if (!api || !raw || raw.indexOf("..") >= 0) return "";
-    if (/^(?:music|covers|loop|radio|owner|backup)\//.test(raw)) return "";
+    if (!api || tgBlockedKey(raw)) return "";
     return api + "/tg/" + raw.split("/").map((part) => encodeURIComponent(part)).join("/");
   }
 

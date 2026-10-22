@@ -16,10 +16,11 @@ Bot API document. Video and long audio, other than radio, are remuxed to HLS
 with ffmpeg. Each segment stays under 19 MiB and is about 4 to 6 seconds.
 The Worker plays that playlist. Codecs are copied when ffmpeg can do it.
 
-The published radio loop is copied as already-built HLS and is never deleted
-from R2. ViktorychMusic songs, live JSON, and account data stay on R2.
-Account data is uploaded only when TG_BACKUP_KEY is set, and then only as
-ciphertext. It is not served and it is not deleted.
+Music, covers, radio, and every loop version are copied as they already are
+and are never deleted from R2. The song AES key is not uploaded. Account
+data is uploaded only when TG_BACKUP_KEY is set, and then only as
+ciphertext. It is not served and it is not deleted. Live JSON, owner files,
+backup internals, and anything that carries a token stay on R2.
 """
 
 from __future__ import annotations
@@ -66,8 +67,6 @@ DATA_KEY = re.compile(
     r"|^discord/(?:messages|pins)/\d{1,22}\.json$"
 )
 ACCOUNT_PREFIXES = (
-    "media/avatars/",
-    "media/banners/",
     "accounts/",
     "account/",
     "profiles/",
@@ -227,6 +226,10 @@ def is_media_key(key: str, content_type: str = "") -> bool:
     return mime.startswith("image/") or mime.startswith("video/") or mime.startswith("audio/")
 
 
+GALLERY_PREFIXES = ("media/avatars/", "media/banners/", "stories/")
+KEY_URI = re.compile(r'#EXT-X-KEY:[^\n]*URI="([^"]+)"', re.IGNORECASE)
+
+
 def structural_role(key: str) -> str:
     lowered = str(key or "").lstrip("/")
     if not lowered or ".." in lowered.split("/"):
@@ -236,12 +239,50 @@ def structural_role(key: str) -> str:
     if lowered.startswith("loop/") or lowered.startswith("radio/"):
         return "radio"
     if lowered.startswith("music/") or lowered.startswith("covers/"):
-        return "music"
+        return "catalog"
     if lowered.startswith("owner/") or DATA_KEY.match(lowered):
         return "live"
+    if any(lowered.startswith(prefix) for prefix in GALLERY_PREFIXES):
+        return "gallery"
     if any(lowered.startswith(prefix) for prefix in ACCOUNT_PREFIXES):
         return "account"
     return ""
+
+
+def is_key_material(key: str, blocked=None) -> bool:
+    """AES keys, key files, and names that carry a token or a secret."""
+    lowered = str(key or "").lstrip("/")
+    name = lowered.rsplit("/", 1)[-1].lower()
+    if name in {"key.bin", "key"} or name.endswith(".key"):
+        return True
+    if lowered.startswith("music/") and name.endswith(".bin"):
+        return True
+    if "token" in name or "secret" in name:
+        return True
+    if re.search(r"(?:^|/)(?:secrets?|tokens?)(?:/|$)", lowered):
+        return True
+    if blocked and lowered in blocked:
+        return True
+    return False
+
+
+def aes_key_refs(text: str, playlist_key: str) -> set:
+    """Object keys named by EXT-X-KEY in one playlist. Those files stay on R2."""
+    folder = str(playlist_key or "").lstrip("/").rsplit("/", 1)[0]
+    found = set()
+    for match in KEY_URI.finditer(text or ""):
+        uri = match.group(1).split("?", 1)[0].strip()
+        if not uri or ".." in uri.split("/"):
+            continue
+        if uri.startswith("https://") or uri.startswith("http://"):
+            path = urllib.parse.urlparse(uri).path.lstrip("/")
+            if path:
+                found.add(path)
+            continue
+        name = uri.split("/")[-1]
+        if name:
+            found.add(folder + "/" + name if folder else name)
+    return found
 
 
 LOOP_PART = re.compile(
@@ -251,15 +292,17 @@ LOOP_PART = re.compile(
 
 
 def loop_part(key: str, loop_version: str = "") -> dict | None:
-    """A segment of the published radio loop, or None when it stays on R2."""
-    version = str(loop_version or "")
-    if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", version):
-        return None
+    """A segment of any published radio loop version, or None for other keys.
+
+    loop_version is accepted so callers can pass the pointer from
+    loop/current.json. Every version is mirrored, not only that one.
+    """
+    del loop_version
     match = LOOP_PART.match(str(key or "").lstrip("/"))
-    if not match or match.group("version") != version:
+    if not match:
         return None
     name = match.group("name")
-    group = "loop/" + version + (match.group("aac") or "")
+    group = "loop/" + match.group("version") + (match.group("aac") or "")
     if name == "index.m3u8":
         return {"group": group, "role": "playlist", "index": -2, "mime": "application/vnd.apple.mpegurl", "name": name}
     if name == "init.mp4":
@@ -276,22 +319,37 @@ def segment_duration(mapping: dict, name: str) -> float:
     return number if number > 0 else 10.0
 
 
-def plan_kind(key: str, size: int, content_type: str, local: bool, loop_version: str = "") -> str:
-    """How this object is handled. Radio, music, and live JSON are kept.
+def plan_kind(key: str, size: int, content_type: str, local: bool, loop_version: str = "", blocked=None) -> str:
+    """How this object is handled.
 
-    The version named by loop/current.json is copied as already-built HLS.
-    It is never re-encoded and never deleted. Every other loop object stays.
+    Music, covers, radio, every loop version, and story, avatar, and banner
+    media are copied as they are and stay on R2. The song AES key is not
+    copied. Live JSON, owner files, and account rows stay off Telegram unless
+    account data is encrypted with TG_BACKUP_KEY.
     """
+    if is_key_material(key, blocked):
+        return "keep-key"
     role = structural_role(key)
     if role == "radio":
         part = loop_part(key, loop_version)
-        if not part:
+        if part:
+            if size <= public_bytes():
+                return "loop"
+            return "too-big"
+        lowered = str(key or "").lstrip("/")
+        if lowered == "loop/current.json" or lowered.startswith("loop/"):
             return "keep-radio"
+        if size <= 0:
+            return "keep-radio"
+        if size <= public_bytes() and (is_media_key(key, content_type) or suffix(key) in {".m3u8", ".m4s", ".ts", ".mp4", ".m4a"}):
+            return "mirror"
+        return "too-big" if size > public_bytes() else "keep-radio"
+    if role in {"catalog", "gallery"}:
+        if size <= 0 or not (is_media_key(key, content_type) or suffix(key) in {".m3u8", ".m4s", ".ts", ".mp4", ".m4a"}):
+            return "keep-other"
         if size <= public_bytes():
-            return "loop"
+            return "mirror"
         return "too-big"
-    if role == "music":
-        return "keep-music"
     if role in {"live", "manifest", "keep"}:
         return "keep-live"
     if role == "account":
@@ -846,6 +904,11 @@ def upload_path(api_base: str, token: str, channel: str, path: Path, caption: st
         remember_d1(cf["token"], cf["account"], cf["database"], entry, part, False, stored_key)
     state["files"] = int(state.get("files") or 0) + 1
     state["bytes"] = int(state.get("bytes") or 0) + path.stat().st_size
+    label = str(entry.get("kind") or "other")
+    kinds = state.setdefault("kinds", {})
+    sizes = state.setdefault("kind_bytes", {})
+    kinds[label] = int(kinds.get(label) or 0) + 1
+    sizes[label] = int(sizes.get(label) or 0) + path.stat().st_size
 
 
 def budget_ok(state: dict, size: int) -> bool:
@@ -874,8 +937,40 @@ def load_remote_manifest(token: str, account: str, buckets: list, directory: Pat
     return empty_manifest(), target
 
 
-def sort_objects(rows: list) -> list:
-    return sorted(rows, key=lambda row: (-int(row.get("size") or 0), str(row.get("uploaded") or ""), str(row.get("key") or "")))
+def sort_objects(rows: list, rank=None) -> list:
+    def key(row):
+        if rank:
+            return rank(row)
+        return (0, -int(row.get("size") or 0), str(row.get("uploaded") or ""), str(row.get("key") or ""))
+    return sorted(rows, key=key)
+
+
+def collect_blocked_keys(cf: dict, rows: list, directory: Path) -> set:
+    """AES key object keys named by music, radio, and loop playlists."""
+    blocked = set()
+    for obj in rows:
+        key = str(obj.get("key") or "").lstrip("/")
+        if not key.endswith(".m3u8"):
+            continue
+        if not (key.startswith("music/") or key.startswith("radio/") or key.startswith("loop/")):
+            continue
+        dest = directory / ("keys-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16] + ".m3u8")
+        try:
+            download_object(cf["token"], cf["account"], obj["bucket"], key, dest)
+            blocked.update(aes_key_refs(dest.read_text(encoding="utf-8", errors="replace"), key))
+        except (urllib.error.URLError, TimeoutError, OSError, RuntimeError, ValueError):
+            continue
+    return blocked
+
+
+def upload_summary(state: dict) -> str:
+    kinds = state.get("kinds") or {}
+    sizes = state.get("kind_bytes") or {}
+    parts = []
+    for name in sorted(kinds):
+        parts.append("%s %s/%s" % (name, kinds[name], sizes.get(name) or 0))
+    detail = (", ".join(parts)) if parts else "none"
+    return "[telegram-backup] uploaded %s files, %s bytes (%s)" % (state.get("files") or 0, state.get("bytes") or 0, detail)
 
 
 def needs_local(objects: list) -> bool:
@@ -981,7 +1076,7 @@ def preflight() -> int:
     work = False
     for obj in rows:
         kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", local, version)
-        if kind in {"small", "hls", "archive", "account", "loop"}:
+        if kind in {"small", "hls", "archive", "account", "loop", "mirror"}:
             work = True
             break
     _output("work", "true" if work else "false")
@@ -1007,11 +1102,11 @@ def new_entry_state() -> dict:
 
 def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -> str:
     local = local_requested()
-    kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", local, cf.get("loop_version") or "")
+    kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", local, cf.get("loop_version") or "", cf.get("blocked_keys"))
     if kind == "too-big":
         log("[telegram-backup] skipped_too_big %s/%s %s" % (obj["bucket"], obj["key"], obj["size"]))
         return "skip"
-    if not kind.startswith(("small", "hls", "archive", "account", "loop")):
+    if not kind.startswith(("small", "hls", "archive", "account", "loop", "mirror")):
         return "skip"
     prior = find_entry(manifest, obj["bucket"], obj["key"])
     if prior and prior.get("etag") and prior.get("etag") == obj.get("etag") and prior.get("sha256"):
@@ -1021,6 +1116,12 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
             if done and done.get("sha256") == prior.get("sha256"):
                 if cf.get("database"):
                     remember_d1(cf["token"], cf["account"], cf["database"], prior, done, bool(prior.get("verified")), part["group"])
+                return "skip"
+        elif kind == "mirror":
+            done = part_done(prior, "file", 0)
+            if done and done.get("sha256") == prior.get("sha256"):
+                if cf.get("database"):
+                    remember_d1(cf["token"], cf["account"], cf["database"], prior, done, bool(prior.get("verified")))
                 return "skip"
         elif prior.get("verified"):
             if may_delete(prior.get("kind") or "", True, int(prior.get("size") or 0)) and not prior.get("deleted"):
@@ -1071,8 +1172,8 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
         src.unlink(missing_ok=True)
         log("[telegram-backup] stored %s/%s (loop %s)" % (obj["bucket"], obj["key"], part["group"]))
         return "ok"
-    entry = ensure_entry(manifest, obj, kind, sha, kind in {"small", "hls"}, False)
-    if kind == "small":
+    entry = ensure_entry(manifest, obj, kind, sha, kind in {"small", "hls", "mirror"}, False)
+    if kind in {"small", "mirror"}:
         if not budget_ok(state, src.stat().st_size):
             return "stop"
         upload_path(PUBLIC_API, cf["bot"], cf["channel"], src, obj["key"][:900], state, entry, "file", 0, sha, 0, entry["mime"], cf)
@@ -1116,7 +1217,7 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
             upload_path(PUBLIC_API, cf["bot"], cf["channel"], path, "%s %s %s" % (obj["key"][:800], role, index), state, entry, role, index, digest, duration, mime, cf)
         shutil.rmtree(hls_dir, ignore_errors=True)
     save_manifest(cf, manifest, directory)
-    if entry.get("serve") and cf.get("worker"):
+    if entry.get("serve") and entry.get("kind") in {"small", "hls"} and cf.get("worker"):
         if verify_entry(entry, cf["worker"], cf["bot"], directory):
             entry["verified"] = True
             for part in entry.get("parts") or []:
@@ -1169,6 +1270,7 @@ def backup(loop_only: bool = False) -> int:
                 worker = worker_api(cf["token"], cf["account"])
             except Exception:
                 worker = ""
+        blocked = collect_blocked_keys(cf, rows, directory)
         cf.update({
             "bot": bot,
             "channel": channel,
@@ -1176,9 +1278,16 @@ def backup(loop_only: bool = False) -> int:
             "worker": worker,
             "manifest_bucket": manifest_bucket,
             "loop_version": version,
+            "blocked_keys": blocked,
         })
         state = new_entry_state()
-        for obj in sort_objects(rows):
+
+        def rank(obj):
+            kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version, blocked)
+            first = 0 if kind in {"loop", "mirror"} else 1
+            return (first, -int(obj.get("size") or 0), str(obj.get("uploaded") or ""), str(obj.get("key") or ""))
+
+        for obj in sort_objects(rows, rank):
             if structural_role(obj["key"]) == "manifest":
                 continue
             if loop_only and plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version) != "loop":
@@ -1193,7 +1302,7 @@ def backup(loop_only: bool = False) -> int:
             if result == "stop":
                 log("[telegram-backup] reached the run cap")
                 break
-        log("[telegram-backup] uploaded %s files, %s bytes" % (state["files"], state["bytes"]))
+        log(upload_summary(state))
         return 0
     except Exception as err:
         log("[telegram-backup] backup failed")
@@ -1228,7 +1337,23 @@ def selftest() -> int:
     check(plan_kind("loop/" + published + "/aac/seg_0001.ts", 1000, "video/mp2t", True, published) == "loop", "the published AAC fallback is mirrored")
     check(plan_kind("loop/" + published + "/index.m3u8", 200, "application/vnd.apple.mpegurl", True, published) == "loop", "the loop playlist is mirrored")
     check(plan_kind("loop/" + published + "/init.mp4", 500, "video/mp4", True, published) == "loop", "the loop init segment is mirrored")
-    check(plan_kind("loop/vOLD/seg_0000.m4s", 1000, "video/iso.segment", True, published) == "keep-radio", "an older loop version stays on R2")
+    check(plan_kind("loop/vOLD/seg_0000.m4s", 1000, "video/iso.segment", True, published) == "loop", "an older loop version is mirrored")
+    check(plan_kind("radio/bed/index.m3u8", 400, "application/vnd.apple.mpegurl", True) == "mirror", "radio audio is mirrored")
+    check(plan_kind("music/song/seg.m4s", 5000, "video/iso.segment", True) == "mirror", "a music segment is mirrored")
+    check(plan_kind("music/song/index.m3u8", 800, "application/vnd.apple.mpegurl", True) == "mirror", "a music playlist is mirrored")
+    check(plan_kind("music/song/init.mp4", 900, "video/mp4", True) == "mirror", "a music init file is mirrored")
+    check(plan_kind("covers/" + ("ab" * 32) + ".png", 1000, "image/png", True) == "mirror", "a cover image is mirrored")
+    check(plan_kind("music/song/key.bin", 16, "application/octet-stream", True) == "keep-key", "a song key file stays on R2")
+    blocked = aes_key_refs('#EXT-X-KEY:METHOD=AES-128,URI="cf1373b0cf10db5ae3fe8dd7.bin",IV=0x1\n', "music/abc/index.m3u8")
+    check(blocked == {"music/abc/cf1373b0cf10db5ae3fe8dd7.bin"}, "a playlist names its AES key")
+    check(plan_kind("music/abc/cf1373b0cf10db5ae3fe8dd7.bin", 16, "application/octet-stream", True, "", blocked) == "keep-key", "the named AES key is not uploaded")
+    check(plan_kind("music/abc/c099e79892e9b2f248f9.m4s", 5000, "video/iso.segment", True, "", blocked) == "mirror", "an encrypted music piece is still mirrored")
+    check(plan_kind("media/avatars/123456789012/" + ("ab" * 32) + ".webp", 1000, "image/webp", True) == "mirror", "avatar media is mirrored")
+    check(plan_kind("media/banners/123456789012/" + ("cd" * 32) + ".jpg", 1000, "image/jpeg", True) == "mirror", "banner media is mirrored")
+    check(plan_kind("stories/card.jpg", 1000, "image/jpeg", True) == "mirror", "story media is mirrored")
+    check(plan_kind("stories.json", 1000, "application/json", True) == "keep-live", "the stories catalog stays on R2")
+    check(plan_kind("owner/tiktok.json", 1000, "application/json", True) == "keep-live", "owner files stay on R2")
+    check(plan_kind("secrets/token.txt", 20, "text/plain", True) == "keep-key", "a token file stays on R2")
     check(plan_kind("loop/" + published + "/seg_0000.m4s", SMALL_BYTES + 1, "video/iso.segment", True, published) == "too-big", "a loop segment of 19 MiB or more stays on R2")
     flac = loop_part("loop/" + published + "/seg_0003.m4s", published)
     aac = loop_part("loop/" + published + "/aac/seg_0001.ts", published)
@@ -1239,16 +1364,16 @@ def selftest() -> int:
     check(loop_part("loop/current.json", published) is None, "current.json is not a loop segment")
     check(segment_duration({"seg_0000.m4s": 10.031}, "seg_0000.m4s") == 10.031, "loop durations come from the playlist")
     check(segment_duration({}, "seg_0000.m4s") == 10.0, "a missing loop duration defaults to 10 seconds")
-    check(plan_kind("music/song/seg.m4s", 5000, "video/iso.segment", True) == "keep-music", "music stays on R2")
     check(plan_kind("feeds.json", 1000, "application/json", True) == "keep-live", "worker JSON stays on R2")
-    check(plan_kind("media/avatars/123456789012/" + ("ab" * 32) + ".webp", 1000, "image/webp", True) == "keep-account", "account data is excluded without a key")
+    check(plan_kind("history/1.json", 1000, "application/json", True) == "keep-account", "account data is excluded without a key")
     check(plan_kind("cold/a.jpg", 1000, "image/jpeg", False) == "small", "a small image is one document")
     check(plan_kind("cold/big.mp4", SMALL_BYTES + 1, "video/mp4", True) == "hls", "a video over 19 MiB becomes HLS")
     check(plan_kind("cold/big.zip", SMALL_BYTES + 1, "application/zip", True) == "archive", "a big archive uses the local server")
     check(plan_kind("cold/big.zip", SMALL_BYTES + 1, "application/zip", False) == "too-big", "a big archive is skipped without the local server")
     check(plan_kind("cold/clip.mp4", SMALL_BYTES, "video/mp4", True) == "small", "a video of 19 MiB stays one document")
     os.environ["TG_BACKUP_KEY"] = "test-passphrase-value"
-    check(plan_kind("media/avatars/123456789012/" + ("ab" * 32) + ".webp", 1000, "image/webp", True) == "account", "a backup key allows an encrypted account copy")
+    check(plan_kind("history/1.json", 1000, "application/json", True) == "account", "a backup key allows an encrypted account copy")
+    check(plan_kind("media/avatars/123456789012/" + ("ab" * 32) + ".webp", 1000, "image/webp", True) == "mirror", "avatar media stays servable when the backup key is set")
     os.environ.pop("TG_BACKUP_KEY", None)
 
     check(part_spans(PART_BYTES, PART_BYTES) == [(0, PART_BYTES)], "a 1950 MiB archive is one part")
@@ -1256,7 +1381,7 @@ def selftest() -> int:
     check(retry_after(429, {"ok": False, "error_code": 429, "parameters": {"retry_after": 9}}) == 9, "retry_after is honored")
     check(retry_after(200, {"ok": True}) is None, "a normal response is not a rate limit")
     check(gap_seconds(10, 11) == 2, "messages stay at least 3 seconds apart")
-    check(may_delete("small", True, 100) and may_delete("hls", True, 10**9) and not may_delete("archive", True, 100) and not may_delete("small", False, 100) and not may_delete("loop", True, 100), "only a verified loadable file can leave R2, and the radio loop never does")
+    check(may_delete("small", True, 100) and may_delete("hls", True, 10**9) and not may_delete("archive", True, 100) and not may_delete("small", False, 100) and not may_delete("loop", True, 100) and not may_delete("mirror", True, 100), "only a verified loadable file can leave R2, and music, covers, and the radio loop never do")
     os.environ["TG_DELETE_FROM_R2"] = "false"
     check(not may_delete("small", True, 100), "TG_DELETE_FROM_R2=false keeps R2")
     os.environ["TG_DELETE_FROM_R2"] = ""
@@ -1312,6 +1437,7 @@ def selftest() -> int:
     check('cron: "17 11 * * *"' in workflow and "workflow_dispatch" in workflow and "actions/cache@v4" in workflow and "--local" in workflow, "the workflow is scheduled, manual, cached, and can start the local server")
     check('echo "$TELEGRAM' not in workflow and "echo ${{ secrets" not in workflow, "the workflow does not print secrets")
     check('path.startsWith("/tg/")' in worker and "TELEGRAM_BOT_TOKEN" in worker and "not_configured" in worker, "the Worker serves /tg and returns 503 without its secret")
+    check("function telegramSecretKey(" in worker and "function ownerOnlyMedia(" in worker and "function hiddenAvatar(" in worker, "the Worker keeps keys, hidden avatars, and owner-only Shorts off anonymous playback")
     check("buildPlaylist" in worker and "index.m3u8" in worker and "parseRange" in worker, "the Worker rewrites playlists and honors Range")
     check("function r2ObjectKey" in app and "tgMediaUrl" in app and "index.m3u8" in app, "the app tries R2, then the Worker, then the source")
     check("docs/telegram-backup.md" in readme and "TELEGRAM_BOT_TOKEN" in readme, "the readme points at the Telegram backup")
@@ -1323,6 +1449,9 @@ def selftest() -> int:
     check(".github/telegram-probe" in workflow and "scripts/telegram_probe.py" in workflow, "pushing the probe file runs the check")
     check("getFile" in restore and "sha256" in restore, "restore downloads by file id and checks sha256")
     check("/tg/loop/" in doc and "never deleted from R2" in doc, "the radio loop is mirrored and stays on R2")
+    check("AES key" in doc and "covers/" in doc and "media/avatars/" in doc and "stories/" in doc, "songs, covers, stories, avatars, and banners are documented")
+    check("sign-up gate" in doc and "owner-only" in doc, "the sign-up gate and the Shorts owner-only rule are documented")
+    check("function tgBlockedKey(" in app and "music/" in app, "the app can fall back to Telegram for music and still refuses key files")
     check('"primary": "r2"' in doc and "LOOP_PRIMARY" in doc, "the radio primary field is documented and defaults to r2")
     check("--loop" in workflow and 'workflows: ["Publish radio loop"]' in workflow, "a published loop is mirrored")
     spaces = (ROOT / "spaces.js").read_text(encoding="utf-8")

@@ -213,3 +213,68 @@ test("the radio loop playlist is public and immutable", async () => {
     await mf.dispose();
   }
 });
+
+test("shorts stay owner-only, a hidden avatar stays hidden, and a song key is not served", async () => {
+  const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT }));
+  try {
+    const readerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.60", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Reader", handle: "reader_tg" })
+    });
+    const reader = await readerSignup.json();
+    assert.equal(readerSignup.status, 201);
+    const ownerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.61", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Owner", handle: "owner_tg" })
+    });
+    const owner = await ownerSignup.json();
+    assert.equal(ownerSignup.status, 201);
+    const hiddenSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.62", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Hidden", handle: "hidden_tg" })
+    });
+    const hidden = await hiddenSignup.json();
+    assert.equal(hiddenSignup.status, 201);
+
+    const db = await mf.getBindings();
+    await db.DB.prepare("UPDATE accounts SET owner = 1 WHERE handle = ?").bind("owner_tg").run();
+    const hiddenRow = await db.DB.prepare("SELECT public_id FROM accounts WHERE handle = ?").bind("hidden_tg").first();
+    const avatarKey = "media/avatars/" + hiddenRow.public_id + "/" + "ab".repeat(32) + ".webp";
+    await db.DB.prepare("UPDATE accounts SET avatar = ?, hide_avatar = 'none' WHERE public_id = ?").bind(avatarKey, hiddenRow.public_id).run();
+    const shortKey = "archive/" + "cd".repeat(32) + ".mp4";
+    await db.DATA.put("feeds.json", JSON.stringify({
+      posts: [
+        { id: "1", platform: "x", text: "public", media: [{ url: "https://pub-example.r2.dev/photos/a.jpg" }] },
+        { id: "2", platform: "youtube", url: "https://www.youtube.com/shorts/abc", media: [{ url: "https://pub-example.r2.dev/" + shortKey }] }
+      ]
+    }));
+    const insert = "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, 'viktorych-data', ?, 4, 4, 'abc', 'application/octet-stream', 0, 1, 1, 0, 1)";
+    await db.DB.prepare(insert).bind(shortKey, "SHORT").run();
+    await db.DB.prepare(insert).bind(avatarKey, "AVATAR").run();
+    await db.DB.prepare(insert).bind("music/abc/index.m3u8", "PLAYLIST").run();
+    await db.DB.prepare(insert).bind("music/abc/cf1373b0cf10db5ae3fe8dd7.bin", "AESKEY").run();
+
+    const anon = await call(mf, "/tg/" + shortKey, { ip: "203.0.113.63" });
+    assert.equal(anon.status, 401);
+    const refused = await call(mf, "/tg/" + shortKey, { ip: "203.0.113.64", token: reader.token });
+    assert.equal(refused.status, 403);
+    assert.equal(refused.body.error, "forbidden");
+    const allowed = await call(mf, "/tg/" + shortKey, { ip: "203.0.113.65", token: owner.token });
+    assert.equal(allowed.status, 200);
+
+    const peek = await call(mf, "/tg/" + avatarKey, { ip: "203.0.113.66", token: reader.token });
+    assert.equal(peek.status, 404);
+    const self = await call(mf, "/tg/" + avatarKey, { ip: "203.0.113.67", token: hidden.token });
+    assert.equal(self.status, 200);
+
+    const song = await call(mf, "/tg/music/abc/index.m3u8", { ip: "203.0.113.68", token: reader.token });
+    assert.equal(song.status, 200);
+    const key = await call(mf, "/tg/music/abc/cf1373b0cf10db5ae3fe8dd7.bin", { ip: "203.0.113.69", token: reader.token });
+    assert.equal(key.status, 404);
+  } finally {
+    await mf.dispose();
+  }
+});

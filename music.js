@@ -333,6 +333,58 @@
     return sectionKey(route.section || "home", route.id || "") === sectionKey(parsed.section, parsed.id);
   }
 
+  function musicObjectKey(url) {
+    var parsed;
+    try { parsed = new URL(String(url || "")); }
+    catch (err) { return ""; }
+    var host = parsed.hostname.toLowerCase();
+    var path = parsed.pathname.replace(/^\/+/, "");
+    try { path = path.split("/").map(function (part) { return decodeURIComponent(part); }).join("/"); }
+    catch (err) { return ""; }
+    if (!path || path.indexOf("..") >= 0 || path.indexOf("\\") >= 0) return "";
+    if (host === "r2.dev" || host.slice(-7) === ".r2.dev") return path;
+    return "";
+  }
+
+  function playlistDirectory(url) {
+    var cut = String(url || "").split("?")[0];
+    var slash = cut.lastIndexOf("/");
+    return slash >= 0 ? cut.slice(0, slash + 1) : cut;
+  }
+
+  function playlistFileName(uri) {
+    return String(uri || "").split("?")[0].split("/").pop();
+  }
+
+  function rewriteMusicPlaylist(text, r2Playlist, tgPlaylist) {
+    var keys = {};
+    String(text || "").split(/\r?\n/).forEach(function (line) {
+      var trimmed = line.trim();
+      if (trimmed.indexOf("#EXT-X-KEY") !== 0) return;
+      var name = playlistFileName(tagUri(trimmed));
+      if (name) keys[name] = true;
+    });
+    var r2Dir = playlistDirectory(r2Playlist);
+    var tgDir = playlistDirectory(tgPlaylist);
+    return String(text || "").split(/\r?\n/).map(function (line) {
+      var trimmed = line.trim();
+      if (!trimmed) return line;
+      function next(uri) {
+        var name = playlistFileName(uri);
+        if (!name) return uri;
+        var base = keys[name] ? r2Dir : tgDir;
+        return base + name;
+      }
+      if (trimmed.charAt(0) === "#") {
+        if (trimmed.indexOf("#EXT-X-KEY") !== 0 && trimmed.indexOf("#EXT-X-MAP") !== 0) return line;
+        var uri = tagUri(trimmed);
+        if (!uri) return line;
+        return line.replace(uri, next(uri));
+      }
+      return next(trimmed);
+    }).join("\n");
+  }
+
   var logic = {
     parseHash: parseHash,
     youtubeId: youtubeId,
@@ -346,7 +398,9 @@
     formatReleased: formatReleased,
     reorder: reorder,
     sameKey: sectionKey,
-    sameSection: sameSection
+    sameSection: sameSection,
+    musicObjectKey: musicObjectKey,
+    rewriteMusicPlaylist: rewriteMusicPlaylist
   };
 
   var hooks = {
@@ -539,10 +593,44 @@
     else box.classList.remove("has-img");
   }
 
+  function musicApi() {
+    return String((root.VIKTORYCH_ACCOUNTS && root.VIKTORYCH_ACCOUNTS.api) || "").replace(/\/$/, "");
+  }
+
+  function musicSession() {
+    return root.ViktorychAccounts && root.ViktorychAccounts.token ? root.ViktorychAccounts.token() : "";
+  }
+
+  function musicTelegramUrl(url) {
+    var key = musicObjectKey(url);
+    var api = musicApi();
+    var name = (key.split("/").pop() || "").toLowerCase();
+    if (!api || !key || key.indexOf("..") >= 0) return "";
+    if (key.indexOf("music/") !== 0 && key.indexOf("covers/") !== 0) return "";
+    if (name === "key.bin" || name.endsWith(".key") || name.endsWith(".bin")) return "";
+    return api + "/tg/" + key.split("/").map(function (part) { return encodeURIComponent(part); }).join("/");
+  }
+
   function onCoverEvent(event) {
     var img = event.target;
     if (!img || img.tagName !== "IMG" || !coverBox(img)) return;
     if (event.type === "error") {
+      var source = img.getAttribute("src") || "";
+      var fallback = musicTelegramUrl(source);
+      var auth = musicSession();
+      if (fallback && auth && img.dataset && img.dataset.tgTried !== "1") {
+        img.dataset.tgTried = "1";
+        fetch(fallback, { headers: { Authorization: "Bearer " + auth } }).then(function (res) {
+          if (!res.ok) throw new Error(String(res.status));
+          return res.blob();
+        }).then(function (blob) {
+          if (img.isConnected) img.src = URL.createObjectURL(blob);
+        }).catch(function () {
+          var failed = coverBox(img);
+          if (failed) failed.classList.remove("has-img");
+        });
+        return;
+      }
       var box = coverBox(img);
       if (box) box.classList.remove("has-img");
       return;
@@ -1168,13 +1256,45 @@
       if (!currentSong() || currentSong().id !== song.id) return;
       if (!audio) return;
       if (HlsCtor && HlsCtor.isSupported()) {
-        var player = new HlsCtor({ enableWorker: false, lowLatencyMode: false, loader: cacheLoader(HlsCtor) });
+        var player = new HlsCtor({
+          enableWorker: false,
+          lowLatencyMode: false,
+          loader: cacheLoader(HlsCtor),
+          xhrSetup: function (xhr, requestUrl) {
+            try {
+              var api = musicApi();
+              if (!api || new URL(requestUrl).host !== new URL(api).host) return;
+              var session = musicSession();
+              if (session) xhr.setRequestHeader("Authorization", "Bearer " + session);
+            } catch (err) { /* a bad URL stays on the default request */ }
+          }
+        });
         hls = player;
         player.on(HlsCtor.Events.ERROR, function (_evt, data) {
           if (!data || !data.fatal || token !== playToken) return;
-          play.playing = false;
-          hooks.toast(tr("Couldn’t play that song"));
-          paint();
+          var tg = musicTelegramUrl(url);
+          var session = musicSession();
+          if (player._viaTg || !tg || !session) {
+            play.playing = false;
+            hooks.toast(tr("Couldn’t play that song"));
+            paint();
+            return;
+          }
+          player._viaTg = true;
+          fetch(tg, { headers: { Authorization: "Bearer " + session } }).then(function (res) {
+            if (!res.ok) throw new Error(String(res.status));
+            return res.text();
+          }).then(function (body) {
+            if (token !== playToken) return;
+            var rewritten = rewriteMusicPlaylist(body, url, tg);
+            var blob = new Blob([rewritten], { type: "application/vnd.apple.mpegurl" });
+            player.loadSource(URL.createObjectURL(blob));
+          }).catch(function () {
+            if (token !== playToken) return;
+            play.playing = false;
+            hooks.toast(tr("Couldn’t play that song"));
+            paint();
+          });
         });
         player.on(HlsCtor.Events.MANIFEST_PARSED, function () {
           if (token !== playToken) return;

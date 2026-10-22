@@ -108,6 +108,14 @@ assert.strictEqual(assets.files.slice().sort().join("\n"), [
   "https://cdn.example/music/x/init.mp4",
   "https://cdn.example/music/x/key.bin"
 ].join("\n"));
+const r2 = "https://pub-example.r2.dev/music/abc/index.m3u8";
+const tg = "https://accounts.example.workers.dev/tg/music/abc/index.m3u8";
+const rewritten = L.rewriteMusicPlaylist(sample.replace('URI="key.bin"', 'URI="cf1373b0cf10db5ae3fe8dd7.bin"').replace('URI="init.mp4"', 'URI="29647c55f231793f9991.mp4"').replace("a.m4s", "c099e79892e9b2f248f9.m4s"), r2, tg);
+assert.ok(rewritten.includes("https://pub-example.r2.dev/music/abc/cf1373b0cf10db5ae3fe8dd7.bin"));
+assert.ok(rewritten.includes("https://accounts.example.workers.dev/tg/music/abc/29647c55f231793f9991.mp4"));
+assert.ok(rewritten.includes("https://accounts.example.workers.dev/tg/music/abc/c099e79892e9b2f248f9.m4s"));
+assert.ok(!rewritten.includes("/tg/music/abc/cf1373b0cf10db5ae3fe8dd7.bin"));
+assert.strictEqual(L.musicObjectKey(r2), "music/abc/index.m3u8");
 const foreign = L.hlsAssets('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="https://evil.example/key.bin"\nseg.m4s\n', "https://cdn.example/music/x/index.m3u8");
 assert.strictEqual(foreign.files.join("\n"), "https://cdn.example/music/x/seg.m4s");
 const master = L.hlsAssets("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\naudio.m3u8\n", "https://cdn.example/music/x/index.m3u8");
