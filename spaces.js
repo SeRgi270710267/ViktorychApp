@@ -86,6 +86,9 @@
 
   const STATUS_MAX_AGE = 2 * 60 * 1000;
   const STATUS_OFFLINE_AGE = 8 * 60 * 1000;
+  const LOOP_DRIFT_S = 5;
+  const LOOP_RECHECK_MS = 3 * 60 * 1000;
+  const LOOP_TICK_MS = 5000;
 
   function statusUpdatedAt(status) {
     if (!status || typeof status !== "object") return null;
@@ -143,6 +146,49 @@
     return { live: true, url: url, listeners: listeners, scheduled: false, reconnecting: statusStale(status, now) };
   }
 
+  function loopPosition(doc, nowMs) {
+    const duration = Number(doc && doc.duration);
+    const epoch = Number(doc && doc.epoch);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(epoch)) return 0;
+    const clock = (typeof nowMs === "number" ? nowMs : Date.now()) / 1000;
+    const t = clock - epoch;
+    return ((t % duration) + duration) % duration;
+  }
+
+  function loopDrift(currentTime, doc, nowMs) {
+    const duration = Number(doc && doc.duration);
+    if (!Number.isFinite(duration) || duration <= 0) return 0;
+    const delta = Number(currentTime) - loopPosition(doc, nowMs);
+    return ((delta + duration / 2) % duration + duration) % duration - duration / 2;
+  }
+
+  function loopSeek(doc, nowMs) {
+    const duration = Number(doc && doc.duration);
+    const pos = loopPosition(doc, nowMs);
+    if (!Number.isFinite(duration) || duration <= 0) return 0;
+    return pos > duration - 0.5 ? 0 : pos;
+  }
+
+  function loopFromDoc(status, allow) {
+    const empty = { live: false, url: "", listeners: null, scheduled: false, reconnecting: false, version: "", duration: 0, epoch: 0 };
+    if (!status || typeof status !== "object" || status.live !== true) return empty;
+    const duration = Number(status.duration);
+    const epoch = Number(status.epoch);
+    if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(epoch)) return empty;
+    const url = allowedAudio(typeof status.url === "string" ? status.url : "", "", allow);
+    if (!url) return empty;
+    return {
+      live: true,
+      url: url,
+      listeners: listenersOf(status),
+      scheduled: false,
+      reconnecting: false,
+      version: typeof status.version === "string" ? status.version : "",
+      duration: duration,
+      epoch: epoch
+    };
+  }
+
   function playlistJumped(prevSn, nextSn, fragCount) {
     if (prevSn == null || nextSn == null) return false;
     if (!Number.isFinite(prevSn) || !Number.isFinite(nextSn)) return false;
@@ -176,6 +222,10 @@
     statusStale: statusStale,
     statusOffline: statusOffline,
     remoteStatusUrl: remoteStatusUrl,
+    loopPosition: loopPosition,
+    loopDrift: loopDrift,
+    loopSeek: loopSeek,
+    loopFromDoc: loopFromDoc,
     playlistJumped: playlistJumped,
     recoverPlan: recoverPlan
   };
@@ -221,6 +271,7 @@
     active: false,
     spaceId: "",
     loadedUrl: "",
+    loadedVersion: "",
     linkDown: false,
     pausedByUser: false,
     corsRetried: false,
@@ -233,6 +284,7 @@
     progressAt: 0,
     lastTime: 0,
     lastSn: null,
+    loopClock: 0,
     generation: 0,
     ignoreErrorUntil: 0,
     recoveredFor: 0,
@@ -372,6 +424,10 @@
       const scheduled = !!(status && (status.scheduled === true || status.state === "scheduled") && !live);
       return { kind: "youtube", live: live && !scheduled, url: "", listeners: listenersOf(status), scheduled: scheduled, allow: allow, channelId: String(source.channelId), forced: known };
     }
+    if (source.loopUrl || type === "loop") {
+      const parsed = loopFromDoc(status || {}, allow);
+      return { kind: "loop", live: parsed.live, url: parsed.url, listeners: parsed.listeners, scheduled: false, allow: allow, channelId: "", forced: !!row.fetched || !!demoFor(space), reconnecting: false, version: parsed.version, duration: parsed.duration, epoch: parsed.epoch };
+    }
     if (source.statusUrl) {
       const parsed = audioFromStatus(status || {}, allow);
       return { kind: "hls", live: parsed.live, url: parsed.url, listeners: parsed.listeners, scheduled: parsed.scheduled, allow: allow, channelId: "", forced: !!row.fetched || !!demoFor(space), reconnecting: !!parsed.reconnecting };
@@ -412,6 +468,9 @@
       state: state,
       listeners: play.listeners,
       playUrl: play.url || "",
+      version: play.version || "",
+      duration: play.duration || 0,
+      epoch: Number.isFinite(play.epoch) ? play.epoch : 0,
       allow: play.allow || [],
       channelId: play.channelId || "",
       href: "#/spaces/" + encodeURIComponent(space.id)
@@ -455,7 +514,7 @@
   }
 
   function signature() {
-    return models().map((item) => [item.id, item.live, item.state, item.playUrl, item.listeners, item.title].join("~")).join("|")
+    return models().map((item) => [item.id, item.live, item.state, item.playUrl, item.version, item.listeners, item.title].join("~")).join("|")
       + "|" + (player.linkDown ? "1" : "0") + "|" + player.spaceId;
   }
 
@@ -657,6 +716,29 @@
     };
   }
 
+  function loopItem(item) {
+    return !!(item && item.kind === "loop" && item.duration > 0 && Number.isFinite(item.epoch));
+  }
+
+  function seekLoopClock(audio, item) {
+    if (!audio || !loopItem(item)) return;
+    try { audio.currentTime = loopSeek(item); } catch (err) { /* not seekable yet */ }
+  }
+
+  function syncLoopClock() {
+    if (!player.active || player.pausedByUser) return;
+    const item = spaceModel(player.spaceId);
+    const audio = player.audio;
+    if (!loopItem(item) || !audio || audio.paused || audio.ended) return;
+    if (Math.abs(loopDrift(audio.currentTime || 0, item)) > LOOP_DRIFT_S) seekLoopClock(audio, item);
+  }
+
+  function wrapLoop(audio) {
+    if (!audio) return;
+    try { audio.currentTime = 0; } catch (err) { /* ignore */ }
+    kickPlay(audio);
+  }
+
   function attach(item, bust) {
     const audio = ensureAudio();
     const url = item.playUrl;
@@ -665,22 +747,34 @@
     const frame = document.getElementById("space-yt");
     if (frame) frame.remove();
     player.loadedUrl = url;
+    player.loadedVersion = item.version || "";
     player.lastSn = null;
     player.lastTime = 0;
     player.progressAt = Date.now();
     audio.preload = "auto";
     const playlist = isPlaylistItem(item);
+    const loop = loopItem(item);
     const Hls = root.Hls;
     if (playlist && Hls && Hls.isSupported()) {
       const generation = player.generation;
-      const hls = new Hls({
+      const shared = {
         enableWorker: false,
+        maxBufferLength: 60,
+        backBufferLength: 30,
+        xhrSetup: (xhr, requestUrl) => {
+          if (allowedAudio(requestUrl, url, allow)) return;
+          xhr.send = function () {};
+          try { xhr.abort(); } catch (err) { /* blocked host */ }
+        }
+      };
+      const hls = new Hls(loop ? Object.assign({
+        startPosition: loopSeek(item),
+        maxBufferHole: 0.5
+      }, shared) : Object.assign({
         lowLatencyMode: false,
         liveSyncDurationCount: 3,
         liveMaxLatencyDurationCount: 10,
-        maxBufferLength: 60,
         maxMaxBufferLength: 120,
-        backBufferLength: 30,
         maxBufferHole: 0.5,
         nudgeOffset: 0.1,
         nudgeMaxRetry: 8,
@@ -688,13 +782,8 @@
         liveDurationInfinity: true,
         manifestLoadPolicy: loadPolicy(4000, 8000),
         playlistLoadPolicy: loadPolicy(4000, 8000),
-        fragLoadPolicy: loadPolicy(6000, 12000),
-        xhrSetup: (xhr, requestUrl) => {
-          if (allowedAudio(requestUrl, url, allow)) return;
-          xhr.send = function () {};
-          try { xhr.abort(); } catch (err) { /* blocked host */ }
-        }
-      });
+        fragLoadPolicy: loadPolicy(6000, 12000)
+      }, shared));
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (generation !== player.generation || !data) return;
         const details = data.details || "";
@@ -709,7 +798,7 @@
         else scheduleRecover("fatal");
       });
       hls.on(Hls.Events.LEVEL_UPDATED, (_evt, data) => {
-        if (generation !== player.generation) return;
+        if (generation !== player.generation || loop) return;
         const details = data && data.details;
         if (!details) return;
         const seq = details.startSN;
@@ -720,6 +809,7 @@
       });
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (generation !== player.generation || !player.active || player.pausedByUser) return;
+        if (loop) seekLoopClock(audio, item);
         kickPlay(audio);
       });
       hls.on(Hls.Events.FRAG_BUFFERED, () => {
@@ -733,6 +823,15 @@
     }
     if (playlist && nativeHls(audio)) {
       audio.src = bust ? bustUrl(url) : url;
+      if (loop) {
+        const generation = player.generation;
+        const onMeta = () => {
+          audio.removeEventListener("loadedmetadata", onMeta);
+          if (generation !== player.generation || !player.active) return;
+          seekLoopClock(audio, item);
+        };
+        audio.addEventListener("loadedmetadata", onMeta);
+      }
       try { audio.load(); } catch (err) { /* the element will still try src */ }
       return;
     }
@@ -751,6 +850,7 @@
       player.audio.removeAttribute("src");
     }
     player.loadedUrl = "";
+    player.loadedVersion = "";
     player.noAnalyser = true;
     let frame = document.getElementById("space-yt");
     const src = "https://www.youtube-nocookie.com/embed/live_stream?channel=" + encodeURIComponent(channelId) + "&autoplay=1";
@@ -938,6 +1038,12 @@
       } catch (err) { /* fall through to a fresh player */ }
     } else if (plan === "reload" && player.hls) {
       player.softLoads += 1;
+      if (item.kind === "loop") {
+        player.loadedUrl = "";
+        attach(item, true);
+        kickPlay(audio);
+        return;
+      }
       try {
         player.hls.stopLoad();
         player.hls.startLoad(-1);
@@ -984,6 +1090,7 @@
 
   function onMediaEnded() {
     if (!player.active || player.pausedByUser || Date.now() < player.ignoreErrorUntil) return;
+    if (loopItem(spaceModel(player.spaceId))) { wrapLoop(player.audio); return; }
     scheduleRecover("ended");
   }
 
@@ -1028,6 +1135,7 @@
     if (!item || item.kind === "youtube" || !item.live || !item.playUrl) return;
     const audio = player.audio;
     if (!audio) return;
+    if (loopItem(item) && audio.ended) { wrapLoop(audio); return; }
     const t = audio.currentTime || 0;
     if (!audio.paused && !audio.ended && (t > player.lastTime + 0.12 || (player.lastTime > 1 && t + 1 < player.lastTime))) {
       noteTime(t);
@@ -1102,7 +1210,10 @@
     }
     if (!item.live || !item.playUrl) return;
     const audio = ensureAudio();
-    if (player.loadedUrl !== item.playUrl) attach(item, false);
+    if (loopItem(item)) {
+      if (player.loadedUrl !== item.playUrl || (item.version || "") !== player.loadedVersion) attach(item, false);
+      else seekLoopClock(audio, item);
+    } else if (player.loadedUrl !== item.playUrl) attach(item, false);
     kickPlay(audio);
     startLevel();
     syncSession();
@@ -1114,6 +1225,7 @@
     player.pausedByUser = false;
     player.linkDown = false;
     player.loadedUrl = "";
+    player.loadedVersion = "";
     player.dockKey = "";
     player.recoverFails = 0;
     player.mediaFixes = 0;
@@ -1339,12 +1451,14 @@
     if (!configOk) { arm(configErrors ? [8000, 20000, 45000][Math.min(configErrors - 1, 2)] : 8000); return; }
     const now = Date.now();
     let wait = document.hidden ? 120000 : 35000;
-    let hot = !!(player.active && !player.pausedByUser);
+    const activeItem = player.active ? spaceModel(player.spaceId) : null;
+    const loopListening = !!(activeItem && activeItem.kind === "loop" && !player.pausedByUser);
+    let hot = !!(player.active && !player.pausedByUser && !loopListening);
     Object.keys(runtime).forEach((id) => {
       const row = runtime[id];
       if (row && row.nextAt) wait = Math.min(wait, Math.max(0, row.nextAt - now));
       const doc = row && row.status;
-      if (doc && doc.live === true && statusStale(doc, now) && !statusOffline(doc, now)) hot = true;
+      if (doc && doc.live === true && doc.mode !== "loop" && statusStale(doc, now) && !statusOffline(doc, now)) hot = true;
     });
     if (hot) wait = Math.min(wait, 20000);
     else if (document.hidden) wait = Math.max(wait, 120000);
@@ -1372,6 +1486,7 @@
       source: {
         type: item.source && item.source.type ? String(item.source.type) : "",
         statusUrl: item.source && item.source.statusUrl ? String(item.source.statusUrl) : "",
+        loopUrl: item.source && item.source.loopUrl ? String(item.source.loopUrl) : "",
         fallback: item.source && item.source.fallback ? String(item.source.fallback) : "",
         url: item.source && item.source.url ? String(item.source.url) : "",
         server: item.source && item.source.server ? String(item.source.server) : "",
@@ -1391,7 +1506,12 @@
   async function loadStatus(space) {
     const source = space.source || {};
     let doc = null;
-    if (source.statusUrl) {
+    if (source.loopUrl || source.type === "loop") {
+      const allow = effectiveAllow(space);
+      const url = resolveStatusUrl(source.loopUrl, allow);
+      if (!url) throw new Error("loop");
+      doc = await fetchStatusDoc(url);
+    } else if (source.statusUrl) {
       const allow = effectiveAllow(space);
       const url = resolveStatusUrl(source.statusUrl, allow);
       try {
@@ -1426,6 +1546,14 @@
       return;
     }
     const audio = ensureAudio();
+    if (loopItem(item)) {
+      if (player.loadedUrl !== item.playUrl || (item.version || "") !== player.loadedVersion) attach(item, false);
+      else if ((audio.paused || audio.ended) && !player.recoverTimer) {
+        seekLoopClock(audio, item);
+        kickPlay(audio);
+      }
+      return;
+    }
     if (player.loadedUrl !== item.playUrl) attach(item, false);
     if ((audio.paused || audio.ended) && !player.recoverTimer) kickPlay(audio);
   }
@@ -1434,7 +1562,8 @@
     const now = Date.now();
     await Promise.all(spaces.map(async (space) => {
       const source = space.source || {};
-      const needs = !!(source.statusUrl || source.type === "owncast");
+      const loopSource = !!(source.loopUrl || source.type === "loop");
+      const needs = !!(source.statusUrl || source.type === "owncast" || loopSource);
       const row = runtime[space.id] || (runtime[space.id] = { errors: 0, nextAt: 0, status: null, fetched: !needs });
       if (!needs) { row.fetched = true; return; }
       if (row.nextAt && now < row.nextAt) return;
@@ -1443,8 +1572,8 @@
         row.fetched = true;
         row.errors = 0;
         const listening = player.active && player.spaceId === space.id && !player.pausedByUser;
-        const grace = row.status && row.status.live === true && statusStale(row.status) && !statusOffline(row.status);
-        row.nextAt = Date.now() + ((listening || grace) ? 20000 : (document.hidden ? 120000 : 35000));
+        const grace = !loopSource && row.status && row.status.live === true && statusStale(row.status) && !statusOffline(row.status);
+        row.nextAt = Date.now() + (loopSource ? LOOP_RECHECK_MS : ((listening || grace) ? 20000 : (document.hidden ? 120000 : 35000)));
       } catch (err) {
         row.fetched = true;
         row.errors += 1;
@@ -1480,9 +1609,12 @@
     syncDock(route || null);
     if (player.active) {
       const item = spaceModel(player.spaceId);
-      if (item && item.kind !== "youtube" && item.playUrl && item.playUrl !== player.loadedUrl && !player.pausedByUser && item.live) {
-        attach(item, false);
-        if (player.audio && (player.audio.paused || player.audio.ended)) kickPlay(player.audio);
+      if (item && item.kind !== "youtube" && item.playUrl && !player.pausedByUser && item.live) {
+        const versionChanged = item.kind === "loop" && (item.version || "") !== player.loadedVersion;
+        if (item.playUrl !== player.loadedUrl || versionChanged) {
+          attach(item, false);
+          if (player.audio && (player.audio.paused || player.audio.ended)) kickPlay(player.audio);
+        }
       }
       syncSession();
       startLevel();
@@ -1538,12 +1670,16 @@
   document.addEventListener("visibilitychange", () => {
     pauseMarquees();
     if (document.hidden) return;
-    nudgeIfQuiet();
+    const item = player.active && !player.pausedByUser ? spaceModel(player.spaceId) : null;
+    if (item && item.kind === "loop" && player.audio) seekLoopClock(player.audio, item);
+    else nudgeIfQuiet();
     if (Date.now() - lastPoll > 15000) arm(1000);
   });
 
   document.addEventListener("resume", () => {
-    nudgeIfQuiet();
+    const item = player.active && !player.pausedByUser ? spaceModel(player.spaceId) : null;
+    if (item && item.kind === "loop" && player.audio) seekLoopClock(player.audio, item);
+    else nudgeIfQuiet();
     arm(500);
   });
 
@@ -1560,6 +1696,7 @@
     ensureDock();
     loadHls();
     if (!player.watch) player.watch = setInterval(watchPlayback, 3000);
+    if (!player.loopClock) player.loopClock = setInterval(syncLoopClock, LOOP_TICK_MS);
     runPoll();
   }
 

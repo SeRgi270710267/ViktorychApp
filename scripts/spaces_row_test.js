@@ -191,11 +191,51 @@ assert.deepStrictEqual([...feed.profile.name].map((ch) => ch.codePointAt(0)), [0
 const space = config.spaces.find((item) => item.id === "superintelmusic");
 assert.strictEqual(space.title, "ViktorychMusic");
 assert.strictEqual(space.host.followId, "telegram:redacted_handle");
-assert.strictEqual(space.source.type, "hls");
-assert.strictEqual(space.source.statusUrl, "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/status.json");
-assert.strictEqual(space.source.fallback, "live/superintelmusic.json");
-assert.deepStrictEqual(space.source.allow, ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev", "trycloudflare.com"]);
+assert.strictEqual(space.source.type, "loop");
+assert.strictEqual(space.source.loopUrl, "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/current.json");
+assert.ok(!space.source.statusUrl);
+assert.ok(!space.source.fallback);
+assert.deepStrictEqual(space.source.allow, ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev"]);
 assert.ok(!space.source.url);
+
+const bed = {
+  live: true,
+  mode: "loop",
+  url: "https://" + pubHost + "/loop/v202610220722/index.m3u8",
+  duration: 2344.663692,
+  epoch: 1792627200,
+  version: "v202610220722",
+  updated: "2020-01-01T00:00:00Z"
+};
+const bedNow = Date.parse("2026-10-22T12:00:00.000Z");
+assert.strictEqual(L.statusStale(bed, bedNow), true);
+const loop = L.loopFromDoc(bed, [pubHost]);
+assert.strictEqual(loop.live, true);
+assert.strictEqual(loop.reconnecting, false);
+assert.strictEqual(loop.url, bed.url);
+assert.strictEqual(loop.version, bed.version);
+assert.strictEqual(loop.duration, bed.duration);
+assert.strictEqual(L.loopFromDoc({ ...bed, live: false }, [pubHost]).live, false);
+assert.strictEqual(L.loopFromDoc({ ...bed, live: false }, [pubHost]).url, "");
+assert.strictEqual(L.loopFromDoc({ ...bed, url: "https://evil.example/loop/index.m3u8" }, [pubHost]).live, false);
+assert.strictEqual(L.loopFromDoc({ ...bed, duration: 0 }, [pubHost]).live, false);
+assert.strictEqual(L.loopFromDoc({ ...bed, epoch: "nope" }, [pubHost]).live, false);
+const clock = { duration: 100, epoch: 1000 };
+assert.strictEqual(L.loopPosition(clock, 1000 * 1000), 0);
+assert.strictEqual(L.loopPosition(clock, (1000 + 40) * 1000), 40);
+assert.strictEqual(L.loopPosition(clock, (1000 + 250) * 1000), 50);
+assert.ok(Math.abs(L.loopPosition(clock, (1000 - 10) * 1000) - 90) < 1e-9);
+assert.strictEqual(L.loopSeek(clock, (1000 + 99.7) * 1000), 0);
+assert.ok(Math.abs(L.loopSeek(clock, (1000 + 99.2) * 1000) - 99.2) < 1e-9);
+const circle = L.loopDrift(1, { duration: 2344.663692, epoch: 0 }, (2344.663692 - 1) * 1000);
+assert.ok(Math.abs(circle - 2) < 0.001, circle);
+assert.ok(src.includes("LOOP_DRIFT_S = 5"));
+assert.ok(src.includes("LOOP_RECHECK_MS = 3 * 60 * 1000"));
+assert.ok(src.includes("startPosition:"));
+assert.ok(src.includes("function loopFromDoc("));
+assert.ok(src.includes("doc.mode !== \"loop\""));
+assert.ok(!src.includes("pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/status.json"));
+assert.strictEqual(src.includes('"/hls/stream.m3u8"'), src.includes('server + "/hls/stream.m3u8"'));
 
 const worker = fs.readFileSync("sw.js", "utf8");
 assert.ok(worker.includes('VERSION = "viktorych-__SW_VERSION__"'));
