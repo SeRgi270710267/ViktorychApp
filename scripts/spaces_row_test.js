@@ -233,12 +233,64 @@ assert.ok(src.includes("LOOP_DRIFT_S = 5"));
 assert.ok(src.includes("LOOP_RECHECK_MS = 3 * 60 * 1000"));
 assert.ok(src.includes("startPosition:"));
 assert.ok(src.includes("function loopFromDoc("));
+assert.ok(src.includes("function loopRecovery("));
+assert.ok(src.includes("function refreshLoopSource("));
 assert.ok(src.includes("doc.mode !== \"loop\""));
+const recoverAt = src.indexOf("async function recoverPlayback(");
+const refreshCall = src.indexOf("refreshLoopSource(", recoverAt);
+const liveGuard = src.indexOf("!item.live", recoverAt);
+assert.ok(recoverAt > 0 && refreshCall > recoverAt && liveGuard > refreshCall, "refresh the loop manifest before the live guard");
 assert.ok(!src.includes("pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/status.json"));
+
+const nextBed = {
+  ...bed,
+  url: "https://" + pubHost + "/loop/v202610220909/index.m3u8",
+  version: "v202610220909",
+  updated: "2026-10-22T09:11:08Z"
+};
+const statusJson = {
+  live: false,
+  station: "ViktorychMusic",
+  hls: { audio: "" },
+  updated: "2026-10-22T08:06:32Z"
+};
+assert.strictEqual(L.loopManifestDoc(bed), true);
+assert.strictEqual(L.loopManifestDoc(nextBed), true);
+assert.strictEqual(L.loopManifestDoc(statusJson), false);
+assert.strictEqual(L.loopNeedsRefresh("fatal", 0), true);
+assert.strictEqual(L.loopNeedsRefresh("stall", 0), true);
+assert.strictEqual(L.loopNeedsRefresh("watch", 0), true);
+assert.strictEqual(L.loopNeedsRefresh("network", 404), true);
+assert.strictEqual(L.loopNeedsRefresh("media", 404), true);
+assert.strictEqual(L.loopNeedsRefresh("media", 0), false);
+assert.strictEqual(L.loopNeedsRefresh("play", 0), false);
+const swapped = L.loopRecovery(loop, nextBed, [pubHost], "network", 404);
+assert.strictEqual(swapped.refresh, true);
+assert.strictEqual(swapped.swap, true);
+assert.strictEqual(swapped.live, true);
+assert.strictEqual(swapped.seek, true);
+assert.strictEqual(swapped.url, nextBed.url);
+assert.strictEqual(swapped.version, "v202610220909");
+const stalled = L.loopRecovery(loop, nextBed, [pubHost], "stall", 0);
+assert.strictEqual(stalled.swap, true);
+assert.strictEqual(stalled.seek, true);
+const sameBed = L.loopRecovery(loop, bed, [pubHost], "fatal", 404);
+assert.strictEqual(sameBed.refresh, true);
+assert.strictEqual(sameBed.swap, false);
+assert.strictEqual(sameBed.live, true);
+assert.strictEqual(sameBed.url, bed.url);
+const poisoned = L.loopRecovery(loop, statusJson, [pubHost], "network", 404);
+assert.strictEqual(poisoned.live, true, "status.json live:false must not take the loop offline");
+assert.strictEqual(poisoned.swap, false);
+assert.strictEqual(poisoned.url, bed.url);
+const turnedOff = L.loopRecovery(loop, { ...nextBed, live: false }, [pubHost], "fatal", 404);
+assert.strictEqual(turnedOff.live, false);
+assert.strictEqual(turnedOff.swap, false);
+assert.strictEqual(turnedOff.url, "");
 assert.strictEqual(src.includes('"/hls/stream.m3u8"'), src.includes('server + "/hls/stream.m3u8"'));
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "viktorych-a5-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "viktorych-a6-__SW_VERSION__"'));
 assert.ok(worker.includes("./spaces.js") && worker.includes("./spaces.css"));
 assert.ok(!worker.includes("superintelmusic.json"));
 assert.ok(worker.includes("isSpaceStatus"));
@@ -251,6 +303,15 @@ const branchAt = worker.indexOf("if (isSpaceStatus(url) || isSpaceAsset(url))");
 const branch = worker.slice(branchAt, branchAt + 180);
 assert.ok(branch.includes('cache: "no-store"'));
 assert.ok(!branch.includes("cache.put") && !branch.includes("caches.open"));
+assert.ok(worker.includes("function isLoopPointer("));
+assert.ok(worker.includes("function isLoopVersionMedia("));
+assert.ok(worker.includes("function forgetLoopCaches("));
+assert.ok(worker.includes("loop/current.json"));
+const pointerAt = worker.indexOf("if (isLoopPointer(url))");
+assert.ok(pointerAt > 0 && pointerAt < branchAt);
+const pointerFn = worker.slice(worker.indexOf("async function fetchLoopPointer"), worker.indexOf("async function fetchLoopPointer") + 700);
+assert.ok(pointerFn.includes('cache: "no-store"'));
+assert.ok(!pointerFn.includes("cache.put") && !pointerFn.includes("caches.open"));
 assert.ok(!new RegExp("supa" + "base|sb_" + "publishable|nadjniz" + "sdaskttxahclp", "i").test(src + worker + JSON.stringify(config)));
 
 console.log("spaces row tests ok");

@@ -1,6 +1,6 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a5-__SW_VERSION__";
+const VERSION = "viktorych-a6-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -101,6 +101,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC).map((key) => caches.delete(key)));
+    try { await forgetLoopCaches(); } catch (err) { /* a stuck loop playlist must not block the new shell */ }
     await self.clients.claim();
     await takeOverClients();
   })());
@@ -160,6 +161,50 @@ function isSpaceStatus(url) {
 
 function isSpaceAsset(url) {
   return spaceHost(url.hostname);
+}
+
+// loop/current.json is the version pointer. Never cache it: a stored copy keeps
+// a deleted loop version after the publisher swaps the bed.
+function isLoopPointer(url) {
+  return spaceHost(url.hostname) && /\/loop\/current\.json$/i.test(url.pathname);
+}
+
+// Versioned playlists and segments are immutable on R2 (a year of cache).
+// Do not keep them in Cache Storage, or a deleted version 404s forever.
+function isLoopVersionMedia(url) {
+  return spaceHost(url.hostname) && /\/loop\/v[^/]+\//i.test(url.pathname);
+}
+
+async function forgetLoopCaches() {
+  const names = await caches.keys();
+  await Promise.all(names.map(async (name) => {
+    const cache = await caches.open(name);
+    const keys = await cache.keys();
+    await Promise.all(keys.map((req) => {
+      let parsed;
+      try { parsed = new URL(req.url); } catch (err) { return null; }
+      if (isLoopPointer(parsed) || isLoopVersionMedia(parsed)) return cache.delete(req);
+      return null;
+    }));
+  }));
+}
+
+async function fetchLoopPointer(request) {
+  const url = new URL(request.url);
+  url.searchParams.set("_", String(Date.now()));
+  const mode = request.mode === "navigate" ? "cors" : request.mode;
+  try {
+    return await fetch(new Request(url.href, {
+      method: "GET",
+      headers: request.headers,
+      mode: mode,
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "follow"
+    }));
+  } catch (err) {
+    return fetch(url.href, { cache: "no-store", redirect: "follow" });
+  }
 }
 
 // ViktorychMusic catalog audio (HLS playlist, key, init, segments, cover) is not
@@ -417,6 +462,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (isCatalogMedia(url)) return;
+  if (isLoopPointer(url)) {
+    event.respondWith(fetchLoopPointer(request));
+    return;
+  }
   if (isSpaceStatus(url) || isSpaceAsset(url)) {
     event.respondWith(fetch(new Request(request, { cache: "no-store" })));
     return;

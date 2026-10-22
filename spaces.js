@@ -189,6 +189,50 @@
     };
   }
 
+  // current.json is the only liveness source for the static loop. A site or
+  // R2 status.json (live:false, no loop url) is not a manifest.
+  function loopManifestDoc(doc) {
+    if (!doc || typeof doc !== "object") return false;
+    if (doc.mode === "loop") return true;
+    const duration = Number(doc.duration);
+    const url = typeof doc.url === "string" ? doc.url : "";
+    return duration > 0 && url.indexOf("/loop/") >= 0;
+  }
+
+  function loopNeedsRefresh(reason, httpStatus) {
+    const status = Number(httpStatus);
+    if (status === 404 || status === 410) return true;
+    return reason === "fatal" || reason === "stall" || reason === "watch" || reason === "network" || reason === "ended" || reason === "unsupported";
+  }
+
+  function loopRecovery(loaded, manifest, allow, reason, httpStatus) {
+    const refresh = loopNeedsRefresh(reason, httpStatus);
+    const keep = loaded && loaded.live && loaded.url ? loaded : null;
+    if (!loopManifestDoc(manifest)) {
+      return {
+        refresh: refresh,
+        live: !!keep,
+        swap: false,
+        url: keep ? keep.url : "",
+        version: keep ? (keep.version || "") : "",
+        seek: false
+      };
+    }
+    const next = loopFromDoc(manifest, allow);
+    if (!next.live || !next.url) {
+      return { refresh: refresh, live: false, swap: false, url: "", version: "", seek: false };
+    }
+    const changed = !loaded || (loaded.version || "") !== (next.version || "") || loaded.url !== next.url;
+    return {
+      refresh: refresh,
+      live: true,
+      swap: !!(refresh && changed),
+      url: next.url,
+      version: next.version || "",
+      seek: true
+    };
+  }
+
   function playlistJumped(prevSn, nextSn, fragCount) {
     if (prevSn == null || nextSn == null) return false;
     if (!Number.isFinite(prevSn) || !Number.isFinite(nextSn)) return false;
@@ -226,6 +270,9 @@
     loopDrift: loopDrift,
     loopSeek: loopSeek,
     loopFromDoc: loopFromDoc,
+    loopManifestDoc: loopManifestDoc,
+    loopNeedsRefresh: loopNeedsRefresh,
+    loopRecovery: loopRecovery,
     playlistJumped: playlistJumped,
     recoverPlan: recoverPlan
   };
@@ -276,6 +323,10 @@
     pausedByUser: false,
     corsRetried: false,
     recoverTimer: 0,
+    recovering: false,
+    recoverSeq: 0,
+    recoverReason: "",
+    recoverStatus: 0,
     waitTimer: 0,
     watch: 0,
     recoverFails: 0,
@@ -787,15 +838,22 @@
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (generation !== player.generation || !data) return;
         const details = data.details || "";
+        const response = data.response || null;
+        const httpStatus = response ? Number(response.code || response.status) || 0 : (data.networkDetails && Number(data.networkDetails.status)) || 0;
+        const missing = httpStatus === 404 || httpStatus === 410;
         if (!data.fatal) {
+          if (loop && missing) {
+            scheduleRecover("network", httpStatus);
+            return;
+          }
           if ((details === "bufferStalledError" || details === "bufferSeekOverHole" || details === "bufferNudgeOnStall") && Date.now() - player.progressAt > 7000) {
-            scheduleRecover("stall");
+            scheduleRecover("stall", httpStatus);
           }
           return;
         }
-        if (data.type === "mediaError") scheduleRecover("media");
-        else if (data.type === "networkError") scheduleRecover("network");
-        else scheduleRecover("fatal");
+        if (data.type === "mediaError") scheduleRecover("media", httpStatus);
+        else if (data.type === "networkError") scheduleRecover("network", httpStatus);
+        else scheduleRecover("fatal", httpStatus);
       });
       hls.on(Hls.Events.LEVEL_UPDATED, (_evt, data) => {
         if (generation !== player.generation || loop) return;
@@ -816,7 +874,7 @@
         if (generation !== player.generation) return;
         player.fragOk = true;
       });
-      hls.loadSource(url);
+      hls.loadSource(bust ? bustUrl(url) : url);
       hls.attachMedia(audio);
       player.hls = hls;
       return;
@@ -971,18 +1029,31 @@
     player.recoverTimer = 0;
     clearTimeout(player.waitTimer);
     player.waitTimer = 0;
+    player.recoverSeq += 1;
+    player.recovering = false;
   }
 
-  function scheduleRecover(reason) {
+  function scheduleRecover(reason, httpStatus) {
     if (!player.active || player.pausedByUser) return;
     noteReconnecting();
     player.recoveredFor = 0;
     player.fragOk = false;
-    if (player.recoverTimer) return;
-    const delay = [1200, 3000, 5000, 8000, 12000][Math.min(player.recoverFails, 4)];
+    const item = spaceModel(player.spaceId);
+    const status = Number(httpStatus) || 0;
+    const urgent = !!(item && item.kind === "loop" && loopNeedsRefresh(reason, status));
+    if (player.recoverTimer || player.recovering) {
+      if (!(urgent && !loopNeedsRefresh(player.recoverReason, player.recoverStatus))) return;
+      clearTimeout(player.recoverTimer);
+      player.recoverTimer = 0;
+    }
+    player.recoverReason = reason || "";
+    player.recoverStatus = status;
+    const delay = urgent && player.recoverFails < 1 ? 250 : [1200, 3000, 5000, 8000, 12000][Math.min(player.recoverFails, 4)];
+    player.recoverSeq += 1;
+    const seq = player.recoverSeq;
     player.recoverTimer = setTimeout(() => {
       player.recoverTimer = 0;
-      recoverPlayback(reason);
+      recoverPlayback(reason, status, seq);
     }, delay);
   }
 
@@ -1017,57 +1088,134 @@
     maybeRender();
   }
 
-  function recoverPlayback(reason) {
+  async function refreshLoopSource(spaceId) {
+    const space = spaces.filter((item) => item && item.id === spaceId)[0];
+    if (!space) return false;
+    const source = space.source || {};
+    if (!(source.loopUrl || source.type === "loop")) return false;
+    const allow = effectiveAllow(space);
+    const url = resolveStatusUrl(source.loopUrl, allow);
+    if (!url) return false;
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(String(res.status));
+      const doc = await res.json();
+      // status.json is live:false and has no loop url. Keep the last manifest.
+      if (!loopManifestDoc(doc)) throw new Error("loop");
+      const row = runtime[space.id] || (runtime[space.id] = { errors: 0, nextAt: 0, status: null, fetched: false });
+      row.status = applyDemo(space, doc);
+      row.fetched = true;
+      row.errors = 0;
+      row.nextAt = Date.now() + LOOP_RECHECK_MS;
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  async function recoverPlayback(reason, httpStatus, seq) {
     if (!player.active || player.pausedByUser) return;
-    const item = spaceModel(player.spaceId);
-    if (!item || item.kind === "youtube" || !item.live || !item.playUrl) return;
-    const audio = ensureAudio();
-    player.recoverFails += 1;
-    noteReconnecting();
-    const plan = recoverPlan(reason, {
-      hasHls: !!player.hls,
-      mediaFixes: player.mediaFixes,
-      softLoads: player.softLoads
-    });
-    if (plan === "media" && player.hls) {
-      player.mediaFixes += 1;
-      try {
-        player.hls.recoverMediaError();
-        kickPlay(audio);
-        return;
-      } catch (err) { /* fall through to a fresh player */ }
-    } else if (plan === "reload" && player.hls) {
-      player.softLoads += 1;
-      if (item.kind === "loop") {
-        player.loadedUrl = "";
-        attach(item, true);
-        kickPlay(audio);
+    if (seq && seq !== player.recoverSeq) return;
+    player.recovering = true;
+    try {
+      const preliminary = spaceModel(player.spaceId);
+      if (preliminary && preliminary.kind === "loop" && loopNeedsRefresh(reason, httpStatus)) {
+        await refreshLoopSource(player.spaceId);
+        if (!player.active || player.pausedByUser || (seq && seq !== player.recoverSeq)) return;
+      }
+      const item = spaceModel(player.spaceId);
+      if (!item || item.kind === "youtube" || !item.live || !item.playUrl) {
+        if (preliminary && preliminary.kind === "loop" && (!item || !item.live)) {
+          player.linkDown = false;
+          if (player.audio && !player.audio.paused) player.audio.pause();
+          syncSession();
+          maybeRender();
+        }
         return;
       }
-      try {
-        player.hls.stopLoad();
-        player.hls.startLoad(-1);
-        kickPlay(audio);
-        return;
-      } catch (err) { /* fall through to a fresh player */ }
+      const audio = ensureAudio();
+      if (item.kind === "loop") {
+        const plan = loopRecovery(
+          { live: true, url: player.loadedUrl, version: player.loadedVersion },
+          (runtime[player.spaceId] && runtime[player.spaceId].status) || null,
+          item.allow || [],
+          reason,
+          httpStatus
+        );
+        if (plan.swap) {
+          player.recoverFails += 1;
+          player.mediaFixes = 0;
+          player.softLoads = 0;
+          player.lastSn = null;
+          player.loadedUrl = "";
+          player.ignoreErrorUntil = Date.now() + 800;
+          noteReconnecting();
+          attach(item, true);
+          seekLoopClock(audio, item);
+          kickPlay(audio);
+          return;
+        }
+      }
+      player.recoverFails += 1;
+      noteReconnecting();
+      const plan = recoverPlan(reason, {
+        hasHls: !!player.hls,
+        mediaFixes: player.mediaFixes,
+        softLoads: player.softLoads
+      });
+      if (plan === "media" && player.hls) {
+        player.mediaFixes += 1;
+        try {
+          player.hls.recoverMediaError();
+          kickPlay(audio);
+          return;
+        } catch (err) { /* fall through to a fresh player */ }
+      } else if (plan === "reload" && player.hls) {
+        player.softLoads += 1;
+        if (item.kind === "loop") {
+          player.loadedUrl = "";
+          attach(item, true);
+          seekLoopClock(audio, item);
+          kickPlay(audio);
+          return;
+        }
+        try {
+          player.hls.stopLoad();
+          player.hls.startLoad(-1);
+          kickPlay(audio);
+          return;
+        } catch (err) { /* fall through to a fresh player */ }
+      }
+      player.mediaFixes = 0;
+      player.softLoads = 0;
+      player.lastSn = null;
+      player.loadedUrl = "";
+      player.ignoreErrorUntil = Date.now() + 800;
+      attach(item, true);
+      if (item.kind === "loop") seekLoopClock(audio, item);
+      kickPlay(audio);
+    } finally {
+      if (!seq || seq === player.recoverSeq) player.recovering = false;
     }
-    player.mediaFixes = 0;
-    player.softLoads = 0;
-    player.lastSn = null;
-    player.loadedUrl = "";
-    player.ignoreErrorUntil = Date.now() + 800;
-    attach(item, true);
-    kickPlay(audio);
   }
 
   function onAudioError() {
     if (!player.active || player.pausedByUser || Date.now() < player.ignoreErrorUntil) return;
     const audio = player.audio;
+    const item = spaceModel(player.spaceId);
+    if (item && item.kind === "loop") {
+      if (audio && audio.crossOrigin) {
+        player.corsRetried = true;
+        player.noAnalyser = true;
+        audio.crossOrigin = null;
+      }
+      scheduleRecover("network");
+      return;
+    }
     if (audio && !player.corsRetried && audio.crossOrigin) {
       player.corsRetried = true;
       player.noAnalyser = true;
       audio.crossOrigin = null;
-      const item = spaceModel(player.spaceId);
       if (item && item.playUrl) {
         player.loadedUrl = "";
         attach(item, true);
@@ -1511,6 +1659,7 @@
       const url = resolveStatusUrl(source.loopUrl, allow);
       if (!url) throw new Error("loop");
       doc = await fetchStatusDoc(url);
+      if (!loopManifestDoc(doc)) throw new Error("loop");
     } else if (source.statusUrl) {
       const allow = effectiveAllow(space);
       const url = resolveStatusUrl(source.statusUrl, allow);
@@ -1589,15 +1738,27 @@
   async function runPoll() {
     if (polling) return;
     polling = true;
+    let catalogFailed = false;
     try {
-      await loadCatalog();
-      configOk = true;
-      configErrors = 0;
-      await refreshAll();
-      lastPoll = Date.now();
+      try {
+        await loadCatalog();
+        configOk = true;
+        configErrors = 0;
+      } catch (err) {
+        catalogFailed = true;
+        configOk = false;
+        configErrors += 1;
+      }
+      // A 401 on feeds.config.json must not freeze a loop that is already loaded.
+      if (!catalogFailed || spaces.length) {
+        await refreshAll();
+        lastPoll = Date.now();
+      }
     } catch (err) {
-      configOk = false;
-      configErrors += 1;
+      if (!catalogFailed) {
+        configOk = false;
+        configErrors += 1;
+      }
     } finally {
       polling = false;
       armNext();
