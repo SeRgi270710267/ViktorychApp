@@ -234,7 +234,6 @@
   const GITHUB_REPO = githubRepo();
   const ARCHIVE_RAW = GITHUB_REPO ? "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/archive/" : "";
   const ARCHIVE_CDN = GITHUB_REPO ? "https://cdn.jsdelivr.net/gh/" + GITHUB_REPO + "@data/archive/" : "";
-  const ARCHIVE_IA = "https://archive.org/download/" + ("sergi-" + previousStoreName("archive")) + "/archive/";
   const IA = { ready: false, files: [], byUrl: {}, posts: {}, shards: {} };
 
   function iaParts(url) {
@@ -4346,13 +4345,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const local = new URL("archive/" + file, document.baseURI).href;
     const raw = ARCHIVE_RAW ? ARCHIVE_RAW + file : "";
     const cdn = ARCHIVE_CDN ? ARCHIVE_CDN + file : "";
-    const ia = ARCHIVE_IA + file;
     const extra = [];
     const month = String(file).match(/^(\d{4}-\d{2}|undated)\.json$/);
     if (month && IA.shards[month[1]]) extra.push(IA.shards[month[1]]);
     if (IA.shards[file]) extra.push(IA.shards[file]);
     const primary = fresh ? [local, raw, cdn] : [local, cdn, raw];
-    return primary.concat(extra).concat([ia]).filter(Boolean);
+    return primary.concat(extra).filter(Boolean);
   }
 
   async function fetchArchive(file, fresh) {
@@ -4394,11 +4392,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     ARCHIVE.order = [];
     ARCHIVE.loaded = {};
     ARCHIVE.posts = [];
-    const manifestTask = fetchArchive("ia-manifest.json", true).then((doc) => {
-      installIaManifest(doc || { v: 1, files: [], posts: {} });
-    }).catch(() => {
-      installIaManifest({ v: 1, files: [], posts: {} });
-    });
+    let manifestDoc = null;
+    try {
+      manifestDoc = await fetchArchive("ia-manifest.json", true);
+    } catch (err) {
+      manifestDoc = null;
+    }
+    installIaManifest(manifestDoc || { v: 1, files: [], posts: {} });
     try {
       const index = await fetchArchive("index.json", true);
       if (index) {
@@ -4406,7 +4406,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         if (ARCHIVE.order.length) await loadShard(ARCHIVE.order[0]);
       }
     } catch (err) { /* the timeline stays on feeds.json */ }
-    await manifestTask;
   }
 
   function revealArchive() {

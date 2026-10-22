@@ -406,8 +406,9 @@ jobs:
           EOF
           git push origin HEAD:main
 
-  # Once a day: copy the shards to the Internet Archive when the keys exist,
-  # then force-push one squashed commit to the orphan data branch. That branch
+  # Once a day: copy changed shards to anonymous Internet Archive items when
+  # the keys exist, then force-push one squashed commit to the orphan data
+  # branch. That branch
   # holds only archive/. The half-hour job does not push it. A GITHUB_TOKEN
   # push does not start another run of this workflow. main is not force-pushed.
   # stories.json is not part of feeds.json. The half-hour job publishes it on
@@ -505,21 +506,7 @@ jobs:
         run: |
           if [ -f wall/on ]; then echo "skip=1" >> "$GITHUB_OUTPUT"; else echo "skip=0" >> "$GITHUB_OUTPUT"; fi
 
-      - name: Upload shards to the Internet Archive
-        if: steps.wallgate.outputs.skip != '1'
-        continue-on-error: true
-        env:
-          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
-          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
-        run: |
-          if [ -z "$IA_ACCESS_KEY" ] || [ -z "$IA_SECRET_KEY" ]; then
-            python3 scripts/ia_archive.py
-            exit 0
-          fi
-          python3 -m pip install --disable-pip-version-check -q internetarchive
-          python3 scripts/ia_archive.py
-
-      - name: Publish the squashed data branch
+      - name: Restore the saved manifest
         if: steps.wallgate.outputs.skip != '1'
         run: |
           if [ -f archive/archive/index.json ]; then
@@ -528,6 +515,19 @@ jobs:
           fi
           git fetch -q --depth=1 origin data || true
           git checkout origin/data -- archive/ia-manifest.json archive/ia-state.json stories.json 2>/dev/null || true
+
+      - name: Upload shards to the Internet Archive
+        if: steps.wallgate.outputs.skip != '1'
+        continue-on-error: true
+        env:
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/ia_archive.py
+
+      - name: Publish the squashed data branch
+        if: steps.wallgate.outputs.skip != '1'
+        run: |
           if [ ! -f archive/index.json ]; then
             echo "no archive index; not updating data"
             exit 1
