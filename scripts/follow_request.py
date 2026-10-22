@@ -410,6 +410,59 @@ def _same(feed: dict, spec: dict) -> bool:
     return bool(url) and url == spec["url"].rstrip("/").lower()
 
 
+def aliases(row: dict) -> list[str]:
+    """Lowercase ids for the same account. The removal list matches any of them."""
+    if not isinstance(row, dict):
+        return []
+    platform = str(row.get("platform") or "").strip().lower()
+    handle = str(row.get("handle") or "").lstrip("@").strip().lower()
+    ident = str(row.get("id") or "").strip().lower()
+    tokens = []
+
+    def add(token: str) -> None:
+        text = str(token or "").strip().lower()
+        if text and text not in tokens:
+            tokens.append(text)
+
+    add(ident)
+    if platform and handle:
+        add(platform + ":" + handle)
+    channel = str(row.get("channelId") or "").strip()
+    if platform == "youtube" and channel:
+        add("youtube:" + channel.lower())
+    return tokens
+
+
+def remember_removed(config: dict, row: dict) -> None:
+    """Keep a removed account off the auto-add list."""
+    removed = config.get("removed")
+    if not isinstance(removed, list):
+        removed = []
+        config["removed"] = removed
+    have = {str(item).strip().lower() for item in removed}
+    for token in aliases(row):
+        if token not in have:
+            removed.append(token)
+            have.add(token)
+
+
+def forget_removed(config: dict, row: dict) -> None:
+    """An explicit follow is allowed to bring a removed account back."""
+    gone = set(aliases(row))
+    removed = config.get("removed")
+    if not isinstance(removed, list) or not gone:
+        return
+    config["removed"] = [item for item in removed if str(item).strip().lower() not in gone]
+
+
+def is_removed(config: dict, row: dict) -> bool:
+    removed = config.get("removed")
+    if not isinstance(removed, list):
+        return False
+    have = {str(item).strip().lower() for item in removed if str(item).strip()}
+    return any(token in have for token in aliases(row))
+
+
 def apply_to_config(config: dict, kind: str, spec: dict) -> str:
     feeds = config.setdefault("feeds", [])
     found = [feed for feed in feeds if _same(feed, spec)]
@@ -418,10 +471,13 @@ def apply_to_config(config: dict, kind: str, spec: dict) -> str:
             raise Reject(found[0].get("id") + " is already followed")
         row = entry_for(spec)
         feeds.append(row)
+        forget_removed(config, row)
         return "Added " + row["id"] + "."
     if not found:
         raise Reject(spec["platform"] + ":" + spec["handle"] + " is not in the feeds")
     removed = found[0].get("id") or spec["platform"] + ":" + spec["handle"]
+    for feed in found:
+        remember_removed(config, feed)
     config["feeds"] = [feed for feed in feeds if feed not in found]
     return "Removed " + removed + "."
 

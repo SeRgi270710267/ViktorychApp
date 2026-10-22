@@ -926,16 +926,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel10-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel11-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "superintel10-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "superintel11-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel10-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel11-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
@@ -1137,7 +1137,9 @@ def main() -> None:
         duplicate_rejected = True
     check(duplicate_rejected, "a duplicate follow is rejected")
     removed, follow_config = follow_req.run("owner-account", "owner-account", "Unfollow request: x nasa", "### Account\n\nx:nasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
-    check(removed.startswith("Removed x:nasa") and follow_config["feeds"] == [], "an unfollow removes the account")
+    check(removed.startswith("Removed x:nasa") and follow_config["feeds"] == [] and "x:nasa" in follow_config.get("removed", []), "an unfollow removes the account and blocks auto-add")
+    brought, follow_config = follow_req.run("owner-account", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    check(brought.startswith("Added x:nasa") and follow_config["feeds"][0]["id"] == "x:nasa" and follow_config.get("removed") == [], "an explicit follow clears the auto-add block")
     untouched = {"feeds": [{"id": "x:keep"}]}
     ignored, same_config = follow_req.run("someone", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
     check(ignored == "" and same_config["feeds"] == [{"id": "x:keep"}], "an issue from anyone else is ignored")
@@ -3544,7 +3546,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "superintel10-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "superintel11-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     check("IG_SESSION" in workflow and "::add-mask::${IG_SESSION}" in workflow and "stories.json" in workflow and "publish-stories" in workflow, "the sync masks the story session and publishes stories.json")
     check("VK_USER_TOKEN: ${{ secrets.VK_USER_TOKEN }}" in workflow and 'echo "::add-mask::${VK_USER_TOKEN}"' in workflow, "the sync masks the VK user token and does not print it")
     instructions = (ROOT / "docs" / "vk-stories-token.md").read_text(encoding="utf-8")
@@ -3722,6 +3724,102 @@ def story_checks() -> None:
     check("border-radius: 16px" in styles and "linear-gradient" in styles and "#stories" in styles, "story avatars are rounded squares and the viewer is full screen")
     row = subprocess.run(["node", "scripts/stories_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "story tray ordering passed\n" + row.stdout + row.stderr)
+
+    import auto_add
+
+    def auto_fetch(url):
+        if "fxtwitter.com/redacted_handle" in url:
+            return 200, '{"screen_name":"redacted_handle","id":"1"}'
+        if "fxtwitter.com/BrianRoemmele" in url:
+            return 200, '{"screen_name":"BrianRoemmele"}'
+        if "fxtwitter.com/freshname" in url or "fxtwitter.com/nasa" in url:
+            return 200, '{"screen_name":"freshname"}'
+        if "t.me/s/durov" in url:
+            return 200, '<div class="tgme_widget_message_wrap" data-post="durov/1">durov</div>'
+        if "vk.com/team" in url:
+            return 200, "<html>team community</html>"
+        if "videos.xml" in url:
+            return 200, "<feed><entry></entry></feed>"
+        if "instagram.com/someuser" in url:
+            return 200, "<html>login</html>"
+        if "fxtwitter.com/DeniedUser" in url:
+            return 403, "no"
+        return 404, ""
+
+    carriers = [
+        {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle", "profile": {"name": "Elon Musk"}},
+        {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram", "profile": {"name": "Telegram News"}},
+        {"id": "vk:vk", "platform": "vk", "handle": "vk", "profile": {"name": "VK"}},
+        {"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle"},
+        {"id": "youtube:redacted_handle", "platform": "youtube", "handle": "redacted_handle", "channelId": "UCfgtuaUadGgOA-91geQ8Qog"},
+        {"id": "x:already", "platform": "x", "handle": "already", "origin": "repost", "defaultFollow": False, "adapter": "fxtwitter"},
+        {"id": "x:X", "platform": "x", "handle": "X", "defaultFollow": False, "adapter": "fxtwitter"},
+    ]
+    discovered = [
+        {"platform": "x", "feedId": "x:redacted_handle", "kind": "repost", "handle": "redacted_handle", "author": "Sawyer Merritt", "avatar": "https://pbs.twimg.com/a.jpg", "sortDate": "2026-10-20T17:22:54.000Z", "repostedBy": {"handle": "redacted_handle", "name": "Elon Musk", "platform": "x", "feedId": "x:redacted_handle"}},
+        {"platform": "x", "feedId": "x:redacted_handle", "kind": "quote", "handle": "redacted_handle", "quoted": {"handle": "SomeoneElse"}},
+        {"platform": "x", "feedId": "x:redacted_handle", "kind": "repost", "handle": "BrianRoemmele", "author": "Brian", "repostedBy": {"handle": "redacted_handle", "feedId": "x:redacted_handle"}},
+        {"platform": "telegram", "feedId": "telegram:telegram", "kind": "repost", "handle": "durov", "author": "Pavel Durov", "forwardedFrom": {"handle": "durov", "name": "Pavel Durov"}, "repostedBy": {"handle": "telegram", "feedId": "telegram:telegram", "platform": "telegram"}},
+        {"platform": "telegram", "feedId": "telegram:telegram", "kind": "post", "handle": "telegram", "forwardedFrom": {"name": "Hidden person"}, "repostedBy": {"handle": "telegram", "feedId": "telegram:telegram"}},
+        {"platform": "vk", "feedId": "vk:vk", "kind": "repost", "handle": "team", "author": "Team", "repostedBy": {"handle": "vk", "feedId": "vk:vk", "platform": "vk"}},
+        {"platform": "vk", "feedId": "vk:vk", "kind": "repost", "handle": "12345", "repostedBy": {"handle": "vk", "feedId": "vk:vk"}},
+        {"platform": "instagram", "feedId": "instagram:redacted_handle", "kind": "repost", "handle": "someuser", "repostedBy": {"handle": "redacted_handle", "feedId": "instagram:redacted_handle"}},
+        {"platform": "youtube", "feedId": "youtube:redacted_handle", "kind": "repost", "handle": "OtherCreator", "channelId": "UCabcdefghijklmnopqrstuv", "author": "Other Creator", "repostedBy": {"handle": "redacted_handle", "feedId": "youtube:redacted_handle"}},
+        {"platform": "x", "feedId": "x:already", "kind": "repost", "handle": "freshname", "author": "Fresh", "repostedBy": {"handle": "already", "feedId": "x:already"}},
+    ]
+    auto_config = {"feeds": [dict(row) for row in carriers], "removed": ["x:brianroemmele"], "autoAdd": {"perRun": 5, "total": 12, "paceSeconds": 2}, "people": []}
+    added_ids = auto_add.apply_auto_adds(auto_config, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
+    added_set = set(added_ids)
+    check(added_set == {"x:redacted_handle", "telegram:durov", "vk:team", "youtube:OtherCreator"}, "reposts add the original public account and skip quotes, private, removed, and a second hop")
+    sawyer = next(feed for feed in auto_config["feeds"] if feed.get("id") == "x:redacted_handle")
+    check(sawyer.get("origin") == "repost" and sawyer.get("defaultFollow") is False and sawyer.get("limit") == 4 and sawyer["addedFrom"]["handle"] == "redacted_handle" and sawyer["addedFrom"]["feedId"] == "x:redacted_handle" and sawyer["addedFrom"]["at"].startswith("2026-10-20T17:22:54") and sawyer["adapter"] == "fxtwitter", "an auto-added account records who reposted it and is not a default follow")
+    youtube_added = next(feed for feed in auto_config["feeds"] if feed.get("id") == "youtube:OtherCreator")
+    check(youtube_added.get("channelId") == "UCabcdefghijklmnopqrstuv" and youtube_added.get("adapter") == "youtube_rss", "a shared YouTube channel is added by its channel id")
+    again = auto_add.apply_auto_adds(auto_config, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
+    check(again == [], "a later sync does not add the same account twice")
+    capped = {"feeds": [dict(row) for row in carriers], "removed": [], "autoAdd": {"perRun": 1, "total": 12}, "people": []}
+    one = auto_add.apply_auto_adds(capped, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
+    check(len(one) == 1, "a sync adds at most perRun new accounts")
+    full = {"feeds": [dict(row) for row in carriers], "removed": [], "autoAdd": {"perRun": 5, "total": 1}, "people": []}
+    check(auto_add.apply_auto_adds(full, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"]) == [], "the total cap counts accounts already added from reposts")
+    denied_posts = [
+        {"platform": "x", "feedId": "x:redacted_handle", "kind": "repost", "handle": "DeniedUser", "author": "Denied", "repostedBy": {"handle": "redacted_handle", "feedId": "x:redacted_handle"}},
+        {"platform": "telegram", "feedId": "telegram:telegram", "kind": "repost", "handle": "durov", "forwardedFrom": {"handle": "durov", "name": "Pavel Durov"}, "repostedBy": {"handle": "telegram", "feedId": "telegram:telegram"}},
+    ]
+    denied_config = {"feeds": [dict(row) for row in carriers if row["id"] in ("x:redacted_handle", "telegram:telegram")], "autoAdd": {"perRun": 5, "total": 12}, "people": []}
+    denied_ids = auto_add.apply_auto_adds(denied_config, denied_posts, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
+    check(denied_ids == ["telegram:durov"], "a 403 stops more checks on that platform and still adds other platforms")
+    profiles = [
+        {"id": "x:redacted_handle", "handle": "redacted_handle", "configured": True},
+        {"id": "x:redacted_handle", "handle": "redacted_handle", "configured": False},
+        {"id": "x:X", "handle": "X", "configured": True},
+    ]
+    auto_add.stamp_profiles(profiles, auto_config["feeds"])
+    stamped = {row["id"]: row for row in profiles}
+    check(stamped["x:redacted_handle"]["configured"] is False and stamped["x:redacted_handle"]["origin"] == "repost" and stamped["x:redacted_handle"]["addedFrom"]["handle"] == "redacted_handle", "the published profile stays Added and keeps the repost note")
+    check(stamped["x:redacted_handle"]["configured"] is True and "origin" not in stamped["x:redacted_handle"], "a normal source stays a default follow")
+    check(stamped["x:X"]["configured"] is False and "origin" not in stamped["x:X"], "defaultFollow false stays out of Following")
+    with tempfile.TemporaryDirectory() as tmp:
+        folder = Path(tmp)
+        base = folder / "feeds.config.json"
+        incoming = folder / "incoming.json"
+        base.write_text('{\n  "cap": 300,\n  "autoAdd": {"perRun": 3, "total": 12},\n  "removed": ["x:brianroemmele"],\n  "feeds": [\n    {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"}\n  ]\n}\n', encoding="utf-8")
+        evil = json.loads(json.dumps(sawyer))
+        evil["source_urls"] = ["http://127.0.0.1/secret"]
+        incoming.write_text(json.dumps({"feeds": [sawyer, evil]}), encoding="utf-8")
+        merged_ids = auto_add.merge_into_file(base, incoming)
+        merged = json.loads(base.read_text(encoding="utf-8"))
+        check(merged_ids == ["x:redacted_handle"] and merged["feeds"][0]["id"] == "x:redacted_handle" and merged["feeds"][1]["id"] == "x:redacted_handle" and merged["cap"] == 300, "the config commit appends the repost source and drops a rewritten URL")
+        blocked = dict(sawyer)
+        blocked["id"] = "x:brianroemmele"
+        blocked["handle"] = "BrianRoemmele"
+        blocked["profile"] = {"name": "Brian", "url": "https://x.com/BrianRoemmele"}
+        from follow_request import entry_for as entry_for_feed
+        blocked = entry_for_feed({"platform": "x", "handle": "BrianRoemmele", "url": "https://x.com/BrianRoemmele", "channelId": ""})
+        blocked["origin"] = "repost"
+        blocked["defaultFollow"] = False
+        incoming.write_text(json.dumps({"feeds": [blocked]}), encoding="utf-8")
+        check(auto_add.merge_into_file(base, incoming) == [], "a removed account is not committed again")
 
 
 if __name__ == "__main__":
