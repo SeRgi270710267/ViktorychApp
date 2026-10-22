@@ -9358,7 +9358,7 @@ if (STATE.histClear) {
     }
     const req = on
       ? accountCall("/v1/reposts", { method: "PUT", body: { kind: "repost", post: snap } })
-      : accountCall("/v1/reposts", { method: "DELETE", body: { postKey: postKey } });
+      : accountCall("/v1/reposts", { method: "POST", body: { postKey: postKey } });
     Promise.resolve(req).then((body) => finishRepost(post, postKey, on, body)).catch(() => finishRepost(post, postKey, on, null));
   }
 
@@ -9403,7 +9403,7 @@ if (STATE.histClear) {
     pendingReposts[key] = { postKey: key, removed: true, inflight: true };
     STATE.menu = null;
     render();
-    accountCall("/v1/reposts", { method: "DELETE", body: { postKey: key } }).then((body) => {
+    accountCall("/v1/reposts", { method: "POST", body: { postKey: key } }).then((body) => {
       if (!body || body.status !== 200) {
         delete pendingReposts[key];
         toast(tr("Couldn't save that repost."));

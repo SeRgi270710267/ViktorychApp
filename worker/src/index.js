@@ -1530,7 +1530,7 @@ async function route(request, env) {
   if (path === "/v1/sync" && request.method === "GET") return handleSyncGet(request, env);
   if (path === "/v1/sync" && request.method === "PUT") return handleSyncPut(request, env);
   if (path === "/v1/reposts" && request.method === "PUT") return handleRepostPut(request, env);
-  if (path === "/v1/reposts" && request.method === "DELETE") return handleRepostDelete(request, env);
+  if (path === "/v1/reposts" && (request.method === "POST" || request.method === "DELETE")) return handleRepostDelete(request, env);
   if (path === "/v1/handle" && request.method === "GET") return handleHandle(env, url);
   const profile = path.match(/^\/v1\/profile\/([^/]+)$/);
   if (profile && request.method === "GET") {

@@ -712,7 +712,7 @@ test("reposts and quotes stay on the account and show on that profile", async ()
   assert.equal(beaProfile.body.reposts[0].post.quoted.text, "original post");
 
   const undone = await call("/v1/reposts", {
-    method: "DELETE",
+    method: "POST",
     ip: "203.0.113.188",
     token: ada.body.token,
     body: { postKey: "r:youtube:yt1" }
