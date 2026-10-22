@@ -1940,6 +1940,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const direct = cleanSocialIdent(status);
     if (direct) return direct;
     const blob = [post && post.url, status, id].filter(Boolean).join(" ");
+    if (platform === "facebook") {
+      const fb = blob.match(/(?:videos|reel)\/(\d{5,20})|[?&]v=(\d{5,20})/);
+      const found = fb ? cleanSocialIdent(fb[1] || fb[2]) : "";
+      if (found) return found;
+    }
     const patterns = [
       /instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]{1,80})/,
       /threads\.(?:com|net)\/(?:@[^/\s]+\/)?(?:post|t)\/([A-Za-z0-9_-]{1,80})/,
@@ -1967,7 +1972,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (role === "photo") return "tiktok/" + handle + "/" + ident + "/photo/" + n;
       return "";
     }
-    if (["x", "instagram", "threads", "youtube", "vk", "telegram", "rss"].indexOf(platform) < 0) return "";
+    if (["x", "instagram", "threads", "youtube", "vk", "telegram", "rss", "facebook"].indexOf(platform) < 0) return "";
     const ident = stableSocialIdent(post);
     if (!ident) return "";
     if (role === "thumb") return "social/" + platform + "/" + ident + "/thumb/" + n;

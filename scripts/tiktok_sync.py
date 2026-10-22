@@ -56,7 +56,30 @@ def publish_iso(timestamp) -> str:
     return iso
 
 
+def codec_name(fmt: dict) -> str:
+    return str((fmt or {}).get("vcodec") or "").lower()
+
+
+def hevc_codec(fmt: dict) -> bool:
+    name = codec_name(fmt)
+    return any(marker in name for marker in ("h265", "hevc", "bytevc1", "hvc1", "hev1"))
+
+
+def format_rank(fmt: dict) -> tuple:
+    rate = 0.0
+    for key in ("tbr", "vbr", "bitrate"):
+        try:
+            value = float(fmt.get(key) or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        if value > 0:
+            rate = value
+            break
+    return (rate, int(fmt.get("height") or 0), int(fmt.get("width") or 0))
+
+
 def choose_format(formats) -> dict | None:
+    """Top h265 or bytevc1 bitrate. A lower h264 variant is only the fallback."""
     rows = []
     for fmt in formats or []:
         if not isinstance(fmt, dict):
@@ -66,22 +89,14 @@ def choose_format(formats) -> dict | None:
         if not vcodec or vcodec == "none" or not url.startswith("https://"):
             continue
         rows.append(fmt)
-    h264 = [
-        fmt for fmt in rows
-        if "avc" in str(fmt.get("vcodec") or "").lower() or "h264" in str(fmt.get("vcodec") or "").lower()
-    ]
-    pool = h264 or [
-        fmt for fmt in rows
-        if "bytevc2" not in str(fmt.get("vcodec") or "").lower() and "hev" not in str(fmt.get("vcodec") or "").lower()
-    ]
+    hevc = [fmt for fmt in rows if hevc_codec(fmt)]
+    if hevc:
+        pool = hevc
+    else:
+        pool = [fmt for fmt in rows if "bytevc2" not in codec_name(fmt)] or rows
     if not pool:
-        pool = rows
-    best = None
-    for fmt in pool:
-        height = int(fmt.get("height") or 0)
-        if best is None or height > int(best.get("height") or 0):
-            best = fmt
-    return best
+        return None
+    return max(pool, key=format_rank)
 
 
 def image_format(fmt: dict) -> bool:

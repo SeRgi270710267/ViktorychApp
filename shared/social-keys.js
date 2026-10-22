@@ -1,6 +1,6 @@
 /** Stable /tg object keys for synced social media. Keep in step with scripts/telegram_backup.py. */
 
-const SOCIAL_PLATFORMS = ["x", "instagram", "threads", "youtube", "vk", "telegram", "rss"];
+const SOCIAL_PLATFORMS = ["x", "instagram", "threads", "youtube", "vk", "telegram", "rss", "facebook"];
 
 function cleanIdent(value) {
   const raw = String(value || "").trim();
@@ -16,9 +16,14 @@ function stableIdent(post) {
     const match = (status || id).match(/(\d{8,22})/);
     return match ? match[1] : "";
   }
-  const direct = cleanIdent(status);
+    const direct = cleanIdent(status);
   if (direct) return direct;
   const blob = [post && post.url, status, id].filter(Boolean).join(" ");
+  if (platform === "facebook") {
+    const fb = blob.match(/(?:videos|reel)\/(\d{5,20})|[?&]v=(\d{5,20})/);
+    const found = fb ? cleanIdent(fb[1] || fb[2]) : "";
+    if (found) return found;
+  }
   const patterns = [
     /instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]{1,80})/,
     /threads\.(?:com|net)\/(?:@[^/\s]+\/)?(?:post|t)\/([A-Za-z0-9_-]{1,80})/,
