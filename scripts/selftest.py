@@ -3180,7 +3180,7 @@ def ia_backup_checks() -> None:
     snap = (ROOT / "scripts" / "pull_snapshot.py").read_text(encoding="utf-8")
     check("feeds-archive" not in archive_src and "Viktorych" not in archive_src and "creator" not in archive_src and "opensource" not in archive_src and "internetarchive" not in archive_src and "run_backup" in archive_src, "shard uploads use the anonymous backup items")
     check("internetarchive" not in sync and "Restore the saved manifest" in sync, "the daily shard upload restores the manifest before it writes")
-    check("workflow_dispatch" in retire_wf and "schedule:" not in retire_wf and "cron:" not in retire_wf and 'echo "$IA_' not in retire_wf and "echo $IA_" not in retire_wf and "IA_ACCESS_KEY" in retire_wf and "IA_SECRET_KEY" in retire_wf and "ia_retire.py copy" in retire_wf and "ia_retire.py delete" in retire_wf, "the retire workflow is manual, uses the keys, and does not print them")
+    check("workflow_dispatch" in retire_wf and "schedule:" not in retire_wf and "cron:" not in retire_wf and 'echo "$IA_' not in retire_wf and "echo $IA_" not in retire_wf and "IA_ACCESS_KEY" in retire_wf and "IA_SECRET_KEY" in retire_wf and "ia_retire.py copy" in retire_wf and "ia_retire.py delete" in retire_wf and 'git checkout -f "$head"' in retire_wf, "the retire workflow is manual, uses the keys, and does not print them")
     check("feeds-archive" not in app and "ARCHIVE_IA" not in app and "installIaManifest(manifestDoc" in app, "the page resolves archive shards from the manifest")
     check("feeds-archive" not in snap and "def shard_url(" in snap and '("ia",' not in snap, "snapshot reads archive shards from the manifest")
     anon = "x" + ("ab" * 16)
