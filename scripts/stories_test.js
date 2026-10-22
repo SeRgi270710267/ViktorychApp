@@ -21,6 +21,7 @@ assert.strictEqual(fs.readFileSync("stories.js", "utf8").includes("?."), false);
 assert.strictEqual(fs.readFileSync("stories.js", "utf8").includes("??"), false);
 
 const now = Date.parse("2026-10-21T19:00:00Z");
+Date.now = function () { return now; };
 const doc = {
   accounts: [
     {

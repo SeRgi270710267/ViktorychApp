@@ -4,7 +4,9 @@
 `copy` uploads remaining files onto anonymous items, checks the new bytes,
 and writes archive/ia-manifest.json. `delete` runs only after that manifest
 is on the data branch and every copied file still matches its hash. It then
-removes every file on the named items and tries to blank creator, title,
+removes every file on the named items. Catalog files that the file API leaves
+in place are removed by asking Internet Archive to delete that named item.
+Anonymous items are never deleted. The run also tries to blank creator, title,
 description, subject, and collection. A refusal is recorded and does not stop
 the rest. The access keys are never printed, and anonymous item ids are counted
 rather than listed.
@@ -20,6 +22,7 @@ import os
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -136,53 +139,178 @@ def _old_items(config: dict) -> list:
     return ia_backup.discover_old_items(urlopen)
 
 
+def _named_item(item: str) -> bool:
+    return bool(ia_backup.old_slot(item)) and not ia_backup.valid_item_id(item)
+
+
+def _file_names(doc: dict) -> list:
+    names = []
+    for row in (doc or {}).get("files") or []:
+        name = str((row or {}).get("name") or "")
+        if name:
+            names.append(name)
+    return names
+
+
+def _read_item(metadata_base: str, item: str, urlopen) -> tuple[int, dict | None]:
+    status, body = ia_backup._http_bytes(metadata_base.rstrip("/") + "/" + urllib.parse.quote(item), urlopen)
+    if status != 200 or not body:
+        return status, None
+    try:
+        doc = json.loads(body.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return status, None
+    return status, doc if isinstance(doc, dict) else None
+
+
+DROP_HEADERS = {"x-archive-cascade-delete": "1", "x-archive-keep-old-version": "0"}
+
+
+def _s3_remove(endpoint: str, item: str, name: str, access: str, secret: str, opener, notes: list) -> bool:
+    code = ia_backup._delete_status(endpoint, item, name, access, secret, opener, DROP_HEADERS)
+    if code in {200, 202, 204, 404}:
+        notes.append(f"[ia-retire] removed {item}/{name}")
+        return True
+    notes.append(f"[ia-retire] could not remove {item}/{name} ({code})")
+    return False
+
+
+def _task_accepted(status: int, payload: bytes) -> bool:
+    if status not in {200, 201, 202} or not payload:
+        return False
+    try:
+        doc = json.loads(payload.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return False
+    if not isinstance(doc, dict) or doc.get("success") is False or doc.get("error"):
+        return False
+    value = doc.get("value") if isinstance(doc.get("value"), dict) else {}
+    return bool(doc.get("success") is True or value.get("task_id") or doc.get("task_id"))
+
+
+def _submit_delete_task(item: str, access: str, secret: str, opener, tasks_url: str, sleep) -> str:
+    """Ask Internet Archive to delete one named item. Returns accepted or refused."""
+    if not _named_item(item):
+        return "refused"
+    body = json.dumps({"identifier": item, "cmd": "delete.php", "args": {}}, separators=(",", ":")).encode()
+    delay = 5.0
+    status = 0
+    payload = b""
+    for attempt in range(4):
+        request = urllib.request.Request(
+            tasks_url,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"LOW {access}:{secret}",
+                "Content-Type": "application/json",
+                "User-Agent": ia_backup.UA,
+                "X-Accept-Reduced-Priority": "1",
+            },
+        )
+        try:
+            with opener.open(request, timeout=60) as response:
+                status = getattr(response, "status", 200)
+                payload = response.read() or b""
+        except urllib.error.HTTPError as err:
+            status = err.code
+            try:
+                payload = err.read() or b""
+            except OSError:
+                payload = b""
+        except (urllib.error.URLError, TimeoutError, OSError):
+            status = 0
+            payload = b""
+        if _task_accepted(status, payload):
+            return "accepted"
+        if attempt + 1 < 4 and status in {0, 429, 503}:
+            sleep(delay)
+            delay = min(delay * 2, 60)
+            continue
+        break
+    return "refused"
+
+
+def _wait_until_clear(metadata_base: str, item: str, urlopen, sleep, wait: float) -> list:
+    started = time.monotonic()
+    delay = 5.0
+    last = ["unread"]
+    while True:
+        status, doc = _read_item(metadata_base, item, urlopen)
+        if status == 404:
+            return []
+        if status == 200 and doc is not None:
+            last = _file_names(doc)
+            if not last:
+                return []
+        if time.monotonic() - started >= wait:
+            return last
+        sleep(delay)
+        delay = min(delay * 2, 30)
+
+
 def purge_files(config: dict, state: dict, sleep=time.sleep) -> dict:
     """Delete every file on the named items. Nothing here uploads."""
     urlopen = config.get("urlopen") or urllib.request.urlopen
     opener = config.get("opener") or ia_backup._opener()
     metadata_base = (config.get("metadata_base") or ia_backup.METADATA_BASE).rstrip("/")
+    tasks_url = (config.get("tasks_base") or "https://archive.org/services/tasks.php").rstrip("/")
     endpoint = config.get("endpoint") or ia_backup.S3_ENDPOINT
     access = config["access"]
     secret = config["secret"]
     pace = float(config.get("pace") if config.get("pace") is not None else 1)
+    wait = float(config["delete_wait"]) if config.get("delete_wait") is not None else 600.0
     notes = []
     deleted = 0
     remaining = {}
     emptied = []
+    tasks_accepted = 0
+    tasks_refused = 0
     for item in _old_items(config):
-        if not ia_backup.old_slot(item):
+        if not _named_item(item):
             continue
-        doc = ia_backup._http_json(metadata_base + "/" + urllib.parse.quote(item), urlopen) or {}
-        names = []
-        for row in doc.get("files") or []:
-            name = str((row or {}).get("name") or "")
-            if name:
-                names.append(name)
-        if not names and not doc.get("metadata") and not doc.get("files"):
+        status, doc = _read_item(metadata_base, item, urlopen)
+        if status == 404 or (status == 200 and doc is not None and not _file_names(doc)):
             notes.append(f"[ia-retire] {item} is already empty")
             emptied.append(item)
             remaining[item] = []
             continue
-        drop_headers = {"x-archive-cascade-delete": "1", "x-archive-keep-old-version": "0"}
-        for name in names:
-            if ia_backup._delete_object(endpoint, item, name, access, secret, opener, drop_headers):
+        if status != 200 or doc is None:
+            notes.append(f"[ia-retire] {item} metadata {status}")
+            remaining[item] = ["unread"]
+            continue
+        for name in _file_names(doc):
+            if _s3_remove(endpoint, item, name, access, secret, opener, notes):
                 deleted += 1
-                notes.append(f"[ia-retire] removed {item}/{name}")
-            else:
-                notes.append(f"[ia-retire] could not remove {item}/{name}")
             if pace:
                 sleep(pace)
-        after = ia_backup._http_json(metadata_base + "/" + urllib.parse.quote(item), urlopen) or {}
-        left = [str((row or {}).get("name") or "") for row in (after.get("files") or []) if (row or {}).get("name")]
-        if left:
+        status, doc = _read_item(metadata_base, item, urlopen)
+        left = _file_names(doc) if status == 200 and doc is not None else ([] if status == 404 else ["unread"])
+        if left and left != ["unread"]:
             for name in left:
-                if ia_backup._delete_object(endpoint, item, name, access, secret, opener, drop_headers):
+                if _s3_remove(endpoint, item, name, access, secret, opener, notes):
                     deleted += 1
-                    notes.append(f"[ia-retire] removed {item}/{name}")
                 if pace:
                     sleep(pace)
-            after = ia_backup._http_json(metadata_base + "/" + urllib.parse.quote(item), urlopen) or {}
-            left = [str((row or {}).get("name") or "") for row in (after.get("files") or []) if (row or {}).get("name")]
+            status, doc = _read_item(metadata_base, item, urlopen)
+            left = _file_names(doc) if status == 200 and doc is not None else ([] if status == 404 else ["unread"])
+        if not left:
+            emptied.append(item)
+            remaining[item] = []
+            notes.append(f"[ia-retire] emptied {item}")
+            continue
+        if left == ["unread"] or status != 200:
+            remaining[item] = left
+            notes.append(f"[ia-retire] {item} still has {len(left)} files")
+            continue
+        outcome = _submit_delete_task(item, access, secret, opener, tasks_url, sleep)
+        if outcome == "accepted":
+            tasks_accepted += 1
+            notes.append(f"[ia-retire] {item} delete task accepted")
+            left = _wait_until_clear(metadata_base, item, urlopen, sleep, wait)
+        else:
+            tasks_refused += 1
+            notes.append(f"[ia-retire] {item} delete task refused")
         remaining[item] = left
         if not left:
             emptied.append(item)
@@ -193,6 +321,8 @@ def purge_files(config: dict, state: dict, sleep=time.sleep) -> dict:
         "deleted": deleted,
         "emptied": emptied,
         "remaining": remaining,
+        "tasks_accepted": tasks_accepted,
+        "tasks_refused": tasks_refused,
         "notes": [ia_backup.scrub(line, [access, secret]) for line in notes],
     }
 
@@ -284,19 +414,6 @@ def blank_metadata(config: dict, sleep=time.sleep) -> dict:
     }
 
 
-def _kept_and_blocking(remaining: dict) -> tuple[list, list]:
-    """System catalogs IA will not delete are separate from files that must go."""
-    kept_system = []
-    still_there = []
-    for names in remaining.values():
-        for name in names:
-            if str(name).endswith(("_meta.xml", "_files.xml")):
-                kept_system.append(name)
-            else:
-                still_there.append(name)
-    return kept_system, still_there
-
-
 def _print_notes(notes) -> None:
     for line in notes:
         if line:
@@ -348,13 +465,15 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"[ia-retire] emptied {len(purged['emptied'])}, "
             f"removed {purged['deleted']}, "
+            f"delete tasks accepted {purged['tasks_accepted']}, "
+            f"delete tasks refused {purged['tasks_refused']}, "
             f"anonymous items {blanked['anonymous']}, "
             f"uploader still set on {blanked['uploader_left']}"
         )
-        kept_system, still_there = _kept_and_blocking(purged["remaining"])
-        if kept_system:
-            print(f"[ia-retire] system catalog files kept {len(kept_system)}")
-        return 1 if still_there else 0
+        leftovers = [name for names in purged["remaining"].values() for name in names]
+        if leftovers:
+            print(f"[ia-retire] files still listed {len(leftovers)}")
+        return 1 if leftovers else 0
     except Exception as err:
         print("[ia-retire] failed", file=sys.stderr)
         print(ia_backup.scrub(str(err), [access, secret]), file=sys.stderr)
