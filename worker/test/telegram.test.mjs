@@ -91,6 +91,9 @@ test("telegram media requires a session and a worker secret", async () => {
     const missing = await call(plain, "/tg/photos/a.jpg", { ip: "203.0.113.83", token: session.token });
     assert.equal(missing.status, 503);
     assert.equal(missing.body.error, "not_configured");
+    const loopMissing = await call(plain, "/tg/loop/v1/index.m3u8", { ip: "203.0.113.84" });
+    assert.equal(loopMissing.status, 503);
+    assert.equal(loopMissing.body.error, "not_configured");
   } finally {
     await plain.dispose();
   }
@@ -163,5 +166,162 @@ test("a signed-in viewer receives a ranged telegram file and a playlist", async 
     assert.equal(unsafe.status, 404);
   } finally {
     await mf.dispose();
+  }
+});
+
+test("the radio loop playlist is public and immutable", async () => {
+  const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT }));
+  try {
+    await mf.dispatchFetch("https://accounts.test/v1/health", { headers: { "CF-Connecting-IP": "203.0.113.71" } });
+    const db = await mf.getBindings();
+    const insert = "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, ?, ?, 'viktorych-data', ?, 3, 4, 'abc', 'video/iso.segment', ?, 1, 1, 0, 1)";
+    for (const row of [
+      ["loop/v1", "init", -1, "LOOPINIT", 0],
+      ["loop/v1", "segment", 0, "LOOP0", 10.031],
+      ["loop/v1", "segment", 1, "LOOP1", 10],
+      ["loop/v1/aac", "segment", 0, "AACAAC0", 10]
+    ]) {
+      await db.DB.prepare(insert).bind(row[0], row[1], row[2], row[3], row[4]).run();
+    }
+
+    const playlist = await call(mf, "/tg/loop/v1/index.m3u8", { ip: "203.0.113.72" });
+    assert.equal(playlist.status, 200);
+    const text = new TextDecoder().decode(playlist.bytes);
+    assert.match(text, /#EXT-X-VERSION:7/);
+    assert.match(text, /\/tg\/loop\/v1\/init/);
+    assert.match(text, /\/tg\/loop\/v1\/0/);
+    assert.match(text, /\/tg\/loop\/v1\/1/);
+    assert.match(text, /#EXTINF:10\.031,/);
+    assert.match(playlist.headers.get("cache-control") || "", /immutable/);
+    assert.match(playlist.headers.get("cdn-cache-control") || "", /immutable/);
+
+    const segment = await call(mf, "/tg/loop/v1/0", { ip: "203.0.113.73" });
+    assert.equal(segment.status, 200);
+    assert.match(segment.headers.get("cache-control") || "", /immutable/);
+    assert.match(segment.headers.get("cdn-cache-control") || "", /immutable/);
+
+    const aac = await call(mf, "/tg/loop/v1/aac/index.m3u8", { ip: "203.0.113.74" });
+    assert.equal(aac.status, 200);
+    const aacText = new TextDecoder().decode(aac.bytes);
+    assert.match(aacText, /#EXT-X-VERSION:3/);
+    assert.match(aacText, /\/tg\/loop\/v1\/aac\/0/);
+    assert.doesNotMatch(aacText, /EXT-X-MAP/);
+
+    const photos = await call(mf, "/tg/photos/a.jpg", { ip: "203.0.113.75" });
+    assert.equal(photos.status, 401);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("shorts stay owner-only, a hidden avatar stays hidden, and a song key is not served", async () => {
+  const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT }));
+  try {
+    const readerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.60", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Reader", handle: "reader_tg" })
+    });
+    const reader = await readerSignup.json();
+    assert.equal(readerSignup.status, 201);
+    const ownerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.61", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Owner", handle: "owner_tg" })
+    });
+    const owner = await ownerSignup.json();
+    assert.equal(ownerSignup.status, 201);
+    const hiddenSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.62", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Hidden", handle: "hidden_tg" })
+    });
+    const hidden = await hiddenSignup.json();
+    assert.equal(hiddenSignup.status, 201);
+
+    const db = await mf.getBindings();
+    await db.DB.prepare("UPDATE accounts SET owner = 1 WHERE handle = ?").bind("owner_tg").run();
+    const hiddenRow = await db.DB.prepare("SELECT public_id FROM accounts WHERE handle = ?").bind("hidden_tg").first();
+    const avatarKey = "media/avatars/" + hiddenRow.public_id + "/" + "ab".repeat(32) + ".webp";
+    await db.DB.prepare("UPDATE accounts SET avatar = ?, hide_avatar = 'none' WHERE public_id = ?").bind(avatarKey, hiddenRow.public_id).run();
+    const shortKey = "archive/" + "cd".repeat(32) + ".mp4";
+    await db.DATA.put("feeds.json", JSON.stringify({
+      posts: [
+        { id: "1", platform: "x", text: "public", media: [{ url: "https://pub-example.r2.dev/photos/a.jpg" }] },
+        { id: "2", platform: "youtube", url: "https://www.youtube.com/shorts/abc", media: [{ url: "https://pub-example.r2.dev/" + shortKey }] }
+      ]
+    }));
+    const insert = "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, 'viktorych-data', ?, 4, 4, 'abc', 'application/octet-stream', 0, 1, 1, 0, 1)";
+    await db.DB.prepare(insert).bind(shortKey, "SHORT").run();
+    await db.DB.prepare(insert).bind(avatarKey, "AVATAR").run();
+    await db.DB.prepare(insert).bind("music/abc/index.m3u8", "PLAYLIST").run();
+    await db.DB.prepare(insert).bind("music/abc/cf1373b0cf10db5ae3fe8dd7.bin", "AESKEY").run();
+
+    const anon = await call(mf, "/tg/" + shortKey, { ip: "203.0.113.63" });
+    assert.equal(anon.status, 401);
+    const refused = await call(mf, "/tg/" + shortKey, { ip: "203.0.113.64", token: reader.token });
+    assert.equal(refused.status, 403);
+    assert.equal(refused.body.error, "forbidden");
+    const allowed = await call(mf, "/tg/" + shortKey, { ip: "203.0.113.65", token: owner.token });
+    assert.equal(allowed.status, 200);
+
+    const peek = await call(mf, "/tg/" + avatarKey, { ip: "203.0.113.66", token: reader.token });
+    assert.equal(peek.status, 404);
+    const self = await call(mf, "/tg/" + avatarKey, { ip: "203.0.113.67", token: hidden.token });
+    assert.equal(self.status, 200);
+
+    const song = await call(mf, "/tg/music/abc/index.m3u8", { ip: "203.0.113.68", token: reader.token });
+    assert.equal(song.status, 200);
+    const key = await call(mf, "/tg/music/abc/cf1373b0cf10db5ae3fe8dd7.bin", { ip: "203.0.113.69", token: reader.token });
+    assert.equal(key.status, 404);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("tiktok media on /tg stays behind the sign-up gate and the owner audience", async () => {
+  const key = "tiktok/gabii_g5/7695476356548660503/video";
+  const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT }));
+  try {
+    const readerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.80", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Reader", handle: "reader_tt" })
+    });
+    const reader = await readerSignup.json();
+    const ownerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.81", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Owner", handle: "owner_tt" })
+    });
+    const owner = await ownerSignup.json();
+    const db = await mf.getBindings();
+    await db.DB.prepare("UPDATE accounts SET owner = 1 WHERE handle = ?").bind("owner_tt").run();
+    await db.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, 'cdn', 'TT1', 9, 4, 'abc', 'video/mp4', 0, 1, 1, 0, 1)").bind(key).run();
+    const anon = await call(mf, "/tg/" + key, { ip: "203.0.113.82" });
+    assert.equal(anon.status, 401);
+    const refused = await call(mf, "/tg/" + key, { ip: "203.0.113.83", token: reader.token });
+    assert.equal(refused.status, 403);
+    const allowed = await call(mf, "/tg/" + key, { ip: "203.0.113.84", token: owner.token });
+    assert.equal(allowed.status, 200);
+  } finally {
+    await mf.dispose();
+  }
+  const open = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT, TIKTOK_AUDIENCE: "all" }));
+  try {
+    const readerSignup = await open.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.85", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Reader", handle: "reader_all" })
+    });
+    const reader = await readerSignup.json();
+    const db = await open.getBindings();
+    await db.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, 'cdn', 'TT2', 10, 4, 'abc', 'video/mp4', 0, 1, 1, 0, 1)").bind(key).run();
+    const anon = await call(open, "/tg/" + key, { ip: "203.0.113.86" });
+    assert.equal(anon.status, 401);
+    const allowed = await call(open, "/tg/" + key, { ip: "203.0.113.87", token: reader.token });
+    assert.equal(allowed.status, 200);
+  } finally {
+    await open.dispose();
   }
 });

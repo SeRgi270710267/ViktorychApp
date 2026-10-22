@@ -56,7 +56,30 @@ def publish_iso(timestamp) -> str:
     return iso
 
 
+def codec_name(fmt: dict) -> str:
+    return str((fmt or {}).get("vcodec") or "").lower()
+
+
+def hevc_codec(fmt: dict) -> bool:
+    name = codec_name(fmt)
+    return any(marker in name for marker in ("h265", "hevc", "bytevc1", "hvc1", "hev1"))
+
+
+def format_rank(fmt: dict) -> tuple:
+    rate = 0.0
+    for key in ("tbr", "vbr", "bitrate"):
+        try:
+            value = float(fmt.get(key) or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        if value > 0:
+            rate = value
+            break
+    return (rate, int(fmt.get("height") or 0), int(fmt.get("width") or 0))
+
+
 def choose_format(formats) -> dict | None:
+    """Top h265 or bytevc1 bitrate. A lower h264 variant is only the fallback."""
     rows = []
     for fmt in formats or []:
         if not isinstance(fmt, dict):
@@ -66,22 +89,45 @@ def choose_format(formats) -> dict | None:
         if not vcodec or vcodec == "none" or not url.startswith("https://"):
             continue
         rows.append(fmt)
-    h264 = [
-        fmt for fmt in rows
-        if "avc" in str(fmt.get("vcodec") or "").lower() or "h264" in str(fmt.get("vcodec") or "").lower()
-    ]
-    pool = h264 or [
-        fmt for fmt in rows
-        if "bytevc2" not in str(fmt.get("vcodec") or "").lower() and "hev" not in str(fmt.get("vcodec") or "").lower()
-    ]
+    hevc = [fmt for fmt in rows if hevc_codec(fmt)]
+    if hevc:
+        pool = hevc
+    else:
+        pool = [fmt for fmt in rows if "bytevc2" not in codec_name(fmt)] or rows
     if not pool:
-        pool = rows
-    best = None
-    for fmt in pool:
-        height = int(fmt.get("height") or 0)
-        if best is None or height > int(best.get("height") or 0):
-            best = fmt
-    return best
+        return None
+    return max(pool, key=format_rank)
+
+
+def image_format(fmt: dict) -> bool:
+    if not isinstance(fmt, dict):
+        return False
+    url = str(fmt.get("url") or "")
+    if not url.startswith("https://"):
+        return False
+    ext = str(fmt.get("ext") or "").lower()
+    if ext in {"jpg", "jpeg", "png", "webp", "gif"}:
+        return True
+    vcodec = str(fmt.get("vcodec") or "").lower()
+    path = urllib.parse.urlparse(url).path.lower()
+    return vcodec in {"", "none"} and path.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif"))
+
+
+def carousel_urls(entry: dict) -> list[str]:
+    """Image URLs the existing extractor already returned. No extra parser."""
+    found = []
+    for fmt in (entry or {}).get("formats") or []:
+        if image_format(fmt):
+            url = str(fmt.get("url") or "")
+            if url not in found:
+                found.append(url)
+    images = (entry or {}).get("images") or []
+    if isinstance(images, list):
+        for item in images:
+            url = item if isinstance(item, str) else (item.get("url") if isinstance(item, dict) else "")
+            if isinstance(url, str) and url.startswith("https://") and url not in found:
+                found.append(url)
+    return found
 
 
 def poster_of(entry: dict) -> str:
@@ -122,20 +168,29 @@ def entry_to_post(entry: dict, handle: str) -> dict | None:
     poster = poster_of(entry)
     width = int((best or {}).get("width") or 0)
     height = int((best or {}).get("height") or 0)
-    media = {"type": "video", "poster": poster, "width": width, "height": height}
+    video = {"type": "video", "poster": poster, "width": width, "height": height}
     play = str((best or {}).get("url") or "")
     if play.startswith("https://"):
-        media["url"] = play
+        video["url"] = play
     duration = entry.get("duration")
     try:
         if duration is not None and float(duration) > 0:
-            media["duration"] = int(float(duration))
+            video["duration"] = int(float(duration))
     except (TypeError, ValueError):
         pass
-    if not media.get("url") and not poster:
-        media = []
+    photos = []
+    for url in carousel_urls(entry):
+        if url == poster or url == play:
+            continue
+        photos.append({"type": "photo", "url": url, "poster": url})
+    if video.get("url"):
+        media = [video] + photos
+    elif photos:
+        media = photos
+    elif poster:
+        media = [{"type": "photo", "url": poster, "poster": poster}]
     else:
-        media = [media]
+        media = []
     name = str(entry.get("nickname") or entry.get("channel") or entry.get("uploader") or handle)
     avatar = str(entry.get("avatar") or "")
     post = post_shell(
@@ -276,10 +331,15 @@ def patch_extractor():
 
     def patched(self, aweme, webpage_url, video_id, extract_flat=False):
         info = original(self, aweme, webpage_url, video_id, True)
+        kept = [fmt for fmt in (info.get("formats") or []) if image_format(fmt)]
+        images = info.get("images")
         try:
-            info["formats"] = self._extract_web_formats(aweme) or []
+            web = self._extract_web_formats(aweme) or []
         except Exception:
-            info["formats"] = []
+            web = []
+        info["formats"] = kept + list(web)
+        if images:
+            info["images"] = images
         author = {}
         if isinstance(aweme, dict):
             raw = aweme.get("author") or aweme.get("authorInfo") or {}

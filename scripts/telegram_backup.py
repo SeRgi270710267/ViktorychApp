@@ -16,14 +16,25 @@ Bot API document. Video and long audio, other than radio, are remuxed to HLS
 with ffmpeg. Each segment stays under 19 MiB and is about 4 to 6 seconds.
 The Worker plays that playlist. Codecs are copied when ffmpeg can do it.
 
-Radio, ViktorychMusic, live JSON, and account data stay on R2. Account data
-is uploaded only when TG_BACKUP_KEY is set, and then only as ciphertext.
-It is not served and it is not deleted.
+Music, covers, radio, and every loop version are copied as they already are
+and are never deleted from R2. The song AES key is not uploaded. Account
+data is uploaded only when TG_BACKUP_KEY is set, and then only as
+ciphertext. It is not served and it is not deleted. Live JSON, owner files,
+backup internals, and anything that carries a token stay on R2.
+
+TikTok videos, posters, and photo carousels, and other synced social media,
+are uploaded too. Videos from TikTok, Instagram, X, YouTube, VK, and Facebook
+are the site's original, remuxed to mp4 with yt-dlp and never re-encoded.
+Photo posts and carousels come from gallery-dl at full size. A video over
+19 MB is split with ffmpeg -c copy. Those copies are deleted from R2 after
+the sha256 check when an R2 object exists. A TikTok 403 or captcha skips
+that item. TikTok LIVE is not recorded.
 """
 
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -48,6 +59,7 @@ SMALL_BYTES = 19 * 1024 * 1024
 PART_BYTES = 1950 * 1024 * 1024
 MAX_NEW_BYTES = 4 * 1024 * 1024 * 1024
 MAX_NEW_FILES = 300
+LOOP_MAX_FILES = 2000
 MIN_INTERVAL = 3.0
 REQUIRED = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHANNEL_ID")
 SECRET_NAMES = REQUIRED + (
@@ -65,8 +77,6 @@ DATA_KEY = re.compile(
     r"|^discord/(?:messages|pins)/\d{1,22}\.json$"
 )
 ACCOUNT_PREFIXES = (
-    "media/avatars/",
-    "media/banners/",
     "accounts/",
     "account/",
     "profiles/",
@@ -226,6 +236,10 @@ def is_media_key(key: str, content_type: str = "") -> bool:
     return mime.startswith("image/") or mime.startswith("video/") or mime.startswith("audio/")
 
 
+GALLERY_PREFIXES = ("media/avatars/", "media/banners/", "stories/")
+KEY_URI = re.compile(r'#EXT-X-KEY:[^\n]*URI="([^"]+)"', re.IGNORECASE)
+
+
 def structural_role(key: str) -> str:
     lowered = str(key or "").lstrip("/")
     if not lowered or ".." in lowered.split("/"):
@@ -235,21 +249,117 @@ def structural_role(key: str) -> str:
     if lowered.startswith("loop/") or lowered.startswith("radio/"):
         return "radio"
     if lowered.startswith("music/") or lowered.startswith("covers/"):
-        return "music"
+        return "catalog"
     if lowered.startswith("owner/") or DATA_KEY.match(lowered):
         return "live"
+    if any(lowered.startswith(prefix) for prefix in GALLERY_PREFIXES):
+        return "gallery"
     if any(lowered.startswith(prefix) for prefix in ACCOUNT_PREFIXES):
         return "account"
     return ""
 
 
-def plan_kind(key: str, size: int, content_type: str, local: bool) -> str:
-    """How this object is handled. Radio, music, and live JSON are kept."""
+def is_key_material(key: str, blocked=None) -> bool:
+    """AES keys, key files, and names that carry a token or a secret."""
+    lowered = str(key or "").lstrip("/")
+    name = lowered.rsplit("/", 1)[-1].lower()
+    if name in {"key.bin", "key"} or name.endswith(".key"):
+        return True
+    if lowered.startswith("music/") and name.endswith(".bin"):
+        return True
+    if "token" in name or "secret" in name:
+        return True
+    if re.search(r"(?:^|/)(?:secrets?|tokens?)(?:/|$)", lowered):
+        return True
+    if blocked and lowered in blocked:
+        return True
+    return False
+
+
+def aes_key_refs(text: str, playlist_key: str) -> set:
+    """Object keys named by EXT-X-KEY in one playlist. Those files stay on R2."""
+    folder = str(playlist_key or "").lstrip("/").rsplit("/", 1)[0]
+    found = set()
+    for match in KEY_URI.finditer(text or ""):
+        uri = match.group(1).split("?", 1)[0].strip()
+        if not uri or ".." in uri.split("/"):
+            continue
+        if uri.startswith("https://") or uri.startswith("http://"):
+            path = urllib.parse.urlparse(uri).path.lstrip("/")
+            if path:
+                found.add(path)
+            continue
+        name = uri.split("/")[-1]
+        if name:
+            found.add(folder + "/" + name if folder else name)
+    return found
+
+
+LOOP_PART = re.compile(
+    r"^(loop/(?P<version>[A-Za-z0-9._-]{1,80})(?P<aac>/aac)?)/"
+    r"(?P<name>index\.m3u8|init\.mp4|seg_(?P<index>\d{1,6})\.(?:m4s|ts))$"
+)
+
+
+def loop_part(key: str, loop_version: str = "") -> dict | None:
+    """A segment of any published radio loop version, or None for other keys.
+
+    loop_version is accepted so callers can pass the pointer from
+    loop/current.json. Every version is mirrored, not only that one.
+    """
+    del loop_version
+    match = LOOP_PART.match(str(key or "").lstrip("/"))
+    if not match:
+        return None
+    name = match.group("name")
+    group = "loop/" + match.group("version") + (match.group("aac") or "")
+    if name == "index.m3u8":
+        return {"group": group, "role": "playlist", "index": -2, "mime": "application/vnd.apple.mpegurl", "name": name}
+    if name == "init.mp4":
+        return {"group": group, "role": "init", "index": -1, "mime": "video/mp4", "name": name}
+    mime = "video/mp2t" if name.endswith(".ts") else "video/iso.segment"
+    return {"group": group, "role": "segment", "index": int(match.group("index")), "mime": mime, "name": name}
+
+
+def segment_duration(mapping: dict, name: str) -> float:
+    try:
+        number = float((mapping or {}).get(Path(str(name or "")).name))
+    except (TypeError, ValueError):
+        return 10.0
+    return number if number > 0 else 10.0
+
+
+def plan_kind(key: str, size: int, content_type: str, local: bool, loop_version: str = "", blocked=None) -> str:
+    """How this object is handled.
+
+    Music, covers, radio, every loop version, and story, avatar, and banner
+    media are copied as they are and stay on R2. The song AES key is not
+    copied. Live JSON, owner files, and account rows stay off Telegram unless
+    account data is encrypted with TG_BACKUP_KEY.
+    """
+    if is_key_material(key, blocked):
+        return "keep-key"
     role = structural_role(key)
     if role == "radio":
-        return "keep-radio"
-    if role == "music":
-        return "keep-music"
+        part = loop_part(key, loop_version)
+        if part:
+            if size <= public_bytes():
+                return "loop"
+            return "too-big"
+        lowered = str(key or "").lstrip("/")
+        if lowered == "loop/current.json" or lowered.startswith("loop/"):
+            return "keep-radio"
+        if size <= 0:
+            return "keep-radio"
+        if size <= public_bytes() and (is_media_key(key, content_type) or suffix(key) in {".m3u8", ".m4s", ".ts", ".mp4", ".m4a"}):
+            return "mirror"
+        return "too-big" if size > public_bytes() else "keep-radio"
+    if role in {"catalog", "gallery"}:
+        if size <= 0 or not (is_media_key(key, content_type) or suffix(key) in {".m3u8", ".m4s", ".ts", ".mp4", ".m4a"}):
+            return "keep-other"
+        if size <= public_bytes():
+            return "mirror"
+        return "too-big"
     if role in {"live", "manifest", "keep"}:
         return "keep-live"
     if role == "account":
@@ -302,6 +412,671 @@ def upsert_part(entry: dict, part: dict) -> None:
     parts.append(part)
     parts.sort(key=lambda row: (str(row.get("role")), int(row.get("index") or 0)))
     entry["parts"] = parts
+
+
+SOCIAL_PLATFORMS = ("x", "instagram", "threads", "youtube", "vk", "telegram", "rss", "facebook")
+ORIGINAL_VIDEO = ("tiktok", "instagram", "x", "youtube", "vk", "facebook")
+ORIGINAL_PHOTO = ORIGINAL_VIDEO + ("threads",)
+YTDLP_FORMAT = "bv*+ba/b"
+TIKTOK_FALLBACK = "bv*[vcodec^=hev]+ba/bv*[vcodec^=h265]+ba/bv*[vcodec*=bytevc1]+ba/bv*[vcodec^=hvc1]+ba/" + YTDLP_FORMAT
+ORIGINAL_CAP = 2 * 1024 * 1024 * 1024
+PAGE_HOSTS = (
+    "tiktok.com",
+    "instagram.com",
+    "x.com",
+    "twitter.com",
+    "youtube.com",
+    "youtu.be",
+    "vk.com",
+    "vk.ru",
+    "facebook.com",
+    "fb.watch",
+    "threads.net",
+    "threads.com",
+)
+FORMAT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+CDN_HOSTS = (
+    "pbs.twimg.com",
+    "video.twimg.com",
+    "i.ytimg.com",
+    "ytimg.com",
+    "ggpht.com",
+    "googleusercontent.com",
+    "cdninstagram.com",
+    "fbcdn.net",
+    "cdnthreads.net",
+    "telesco.pe",
+    "telegram-cdn.org",
+    "userapi.com",
+    "vkuser.net",
+    "tiktokcdn.com",
+    "tiktokcdn-us.com",
+    "tiktokcdn-eu.com",
+    "tiktokv.com",
+    "bytefcdn.com",
+    "muscdn.com",
+    "ibytedtos.com",
+    "ibyteimg.com",
+)
+CDN_CAP = 200 * 1024 * 1024
+IDENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+CDN_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
+def clean_ident(value: str) -> str:
+    raw = str(value or "").strip()
+    return raw if IDENT_RE.fullmatch(raw) else ""
+
+
+def stable_ident(post: dict) -> str:
+    """Same id rules as shared/social-keys.js."""
+    platform = str((post or {}).get("platform") or "").lower()
+    status = str((post or {}).get("statusId") or "")
+    ident = str((post or {}).get("id") or "")
+    if platform == "tiktok":
+        match = re.search(r"(\d{8,22})", status or ident)
+        return match.group(1) if match else ""
+    direct = clean_ident(status)
+    if direct:
+        return direct
+    blob = " ".join(part for part in (str((post or {}).get("url") or ""), status, ident) if part)
+    if platform == "facebook":
+        match = re.search(r"(?:videos|reel)/(\d{5,20})|[?&]v=(\d{5,20})", blob)
+        found = clean_ident(match.group(1) or match.group(2)) if match else ""
+        if found:
+            return found
+    patterns = (
+        r"instagram\.com/(?:p|reel|tv)/([A-Za-z0-9_-]{1,80})",
+        r"threads\.(?:com|net)/(?:@[^/\s]+/)?(?:post|t)/([A-Za-z0-9_-]{1,80})",
+        r"(?:youtube\.com/(?:watch\?v=|shorts/|embed/)|youtu\.be/|youtube-nocookie\.com/embed/)([A-Za-z0-9_-]{6,16})",
+        r"video(-?\d+_\d+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, blob)
+        found = clean_ident(match.group(1)) if match else ""
+        if found:
+            return found
+    bare = ident.split(":", 1)[1] if ":" in ident else ident
+    return clean_ident(bare)
+
+
+def social_object_key(post: dict, role: str, index: int = 0) -> str:
+    """Same object keys as shared/social-keys.js."""
+    platform = str((post or {}).get("platform") or "").lower()
+    n = max(0, int(index or 0))
+    if platform == "tiktok":
+        handle = str((post or {}).get("handle") or "").lstrip("@")
+        ident = stable_ident(post)
+        if re.fullmatch(r"[A-Za-z0-9._]{2,24}", handle) is None or re.fullmatch(r"\d{8,22}", ident) is None:
+            return ""
+        if role == "video":
+            return "tiktok/" + handle + "/" + ident + "/video"
+        if role == "poster":
+            return "tiktok/" + handle + "/" + ident + "/poster"
+        if role == "photo":
+            return "tiktok/" + handle + "/" + ident + "/photo/" + str(n)
+        return ""
+    if platform not in SOCIAL_PLATFORMS:
+        return ""
+    ident = stable_ident(post)
+    if not ident:
+        return ""
+    if role == "thumb":
+        return "social/" + platform + "/" + ident + "/thumb/" + str(n)
+    if role == "video":
+        return "social/" + platform + "/" + ident + "/video/" + str(n)
+    if role == "poster":
+        return "social/" + platform + "/" + ident + "/poster/" + str(n)
+    if role == "photo":
+        return "social/" + platform + "/" + ident + "/photo/" + str(n)
+    return ""
+
+
+def host_ok(url: str) -> bool:
+    try:
+        host = (urllib.parse.urlparse(str(url or "")).hostname or "").lower()
+    except ValueError:
+        return False
+    if not host:
+        return False
+    return any(host == suffix or host.endswith("." + suffix) for suffix in CDN_HOSTS)
+
+
+def page_host_ok(url: str) -> bool:
+    try:
+        parsed = urllib.parse.urlparse(str(url or ""))
+    except ValueError:
+        return False
+    if parsed.scheme != "https" or parsed.username or parsed.password:
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host or host_ok(url):
+        return False
+    query = (parsed.query or "").lower()
+    if any(word in query for word in ("cookie", "sessionid", "access_token")):
+        return False
+    return any(host == suffix or host.endswith("." + suffix) for suffix in PAGE_HOSTS)
+
+
+def public_page(post: dict) -> str:
+    """Public page URL. No CDN host, no cookies, no live room."""
+    if live_recording(post):
+        return ""
+    platform = str((post or {}).get("platform") or "").lower()
+    ident = stable_ident(post)
+    handle = str((post or {}).get("handle") or "").lstrip("@")
+    if platform == "tiktok" and re.fullmatch(r"[A-Za-z0-9._]{2,24}", handle) and re.fullmatch(r"\d{8,22}", ident):
+        return "https://www.tiktok.com/@" + handle + "/video/" + ident
+    if platform == "youtube" and re.fullmatch(r"[A-Za-z0-9_-]{11}", ident or ""):
+        return "https://www.youtube.com/watch?v=" + ident
+    raw = str((post or {}).get("url") or "").strip()
+    if platform in {"instagram", "x", "vk", "facebook", "threads"} and page_host_ok(raw):
+        parsed = urllib.parse.urlparse(raw)
+        return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+    if platform == "instagram" and ident:
+        return "https://www.instagram.com/p/" + ident + "/"
+    if platform == "x" and ident.isdigit():
+        if re.fullmatch(r"[A-Za-z0-9_]{1,30}", handle):
+            return "https://x.com/" + handle + "/status/" + ident
+        return "https://x.com/i/status/" + ident
+    if platform == "vk" and re.fullmatch(r"-?\d+_\d+", ident or ""):
+        return "https://vk.com/video" + ident
+    if platform == "threads" and ident:
+        return "https://www.threads.net/t/" + ident
+    raw = str((post or {}).get("url") or "").strip()
+    if page_host_ok(raw):
+        parsed = urllib.parse.urlparse(raw)
+        return urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+    return ""
+
+
+def catalog_info(post: dict) -> dict:
+    stats = post.get("stats") if isinstance(post.get("stats"), dict) else {}
+
+    def num(*keys) -> int:
+        for key in keys:
+            if key not in stats:
+                continue
+            try:
+                return int(stats.get(key) or 0)
+            except (TypeError, ValueError):
+                return 0
+        return 0
+
+    date = str((post or {}).get("date") or "")
+    found = re.match(r"(\d{4})-(\d{2})-(\d{2})", date)
+    return {
+        "id": stable_ident(post),
+        "views": num("views", "view_count"),
+        "likes": num("likes", "like_count"),
+        "comments": num("replies", "comments", "comment_count"),
+        "shares": num("reposts", "shares", "share_count"),
+        "upload_date": "".join(found.groups()) if found else "",
+    }
+
+
+def info_fields(raw: dict) -> dict:
+    """Counts, date, and id from an info JSON. Download URLs are dropped."""
+    if not isinstance(raw, dict):
+        return {}
+
+    def num(*keys):
+        for key in keys:
+            if key not in raw or raw.get(key) is None:
+                continue
+            try:
+                return int(raw.get(key) or 0)
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    out = {}
+    ident = str(raw.get("id") or "")
+    if ident and IDENT_RE.fullmatch(ident):
+        out["id"] = ident
+    for dest, keys in (
+        ("views", ("view_count", "views")),
+        ("likes", ("like_count", "likes")),
+        ("comments", ("comment_count", "comments", "reply_count")),
+        ("shares", ("repost_count", "share_count", "shares")),
+    ):
+        value = num(*keys)
+        if value is not None:
+            out[dest] = value
+    upload = str(raw.get("upload_date") or "")
+    if re.fullmatch(r"\d{8}", upload):
+        out["upload_date"] = upload
+    return out
+
+
+def merge_info(base: dict, extra: dict) -> dict:
+    out = dict(base or {})
+    for key, value in (extra or {}).items():
+        if value not in ("", None):
+            out[key] = value
+    return out
+
+
+def runner_blocked(text: str) -> bool:
+    low = (text or "").lower()
+    if "captcha" in low:
+        return True
+    if "http error 403" in low or "403 forbidden" in low or "error 403" in low:
+        return True
+    if "verify you are human" in low or "sign in to confirm" in low:
+        return True
+    return False
+
+
+def hevc_name(fmt: dict) -> bool:
+    name = str((fmt or {}).get("vcodec") or "").lower()
+    return any(marker in name for marker in ("h265", "hevc", "bytevc1", "hvc1", "hev1"))
+
+
+def format_bitrate(fmt: dict) -> float:
+    for key in ("tbr", "vbr", "bitrate"):
+        try:
+            value = float(fmt.get(key) or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        if value > 0:
+            return value
+    return 0.0
+
+
+def tiktok_selector(formats) -> str:
+    """Top h265 or bytevc1, then bv*+ba/b. Format ids come from yt-dlp -J, the same list as -F."""
+    videos = []
+    audios = []
+    for fmt in formats or []:
+        if not isinstance(fmt, dict):
+            continue
+        fid = str(fmt.get("format_id") or "")
+        if not FORMAT_ID_RE.fullmatch(fid):
+            continue
+        vcodec = str(fmt.get("vcodec") or "none")
+        acodec = str(fmt.get("acodec") or "none")
+        if vcodec not in {"", "none"} and acodec in {"", "none"}:
+            videos.append(fmt)
+        elif vcodec in {"", "none"} and acodec not in {"", "none"}:
+            audios.append(fmt)
+    hevc = [fmt for fmt in videos if hevc_name(fmt)]
+    pool = hevc or []
+    if not pool:
+        return TIKTOK_FALLBACK
+    pool.sort(key=lambda fmt: (format_bitrate(fmt), int(fmt.get("height") or 0)), reverse=True)
+    best = pool[0]
+    vid = str(best.get("format_id") or "")
+    audios.sort(key=format_bitrate, reverse=True)
+    audio = str(audios[0].get("format_id") or "") if audios else ""
+    if audio:
+        return vid + "+" + audio + "/" + YTDLP_FORMAT
+    return vid + "+ba/" + YTDLP_FORMAT
+
+
+def video_format_arg(platform: str, formats=None) -> str:
+    if platform == "tiktok":
+        return tiktok_selector(formats or [])
+    return YTDLP_FORMAT
+
+
+def ytdlp_download_args(page: str, dest: Path, selector: str) -> list:
+    return [
+        "--ignore-config",
+        "--no-cookies",
+        "--no-playlist",
+        "--no-warnings",
+        "--no-progress",
+        "--retries", "1",
+        "--fragment-retries", "1",
+        "--socket-timeout", "30",
+        "--match-filters", "!is_live",
+        "-f", selector,
+        "--merge-output-format", "mp4",
+        "--remux-video", "mp4",
+        "--max-filesize", "2G",
+        "--write-info-json",
+        "-o", str(dest / "media.%(ext)s"),
+        page,
+    ]
+
+
+def gallery_download_args(page: str, dest: Path, ordinal: int) -> list:
+    n = max(1, int(ordinal or 1))
+    return [
+        "--config-ignore",
+        "--no-input",
+        "-D", str(dest),
+        "--range", "%s-%s" % (n, n),
+        "--write-metadata",
+        "--filename", "{num}.{extension}",
+        page,
+    ]
+
+
+def live_recording(post: dict) -> bool:
+    if str((post or {}).get("kind") or "").lower() == "live":
+        return True
+    url = str((post or {}).get("url") or "")
+    return str((post or {}).get("platform") or "").lower() == "tiktok" and "/live" in url and "/video/" not in url
+
+
+def walk_posts(doc: dict) -> list:
+    rows = []
+
+    def add(post: dict) -> None:
+        if not isinstance(post, dict):
+            return
+        rows.append(post)
+        quoted = post.get("quoted")
+        if isinstance(quoted, dict):
+            add(quoted)
+
+    for post in (doc or {}).get("posts") or []:
+        add(post)
+    return rows
+
+
+def media_candidates(post: dict, media: dict, index: int) -> list:
+    del index
+    platform = str((post or {}).get("platform") or "").lower()
+    kind = str((media or {}).get("type") or "").lower()
+    url = str((media or {}).get("url") or "").strip()
+    poster = str((media or {}).get("poster") or "").strip()
+    rows = []
+    if platform == "youtube":
+        ident = stable_ident(post)
+        if kind in {"photo", "image"} and url:
+            rows.append(("photo", url))
+        elif re.fullmatch(r"[A-Za-z0-9_-]{11}", ident or ""):
+            rows.append(("video", ""))
+            if poster:
+                rows.append(("thumb", poster))
+        elif poster:
+            rows.append(("thumb", poster))
+        return rows
+    if platform == "tiktok":
+        if kind in {"photo", "image"} and url:
+            rows.append(("photo", url))
+        elif url:
+            rows.append(("video", url))
+        if poster and poster != url:
+            rows.append(("poster", poster))
+        return rows
+    if kind in {"video", "animated_gif"} and url:
+        rows.append(("video", url))
+    elif kind in {"photo", "image"} and url:
+        rows.append(("photo", url))
+    if poster and poster != url:
+        rows.append(("poster", poster))
+    return rows
+
+
+def plan_social(docs: list, present_keys) -> list:
+    """Originals for videos and photos. Posters already on R2 stay with that pass."""
+    items = []
+    seen = set()
+    present = set(present_keys or ())
+    for doc in docs or []:
+        for post in walk_posts(doc):
+            if live_recording(post):
+                continue
+            platform = str(post.get("platform") or "").lower()
+            if platform != "tiktok" and platform not in SOCIAL_PLATFORMS:
+                continue
+            page = public_page(post)
+            info = catalog_info(post)
+            photo_ordinal = 0
+            for index, media in enumerate(post.get("media") or []):
+                if not isinstance(media, dict):
+                    continue
+                for role, url in media_candidates(post, media, index):
+                    key_index = 0 if platform == "tiktok" and role in {"video", "poster"} else index
+                    key = social_object_key(post, role, key_index)
+                    if not key or key in seen:
+                        continue
+                    original = (role == "video" and platform in ORIGINAL_VIDEO) or (role == "photo" and platform in ORIGINAL_PHOTO)
+                    if key in present and not original:
+                        continue
+                    source = url if host_ok(url) else ""
+                    if not original and not source:
+                        continue
+                    if original and not page and not source:
+                        continue
+                    if role == "photo":
+                        photo_ordinal += 1
+                    seen.add(key)
+                    items.append({
+                        "bucket": "cdn",
+                        "key": key,
+                        "size": 0,
+                        "etag": "",
+                        "content_type": "",
+                        "source_url": source,
+                        "page_url": page if original else "",
+                        "platform": platform,
+                        "role": role,
+                        "original": original,
+                        "photo_ordinal": photo_ordinal if role == "photo" else 0,
+                        "info": info,
+                        "uploaded": "",
+                    })
+    return items
+
+
+def sniff_type(path: Path, header: str) -> str:
+    raw = (header or "").split(";")[0].strip().lower()
+    if raw and raw != "application/octet-stream":
+        return raw
+    try:
+        data = path.read_bytes()[:16]
+    except OSError:
+        data = b""
+    if len(data) >= 8 and data[4:8] == b"ftyp":
+        return "video/mp4"
+    if data.startswith(b"\x89PNG"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if data.startswith(b"GIF8"):
+        return "image/gif"
+    if data.startswith(b"RIFF") and b"WEBP" in data:
+        return "image/webp"
+    return raw or "application/octet-stream"
+
+
+def fetch_allowed(url: str, dest: Path, limit: int = CDN_CAP):
+    """GET an allowlisted CDN URL. No cookies and no extra headers."""
+    if not host_ok(url):
+        return None
+    req = urllib.request.Request(url, headers={"User-Agent": CDN_UA, "Accept": "*/*"})
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res, dest.open("wb") as out:
+            if not host_ok(res.geturl()):
+                return None
+            while True:
+                block = res.read(1024 * 1024)
+                if not block:
+                    break
+                total += len(block)
+                if total > limit:
+                    return None
+                out.write(block)
+                digest.update(block)
+            header = res.headers.get("Content-Type") or ""
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+    if total <= 0:
+        return None
+    return {"sha256": digest.hexdigest(), "size": total, "content_type": sniff_type(dest, header)}
+
+
+def tool_cmd(module: str, binary: str):
+    if importlib.util.find_spec(module) is not None:
+        return [sys.executable, "-m", module]
+    found = shutil.which(binary)
+    return [found] if found else None
+
+
+def run_captured(cmd: list, timeout: int) -> tuple:
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired):
+        return 1, "", "timeout"
+    out = proc.stdout.decode("utf-8", "replace")
+    err = proc.stderr.decode("utf-8", "replace")
+    return proc.returncode, out, err
+
+
+def load_info_files(directory: Path) -> dict:
+    merged = {}
+    for path in directory.rglob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeError):
+            continue
+        if isinstance(data, dict):
+            merged = merge_info(merged, info_fields(data))
+    return merged
+
+
+def file_result(path: Path, header: str, info: dict) -> dict | None:
+    if not path.is_file() or path.stat().st_size <= 0:
+        return None
+    if path.stat().st_size > ORIGINAL_CAP:
+        return None
+    digest = hash_file(path)
+    return {
+        "sha256": digest,
+        "size": path.stat().st_size,
+        "content_type": sniff_type(path, header),
+        "info": info,
+    }
+
+
+def fetch_ytdlp(obj: dict, dest: Path, directory: Path):
+    page = str(obj.get("page_url") or "")
+    if not page_host_ok(page):
+        return None
+    base = tool_cmd("yt_dlp", "yt-dlp")
+    if not base:
+        return None
+    platform = str(obj.get("platform") or "")
+    code, out, err = (0, "", "")
+    formats = []
+    if platform == "tiktok":
+        code, out, err = run_captured(base + [
+            "--ignore-config", "--no-cookies", "--no-playlist", "--no-warnings",
+            "--skip-download", "-J", page,
+        ], 60)
+        if runner_blocked(out + "\n" + err):
+            return "blocked"
+        try:
+            parsed = json.loads(out) if out.strip().startswith("{") else {}
+        except json.JSONDecodeError:
+            parsed = {}
+        if isinstance(parsed, dict):
+            if parsed.get("is_live") or str(parsed.get("live_status") or "") in {"is_live", "is_upcoming"}:
+                return "live"
+            formats = parsed.get("formats") or []
+    selector = video_format_arg(platform, formats)
+    work = directory / "ytdlp"
+    if work.exists():
+        shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    code, out, err = run_captured(base + ytdlp_download_args(page, work, selector), 300)
+    text = out + "\n" + err
+    if platform == "tiktok" and runner_blocked(text):
+        shutil.rmtree(work, ignore_errors=True)
+        return "blocked"
+    if "does not pass filter" in text.lower() or "live event" in text.lower():
+        shutil.rmtree(work, ignore_errors=True)
+        return "live"
+    saved = [path for path in work.glob("media.mp4") if path.is_file() and path.stat().st_size > 0]
+    if not saved:
+        saved = [path for path in work.rglob("*.mp4") if path.is_file() and path.stat().st_size > 0 and ".part" not in path.name]
+    if not saved:
+        shutil.rmtree(work, ignore_errors=True)
+        return None
+    chosen = max(saved, key=lambda path: path.stat().st_size)
+    info = merge_info(obj.get("info") or {}, load_info_files(work))
+    if chosen.stat().st_size > ORIGINAL_CAP:
+        shutil.rmtree(work, ignore_errors=True)
+        return None
+    shutil.move(str(chosen), dest)
+    shutil.rmtree(work, ignore_errors=True)
+    return file_result(dest, "video/mp4", info)
+
+
+def fetch_gallery(obj: dict, dest: Path, directory: Path):
+    page = str(obj.get("page_url") or "")
+    if not page_host_ok(page):
+        return None
+    base = tool_cmd("gallery_dl", "gallery-dl")
+    if not base:
+        return None
+    work = directory / "gallery"
+    if work.exists():
+        shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    ordinal = int(obj.get("photo_ordinal") or 1)
+    code, out, err = run_captured(base + gallery_download_args(page, work, ordinal), 180)
+    text = out + "\n" + err
+    if str(obj.get("platform") or "") == "tiktok" and runner_blocked(text):
+        shutil.rmtree(work, ignore_errors=True)
+        return "blocked"
+    images = [
+        path for path in work.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".gif"} and path.stat().st_size > 0
+    ]
+    if not images:
+        shutil.rmtree(work, ignore_errors=True)
+        return None
+    chosen = max(images, key=lambda path: path.stat().st_size)
+    info = merge_info(obj.get("info") or {}, load_info_files(work))
+    if chosen.stat().st_size > ORIGINAL_CAP:
+        shutil.rmtree(work, ignore_errors=True)
+        return None
+    shutil.move(str(chosen), dest)
+    shutil.rmtree(work, ignore_errors=True)
+    return file_result(dest, "", info)
+
+
+def fetch_original(obj: dict, dest: Path, directory: Path):
+    role = str(obj.get("role") or "")
+    platform = str(obj.get("platform") or "")
+    if role == "video" and platform in ORIGINAL_VIDEO:
+        return fetch_ytdlp(obj, dest, directory)
+    if role == "photo" and platform in ORIGINAL_PHOTO:
+        return fetch_gallery(obj, dest, directory)
+    return None
+
+
+def read_json_key(cf: dict, buckets: list, key: str, directory: Path):
+    for bucket in buckets:
+        dest = directory / ("cat-" + hashlib.sha256((bucket + "/" + key).encode("utf-8")).hexdigest()[:12] + ".json")
+        try:
+            download_object(cf["token"], cf["account"], bucket, key, dest)
+            data = json.loads(dest.read_text(encoding="utf-8"))
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, RuntimeError, ValueError):
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
+def note_social(state: dict, key: str, files_before: int, bytes_before: int) -> None:
+    added_files = int(state.get("files") or 0) - int(files_before)
+    added_bytes = int(state.get("bytes") or 0) - int(bytes_before)
+    if added_files <= 0 and added_bytes <= 0:
+        return
+    state["social_files"] = int(state.get("social_files") or 0) + max(added_files, 0)
+    state["social_bytes"] = int(state.get("social_bytes") or 0) + max(added_bytes, 0)
+    if str(key).startswith("tiktok/"):
+        state["tiktok_files"] = int(state.get("tiktok_files") or 0) + max(added_files, 0)
+        state["tiktok_bytes"] = int(state.get("tiktok_bytes") or 0) + max(added_bytes, 0)
 
 
 def may_delete(kind: str, verified: bool, size: int) -> bool:
@@ -558,10 +1333,73 @@ def has_video_stream(src: Path) -> bool:
     return b"video" in proc.stdout
 
 
-def ffmpeg_hls(src: Path, dest: Path, seconds: int, transcode: bool, video: bool) -> None:
-    if dest.exists():
-        shutil.rmtree(dest, ignore_errors=True)
-    dest.mkdir(parents=True)
+def probe_saved(path: Path) -> dict:
+    """Width, height, codec, and bitrate. Empty when ffprobe is missing."""
+    if shutil.which("ffprobe") is None or not path.is_file():
+        return {}
+    proc = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "stream=codec_type,codec_name,width,height,bit_rate:format=bit_rate,duration",
+            "-of", "json", str(path),
+        ],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        return {}
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except json.JSONDecodeError:
+        return {}
+    streams = data.get("streams") if isinstance(data, dict) else []
+    streams = streams if isinstance(streams, list) else []
+    video = next((row for row in streams if isinstance(row, dict) and row.get("codec_type") == "video"), None)
+    stream = video or next((row for row in streams if isinstance(row, dict)), {})
+    if not isinstance(stream, dict):
+        return {}
+    codec = str(stream.get("codec_name") or "")
+    try:
+        width = int(stream.get("width") or 0)
+    except (TypeError, ValueError):
+        width = 0
+    try:
+        height = int(stream.get("height") or 0)
+    except (TypeError, ValueError):
+        height = 0
+    bitrate = 0
+    container = data.get("format") if isinstance(data, dict) else {}
+    for raw in (stream.get("bit_rate"), (container or {}).get("bit_rate") if isinstance(container, dict) else None):
+        try:
+            value = int(raw or 0)
+        except (TypeError, ValueError):
+            value = 0
+        if value > 0:
+            bitrate = value
+            break
+    if not codec and width <= 0:
+        return {}
+    duration = 0.0
+    if isinstance(container, dict):
+        try:
+            duration = float(container.get("duration") or 0)
+        except (TypeError, ValueError):
+            duration = 0.0
+    if duration < 0:
+        duration = 0.0
+    return {"width": width, "height": height, "codec": codec, "bitrate": bitrate, "duration": round(duration, 3)}
+
+
+def log_probe(key: str, probe: dict) -> None:
+    if not probe:
+        log("[telegram-backup] probe %s unavailable" % key)
+        return
+    log("[telegram-backup] probe %s %sx%s %s %s %ss" % (
+        key, probe.get("width") or 0, probe.get("height") or 0, probe.get("codec") or "",
+        probe.get("bitrate") or 0, probe.get("duration") or 0,
+    ))
+
+
+def hls_command(src: Path, dest: Path, seconds: int, transcode: bool, video: bool) -> list:
     cmd = ["ffmpeg", "-y", "-i", str(src)]
     if not video:
         cmd += ["-vn", "-c:a", "aac" if transcode else "copy"]
@@ -576,16 +1414,26 @@ def ffmpeg_hls(src: Path, dest: Path, seconds: int, transcode: bool, video: bool
             "-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", "init.mp4",
             "-hls_segment_filename", str(dest / "seg%05d.m4s"), str(dest / "index.m3u8"),
         ]
-    proc = subprocess.run(cmd, capture_output=True)
+    return cmd
+
+
+def ffmpeg_hls(src: Path, dest: Path, seconds: int, transcode: bool, video: bool) -> None:
+    if dest.exists():
+        shutil.rmtree(dest, ignore_errors=True)
+    dest.mkdir(parents=True)
+    proc = subprocess.run(hls_command(src, dest, seconds, transcode, video), capture_output=True)
     if proc.returncode != 0 or not (dest / "index.m3u8").is_file():
         raise RuntimeError("ffmpeg failed")
 
 
-def build_hls(src: Path, dest: Path) -> tuple:
-    """Return init name, segment rows, and whether a transcode was required."""
+def build_hls(src: Path, dest: Path, copy_only: bool = False) -> tuple:
+    """Return init name, segment rows, and whether a transcode was required.
+
+    copy_only never re-encodes. A segment that cannot fit is left for the caller to skip.
+    """
     video = has_video_stream(src)
     last = "ffmpeg failed"
-    passes = (False, True) if video else (False, True)
+    passes = (False,) if copy_only else (False, True)
     for transcode in passes:
         for seconds in (5, 4, 2, 1):
             try:
@@ -668,10 +1516,10 @@ def d1_kind(role: str) -> str:
     return {"file": "single", "segment": "segment", "init": "init", "playlist": "playlist", "part": "archive"}.get(role, role)
 
 
-def remember_d1(token: str, account: str, database: str, entry: dict, part: dict, verified: bool) -> None:
+def remember_d1(token: str, account: str, database: str, entry: dict, part: dict, verified: bool, object_key: str = "") -> None:
     serve = 1 if entry.get("serve") and part["role"] in {"file", "segment", "init"} else 0
     d1_exec(token, account, database, D1_UPSERT, [
-        entry["key"],
+        object_key or entry["key"],
         d1_kind(part["role"]),
         int(part["index"]),
         entry["bucket"],
@@ -778,9 +1626,12 @@ def ensure_entry(manifest: dict, obj: dict, kind: str, sha: str, serve: bool, en
     return entry
 
 
-def upload_path(api_base: str, token: str, channel: str, path: Path, caption: str, state: dict, entry: dict, role: str, index: int, sha: str, duration: float, mime: str, cf: dict) -> None:
+def upload_path(api_base: str, token: str, channel: str, path: Path, caption: str, state: dict, entry: dict, role: str, index: int, sha: str, duration: float, mime: str, cf: dict, d1_key: str = "") -> None:
     existing = part_done(entry, role, index)
+    stored_key = d1_key or entry["key"]
     if existing and existing.get("sha256") == sha:
+        if cf.get("database"):
+            remember_d1(cf["token"], cf["account"], cf["database"], entry, existing, bool(entry.get("verified")), stored_key)
         return
     sent = send_document(api_base, token, channel, path, caption, state)
     if int(sent.get("file_size") or 0) != path.stat().st_size:
@@ -798,13 +1649,34 @@ def upload_path(api_base: str, token: str, channel: str, path: Path, caption: st
     }
     upsert_part(entry, part)
     if cf.get("database"):
-        remember_d1(cf["token"], cf["account"], cf["database"], entry, part, False)
+        remember_d1(cf["token"], cf["account"], cf["database"], entry, part, False, stored_key)
     state["files"] = int(state.get("files") or 0) + 1
     state["bytes"] = int(state.get("bytes") or 0) + path.stat().st_size
+    label = str(entry.get("kind") or "other")
+    kinds = state.setdefault("kinds", {})
+    sizes = state.setdefault("kind_bytes", {})
+    kinds[label] = int(kinds.get(label) or 0) + 1
+    sizes[label] = int(sizes.get(label) or 0) + path.stat().st_size
+
+
+def loop_file_cap() -> int:
+    raw = (os.environ.get("TG_LOOP_MAX_FILES") or str(LOOP_MAX_FILES)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = LOOP_MAX_FILES
+    return min(max(value, 1), 5000)
+
+
+def loop_rank(key: str, version: str) -> tuple:
+    text = str(key or "").lstrip("/")
+    current = bool(version) and text.startswith("loop/" + version + "/")
+    return (0 if current else 1, text)
 
 
 def budget_ok(state: dict, size: int) -> bool:
-    return int(state.get("files") or 0) < MAX_NEW_FILES and int(state.get("bytes") or 0) + size <= MAX_NEW_BYTES
+    cap = int(state.get("file_cap") or MAX_NEW_FILES)
+    return int(state.get("files") or 0) < cap and int(state.get("bytes") or 0) + size <= MAX_NEW_BYTES
 
 
 def save_manifest(cf: dict, manifest: dict, directory: Path) -> None:
@@ -829,8 +1701,40 @@ def load_remote_manifest(token: str, account: str, buckets: list, directory: Pat
     return empty_manifest(), target
 
 
-def sort_objects(rows: list) -> list:
-    return sorted(rows, key=lambda row: (-int(row.get("size") or 0), str(row.get("uploaded") or ""), str(row.get("key") or "")))
+def sort_objects(rows: list, rank=None) -> list:
+    def key(row):
+        if rank:
+            return rank(row)
+        return (0, -int(row.get("size") or 0), str(row.get("uploaded") or ""), str(row.get("key") or ""))
+    return sorted(rows, key=key)
+
+
+def collect_blocked_keys(cf: dict, rows: list, directory: Path) -> set:
+    """AES key object keys named by music, radio, and loop playlists."""
+    blocked = set()
+    for obj in rows:
+        key = str(obj.get("key") or "").lstrip("/")
+        if not key.endswith(".m3u8"):
+            continue
+        if not (key.startswith("music/") or key.startswith("radio/") or key.startswith("loop/")):
+            continue
+        dest = directory / ("keys-" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:16] + ".m3u8")
+        try:
+            download_object(cf["token"], cf["account"], obj["bucket"], key, dest)
+            blocked.update(aes_key_refs(dest.read_text(encoding="utf-8", errors="replace"), key))
+        except (urllib.error.URLError, TimeoutError, OSError, RuntimeError, ValueError):
+            continue
+    return blocked
+
+
+def upload_summary(state: dict) -> str:
+    kinds = state.get("kinds") or {}
+    sizes = state.get("kind_bytes") or {}
+    parts = []
+    for name in sorted(kinds):
+        parts.append("%s %s/%s" % (name, kinds[name], sizes.get(name) or 0))
+    detail = (", ".join(parts)) if parts else "none"
+    return "[telegram-backup] uploaded %s files, %s bytes (%s)" % (state.get("files") or 0, state.get("bytes") or 0, detail)
 
 
 def needs_local(objects: list) -> bool:
@@ -880,6 +1784,40 @@ def collect_objects(cf: dict) -> list:
     return rows
 
 
+def read_loop_version(token: str, account: str, buckets: list, directory: Path) -> str:
+    """The version loop/current.json is publishing. Empty when it cannot be read."""
+    for bucket in buckets:
+        dest = directory / "loop-current.json"
+        try:
+            download_object(token, account, bucket, "loop/current.json", dest)
+            data = json.loads(dest.read_text(encoding="utf-8"))
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, RuntimeError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        version = str(data.get("version") or "")
+        if re.fullmatch(r"[A-Za-z0-9._-]{1,80}", version):
+            return version
+    return ""
+
+
+def loop_duration_map(cf: dict, bucket: str, group: str, directory: Path) -> dict:
+    cache = cf.setdefault("loop_duration_maps", {})
+    if group in cache:
+        return cache[group]
+    mapping = {}
+    dest = directory / ("loop-dur-" + hashlib.sha256(group.encode("utf-8")).hexdigest()[:16] + ".m3u8")
+    try:
+        download_object(cf["token"], cf["account"], bucket, group + "/index.m3u8", dest)
+        _init, items = parse_hls(dest.read_text(encoding="utf-8", errors="replace"))
+        for name, duration in items:
+            mapping[Path(name).name] = float(duration) if duration and duration > 0 else 10.0
+    except (urllib.error.URLError, TimeoutError, OSError, RuntimeError, ValueError):
+        mapping = {}
+    cache[group] = mapping
+    return mapping
+
+
 def preflight() -> int:
     cf = prepare_clients()
     if cf is None:
@@ -888,17 +1826,21 @@ def preflight() -> int:
         return 0
     if cf.get("error"):
         return 1
+    directory = Path(tempfile.mkdtemp(prefix="tg-preflight-"))
     try:
         rows = collect_objects(cf)
+        version = read_loop_version(cf["token"], cf["account"], bucket_names(cf["token"], cf["account"]), directory)
     except Exception as err:
         log("[telegram-backup] could not list R2")
         log(scrub(str(err), current_secrets()))
         return 1
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
     local = needs_local(rows)
     work = False
     for obj in rows:
-        kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", local)
-        if kind in {"small", "hls", "archive", "account"}:
+        kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", local, version)
+        if kind in {"small", "hls", "archive", "account", "loop", "mirror"}:
             work = True
             break
     _output("work", "true" if work else "false")
@@ -922,22 +1864,188 @@ def new_entry_state() -> dict:
     return {"last": 0.0, "files": 0, "bytes": 0}
 
 
+def finish_verified(entry: dict, obj: dict, manifest: dict, cf: dict, directory: Path) -> None:
+    if not (entry.get("serve") and entry.get("kind") in {"small", "hls"} and cf.get("worker")):
+        return
+    if not verify_entry(entry, cf["worker"], cf["bot"], directory):
+        log("[telegram-backup] not verified %s/%s" % (obj["bucket"], obj["key"]))
+        return
+    entry["verified"] = True
+    for part in entry.get("parts") or []:
+        if cf.get("database"):
+            remember_d1(cf["token"], cf["account"], cf["database"], entry, part, True)
+    save_manifest(cf, manifest, directory)
+    if obj.get("bucket") == "cdn":
+        if obj.get("r2_bucket") and obj.get("r2_key") and may_delete(entry.get("kind") or "", True, int(entry.get("size") or 0)):
+            delete_object(cf["token"], cf["account"], obj["r2_bucket"], obj["r2_key"])
+            entry["deleted"] = True
+            save_manifest(cf, manifest, directory)
+            log("[telegram-backup] deleted %s/%s" % (obj["r2_bucket"], obj["r2_key"]))
+        return
+    if may_delete(entry.get("kind") or "", True, int(entry.get("size") or 0)):
+        delete_object(cf["token"], cf["account"], obj["bucket"], obj["key"])
+        entry["deleted"] = True
+        save_manifest(cf, manifest, directory)
+        log("[telegram-backup] deleted %s/%s" % (obj["bucket"], obj["key"]))
+
+
+def store_loaded(src: Path, obj: dict, kind: str, manifest: dict, cf: dict, state: dict, directory: Path, sha: str, copy_only: bool = False) -> str:
+    entry = ensure_entry(manifest, obj, kind, sha, True, False)
+    if obj.get("info"):
+        entry["info"] = obj["info"]
+    if obj.get("probe"):
+        entry["probe"] = obj["probe"]
+    files_before = int(state.get("files") or 0)
+    bytes_before = int(state.get("bytes") or 0)
+    if kind == "small":
+        if not budget_ok(state, src.stat().st_size):
+            return "stop"
+        upload_path(PUBLIC_API, cf["bot"], cf["channel"], src, obj["key"][:900], state, entry, "file", 0, sha, 0, entry["mime"], cf)
+    else:
+        hls_dir = directory / "hls"
+        try:
+            init, items, transcoded = build_hls(src, hls_dir, copy_only=copy_only)
+        except RuntimeError:
+            shutil.rmtree(hls_dir, ignore_errors=True)
+            if copy_only:
+                log("[telegram-backup] skipped_hls %s/%s (not re-encoded)" % (obj["bucket"], obj["key"]))
+            else:
+                log("[telegram-backup] skipped_hls %s/%s" % (obj["bucket"], obj["key"]))
+            return "skip"
+        if transcoded:
+            log("[telegram-backup] transcoded %s/%s so every segment stays under 19 MiB" % (obj["bucket"], obj["key"]))
+        queue = []
+        if init:
+            queue.append((-1, "init", hls_dir / Path(init).name, "video/mp4", 0))
+        for index, (name, duration) in enumerate(items):
+            path = hls_dir / Path(name).name
+            mime = "video/mp2t" if path.suffix == ".ts" else "video/iso.segment"
+            queue.append((index, "segment", path, mime, duration))
+        queue.append((-2, "playlist", hls_dir / "index.m3u8", "application/vnd.apple.mpegurl", 0))
+        for index, role, path, mime, duration in queue:
+            if not budget_ok(state, path.stat().st_size):
+                save_manifest(cf, manifest, directory)
+                shutil.rmtree(hls_dir, ignore_errors=True)
+                return "stop"
+            digest = hash_file(path)
+            upload_path(PUBLIC_API, cf["bot"], cf["channel"], path, "%s %s %s" % (obj["key"][:800], role, index), state, entry, role, index, digest, duration, mime, cf)
+        shutil.rmtree(hls_dir, ignore_errors=True)
+    save_manifest(cf, manifest, directory)
+    finish_verified(entry, obj, manifest, cf, directory)
+    if obj.get("bucket") == "cdn":
+        note_social(state, obj["key"], files_before, bytes_before)
+    log("[telegram-backup] stored %s/%s (%s)" % (obj["bucket"], obj["key"], kind))
+    return "ok"
+
+
+def process_cdn(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -> str:
+    prior = find_entry(manifest, obj["bucket"], obj["key"])
+    if prior and prior.get("verified") and (prior.get("parts") or []):
+        if obj.get("r2_bucket") and obj.get("r2_key") and not prior.get("deleted") and may_delete(prior.get("kind") or "", True, int(prior.get("size") or 0)):
+            delete_object(cf["token"], cf["account"], obj["r2_bucket"], obj["r2_key"])
+            prior["deleted"] = True
+            save_manifest(cf, manifest, directory)
+            log("[telegram-backup] deleted %s/%s" % (obj["r2_bucket"], obj["r2_key"]))
+        return "skip"
+    src = directory / "cdn.bin"
+    src.unlink(missing_ok=True)
+    fetched = None
+    if obj.get("original"):
+        outcome = fetch_original(obj, src, directory)
+        if outcome == "blocked":
+            src.unlink(missing_ok=True)
+            log("[telegram-backup] skipped_blocked %s" % obj["key"])
+            return "blocked"
+        if outcome == "live":
+            src.unlink(missing_ok=True)
+            log("[telegram-backup] skipped_live %s" % obj["key"])
+            return "blocked"
+        if isinstance(outcome, dict):
+            fetched = outcome
+            if outcome.get("info"):
+                obj["info"] = outcome["info"]
+        else:
+            log("[telegram-backup] original_unavailable %s" % obj["key"])
+    if not fetched:
+        fetched = fetch_allowed(str(obj.get("source_url") or ""), src)
+    if not fetched:
+        src.unlink(missing_ok=True)
+        log("[telegram-backup] skipped_cdn %s" % obj["key"])
+        return "skip"
+    obj["size"] = int(fetched["size"])
+    obj["content_type"] = fetched["content_type"]
+    obj["etag"] = fetched["sha256"]
+    probe = probe_saved(src)
+    obj["probe"] = probe
+    log_probe(obj["key"], probe)
+    kind = plan_kind(obj["key"], obj["size"], obj["content_type"], False)
+    if obj.get("role") == "video" and kind == "keep-other":
+        obj["content_type"] = "video/mp4"
+        kind = plan_kind(obj["key"], obj["size"], obj["content_type"], False)
+    if kind not in {"small", "hls"}:
+        src.unlink(missing_ok=True)
+        log("[telegram-backup] skipped_too_big cdn/%s %s" % (obj["key"], obj["size"]))
+        return "skip"
+    copy_only = obj.get("role") == "video"
+    try:
+        return store_loaded(src, obj, kind, manifest, cf, state, directory, fetched["sha256"], copy_only=copy_only)
+    finally:
+        src.unlink(missing_ok=True)
+
+
+def social_catalogs(cf: dict, directory: Path, buckets: list) -> list:
+    docs = []
+    for key in ("owner/tiktok.json", "feeds.json"):
+        doc = read_json_key(cf, buckets, key, directory)
+        if doc is None and key == "owner/tiktok.json":
+            local = ROOT / "owner" / "tiktok.json"
+            if local.is_file():
+                try:
+                    doc = json.loads(local.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    doc = None
+        if doc is None and key == "feeds.json":
+            local = ROOT / "feeds.json"
+            if local.is_file():
+                try:
+                    doc = json.loads(local.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    doc = None
+        if isinstance(doc, dict):
+            docs.append(doc)
+    return docs
+
+
 def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -> str:
     local = local_requested()
-    kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", local)
+    kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", local, cf.get("loop_version") or "", cf.get("blocked_keys"))
     if kind == "too-big":
         log("[telegram-backup] skipped_too_big %s/%s %s" % (obj["bucket"], obj["key"], obj["size"]))
         return "skip"
-    if not kind.startswith(("small", "hls", "archive", "account")):
+    if not kind.startswith(("small", "hls", "archive", "account", "loop", "mirror")):
         return "skip"
     prior = find_entry(manifest, obj["bucket"], obj["key"])
-    if prior and prior.get("etag") and prior.get("etag") == obj.get("etag") and prior.get("verified") and prior.get("sha256"):
-        if may_delete(prior.get("kind") or "", True, int(prior.get("size") or 0)) and not prior.get("deleted"):
-            delete_object(cf["token"], cf["account"], obj["bucket"], obj["key"])
-            prior["deleted"] = True
-            save_manifest(cf, manifest, directory)
-            log("[telegram-backup] deleted %s/%s" % (obj["bucket"], obj["key"]))
-        return "skip"
+    if prior and prior.get("etag") and prior.get("etag") == obj.get("etag") and prior.get("sha256"):
+        if kind == "loop":
+            part = loop_part(obj["key"], cf.get("loop_version") or "")
+            done = part_done(prior, part["role"], part["index"]) if part else None
+            if done and done.get("sha256") == prior.get("sha256"):
+                if cf.get("database"):
+                    remember_d1(cf["token"], cf["account"], cf["database"], prior, done, bool(prior.get("verified")), part["group"])
+                return "skip"
+        elif kind == "mirror":
+            done = part_done(prior, "file", 0)
+            if done and done.get("sha256") == prior.get("sha256"):
+                if cf.get("database"):
+                    remember_d1(cf["token"], cf["account"], cf["database"], prior, done, bool(prior.get("verified")))
+                return "skip"
+        elif prior.get("verified"):
+            if may_delete(prior.get("kind") or "", True, int(prior.get("size") or 0)) and not prior.get("deleted"):
+                delete_object(cf["token"], cf["account"], obj["bucket"], obj["key"])
+                prior["deleted"] = True
+                save_manifest(cf, manifest, directory)
+                log("[telegram-backup] deleted %s/%s" % (obj["bucket"], obj["key"]))
+            return "skip"
     src = directory / "object.bin"
     sha = download_object(cf["token"], cf["account"], obj["bucket"], obj["key"], src)
     if kind == "account":
@@ -959,8 +2067,32 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
             return "ok"
         finally:
             cipher.unlink(missing_ok=True)
-    entry = ensure_entry(manifest, obj, kind, sha, kind in {"small", "hls"}, False)
-    if kind == "small":
+    if kind == "loop":
+        part = loop_part(obj["key"], cf.get("loop_version") or "")
+        if not part:
+            src.unlink(missing_ok=True)
+            return "skip"
+        entry = ensure_entry(manifest, obj, "loop", sha, True, False)
+        entry["group"] = part["group"]
+        duration = 0.0
+        if part["role"] == "segment":
+            duration = segment_duration(loop_duration_map(cf, obj["bucket"], part["group"], directory), part["name"])
+        if not budget_ok(state, src.stat().st_size):
+            save_manifest(cf, manifest, directory)
+            return "stop"
+        if part["role"] == "segment":
+            state["loop_segments"] = int(state.get("loop_segments") or 0) + 1
+            state["loop_max"] = max(int(state.get("loop_max") or 0), src.stat().st_size)
+        upload_path(
+            PUBLIC_API, cf["bot"], cf["channel"], src, obj["key"][:900], state, entry,
+            part["role"], part["index"], sha, duration, part["mime"], cf, part["group"],
+        )
+        save_manifest(cf, manifest, directory)
+        src.unlink(missing_ok=True)
+        log("[telegram-backup] stored %s/%s (loop %s)" % (obj["bucket"], obj["key"], part["group"]))
+        return "ok"
+    entry = ensure_entry(manifest, obj, kind, sha, kind in {"small", "hls", "mirror"}, False)
+    if kind in {"small", "mirror"}:
         if not budget_ok(state, src.stat().st_size):
             return "stop"
         upload_path(PUBLIC_API, cf["bot"], cf["channel"], src, obj["key"][:900], state, entry, "file", 0, sha, 0, entry["mime"], cf)
@@ -1004,7 +2136,7 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
             upload_path(PUBLIC_API, cf["bot"], cf["channel"], path, "%s %s %s" % (obj["key"][:800], role, index), state, entry, role, index, digest, duration, mime, cf)
         shutil.rmtree(hls_dir, ignore_errors=True)
     save_manifest(cf, manifest, directory)
-    if entry.get("serve") and cf.get("worker"):
+    if entry.get("serve") and entry.get("kind") in {"small", "hls"} and cf.get("worker"):
         if verify_entry(entry, cf["worker"], cf["bot"], directory):
             entry["verified"] = True
             for part in entry.get("parts") or []:
@@ -1023,7 +2155,7 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
     return "ok"
 
 
-def backup() -> int:
+def backup(loop_only: bool = False) -> int:
     cf = prepare_clients()
     if cf is None:
         return 0
@@ -1034,6 +2166,10 @@ def backup() -> int:
     directory = Path(tempfile.mkdtemp(prefix="tg-backup-"))
     try:
         rows = collect_objects(cf)
+        version = read_loop_version(cf["token"], cf["account"], bucket_names(cf["token"], cf["account"]), directory)
+        if loop_only and not version:
+            log("[telegram-backup] loop/current.json has no version; skipping the mirror")
+            return 0
         local = local_requested() and needs_local(rows)
         manifest, manifest_bucket = load_remote_manifest(cf["token"], cf["account"], bucket_names(cf["token"], cf["account"]), directory)
         if not manifest_bucket:
@@ -1053,16 +2189,50 @@ def backup() -> int:
                 worker = worker_api(cf["token"], cf["account"])
             except Exception:
                 worker = ""
+        blocked = collect_blocked_keys(cf, rows, directory)
         cf.update({
             "bot": bot,
             "channel": channel,
             "database": database,
             "worker": worker,
             "manifest_bucket": manifest_bucket,
+            "loop_version": version,
+            "blocked_keys": blocked,
         })
         state = new_entry_state()
-        for obj in sort_objects(rows):
+        if loop_only:
+            state["file_cap"] = loop_file_cap()
+            log("[telegram-backup] mirroring loop %s" % version)
+
+        def rank(obj):
+            if loop_only:
+                return loop_rank(str(obj.get("key") or ""), version)
+            kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version, blocked)
+            key = str(obj.get("key") or "")
+            if key.startswith("tiktok/"):
+                first = 0
+            elif key.startswith("social/") and "/video/" in key:
+                first = 1
+            elif key.startswith("social/"):
+                first = 2
+            elif kind in {"loop", "mirror"}:
+                first = 3
+            else:
+                first = 4
+            return (first, -int(obj.get("size") or 0), str(obj.get("uploaded") or ""), key)
+
+        stopped = False
+        if not loop_only:
+            log("[telegram-backup] social originals for added accounts are downloaded by media-extract")
+        for obj in sort_objects(rows, rank):
+            if stopped:
+                break
+            owned = find_entry(manifest, "cdn", str(obj.get("key") or ""))
+            if owned and owned.get("parts") and str(obj.get("key") or "").startswith(("tiktok/", "social/")):
+                continue
             if structural_role(obj["key"]) == "manifest":
+                continue
+            if loop_only and plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version) != "loop":
                 continue
             try:
                 result = process(obj, manifest, cf, state, directory)
@@ -1074,7 +2244,15 @@ def backup() -> int:
             if result == "stop":
                 log("[telegram-backup] reached the run cap")
                 break
-        log("[telegram-backup] uploaded %s files, %s bytes" % (state["files"], state["bytes"]))
+        log("[telegram-backup] social %s files, %s bytes; tiktok %s files, %s bytes" % (
+            state.get("social_files") or 0,
+            state.get("social_bytes") or 0,
+            state.get("tiktok_files") or 0,
+            state.get("tiktok_bytes") or 0,
+        ))
+        log(upload_summary(state))
+        if loop_only:
+            log("[telegram-backup] loop mirror stored %s segments, largest %s bytes" % (state.get("loop_segments") or 0, state.get("loop_max") or 0))
         return 0
     except Exception as err:
         log("[telegram-backup] backup failed")
@@ -1102,17 +2280,50 @@ def selftest() -> int:
     os.environ.pop("TG_BACKUP_KEY", None)
     os.environ["TG_MAX_MB"] = "19"
     os.environ["TG_DELETE_FROM_R2"] = ""
+    published = "v202610221300"
     check(plan_kind("loop/current.json", 100, "application/json", True) == "keep-radio", "radio stays on R2")
-    check(plan_kind("music/song/seg.m4s", 5000, "video/iso.segment", True) == "keep-music", "music stays on R2")
+    check(plan_kind("loop/current.json", 100, "application/json", True, published) == "keep-radio", "current.json stays on R2")
+    check(plan_kind("loop/" + published + "/seg_0000.m4s", 1000, "video/iso.segment", True, published) == "loop", "the published FLAC loop is mirrored")
+    check(plan_kind("loop/" + published + "/aac/seg_0001.ts", 1000, "video/mp2t", True, published) == "loop", "the published AAC fallback is mirrored")
+    check(plan_kind("loop/" + published + "/index.m3u8", 200, "application/vnd.apple.mpegurl", True, published) == "loop", "the loop playlist is mirrored")
+    check(plan_kind("loop/" + published + "/init.mp4", 500, "video/mp4", True, published) == "loop", "the loop init segment is mirrored")
+    check(plan_kind("loop/vOLD/seg_0000.m4s", 1000, "video/iso.segment", True, published) == "loop", "an older loop version is mirrored")
+    check(plan_kind("radio/bed/index.m3u8", 400, "application/vnd.apple.mpegurl", True) == "mirror", "radio audio is mirrored")
+    check(plan_kind("music/song/seg.m4s", 5000, "video/iso.segment", True) == "mirror", "a music segment is mirrored")
+    check(plan_kind("music/song/index.m3u8", 800, "application/vnd.apple.mpegurl", True) == "mirror", "a music playlist is mirrored")
+    check(plan_kind("music/song/init.mp4", 900, "video/mp4", True) == "mirror", "a music init file is mirrored")
+    check(plan_kind("covers/" + ("ab" * 32) + ".png", 1000, "image/png", True) == "mirror", "a cover image is mirrored")
+    check(plan_kind("music/song/key.bin", 16, "application/octet-stream", True) == "keep-key", "a song key file stays on R2")
+    blocked = aes_key_refs('#EXT-X-KEY:METHOD=AES-128,URI="cf1373b0cf10db5ae3fe8dd7.bin",IV=0x1\n', "music/abc/index.m3u8")
+    check(blocked == {"music/abc/cf1373b0cf10db5ae3fe8dd7.bin"}, "a playlist names its AES key")
+    check(plan_kind("music/abc/cf1373b0cf10db5ae3fe8dd7.bin", 16, "application/octet-stream", True, "", blocked) == "keep-key", "the named AES key is not uploaded")
+    check(plan_kind("music/abc/c099e79892e9b2f248f9.m4s", 5000, "video/iso.segment", True, "", blocked) == "mirror", "an encrypted music piece is still mirrored")
+    check(plan_kind("media/avatars/123456789012/" + ("ab" * 32) + ".webp", 1000, "image/webp", True) == "mirror", "avatar media is mirrored")
+    check(plan_kind("media/banners/123456789012/" + ("cd" * 32) + ".jpg", 1000, "image/jpeg", True) == "mirror", "banner media is mirrored")
+    check(plan_kind("stories/card.jpg", 1000, "image/jpeg", True) == "mirror", "story media is mirrored")
+    check(plan_kind("stories.json", 1000, "application/json", True) == "keep-live", "the stories catalog stays on R2")
+    check(plan_kind("owner/tiktok.json", 1000, "application/json", True) == "keep-live", "owner files stay on R2")
+    check(plan_kind("secrets/token.txt", 20, "text/plain", True) == "keep-key", "a token file stays on R2")
+    check(plan_kind("loop/" + published + "/seg_0000.m4s", SMALL_BYTES + 1, "video/iso.segment", True, published) == "too-big", "a loop segment of 19 MiB or more stays on R2")
+    flac = loop_part("loop/" + published + "/seg_0003.m4s", published)
+    aac = loop_part("loop/" + published + "/aac/seg_0001.ts", published)
+    check(flac["group"] == "loop/" + published and flac["role"] == "segment" and flac["index"] == 3, "FLAC segments are recorded under the loop version")
+    check(aac["group"] == "loop/" + published + "/aac" and aac["mime"] == "video/mp2t" and aac["index"] == 1, "AAC segments are recorded under the loop version")
+    check(loop_part("loop/" + published + "/index.m3u8", published)["index"] == -2, "the playlist is a manifest row, not a served segment")
+    check(loop_part("loop/" + published + "/init.mp4", published)["role"] == "init", "the init segment is part of the loop version")
+    check(loop_part("loop/current.json", published) is None, "current.json is not a loop segment")
+    check(segment_duration({"seg_0000.m4s": 10.031}, "seg_0000.m4s") == 10.031, "loop durations come from the playlist")
+    check(segment_duration({}, "seg_0000.m4s") == 10.0, "a missing loop duration defaults to 10 seconds")
     check(plan_kind("feeds.json", 1000, "application/json", True) == "keep-live", "worker JSON stays on R2")
-    check(plan_kind("media/avatars/123456789012/" + ("ab" * 32) + ".webp", 1000, "image/webp", True) == "keep-account", "account data is excluded without a key")
+    check(plan_kind("history/1.json", 1000, "application/json", True) == "keep-account", "account data is excluded without a key")
     check(plan_kind("cold/a.jpg", 1000, "image/jpeg", False) == "small", "a small image is one document")
     check(plan_kind("cold/big.mp4", SMALL_BYTES + 1, "video/mp4", True) == "hls", "a video over 19 MiB becomes HLS")
     check(plan_kind("cold/big.zip", SMALL_BYTES + 1, "application/zip", True) == "archive", "a big archive uses the local server")
     check(plan_kind("cold/big.zip", SMALL_BYTES + 1, "application/zip", False) == "too-big", "a big archive is skipped without the local server")
     check(plan_kind("cold/clip.mp4", SMALL_BYTES, "video/mp4", True) == "small", "a video of 19 MiB stays one document")
     os.environ["TG_BACKUP_KEY"] = "test-passphrase-value"
-    check(plan_kind("media/avatars/123456789012/" + ("ab" * 32) + ".webp", 1000, "image/webp", True) == "account", "a backup key allows an encrypted account copy")
+    check(plan_kind("history/1.json", 1000, "application/json", True) == "account", "a backup key allows an encrypted account copy")
+    check(plan_kind("media/avatars/123456789012/" + ("ab" * 32) + ".webp", 1000, "image/webp", True) == "mirror", "avatar media stays servable when the backup key is set")
     os.environ.pop("TG_BACKUP_KEY", None)
 
     check(part_spans(PART_BYTES, PART_BYTES) == [(0, PART_BYTES)], "a 1950 MiB archive is one part")
@@ -1120,7 +2331,7 @@ def selftest() -> int:
     check(retry_after(429, {"ok": False, "error_code": 429, "parameters": {"retry_after": 9}}) == 9, "retry_after is honored")
     check(retry_after(200, {"ok": True}) is None, "a normal response is not a rate limit")
     check(gap_seconds(10, 11) == 2, "messages stay at least 3 seconds apart")
-    check(may_delete("small", True, 100) and may_delete("hls", True, 10**9) and not may_delete("archive", True, 100) and not may_delete("small", False, 100), "only a verified loadable file can leave R2")
+    check(may_delete("small", True, 100) and may_delete("hls", True, 10**9) and not may_delete("archive", True, 100) and not may_delete("small", False, 100) and not may_delete("loop", True, 100) and not may_delete("mirror", True, 100), "only a verified loadable file can leave R2, and music, covers, and the radio loop never do")
     os.environ["TG_DELETE_FROM_R2"] = "false"
     check(not may_delete("small", True, 100), "TG_DELETE_FROM_R2=false keeps R2")
     os.environ["TG_DELETE_FROM_R2"] = ""
@@ -1162,6 +2373,14 @@ def selftest() -> int:
             names = [Path(init_name).name] + [Path(name).name for name, _duration in segs]
             check(bool(segs) and segments_under(folder / "out", names, SMALL_BYTES), "HLS segments stay under 19 MiB")
             check(all(4 <= duration <= 6 or duration <= 6 for _name, duration in segs), "sample segments are a few seconds")
+            copied = hls_command(src, folder / "copy-cmd", 5, False, True)
+            check(copied[copied.index("-c") + 1] == "copy" and "libx264" not in copied, "HLS copy uses -c copy and does not re-encode")
+            init_only, segs_only, transcoded = build_hls(src, folder / "copy", copy_only=True)
+            names_only = [Path(init_only).name] + [Path(name).name for name, _duration in segs_only]
+            check(transcoded is False and bool(segs_only) and segments_under(folder / "copy", names_only, SMALL_BYTES), "copy-only HLS keeps the original codecs")
+            if shutil.which("ffprobe"):
+                probed = probe_saved(src)
+                check(probed.get("width") == 160 and probed.get("height") == 120 and probed.get("codec") == "h264" and int(probed.get("bitrate") or 0) > 0 and float(probed.get("duration") or 0) > 0, "ffprobe records width, height, codec, bitrate, and duration")
 
     doc = (ROOT / "docs" / "telegram-backup.md").read_text(encoding="utf-8")
     workflow = (ROOT / ".github" / "workflows" / "telegram-backup.yml").read_text(encoding="utf-8")
@@ -1173,9 +2392,14 @@ def selftest() -> int:
     check("https://github.com/ViktorychGroup/ViktorychApp/settings/secrets/actions/new" in doc, "the docs name the GitHub secret page")
     check("@BotFather" in doc and "/newbot" in doc and "https://my.telegram.org" in doc, "the docs include the bot and api_id steps")
     check("wrangler secret put TELEGRAM_BOT_TOKEN" in doc, "the docs include the Worker secret command")
+    secret_workflow = (ROOT / ".github" / "workflows" / "telegram-worker-secret.yml").read_text(encoding="utf-8")
+    check("wrangler secret put TELEGRAM_BOT_TOKEN" in secret_workflow and "printf '%s'" in secret_workflow, "the Worker secret is copied from stdin")
+    check('echo "$TELEGRAM' not in secret_workflow and "echo ${{ secrets" not in secret_workflow, "the Worker secret workflow does not print secrets")
+    check(".github/telegram-worker-secret" in secret_workflow and ".github/telegram-worker-secret" in doc, "pushing the marker copies the Worker secret")
     check('cron: "17 11 * * *"' in workflow and "workflow_dispatch" in workflow and "actions/cache@v4" in workflow and "--local" in workflow, "the workflow is scheduled, manual, cached, and can start the local server")
     check('echo "$TELEGRAM' not in workflow and "echo ${{ secrets" not in workflow, "the workflow does not print secrets")
     check('path.startsWith("/tg/")' in worker and "TELEGRAM_BOT_TOKEN" in worker and "not_configured" in worker, "the Worker serves /tg and returns 503 without its secret")
+    check("function telegramSecretKey(" in worker and "function ownerOnlyMedia(" in worker and "function hiddenAvatar(" in worker, "the Worker keeps keys, hidden avatars, and owner-only Shorts off anonymous playback")
     check("buildPlaylist" in worker and "index.m3u8" in worker and "parseRange" in worker, "the Worker rewrites playlists and honors Range")
     check("function r2ObjectKey" in app and "tgMediaUrl" in app and "index.m3u8" in app, "the app tries R2, then the Worker, then the source")
     check("docs/telegram-backup.md" in readme and "TELEGRAM_BOT_TOKEN" in readme, "the readme points at the Telegram backup")
@@ -1186,6 +2410,98 @@ def selftest() -> int:
     check('("true" if present else "false")' in probe, "the probe prints true or false for each secret")
     check(".github/telegram-probe" in workflow and "scripts/telegram_probe.py" in workflow, "pushing the probe file runs the check")
     check("getFile" in restore and "sha256" in restore, "restore downloads by file id and checks sha256")
+    check("/tg/loop/" in doc and "never deleted from R2" in doc, "the radio loop is mirrored and stays on R2")
+    check("AES key" in doc and "covers/" in doc and "media/avatars/" in doc and "stories/" in doc, "songs, covers, stories, avatars, and banners are documented")
+    check("sign-up gate" in doc and "owner-only" in doc, "the sign-up gate and the Shorts owner-only rule are documented")
+    check("function tgBlockedKey(" in app and "music/" in app, "the app can fall back to Telegram for music and still refuses key files")
+    check('"primary": "r2"' in doc and "LOOP_PRIMARY" in doc, "the radio primary field is documented and defaults to r2")
+    check("--loop" in workflow and 'workflows: ["Publish radio loop"]' in workflow and "loop_only" in workflow and "timeout-minutes: 180" in workflow, "a published loop is mirrored")
+    check(loop_file_cap() >= 1000 and MAX_NEW_FILES == 300, "a loop mirror can hold a full version and the daily backup stays at 300 files")
+    check(loop_rank("loop/v202610221355/seg_0001.m4s", "v202610221355") < loop_rank("loop/vOLD/seg_0001.m4s", "v202610221355"), "the current loop version is mirrored first")
+    tiktok_post = {
+        "platform": "tiktok",
+        "handle": "gabii_g5",
+        "statusId": "7695476356548660503",
+        "date": "2026-10-11T18:18:39Z",
+        "stats": {"views": 9, "likes": 3, "replies": 1, "reposts": 0},
+        "media": [
+            {"type": "video", "url": "https://v16.tiktokcdn.com/clip.mp4", "poster": "https://p16.tiktokcdn.com/cover.jpg"},
+            {"type": "photo", "url": "https://p16.tiktokcdn.com/slide.jpg"},
+        ],
+    }
+    planned = plan_social([{"posts": [tiktok_post]}], set())
+    planned_keys = {row["key"]: row for row in planned}
+    check(set(planned_keys) == {
+        "tiktok/gabii_g5/7695476356548660503/video",
+        "tiktok/gabii_g5/7695476356548660503/poster",
+        "tiktok/gabii_g5/7695476356548660503/photo/1",
+    }, "TikTok video, poster, and carousel photo get stable keys")
+    video_row = planned_keys["tiktok/gabii_g5/7695476356548660503/video"]
+    check(video_row["original"] is True and video_row["page_url"] == "https://www.tiktok.com/@gabii_g5/video/7695476356548660503", "a TikTok video is fetched from the public page")
+    check(planned_keys["tiktok/gabii_g5/7695476356548660503/photo/1"]["photo_ordinal"] == 1, "a carousel photo keeps its gallery index")
+    check(video_row["info"]["views"] == 9 and video_row["info"]["likes"] == 3 and video_row["info"]["upload_date"] == "20261011", "the manifest keeps views, likes, and the upload date")
+    live_post = {"platform": "tiktok", "handle": "gabii_g5", "kind": "live", "url": "https://www.tiktok.com/@gabii_g5/live", "media": [{"type": "video", "url": "https://v16.tiktokcdn.com/live.mp4"}]}
+    check(plan_social([{"posts": [live_post]}], set()) == [], "a TikTok live is not recorded")
+    thumb = plan_social([{"posts": [{"platform": "youtube", "statusId": "xtrFOsncOeo", "url": "https://www.youtube.com/watch?v=xtrFOsncOeo", "date": "2026-10-20T13:34:32+00:00", "stats": {"views": 88288, "likes": 5387}, "media": [{"type": "video", "url": "https://www.youtube-nocookie.com/embed/xtrFOsncOeo", "poster": "https://i.ytimg.com/vi/xtrFOsncOeo/hqdefault.jpg", "stream": "https://invidious.example/v.mp4"}]}]}], set())
+    by_key = {row["key"]: row for row in thumb}
+    check(set(by_key) == {"social/youtube/xtrFOsncOeo/video/0", "social/youtube/xtrFOsncOeo/thumb/0"}, "YouTube stores the original video and its thumbnail")
+    check(by_key["social/youtube/xtrFOsncOeo/video/0"]["source_url"] == "" and by_key["social/youtube/xtrFOsncOeo/video/0"]["page_url"] == "https://www.youtube.com/watch?v=xtrFOsncOeo", "the YouTube embed is not fetched")
+    check(by_key["social/youtube/xtrFOsncOeo/thumb/0"]["source_url"].startswith("https://i.ytimg.com/"), "YouTube contributes its thumbnail, not the embed")
+    check(host_ok("https://v16.tiktokcdn.com/a.mp4") and not host_ok("https://www.youtube.com/watch?v=xtrFOsncOeo"), "only the existing CDN hosts are fetched")
+    again = plan_social([{"posts": [tiktok_post]}], {"tiktok/gabii_g5/7695476356548660503/video"})
+    check(any(row["key"] == "tiktok/gabii_g5/7695476356548660503/video" and row["original"] for row in again), "a TikTok video on R2 is still replaced by the original")
+    check("bv*+ba/b" in ytdlp_download_args("https://www.youtube.com/watch?v=xtrFOsncOeo", Path("out"), YTDLP_FORMAT), "yt-dlp uses bv*+ba/b")
+    args = ytdlp_download_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), "bytevc1+audio/bv*+ba/b")
+    check(args[args.index("-f") + 1].endswith("/bv*+ba/b") and args[args.index("--merge-output-format") + 1] == "mp4" and args[args.index("--remux-video") + 1] == "mp4" and "--no-cookies" in args and "--cookies" not in args, "the remux is mp4 and uses no cookies")
+    check(tiktok_selector([
+        {"format_id": "h264_1080", "vcodec": "h264", "acodec": "none", "tbr": 2500, "height": 1080},
+        {"format_id": "bytevc1_720", "vcodec": "bytevc1", "acodec": "none", "tbr": 1800, "height": 720},
+        {"format_id": "h265_540", "vcodec": "h265", "acodec": "none", "tbr": 900, "height": 540},
+        {"format_id": "audio", "vcodec": "none", "acodec": "aac", "tbr": 128},
+    ]) == "bytevc1_720+audio/bv*+ba/b", "TikTok prefers the top bytevc1 bitrate over a higher h264")
+    check(video_format_arg("instagram") == "bv*+ba/b", "Instagram, X, YouTube, VK, and Facebook use bv*+ba/b")
+    gallery_args = gallery_download_args("https://www.instagram.com/p/DeZgzTEggQe/", Path("photos"), 2)
+    check("--config-ignore" in gallery_args and "--cookies" not in gallery_args and "2-2" in gallery_args, "gallery-dl asks for one full-size photo and no cookies")
+    meta = info_fields({"id": "abc", "view_count": 5, "like_count": 2, "comment_count": 1, "repost_count": 3, "upload_date": "20261011", "url": "https://cdn.example/file.mp4?token=secret", "formats": [{"url": "https://cdn.example/a"}]})
+    check(meta == {"id": "abc", "views": 5, "likes": 2, "comments": 1, "shares": 3, "upload_date": "20261011"} and "token" not in json.dumps(meta), "info JSON keeps counts and drops URLs")
+    check(runner_blocked("ERROR: unable to download video data: HTTP Error 403: Forbidden") and runner_blocked("captcha required") and not runner_blocked("video unavailable"), "a TikTok 403 or captcha is a skip, and a normal miss is not")
+    ig = {"platform": "instagram", "statusId": "https://www.instagram.com/p/DeZgzTEggQe/", "url": "https://www.instagram.com/p/DeZgzTEggQe/", "media": [{"type": "photo", "url": "https://scontent.cdninstagram.com/a.jpg"}]}
+    check(social_object_key(ig, "photo", 0) == "social/instagram/DeZgzTEggQe/photo/0", "an Instagram shortcode is the object id")
+    node_keys = subprocess.run(["node", "--input-type=module", "-e", """
+import { socialObjectKey } from "./shared/social-keys.js";
+const post = { platform: "tiktok", handle: "gabii_g5", statusId: "7695476356548660503" };
+const ig = { platform: "instagram", statusId: "https://www.instagram.com/p/DeZgzTEggQe/", url: "https://www.instagram.com/p/DeZgzTEggQe/" };
+const yt = { platform: "youtube", statusId: "xtrFOsncOeo" };
+process.stdout.write([
+  socialObjectKey(post, "video", 0),
+  socialObjectKey(post, "poster", 0),
+  socialObjectKey(post, "photo", 1),
+  socialObjectKey(ig, "photo", 0),
+  socialObjectKey(yt, "thumb", 0)
+].join("\\n"));
+"""], capture_output=True, text=True, check=False)
+    check(node_keys.returncode == 0 and node_keys.stdout.splitlines() == [
+        "tiktok/gabii_g5/7695476356548660503/video",
+        "tiktok/gabii_g5/7695476356548660503/poster",
+        "tiktok/gabii_g5/7695476356548660503/photo/1",
+        "social/instagram/DeZgzTEggQe/photo/0",
+        "social/youtube/xtrFOsncOeo/thumb/0",
+    ], "the page and the backup use the same object keys")
+    check('return "tiktok/" + handle + "/" + ident + "/video"' in app, "the app builds the TikTok video key")
+    check("HLS VOD" in doc and "if you ask" in doc, "live recordings are only a later HLS VOD note")
+    check("TikTok media loads from /tg" in doc, "TikTok playback from Telegram is documented")
+    check("bv*+ba/b" in doc and "--merge-output-format mp4" in doc and "--remux-video mp4" in doc, "the docs name the yt-dlp remux")
+    check("gallery-dl" in doc and "-c copy" in doc and "bytevc1" in doc, "the docs name full-size photos, copy-only HLS, and the TikTok codec")
+    extract_workflow = (ROOT / ".github" / "workflows" / "media-extract.yml").read_text(encoding="utf-8")
+    check("yt-dlp==2026.10.21" in extract_workflow and "gallery-dl==1.32.17" in extract_workflow and "ffprobe" in extract_workflow and 'cron: "17 */3 * * *"' in extract_workflow, "media-extract is scheduled and pins yt-dlp, gallery-dl, and ffprobe")
+    spaces = (ROOT / "spaces.js").read_text(encoding="utf-8")
+    check("function loopMirrorPlan(" in spaces and "maxNumRetry: 1" in spaces, "the player falls back after one R2 retry")
+    check("function loopPrimaryName(" in spaces and "loopPrimaryChanged(" in spaces, "the player reads the loop primary field")
+    extracted = subprocess.run([sys.executable, str(ROOT / "scripts" / "media_extract.py"), "--selftest"], capture_output=True, text=True, check=False)
+    if extracted.returncode != 0:
+        print(extracted.stdout)
+        print(extracted.stderr)
+    check(extracted.returncode == 0, "the media-extract self-test passes")
     probed = subprocess.run([sys.executable, str(ROOT / "scripts" / "telegram_probe.py"), "--selftest"], capture_output=True, text=True, check=False)
     check(probed.returncode == 0, "the probe self-test passes")
     restored = subprocess.run([sys.executable, str(ROOT / "scripts" / "telegram_restore.py"), "--selftest"], capture_output=True, text=True, check=False)
@@ -1201,6 +2517,8 @@ def main(argv: list | None = None) -> int:
             return selftest()
         if "--preflight" in args:
             return preflight()
+        if "--loop" in args:
+            return backup(loop_only=True)
         return backup()
     except SystemExit:
         raise

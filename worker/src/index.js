@@ -2,6 +2,7 @@ import { OWNER_HANDLE, inspectHandle } from "../../shared/handle-skeleton.js";
 import { parseRoomId, pickStreams } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
+import { socialKeysForPost } from "../../shared/social-keys.js";
 import { buildPlaylist, parseRange, safeTelegramPath } from "./telegram.js";
 
 const encoder = new TextEncoder();
@@ -1159,7 +1160,103 @@ const TG_PATH_TTL_MS = 50 * 60 * 1000;
 const TG_USER_LIMIT = 1200;
 const TG_VERIFY_LIMIT = 4000;
 const TG_ANON_LIMIT = 60;
+const TG_LOOP_LIMIT = 800;
 const TG_WINDOW_MS = 60 * 60 * 1000;
+const LOOP_PUBLIC = /^loop\/[A-Za-z0-9._-]{1,80}(?:\/aac)?(?:\/(?:index\.m3u8|init|\d+))?$/;
+
+function loopGroupKey(key) {
+  return /^loop\/[A-Za-z0-9._-]{1,80}(?:\/aac)?$/.test(String(key || ""));
+}
+
+function tiktokPlaybackKey(raw) {
+  const text = String(raw || "").replace(/\/(?:index\.m3u8|init|\d+)$/, "");
+  return /^tiktok\/[A-Za-z0-9._]{2,24}\/\d{8,22}\/(?:video|poster|photo\/\d{1,3})$/.test(text);
+}
+
+function publicLoopCache() {
+  return {
+    "cache-control": "public, max-age=31536000, immutable",
+    "cdn-cache-control": "public, max-age=31536000, immutable"
+  };
+}
+
+function telegramSecretKey(key) {
+  const raw = String(key || "");
+  const name = (raw.split("/").pop() || "").toLowerCase();
+  if (!raw || raw.indexOf("..") >= 0) return true;
+  if (raw.startsWith("owner/") || raw.startsWith("backup/") || raw === "loop/current.json") return true;
+  if (name === "key.bin" || name === "key" || name.endsWith(".key")) return true;
+  if (raw.startsWith("music/") && name.endsWith(".bin")) return true;
+  if (name.indexOf("token") >= 0 || name.indexOf("secret") >= 0) return true;
+  return false;
+}
+
+const AVATAR_MEDIA = /^media\/avatars\/(\d{12})\/([a-f0-9]{64})\.(webp|jpg|png)$/;
+const ownerMediaCache = { at: 0, keys: null };
+
+function addOwnerMediaKey(value, into) {
+  const raw = String(value || "").trim();
+  if (!raw || raw.indexOf("..") >= 0) return;
+  let path = "";
+  if (/^(?:archive|music|covers|radio|loop|media|stories)\//.test(raw)) path = raw.split("?")[0];
+  else {
+    try {
+      const url = new URL(raw);
+      const host = url.hostname.toLowerCase();
+      if (host === "r2.dev" || host.endsWith(".r2.dev") || host.endsWith(".workers.dev")) {
+        path = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+        if (path.startsWith("v1/archive/")) path = "archive/" + path.slice("v1/archive/".length);
+        if (path.startsWith("tg/")) path = path.slice(3);
+      }
+    } catch (err) { path = ""; }
+  }
+  if (!path || path.indexOf("..") >= 0) return;
+  path = path.split("?")[0];
+  if (/^(?:archive|music|covers|radio|loop|media|stories)\//.test(path)) into.add(path);
+}
+
+function collectOwnerMedia(value, env, into) {
+  if (Array.isArray(value)) {
+    value.forEach((item) => {
+      if (item && typeof item === "object" && !Array.isArray(item) && ownerOnlyItem(item, env)) {
+        const walk = (node) => {
+          if (typeof node === "string") addOwnerMediaKey(node, into);
+          else if (Array.isArray(node)) node.forEach(walk);
+          else if (node && typeof node === "object") Object.keys(node).forEach((name) => walk(node[name]));
+        };
+        walk(item);
+        if (String(item.platform || "").toLowerCase() !== "tiktok") socialKeysForPost(item).forEach((key) => into.add(key));
+      } else collectOwnerMedia(item, env, into);
+    });
+    return;
+  }
+  if (value && typeof value === "object") Object.keys(value).forEach((name) => collectOwnerMedia(value[name], env, into));
+}
+
+async function ownerOnlyMedia(env) {
+  const now = Date.now();
+  if (ownerMediaCache.keys && now - ownerMediaCache.at < 60000) return ownerMediaCache.keys;
+  const keys = new Set();
+  if (env.DATA) {
+    for (const name of ["feeds.json", "stories.json"]) {
+      const object = await env.DATA.get(name);
+      if (!object) continue;
+      try { collectOwnerMedia(JSON.parse(await object.text()), env, keys); }
+      catch (err) { /* a bad catalog does not open owner-only media */ }
+    }
+  }
+  ownerMediaCache.at = now;
+  ownerMediaCache.keys = keys;
+  return keys;
+}
+
+async function hiddenAvatar(env, viewer, key) {
+  const match = AVATAR_MEDIA.exec(String(key || ""));
+  if (!match || !env.DB) return false;
+  const owner = await env.DB.prepare("SELECT public_id, hide_avatar FROM accounts WHERE public_id = ?").bind(match[1]).first();
+  if (!owner || !cleanHide(owner.hide_avatar)) return false;
+  return !viewer || viewer.public_id !== owner.public_id;
+}
 
 function bearerIsBot(env, request) {
   const token = bearer(request);
@@ -1241,84 +1338,105 @@ function mediaResponse(bytes, mime, status, extra) {
   return new Response(bytes, { status: status, headers: headers });
 }
 
-async function rangedTelegram(request, env, row) {
+async function rangedTelegram(request, env, row, immutable) {
   const full = await telegramBody(env, row);
   if (!full) return json(502, { error: "unavailable" });
   const bytes = await full.arrayBuffer();
   const mime = row.mime || full.headers.get("content-type") || "application/octet-stream";
   const span = parseRange(request.headers.get("Range"), bytes.byteLength);
+  const extra = immutable ? publicLoopCache() : null;
   if (span === false) {
     return new Response(null, {
       status: 416,
       headers: { "content-range": "bytes */" + bytes.byteLength, "cache-control": "no-store" }
     });
   }
-  if (!span) return mediaResponse(bytes, mime, 200);
+  if (!span) return mediaResponse(bytes, mime, 200, extra);
   const slice = bytes.slice(span.start, span.end + 1);
-  return mediaResponse(slice, mime, 206, {
+  return mediaResponse(slice, mime, 206, Object.assign({
     "content-range": "bytes " + span.start + "-" + span.end + "/" + bytes.byteLength
-  });
+  }, extra || {}));
 }
 
 async function handleTelegram(request, env, path) {
   if (!env.DB) return json(503, { error: "not_configured" });
-  const viewer = await sessionAccount(env, request);
-  const verify = !viewer && bearerIsBot(env, request);
-  if (!viewer && !verify) {
-    const anon = await rateHit(env, "tg-anon:" + clientIp(request), TG_ANON_LIMIT, TG_WINDOW_MS);
-    if (!anon.ok) return limited(anon);
-    return json(401, { error: "unauthorized" });
-  }
-  if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
-  const budget = await rateHit(env, verify ? "tg-verify" : "tg:" + clientIp(request), verify ? TG_VERIFY_LIMIT : TG_USER_LIMIT, TG_WINDOW_MS);
-  if (!budget.ok) return limited(budget);
   const raw = path.replace(/^\/tg\/?/, "");
   let decoded = raw;
   try { decoded = raw.split("/").map((part) => decodeURIComponent(part)).join("/"); }
   catch (err) { return json(404, { error: "not_found" }); }
   if (!decoded || decoded.indexOf("..") >= 0 || decoded.charAt(0) === "/" || decoded.indexOf("\\") >= 0) return json(404, { error: "not_found" });
+  const publicLoop = LOOP_PUBLIC.test(decoded);
+  const verify = bearerIsBot(env, request);
+  let viewer = null;
+  if (publicLoop) {
+    if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
+    const budget = await rateHit(env, verify ? "tg-verify" : "tg-loop:" + clientIp(request), verify ? TG_VERIFY_LIMIT : TG_LOOP_LIMIT, TG_WINDOW_MS);
+    if (!budget.ok) return limited(budget);
+  } else {
+    viewer = await sessionAccount(env, request);
+    if (!viewer && !verify) {
+      const anon = await rateHit(env, "tg-anon:" + clientIp(request), TG_ANON_LIMIT, TG_WINDOW_MS);
+      if (!anon.ok) return limited(anon);
+      return json(401, { error: "unauthorized" });
+    }
+    if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
+    const budget = await rateHit(env, verify ? "tg-verify" : "tg:" + clientIp(request), verify ? TG_VERIFY_LIMIT : TG_USER_LIMIT, TG_WINDOW_MS);
+    if (!budget.ok) return limited(budget);
+  }
+  if (telegramSecretKey(decoded)) return json(404, { error: "not_found" });
   let key = decoded;
   let mode = "file";
   let index = 0;
-  if (decoded.endsWith("/index.m3u8")) {
+  const exact = await env.DB.prepare("SELECT kind FROM telegram_files WHERE object_key = ? AND kind = 'single' AND serve = 1 AND encrypted = 0").bind(decoded).first();
+  if (exact) {
+    key = decoded;
+    mode = "file";
+  } else if (decoded.endsWith("/index.m3u8")) {
     key = decoded.slice(0, -"/index.m3u8".length);
     mode = "playlist";
   } else if (decoded.endsWith("/init")) {
     key = decoded.slice(0, -"/init".length);
     mode = "init";
   } else {
-    const exact = await env.DB.prepare("SELECT kind FROM telegram_files WHERE object_key = ? AND kind = 'single' AND serve = 1 AND encrypted = 0").bind(decoded).first();
-    if (!exact) {
-      const nested = decoded.match(/^(.*)\/(\d+)$/);
-      if (nested) {
-        const parent = await env.DB.prepare("SELECT part_index FROM telegram_files WHERE object_key = ? AND kind = 'segment' AND part_index = ? AND serve = 1 AND encrypted = 0").bind(nested[1], Number(nested[2])).first();
-        if (parent) {
-          key = nested[1];
-          index = Number(nested[2]);
-          mode = "segment";
-        }
+    const nested = decoded.match(/^(.*)\/(\d+)$/);
+    if (nested) {
+      const parent = await env.DB.prepare("SELECT part_index FROM telegram_files WHERE object_key = ? AND kind = 'segment' AND part_index = ? AND serve = 1 AND encrypted = 0").bind(nested[1], Number(nested[2])).first();
+      if (parent) {
+        key = nested[1];
+        index = Number(nested[2]);
+        mode = "segment";
       }
     }
   }
-  if (!key) return json(404, { error: "not_found" });
+  if (!key || telegramSecretKey(key)) return json(404, { error: "not_found" });
+  if (!publicLoop && !verify) {
+    if (await hiddenAvatar(env, viewer, decoded) || await hiddenAvatar(env, viewer, key)) return json(404, { error: "not_found" });
+    if ((tiktokPlaybackKey(decoded) || tiktokPlaybackKey(key)) && !tiktokPublic(env) && (!viewer || viewer.owner !== 1)) {
+      return json(403, { error: "forbidden" });
+    }
+    const owned = await ownerOnlyMedia(env);
+    if (owned.has(decoded) || owned.has(key)) {
+      if (!viewer || viewer.owner !== 1) return json(403, { error: "forbidden" });
+    }
+  }
   if (mode === "playlist") {
     const rows = await telegramRows(env, key);
     const text = buildPlaylist(rows, key, new URL(request.url).origin);
     if (!text) return json(404, { error: "not_found" });
-    return new Response(text, {
-      status: 200,
-      headers: {
-        "content-type": "application/vnd.apple.mpegurl",
-        "cache-control": "private, max-age=60",
-        "x-content-type-options": "nosniff"
-      }
-    });
+    const immutable = loopGroupKey(key);
+    const headers = {
+      "content-type": "application/vnd.apple.mpegurl",
+      "cache-control": immutable ? "public, max-age=31536000, immutable" : "private, max-age=60",
+      "x-content-type-options": "nosniff"
+    };
+    if (immutable) headers["cdn-cache-control"] = "public, max-age=31536000, immutable";
+    return new Response(text, { status: 200, headers: headers });
   }
   const kind = mode === "init" ? "init" : mode === "segment" ? "segment" : "single";
   const partIndex = mode === "segment" ? index : mode === "init" ? -1 : 0;
   const row = await env.DB.prepare("SELECT object_key, kind, part_index, file_id, size, sha256, mime, duration, serve, encrypted FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? AND serve = 1 AND encrypted = 0").bind(key, kind, partIndex).first();
   if (!row || !row.file_id) return json(404, { error: "not_found" });
-  return rangedTelegram(request, env, row);
+  return rangedTelegram(request, env, row, loopGroupKey(key));
 }
 
 async function route(request, env) {

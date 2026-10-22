@@ -21,10 +21,12 @@ def main() -> int:
     iso = publish_iso(1791742719)
     assert iso == "2026-10-11T18:18:39Z"
     assert publish_iso(1791742719000) == iso
-    h264 = {"vcodec": "h264", "url": "https://cdn.example/h264.mp4", "height": 576, "width": 1024}
-    hevc = {"vcodec": "h265", "url": "https://cdn.example/hevc.mp4", "height": 720, "width": 1280}
-    picked = choose_format([hevc, h264])
-    assert picked["url"].endswith("h264.mp4")
+    h264 = {"vcodec": "h264", "url": "https://cdn.example/h264.mp4", "height": 1080, "width": 1920, "tbr": 2500}
+    low = {"vcodec": "h265", "url": "https://cdn.example/hevc.mp4", "height": 720, "width": 1280, "tbr": 800}
+    top = {"vcodec": "bytevc1", "url": "https://cdn.example/bytevc1.mp4", "height": 720, "width": 1280, "tbr": 1600}
+    picked = choose_format([h264, low, top])
+    assert picked["url"].endswith("bytevc1.mp4")
+    assert choose_format([h264])["url"].endswith("h264.mp4")
     missing = entry_to_post({"id": "123456", "description": "no time"}, "gabii_g5")
     assert missing is None
     post = entry_to_post({
@@ -38,14 +40,31 @@ def main() -> int:
         "comment_count": 7,
         "view_count": 517,
         "duration": 19,
-        "formats": [hevc, h264],
+        "formats": [low, top, h264],
         "thumbnails": [{"url": "https://cdn.example/poster.jpg"}],
     }, "gabii_g5")
     assert post["date"] == iso
     assert post["ownerOnly"] is True
     assert post["short"] is True
     assert post["platform"] == "tiktok"
-    assert post["media"][0]["url"].endswith("h264.mp4")
+    assert post["media"][0]["url"].endswith("bytevc1.mp4")
+    slides = entry_to_post({
+        "id": "7695476356548660503",
+        "timestamp": 1791742719,
+        "description": "slides",
+        "formats": [
+            {"ext": "jpeg", "vcodec": "none", "url": "https://p16.tiktokcdn.com/1.jpg"},
+            {"ext": "jpeg", "vcodec": "none", "url": "https://p16.tiktokcdn.com/2.jpg"},
+        ],
+        "images": [{"url": "https://p16.tiktokcdn.com/3.jpg"}],
+    }, "gabii_g5")
+    urls = [item["url"] for item in slides["media"]]
+    assert urls == [
+        "https://p16.tiktokcdn.com/1.jpg",
+        "https://p16.tiktokcdn.com/2.jpg",
+        "https://p16.tiktokcdn.com/3.jpg",
+    ]
+    assert all(item["type"] == "photo" for item in slides["media"])
     assert "T" in post["date"] and post["date"] != ""
     root = Path(__file__).resolve().parents[1]
     tmp = root / "owner" / "tiktok-test-tmp"
