@@ -61,7 +61,19 @@
           remember(platform + ":" + lower(account.channelId), person);
           remember(platform + ":" + account.channelId, person);
         }
+        if (account.permanentId) remember(platform + ":" + String(account.permanentId), person);
+        if (account.secUid) remember(platform + ":" + String(account.secUid), person);
         if (account.feedId) remember(String(account.feedId).toLowerCase(), person);
+      });
+    });
+    people.forEach((person) => {
+      if (!person || !person.id) return;
+      (person.accounts || []).forEach((account) => {
+        const platform = account.platform || "x";
+        (account.previousHandles || []).forEach((item) => {
+          const handle = lower(item);
+          if (handle) remember(platform + ":" + handle, person);
+        });
       });
     });
   }
@@ -94,13 +106,19 @@
     return person ? (person.name || person.id) : "";
   }
 
+  function accountHandles(account) {
+    return [account && account.handle].concat((account && account.previousHandles) || []).map(lower).filter(Boolean);
+  }
+
   function sameAccount(feed, account) {
     if (!feed || !account) return false;
     if ((feed.platform || "x") !== (account.platform || "x")) return false;
     const handle = lower(feed.handle);
     const channel = String(feed.channelId || "");
-    if (handle && handle === lower(account.handle)) return true;
+    const names = accountHandles(account);
+    if (handle && names.indexOf(handle) >= 0) return true;
     if (account.channelId && (channel === account.channelId || handle === lower(account.channelId))) return true;
+    if (account.permanentId && String(feed.permanentId || "") === String(account.permanentId)) return true;
     if (account.feedId && feed.id === account.feedId) return true;
     return false;
   }
@@ -135,7 +153,7 @@
     const handle = lower(by.handle);
     return (person.accounts || []).some((account) => {
       if (by.feedId && account.feedId && by.feedId === account.feedId) return true;
-      return (account.platform || "x") === platform && !!handle && handle === lower(account.handle);
+      return (account.platform || "x") === platform && !!handle && accountHandles(account).indexOf(handle) >= 0;
     });
   }
 
@@ -144,7 +162,7 @@
     const platform = post.platform || "x";
     const handle = lower(post.handle);
     if (!handle) return false;
-    return (person.accounts || []).some((account) => (account.platform || "x") === platform && handle === lower(account.handle));
+    return (person.accounts || []).some((account) => (account.platform || "x") === platform && accountHandles(account).indexOf(handle) >= 0);
   }
 
   function countsAsOwn(post, person) {
@@ -161,7 +179,8 @@
     return (person.accounts || []).some((account) => {
       if ((account.platform || "x") !== platform) return false;
       if (account.feedId && post.feedId === account.feedId) return true;
-      if (handle && handle === lower(account.handle)) return true;
+      if (handle && accountHandles(account).indexOf(handle) >= 0) return true;
+      if (account.permanentId && String(post.permanentId || "") === String(account.permanentId)) return true;
       if (account.channelId && (channel === account.channelId || handle === lower(account.channelId) || post.feedId === (account.platform + ":" + account.channelId))) return true;
       return false;
     }) || catalogIds(person).indexOf(post.feedId) >= 0;

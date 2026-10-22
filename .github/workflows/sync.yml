@@ -388,21 +388,25 @@ jobs:
           import pathlib, sys
           sys.path.insert(0, "scripts")
           from auto_add import merge_into_file
+          from account_identity import merge_identity_into_file
           added = merge_into_file(pathlib.Path("feeds.config.json"), pathlib.Path("incoming/feeds.config.json"))
+          notes = merge_identity_into_file(pathlib.Path("feeds.config.json"), pathlib.Path("incoming/feeds.config.json"))
           pathlib.Path("auto-added.txt").write_text("\n".join(added), encoding="utf-8")
+          pathlib.Path("identity.txt").write_text("\n".join(notes), encoding="utf-8")
           print("auto-added", ", ".join(added) or "none")
+          print("identity", ", ".join(notes) or "none")
           PY
-          if [ ! -s auto-added.txt ]; then
-            echo "no new auto-added feeds"
+          if [ ! -s auto-added.txt ] && [ ! -s identity.txt ]; then
+            echo "no added-account changes"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add feeds.config.json
           git commit -F - <<EOF
-          Auto-add reposted accounts
+          Save added-account ids and handles
 
-          $(cat auto-added.txt)
+          $(cat auto-added.txt identity.txt)
           EOF
           git push origin HEAD:main
 

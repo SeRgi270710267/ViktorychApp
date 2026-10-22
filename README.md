@@ -119,7 +119,7 @@ Counts under 10,000 use commas. Larger counts use `1.2K`, `24K`, `6.1M`. Times u
 
 ## Refreshing posts
 
-`feeds.config.json` lists each account: platform, handle, adapter, and `source_url` with fallbacks. These placeholders are filled from the top of the config:
+`feeds.config.json` lists each added account: platform, handle, adapter, and `source_url` with fallbacks. Each added account also stores a permanent id next to the handle. When the account changes its handle, the next sync keeps the same account, and an older link still opens it. These placeholders are filled from the top of the config:
 
 - `{rsshubBase}` — default `http://localhost:1200`
 - `{fxtwitterBase}` — default `https://api.fxtwitter.com`

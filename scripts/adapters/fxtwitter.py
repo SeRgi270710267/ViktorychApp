@@ -143,6 +143,9 @@ def _author_profile(author: dict) -> dict:
         profile["postsCount"] = author.get("tweets") if author.get("tweets") is not None else author.get("posts")
     if author.get("joined"):
         profile["joined"] = author.get("joined")
+    raw_id = author.get("id") or author.get("rest_id") or author.get("id_str") or ""
+    if str(raw_id).isdigit():
+        profile["permanentId"] = str(raw_id)
     return profile
 
 
@@ -236,6 +239,48 @@ def _owned(post: dict, handle: str) -> bool:
     return author == want or by == want
 
 
+def _person_id(person) -> str:
+    if not isinstance(person, dict):
+        return ""
+    raw = person.get("id") or person.get("rest_id") or person.get("id_str") or ""
+    text = str(raw).strip()
+    return text if text.isdigit() else ""
+
+
+def _status_owned(status: dict, feed: dict) -> bool:
+    """Keep a post when the handle or the permanent id is this added account."""
+    want = (feed.get("handle") or "").lstrip("@").lower()
+    previous = {(str(item or "").lstrip("@").lower()) for item in (feed.get("previousHandles") or [])}
+    stored = str(feed.get("permanentId") or "")
+    names = []
+    for key in ("author", "reposted_by", "retweeted_by"):
+        person = status.get(key)
+        if not isinstance(person, dict):
+            continue
+        screen = (person.get("screen_name") or person.get("handle") or "").lstrip("@").lower()
+        if screen:
+            names.append(screen)
+        if stored and _person_id(person) == stored:
+            return True
+    if not want:
+        return True
+    return any(name == want or name in previous for name in names)
+
+
+def _is_account(person: dict, feed: dict) -> bool:
+    if not isinstance(person, dict):
+        return False
+    want = (feed.get("handle") or "").lstrip("@").lower()
+    previous = {(str(item or "").lstrip("@").lower()) for item in (feed.get("previousHandles") or [])}
+    stored = str(feed.get("permanentId") or "")
+    screen = (person.get("screen_name") or person.get("handle") or "").lstrip("@").lower()
+    if stored and _person_id(person) == stored:
+        return True
+    if stored and _person_id(person) and _person_id(person) != stored:
+        return False
+    return bool(screen) and (screen == want or screen in previous)
+
+
 def parse(payload, feed: dict | None = None, now=None) -> dict:
     feed = feed or {}
     if isinstance(payload, str):
@@ -250,18 +295,24 @@ def parse(payload, feed: dict | None = None, now=None) -> dict:
         if status.get("type") in ("tombstone", "thread", "deleted", "unavailable"):
             continue
         post = convert_status(status, feed, nested=False)
-        if not post.get("id") or not _owned(post, feed.get("handle") or ""):
+        if not post.get("id") or not _status_owned(status, feed):
             continue
         posts.append(post)
         author = status.get("author") or {}
         handle = (author.get("screen_name") or author.get("handle") or "").lower()
         if handle and handle not in profiles:
             profiles[handle] = _author_profile(author)
+            if _is_account(author, feed):
+                profiles[handle]["account"] = True
         by = status.get("reposted_by") or status.get("retweeted_by") or {}
         if isinstance(by, dict):
             bh = (by.get("screen_name") or by.get("handle") or "").lower()
             if bh and bh not in profiles:
                 profiles[bh] = _author_profile(by)
+                if _is_account(by, feed):
+                    profiles[bh]["account"] = True
+            elif bh and _is_account(by, feed):
+                profiles[bh]["account"] = True
         quote = status.get("quote") or {}
         qh = ((quote.get("author") or {}).get("screen_name") or "").lower()
         if qh and qh not in profiles:

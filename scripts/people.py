@@ -225,10 +225,22 @@ def apply_link(config: dict, body: str, fetch, resolve=None) -> tuple[str, dict]
     return verb + ", ".join(linked) + " to " + target["id"] + ".", config
 
 
+def _handle_names(row: dict) -> list:
+    names = [row.get("handle") or ""]
+    names.extend(row.get("previousHandles") or [])
+    return [str(name).lstrip("@") for name in names if str(name or "").strip()]
+
+
 def _same_feed(feed: dict, account: dict) -> bool:
     if (feed.get("platform") or "") != account.get("platform"):
         return False
-    if (feed.get("handle") or "").casefold() == (account.get("handle") or "").casefold():
+    feed_names = {name.casefold() for name in _handle_names(feed)}
+    account_names = {name.casefold() for name in _handle_names(account)}
+    if feed_names and account_names and feed_names & account_names:
+        return True
+    left = str(feed.get("permanentId") or "")
+    right = str(account.get("permanentId") or "")
+    if left and left == right:
         return True
     channel = account.get("channelId") or ""
     return bool(channel) and feed.get("channelId") == channel
@@ -269,6 +281,14 @@ def extra_feeds(config: dict) -> list:
                 row = entry_for(spec)
             except Exception:
                 continue
+            if account.get("permanentId"):
+                row["permanentId"] = account.get("permanentId")
+            if account.get("secUid"):
+                row["secUid"] = account.get("secUid")
+            previous = [str(item).lstrip("@") for item in (account.get("previousHandles") or []) if str(item or "").strip()]
+            if previous:
+                row["previousHandles"] = previous
+                row["id"] = platform + ":" + previous[0]
             profile = {"url": spec["url"]}
             if person.get("name"):
                 profile["name"] = person["name"]
@@ -281,7 +301,7 @@ def extra_feeds(config: dict) -> list:
 def _profile_match(profile: dict, account: dict) -> bool:
     if (profile.get("platform") or "") != account.get("platform"):
         return False
-    if (profile.get("handle") or "").casefold() == (account.get("handle") or "").casefold():
+    if _same_feed(profile, account):
         return True
     channel = account.get("channelId") or ""
     return bool(channel) and profile.get("channelId") == channel
@@ -354,6 +374,15 @@ def _account_row(person_account: dict, profile: dict | None) -> dict:
     }
     if person_account.get("channelId") or profile.get("channelId"):
         row["channelId"] = person_account.get("channelId") or profile.get("channelId")
+    permanent = person_account.get("permanentId") or profile.get("permanentId") or ""
+    if permanent:
+        row["permanentId"] = permanent
+    sec = person_account.get("secUid") or profile.get("secUid") or ""
+    if sec:
+        row["secUid"] = sec
+    previous = person_account.get("previousHandles") or profile.get("previousHandles") or []
+    if previous:
+        row["previousHandles"] = list(previous)
     if profile.get("id"):
         row["feedId"] = profile["id"]
     else:
@@ -409,6 +438,7 @@ def enrich_x(account: dict) -> dict:
         "followers": user.get("followers"),
         "following": user.get("following"),
         "url": user.get("url") or account_url(account),
+        "permanentId": str(user.get("id") or "") if str(user.get("id") or "").isdigit() else "",
         "website": website.get("url") if isinstance(website, dict) else "",
     }
 
@@ -426,6 +456,18 @@ def build_people(config: dict, profiles: list, fetch: bool = False) -> dict:
                     for key, value in live.items():
                         if value not in ("", None):
                             profile[key] = value
+                    if live.get("permanentId"):
+                        try:
+                            from account_identity import apply_to_config
+
+                            apply_to_config(config, account, {
+                                "handle": live.get("handle") or account.get("handle"),
+                                "permanentId": live.get("permanentId"),
+                                "authoritative": True,
+                                "platform": "x",
+                            })
+                        except Exception:
+                            pass
             rows.append(_account_row(account, profile))
         avatars = [person.get("avatar") or ""] + [row.get("avatar") or "" for row in rows]
         banners = [person.get("banner") or ""] + [row.get("banner") or "" for row in rows]

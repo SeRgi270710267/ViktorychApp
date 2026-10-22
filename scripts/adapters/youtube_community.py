@@ -995,6 +995,12 @@ def _page_posts(feed: dict) -> tuple[list, str]:
         except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
             print(f"[youtube] posts page: {exc}", file=sys.stderr)
             continue
+        from account_identity import youtube_handle_from_html
+
+        found = youtube_handle_from_html(html, channel_id)
+        if found and channel_id:
+            feed["_observedHandle"] = found
+            feed["_observedPermanentId"] = channel_id
         posts, source = _posts_from_html(html, feed)
         if posts:
             return posts, source

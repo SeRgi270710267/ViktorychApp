@@ -1,0 +1,22 @@
+{
+  "statuses": [
+    {
+      "id": "9002",
+      "text": "A different account.",
+      "author": {
+        "id": "999",
+        "screen_name": "someoneelse",
+        "name": "Someone Else"
+      },
+      "quote": {
+        "id": "9001",
+        "text": "Quoted.",
+        "author": {
+          "id": "44196397",
+          "screen_name": "elonmusknew",
+          "name": "Elon Musk"
+        }
+      }
+    }
+  ]
+}

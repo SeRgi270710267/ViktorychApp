@@ -92,8 +92,14 @@ def apply_override(profile: dict, feed: dict) -> dict:
     merged["name"] = merged.get("name") or feed.get("handle") or ""
     merged["title"] = merged.get("name")
     merged["configured"] = feed.get("defaultFollow", True) is not False
-    if feed.get("channelId") and not merged.get("channelId"):
+    if feed.get("channelId"):
         merged["channelId"] = feed["channelId"]
+    if feed.get("permanentId"):
+        merged["permanentId"] = feed["permanentId"]
+    if feed.get("secUid"):
+        merged["secUid"] = feed["secUid"]
+    if feed.get("previousHandles"):
+        merged["previousHandles"] = list(feed.get("previousHandles") or [])
     if not merged.get("url"):
         from adapters.common import profile_url
 
@@ -470,6 +476,12 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     except Exception:
         pace = 2.0
 
+    try:
+        from account_identity import begin_run
+
+        begin_run()
+    except Exception:
+        pass
     feed_rows = list(config.get("feeds") or [])
     if not use_fixtures:
         try:
@@ -563,8 +575,24 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             detail = errors[-1] if errors else "no source"
             print(f"[keep] {feed['id']}: {detail}", file=sys.stderr)
             record_source(health, feed["id"], False, stamp, detail)
+            if not use_fixtures:
+                try:
+                    from account_identity import resolve_failed
+
+                    resolve_failed(config, feed, profiles)
+                except Exception:
+                    print(f"[keep] {feed.get('id')}: id lookup failed", file=sys.stderr)
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
+        if not use_fixtures:
+            try:
+                from account_identity import note_success
+
+                renamed_from = note_success(config, feed, adapter or "", payload, result)
+                if renamed_from:
+                    result = accept_feed(adapter, payload, feed)
+            except Exception as exc:
+                print(f"[keep] {feed.get('id')}: identity: {exc}", file=sys.stderr)
         posts = result.get("posts") or []
         if adapter == "fxtwitter" and not use_fixtures and source_url and feed.get("origin") != "repost":
             reply_url = source_url + ("&" if "?" in source_url else "?") + "with_replies=1"
@@ -649,6 +677,15 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                 print(f"[ok] {feed['id']}: {len(extra)} community posts via {source}")
             else:
                 print(f"[keep] {feed['id']}: no community posts", file=sys.stderr)
+        if not use_fixtures and feed.get("_observedHandle"):
+            try:
+                from account_identity import note_success, retarget_posts
+
+                renamed_from = note_success(config, feed, adapter or "", payload, result)
+                if renamed_from:
+                    retarget_posts(posts, renamed_from, feed.get("handle") or "")
+            except Exception as exc:
+                print(f"[keep] {feed.get('id')}: identity: {exc}", file=sys.stderr)
         posts = [post for post in posts if not post_is_bridge_error(post)]
         stored = {}
         for item in old_by_feed.get(feed["id"], []):
@@ -686,12 +723,22 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         collected.extend(posts)
         incoming = result.get("profiles") or []
         primary = None
+        want = (feed.get("handle") or "").lower()
+        previous = {(str(item or "").lstrip("@").lower()) for item in (feed.get("previousHandles") or [])}
+        permanent = str(feed.get("permanentId") or "")
         for profile in incoming:
-            if (profile.get("handle") or "").lower() == (feed.get("handle") or "").lower() and (
-                not feed.get("platform") or profile.get("platform") == feed.get("platform")
-            ):
+            if feed.get("platform") and profile.get("platform") not in ("", feed.get("platform")):
+                continue
+            if permanent and str(profile.get("permanentId") or "") == permanent and profile.get("account"):
                 primary = profile
                 break
+        if primary is None:
+            for profile in incoming:
+                handle = (profile.get("handle") or "").lower()
+                if handle == want or handle in previous:
+                    if not feed.get("platform") or profile.get("platform") == feed.get("platform"):
+                        primary = profile
+                        break
         if primary is None:
             from adapters.common import blank_profile
 
@@ -802,6 +849,13 @@ def main() -> None:
         publish(config, doc, fetch=not args.fixtures)
     except Exception as exc:
         print(f"[people] {exc}", file=sys.stderr)
+    if not args.fixtures:
+        try:
+            from account_identity import commit_file
+
+            commit_file(Path(args.config), config)
+        except Exception as exc:
+            print(f"[keep] identity config: {exc}", file=sys.stderr)
     stories_health = []
     if not args.fixtures:
         try:

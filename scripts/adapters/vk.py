@@ -293,7 +293,44 @@ def _one(item: dict, feed: dict, people: dict, nested: bool = False) -> dict | N
     )
 
 
-def _profile(group: dict, feed: dict, post_count) -> dict:
+def _owner_id(group: dict) -> str:
+    try:
+        number = int(group.get("id"))
+    except (TypeError, ValueError):
+        return ""
+    if number == 0:
+        return ""
+    if str(group.get("type") or "page").lower() == "profile":
+        return str(abs(number))
+    return str(-abs(number))
+
+
+def _pick_group(groups: list, feed: dict, response: dict) -> tuple[dict, bool]:
+    """The added account, not the first community mentioned on the wall."""
+    stored = str(feed.get("permanentId") or "")
+    wanted = (feed.get("handle") or "").lstrip("@").lower()
+    if stored:
+        for row in groups:
+            if _owner_id(row) == stored:
+                return row, True
+    for row in groups:
+        if (row.get("screen_name") or "").lower() == wanted and wanted:
+            return row, True
+    owners = []
+    for item in response.get("items") or []:
+        if isinstance(item, dict) and item.get("owner_id") is not None:
+            owners.append(str(item.get("owner_id")))
+    if owners and not stored:
+        top = max(set(owners), key=owners.count)
+        for row in groups:
+            if _owner_id(row) == top:
+                return row, True
+    if groups:
+        return groups[0], False
+    return {}, False
+
+
+def _profile(group: dict, feed: dict, post_count, account: bool = False) -> dict:
     handle = (group.get("screen_name") or feed.get("handle") or "").lstrip("@")
     name = group.get("name") or handle
     images = ((group.get("cover") or {}) if isinstance(group.get("cover"), dict) else {}).get("images") or []
@@ -323,6 +360,13 @@ def _profile(group: dict, feed: dict, post_count) -> dict:
         profile["postsCount"] = post_count
         # wall.get counts copies and co-owned posts along with the community's own.
         profile["postsCountIncludesReposts"] = True
+    owner = _owner_id(group)
+    stored = str(feed.get("permanentId") or "")
+    if owner and stored and owner != stored:
+        account = False
+    if account and owner:
+        profile["permanentId"] = owner
+        profile["account"] = True
     return profile
 
 
@@ -338,9 +382,8 @@ def parse(payload, feed: dict) -> dict:
         if post:
             posts.append(post)
     groups = [row for row in (response.get("groups") or []) if isinstance(row, dict)]
-    wanted = (feed.get("handle") or "").lower()
-    group = next((row for row in groups if (row.get("screen_name") or "").lower() == wanted), groups[0] if groups else {})
-    profiles = [_profile(group, feed, response.get("count"))] if group else []
+    group, account = _pick_group(groups, feed, response)
+    profiles = [_profile(group, feed, response.get("count"), account)] if group else []
     return {"posts": posts, "profiles": profiles}
 
 

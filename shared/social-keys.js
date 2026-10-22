@@ -39,13 +39,54 @@ function stableIdent(post) {
   return cleanIdent(bare);
 }
 
+function tiktokUserId(post) {
+  const raw = String((post && (post.permanentId || post.userId)) || "").trim();
+  return /^\d{5,22}$/.test(raw) ? raw : "";
+}
+
+function tiktokHandles(post) {
+  const handles = [];
+  const current = String((post && post.handle) || "").replace(/^@/, "");
+  if (/^[A-Za-z0-9._]{2,24}$/.test(current)) handles.push(current);
+  ((post && post.previousHandles) || []).forEach((item) => {
+    const name = String(item || "").replace(/^@/, "");
+    if (/^[A-Za-z0-9._]{2,24}$/.test(name) && !handles.some((have) => have.toLowerCase() === name.toLowerCase())) handles.push(name);
+  });
+  return handles;
+}
+
+function socialKeyCandidates(post, role, index) {
+  const platform = String((post && post.platform) || "").toLowerCase();
+  if (platform !== "tiktok") {
+    const key = socialObjectKey(post, role, index);
+    return key ? [key] : [];
+  }
+  const ident = stableIdent(post);
+  const n = Math.max(0, Number(index) || 0);
+  let suffix = "";
+  if (role === "video") suffix = "/video";
+  else if (role === "poster") suffix = "/poster";
+  else if (role === "photo") suffix = "/photo/" + n;
+  if (!/^\d{8,22}$/.test(ident) || !suffix) return [];
+  const keys = [];
+  const userId = tiktokUserId(post);
+  if (userId) keys.push("tiktok/id/" + userId + "/" + ident + suffix);
+  tiktokHandles(post).forEach((handle) => keys.push("tiktok/" + handle + "/" + ident + suffix));
+  return keys;
+}
+
 function socialObjectKey(post, role, index) {
   const platform = String((post && post.platform) || "").toLowerCase();
   const n = Math.max(0, Number(index) || 0);
   if (platform === "tiktok") {
     const handle = String((post && post.handle) || "").replace(/^@/, "");
     const ident = stableIdent(post);
-    if (!/^[A-Za-z0-9._]{2,24}$/.test(handle) || !/^\d{8,22}$/.test(ident)) return "";
+    const userId = tiktokUserId(post);
+    if (!/^\d{8,22}$/.test(ident)) return "";
+    if (userId && role === "video") return "tiktok/id/" + userId + "/" + ident + "/video";
+    if (userId && role === "poster") return "tiktok/id/" + userId + "/" + ident + "/poster";
+    if (userId && role === "photo") return "tiktok/id/" + userId + "/" + ident + "/photo/" + n;
+    if (!/^[A-Za-z0-9._]{2,24}$/.test(handle)) return "";
     if (role === "video") return "tiktok/" + handle + "/" + ident + "/video";
     if (role === "poster") return "tiktok/" + handle + "/" + ident + "/poster";
     if (role === "photo") return "tiktok/" + handle + "/" + ident + "/photo/" + n;
@@ -116,4 +157,4 @@ function socialKeysForPost(post) {
   return keys;
 }
 
-export { socialObjectKey, socialFileKey, socialStillKey, socialKeysForPost, stableIdent };
+export { socialObjectKey, socialKeyCandidates, socialFileKey, socialStillKey, socialKeysForPost, stableIdent };
