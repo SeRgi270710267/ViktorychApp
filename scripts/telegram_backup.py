@@ -21,6 +21,11 @@ and are never deleted from R2. The song AES key is not uploaded. Account
 data is uploaded only when TG_BACKUP_KEY is set, and then only as
 ciphertext. It is not served and it is not deleted. Live JSON, owner files,
 backup internals, and anything that carries a token stay on R2.
+
+TikTok videos, posters, and photo carousels already stored by the sync, and
+other synced social media on an allowed host, are uploaded too. A video over
+19 MB becomes HLS. Those copies are deleted from R2 after the sha256 check
+when an R2 object exists. TikTok LIVE is not recorded.
 """
 
 from __future__ import annotations
@@ -402,6 +407,275 @@ def upsert_part(entry: dict, part: dict) -> None:
     parts.append(part)
     parts.sort(key=lambda row: (str(row.get("role")), int(row.get("index") or 0)))
     entry["parts"] = parts
+
+
+SOCIAL_PLATFORMS = ("x", "instagram", "threads", "youtube", "vk", "telegram", "rss")
+CDN_HOSTS = (
+    "pbs.twimg.com",
+    "video.twimg.com",
+    "i.ytimg.com",
+    "ytimg.com",
+    "ggpht.com",
+    "googleusercontent.com",
+    "cdninstagram.com",
+    "fbcdn.net",
+    "cdnthreads.net",
+    "telesco.pe",
+    "telegram-cdn.org",
+    "userapi.com",
+    "vkuser.net",
+    "tiktokcdn.com",
+    "tiktokcdn-us.com",
+    "tiktokcdn-eu.com",
+    "tiktokv.com",
+    "bytefcdn.com",
+    "muscdn.com",
+    "ibytedtos.com",
+    "ibyteimg.com",
+)
+CDN_CAP = 200 * 1024 * 1024
+IDENT_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+CDN_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
+def clean_ident(value: str) -> str:
+    raw = str(value or "").strip()
+    return raw if IDENT_RE.fullmatch(raw) else ""
+
+
+def stable_ident(post: dict) -> str:
+    """Same id rules as shared/social-keys.js."""
+    platform = str((post or {}).get("platform") or "").lower()
+    status = str((post or {}).get("statusId") or "")
+    ident = str((post or {}).get("id") or "")
+    if platform == "tiktok":
+        match = re.search(r"(\d{8,22})", status or ident)
+        return match.group(1) if match else ""
+    direct = clean_ident(status)
+    if direct:
+        return direct
+    blob = " ".join(part for part in (str((post or {}).get("url") or ""), status, ident) if part)
+    patterns = (
+        r"instagram\.com/(?:p|reel|tv)/([A-Za-z0-9_-]{1,80})",
+        r"threads\.(?:com|net)/(?:@[^/\s]+/)?(?:post|t)/([A-Za-z0-9_-]{1,80})",
+        r"(?:youtube\.com/(?:watch\?v=|shorts/|embed/)|youtu\.be/|youtube-nocookie\.com/embed/)([A-Za-z0-9_-]{6,16})",
+        r"video(-?\d+_\d+)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, blob)
+        found = clean_ident(match.group(1)) if match else ""
+        if found:
+            return found
+    bare = ident.split(":", 1)[1] if ":" in ident else ident
+    return clean_ident(bare)
+
+
+def social_object_key(post: dict, role: str, index: int = 0) -> str:
+    """Same object keys as shared/social-keys.js."""
+    platform = str((post or {}).get("platform") or "").lower()
+    n = max(0, int(index or 0))
+    if platform == "tiktok":
+        handle = str((post or {}).get("handle") or "").lstrip("@")
+        ident = stable_ident(post)
+        if re.fullmatch(r"[A-Za-z0-9._]{2,24}", handle) is None or re.fullmatch(r"\d{8,22}", ident) is None:
+            return ""
+        if role == "video":
+            return "tiktok/" + handle + "/" + ident + "/video"
+        if role == "poster":
+            return "tiktok/" + handle + "/" + ident + "/poster"
+        if role == "photo":
+            return "tiktok/" + handle + "/" + ident + "/photo/" + str(n)
+        return ""
+    if platform not in SOCIAL_PLATFORMS:
+        return ""
+    ident = stable_ident(post)
+    if not ident:
+        return ""
+    if role == "thumb":
+        return "social/" + platform + "/" + ident + "/thumb/" + str(n)
+    if role == "video":
+        return "social/" + platform + "/" + ident + "/video/" + str(n)
+    if role == "poster":
+        return "social/" + platform + "/" + ident + "/poster/" + str(n)
+    if role == "photo":
+        return "social/" + platform + "/" + ident + "/photo/" + str(n)
+    return ""
+
+
+def host_ok(url: str) -> bool:
+    try:
+        host = (urllib.parse.urlparse(str(url or "")).hostname or "").lower()
+    except ValueError:
+        return False
+    if not host:
+        return False
+    return any(host == suffix or host.endswith("." + suffix) for suffix in CDN_HOSTS)
+
+
+def live_recording(post: dict) -> bool:
+    if str((post or {}).get("kind") or "").lower() == "live":
+        return True
+    url = str((post or {}).get("url") or "")
+    return str((post or {}).get("platform") or "").lower() == "tiktok" and "/live" in url and "/video/" not in url
+
+
+def walk_posts(doc: dict) -> list:
+    rows = []
+
+    def add(post: dict) -> None:
+        if not isinstance(post, dict):
+            return
+        rows.append(post)
+        quoted = post.get("quoted")
+        if isinstance(quoted, dict):
+            add(quoted)
+
+    for post in (doc or {}).get("posts") or []:
+        add(post)
+    return rows
+
+
+def media_candidates(post: dict, media: dict, index: int) -> list:
+    del index
+    platform = str((post or {}).get("platform") or "").lower()
+    kind = str((media or {}).get("type") or "").lower()
+    url = str((media or {}).get("url") or "").strip()
+    poster = str((media or {}).get("poster") or "").strip()
+    rows = []
+    if platform == "youtube":
+        if kind in {"photo", "image"} and url:
+            rows.append(("photo", url))
+        elif poster:
+            rows.append(("thumb", poster))
+        return rows
+    if platform == "tiktok":
+        if kind in {"photo", "image"} and url:
+            rows.append(("photo", url))
+        elif url:
+            rows.append(("video", url))
+        if poster and poster != url:
+            rows.append(("poster", poster))
+        return rows
+    if kind in {"video", "animated_gif"} and url:
+        rows.append(("video", url))
+    elif kind in {"photo", "image"} and url:
+        rows.append(("photo", url))
+    if poster and poster != url:
+        rows.append(("poster", poster))
+    return rows
+
+
+def plan_social(docs: list, present_keys) -> list:
+    """CDN files the sync already stored. Keys already on R2 are left to that pass."""
+    items = []
+    seen = set()
+    present = set(present_keys or ())
+    for doc in docs or []:
+        for post in walk_posts(doc):
+            if live_recording(post):
+                continue
+            platform = str(post.get("platform") or "").lower()
+            if platform != "tiktok" and platform not in SOCIAL_PLATFORMS:
+                continue
+            for index, media in enumerate(post.get("media") or []):
+                if not isinstance(media, dict):
+                    continue
+                for role, url in media_candidates(post, media, index):
+                    key = social_object_key(post, role, index if role != "poster" or platform != "tiktok" else 0)
+                    if role == "video" and platform == "tiktok":
+                        key = social_object_key(post, "video", 0)
+                    if role == "poster" and platform == "tiktok":
+                        key = social_object_key(post, "poster", 0)
+                    if not key or key in seen or key in present:
+                        continue
+                    if not host_ok(url):
+                        continue
+                    seen.add(key)
+                    items.append({
+                        "bucket": "cdn",
+                        "key": key,
+                        "size": 0,
+                        "etag": "",
+                        "content_type": "",
+                        "source_url": url,
+                        "role": role,
+                        "uploaded": "",
+                    })
+    return items
+
+
+def sniff_type(path: Path, header: str) -> str:
+    raw = (header or "").split(";")[0].strip().lower()
+    if raw and raw != "application/octet-stream":
+        return raw
+    try:
+        data = path.read_bytes()[:16]
+    except OSError:
+        data = b""
+    if len(data) >= 8 and data[4:8] == b"ftyp":
+        return "video/mp4"
+    if data.startswith(b"\x89PNG"):
+        return "image/png"
+    if data.startswith(b"\xff\xd8"):
+        return "image/jpeg"
+    if data.startswith(b"GIF8"):
+        return "image/gif"
+    if data.startswith(b"RIFF") and b"WEBP" in data:
+        return "image/webp"
+    return raw or "application/octet-stream"
+
+
+def fetch_allowed(url: str, dest: Path, limit: int = CDN_CAP):
+    """GET an allowlisted CDN URL. No cookies and no extra headers."""
+    if not host_ok(url):
+        return None
+    req = urllib.request.Request(url, headers={"User-Agent": CDN_UA, "Accept": "*/*"})
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res, dest.open("wb") as out:
+            if not host_ok(res.geturl()):
+                return None
+            while True:
+                block = res.read(1024 * 1024)
+                if not block:
+                    break
+                total += len(block)
+                if total > limit:
+                    return None
+                out.write(block)
+                digest.update(block)
+            header = res.headers.get("Content-Type") or ""
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        return None
+    if total <= 0:
+        return None
+    return {"sha256": digest.hexdigest(), "size": total, "content_type": sniff_type(dest, header)}
+
+
+def read_json_key(cf: dict, buckets: list, key: str, directory: Path):
+    for bucket in buckets:
+        dest = directory / ("cat-" + hashlib.sha256((bucket + "/" + key).encode("utf-8")).hexdigest()[:12] + ".json")
+        try:
+            download_object(cf["token"], cf["account"], bucket, key, dest)
+            data = json.loads(dest.read_text(encoding="utf-8"))
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, RuntimeError, ValueError):
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
+def note_social(state: dict, key: str, files_before: int, bytes_before: int) -> None:
+    added_files = int(state.get("files") or 0) - int(files_before)
+    added_bytes = int(state.get("bytes") or 0) - int(bytes_before)
+    if added_files <= 0 and added_bytes <= 0:
+        return
+    state["social_files"] = int(state.get("social_files") or 0) + max(added_files, 0)
+    state["social_bytes"] = int(state.get("social_bytes") or 0) + max(added_bytes, 0)
+    if str(key).startswith("tiktok/"):
+        state["tiktok_files"] = int(state.get("tiktok_files") or 0) + max(added_files, 0)
+        state["tiktok_bytes"] = int(state.get("tiktok_bytes") or 0) + max(added_bytes, 0)
 
 
 def may_delete(kind: str, verified: bool, size: int) -> bool:
@@ -1100,6 +1374,129 @@ def new_entry_state() -> dict:
     return {"last": 0.0, "files": 0, "bytes": 0}
 
 
+def finish_verified(entry: dict, obj: dict, manifest: dict, cf: dict, directory: Path) -> None:
+    if not (entry.get("serve") and entry.get("kind") in {"small", "hls"} and cf.get("worker")):
+        return
+    if not verify_entry(entry, cf["worker"], cf["bot"], directory):
+        log("[telegram-backup] not verified %s/%s" % (obj["bucket"], obj["key"]))
+        return
+    entry["verified"] = True
+    for part in entry.get("parts") or []:
+        if cf.get("database"):
+            remember_d1(cf["token"], cf["account"], cf["database"], entry, part, True)
+    save_manifest(cf, manifest, directory)
+    if obj.get("bucket") == "cdn":
+        if obj.get("r2_bucket") and obj.get("r2_key") and may_delete(entry.get("kind") or "", True, int(entry.get("size") or 0)):
+            delete_object(cf["token"], cf["account"], obj["r2_bucket"], obj["r2_key"])
+            entry["deleted"] = True
+            save_manifest(cf, manifest, directory)
+            log("[telegram-backup] deleted %s/%s" % (obj["r2_bucket"], obj["r2_key"]))
+        return
+    if may_delete(entry.get("kind") or "", True, int(entry.get("size") or 0)):
+        delete_object(cf["token"], cf["account"], obj["bucket"], obj["key"])
+        entry["deleted"] = True
+        save_manifest(cf, manifest, directory)
+        log("[telegram-backup] deleted %s/%s" % (obj["bucket"], obj["key"]))
+
+
+def store_loaded(src: Path, obj: dict, kind: str, manifest: dict, cf: dict, state: dict, directory: Path, sha: str) -> str:
+    entry = ensure_entry(manifest, obj, kind, sha, True, False)
+    files_before = int(state.get("files") or 0)
+    bytes_before = int(state.get("bytes") or 0)
+    if kind == "small":
+        if not budget_ok(state, src.stat().st_size):
+            return "stop"
+        upload_path(PUBLIC_API, cf["bot"], cf["channel"], src, obj["key"][:900], state, entry, "file", 0, sha, 0, entry["mime"], cf)
+    else:
+        hls_dir = directory / "hls"
+        try:
+            init, items, transcoded = build_hls(src, hls_dir)
+        except RuntimeError:
+            shutil.rmtree(hls_dir, ignore_errors=True)
+            log("[telegram-backup] skipped_hls %s/%s" % (obj["bucket"], obj["key"]))
+            return "skip"
+        if transcoded:
+            log("[telegram-backup] transcoded %s/%s so every segment stays under 19 MiB" % (obj["bucket"], obj["key"]))
+        queue = []
+        if init:
+            queue.append((-1, "init", hls_dir / Path(init).name, "video/mp4", 0))
+        for index, (name, duration) in enumerate(items):
+            path = hls_dir / Path(name).name
+            mime = "video/mp2t" if path.suffix == ".ts" else "video/iso.segment"
+            queue.append((index, "segment", path, mime, duration))
+        queue.append((-2, "playlist", hls_dir / "index.m3u8", "application/vnd.apple.mpegurl", 0))
+        for index, role, path, mime, duration in queue:
+            if not budget_ok(state, path.stat().st_size):
+                save_manifest(cf, manifest, directory)
+                shutil.rmtree(hls_dir, ignore_errors=True)
+                return "stop"
+            digest = hash_file(path)
+            upload_path(PUBLIC_API, cf["bot"], cf["channel"], path, "%s %s %s" % (obj["key"][:800], role, index), state, entry, role, index, digest, duration, mime, cf)
+        shutil.rmtree(hls_dir, ignore_errors=True)
+    save_manifest(cf, manifest, directory)
+    finish_verified(entry, obj, manifest, cf, directory)
+    if obj.get("bucket") == "cdn":
+        note_social(state, obj["key"], files_before, bytes_before)
+    log("[telegram-backup] stored %s/%s (%s)" % (obj["bucket"], obj["key"], kind))
+    return "ok"
+
+
+def process_cdn(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -> str:
+    prior = find_entry(manifest, obj["bucket"], obj["key"])
+    if prior and prior.get("verified") and (prior.get("parts") or []):
+        if obj.get("r2_bucket") and obj.get("r2_key") and not prior.get("deleted") and may_delete(prior.get("kind") or "", True, int(prior.get("size") or 0)):
+            delete_object(cf["token"], cf["account"], obj["r2_bucket"], obj["r2_key"])
+            prior["deleted"] = True
+            save_manifest(cf, manifest, directory)
+            log("[telegram-backup] deleted %s/%s" % (obj["r2_bucket"], obj["r2_key"]))
+        return "skip"
+    src = directory / "cdn.bin"
+    src.unlink(missing_ok=True)
+    fetched = fetch_allowed(str(obj.get("source_url") or ""), src)
+    if not fetched:
+        src.unlink(missing_ok=True)
+        log("[telegram-backup] skipped_cdn %s" % obj["key"])
+        return "skip"
+    obj["size"] = int(fetched["size"])
+    obj["content_type"] = fetched["content_type"]
+    obj["etag"] = fetched["sha256"]
+    kind = plan_kind(obj["key"], obj["size"], obj["content_type"], False)
+    if obj.get("role") == "video" and kind == "keep-other":
+        obj["content_type"] = "video/mp4"
+        kind = plan_kind(obj["key"], obj["size"], obj["content_type"], False)
+    if kind not in {"small", "hls"}:
+        src.unlink(missing_ok=True)
+        log("[telegram-backup] skipped_too_big cdn/%s %s" % (obj["key"], obj["size"]))
+        return "skip"
+    try:
+        return store_loaded(src, obj, kind, manifest, cf, state, directory, fetched["sha256"])
+    finally:
+        src.unlink(missing_ok=True)
+
+
+def social_catalogs(cf: dict, directory: Path, buckets: list) -> list:
+    docs = []
+    for key in ("owner/tiktok.json", "feeds.json"):
+        doc = read_json_key(cf, buckets, key, directory)
+        if doc is None and key == "owner/tiktok.json":
+            local = ROOT / "owner" / "tiktok.json"
+            if local.is_file():
+                try:
+                    doc = json.loads(local.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    doc = None
+        if doc is None and key == "feeds.json":
+            local = ROOT / "feeds.json"
+            if local.is_file():
+                try:
+                    doc = json.loads(local.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    doc = None
+        if isinstance(doc, dict):
+            docs.append(doc)
+    return docs
+
+
 def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -> str:
     local = local_requested()
     kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", local, cf.get("loop_version") or "", cf.get("blocked_keys"))
@@ -1284,10 +1681,38 @@ def backup(loop_only: bool = False) -> int:
 
         def rank(obj):
             kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version, blocked)
-            first = 0 if kind in {"loop", "mirror"} else 1
-            return (first, -int(obj.get("size") or 0), str(obj.get("uploaded") or ""), str(obj.get("key") or ""))
+            key = str(obj.get("key") or "")
+            if key.startswith("tiktok/") or key.startswith("social/"):
+                first = 0
+            elif kind in {"loop", "mirror"}:
+                first = 1
+            else:
+                first = 2
+            return (first, -int(obj.get("size") or 0), str(obj.get("uploaded") or ""), key)
 
+        stopped = False
+        if not loop_only:
+            present = {str(row.get("key") or "") for row in rows}
+            paired = {str(row.get("key") or ""): row for row in rows}
+            for item in plan_social(social_catalogs(cf, directory, bucket_names(cf["token"], cf["account"])), present):
+                match = paired.get(item["key"])
+                if match:
+                    item["r2_bucket"] = match["bucket"]
+                    item["r2_key"] = match["key"]
+                try:
+                    result = process_cdn(item, manifest, cf, state, directory)
+                except Exception as err:
+                    log("[telegram-backup] failed cdn/%s" % item["key"])
+                    log(scrub(str(err), current_secrets()))
+                    save_manifest(cf, manifest, directory)
+                    return 1
+                if result == "stop":
+                    stopped = True
+                    log("[telegram-backup] reached the run cap")
+                    break
         for obj in sort_objects(rows, rank):
+            if stopped:
+                break
             if structural_role(obj["key"]) == "manifest":
                 continue
             if loop_only and plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version) != "loop":
@@ -1302,6 +1727,12 @@ def backup(loop_only: bool = False) -> int:
             if result == "stop":
                 log("[telegram-backup] reached the run cap")
                 break
+        log("[telegram-backup] social %s files, %s bytes; tiktok %s files, %s bytes" % (
+            state.get("social_files") or 0,
+            state.get("social_bytes") or 0,
+            state.get("tiktok_files") or 0,
+            state.get("tiktok_bytes") or 0,
+        ))
         log(upload_summary(state))
         return 0
     except Exception as err:
@@ -1454,6 +1885,53 @@ def selftest() -> int:
     check("function tgBlockedKey(" in app and "music/" in app, "the app can fall back to Telegram for music and still refuses key files")
     check('"primary": "r2"' in doc and "LOOP_PRIMARY" in doc, "the radio primary field is documented and defaults to r2")
     check("--loop" in workflow and 'workflows: ["Publish radio loop"]' in workflow, "a published loop is mirrored")
+    tiktok_post = {
+        "platform": "tiktok",
+        "handle": "gabii_g5",
+        "statusId": "7695476356548660503",
+        "media": [
+            {"type": "video", "url": "https://v16.tiktokcdn.com/clip.mp4", "poster": "https://p16.tiktokcdn.com/cover.jpg"},
+            {"type": "photo", "url": "https://p16.tiktokcdn.com/slide.jpg"},
+        ],
+    }
+    planned = plan_social([{"posts": [tiktok_post]}], set())
+    planned_keys = {row["key"] for row in planned}
+    check(planned_keys == {
+        "tiktok/gabii_g5/7695476356548660503/video",
+        "tiktok/gabii_g5/7695476356548660503/poster",
+        "tiktok/gabii_g5/7695476356548660503/photo/1",
+    }, "TikTok video, poster, and carousel photo get stable keys")
+    live_post = {"platform": "tiktok", "handle": "gabii_g5", "kind": "live", "url": "https://www.tiktok.com/@gabii_g5/live", "media": [{"type": "video", "url": "https://v16.tiktokcdn.com/live.mp4"}]}
+    check(plan_social([{"posts": [live_post]}], set()) == [], "a TikTok live is not recorded")
+    thumb = plan_social([{"posts": [{"platform": "youtube", "statusId": "xtrFOsncOeo", "media": [{"type": "video", "url": "https://www.youtube-nocookie.com/embed/xtrFOsncOeo", "poster": "https://i.ytimg.com/vi/xtrFOsncOeo/hqdefault.jpg", "stream": "https://invidious.example/v.mp4"}]}]}], set())
+    check(len(thumb) == 1 and thumb[0]["key"] == "social/youtube/xtrFOsncOeo/thumb/0", "YouTube contributes its thumbnail, not the embed")
+    check(host_ok("https://v16.tiktokcdn.com/a.mp4") and not host_ok("https://www.youtube.com/watch?v=xtrFOsncOeo"), "only the existing CDN hosts are fetched")
+    check(plan_social([{"posts": [tiktok_post]}], {"tiktok/gabii_g5/7695476356548660503/video"})[0]["key"] != "tiktok/gabii_g5/7695476356548660503/video", "a TikTok file already on R2 is not fetched again")
+    ig = {"platform": "instagram", "statusId": "https://www.instagram.com/p/DeZgzTEggQe/", "url": "https://www.instagram.com/p/DeZgzTEggQe/", "media": [{"type": "photo", "url": "https://scontent.cdninstagram.com/a.jpg"}]}
+    check(social_object_key(ig, "photo", 0) == "social/instagram/DeZgzTEggQe/photo/0", "an Instagram shortcode is the object id")
+    node_keys = subprocess.run(["node", "--input-type=module", "-e", """
+import { socialObjectKey } from "./shared/social-keys.js";
+const post = { platform: "tiktok", handle: "gabii_g5", statusId: "7695476356548660503" };
+const ig = { platform: "instagram", statusId: "https://www.instagram.com/p/DeZgzTEggQe/", url: "https://www.instagram.com/p/DeZgzTEggQe/" };
+const yt = { platform: "youtube", statusId: "xtrFOsncOeo" };
+process.stdout.write([
+  socialObjectKey(post, "video", 0),
+  socialObjectKey(post, "poster", 0),
+  socialObjectKey(post, "photo", 1),
+  socialObjectKey(ig, "photo", 0),
+  socialObjectKey(yt, "thumb", 0)
+].join("\\n"));
+"""], capture_output=True, text=True, check=False)
+    check(node_keys.returncode == 0 and node_keys.stdout.splitlines() == [
+        "tiktok/gabii_g5/7695476356548660503/video",
+        "tiktok/gabii_g5/7695476356548660503/poster",
+        "tiktok/gabii_g5/7695476356548660503/photo/1",
+        "social/instagram/DeZgzTEggQe/photo/0",
+        "social/youtube/xtrFOsncOeo/thumb/0",
+    ], "the page and the backup use the same object keys")
+    check('return "tiktok/" + handle + "/" + ident + "/video"' in app, "the app builds the TikTok video key")
+    check("HLS VOD" in doc and "if you ask" in doc, "live recordings are only a later HLS VOD note")
+    check("TikTok media loads from /tg" in doc, "TikTok playback from Telegram is documented")
     spaces = (ROOT / "spaces.js").read_text(encoding="utf-8")
     check("function loopMirrorPlan(" in spaces and "maxNumRetry: 1" in spaces, "the player falls back after one R2 retry")
     check("function loopPrimaryName(" in spaces and "loopPrimaryChanged(" in spaces, "the player reads the loop primary field")

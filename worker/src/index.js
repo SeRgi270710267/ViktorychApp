@@ -2,6 +2,7 @@ import { OWNER_HANDLE, inspectHandle } from "../../shared/handle-skeleton.js";
 import { parseRoomId, pickStreams } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
+import { socialKeysForPost } from "../../shared/social-keys.js";
 import { buildPlaylist, parseRange, safeTelegramPath } from "./telegram.js";
 
 const encoder = new TextEncoder();
@@ -1167,6 +1168,11 @@ function loopGroupKey(key) {
   return /^loop\/[A-Za-z0-9._-]{1,80}(?:\/aac)?$/.test(String(key || ""));
 }
 
+function tiktokPlaybackKey(raw) {
+  const text = String(raw || "").replace(/\/(?:index\.m3u8|init|\d+)$/, "");
+  return /^tiktok\/[A-Za-z0-9._]{2,24}\/\d{8,22}\/(?:video|poster|photo\/\d{1,3})$/.test(text);
+}
+
 function publicLoopCache() {
   return {
     "cache-control": "public, max-age=31536000, immutable",
@@ -1219,6 +1225,7 @@ function collectOwnerMedia(value, env, into) {
           else if (node && typeof node === "object") Object.keys(node).forEach((name) => walk(node[name]));
         };
         walk(item);
+        if (String(item.platform || "").toLowerCase() !== "tiktok") socialKeysForPost(item).forEach((key) => into.add(key));
       } else collectOwnerMedia(item, env, into);
     });
     return;
@@ -1404,6 +1411,9 @@ async function handleTelegram(request, env, path) {
   if (!key || telegramSecretKey(key)) return json(404, { error: "not_found" });
   if (!publicLoop && !verify) {
     if (await hiddenAvatar(env, viewer, decoded) || await hiddenAvatar(env, viewer, key)) return json(404, { error: "not_found" });
+    if ((tiktokPlaybackKey(decoded) || tiktokPlaybackKey(key)) && !tiktokPublic(env) && (!viewer || viewer.owner !== 1)) {
+      return json(403, { error: "forbidden" });
+    }
     const owned = await ownerOnlyMedia(env);
     if (owned.has(decoded) || owned.has(key)) {
       if (!viewer || viewer.owner !== 1) return json(403, { error: "forbidden" });

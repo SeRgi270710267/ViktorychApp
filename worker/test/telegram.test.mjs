@@ -278,3 +278,50 @@ test("shorts stay owner-only, a hidden avatar stays hidden, and a song key is no
     await mf.dispose();
   }
 });
+
+test("tiktok media on /tg stays behind the sign-up gate and the owner audience", async () => {
+  const key = "tiktok/gabii_g5/7695476356548660503/video";
+  const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT }));
+  try {
+    const readerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.80", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Reader", handle: "reader_tt" })
+    });
+    const reader = await readerSignup.json();
+    const ownerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.81", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Owner", handle: "owner_tt" })
+    });
+    const owner = await ownerSignup.json();
+    const db = await mf.getBindings();
+    await db.DB.prepare("UPDATE accounts SET owner = 1 WHERE handle = ?").bind("owner_tt").run();
+    await db.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, 'cdn', 'TT1', 9, 4, 'abc', 'video/mp4', 0, 1, 1, 0, 1)").bind(key).run();
+    const anon = await call(mf, "/tg/" + key, { ip: "203.0.113.82" });
+    assert.equal(anon.status, 401);
+    const refused = await call(mf, "/tg/" + key, { ip: "203.0.113.83", token: reader.token });
+    assert.equal(refused.status, 403);
+    const allowed = await call(mf, "/tg/" + key, { ip: "203.0.113.84", token: owner.token });
+    assert.equal(allowed.status, 200);
+  } finally {
+    await mf.dispose();
+  }
+  const open = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT, TIKTOK_AUDIENCE: "all" }));
+  try {
+    const readerSignup = await open.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.85", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Reader", handle: "reader_all" })
+    });
+    const reader = await readerSignup.json();
+    const db = await open.getBindings();
+    await db.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, 'cdn', 'TT2', 10, 4, 'abc', 'video/mp4', 0, 1, 1, 0, 1)").bind(key).run();
+    const anon = await call(open, "/tg/" + key, { ip: "203.0.113.86" });
+    assert.equal(anon.status, 401);
+    const allowed = await call(open, "/tg/" + key, { ip: "203.0.113.87", token: reader.token });
+    assert.equal(allowed.status, 200);
+  } finally {
+    await open.dispose();
+  }
+});

@@ -112,7 +112,17 @@ jobs:
 
       - name: Install ffmpeg
         if: steps.secrets.outputs.present == 'true'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ffmpeg-dist
+          curl -fsSL --retry 5 --retry-all-errors -o /tmp/ffmpeg.tar.xz \
+            https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+          tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-dist
+          bin=$(find /tmp/ffmpeg-dist -type f -path '*/bin/ffmpeg' | head -n 1)
+          test -n "$bin"
+          sudo install -m 755 "$bin" /usr/local/bin/ffmpeg
+          ffmpeg -version | head -n 2
 
       - name: Preflight
         id: preflight

@@ -46,6 +46,23 @@ def main() -> int:
     assert post["short"] is True
     assert post["platform"] == "tiktok"
     assert post["media"][0]["url"].endswith("h264.mp4")
+    slides = entry_to_post({
+        "id": "7695476356548660503",
+        "timestamp": 1791742719,
+        "description": "slides",
+        "formats": [
+            {"ext": "jpeg", "vcodec": "none", "url": "https://p16.tiktokcdn.com/1.jpg"},
+            {"ext": "jpeg", "vcodec": "none", "url": "https://p16.tiktokcdn.com/2.jpg"},
+        ],
+        "images": [{"url": "https://p16.tiktokcdn.com/3.jpg"}],
+    }, "gabii_g5")
+    urls = [item["url"] for item in slides["media"]]
+    assert urls == [
+        "https://p16.tiktokcdn.com/1.jpg",
+        "https://p16.tiktokcdn.com/2.jpg",
+        "https://p16.tiktokcdn.com/3.jpg",
+    ]
+    assert all(item["type"] == "photo" for item in slides["media"])
     assert "T" in post["date"] and post["date"] != ""
     root = Path(__file__).resolve().parents[1]
     tmp = root / "owner" / "tiktok-test-tmp"
