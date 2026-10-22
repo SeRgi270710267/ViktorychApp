@@ -2,6 +2,11 @@ name: Accounts
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "worker/**"
+      - "shared/**"
+      - ".github/workflows/accounts.yml"
   push:
     branches:
       - main
@@ -14,7 +19,22 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Test the account worker
+        working-directory: worker
+        run: npm ci && npm test
+
   deploy:
+    needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +50,7 @@ jobs:
           OWNER_CLAIM_CODE: ${{ secrets.OWNER_CLAIM_CODE }}
           ACCOUNT_PEPPER: ${{ secrets.ACCOUNT_PEPPER }}
           TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: |
           if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
             echo "Cloudflare credentials are not set; skipping the account worker."
@@ -136,6 +157,7 @@ jobs:
           if [ -n "${OWNER_CLAIM_CODE:-}" ]; then printf '%s' "$OWNER_CLAIM_CODE" | npx wrangler secret put OWNER_CLAIM_CODE; fi
           if [ -n "${ACCOUNT_PEPPER:-}" ]; then printf '%s' "$ACCOUNT_PEPPER" | npx wrangler secret put ACCOUNT_PEPPER; fi
           if [ -n "${TURNSTILE_SECRET:-}" ]; then printf '%s' "$TURNSTILE_SECRET" | npx wrangler secret put TURNSTILE_SECRET; fi
+          if [ -n "${TELEGRAM_CHANNEL_ID:-}" ]; then printf '%s' "$TELEGRAM_CHANNEL_ID" | npx wrangler secret put TELEGRAM_CHANNEL_ID; fi
           echo "account worker deployed"
 
       - name: Check owner TikTok playback

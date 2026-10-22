@@ -5407,6 +5407,11 @@ const here = parseRoute();
     if (parts[0] === "bookmarks" && parts.length === 1) return { name: "history", tab: "bookmarks", query };
     if (parts[0] === "music") return { name: "music", section: parts[1] || "home", id: parts.slice(2).join("/"), query };
     if (parts[0] === "shorts") return { name: "shorts", live: parts[1] === "live", query };
+    if (parts[0] === "drive") {
+      if (parts[1] === "trash") return { name: "drive", trash: true, folder: "", query };
+      if (parts[1] === "folder" && parts[2]) return { name: "drive", trash: false, folder: parts[2], query };
+      return { name: "drive", trash: false, folder: "", query };
+    }
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
@@ -8804,7 +8809,8 @@ const here = parseRoute();
         profile: tr("Profile"),
         person: tr("Profile"),
         spaces: tr("Space"),
-        shorts: tr("Shorts")
+        shorts: tr("Shorts"),
+        drive: tr("Drive")
       };
       key = map[route.name] || "";
     }
@@ -8949,6 +8955,7 @@ const here = parseRoute();
       <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
       <a href="#/music">${icon("muNote")} ${tr("Music")}</a>
       ${window.ViktorychShorts && window.ViktorychShorts.visible() ? `<a href="#/shorts">${icon("shorts")} ${tr("Shorts")}</a>` : ""}
+      ${window.ViktorychDrive && window.ViktorychDrive.visible() ? `<a href="#/drive">${icon("bookmark")} ${tr("Drive")}</a>` : ""}
       <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>${tr("You")}</b><div class="phandle">@reader</div></div></div>`}
@@ -9095,7 +9102,7 @@ if (STATE.histClear) {
   }
 
   function shell(main, route) {
-    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts";
+    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive";
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music"].includes(route.name);
@@ -10442,6 +10449,7 @@ if (STATE.histClear) {
   function view(route) {
     if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
     if (route.name === "shorts") return (window.ViktorychShorts && window.ViktorychShorts.visible() && window.ViktorychShorts.page(route)) || pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
+    if (route.name === "drive" && window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
@@ -10660,7 +10668,10 @@ if (STATE.histClear) {
       history.replaceState(null, "", location.pathname + location.search + "#/history/bookmarks");
     }
     const gen = (STATE.renderGen = (STATE.renderGen || 0) + 1);
-    const route = parseRoute();
+    let route = parseRoute();
+    if (route.name === "drive" && !(window.ViktorychDrive && window.ViktorychDrive.visible())) {
+      route = { name: "home", tab: "foryou", query: route.query || new URLSearchParams() };
+    }
     syncHomeFromQuery(route);
     const currentTab = route.name === "home" ? (route.tab || "foryou") : "";
     if (!(route.name === "home" && STATE.tabMenu === currentTab)) STATE.tabMenu = null;
@@ -10725,6 +10736,10 @@ if (STATE.histClear) {
       if (window.ViktorychShorts) {
         if (route.name === "shorts") window.ViktorychShorts.mount(route);
         else window.ViktorychShorts.unmount();
+      }
+      if (window.ViktorychDrive) {
+        if (route.name === "drive") window.ViktorychDrive.mount(route);
+        else window.ViktorychDrive.unmount();
       }
       if (route.name === "article" && STATE.scrollKey !== nextKey) {
         const saved = articleScroll(route.id);
