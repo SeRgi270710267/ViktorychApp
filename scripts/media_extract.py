@@ -29,7 +29,7 @@ from tiktok_sync import TRACKED  # noqa: E402
 
 EXTRACT = ("tiktok", "instagram", "x", "youtube", "vk", "facebook", "threads")
 ARCHIVE_KEY = "backup/media-archive.txt"
-GALLERY_KEY = "backup/gallery-archive.txt"
+GALLERY_KEY = "backup/gallery-archive.sqlite"
 CATALOG_KEY = "backup/tiktok-catalog.json"
 CURSOR_KEY = "backup/media-cursor.txt"
 LINKS_KEY = "backup/media-links.json"
@@ -231,6 +231,25 @@ def put_text(cf: dict, bucket: str, key: str, text: str) -> None:
     tb.put_bytes(cf["token"], cf["account"], bucket, key, text.encode("utf-8"), "text/plain; charset=utf-8")
 
 
+def put_file(cf: dict, bucket: str, key: str, path: Path) -> None:
+    if path.is_file() and path.stat().st_size > 0:
+        tb.put_bytes(cf["token"], cf["account"], bucket, key, path.read_bytes(), "application/octet-stream")
+
+
+def text_file(path: Path) -> str:
+    if not path.is_file():
+        return ""
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def fetch_bytes(cf: dict, bucket: str, key: str, dest: Path) -> None:
+    try:
+        tb.download_object(cf["token"], cf["account"], bucket, key, dest)
+    except (urllib.error.URLError, TimeoutError, OSError, RuntimeError):
+        if dest.exists():
+            dest.unlink()
+
+
 def put_json(cf: dict, bucket: str, key: str, data: dict) -> None:
     payload = (json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
     tb.put_bytes(cf["token"], cf["account"], bucket, key, payload, "application/json")
@@ -388,9 +407,9 @@ def extract() -> int:
         cf, manifest = opened
         bucket = cf["manifest_bucket"]
         archive = directory / "archive.txt"
-        photos = directory / "gallery-archive.txt"
+        photos = directory / "gallery-archive.sqlite"
         archive.write_text(r2_text(cf, bucket, ARCHIVE_KEY, directory / "remote-archive.txt"), encoding="utf-8")
-        photos.write_text(r2_text(cf, bucket, GALLERY_KEY, directory / "remote-gallery.txt"), encoding="utf-8")
+        fetch_bytes(cf, bucket, GALLERY_KEY, photos)
         catalog = r2_json(cf, bucket, CATALOG_KEY, directory / "remote-catalog.json")
         links_doc = r2_json(cf, bucket, LINKS_KEY, directory / "remote-links.json")
         links = [row for row in (links_doc.get("items") or []) if isinstance(row, dict) and row.get("key")]
@@ -421,7 +440,7 @@ def extract() -> int:
             if tb.runner_blocked(text):
                 log("[media-extract] skipped_blocked %s/%s" % (account["platform"], account["handle"]))
                 shutil.rmtree(work, ignore_errors=True)
-                put_text(cf, bucket, ARCHIVE_KEY, archive.read_text(encoding="utf-8"))
+                put_text(cf, bucket, ARCHIVE_KEY, text_file(archive))
                 continue
             for item in video_posts(work, account, catalog):
                 if stored >= limit:
@@ -458,8 +477,8 @@ def extract() -> int:
                             links.append({"key": item["key"], "platform": account["platform"], "handle": account["handle"], "id": item["post"].get("statusId") or "", "stats": item["stats"]})
                             log("[media-extract] linked %s" % item["key"])
             shutil.rmtree(work, ignore_errors=True)
-            put_text(cf, bucket, ARCHIVE_KEY, archive.read_text(encoding="utf-8"))
-            put_text(cf, bucket, GALLERY_KEY, photos.read_text(encoding="utf-8"))
+            put_text(cf, bucket, ARCHIVE_KEY, text_file(archive))
+            put_file(cf, bucket, GALLERY_KEY, photos)
             put_json(cf, bucket, CATALOG_KEY, catalog)
         by_key = {}
         for row in links:
@@ -517,6 +536,15 @@ def selftest() -> int:
     doc = (ROOT / "docs" / "telegram-backup.md").read_text(encoding="utf-8")
     check("archive.txt" in doc and "user_id" in doc and "sec_uid" in doc and "17 */3 * * *" in doc, "the docs describe the archive, the catalog, and the schedule")
     check("added account" in doc and "tracked account" not in doc and "name: Extract added accounts" in workflow, "added accounts is the name for profiles in feeds.config.json")
+    source = Path(__file__).read_text(encoding="utf-8")
+    check(("photos" + ".read_text(") not in source and "gallery-archive.sqlite" in source, "the gallery-dl archive is a sqlite file, not text")
+    sample = Path("gallery-sample.sqlite")
+    try:
+        blob = b"SQLite format 3\x00" + bytes(range(83)) + b"\x89"
+        sample.write_bytes(blob)
+        check(sample.read_bytes()[99:100] == b"\x89" and text_file(sample).startswith("SQLite"), "a sqlite archive survives a binary byte")
+    finally:
+        sample.unlink(missing_ok=True)
     print("media extract selftest ok")
     return 0
 
