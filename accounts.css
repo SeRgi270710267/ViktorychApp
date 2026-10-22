@@ -177,34 +177,64 @@ html[data-wall="1"] body {
 }
 .acct-field {
   position: relative;
-  height: 56px;
+  display: block;
+  box-sizing: border-box;
+  height: 58px;
+  min-height: 58px;
   margin-top: 24px;
-  border: 1px solid var(--line);
+  border: 1px solid #333639;
   border-radius: 4px;
   background: transparent;
+  overflow: hidden;
 }
+html[data-theme="dim"] .acct-field { border-color: #38444d; }
+html[data-theme="default"] .acct-field { border-color: #cfd9de; }
 .acct-field:focus-within { border-color: #1d9bf0; }
 .acct-field input,
 .acct-field textarea {
+  display: block;
   width: 100%;
-  height: 56px;
+  height: 58px;
+  min-height: 58px;
+  max-height: 58px;
+  box-sizing: border-box;
+  margin: 0;
   border: 0;
+  border-radius: 0;
   outline: none;
+  box-shadow: none;
   background: transparent;
   color: var(--text);
   font: inherit;
   font-size: 17px;
-  padding: 20px 8px 0;
+  line-height: 24px;
+  padding: 26px 72px 6px 12px;
+  -webkit-appearance: none;
+  appearance: none;
+  caret-color: var(--text);
 }
-.acct-field textarea { height: 96px; resize: vertical; padding-top: 24px; }
-.acct-field.tall { height: auto; }
+.acct-field textarea {
+  height: 120px;
+  min-height: 120px;
+  max-height: none;
+  resize: vertical;
+  padding-top: 28px;
+  padding-bottom: 28px;
+}
+.acct-field.tall { height: auto; min-height: 120px; overflow: visible; }
 .acct-field label {
   position: absolute;
-  left: 8px;
-  top: 16px;
+  left: 12px;
+  right: 72px;
+  top: 17px;
+  margin: 0;
   color: var(--muted);
   font-size: 17px;
+  line-height: 24px;
   pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .acct-field input:focus + label,
 .acct-field textarea:focus + label,
@@ -212,7 +242,23 @@ html[data-wall="1"] body {
 .acct-field textarea:not(:placeholder-shown) + label {
   top: 6px;
   font-size: 13px;
-  color: #1d9bf0;
+  line-height: 16px;
+}
+.acct-field:focus-within label { color: #1d9bf0; }
+.acct-count {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 16px;
+  pointer-events: none;
+}
+.acct-field.tall .acct-count {
+  top: auto;
+  bottom: 8px;
+  transform: none;
 }
 .acct-next {
   width: 100%;

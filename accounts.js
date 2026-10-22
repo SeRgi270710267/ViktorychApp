@@ -14,6 +14,7 @@
   var form = {};
   var errorText = "";
   var legalTitle = "";
+  var painted = "";
   var pushTimer = 0;
   var pushing = false;
 
@@ -199,9 +200,25 @@
   function layer() {
     return document.getElementById("account-layer");
   }
-  function field(name, label, type) {
+  function fieldCount(name, value, max) {
+    var raw = name === "accountNumber" ? String(value || "").replace(/\D/g, "") : String(value || "");
+    return Array.from(raw).length + " / " + max;
+  }
+  function field(name, label, type, max) {
     var value = form[name] == null ? "" : String(form[name]);
-    return '<label class="acct-field"><input name="' + esc(name) + '" type="' + (type || "text") + '" placeholder=" " autocomplete="' + (name === "accountNumber" ? "off" : "nickname") + '" value="' + esc(value) + '"><label>' + esc(label) + "</label></label>";
+    var id = "acct-" + name;
+    var limit = name === "accountNumber" ? 16 : max;
+    var maxAttr = "";
+    if (name === "accountNumber") maxAttr = ' data-max="16" inputmode="numeric"';
+    else if (limit) maxAttr = ' maxlength="' + limit + '" data-max="' + limit + '"';
+    var count = limit ? '<span class="acct-count">' + fieldCount(name, value, limit) + "</span>" : "";
+    var autocomplete = name === "accountNumber" || name === "claimCode" ? "off" : "nickname";
+    return '<div class="acct-field"><input id="' + id + '" name="' + esc(name) + '" type="' + (type || "text") + '"' + maxAttr + ' placeholder=" " autocomplete="' + autocomplete + '" value="' + esc(value) + '"><label for="' + id + '">' + esc(label) + "</label>" + count + "</div>";
+  }
+  function textArea(name, label, max) {
+    var value = form[name] == null ? "" : String(form[name]);
+    var id = "acct-" + name;
+    return '<div class="acct-field tall"><textarea id="' + id + '" name="' + esc(name) + '" maxlength="' + max + '" data-max="' + max + '" placeholder=" ">' + esc(value) + '</textarea><label for="' + id + '">' + esc(label) + '</label><span class="acct-count">' + fieldCount(name, value, max) + "</span></div>";
   }
   function closeIcon() {
     return '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M10.6 12 4.8 6.2l1.4-1.4L12 10.6l5.8-5.8 1.4 1.4L13.4 12l5.8 5.8-1.4 1.4L12 13.4l-5.8 5.8-1.4-1.4L10.6 12z"/></svg>';
@@ -229,9 +246,9 @@
     }
     if (step === 1) {
       var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : '<button class="acct-quiet" type="button" data-acct="claim">' + esc(tr("Have a claim code?")) + "</button>";
-      return '<p class="acct-sub">' + esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters.")) + "</p>" + field("handle", tr("Choose a handle")) + claim + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
+      return '<p class="acct-sub">' + esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters.")) + "</p>" + field("handle", tr("Choose a handle"), "text", 15) + claim + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
     }
-    return '<p class="acct-sub">' + esc(tr("Your name is shown on your profile.")) + "</p>" + field("displayName", tr("Name")) + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
+    return '<p class="acct-sub">' + esc(tr("Your name is shown on your profile.")) + "</p>" + field("displayName", tr("Name"), "text", 50) + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
   }
   function loginBody() {
     return field("accountNumber", tr("Account number")) + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="do-login">' + esc(tr("Log in")) + '</button><p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + "</button></p>";
@@ -239,8 +256,8 @@
   function editBody() {
     var session = readSession();
     var account = session && session.account || {};
-    var locked = account.owner ? '<p class="acct-sub">@' + esc(account.handle) + "</p>" : field("handle", tr("Choose a handle"));
-    return field("displayName", tr("Name")) + locked + '<label class="acct-field tall"><textarea name="bio" maxlength="160" placeholder=" ">' + esc(form.bio || "") + "</textarea><label>" + esc(tr("Bio")) + '</label></label><label class="acct-file">' + esc(tr("Profile photo")) + '<input name="avatar" type="file" accept="image/jpeg,image/png,image/webp"></label><label class="acct-file">' + esc(tr("Banner")) + '<input name="banner" type="file" accept="image/jpeg,image/png,image/webp"></label><p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="save-profile">' + esc(tr("Save")) + "</button>";
+    var locked = account.owner ? '<p class="acct-sub">@' + esc(account.handle) + "</p>" : field("handle", tr("Choose a handle"), "text", 15);
+    return field("displayName", tr("Name"), "text", 50) + locked + textArea("bio", tr("Bio"), 160) + '<label class="acct-file">' + esc(tr("Profile photo")) + '<input name="avatar" type="file" accept="image/jpeg,image/png,image/webp"></label><label class="acct-file">' + esc(tr("Banner")) + '<input name="banner" type="file" accept="image/jpeg,image/png,image/webp"></label><p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="save-profile">' + esc(tr("Save")) + "</button>";
   }
   function legalBody() {
     return '<p class="acct-sub">' + esc(tr("Not affiliated with X.")) + "</p>";
@@ -256,6 +273,12 @@
     else if (view === "legal") html += modal(legalTitle || tr("About"), legalBody());
     else if (view === "leave") html += modal(tr("Save your account number"), '<p class="acct-sub">' + esc(tr("Leave without saving the account number?")) + '</p><button class="acct-next" type="button" data-acct="abandon">' + esc(tr("Close")) + '</button><button class="acct-line" type="button" data-acct="stay" style="width:100%;margin-top:12px">' + esc(tr("Back")) + "</button>");
     root.innerHTML = html;
+    var mark = (view || "") + ":" + step + ":" + (form.claimOpen ? "1" : "0");
+    if (mark !== painted) {
+      painted = mark;
+      var input = form.claimOpen ? root.querySelector('input[name="claimCode"]') : root.querySelector(".acct-field input, .acct-field textarea");
+      if (input) input.focus();
+    }
     if (config().turnstileSiteKey && !document.getElementById("turnstile-js")) {
       var script = document.createElement("script");
       script.id = "turnstile-js";
@@ -741,9 +764,14 @@
       var digits = String(el.value || "").replace(/\D/g, "").slice(0, 16);
       el.value = grouped(digits);
       form.accountNumber = digits;
+      var numberCount = el.parentNode && el.parentNode.querySelector(".acct-count");
+      if (numberCount) numberCount.textContent = fieldCount("accountNumber", digits, 16);
       return;
     }
     form[el.name] = el.value;
+    var count = el.parentNode && el.parentNode.querySelector(".acct-count");
+    var max = Number(el.getAttribute("data-max") || 0);
+    if (count && max) count.textContent = fieldCount(el.name, el.value, max);
   }, true);
   document.addEventListener("change", function (event) {
     var el = event.target;
