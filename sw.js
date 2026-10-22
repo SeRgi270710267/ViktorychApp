@@ -1,8 +1,9 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a4-__SW_VERSION__";
+const VERSION = "viktorych-a5-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
+let playToken = "";
 importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
@@ -177,6 +178,14 @@ function isOwnerTiktok(url) {
   return url.origin === self.location.origin && /\/owner\/tiktok\.json$/.test(url.pathname);
 }
 
+function isOwnerPlay(url) {
+  return /\/v1\/owner\/play$/.test(url.pathname) && url.searchParams.has("id");
+}
+
+function isAccountMedia(url) {
+  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname);
+}
+
 function privateData(url) {
   return isData(url) || isAppJson(url) || isMedia(url) || isLive(url) || isCommentApi(url) || isSpaceStatus(url) || isSpaceAsset(url) || isCatalogMedia(url) || isOwnerTiktok(url);
 }
@@ -346,6 +355,7 @@ self.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data.type === "auth") {
     accountsAuthed = !!data.on;
+    playToken = data.on && typeof data.token === "string" ? data.token : "";
     if (!data.on) {
       event.waitUntil((async () => {
         await caches.delete(DATA);
@@ -392,6 +402,16 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (isOwnerPlay(url) || isAccountMedia(url)) {
+    event.respondWith((async () => {
+      const headers = new Headers();
+      if (playToken) headers.set("Authorization", "Bearer " + playToken);
+      const range = request.headers.get("Range");
+      if (range && isOwnerPlay(url)) headers.set("Range", range);
+      return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });
+    })());
+    return;
+  }
   if (ACCOUNTS_WALL && !accountsAuthed && privateData(url)) {
     event.respondWith(new Response("", { status: 401, headers: { "cache-control": "no-store" } }));
     return;

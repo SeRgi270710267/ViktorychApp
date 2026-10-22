@@ -166,13 +166,36 @@
       "</div>";
   }
 
+  function playId(post) {
+    var id = String((post && post.statusId) || "");
+    if (/^\d{8,22}$/.test(id)) return id;
+    var match = String((post && post.id) || "").match(/(\d{8,22})/);
+    return match ? match[1] : "";
+  }
+
+  function playSrc(post) {
+    var id = playId(post);
+    var handle = String((post && post.handle) || "");
+    if (!id || !/^[A-Za-z0-9._]{2,24}$/.test(handle) || !apiBase() || !hooks.token()) return "";
+    if (post.platform && post.platform !== "tiktok") return "";
+    return apiBase() + "/v1/owner/play?id=" + encodeURIComponent(id) + "&handle=" + encodeURIComponent(handle);
+  }
+
+  function postById(id) {
+    var list = forYou();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].id === id) return list[i];
+    }
+    return null;
+  }
+
   function slide(post) {
     var media = videoOf(post);
     var profile = "#/" + encodeURIComponent(post.platform || "tiktok") + "/" + encodeURIComponent(post.handle || "");
     var caption = String(post.text || "");
     return '<article class="shorts-slide" data-id="' + hooks.esc(post.id || "") + '" data-kind="video">' +
       '<div class="shorts-stage">' +
-      '<video playsinline loop preload="metadata"' + (media.poster ? ' poster="' + hooks.esc(media.poster) + '"' : "") + (media.url ? ' src="' + hooks.esc(media.url) + '"' : "") + ' muted></video>' +
+      '<video playsinline loop preload="none"' + (media.poster ? ' poster="' + hooks.esc(media.poster) + '"' : "") + ' muted></video>' +
       (media.poster ? '<img class="shorts-poster" alt="" src="' + hooks.esc(media.poster) + '" referrerpolicy="no-referrer">' : "") +
       '<button class="shorts-hit" type="button" data-shorts="stage" aria-label="' + hooks.esc(tr("Pause")) + '"></button>' +
       rail(post) +
@@ -346,22 +369,47 @@
     return best;
   }
 
+  function armSlide(slideEl, preload) {
+    var video = slideEl.querySelector("video");
+    if (!video || slideEl.getAttribute("data-kind") === "live") return;
+    var post = postById(slideEl.getAttribute("data-id") || "");
+    var src = post && post.platform === "tiktok" ? playSrc(post) : ((videoOf(post).url) || "");
+    if (!src) return;
+    video.preload = preload;
+    if (video.getAttribute("src") !== src) video.src = src;
+  }
+
+  function stopSlide(slideEl) {
+    var video = slideEl.querySelector("video");
+    if (!video || slideEl.getAttribute("data-kind") === "live") return;
+    video.pause();
+    if (video.getAttribute("src")) {
+      video.removeAttribute("src");
+      try { video.load(); } catch (err) { /* the element is going away */ }
+    }
+  }
+
   function playActive() {
     var feed = document.getElementById("shorts-feed");
     if (!feed) return;
     var slides = feed.querySelectorAll(".shorts-slide");
     var current = activeVideo();
+    var next = null;
+    for (var n = 0; n < slides.length; n++) {
+      if (slides[n] === current && slides[n + 1] && slides[n + 1].getAttribute("data-kind") !== "live") next = slides[n + 1];
+    }
     for (var i = 0; i < slides.length; i++) {
       var video = slides[i].querySelector("video");
       if (!video || slides[i].getAttribute("data-kind") === "live") continue;
       video.muted = !sound;
       if (slides[i] === current) {
+        armSlide(slides[i], "auto");
         var play = video.play();
-        if (play && play.catch) play.catch(function () {
-          var poster = current.querySelector(".shorts-poster");
-          if (poster) poster.style.display = "block";
-        });
-      } else video.pause();
+        if (play && play.catch) play.catch(function () {});
+      } else if (slides[i] === next) {
+        armSlide(slides[i], "metadata");
+        video.pause();
+      } else stopSlide(slides[i]);
     }
   }
 
@@ -449,7 +497,7 @@
 
   function onError(event) {
     var video = event.target;
-    if (!video || video.tagName !== "VIDEO") return;
+    if (!video || video.tagName !== "VIDEO" || !video.getAttribute("src")) return;
     var slideEl = video.closest(".shorts-slide");
     if (!slideEl) return;
     if (slideEl.getAttribute("data-kind") === "live") {
@@ -459,6 +507,22 @@
     }
     var poster = slideEl.querySelector(".shorts-poster");
     if (poster) poster.style.display = "block";
+    var post = postById(slideEl.getAttribute("data-id") || "");
+    var src = post ? playSrc(post) : "";
+    if (!src || !hooks.token()) return;
+    fetch(src + "&meta=1", { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+      return res.json();
+    }).then(function (body) {
+      if (!body || body.ok || !body.detail) return;
+      var note = slideEl.querySelector(".shorts-note");
+      if (!note) {
+        note = document.createElement("p");
+        note.className = "shorts-note";
+        var meta = slideEl.querySelector(".shorts-meta");
+        if (meta) meta.appendChild(note);
+      }
+      note.textContent = body.detail;
+    }).catch(function () {});
   }
 
   function mount(route) {
@@ -467,6 +531,12 @@
     if (!feed) return;
     feed.addEventListener("click", onClick);
     feed.addEventListener("error", onError, true);
+    feed.addEventListener("playing", function (event) {
+      var video = event.target;
+      if (!video || video.tagName !== "VIDEO") return;
+      var poster = video.parentNode && video.parentNode.querySelector(".shorts-poster");
+      if (poster) poster.style.display = "none";
+    }, true);
     feed.addEventListener("scroll", function () {
       clearTimeout(feed._play);
       feed._play = setTimeout(playActive, 80);
