@@ -59,6 +59,7 @@ SMALL_BYTES = 19 * 1024 * 1024
 PART_BYTES = 1950 * 1024 * 1024
 MAX_NEW_BYTES = 4 * 1024 * 1024 * 1024
 MAX_NEW_FILES = 300
+LOOP_MAX_FILES = 2000
 MIN_INTERVAL = 3.0
 REQUIRED = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHANNEL_ID")
 SECRET_NAMES = REQUIRED + (
@@ -1658,8 +1659,24 @@ def upload_path(api_base: str, token: str, channel: str, path: Path, caption: st
     sizes[label] = int(sizes.get(label) or 0) + path.stat().st_size
 
 
+def loop_file_cap() -> int:
+    raw = (os.environ.get("TG_LOOP_MAX_FILES") or str(LOOP_MAX_FILES)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        value = LOOP_MAX_FILES
+    return min(max(value, 1), 5000)
+
+
+def loop_rank(key: str, version: str) -> tuple:
+    text = str(key or "").lstrip("/")
+    current = bool(version) and text.startswith("loop/" + version + "/")
+    return (0 if current else 1, text)
+
+
 def budget_ok(state: dict, size: int) -> bool:
-    return int(state.get("files") or 0) < MAX_NEW_FILES and int(state.get("bytes") or 0) + size <= MAX_NEW_BYTES
+    cap = int(state.get("file_cap") or MAX_NEW_FILES)
+    return int(state.get("files") or 0) < cap and int(state.get("bytes") or 0) + size <= MAX_NEW_BYTES
 
 
 def save_manifest(cf: dict, manifest: dict, directory: Path) -> None:
@@ -2063,6 +2080,9 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
         if not budget_ok(state, src.stat().st_size):
             save_manifest(cf, manifest, directory)
             return "stop"
+        if part["role"] == "segment":
+            state["loop_segments"] = int(state.get("loop_segments") or 0) + 1
+            state["loop_max"] = max(int(state.get("loop_max") or 0), src.stat().st_size)
         upload_path(
             PUBLIC_API, cf["bot"], cf["channel"], src, obj["key"][:900], state, entry,
             part["role"], part["index"], sha, duration, part["mime"], cf, part["group"],
@@ -2180,8 +2200,13 @@ def backup(loop_only: bool = False) -> int:
             "blocked_keys": blocked,
         })
         state = new_entry_state()
+        if loop_only:
+            state["file_cap"] = loop_file_cap()
+            log("[telegram-backup] mirroring loop %s" % version)
 
         def rank(obj):
+            if loop_only:
+                return loop_rank(str(obj.get("key") or ""), version)
             kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version, blocked)
             key = str(obj.get("key") or "")
             if key.startswith("tiktok/"):
@@ -2226,6 +2251,8 @@ def backup(loop_only: bool = False) -> int:
             state.get("tiktok_bytes") or 0,
         ))
         log(upload_summary(state))
+        if loop_only:
+            log("[telegram-backup] loop mirror stored %s segments, largest %s bytes" % (state.get("loop_segments") or 0, state.get("loop_max") or 0))
         return 0
     except Exception as err:
         log("[telegram-backup] backup failed")
@@ -2388,7 +2415,9 @@ def selftest() -> int:
     check("sign-up gate" in doc and "owner-only" in doc, "the sign-up gate and the Shorts owner-only rule are documented")
     check("function tgBlockedKey(" in app and "music/" in app, "the app can fall back to Telegram for music and still refuses key files")
     check('"primary": "r2"' in doc and "LOOP_PRIMARY" in doc, "the radio primary field is documented and defaults to r2")
-    check("--loop" in workflow and 'workflows: ["Publish radio loop"]' in workflow, "a published loop is mirrored")
+    check("--loop" in workflow and 'workflows: ["Publish radio loop"]' in workflow and "loop_only" in workflow and "timeout-minutes: 180" in workflow, "a published loop is mirrored")
+    check(loop_file_cap() >= 1000 and MAX_NEW_FILES == 300, "a loop mirror can hold a full version and the daily backup stays at 300 files")
+    check(loop_rank("loop/v202610221355/seg_0001.m4s", "v202610221355") < loop_rank("loop/vOLD/seg_0001.m4s", "v202610221355"), "the current loop version is mirrored first")
     tiktok_post = {
         "platform": "tiktok",
         "handle": "gabii_g5",
