@@ -3181,6 +3181,7 @@ def ia_backup_checks() -> None:
     check("feeds-archive" not in archive_src and "Viktorych" not in archive_src and "creator" not in archive_src and "opensource" not in archive_src and "internetarchive" not in archive_src and "run_backup" in archive_src, "shard uploads use the anonymous backup items")
     check("internetarchive" not in sync and "Restore the saved manifest" in sync, "the daily shard upload restores the manifest before it writes")
     check("workflow_dispatch" in retire_wf and "schedule:" not in retire_wf and "cron:" not in retire_wf and 'echo "$IA_' not in retire_wf and "echo $IA_" not in retire_wf and "IA_ACCESS_KEY" in retire_wf and "IA_SECRET_KEY" in retire_wf and "ia_retire.py copy" in retire_wf and "ia_retire.py delete" in retire_wf and 'git checkout -f "$head"' in retire_wf, "the retire workflow is manual, uses the keys, and does not print them")
+    check(retire_wf.index('git checkout --force "$GITHUB_SHA"') < retire_wf.index("ia_retire.py delete"), "delete runs from this commit after the data branch publish")
     check("feeds-archive" not in app and "ARCHIVE_IA" not in app and "installIaManifest(manifestDoc" in app, "the page resolves archive shards from the manifest")
     check("feeds-archive" not in snap and "def shard_url(" in snap and '("ia",' not in snap, "snapshot reads archive shards from the manifest")
     anon = "x" + ("ab" * 16)
@@ -3204,12 +3205,14 @@ def ia_backup_checks() -> None:
     retire_meta = {"creator": "owner-account", "collection": "opensource", "uploader": "person@example.com", "title": "named"}
     anon_meta = {"title": "files", "uploader": "person@example.com", "noindex": "true"}
     retire_deleted = []
+    retire_headers = []
 
     def retire_open(request, timeout=None):
         method = request.get_method()
         path = urllib.parse.urlparse(request.full_url).path
         if method == "DELETE":
             retire_deleted.append(path)
+            retire_headers.extend(request.header_items())
             name = path.rsplit("/", 1)[-1]
             if name in retire_files:
                 retire_files.remove(name)
@@ -3259,10 +3262,16 @@ def ia_backup_checks() -> None:
     retire_purged = ia_retire.purge_files(retire_config, retire_state, sleep=lambda delay: None)
     check("superintelapp-2026-10" in retire_purged["emptied"] and retire_purged["remaining"]["superintelapp-2026-10"] == [], "named items are emptied after the copies check out")
     check(any(path.endswith("_meta.xml") for path in retire_deleted), "derived metadata files are deleted too")
+    check(any("cascade-delete" in key.lower() and value == "1" for key, value in retire_headers), "deletes ask Internet Archive to drop derivatives")
     retire_blanked = ia_retire.blank_metadata(retire_config, sleep=lambda delay: None)
     retire_fields = retire_blanked["items"]["superintelapp-2026-10"]
     check(retire_fields["creator"] == "removed" and retire_fields["collection"] == "removed" and retire_fields["uploader"] == "refused" and retire_fields["noindex"] == "refused", "creator and collection can be cleared and a read-only uploader is kept")
+    check(retire_fields["description"] == "overwritten" and retire_fields["title"] == "removed", "a missing description becomes the plain label and a title can be cleared")
     check(retire_blanked["uploader_left"] == 1 and retire_blanked["anonymous"] == 1, "anonymous items are counted and a refused uploader stays")
+    catalog_kept, catalog_blocking = ia_retire._kept_and_blocking({"superintelapp-2026-10": ["superintelapp-2026-10_meta.xml", "superintelapp-2026-10_files.xml"]})
+    torrent_kept, torrent_blocking = ia_retire._kept_and_blocking({"superintelapp-2026-10": ["superintelapp-2026-10_archive.torrent"]})
+    check(catalog_kept and not catalog_blocking, "system catalog files do not fail the retirement")
+    check(torrent_blocking and not torrent_kept, "a leftover torrent still fails the retirement")
     retire_notes = " ".join(retire_blanked["notes"] + retire_purged["notes"])
     check("test-secret-value" not in retire_notes and "person@example.com" not in retire_notes and anon not in retire_notes, "retire notes do not print the keys, the uploader address, or an anonymous id")
 

@@ -163,8 +163,9 @@ def purge_files(config: dict, state: dict, sleep=time.sleep) -> dict:
             emptied.append(item)
             remaining[item] = []
             continue
+        drop_headers = {"x-archive-cascade-delete": "1", "x-archive-keep-old-version": "0"}
         for name in names:
-            if ia_backup._delete_object(endpoint, item, name, access, secret, opener):
+            if ia_backup._delete_object(endpoint, item, name, access, secret, opener, drop_headers):
                 deleted += 1
                 notes.append(f"[ia-retire] removed {item}/{name}")
             else:
@@ -175,7 +176,7 @@ def purge_files(config: dict, state: dict, sleep=time.sleep) -> dict:
         left = [str((row or {}).get("name") or "") for row in (after.get("files") or []) if (row or {}).get("name")]
         if left:
             for name in left:
-                if ia_backup._delete_object(endpoint, item, name, access, secret, opener):
+                if ia_backup._delete_object(endpoint, item, name, access, secret, opener, drop_headers):
                     deleted += 1
                     notes.append(f"[ia-retire] removed {item}/{name}")
                 if pace:
@@ -223,7 +224,11 @@ def blank_metadata(config: dict, sleep=time.sleep) -> dict:
         fields = {}
         for key in BLANK_FIELDS:
             if key not in before or before.get(key) in (None, "", [], {}):
-                fields[key] = "absent"
+                if key in ("title", "description"):
+                    ia_backup._patch_metadata(item, {key: "files"}, (), access, secret, urlopen, opener, metadata_base, sleep)
+                    fields[key] = "pending"
+                else:
+                    fields[key] = "absent"
                 continue
             ia_backup._patch_metadata(item, {}, (key,), access, secret, urlopen, opener, metadata_base, sleep)
             if key in ("title", "description"):
@@ -277,6 +282,19 @@ def blank_metadata(config: dict, sleep=time.sleep) -> dict:
         "uploader_left": uploader_left,
         "notes": [ia_backup.scrub(line, [access, secret]) for line in notes],
     }
+
+
+def _kept_and_blocking(remaining: dict) -> tuple[list, list]:
+    """System catalogs IA will not delete are separate from files that must go."""
+    kept_system = []
+    still_there = []
+    for names in remaining.values():
+        for name in names:
+            if str(name).endswith(("_meta.xml", "_files.xml")):
+                kept_system.append(name)
+            else:
+                still_there.append(name)
+    return kept_system, still_there
 
 
 def _print_notes(notes) -> None:
@@ -333,8 +351,10 @@ def main(argv: list[str] | None = None) -> int:
             f"anonymous items {blanked['anonymous']}, "
             f"uploader still set on {blanked['uploader_left']}"
         )
-        leftovers = sum(len(names) for names in purged["remaining"].values())
-        return 1 if leftovers else 0
+        kept_system, still_there = _kept_and_blocking(purged["remaining"])
+        if kept_system:
+            print(f"[ia-retire] system catalog files kept {len(kept_system)}")
+        return 1 if still_there else 0
     except Exception as err:
         print("[ia-retire] failed", file=sys.stderr)
         print(ia_backup.scrub(str(err), [access, secret]), file=sys.stderr)

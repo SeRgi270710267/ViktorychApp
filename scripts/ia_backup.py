@@ -876,14 +876,17 @@ def live_manifest_ready(state: dict, urlopen, origin: str) -> bool:
     return all((row.get("url") or "") in live_urls for row in copied)
 
 
-def _delete_object(endpoint: str, item: str, name: str, access: str, secret: str, opener) -> bool:
+def _delete_object(endpoint: str, item: str, name: str, access: str, secret: str, opener, extra=None) -> bool:
     if not ITEM_RE.match(item) or not re.fullmatch(r"[A-Za-z0-9._-]{1,180}", name):
         return False
     url = endpoint.rstrip("/") + "/" + urllib.parse.quote(item) + "/" + urllib.parse.quote(name)
+    headers = {"Authorization": f"LOW {access}:{secret}", "User-Agent": UA}
+    if extra:
+        headers.update(extra)
     request = urllib.request.Request(
         url,
         method="DELETE",
-        headers={"Authorization": f"LOW {access}:{secret}", "User-Agent": UA},
+        headers=headers,
     )
     try:
         with opener.open(request, timeout=60) as response:

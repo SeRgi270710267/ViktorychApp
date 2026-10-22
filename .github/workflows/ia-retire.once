@@ -4,3 +4,5 @@ The delete step stays on the code checkout.
 Retry the delete step.
 
 Direct retry.
+
+Leave system catalog files when Internet Archive refuses them.
