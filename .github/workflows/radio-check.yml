@@ -1,0 +1,366 @@
+# Public health check for the ViktorychMusic static loop.
+# Bash, curl, and jq only: no checkout, no secrets, and no AI.
+
+name: Radio health check
+
+on:
+  schedule:
+    # 07:00 UTC, which is 09:00 in Stockholm during Central European Summer Time.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: none
+
+concurrency:
+  group: radio-health-check
+  cancel-in-progress: false
+
+jobs:
+  radio-check:
+    name: Check loop
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check current.json, playlist, and segments
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+          MANIFEST_URL="https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/current.json"
+          ATTEMPTS=5
+
+          RESULT="failed"
+          REASON="the check stopped before it finished"
+          VERSION="n/a"
+          POSITION="n/a"
+          SEGMENT_CHECKED="n/a"
+          SEGMENT_URL="n/a"
+          SEGMENT_STATUS="n/a"
+          SEGMENT0="n/a"
+          SEGMENT0_URL="n/a"
+          SEGMENT0_STATUS="n/a"
+          PLAYLIST_URL="n/a"
+          PLAYLIST_NOTE="n/a"
+          CHECKED_AT="n/a"
+
+          summary_written=0
+          tmpdir=""
+
+          finish() {
+            if [[ "$summary_written" -eq 1 ]]; then
+              return 0
+            fi
+            summary_written=1
+            local body dest
+            body=$(
+              printf '%s\n' "## Radio health check"
+              printf '\n'
+              if [[ "$RESULT" == "passed" ]]; then
+                printf '%s\n' "**Passed**"
+              else
+                printf '%s\n' "**Failed**"
+              fi
+              printf '\n'
+              printf '%s\n' "- **Version:** ${VERSION}"
+              printf '%s\n' "- **Position:** ${POSITION}"
+              printf '%s\n' "- **Segment checked:** ${SEGMENT_CHECKED}"
+              printf '%s\n' "- **Segment URL:** ${SEGMENT_URL}"
+              printf '%s\n' "- **Current segment HTTP:** ${SEGMENT_STATUS}"
+              printf '%s\n' "- **Segment 0:** ${SEGMENT0}"
+              printf '%s\n' "- **Segment 0 URL:** ${SEGMENT0_URL}"
+              printf '%s\n' "- **Segment 0 HTTP:** ${SEGMENT0_STATUS}"
+              printf '%s\n' "- **Playlist:** ${PLAYLIST_URL}"
+              printf '%s\n' "- **Playlist check:** ${PLAYLIST_NOTE}"
+              printf '%s\n' "- **Checked at:** ${CHECKED_AT}"
+              if [[ "$RESULT" != "passed" && -n "$REASON" ]]; then
+                printf '\n'
+                printf '%s\n' "**Failure:** ${REASON}"
+              fi
+            )
+            printf '%s\n' "$body"
+            dest="${GITHUB_STEP_SUMMARY:-}"
+            if [[ -n "$dest" ]]; then
+              printf '%s\n' "$body" >> "$dest"
+            fi
+          }
+
+          cleanup() {
+            finish || true
+            if [[ -n "${tmpdir:-}" ]]; then
+              rm -rf "$tmpdir"
+            fi
+          }
+          trap cleanup EXIT
+          tmpdir=$(mktemp -d)
+
+          die() {
+            REASON=$(printf '%s' "$1" | tr '\n\r' '  ')
+            printf '::error::%s\n' "$REASON"
+            printf 'radio-check: %s\n' "$REASON" >&2
+            exit 1
+          }
+
+          one_line() {
+            printf '%s' "$1" | tr '\n\r' '  '
+          }
+
+          trim() {
+            local s="$1"
+            s="${s//$'\r'/}"
+            s="${s#"${s%%[![:space:]]*}"}"
+            s="${s%"${s##*[![:space:]]}"}"
+            printf '%s' "$s"
+          }
+
+          is_transient() {
+            case "$1" in
+              000|408|429|500|502|503|504) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # Every curl sends the desktop browser User-Agent. Transient transport
+          # failures and 408/429/5xx are retried. A 403 or 404 is final.
+          request() {
+            local method="$1" url="$2" dest="$3"
+            local attempt=1 code delay=2
+            while [[ "$attempt" -le "$ATTEMPTS" ]]; do
+              if [[ "$method" == "HEAD" ]]; then
+                code=$(curl -sS -L -I \
+                  --connect-timeout 10 \
+                  --max-time 25 \
+                  -A "$UA" \
+                  -o /dev/null \
+                  -w '%{http_code}' \
+                  "$url") || code="000"
+              else
+                code=$(curl -sS -L \
+                  --connect-timeout 10 \
+                  --max-time 25 \
+                  -A "$UA" \
+                  -o "$dest" \
+                  -w '%{http_code}' \
+                  "$url") || code="000"
+              fi
+              if is_transient "$code" && [[ "$attempt" -lt "$ATTEMPTS" ]]; then
+                printf 'transient HTTP %s for %s %s, retry %s/%s\n' \
+                  "$code" "$method" "$url" "$attempt" "$((ATTEMPTS - 1))" >&2
+                sleep "$delay"
+                if [[ "$delay" -lt 16 ]]; then
+                  delay=$((delay * 2))
+                fi
+                attempt=$((attempt + 1))
+                continue
+              fi
+              printf '%s' "$code"
+              return 0
+            done
+            printf '%s' "000"
+          }
+
+          # Resolve a playlist URI against the playlist URL. Segment names come
+          # from the playlist; this only joins a relative path.
+          resolve_url() {
+            local base="$1" rel="$2"
+            rel=$(trim "$rel")
+            if [[ -z "$rel" ]]; then
+              printf 'empty segment URI\n' >&2
+              return 1
+            fi
+            if [[ "$rel" == https://* ]]; then
+              printf '%s\n' "$rel"
+              return 0
+            fi
+            if [[ "$rel" == //* ]]; then
+              printf 'https:%s\n' "$rel"
+              return 0
+            fi
+            if [[ "$rel" =~ ^[A-Za-z][A-Za-z0-9+.-]*: ]]; then
+              printf 'segment URI must be https or relative to the playlist: %s\n' "$rel" >&2
+              return 1
+            fi
+            local stripped="${base%%#*}"
+            stripped="${stripped%%\?*}"
+            if [[ "$stripped" != https://* ]]; then
+              printf 'playlist URL must be https: %s\n' "$base" >&2
+              return 1
+            fi
+            local frag="" query=""
+            if [[ "$rel" == *"#"* ]]; then
+              frag="#${rel#*#}"
+              rel="${rel%%#*}"
+            fi
+            if [[ "$rel" == *"?"* ]]; then
+              query="?${rel#*\?}"
+              rel="${rel%%\?*}"
+            fi
+            local after="${stripped#https://}"
+            local host="${after%%/*}"
+            local path="/"
+            if [[ "$after" == */* ]]; then
+              path="/${after#*/}"
+            fi
+            local combined
+            if [[ "$rel" == /* ]]; then
+              combined="$rel"
+            else
+              local dir="${path%/*}"
+              if [[ -z "$dir" || "$dir" == "/" ]]; then
+                combined="/${rel}"
+              else
+                combined="${dir}/${rel}"
+              fi
+            fi
+            local -a parts=()
+            local -a stack=()
+            local IFS=/
+            read -r -a parts <<< "${combined#/}"
+            local part
+            for part in "${parts[@]}"; do
+              case "$part" in
+                ""|".") ;;
+                "..")
+                  if ((${#stack[@]} > 0)); then
+                    unset 'stack[-1]'
+                  fi
+                  ;;
+                *) stack+=("$part") ;;
+              esac
+            done
+            local joined="/"
+            if ((${#stack[@]} > 0)); then
+              joined=""
+              local piece
+              for piece in "${stack[@]}"; do
+                joined+="/${piece}"
+              done
+            fi
+            printf 'https://%s%s%s%s\n' "$host" "$joined" "$query" "$frag"
+          }
+
+          command -v curl >/dev/null 2>&1 || die "curl is not installed"
+          command -v jq >/dev/null 2>&1 || die "jq is not installed"
+
+          NOW=$(date +%s)
+          CHECKED_AT=$(date -u -d "@${NOW}" +%Y-%m-%dT%H:%M:%SZ)
+
+          manifest="${tmpdir}/current.json"
+          code=$(request GET "$MANIFEST_URL" "$manifest")
+          if [[ "$code" != "200" ]]; then
+            die "GET ${MANIFEST_URL} returned HTTP ${code}"
+          fi
+          if ! jq -e 'type == "object"' "$manifest" >/dev/null 2>"${tmpdir}/jq.err"; then
+            die "current.json is not a JSON object"
+          fi
+
+          VERSION=$(one_line "$(jq -r 'if .version == null then "n/a" else (.version | tostring) end' "$manifest")")
+          [[ -n "$VERSION" ]] || VERSION="n/a"
+
+          live_json=$(jq -c '.live' "$manifest")
+          if ! jq -e '.live == true' "$manifest" >/dev/null; then
+            die "current.json .live is not true (got ${live_json})"
+          fi
+
+          playlist_raw=$(jq -er '.url | strings' "$manifest" 2>"${tmpdir}/jq.err") || die "current.json .url is missing or not a string"
+          PLAYLIST_URL=$(one_line "$playlist_raw")
+          if [[ "$PLAYLIST_URL" != https://* ]]; then
+            die "current.json .url is not an https URL"
+          fi
+
+          epoch_json=$(jq -c '.epoch' "$manifest")
+          duration_json=$(jq -c '.duration' "$manifest")
+          seg_json=$(jq -c '.segment_duration' "$manifest")
+
+          playlist="${tmpdir}/index.m3u8"
+          code=$(request GET "$PLAYLIST_URL" "$playlist")
+          if [[ "$code" != "200" ]]; then
+            die "GET playlist returned HTTP ${code}: ${PLAYLIST_URL}"
+          fi
+          if ! grep -q -F '#EXT-X-ENDLIST' "$playlist"; then
+            PLAYLIST_NOTE="missing #EXT-X-ENDLIST"
+            die "playlist does not contain #EXT-X-ENDLIST: ${PLAYLIST_URL}"
+          fi
+          PLAYLIST_NOTE="contains #EXT-X-ENDLIST"
+
+          segments=()
+          while IFS= read -r line || [[ -n "$line" ]]; do
+            line=$(trim "$line")
+            [[ -z "$line" ]] && continue
+            [[ "$line" == \#* ]] && continue
+            segments+=("$line")
+          done < "$playlist"
+          COUNT=${#segments[@]}
+          if [[ "$COUNT" -lt 1 ]]; then
+            die "playlist has no media segments: ${PLAYLIST_URL}"
+          fi
+
+          if ! calc=$(jq -en \
+            --argjson now "$NOW" \
+            --argjson epoch "$epoch_json" \
+            --argjson duration "$duration_json" \
+            --argjson seg "$seg_json" \
+            --argjson count "$COUNT" '
+              def num(name):
+                if type != "number" or isnan or isinfinite then
+                  error(name + " is not a finite number")
+                else . end;
+              ($epoch | num("epoch")) as $epoch
+              | ($duration | num("duration")) as $duration
+              | ($seg | num("segment_duration")) as $seg
+              | if $duration <= 0 then error("duration must be positive")
+                elif $seg <= 0 then error("segment_duration must be positive")
+                elif $count < 1 then error("playlist has no segments")
+                else
+                  (($now - $epoch) - $duration * ((($now - $epoch) / $duration) | floor)) as $pos
+                  | ($pos / $seg | floor) as $idx
+                  | if $idx < 0 or $idx >= $count then
+                      error("segment index \($idx) is outside playlist range 0..\($count - 1) (position \($pos)s, \($count) segments)")
+                    else
+                      {
+                        idx: $idx,
+                        position: "\((($pos * 1000 + 0.5) | floor) / 1000)s into \((($duration * 1000 + 0.5) | floor) / 1000)s loop, segment \($idx) of \($count)"
+                      }
+                    end
+                end
+            ' 2>"${tmpdir}/jq.err"); then
+            detail=$(tr '\n' ' ' < "${tmpdir}/jq.err")
+            die "could not compute the current segment: ${detail}"
+          fi
+
+          idx=$(jq -r '.idx' <<< "$calc")
+          POSITION=$(one_line "$(jq -r '.position' <<< "$calc")")
+          current_rel=$(trim "${segments[$idx]}")
+          first_rel=$(trim "${segments[0]}")
+          SEGMENT_CHECKED="index ${idx}: ${current_rel}"
+          SEGMENT0="index 0: ${first_rel}"
+
+          if ! SEGMENT_URL=$(resolve_url "$PLAYLIST_URL" "$current_rel"); then
+            die "could not resolve segment ${idx} (${current_rel}) against ${PLAYLIST_URL}"
+          fi
+          if ! SEGMENT0_URL=$(resolve_url "$PLAYLIST_URL" "$first_rel"); then
+            die "could not resolve segment 0 (${first_rel}) against ${PLAYLIST_URL}"
+          fi
+          SEGMENT_URL=$(one_line "$SEGMENT_URL")
+          SEGMENT0_URL=$(one_line "$SEGMENT0_URL")
+          if [[ "$SEGMENT_URL" != https://* || "$SEGMENT0_URL" != https://* ]]; then
+            die "resolved segment URL is not https"
+          fi
+
+          SEGMENT0_STATUS=$(request HEAD "$SEGMENT0_URL" /dev/null)
+          if [[ "$SEGMENT0_STATUS" != "200" ]]; then
+            die "segment 0 returned HTTP ${SEGMENT0_STATUS}: ${SEGMENT0_URL}"
+          fi
+          SEGMENT_STATUS=$(request HEAD "$SEGMENT_URL" /dev/null)
+          if [[ "$SEGMENT_STATUS" != "200" ]]; then
+            die "segment ${idx} returned HTTP ${SEGMENT_STATUS}: ${SEGMENT_URL}"
+          fi
+
+          SEGMENT_CHECKED="index ${idx}: ${current_rel} (HTTP ${SEGMENT_STATUS})"
+          SEGMENT0="index 0: ${first_rel} (HTTP ${SEGMENT0_STATUS})"
+          RESULT="passed"
+          REASON=""
+          printf 'radio-check passed version=%s position="%s" segment="%s" segment0="%s"\n' \
+            "$VERSION" "$POSITION" "$SEGMENT_CHECKED" "$SEGMENT0"
+          exit 0
