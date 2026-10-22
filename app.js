@@ -6841,9 +6841,95 @@ const here = parseRoute();
     }
   }
 
+  let exploreSearchObserver = null;
+  let exploreSearchOnResize = null;
+  let exploreLabelProbe = null;
+  const EXPLORE_SEARCH_MAX = 16;
+  const EXPLORE_SEARCH_MIN = 13;
+
+  function exploreLabelWidth(text, px, family, weight) {
+    if (!exploreLabelProbe) {
+      exploreLabelProbe = document.createElement("span");
+      exploreLabelProbe.setAttribute("aria-hidden", "true");
+      exploreLabelProbe.style.position = "fixed";
+      exploreLabelProbe.style.left = "0";
+      exploreLabelProbe.style.top = "0";
+      exploreLabelProbe.style.visibility = "hidden";
+      exploreLabelProbe.style.whiteSpace = "nowrap";
+      exploreLabelProbe.style.pointerEvents = "none";
+      document.body.appendChild(exploreLabelProbe);
+    }
+    exploreLabelProbe.textContent = text;
+    exploreLabelProbe.style.fontWeight = weight;
+    exploreLabelProbe.style.fontSize = px + "px";
+    exploreLabelProbe.style.fontFamily = family;
+    return exploreLabelProbe.getBoundingClientRect().width;
+  }
+
+  function exploreSearchSize(text, family, weight, room) {
+    for (let half = EXPLORE_SEARCH_MAX * 2; half >= EXPLORE_SEARCH_MIN * 2; half--) {
+      const px = half / 2;
+      if (exploreLabelWidth(text, px, family, weight) <= room) return px;
+    }
+    return 0;
+  }
+
+  function fitExploreSearch() {
+    const input = document.getElementById("explore-q");
+    if (!input) return;
+    const full = productName("search");
+    const tight = productName("searchShort");
+    if (!full || !tight) return;
+    const cs = getComputedStyle(input);
+    const room = input.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0) - 2;
+    if (!(room > 8)) return;
+    const family = cs.fontFamily;
+    const weight = cs.fontWeight || "400";
+    let label = full;
+    let size = exploreSearchSize(full, family, weight, room);
+    if (!size) {
+      label = tight;
+      size = exploreSearchSize(tight, family, weight, room) || EXPLORE_SEARCH_MIN;
+    }
+    const nextSize = (size % 1 ? size.toFixed(1) : String(size)) + "px";
+    if (input.placeholder !== label) input.placeholder = label;
+    if (input.getAttribute("aria-label") !== label) input.setAttribute("aria-label", label);
+    if (input.style.fontSize !== nextSize) input.style.fontSize = nextSize;
+  }
+
+  function clearExploreSearchFit() {
+    if (exploreSearchObserver) {
+      exploreSearchObserver.disconnect();
+      exploreSearchObserver = null;
+    }
+    if (exploreSearchOnResize) {
+      window.removeEventListener("resize", exploreSearchOnResize);
+      exploreSearchOnResize = null;
+    }
+  }
+
+  function bindExploreSearchFit() {
+    const input = document.getElementById("explore-q");
+    clearExploreSearchFit();
+    if (!input) return;
+    const refit = function () {
+      fitExploreSearch();
+      requestAnimationFrame(fitExploreSearch);
+    };
+    fitExploreSearch();
+    if (typeof ResizeObserver === "function") {
+      exploreSearchObserver = new ResizeObserver(refit);
+      exploreSearchObserver.observe(input);
+    }
+    exploreSearchOnResize = refit;
+    window.addEventListener("resize", exploreSearchOnResize);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { fitExploreSearch(); });
+  }
+
   function exploreSearchField(q) {
     const text = q || "";
-    return `<div class="gform-box"><label class="search gsearch"><span class="gsearch-lead">${icon("search")}</span><input id="explore-q" type="text" value="${esc(text)}" placeholder="${tr("Search")}" aria-label="${tr("Search")}" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-autocomplete="list" aria-controls="explore-suggest" aria-expanded="false"><span class="gsearch-tools"><button class="gsearch-clear" type="button" data-act="explore-clear" aria-label="${tr("Clear")}"${text ? "" : " hidden"}>${icon("close")}</button><button class="gsearch-mic" type="button" data-act="explore-mic" aria-label="${tr("Search by voice")}">${icon("mic")}</button></span></label><div id="explore-suggest" class="gsuggest" role="listbox" aria-label="${tr("Suggestions")}" hidden></div></div>`;
+    const name = productName("search");
+    return `<div class="gform-box"><label class="search gsearch"><span class="gsearch-lead">${icon("search")}</span><input id="explore-q" type="text" value="${esc(text)}" placeholder="${esc(name)}" aria-label="${esc(name)}" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-autocomplete="list" aria-controls="explore-suggest" aria-expanded="false"><span class="gsearch-tools"><button class="gsearch-clear" type="button" data-act="explore-clear" aria-label="${tr("Clear")}"${text ? "" : " hidden"}>${icon("close")}</button><button class="gsearch-mic" type="button" data-act="explore-mic" aria-label="${tr("Search by voice")}">${icon("mic")}</button></span></label><div id="explore-suggest" class="gsuggest" role="listbox" aria-label="${tr("Suggestions")}" hidden></div></div>`;
   }
 
   function exploreHome() {
@@ -9752,6 +9838,8 @@ if (STATE.histClear) {
       placeFloatMenu(".tab-context");
       syncTabArrows();
       if (window.FeedsDiscord && window.FeedsDiscord.mount) window.FeedsDiscord.mount(route);
+      if (route.name === "explore") bindExploreSearchFit();
+      else clearExploreSearchFit();
       bindNavSplit();
     };
     const endRoute = () => {

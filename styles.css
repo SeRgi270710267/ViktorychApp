@@ -2828,7 +2828,9 @@ html[data-theme="default"] .gresults-logo { color: #000; }
   font-family: var(--font);
   font-size: 16px;
   height: 44px;
+  text-overflow: clip;
 }
+.search.gsearch input::placeholder { text-overflow: clip; }
 .search.gsearch:focus-within {
   background: var(--bg);
   border-color: var(--blue);

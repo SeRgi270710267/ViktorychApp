@@ -1,4 +1,4 @@
-/* Product names are brand.name or brand.short plus brand.app or brand.music. */
+/* Product names are brand.name or brand.short plus brand.app, brand.music, or brand.search. */
 SI18n.addPack("ru", {
   "Home": "Главная",
   "Explore": "Обзор",
@@ -74,6 +74,7 @@ SI18n.addPack("ru", {
   "brand.short": "Виктрыч",
   "brand.app": "Апп",
   "brand.music": "Музыка",
+  "brand.search": "Поиск",
   "Home timeline": "Главная лента",
   "Scroll tabs left": "Прокрутить вкладки влево",
   "Scroll tabs right": "Прокрутить вкладки вправо",

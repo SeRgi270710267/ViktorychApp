@@ -63,14 +63,17 @@
     return fill(lookup(key), vars);
   }
 
-  // Full product: brand.name + brand.app (ViktorychApp) or brand.music
-  // (ViktorychMusic). Tight labels use brand.short: pwa (ViktrychApp) and
-  // musicShort (ViktrychMusic). A rebrand edits those four pack values.
+  // Full product: brand.name plus brand.app (ViktorychApp), brand.music
+  // (ViktorychMusic), or brand.search (ViktorychSearch). Tight labels use
+  // brand.short: pwa (ViktrychApp), musicShort (ViktrychMusic), and
+  // searchShort (ViktrychSearch). A rebrand edits those pack values.
   // No separator, so a space or a translated suffix belongs in the pack value.
   function productName(kind) {
-    var tight = kind === "pwa" || kind === "musicShort";
+    var tight = kind === "pwa" || kind === "musicShort" || kind === "searchShort";
     var stem = tight ? t("brand.short") : t("brand.name");
-    var suffix = (kind === "music" || kind === "musicShort") ? t("brand.music") : t("brand.app");
+    var suffix = t("brand.app");
+    if (kind === "music" || kind === "musicShort") suffix = t("brand.music");
+    else if (kind === "search" || kind === "searchShort") suffix = t("brand.search");
     return stem + suffix;
   }
 
