@@ -1,0 +1,37 @@
+# Writes LOOP_PRIMARY onto the live loop/current.json. It does not encode.
+
+name: Radio loop primary
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/radio_loop.py
+      - .github/workflows/radio-primary.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radio-primary
+  cancel-in-progress: false
+
+jobs:
+  pointer:
+    name: Set the live primary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Point loop/current.json at Telegram
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python3 scripts/radio_loop.py --set-primary

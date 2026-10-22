@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_BASE = "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev"
 EPOCH = 1792627200
 SEGMENT_S = 10
+# "tg" starts playback on the Telegram mirror. Any other value stays on R2.
+LOOP_PRIMARY = "tg"
 # Heard order of the Radio masters. File ids are build inputs, not playback URLs.
 MASTERS = (
     ("america.wav", "1szR2F6ttCOiopBdmrsd78JYAxzkGKBWW"),
@@ -79,6 +81,15 @@ def raise_target(text: str) -> str:
     return body
 
 
+def primary_value(value: str | None = None) -> str:
+    raw = LOOP_PRIMARY if value is None else value
+    return "tg" if str(raw or "").strip().lower() == "tg" else "r2"
+
+
+def durations_match(left: float, right: float) -> bool:
+    return abs(float(left) - float(right)) <= 0.05
+
+
 def build_manifest(version: str, duration: float, updated: str) -> dict:
     base = PUBLIC_BASE + "/loop/" + version
     return {
@@ -95,7 +106,61 @@ def build_manifest(version: str, duration: float, updated: str) -> dict:
         "segment_duration": SEGMENT_S,
         "version": version,
         "updated": updated,
+        "primary": primary_value(),
     }
+
+
+def fetch_current() -> dict:
+    url = PUBLIC_BASE + "/loop/current.json?_=" + str(int(time.time() * 1000))
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Cache-Control": "no-cache"})
+    with urllib.request.urlopen(req, timeout=60) as res:
+        data = json.loads(res.read().decode("utf-8"))
+    if not isinstance(data, dict):
+        raise SystemExit("loop/current.json is not an object")
+    return data
+
+
+def keep_published_version(existing: dict, duration: float, count: int, playlist_count: int | None) -> bool:
+    """Keep the live version when this encode is the same loop.
+
+    A matching duration and segment count means the Telegram mirror already
+    has these segments. Replacing the pointer would aim playback at a version
+    that is not mirrored yet. A playlist that cannot be read stays put.
+    """
+    if not isinstance(existing, dict):
+        return False
+    if str(existing.get("codec") or "") != "flac":
+        return False
+    version = str(existing.get("version") or "")
+    if not version:
+        return False
+    try:
+        segment = int(existing.get("segment_duration") or 0)
+        old_duration = float(existing.get("duration"))
+    except (TypeError, ValueError):
+        return False
+    if segment != SEGMENT_S or not durations_match(old_duration, duration):
+        return False
+    if playlist_count is None:
+        return True
+    return int(playlist_count) == int(count)
+
+
+def live_playlist_count(version: str) -> int | None:
+    url = PUBLIC_BASE + "/loop/" + urllib.parse.quote(version) + "/index.m3u8"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Cache-Control": "no-cache"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res:
+            text = res.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return None
+    count, _total, _longest = playlist_duration(text)
+    return count
+
+
+def write_pointer(bucket: str, manifest: dict, dest: Path) -> None:
+    dest.write_text(json.dumps(manifest, ensure_ascii=False) + "\n", encoding="utf-8")
+    put_object(bucket, "loop/current.json", dest, "application/json", "no-cache")
 
 
 def _token() -> str:
@@ -291,6 +356,23 @@ def publish(bed: Path, version: str, duration: float, pages: str) -> None:
         raise SystemExit("Cloudflare credentials are not set")
     bucket = find_bucket()
     flac = bed / "flac"
+    count, encoded, _longest = playlist_duration(flac.joinpath("index.m3u8").read_text(encoding="utf-8"))
+    if not durations_match(encoded, duration):
+        duration = encoded
+    updated = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    manifest = build_manifest(version, duration, updated)
+    try:
+        existing = fetch_current()
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+        existing = {}
+    playlist_count = live_playlist_count(str(existing.get("version") or "")) if existing.get("version") else None
+    if keep_published_version(existing, duration, count, playlist_count):
+        kept = dict(existing)
+        kept["primary"] = manifest["primary"]
+        kept["updated"] = updated
+        write_pointer(bucket, kept, bed / "current.json")
+        print("kept", kept.get("version"), "primary", kept["primary"])
+        return
     aac = bed / "aac"
     immutable = "public, max-age=31536000, immutable"
     files = []
@@ -308,12 +390,23 @@ def publish(bed: Path, version: str, duration: float, pages: str) -> None:
         raise SystemExit("public segment is not readable: " + probe)
     if pages:
         wait_for_player(pages, 20 * 60)
-    updated = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    manifest = build_manifest(version, duration, updated)
-    pointer = bed / "current.json"
-    pointer.write_text(json.dumps(manifest, ensure_ascii=False) + "\n", encoding="utf-8")
-    put_object(bucket, "loop/current.json", pointer, "application/json", "no-cache")
-    print("published", version, "duration", manifest["duration"])
+    write_pointer(bucket, manifest, bed / "current.json")
+    print("published", version, "duration", manifest["duration"], "primary", manifest["primary"])
+
+
+def set_live_primary() -> None:
+    """Write LOOP_PRIMARY onto the live pointer. Does not encode or upload segments."""
+    if not _token() or not _account():
+        raise SystemExit("Cloudflare credentials are not set")
+    bucket = find_bucket()
+    current = fetch_current()
+    version = str(current.get("version") or "")
+    if not version:
+        raise SystemExit("loop/current.json has no version")
+    current["primary"] = primary_value()
+    current["updated"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    write_pointer(bucket, current, Path("/tmp/radio-current.json"))
+    print("loop primary", current["primary"], "version", version)
 
 
 def self_check() -> int:
@@ -326,6 +419,13 @@ def self_check() -> int:
     assert doc["url"].endswith("/loop/v1/index.m3u8")
     assert doc["fallback"].endswith("/loop/v1/aac/index.m3u8")
     assert doc["epoch"] == EPOCH and health_index_ok(doc["duration"], doc["segment_duration"], 221)
+    assert LOOP_PRIMARY == "tg" and doc["primary"] == "tg"
+    assert primary_value("r2") == "r2" and primary_value("nope") == "r2" and primary_value(" TG ") == "tg"
+    same = {"codec": "flac", "segment_duration": 10, "duration": 2208.532872, "version": "v202610221355"}
+    assert keep_published_version(same, 2208.532872, 221, 221)
+    assert keep_published_version(same, 2208.55, 221, None)
+    assert not keep_published_version(same, 2208.532872, 221, 220)
+    assert not keep_published_version(same, 100.0, 10, 10)
     print("radio loop self-check ok")
     return 0
 
@@ -337,11 +437,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wav-dir", default="")
     parser.add_argument("--out", default="")
     parser.add_argument("--publish", action="store_true")
+    parser.add_argument("--set-primary", action="store_true")
     parser.add_argument("--pages", default="https://viktorychgroup.github.io/ViktorychApp")
     parser.add_argument("--version", default="")
     args = parser.parse_args(argv)
     if args.self_check:
         return self_check()
+    if args.set_primary:
+        set_live_primary()
+        return 0
     if not _token() or not _account():
         print("radio publish skipped: cloudflare credentials are not set")
         return 1 if args.publish else 0
