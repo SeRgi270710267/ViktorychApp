@@ -841,6 +841,7 @@ def main() -> None:
     check(skipped.returncode == 0 and "skipping the upload" in skipped.stdout, "missing Internet Archive keys skip the upload")
     check("sentinel-secret-value" not in combined and "IA_SECRET_KEY" not in combined, "the skip path does not print a secret")
     ia_backup_checks()
+    gdrive_checks()
 
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
@@ -4025,6 +4026,73 @@ def story_checks() -> None:
         blocked["defaultFollow"] = False
         incoming.write_text(json.dumps({"feeds": [blocked]}), encoding="utf-8")
         check(auto_add.merge_into_file(base, incoming) == [], "a removed account is not committed again")
+
+
+def gdrive_checks() -> None:
+    import subprocess
+
+    import gdrive_backup
+
+    doc = (ROOT / "docs" / "gdrive-backup.md").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "gdrive-backup.yml").read_text(encoding="utf-8")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    check('cron: "17 9 * * *"' in workflow and "workflow_dispatch" in workflow and "timeout-minutes: 40" in workflow and "group: gdrive-backup" in workflow, "the Drive backup is daily, manual, and capped at 40 minutes")
+    check("GDRIVE_RCLONE_TOKEN" in workflow and 'echo "$GDRIVE' not in workflow and "echo $GDRIVE" not in workflow and 'echo "${GDRIVE' not in workflow, "the Drive workflow uses the secret and does not print it")
+    check("v1.75.2" in workflow and "v1.75.2" in doc and "drive.file" in doc and ".\\rclone.exe authorize \"drive\" $blob" in doc, "the token steps pin rclone and the drive.file authorize command")
+    check("https://github.com/ViktorychGroup/ViktorychApp/settings/secrets/actions/new" in doc and "GDRIVE_RCLONE_TOKEN" in doc and "service account" in doc.lower() and "account data" in doc.lower(), "the token steps name the GitHub secret page and refuse a service account")
+    check("docs/gdrive-backup.md" in readme and "GDRIVE_RCLONE_TOKEN" in readme and "account data is not uploaded" in readme.lower(), "the readme points at the Drive backup and leaves account data out")
+    env = os.environ.copy()
+    env.pop("GDRIVE_RCLONE_TOKEN", None)
+    skipped = subprocess.run([sys.executable, str(ROOT / "scripts" / "gdrive_backup.py")], capture_output=True, text=True, env=env, check=False)
+    check(skipped.returncode == 0 and "skipping the upload" in skipped.stdout, "a missing Drive token skips the upload")
+    env["GDRIVE_RCLONE_TOKEN"] = json.dumps({"client_id": "cid-secret-value", "client_secret": "csec-secret-value", "scope": "drive", "token": {"access_token": "at-secret-value", "refresh_token": "rt-secret-value"}})
+    rejected = subprocess.run([sys.executable, str(ROOT / "scripts" / "gdrive_backup.py")], capture_output=True, text=True, env=env, check=False)
+    combined = rejected.stdout + rejected.stderr
+    check(rejected.returncode == 1 and "not a drive.file user token" in rejected.stdout and "cid-secret-value" not in combined and "csec-secret-value" not in combined and "at-secret-value" not in combined and "rt-secret-value" not in combined, "a full-drive token is rejected and is not printed")
+    parsed = gdrive_backup.parse_secret(json.dumps({"client_id": "cid-secret-value", "client_secret": "csec-secret-value", "scope": "drive.file", "token": "{\"access_token\":\"at-secret-value\",\"refresh_token\":\"rt-secret-value\"}"}))
+    rendered = gdrive_backup.rclone_config_text(parsed)
+    check("scope = drive.file" in rendered and "rt-secret-value" in rendered and "rt-secret-value" not in gdrive_backup.scrub("saw rt-secret-value", gdrive_backup.secret_values(parsed)), "the rclone config is drive.file and logs are scrubbed")
+    check(gdrive_backup.account_data_url("https://pub-example.r2.dev/media/avatars/a.png") and gdrive_backup.account_data_url("https://app.workers.dev/v1/me") and not gdrive_backup.account_data_url("https://pub-example.r2.dev/music/song/cover.png"), "account avatars and the worker API stay off Drive")
+    music = json.loads((ROOT / "data" / "music.json").read_text(encoding="utf-8"))
+    songs = gdrive_backup.music_plan(music)
+    check(any(row["kind"] == "covers" and row["label"] == "america-dont-sit-still" for row in songs) and any(row["kind"] == "music" and row["playlist"] for row in songs), "song audio and covers are planned for Drive")
+    poisoned = gdrive_backup.music_plan({"songs": [{"id": "x", "cover": "https://cdn.workers.dev/media/avatars/a.png", "stream": "https://cdn.workers.dev/v1/song.m3u8"}]})
+    check(poisoned == [], "a song entry that points at account data is dropped")
+    loops = gdrive_backup.loop_urls_from_config(json.loads((ROOT / "feeds.config.json").read_text(encoding="utf-8")))
+    radio = gdrive_backup.radio_plan(loops)
+    check(loops and loops[0].endswith("/loop/current.json") and radio and radio[0]["kind"] == "radio" and radio[0]["playlist"], "the radio loop is planned for Drive")
+    variant, segments, extras = gdrive_backup.hls_media("#EXTM3U\n#EXTINF:6,\nseg-0.ts\n#EXTINF:6,\nseg-1.ts\n", "https://pub-example.r2.dev/loop/index.m3u8")
+    check(variant == "" and extras == [] and segments == ["https://pub-example.r2.dev/loop/seg-0.ts", "https://pub-example.r2.dev/loop/seg-1.ts"], "radio segments resolve against the playlist")
+    encrypted = "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXT-X-KEY:METHOD=AES-128,URI=\"key.bin\",IV=0x1\n#EXTINF:6,\na.m4s\n"
+    _variant, parts, assets = gdrive_backup.hls_media(encrypted, "https://pub-example.r2.dev/music/abc/index.m3u8")
+    saved = gdrive_backup.segment_items({"kind": "music", "logical": "music:abc:playlist", "hosts": ("r2.dev",), "label": "abc"}, assets + parts, encrypted.encode(), "https://pub-example.r2.dev/music/abc/index.m3u8")
+    paths = [row["path"] for row in saved]
+    check(paths == ["music/abc/index.m3u8", "music/abc/init.mp4", "music/abc/key.bin", "music/abc/a.m4s"], "a song keeps its playlist, init file, key, and audio in one folder")
+    blocked, _base = gdrive_backup.playlist_source(b'{"url":"https://cdn.workers.dev/loop/index.m3u8"}', "https://pub-example.r2.dev/loop/current.json", ("r2.dev",))
+    check(blocked is None, "a radio manifest that leaves the music host is dropped")
+    policy = __import__("ia_backup").load_ia_policy()
+    widened = __import__("ia_backup").load_ia_policy({"tiktok_allow": ["gabii_g5"]})
+    posts = [
+        {"platform": "tiktok", "handle": "gabii_g5", "statusId": "123", "media": [{"type": "video", "url": "https://v16.tiktokcdn.com/a.mp4", "poster": "https://p16.tiktokcdn.com/a.jpg"}]},
+        {"platform": "vk", "id": "9", "media": [{"type": "video", "url": "https://userapi.com/v.mp4"}, {"type": "photo", "url": "https://userapi.com/p.jpg"}]},
+        {"platform": "youtube", "id": "abc", "feedId": "youtube:redacted_handle", "media": [{"type": "video", "url": "https://archive.org/download/x/y.mp4"}]},
+    ]
+    tiktok = gdrive_backup.tiktok_plan(posts, policy)
+    check(len(tiktok) == 2 and gdrive_backup.tiktok_plan(posts, widened) == [], "TikTok that is not allowlisted is backed up, and gabii_g5 stays off while the list is empty")
+    manifest = {
+        "files": [
+            {"u": "https://video.twimg.com/a.mp4", "a": "https://archive.org/download/xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/a.mp4", "k": "video"},
+            {"u": "https://i.ytimg.com/vi/abc.jpg", "a": "https://archive.org/download/xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/b.jpg", "k": "photo"},
+        ],
+        "posts": {"x:1": [0], "youtube:abc": [1]},
+    }
+    media = gdrive_backup.media_plan(posts, manifest, policy)
+    check(any(row["logical"].endswith("/a.mp4") for row in media) and not any("b.jpg" in row["logical"] or row["label"].startswith("youtube:") for row in media) and any(row["label"] == "vk:9" for row in media), "Drive keeps rejected videos and leaves allowlisted YouTube files out")
+    sizes = {media[0]["logical"]: 10, media[-1]["logical"]: 90}
+    ordered = [row for row in gdrive_backup.sort_media(media, sizes) if row["kind"] == "media"]
+    check(len(ordered) == 2 and sizes[ordered[0]["logical"]] == 90 and sizes[ordered[1]["logical"]] == 10, "the larger video is uploaded before the smaller one")
+    known = {"v": 1, "files": [{"logical": songs[0]["logical"], "sha256": "ab" * 32, "path": "covers/" + ("ab" * 32) + ".png"}]}
+    check(songs[0]["logical"] in gdrive_backup.known_ids(known) and ("ab" * 32) in gdrive_backup.known_hashes(known), "a stored hash and logical id are treated as already uploaded")
 
 
 if __name__ == "__main__":
