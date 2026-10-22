@@ -16,6 +16,7 @@ IA_ACCESS_KEY and IA_SECRET_KEY come from the environment.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -175,6 +176,15 @@ def _s3_remove(endpoint: str, item: str, name: str, access: str, secret: str, op
     return False
 
 
+def _task_bytes(payload: bytes) -> bytes:
+    if len(payload) >= 2 and payload[:2] == b"\x1f\x8b":
+        try:
+            return gzip.decompress(payload)
+        except OSError:
+            return payload
+    return payload
+
+
 def _task_accepted(status: int, payload: bytes) -> bool:
     if status not in {200, 201, 202} or not payload:
         return False
@@ -188,47 +198,74 @@ def _task_accepted(status: int, payload: bytes) -> bool:
     return bool(doc.get("success") is True or value.get("task_id") or doc.get("task_id"))
 
 
-def _submit_delete_task(item: str, access: str, secret: str, opener, tasks_url: str, sleep) -> str:
-    """Ask Internet Archive to delete one named item. Returns accepted or refused."""
+def _task_detail(status: int, payload: bytes, access: str, secret: str) -> str:
+    text = ""
+    try:
+        doc = json.loads(payload.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        doc = None
+    if isinstance(doc, dict) and isinstance(doc.get("error"), str):
+        text = " ".join(doc["error"].split())
+    text = ia_backup.scrub(text, [access, secret])
+    if "@" in text or len(text) > 60:
+        text = ""
+    return f"{status or 0} {text}".strip()
+
+
+def _archive_host(url: str) -> bool:
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    return host == "archive.org" or host.endswith(".archive.org")
+
+
+def _post_task(opener, url: str, body: bytes, access: str, secret: str, depth: int = 0) -> tuple[int, bytes]:
+    request = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"LOW {access}:{secret}",
+            "Content-Type": "application/json",
+            "User-Agent": ia_backup.UA,
+            "X-Accept-Reduced-Priority": "1",
+        },
+    )
+    try:
+        with opener.open(request, timeout=60) as response:
+            return getattr(response, "status", 200), _task_bytes(response.read() or b"")
+    except urllib.error.HTTPError as err:
+        try:
+            payload = err.read() or b""
+        except OSError:
+            payload = b""
+        location = ""
+        if err.headers:
+            location = err.headers.get("Location") or ""
+        if depth == 0 and err.code in {301, 302, 303, 307, 308} and location and _archive_host(location):
+            return _post_task(opener, urllib.parse.urljoin(url, location), body, access, secret, depth + 1)
+        return err.code, _task_bytes(payload)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return 0, b""
+
+
+def _submit_delete_task(item: str, access: str, secret: str, opener, tasks_url: str, sleep) -> tuple[str, str]:
+    """Ask Internet Archive to delete one named item. Returns accepted or refused, plus a short status."""
     if not _named_item(item):
-        return "refused"
-    body = json.dumps({"identifier": item, "cmd": "delete.php", "args": {}}, separators=(",", ":")).encode()
+        return "refused", "0"
+    # Match the Tasks API client: identifier and cmd, and no empty args object.
+    body = json.dumps({"identifier": item, "cmd": "delete.php"}, separators=(",", ":")).encode()
     delay = 5.0
     status = 0
     payload = b""
     for attempt in range(4):
-        request = urllib.request.Request(
-            tasks_url,
-            data=body,
-            method="POST",
-            headers={
-                "Authorization": f"LOW {access}:{secret}",
-                "Content-Type": "application/json",
-                "User-Agent": ia_backup.UA,
-                "X-Accept-Reduced-Priority": "1",
-            },
-        )
-        try:
-            with opener.open(request, timeout=60) as response:
-                status = getattr(response, "status", 200)
-                payload = response.read() or b""
-        except urllib.error.HTTPError as err:
-            status = err.code
-            try:
-                payload = err.read() or b""
-            except OSError:
-                payload = b""
-        except (urllib.error.URLError, TimeoutError, OSError):
-            status = 0
-            payload = b""
+        status, payload = _post_task(opener, tasks_url, body, access, secret)
         if _task_accepted(status, payload):
-            return "accepted"
+            return "accepted", ""
         if attempt + 1 < 4 and status in {0, 429, 503}:
             sleep(delay)
             delay = min(delay * 2, 60)
             continue
         break
-    return "refused"
+    return "refused", _task_detail(status, payload, access, secret)
 
 
 def _wait_until_clear(metadata_base: str, item: str, urlopen, sleep, wait: float) -> list:
@@ -303,14 +340,14 @@ def purge_files(config: dict, state: dict, sleep=time.sleep) -> dict:
             remaining[item] = left
             notes.append(f"[ia-retire] {item} still has {len(left)} files")
             continue
-        outcome = _submit_delete_task(item, access, secret, opener, tasks_url, sleep)
+        outcome, detail = _submit_delete_task(item, access, secret, opener, tasks_url, sleep)
         if outcome == "accepted":
             tasks_accepted += 1
             notes.append(f"[ia-retire] {item} delete task accepted")
             left = _wait_until_clear(metadata_base, item, urlopen, sleep, wait)
         else:
             tasks_refused += 1
-            notes.append(f"[ia-retire] {item} delete task refused")
+            notes.append(f"[ia-retire] {item} delete task refused {detail}".rstrip())
         remaining[item] = left
         if not left:
             emptied.append(item)
