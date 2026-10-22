@@ -370,7 +370,7 @@ def extract() -> int:
         config = {}
     accounts = accounts_from(config if isinstance(config, dict) else {}, list(TRACKED))
     if not accounts:
-        log("[media-extract] no tracked accounts")
+        log("[media-extract] no added accounts")
         return 0
     ytdlp = tb.tool_cmd("yt_dlp", "yt-dlp")
     gallery = tb.tool_cmd("gallery_dl", "gallery-dl")
@@ -464,7 +464,7 @@ def extract() -> int:
                 by_key[row["key"]] = row
         put_json(cf, bucket, LINKS_KEY, {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "items": list(by_key.values())})
         put_text(cf, bucket, CURSOR_KEY, str((start + visited) % max(len(accounts), 1)))
-        log("[media-extract] stored %s files, visited %s accounts" % (stored, visited))
+        log("[media-extract] stored %s files, visited %s added accounts" % (stored, visited))
         log(tb.upload_summary(state))
         return 0
     except Exception as err:
@@ -490,7 +490,7 @@ def selftest() -> int:
         ]
     }, ["gabii_g5"])
     urls = {row["url"] for row in rows}
-    check("https://www.tiktok.com/@gabii_g5" in urls, "TikTok is included from the tracked handles")
+    check("https://www.tiktok.com/@gabii_g5" in urls, "TikTok is included with the added accounts")
     check("https://www.youtube.com/channel/UCfgtuaUadGgOA-91geQ8Qog/videos" in urls, "YouTube uses the public channel videos page")
     check("https://x.com/redacted_handle" in urls and "https://www.instagram.com/redacted_handle/" in urls, "X and Instagram use the public profile")
     check(all("t.me" not in row["url"] for row in rows), "a Telegram channel is not extracted")
@@ -513,6 +513,7 @@ def selftest() -> int:
     check('echo "$TELEGRAM' not in workflow and "IG_SESSION" not in workflow and "--cookies" not in workflow and "COOKIES" not in workflow, "the workflow does not print secrets or pass cookies")
     doc = (ROOT / "docs" / "telegram-backup.md").read_text(encoding="utf-8")
     check("archive.txt" in doc and "user_id" in doc and "sec_uid" in doc and "17 */3 * * *" in doc, "the docs describe the archive, the catalog, and the schedule")
+    check("added account" in doc and "tracked account" not in doc and "added accounts" in workflow, "added accounts is the name for profiles in feeds.config.json")
     print("media extract selftest ok")
     return 0
 

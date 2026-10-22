@@ -1,4 +1,4 @@
-# Download new public posts and store the original file on Telegram.
+# Download new public posts from added accounts and store the original file on Telegram.
 # Every 3 hours, and when this workflow, its script, or feeds.config.json
 # is pushed to main. A push of the site from the sync job does not start it.
 # Public pages only. No cookies, no captcha bypass, no viewbots.
@@ -96,7 +96,7 @@ jobs:
         if: steps.secrets.outputs.present == 'true'
         run: python3 -m pip install --disable-pip-version-check 'yt-dlp==2026.10.21' 'gallery-dl==1.32.17'
 
-      - name: Download new public posts
+      - name: Download new posts from added accounts
         if: steps.secrets.outputs.present == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
