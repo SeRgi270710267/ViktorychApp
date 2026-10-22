@@ -91,6 +91,9 @@ test("telegram media requires a session and a worker secret", async () => {
     const missing = await call(plain, "/tg/photos/a.jpg", { ip: "203.0.113.83", token: session.token });
     assert.equal(missing.status, 503);
     assert.equal(missing.body.error, "not_configured");
+    const loopMissing = await call(plain, "/tg/loop/v1/index.m3u8", { ip: "203.0.113.84" });
+    assert.equal(loopMissing.status, 503);
+    assert.equal(loopMissing.body.error, "not_configured");
   } finally {
     await plain.dispose();
   }
@@ -161,6 +164,51 @@ test("a signed-in viewer receives a ranged telegram file and a playlist", async 
 
     const unsafe = await call(mf, "/tg/%2e%2e", { ip: "203.0.113.99", token: session.token });
     assert.equal(unsafe.status, 404);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("the radio loop playlist is public and immutable", async () => {
+  const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT }));
+  try {
+    await mf.dispatchFetch("https://accounts.test/v1/health", { headers: { "CF-Connecting-IP": "203.0.113.71" } });
+    const db = await mf.getBindings();
+    const insert = "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, ?, ?, 'viktorych-data', ?, 3, 4, 'abc', 'video/iso.segment', ?, 1, 1, 0, 1)";
+    for (const row of [
+      ["loop/v1", "init", -1, "LOOPINIT", 0],
+      ["loop/v1", "segment", 0, "LOOP0", 10.031],
+      ["loop/v1", "segment", 1, "LOOP1", 10],
+      ["loop/v1/aac", "segment", 0, "AACAAC0", 10]
+    ]) {
+      await db.DB.prepare(insert).bind(row[0], row[1], row[2], row[3], row[4]).run();
+    }
+
+    const playlist = await call(mf, "/tg/loop/v1/index.m3u8", { ip: "203.0.113.72" });
+    assert.equal(playlist.status, 200);
+    const text = new TextDecoder().decode(playlist.bytes);
+    assert.match(text, /#EXT-X-VERSION:7/);
+    assert.match(text, /\/tg\/loop\/v1\/init/);
+    assert.match(text, /\/tg\/loop\/v1\/0/);
+    assert.match(text, /\/tg\/loop\/v1\/1/);
+    assert.match(text, /#EXTINF:10\.031,/);
+    assert.match(playlist.headers.get("cache-control") || "", /immutable/);
+    assert.match(playlist.headers.get("cdn-cache-control") || "", /immutable/);
+
+    const segment = await call(mf, "/tg/loop/v1/0", { ip: "203.0.113.73" });
+    assert.equal(segment.status, 200);
+    assert.match(segment.headers.get("cache-control") || "", /immutable/);
+    assert.match(segment.headers.get("cdn-cache-control") || "", /immutable/);
+
+    const aac = await call(mf, "/tg/loop/v1/aac/index.m3u8", { ip: "203.0.113.74" });
+    assert.equal(aac.status, 200);
+    const aacText = new TextDecoder().decode(aac.bytes);
+    assert.match(aacText, /#EXT-X-VERSION:3/);
+    assert.match(aacText, /\/tg\/loop\/v1\/aac\/0/);
+    assert.doesNotMatch(aacText, /EXT-X-MAP/);
+
+    const photos = await call(mf, "/tg/photos/a.jpg", { ip: "203.0.113.75" });
+    assert.equal(photos.status, 401);
   } finally {
     await mf.dispose();
   }

@@ -1159,7 +1159,20 @@ const TG_PATH_TTL_MS = 50 * 60 * 1000;
 const TG_USER_LIMIT = 1200;
 const TG_VERIFY_LIMIT = 4000;
 const TG_ANON_LIMIT = 60;
+const TG_LOOP_LIMIT = 800;
 const TG_WINDOW_MS = 60 * 60 * 1000;
+const LOOP_PUBLIC = /^loop\/[A-Za-z0-9._-]{1,80}(?:\/aac)?(?:\/(?:index\.m3u8|init|\d+))?$/;
+
+function loopGroupKey(key) {
+  return /^loop\/[A-Za-z0-9._-]{1,80}(?:\/aac)?$/.test(String(key || ""));
+}
+
+function publicLoopCache() {
+  return {
+    "cache-control": "public, max-age=31536000, immutable",
+    "cdn-cache-control": "public, max-age=31536000, immutable"
+  };
+}
 
 function bearerIsBot(env, request) {
   const token = bearer(request);
@@ -1241,42 +1254,50 @@ function mediaResponse(bytes, mime, status, extra) {
   return new Response(bytes, { status: status, headers: headers });
 }
 
-async function rangedTelegram(request, env, row) {
+async function rangedTelegram(request, env, row, immutable) {
   const full = await telegramBody(env, row);
   if (!full) return json(502, { error: "unavailable" });
   const bytes = await full.arrayBuffer();
   const mime = row.mime || full.headers.get("content-type") || "application/octet-stream";
   const span = parseRange(request.headers.get("Range"), bytes.byteLength);
+  const extra = immutable ? publicLoopCache() : null;
   if (span === false) {
     return new Response(null, {
       status: 416,
       headers: { "content-range": "bytes */" + bytes.byteLength, "cache-control": "no-store" }
     });
   }
-  if (!span) return mediaResponse(bytes, mime, 200);
+  if (!span) return mediaResponse(bytes, mime, 200, extra);
   const slice = bytes.slice(span.start, span.end + 1);
-  return mediaResponse(slice, mime, 206, {
+  return mediaResponse(slice, mime, 206, Object.assign({
     "content-range": "bytes " + span.start + "-" + span.end + "/" + bytes.byteLength
-  });
+  }, extra || {}));
 }
 
 async function handleTelegram(request, env, path) {
   if (!env.DB) return json(503, { error: "not_configured" });
-  const viewer = await sessionAccount(env, request);
-  const verify = !viewer && bearerIsBot(env, request);
-  if (!viewer && !verify) {
-    const anon = await rateHit(env, "tg-anon:" + clientIp(request), TG_ANON_LIMIT, TG_WINDOW_MS);
-    if (!anon.ok) return limited(anon);
-    return json(401, { error: "unauthorized" });
-  }
-  if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
-  const budget = await rateHit(env, verify ? "tg-verify" : "tg:" + clientIp(request), verify ? TG_VERIFY_LIMIT : TG_USER_LIMIT, TG_WINDOW_MS);
-  if (!budget.ok) return limited(budget);
   const raw = path.replace(/^\/tg\/?/, "");
   let decoded = raw;
   try { decoded = raw.split("/").map((part) => decodeURIComponent(part)).join("/"); }
   catch (err) { return json(404, { error: "not_found" }); }
   if (!decoded || decoded.indexOf("..") >= 0 || decoded.charAt(0) === "/" || decoded.indexOf("\\") >= 0) return json(404, { error: "not_found" });
+  const publicLoop = LOOP_PUBLIC.test(decoded);
+  const verify = bearerIsBot(env, request);
+  if (publicLoop) {
+    if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
+    const budget = await rateHit(env, verify ? "tg-verify" : "tg-loop:" + clientIp(request), verify ? TG_VERIFY_LIMIT : TG_LOOP_LIMIT, TG_WINDOW_MS);
+    if (!budget.ok) return limited(budget);
+  } else {
+    const viewer = await sessionAccount(env, request);
+    if (!viewer && !verify) {
+      const anon = await rateHit(env, "tg-anon:" + clientIp(request), TG_ANON_LIMIT, TG_WINDOW_MS);
+      if (!anon.ok) return limited(anon);
+      return json(401, { error: "unauthorized" });
+    }
+    if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
+    const budget = await rateHit(env, verify ? "tg-verify" : "tg:" + clientIp(request), verify ? TG_VERIFY_LIMIT : TG_USER_LIMIT, TG_WINDOW_MS);
+    if (!budget.ok) return limited(budget);
+  }
   let key = decoded;
   let mode = "file";
   let index = 0;
@@ -1305,20 +1326,20 @@ async function handleTelegram(request, env, path) {
     const rows = await telegramRows(env, key);
     const text = buildPlaylist(rows, key, new URL(request.url).origin);
     if (!text) return json(404, { error: "not_found" });
-    return new Response(text, {
-      status: 200,
-      headers: {
-        "content-type": "application/vnd.apple.mpegurl",
-        "cache-control": "private, max-age=60",
-        "x-content-type-options": "nosniff"
-      }
-    });
+    const immutable = loopGroupKey(key);
+    const headers = {
+      "content-type": "application/vnd.apple.mpegurl",
+      "cache-control": immutable ? "public, max-age=31536000, immutable" : "private, max-age=60",
+      "x-content-type-options": "nosniff"
+    };
+    if (immutable) headers["cdn-cache-control"] = "public, max-age=31536000, immutable";
+    return new Response(text, { status: 200, headers: headers });
   }
   const kind = mode === "init" ? "init" : mode === "segment" ? "segment" : "single";
   const partIndex = mode === "segment" ? index : mode === "init" ? -1 : 0;
   const row = await env.DB.prepare("SELECT object_key, kind, part_index, file_id, size, sha256, mime, duration, serve, encrypted FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? AND serve = 1 AND encrypted = 0").bind(key, kind, partIndex).first();
   if (!row || !row.file_id) return json(404, { error: "not_found" });
-  return rangedTelegram(request, env, row);
+  return rangedTelegram(request, env, row, loopGroupKey(key));
 }
 
 async function route(request, env) {

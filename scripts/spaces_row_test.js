@@ -315,6 +315,107 @@ assert.strictEqual(stayAac.swap, false);
 assert.strictEqual(stayAac.url, flacBed.fallback);
 assert.ok(src.includes("function loopPlayChoice("));
 assert.ok(src.includes("function flacInMp4("));
+assert.ok(src.includes("function loopMirrorPlan("));
+assert.ok(src.includes("maxNumRetry: 1"));
+
+const loopApi = "https://viktorych-accounts.example.workers.dev";
+const loopR2 = "https://" + pubHost + "/loop/v202610221300/index.m3u8";
+const loopTg = loopApi + "/tg/loop/v202610221300/index.m3u8";
+const once = L.loopMirrorPlan({
+  r2Url: loopR2,
+  api: loopApi,
+  version: "v202610221300",
+  via: "r2",
+  failures: 1,
+  status: 502,
+  position: 42.5
+});
+assert.strictEqual(once.switched, false);
+assert.strictEqual(once.url, loopR2);
+assert.strictEqual(once.seek, 42.5);
+const fallen = L.loopMirrorPlan({
+  r2Url: loopR2,
+  api: loopApi,
+  version: "v202610221300",
+  via: "r2",
+  failures: 2,
+  status: 404,
+  position: 42.5
+});
+assert.strictEqual(fallen.switched, true);
+assert.strictEqual(fallen.via, "telegram");
+assert.strictEqual(fallen.url, loopTg);
+assert.strictEqual(fallen.seek, 42.5);
+const networkDown = L.loopMirrorPlan({
+  r2Url: loopR2,
+  api: loopApi,
+  version: "v202610221300",
+  via: "r2",
+  failures: 2,
+  network: true,
+  position: 42.5
+});
+assert.strictEqual(networkDown.switched, true);
+assert.strictEqual(networkDown.url, loopTg);
+assert.strictEqual(networkDown.seek, 42.5);
+const aacR2 = "https://" + pubHost + "/loop/v202610221300/aac/index.m3u8";
+const aacMirror = L.loopMirrorPlan({
+  r2Url: aacR2,
+  api: loopApi,
+  version: "v202610221300",
+  via: "r2",
+  failures: 2,
+  status: 502,
+  position: 42.5
+});
+assert.strictEqual(aacMirror.url, loopApi + "/tg/loop/v202610221300/aac/index.m3u8");
+const nextLoop = L.loopMirrorPlan({
+  r2Url: loopR2,
+  api: loopApi,
+  version: "v202610221300",
+  nextVersion: "v202610221400",
+  via: "telegram",
+  failures: 2,
+  status: 502,
+  position: 42.5
+});
+assert.strictEqual(nextLoop.switched, false);
+assert.strictEqual(nextLoop.via, "r2");
+assert.strictEqual(nextLoop.url, loopR2);
+const stayTg = L.loopMirrorPlan({
+  r2Url: loopR2,
+  api: loopApi,
+  version: "v202610221300",
+  via: "telegram",
+  failures: 2,
+  status: 502,
+  position: 42.5
+});
+assert.strictEqual(stayTg.switched, false);
+assert.strictEqual(stayTg.via, "telegram");
+assert.strictEqual(stayTg.url, loopTg);
+const noApi = L.loopMirrorPlan({
+  r2Url: loopR2,
+  api: "",
+  version: "v202610221300",
+  via: "r2",
+  failures: 2,
+  network: true,
+  position: 42.5
+});
+assert.strictEqual(noApi.switched, false);
+assert.strictEqual(noApi.url, loopR2);
+const badApi = L.loopMirrorPlan({
+  r2Url: loopR2,
+  api: "http://accounts.example",
+  version: "v202610221300",
+  via: "r2",
+  failures: 2,
+  status: 500,
+  position: 3
+});
+assert.strictEqual(badApi.switched, false);
+assert.strictEqual(badApi.url, loopR2);
 assert.ok(src.includes('audio/mp4; codecs="flac"'));
 assert.ok(src.includes("MediaSource.isTypeSupported"));
 assert.ok(src.includes(".canPlayType("));
