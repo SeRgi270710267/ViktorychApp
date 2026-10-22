@@ -24,6 +24,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SITE_FILES = (
     "index.html",
+    "accounts.js",
+    "accounts.css",
+    "accounts.config.js",
+    "marks.js",
     "app.js",
     "styles.css",
     "split.js",
@@ -50,7 +54,7 @@ SITE_FILES = (
     ".nojekyll",
     "feeds.config.json",
 )
-COPY_DIRS = ("icons", "splash", "screenshots", "i18n")
+COPY_DIRS = ("icons", "splash", "screenshots", "i18n", "shared")
 UA = "viktorych-preview/1.0"
 
 
@@ -200,6 +204,7 @@ def assemble(root: Path, token: str) -> Path:
     repo = os.environ.get("GITHUB_REPOSITORY") or ""
     gh = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
     used_artifact = False
+    prior = None
     if repo and gh:
         try:
             artifact = _latest_artifact(repo, gh)
@@ -208,6 +213,9 @@ def assemble(root: Path, token: str) -> Path:
                 used_artifact = _extract_artifact(payload, dest)
                 if used_artifact:
                     print(f"[discord-live] base artifact {artifact.get('id')}")
+                    sys.path.insert(0, str(root / "scripts"))
+                    import accounts_publish
+                    prior = accounts_publish.read_gate(dest)
         except Exception as exc:
             print(f"[discord-live] artifact base skipped: {type(exc).__name__}")
     if not used_artifact:
@@ -216,6 +224,10 @@ def assemble(root: Path, token: str) -> Path:
         _from_checkout(root, dest)
     else:
         _overlay(root, dest)
+    if prior and prior.get("gate"):
+        sys.path.insert(0, str(root / "scripts"))
+        import accounts_publish
+        accounts_publish.repair(dest, prior)
     _token_clean(dest, token)
     return dest
 

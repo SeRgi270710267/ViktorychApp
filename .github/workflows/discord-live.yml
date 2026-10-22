@@ -57,6 +57,8 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           NODE_PATH: ${{ runner.temp }}/discord-live/node_modules
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -n "${DISCORD_USER_TOKEN:-}" ]; then
             echo "::add-mask::${DISCORD_USER_TOKEN}"

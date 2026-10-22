@@ -1,0 +1,64 @@
+name: Accounts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "worker/**"
+      - "shared/**"
+      - ".github/workflows/accounts.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Deploy the account worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OWNER_CLAIM_CODE: ${{ secrets.OWNER_CLAIM_CODE }}
+          ACCOUNT_PEPPER: ${{ secrets.ACCOUNT_PEPPER }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+            echo "Cloudflare credentials are not set; skipping the account worker."
+            exit 0
+          fi
+          cd worker
+          npm ci
+          set +e
+          npx wrangler d1 info viktorych-accounts > /tmp/d1.txt 2>&1
+          info_code=$?
+          set -e
+          if [ "$info_code" -ne 0 ]; then
+            npx wrangler d1 create viktorych-accounts > /tmp/d1.txt
+          fi
+          python3 - <<'PY'
+          import pathlib, re, sys
+          text = pathlib.Path("/tmp/d1.txt").read_text(encoding="utf-8", errors="replace")
+          found = re.search(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", text)
+          if not found:
+              print("database id was not found", file=sys.stderr)
+              sys.exit(1)
+          path = pathlib.Path("wrangler.toml")
+          path.write_text(re.sub(r'database_id = "[^"]+"', 'database_id = "%s"' % found.group(1), path.read_text(encoding="utf-8")), encoding="utf-8")
+          print("database id updated on the runner")
+          PY
+          npx wrangler d1 migrations apply viktorych-accounts --remote
+          npx wrangler r2 bucket create viktorych-data || true
+          npx wrangler deploy
+          if [ -n "${OWNER_CLAIM_CODE:-}" ]; then printf '%s' "$OWNER_CLAIM_CODE" | npx wrangler secret put OWNER_CLAIM_CODE; fi
+          if [ -n "${ACCOUNT_PEPPER:-}" ]; then printf '%s' "$ACCOUNT_PEPPER" | npx wrangler secret put ACCOUNT_PEPPER; fi
+          if [ -n "${TURNSTILE_SECRET:-}" ]; then printf '%s' "$TURNSTILE_SECRET" | npx wrangler secret put TURNSTILE_SECRET; fi
+          echo "account worker deployed"

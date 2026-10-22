@@ -127,6 +127,7 @@
   <link rel="stylesheet" href="spaces.css">
   <link rel="stylesheet" href="stories.css">
   <link rel="stylesheet" href="music.css">
+  <link rel="stylesheet" href="accounts.css">
   <link rel="preconnect" href="https://pbs.twimg.com" crossorigin>
   <link rel="preconnect" href="https://video.twimg.com" crossorigin>
   <link rel="preconnect" href="https://i.ytimg.com" crossorigin>
@@ -160,6 +161,7 @@
 <body>
   <div class="wco" aria-hidden="true"></div>
   <div id="app"></div>
+  <div id="account-layer"></div>
   <div id="hover"></div>
   <div id="pull" aria-hidden="true"><span class="spin"></span></div>
   <button id="new-posts" type="button" hidden data-i18n="New posts">New posts</button>
@@ -181,6 +183,9 @@
   <script src="spaces.js" defer></script>
   <script src="stories.js" defer></script>
   <script src="music.js" defer></script>
+  <script src="accounts.config.js" defer></script>
+  <script src="shared/handle-skeleton.js" type="module"></script>
+  <script src="accounts.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

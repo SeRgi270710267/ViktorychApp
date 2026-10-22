@@ -1,6 +1,8 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-__SW_VERSION__";
+const VERSION = "viktorych-a2-__SW_VERSION__";
+const ACCOUNTS_WALL = false;
+let accountsAuthed = false;
 importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
@@ -59,6 +61,10 @@ const SHELL_FILES = [
   "./marks.js",
   "./music.js",
   "./music.css",
+  "./accounts.js",
+  "./accounts.css",
+  "./accounts.config.js",
+  "./shared/handle-skeleton.js",
   "./hls-1.7.3.min.js",
   "./favicon.svg",
   "./favicon.ico",
@@ -158,6 +164,15 @@ function isSpaceAsset(url) {
 // an offline copy in sintel-music-offline. That cache is not this worker's.
 function isCatalogMedia(url) {
   return spaceHost(url.hostname) && url.pathname.toLowerCase().indexOf("/music/") !== -1;
+}
+
+function isAppJson(url) {
+  if (url.origin !== self.location.origin) return false;
+  return /\/(?:feeds\.config|status)\.json$/.test(url.pathname) || /\/fallback\/[^/]+\.json$/.test(url.pathname);
+}
+
+function privateData(url) {
+  return isData(url) || isAppJson(url) || isMedia(url) || isLive(url) || isCommentApi(url) || isSpaceStatus(url) || isSpaceAsset(url) || isCatalogMedia(url);
 }
 
 function isLive(url) {
@@ -323,6 +338,16 @@ async function cacheBookmark(urls) {
 
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "auth") {
+    accountsAuthed = !!data.on;
+    if (!data.on) {
+      event.waitUntil((async () => {
+        await caches.delete(DATA);
+        await caches.delete(MEDIA);
+        await caches.delete(LIVE);
+      })());
+    }
+  }
   if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
   if (data.type === "cache-bookmark") event.waitUntil(cacheBookmark(data.urls));
   if (data.type === "seen" || data.type === "state") {
@@ -361,6 +386,10 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (ACCOUNTS_WALL && !accountsAuthed && privateData(url)) {
+    event.respondWith(new Response("", { status: 401, headers: { "cache-control": "no-store" } }));
+    return;
+  }
   if (isCatalogMedia(url)) return;
   if (isSpaceStatus(url) || isSpaceAsset(url)) {
     event.respondWith(fetch(new Request(request, { cache: "no-store" })));

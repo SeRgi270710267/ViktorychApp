@@ -1,0 +1,13 @@
+{
+  "name": "viktorych-accounts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "test": "node --test --test-concurrency=1 test/accounts.test.mjs"
+  },
+  "devDependencies": {
+    "miniflare": "^4.20251008.0",
+    "wrangler": "^4.43.0"
+  }
+}

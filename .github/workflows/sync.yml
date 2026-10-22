@@ -269,7 +269,9 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html app.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css hls-1.7.3.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html app.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js accounts.css accounts.config.js hls-1.7.3.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          mkdir -p _site/shared
+          cp shared/handle-skeleton.js _site/shared/
           mkdir -p _site/i18n
           cp i18n/*.js _site/i18n/
           if [ -f data/music.json ]; then mkdir -p _site/data; cp data/music.json _site/data/; fi
@@ -311,6 +313,22 @@ jobs:
               print(f"ERROR: built site is {total} bytes ({total / 1024 / 1024:.2f} MB), over the 200 MB limit ({limit} bytes).", file=sys.stderr)
               sys.exit(1)
           PY
+
+      - name: Move app data behind sign-in when the API is ready
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACCOUNTS_API: ${{ vars.ACCOUNTS_API }}
+          TURNSTILE_SITEKEY: ${{ secrets.TURNSTILE_SITEKEY }}
+        run: python3 scripts/accounts_publish.py --site _site --source .
+
+      - name: Record whether the login wall is on
+        uses: actions/upload-artifact@v4
+        with:
+          name: accounts-wall
+          path: accounts-wall/on
+          if-no-files-found: ignore
+          retention-days: 1
 
       - uses: actions/upload-pages-artifact@v3
         with:
@@ -408,7 +426,19 @@ jobs:
           name: stories-json
           path: incoming
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: accounts-wall
+          path: wall
+
+      - name: See if the login wall is on
+        id: wallgate
+        run: |
+          if [ -f wall/on ]; then echo "skip=1" >> "$GITHUB_OUTPUT"; else echo "skip=0" >> "$GITHUB_OUTPUT"; fi
+
       - name: Commit stories.json on the data branch
+        if: steps.wallgate.outputs.skip != '1'
         run: |
           git fetch --depth=1 origin data || { echo "data branch is not available; stories stay on Pages"; exit 0; }
           git checkout -B data origin/data
@@ -462,7 +492,19 @@ jobs:
         with:
           python-version: "3.12"
 
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: accounts-wall
+          path: wall
+
+      - name: See if the login wall is on
+        id: wallgate
+        run: |
+          if [ -f wall/on ]; then echo "skip=1" >> "$GITHUB_OUTPUT"; else echo "skip=0" >> "$GITHUB_OUTPUT"; fi
+
       - name: Upload shards to the Internet Archive
+        if: steps.wallgate.outputs.skip != '1'
         continue-on-error: true
         env:
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
@@ -476,6 +518,7 @@ jobs:
           python3 scripts/ia_archive.py
 
       - name: Publish the squashed data branch
+        if: steps.wallgate.outputs.skip != '1'
         run: |
           if [ -f archive/archive/index.json ]; then
             mv archive/archive/*.json archive/

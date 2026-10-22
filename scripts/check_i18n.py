@@ -26,6 +26,7 @@ UI_FILES = (
     "sw.js",
     "index.html",
     "404.html",
+    "accounts.js",
 )
 # Short words that also appear as data, and phrases that are allowed to stay
 # in English because they are product names or technical tokens.

@@ -757,6 +757,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function saveSettings() {
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
     syncWorkerState();
+    if (window.ViktorychAccounts && window.ViktorychAccounts.onLocalChange) window.ViktorychAccounts.onLocalChange();
   }
 
   function feedHasPosts(id) {
@@ -5049,8 +5050,7 @@ const here = parseRoute();
         ${post}
       </div>
       <button class="account-pill" data-act="drawer" aria-label="${tr("Account menu")}">
-        <span class="ava initials">Y</span>
-        <span class="account-meta"><b>${tr("You")}</b><span>@reader</span></span>
+        ${(window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials">Y</span><span class="account-meta"><b>${tr("You")}</b><span>@reader</span></span>`}
         <span class="dots">${icon("more")}</span>
       </button>
     </header>`;
@@ -6366,6 +6366,10 @@ const here = parseRoute();
   }
 
   function profileView(route) {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.profileHtml) {
+      const accountPage = window.ViktorychAccounts.profileHtml(route);
+      if (accountPage) return accountPage;
+    }
     posts().forEach(creditCarried);
     if (window.FeedsPeople) {
       const merged = window.FeedsPeople.page(route);
@@ -8345,7 +8349,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
-    </div>`;
+    </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
 
   function drawer() {
@@ -8358,7 +8362,7 @@ const here = parseRoute();
       <a href="#/music">${icon("muNote")} ${tr("Music")}</a>
       <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
-      <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>${tr("You")}</b><div class="phandle">@reader</div></div></div>
+      ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>${tr("You")}</b><div class="phandle">@reader</div></div></div>`}
       ${links}
       ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${tr("Install app")}</button>`}
     </div></div>`;
@@ -9547,7 +9551,7 @@ if (STATE.histClear) {
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
-    if (STATE.error) {
+    if (STATE.error && route.name === "home") {
       return pageHead(tr("Home")) + `<div class="error-box"><h2>${tr("Couldn’t load posts")}</h2><p>${tr("feeds.json didn’t load. Check that the file is next to this page.")}</p><button class="retry" data-act="reload">${tr("Retry")}</button></div>`;
     }
     const params = new URLSearchParams(location.search);
@@ -11441,6 +11445,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     scrollFreeze = true;
   }, true);
   window.addEventListener("hashchange", () => {
+    if (window.ViktorychAccounts?.blocking?.()) return;
     const nextHash = location.hash || "#/";
     const prevHash = lastKey || "";
     if (/^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
@@ -12933,6 +12938,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   async function boot() {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking()) {
+      registerSW();
+      STATE.settings = loadSettings();
+      applyTheme();
+      window.ViktorychAccounts.enter();
+      return;
+    }
     consumeShareTarget();
     bindShell();
     registerSW();
@@ -13026,7 +13038,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   document.addEventListener("pointerup", flushSplitRender);
   document.addEventListener("pointercancel", flushSplitRender);
 
-  if (window.SI18n) window.SI18n.onChange(function () { render(); syncWorkerState(); });
+  if (window.SI18n) window.SI18n.onChange(function () {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking()) return;
+    render();
+    syncWorkerState();
+  });
   if (window.FeedsTV && window.FeedsTV.attach) window.FeedsTV.attach();
   if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
   if (window.FeedsPeople) {
@@ -13036,7 +13052,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
       statusHash: statusHash, watchHash: watchHash, render: render
     });
-    window.FeedsPeople.start();
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsPeople.start();
   }
   if (window.FeedsDiscord) {
     window.FeedsDiscord.bind({
@@ -13048,7 +13064,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         STATE.scrollKey = "#/messages";
       }
     });
-    window.FeedsDiscord.start();
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsDiscord.start();
   }
   if (window.Stories) {
     window.Stories.bind({
@@ -13066,9 +13082,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       shareRoot: shareRoot,
       toast: toast
     });
-    window.Spaces.start();
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.Spaces.start();
   }
-  if (window.SIntelMusic && window.SIntelMusic.bind) {
+  if (window.SIntelMusic && window.SIntelMusic.bind && !(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) {
     window.SIntelMusic.bind({
       render: function () { render(); },
       toast: toast,
@@ -13076,5 +13092,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       repo: function () { return GITHUB_REPO; }
     });
   }
+  if (window.ViktorychAccounts) window.ViktorychAccounts.requestRender = function () { render(); };
   boot();
 })();

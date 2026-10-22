@@ -1,0 +1,19 @@
+name = "viktorych-accounts"
+main = "src/index.js"
+compatibility_date = "2026-01-15"
+workers_dev = true
+
+[vars]
+ALLOWED_ORIGINS = "https://viktorychgroup.github.io"
+PBKDF2_ITERATIONS = "8000"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "viktorych-accounts"
+# The deploy workflow replaces this placeholder after it creates the database.
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "DATA"
+bucket_name = "viktorych-data"
