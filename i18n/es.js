@@ -839,5 +839,17 @@ SI18n.addPack("es", {
   "driveSelected.one": "{n} seleccionado",
   "driveSelected.few": "{n} seleccionados",
   "driveSelected.many": "{n} seleccionados",
-  "driveSelected.other": "{n} seleccionados"
+  "driveSelected.other": "{n} seleccionados",
+  "Games": "Juegos",
+  "Recently played": "Jugados recientemente",
+  "Favourites": "Favoritos",
+  "Nothing played yet.": "Todavía no has jugado.",
+  "No favourites yet.": "Todavía no hay favoritos.",
+  "Web shooter": "Shooter web",
+  "Share to feed": "Compartir en el feed",
+  "The game didn’t load.": "El juego no se cargó.",
+  "Full screen": "Pantalla completa",
+  "Exit full screen": "Salir de pantalla completa",
+  "Playing ReGone on {app}": "Jugando a ReGone en {app}",
+  "That game isn’t here.": "Ese juego no está aquí."
 });

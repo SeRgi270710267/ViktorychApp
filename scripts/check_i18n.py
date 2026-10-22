@@ -29,6 +29,7 @@ UI_FILES = (
     "accounts.js",
     "shorts.js",
     "drive.js",
+    "games.js",
 )
 # Short words that also appear as data, and phrases that are allowed to stay
 # in English because they are product names or technical tokens.

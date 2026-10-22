@@ -839,5 +839,17 @@ SI18n.addPack("ru", {
   "driveSelected.one": "Выбрано {n}",
   "driveSelected.few": "Выбрано {n}",
   "driveSelected.many": "Выбрано {n}",
-  "driveSelected.other": "Выбрано {n}"
+  "driveSelected.other": "Выбрано {n}",
+  "Games": "Игры",
+  "Recently played": "Недавно играли",
+  "Favourites": "Избранное",
+  "Nothing played yet.": "Пока ничего не играли.",
+  "No favourites yet.": "Пока нет избранного.",
+  "Web shooter": "Веб-шутер",
+  "Share to feed": "Поделиться в ленте",
+  "The game didn’t load.": "Игра не загрузилась.",
+  "Full screen": "На весь экран",
+  "Exit full screen": "Выйти из полного экрана",
+  "Playing ReGone on {app}": "Играю в ReGone в {app}",
+  "That game isn’t here.": "Этой игры здесь нет."
 });
