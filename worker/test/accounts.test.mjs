@@ -617,6 +617,15 @@ test("archive copies are public and account objects stay hidden", async () => {
 });
 
 test("reposts and quotes stay on the account and show on that profile", async () => {
+  const preflight = await mf.dispatchFetch("https://accounts.test/v1/reposts", {
+    method: "OPTIONS",
+    headers: {
+      Origin: "https://viktorychgroup.github.io",
+      "Access-Control-Request-Method": "DELETE"
+    }
+  });
+  assert.equal(preflight.status, 204);
+  assert.match(preflight.headers.get("access-control-allow-methods") || "", /\bDELETE\b/);
   const ada = await call("/v1/signup", {
     method: "POST",
     ip: "203.0.113.180",

@@ -51,7 +51,7 @@ function withCors(request, env, response) {
   headers.set("vary", "Origin");
   headers.set("access-control-allow-headers", "Content-Type, Authorization, Range");
   headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type");
-  headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, OPTIONS");
+  headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
   return new Response(response.body, { status: response.status, headers });
 }
