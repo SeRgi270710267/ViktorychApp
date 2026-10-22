@@ -1,5 +1,23 @@
 /* X-style reader. Timelines come from feeds.json plus monthly archive stubs on the data branch. X replies, YouTube comments, and old-post details load live in the browser. */
 (function () {
+
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
+    return fn ? fn(key, vars) : key;
+  }
+  function trn(key, n, vars) {
+    var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
+    return fn ? fn(key, n, vars) : String(n);
+  }
+  function productName(kind) {
+    var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
+    if (api && api.productName) return api.productName(kind);
+    if (kind === "musicShort") return "ViktrychMusic";
+    if (kind === "music") return "ViktorychMusic";
+    if (kind === "pwa") return "ViktrychApp";
+    return "ViktorychApp";
+  }
+
   // Storage names use the SuperintelApp prefix. A missing value is copied once
   // from the previous prefix so saved follows stay on this origin.
   function storeName(suffix) {
@@ -388,13 +406,13 @@
         statusId: "9001",
         platform: "x",
         handle: "archived",
-        author: "Deleted post",
+        author: tr("Deleted post"),
         feedId: "x:archived",
         kind: "post",
-        text: "This post was deleted at the source. The photo is loading from archive.org.",
+        text: tr("This post was deleted at the source. The photo is loading from archive.org."),
         date: "2099-10-21T12:00:00Z",
         url: "https://x.com/archived/status/9001",
-        media: [{ type: "photo", url: dead, alt: "Saved on archive.org" }],
+        media: [{ type: "photo", url: dead, alt: tr("Saved on archive.org") }],
         avatar: dead
       });
     }
@@ -910,7 +928,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function groupsIssueUrl() {
     const payload = JSON.stringify(cleanGroups(STATE.settings.groups));
-    const params = new URLSearchParams({ template: "groups.yml", title: "Subscription groups", groups: payload });
+    const params = new URLSearchParams({ template: "groups.yml", title: tr("Subscription groups"), groups: payload });
     return "https://github.com/" + GITHUB_REPO + "/issues/new?" + params.toString();
   }
 
@@ -983,10 +1001,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function unpublishedNote(kind, platform, hasOriginal) {
-    const name = PLATFORM[platform] || "the original site";
-    const what = kind === "profile" ? "profile" : "post";
-    if (hasOriginal) return "This " + what + " isn’t in the published snapshot, so the link opens on " + name + ".";
-    return "This " + what + " isn’t in the published snapshot, so there is no preview page for it.";
+    const name = PLATFORM[platform] || tr("the original site");
+    if (kind === "profile" && hasOriginal) return tr("This profile isn’t in the published snapshot, so the link opens on {where}.", { where: name });
+    if (hasOriginal) return tr("This post isn’t in the published snapshot, so the link opens on {where}.", { where: name });
+    if (kind === "profile") return tr("This profile isn’t in the published snapshot, so there is no preview page for it.");
+    return tr("This post isn’t in the published snapshot, so there is no preview page for it.");
   }
 
   function findFeed(platform, handle) {
@@ -1109,17 +1128,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function byStamp(a, b) { return stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0; }
 
   function formatCount(n) {
+    if (window.SI18n) return window.SI18n.formatCount(n);
     n = Number(n);
     if (!isFinite(n)) return "";
-    const abs = Math.abs(n);
-    const trim = (v) => {
-      const s = (Math.round(v * 10) / 10).toFixed(1);
-      return s.endsWith(".0") ? s.slice(0, -2) : s;
-    };
-    if (abs < 10000) return Math.trunc(n).toLocaleString("en-US");
-    if (abs < 1e6) return trim(n / 1e3) + "K";
-    if (abs < 1e9) return trim(n / 1e6) + "M";
-    return trim(n / 1e9) + "B";
+    return String(Math.trunc(n));
   }
 
   function shownCount(value, extra) {
@@ -1130,32 +1142,18 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function relTime(iso) {
-    const then = new Date(iso).getTime();
-    if (!then) return "";
-    const sec = Math.max(0, (Date.now() - then) / 1000);
-    if (sec < 60) return Math.max(1, Math.floor(sec)) + "s";
-    if (sec < 3600) return Math.floor(sec / 60) + "m";
-    if (sec < 86400) return Math.floor(sec / 3600) + "h";
-    const d = new Date(iso);
-    if (d.getFullYear() === new Date().getFullYear()) return MONTHS[d.getMonth()] + " " + d.getDate();
-    return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+    if (window.SI18n) return window.SI18n.relTime(iso);
+    return "";
   }
 
   function fullTime(iso) {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    let h = d.getHours();
-    const am = h >= 12 ? "PM" : "AM";
-    h = h % 12 || 12;
-    const min = String(d.getMinutes()).padStart(2, "0");
-    return h + ":" + min + " " + am + " · " + MONTHS[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear();
+    if (window.SI18n) return window.SI18n.fullTime(iso);
+    return "";
   }
 
   function joinedLabel(iso) {
-    if (!iso) return "";
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    return "Joined " + MONTHS_LONG[d.getMonth()] + " " + d.getFullYear();
+    if (window.SI18n) return window.SI18n.joined(iso);
+    return "";
   }
 
   function initials(name) {
@@ -1173,7 +1171,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function badge(type) {
     if (!type || type === "none") return "";
     const cls = type === "business" ? "business" : type === "government" ? "government" : "blue";
-    const label = cls === "business" ? "Verified business" : cls === "government" ? "Verified government" : "Verified";
+    const label = cls === "business" ? tr("Verified business") : cls === "government" ? tr("Verified government") : tr("Verified");
     return `<span class="vbadge ${cls}" title="${label}">${icon("check")}</span>`;
   }
 
@@ -1300,7 +1298,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     } else {
       const translated = STATE.translated[key];
       if (translated && !STATE.originalShown[key]) {
-        return linkify(translated, [], post.platform, post.handle) + ` <button class="show-more" data-act="show-original" data-key="${esc(key)}">Show original</button>`;
+        return linkify(translated, [], post.platform, post.handle) + ` <button class="show-more" data-act="show-original" data-key="${esc(key)}">${tr("Show original")}</button>`;
       }
     }
     const text = post.text || "";
@@ -1310,7 +1308,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     let cut = text.slice(0, 280);
     const sp = cut.lastIndexOf(" ");
     if (sp > 220) cut = cut.slice(0, sp);
-    return linkify(cut, post.links, post.platform, post.handle) + ` <button class="show-more" data-act="more" data-key="${esc(key)}">Show more</button>`;
+    return linkify(cut, post.links, post.platform, post.handle) + ` <button class="show-more" data-act="more" data-key="${esc(key)}">${tr("Show more")}</button>`;
   }
 
   function readerLanguage() {
@@ -1355,7 +1353,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const inner = withDiscordEmoji(post, textHtml(post, key, full));
     if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner);
     const offer = offerTranslate(key, sample)
-      ? `<button class="show-more translate-link" type="button" data-act="translate" data-key="${esc(key)}">Translate post</button>`
+      ? `<button class="show-more translate-link" type="button" data-act="translate" data-key="${esc(key)}">${tr("Translate post")}</button>`
       : "";
     return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${inner}</div>${offer}`;
   }
@@ -1465,13 +1463,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function watchOn(platform) {
-    if (platform === "instagram") return "Watch on Instagram";
-    if (platform === "threads") return "Watch on Threads";
-    if (platform === "youtube") return "Watch on YouTube";
-    if (platform === "x") return "Watch on X";
-    if (platform === "vk") return "Watch on VK";
-    if (platform === "telegram") return "Watch on Telegram";
-    return "Open original";
+    if (platform === "instagram") return tr("Watch on Instagram");
+    if (platform === "threads") return tr("Watch on Threads");
+    if (platform === "youtube") return tr("Watch on YouTube");
+    if (platform === "x") return tr("Watch on X");
+    if (platform === "vk") return tr("Watch on VK");
+    if (platform === "telegram") return tr("Watch on Telegram");
+    return tr("Open original");
   }
 
   function originalOf(post, media) {
@@ -1559,7 +1557,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const href = originalOf(post, media);
     const mode = preview === "feed" || preview === "subs" ? preview : "";
     const chrome = mode === "feed" && !gif
-      ? `<button class="vmute" type="button" data-act="mute" aria-label="Unmute" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden></span>`
+      ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden></span>`
       : "";
     const round = media && media.round ? " round" : "";
     const progress = !gif && post ? videoProgress(post) : 0;
@@ -1569,8 +1567,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ${bar}
       ${dur ? `<span class="vdur">${esc(dur)}</span>` : ""}
       ${gif ? `<span class="gif-badge">GIF</span>` : ""}
-      <button class="play" type="button" data-act="play" aria-label="Play">${icon("play")}</button>
-      <button class="vretry" type="button" data-act="video-retry" hidden>Retry</button>
+      <button class="play" type="button" data-act="play" aria-label="${tr("Play")}">${icon("play")}</button>
+      <button class="vretry" type="button" data-act="video-retry" hidden>${tr("Retry")}</button>
       <a class="vfallback" data-act="stop" hidden target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}"><span>${esc(label)}</span></a>
       ${chrome}
     </div>`;
@@ -1594,7 +1592,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function attachmentHtml(items) {
     return (items || []).filter((item) => item && (item.type === "file" || item.type === "audio")).map((item) => {
       const href = item.url || item.open || "#";
-      const kind = item.type === "audio" ? "Voice" : "File";
+      const kind = item.type === "audio" ? tr("Voice") : tr("File");
       const extra = item.extra ? `<span class="file-extra">${esc(item.extra)}</span>` : "";
       return `<a class="file-card" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href)}"><span class="file-kind">${kind}</span><span class="file-title">${esc(item.title || kind)}</span>${extra}</a>`;
     }).join("");
@@ -1620,18 +1618,18 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const href = guild ? profileHash("discord", guild) : (post.url || "#");
     const channel = post.channelName ? `<a class="discord-channel" data-act="stop" href="${esc(href)}">#${esc(post.channelName)}</a>` : "";
     const thread = post.threadName ? `<span class="discord-thread">${esc(post.threadName)}</span>` : "";
-    const bot = post.bot ? `<span class="discord-bot">Bot</span>` : "";
+    const bot = post.bot ? `<span class="discord-bot">${tr("Bot")}</span>` : "";
     if (!channel && !thread && !bot) return "";
     return `<div class="discord-meta">${channel}${thread}${bot}</div>`;
   }
 
   function audienceCounts(profile, word) {
     if (!profile) return "";
-    const label = word || (profile.platform === "youtube" || profile.platform === "telegram" ? "Subscribers" : profile.platform === "discord" ? "Members" : "Followers");
+    const label = word || (profile.platform === "youtube" || profile.platform === "telegram" ? tr("Subscribers") : profile.platform === "discord" ? tr("Members") : tr("Followers"));
     const bits = [];
-    if (profile.following != null) bits.push(`<div><b>${esc(formatCount(profile.following))}</b> <span>Following</span></div>`);
+    if (profile.following != null) bits.push(`<div><b>${esc(formatCount(profile.following))}</b> <span>${tr("Following count")}</span></div>`);
     if (profile.followers != null) bits.push(`<div><b>${esc(formatCount(profile.followers))}</b> <span>${label}</span></div>`);
-    if (profile.platform === "discord" && profile.online != null) bits.push(`<div><b>${esc(formatCount(profile.online))}</b> <span>Online</span></div>`);
+    if (profile.platform === "discord" && profile.online != null) bits.push(`<div><b>${esc(formatCount(profile.online))}</b> <span>${tr("Online")}</span></div>`);
     return bits.length ? `<div class="counts">${bits.join("")}</div>` : "";
   }
 
@@ -1651,11 +1649,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!list.length) return files;
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
-      const open = embed.open ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(embed.open)}">Open original</a>` : "";
-      return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(embed.url)}" title="${esc(embed.title || "Post")}" loading="lazy"></iframe>${open}</div></div>` + files;
+      const open = embed.open ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(embed.open)}">${tr("Open original")}</a>` : "";
+      return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(embed.url)}" title="${esc(embed.title || tr("Post noun"))}" loading="lazy"></iframe>${open}</div></div>` + files;
     }
     if (list.length === 1 && list[0].type === "placeholder") {
-      return `<div class="media m1"><div class="tile broken"><a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(list[0].url || "#")}">Open original</a></div></div>` + files;
+      return `<div class="media m1"><div class="tile broken"><a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(list[0].url || "#")}">${tr("Open original")}</a></div></div>` + files;
     }
     const n = list.length;
     const cls = n === 1 ? "m1" : n === 2 ? "m2" : n === 3 ? "m3" : "m4";
@@ -1932,7 +1930,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         frame.referrerPolicy = "strict-origin-when-cross-origin";
       }
       frame.src = url;
-      frame.title = (post && (post.title || post.text)) || "Video";
+      frame.title = (post && (post.title || post.text)) || tr("Video");
       frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
       frame.allowFullscreen = !opts.preview;
       const nudge = () => {
@@ -2042,8 +2040,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (poster) artwork.unshift({ src: poster, sizes: "1280x720", type: "image/jpeg" });
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
-          title: (post && (post.title || String(post.text || "").slice(0, 80))) || "Video",
-          artist: (post && (post.author || post.handle)) || "SuperintelApp",
+          title: (post && (post.title || String(post.text || "").slice(0, 80))) || tr("Video"),
+          artist: (post && (post.author || post.handle)) || productName("app"),
           artwork: artwork
         });
         navigator.mediaSession.setActionHandler("play", () => { video.play(); });
@@ -2405,7 +2403,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!box) {
       box = document.createElement("aside");
       box.id = "autoplay-debug";
-      box.setAttribute("aria-label", "Autoplay debug");
+      box.setAttribute("aria-label", tr("Autoplay debug"));
       document.body.appendChild(box);
     }
     const conn = connectionInfo();
@@ -2458,7 +2456,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!btn) return;
     const on = !!STATE.sound;
     btn.innerHTML = icon(on ? "vol" : "volOff");
-    btn.setAttribute("aria-label", on ? "Mute" : "Unmute");
+    btn.setAttribute("aria-label", on ? tr("Mute") : tr("Unmute"));
     btn.setAttribute("aria-pressed", on ? "true" : "false");
   }
 
@@ -2646,8 +2644,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function followButton(id, large) {
     const on = isFollowed(id);
-    return `<button class="follow${on ? " following" : ""}${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}" aria-pressed="${on ? "true" : "false"}"><span class="f">Following</span><span class="u">Unfollow</span>${on ? "" : "Follow"}</button>`.replace(
-      on ? "" : `<span class="f">Following</span><span class="u">Unfollow</span>`,
+    return `<button class="follow${on ? " following" : ""}${large ? " lg" : ""}" data-act="follow" data-id="${esc(id)}" aria-pressed="${on ? "true" : "false"}"><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span>${on ? "" : tr("Follow")}</button>`.replace(
+      on ? "" : `<span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span>`,
       ""
     );
   }
@@ -2663,12 +2661,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const primary = ids[0] || id;
     const attr = ` data-id="${esc(primary)}" data-ids="${esc(ids.join(","))}"`;
     if (ids.some((item) => isFollowed(item))) {
-      return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">Following</span><span class="u">Unfollow</span></button>`;
+      return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span></button>`;
     }
     if (!ids.some((item) => siteSource(item))) {
-      return `<a class="follow${large ? " lg" : ""}" data-act="follow-request" data-id="${esc(primary)}" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("follow", primary))}">Follow</a>`;
+      return `<a class="follow${large ? " lg" : ""}" data-act="follow-request" data-id="${esc(primary)}" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("follow", primary))}">${tr("Follow")}</a>`;
     }
-    return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>Follow</button>`;
+    return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>${tr("Follow")}</button>`;
   }
 
   function bellGlyph(kind) {
@@ -2709,7 +2707,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!accountFollowed(id)) return "";
     const on = bellOn(id);
     const open = !!(STATE.bellMenu && STATE.bellMenu.id === id);
-    return `<button class="notify-bell${on ? " on" : ""}" type="button" data-act="bell" data-id="${esc(id)}" data-handle="${esc(String(handle || "").replace(/^@/, ""))}" title="Notify" aria-label="Notify" aria-haspopup="menu" aria-expanded="${open ? "true" : "false"}"><span class="bell-off">${bellGlyph("off-outline")}</span><span class="bell-add">${bellGlyph("plus")}</span><span class="bell-on">${bellGlyph("on")}</span></button>`;
+    return `<button class="notify-bell${on ? " on" : ""}" type="button" data-act="bell" data-id="${esc(id)}" data-handle="${esc(String(handle || "").replace(/^@/, ""))}" title="${tr("Notify")}" aria-label="${tr("Notify")}" aria-haspopup="menu" aria-expanded="${open ? "true" : "false"}"><span class="bell-off">${bellGlyph("off-outline")}</span><span class="bell-add">${bellGlyph("plus")}</span><span class="bell-on">${bellGlyph("on")}</span></button>`;
   }
 
   function actionBar(post) {
@@ -2723,17 +2721,17 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         <span class="ic">${icon(path)}</span>${count ? `<span class="count">${esc(count)}</span>` : ""}
       </button>`;
     const replyCount = shownCount(stats.replies, 0);
-    const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="Replies"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
+    const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="${tr("Replies")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
     return `<div class="actions">
       <div class="action-stats">
         ${replyLink}
-        ${btn("repost", "repost", "repost", "Repost", shownCount(stats.reposts, reposted ? 1 : 0))}
-        ${btn("like", "like", liked ? "heartOn" : "heart", "Like", shownCount(stats.likes, liked ? 1 : 0))}
-        ${btn("views", "open-status", "views", "Views", shownCount(stats.views, 0))}
+        ${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0))}
+        ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0))}
+        ${btn("views", "open-status", "views", tr("Views"), shownCount(stats.views, 0))}
       </div>
       <div class="action-more">
-        ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", "Bookmark", "")}
-        ${btn("share", "share", "share", "Share", "")}
+        ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", tr("Bookmark"), "")}
+        ${btn("share", "share", "share", tr("Share"), "")}
       </div>
     </div>`;
   }
@@ -2751,7 +2749,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<div class="quote"${open}>
       <div class="quote-head">
         ${avatar(quoted.avatar, quoted.author || quoted.handle)}
-        <span class="name">${esc(quoted.author || quoted.handle || "Post")}${badge(quoted.verifiedType)}</span>
+        <span class="name">${esc(quoted.author || quoted.handle || tr("Post noun"))}${badge(quoted.verifiedType)}</span>
         ${quoted.handle ? `<span class="handle">@${esc(quoted.handle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
@@ -4275,7 +4273,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function archiveSentinel() {
     if (!(ARCHIVE.order || []).some((name) => !ARCHIVE.loaded[name])) return "";
-    return `<div id="archive-more" class="archive-more">Older posts</div>`;
+    return `<div id="archive-more" class="archive-more">${tr("Older posts")}</div>`;
   }
 
   function nextShardName() {
@@ -4662,16 +4660,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (reply && reply._community) return "";
     const total = Number((reply.stats || {}).replies || 0);
     if (!(total > shown)) return "";
-    const label = shown ? "Show more replies" : "Show replies";
+    const label = shown ? tr("Show more replies") : tr("Show replies");
     return `<a class="show-replies" data-act="stop" href="${esc(statusHash(reply))}">${label}</a>`;
   }
 
   function freshLabel(at) {
-    const t = typeof at === "number" ? at : Date.parse(at || "");
-    if (!isFinite(t) || t <= 0) return "";
-    const mins = Math.max(0, Math.floor((Date.now() - t) / 60000));
-    if (mins < 1) return "Updated just now";
-    return "Updated " + mins + " min ago";
+    const stamp = typeof at === "number" ? at : Date.parse(at || "");
+    if (!isFinite(stamp) || stamp <= 0) return "";
+    const mins = Math.max(0, Math.floor((Date.now() - stamp) / 60000));
+    if (mins < 1) return tr("Updated just now");
+    return trn("minutesAgo", mins);
   }
 
   function replySortMode() {
@@ -4689,7 +4687,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function replySortTabs() {
     const sort = replySortMode();
     const tab = (id, label) => `<button class="tab${sort === id ? " on" : ""}" type="button" data-act="reply-sort" data-sort="${id}" role="tab" aria-selected="${sort === id ? "true" : "false"}"><span>${label}</span></button>`;
-    return `<div class="tabs reply-tabs" role="tablist">${tab("relevant", "Relevant")}${tab("recent", "Recent")}${tab("liked", "Liked")}</div>`;
+    return `<div class="tabs reply-tabs" role="tablist">${tab("relevant", tr("Relevant"))}${tab("recent", tr("Recent"))}${tab("liked", tr("Liked"))}</div>`;
   }
 
   function replyTools(post) {
@@ -4701,9 +4699,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function replyList(post) {
     const tools = replyTools(post);
     const slice = replySlice(post);
-    if (slice.loading) return tools + `<div class="reply-empty">Loading replies…</div>`;
+    if (slice.loading) return tools + `<div class="reply-empty">${tr("Loading replies…")}</div>`;
     if (!slice.shown.length && !slice.more && !slice.spam) {
-      return tools + `<div class="reply-empty">${slice.missing ? "Replies aren’t available for this post." : "No replies yet."}</div>`;
+      return tools + `<div class="reply-empty">${slice.missing ? tr("Replies aren’t available for this post.") : tr("No replies yet.")}</div>`;
     }
     const id = postKey(post);
     const root = originalHandle(post);
@@ -4728,8 +4726,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         continues: index < cards.length - 1
       })).join("") + repliesLink(reply, inline.length);
     }).join("");
-    const more = slice.more ? `<button class="more-replies" type="button" data-act="more-replies" data-id="${esc(id)}">Show more replies</button>` : "";
-    const spam = slice.spam ? `<button class="more-replies spam" type="button" data-act="spam-replies" data-id="${esc(id)}">Show probable spam</button>` : "";
+    const more = slice.more ? `<button class="more-replies" type="button" data-act="more-replies" data-id="${esc(id)}">${tr("Show more replies")}</button>` : "";
+    const spam = slice.spam ? `<button class="more-replies spam" type="button" data-act="spam-replies" data-id="${esc(id)}">${tr("Show probable spam")}</button>` : "";
     return tools + html + more + spam;
   }
 
@@ -4737,8 +4735,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<div class="composer${bridge ? " bridge" : ""}">
       <span class="ava initials">Y</span>
       <div class="composer-main">
-        <div class="composer-placeholder">Post your reply</div>
-        <div class="composer-bar"><button class="reply-send" type="button" disabled>Reply</button></div>
+        <div class="composer-placeholder">${tr("Post your reply")}</div>
+        <div class="composer-bar"><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
       </div>
     </div>`;
   }
@@ -4751,12 +4749,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         ${avatar(face.avatar, post.author || post.handle)}
         <div class="post-main">
           <div class="byline">
-            <a class="name" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || "Post")}${badge(face.verified)}</a>
+            <a class="name" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || tr("Post noun"))}${badge(face.verified)}</a>
             ${post.handle ? `<a class="handle" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + post.handle)}">@${esc(post.handle)}</a>` : ""}
             ${when}
             ${sourceBadge(post.platform)}
           </div>
-          <div class="unavailable">This post is unavailable.</div>
+          <div class="unavailable">${tr("This post is unavailable.")}</div>
         </div>
       </div>
     </article>`;
@@ -4787,7 +4785,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<div class="reply-context">
       <div class="quote-head">
         ${avatar(parent.avatar, parent.author || parent.handle)}
-        <span class="name">${esc(parent.author || parent.handle || "Post")}</span>
+        <span class="name">${esc(parent.author || parent.handle || tr("Post noun"))}</span>
         ${parent.handle ? `<span class="handle">@${esc(parent.handle)}</span>` : ""}
       </div>
       ${text ? `<div class="quote-text">${esc(text.slice(0, 220))}</div>` : ""}
@@ -4801,7 +4799,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (by && (by.name || by.handle)) return "";
     const name = String(from.name || "").trim();
     const handle = String(from.handle || "").trim();
-    if (!name && !handle) return `<div class="repost-line">${icon("repost")}<span>Forwarded</span></div>`;
+    if (!name && !handle) return `<div class="repost-line">${icon("repost")}<span>${tr("Forwarded")}</span></div>`;
     const label = name || ("@" + handle);
     const who = handle
       ? `<a data-act="stop" data-card="${esc("telegram:" + handle)}" href="${esc(accountHash("telegram", handle))}">${esc(label)}</a>`
@@ -4819,17 +4817,17 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const sharedNote = repostQuote(post, hideRepost ? "author" : "");
     const forwarded = forwardLine(post);
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
-    const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const context = mode !== "status" && post.replyParent && (post.kind === "reply" || post.platform === "telegram") ? contextCard(post.replyParent) : "";
     const repostFeed = feedOf(post);
     const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
-      ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? "Turn on reposts" : "Turn off reposts"}</button>`
+      ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? tr("Turn on reposts") : tr("Turn off reposts")}</button>`
       : "";
     const shareLink = sharePostUrl(post, "post") || post.url || sitePermalink(statusHash(post));
     const shareNote = sharePostUrl(post, "post") ? "" : unpublishedNote("post", post.platform, !!post.url);
 const here = parseRoute();
-    const histItem = here.name === "history" ? `<button data-act="hist-remove" data-id="${esc(post.id)}" data-tab="${esc(here.tab || "bookmarks")}">Remove from History</button>` : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>Copy link</button><button data-act="add-to-tab" data-id="${esc(post.id)}">Add to tab…</button>${histItem}${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">View on ${esc(PLATFORM[post.platform] || "web")}</a></div>` : "";
+    const histItem = here.name === "history" ? `<button data-act="hist-remove" data-id="${esc(post.id)}" data-tab="${esc(here.tab || "bookmarks")}">${tr("Remove from History")}</button>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${histItem}${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -4840,12 +4838,12 @@ const here = parseRoute();
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
     const displayHandle = creator ? (post.handle || creator.handle || "") : (post.handle || "");
-    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || "Profile")}">${avatar(face.avatar, displayName)}</a>`;
+    const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
     const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
     const threadLink = mode !== "status" && mode !== "reply" && (threadChildren(post).length || nestedDiscord)
-      ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">Show this thread</a>` : "";
+      ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = post.stub ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
       ${context}
@@ -4860,9 +4858,9 @@ const here = parseRoute();
             ${displayHandle ? `<a class="handle" href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}">@${esc(displayHandle)}</a>` : ""}
             <span class="dot">·</span>
             <a class="time" href="${esc(dest)}">${esc(relTime(post.date))}</a>
-            ${post.edited ? `<span class="edited">Edited</span>` : ""}
+            ${post.edited ? `<span class="edited">${tr("Edited")}</span>` : ""}
             ${sourceBadge(post.platform)}
-            <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="More">${icon("more")}</button>
+            <button class="more-btn" data-act="menu" data-id="${esc(post.id)}" aria-label="${tr("More")}">${icon("more")}</button>
           </div>
           ${reply}
           ${discordMeta(post)}
@@ -4932,6 +4930,7 @@ const here = parseRoute();
     if (parts[0] === "article" && parts[1]) return { name: "article", id: parts.slice(1).join("/"), query };
     if (parts[0] === "bookmarks" && parts.length === 1) return { name: "history", tab: "bookmarks", query };
     if (parts[0] === "music") return { name: "music", section: parts[1] || "home", id: parts.slice(2).join("/"), query };
+    if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
     if (parts[0] === "lists" && parts[1]) return { name: "list", id: parts[1], query };
@@ -4964,11 +4963,11 @@ const here = parseRoute();
   }
 
   function navItem(href, name, label, on, aria) {
-    const onName = name + "On";
+    const onName = name + tr("On");
     const glyph = icon(on && PATH[onName] && (name === "home" || name.indexOf("mu") === 0) ? onName : name);
     const badge = name === "bell" ? bellBadgeHtml() : "";
     const accessible = aria || label;
-    return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(accessible)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${label}</span></a>`;
+    return `<a class="nav-item${on ? " on" : ""}" href="${href}" aria-label="${esc(accessible)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${esc(label)}</span></a>`;
   }
 
   function wordmarkSvg(cls) {
@@ -4976,36 +4975,36 @@ const here = parseRoute();
   }
 
   function brandLink() {
-    return `<a class="logo" href="#/" aria-label="SuperintelApp"><svg class="logo-full" viewBox="0 0 9539.20 2079.00" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5774.2 1661 6315.2 171H 6535.2L 7083.2 1661H 6883.2L 6734.2 1245H 6120.2L 5976.2 1661ZM 6178.2 1079H 6675.2L 6567.2 777Q 6540.2 702 6506.2 593.5Q 6472.2 485 6424.2 323Q 6377.2 488 6342.2 598Q 6307.2 708 6283.2 777Z M 7293.2 2079V 543H 7467.2V 722H 7487.2Q 7506.2 692 7540.2 646.5Q 7574.2 601 7638.2 565Q 7702.2 529 7811.2 529Q 7951.2 529 8057.7 599Q 8164.2 669 8224.7 798.5Q 8285.2 928 8285.2 1105Q 8285.2 1283 8225.2 1413Q 8165.2 1543 8058.7 1614Q 7952.2 1685 7812.2 1685Q 7706.2 1685 7641.2 1648.5Q 7576.2 1612 7541.2 1565.5Q 7506.2 1519 7487.2 1488H 7473.2V 2079ZM 7785.2 1524Q 7890.2 1524 7960.7 1467.5Q 8031.2 1411 8066.7 1315.5Q 8102.2 1220 8102.2 1103Q 8102.2 987 8067.2 893.5Q 8032.2 800 7961.7 745Q 7891.2 690 7785.2 690Q 7631.2 690 7551.2 804Q 7471.2 918 7471.2 1103Q 7471.2 1290 7552.2 1407Q 7633.2 1524 7785.2 1524Z M 8547.2 2079V 543H 8721.2V 722H 8741.2Q 8760.2 692 8794.2 646.5Q 8828.2 601 8892.2 565Q 8956.2 529 9065.2 529Q 9205.2 529 9311.7 599Q 9418.2 669 9478.7 798.5Q 9539.2 928 9539.2 1105Q 9539.2 1283 9479.2 1413Q 9419.2 1543 9312.7 1614Q 9206.2 1685 9066.2 1685Q 8960.2 1685 8895.2 1648.5Q 8830.2 1612 8795.2 1565.5Q 8760.2 1519 8741.2 1488H 8727.2V 2079ZM 9039.2 1524Q 9144.2 1524 9214.7 1467.5Q 9285.2 1411 9320.7 1315.5Q 9356.2 1220 9356.2 1103Q 9356.2 987 9321.2 893.5Q 9286.2 800 9215.7 745Q 9145.2 690 9039.2 690Q 8885.2 690 8805.2 804Q 8725.2 918 8725.2 1103Q 8725.2 1290 8806.2 1407Q 8887.2 1524 9039.2 1524Z"/></svg><svg class="logo-si" viewBox="0 0 1986.60 1680.80" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z"/></svg></a>`;
+    return `<a class="logo" href="#/" aria-label="${productName("app")}"><svg class="logo-full" viewBox="0 0 9539.20 2079.00" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5774.2 1661 6315.2 171H 6535.2L 7083.2 1661H 6883.2L 6734.2 1245H 6120.2L 5976.2 1661ZM 6178.2 1079H 6675.2L 6567.2 777Q 6540.2 702 6506.2 593.5Q 6472.2 485 6424.2 323Q 6377.2 488 6342.2 598Q 6307.2 708 6283.2 777Z M 7293.2 2079V 543H 7467.2V 722H 7487.2Q 7506.2 692 7540.2 646.5Q 7574.2 601 7638.2 565Q 7702.2 529 7811.2 529Q 7951.2 529 8057.7 599Q 8164.2 669 8224.7 798.5Q 8285.2 928 8285.2 1105Q 8285.2 1283 8225.2 1413Q 8165.2 1543 8058.7 1614Q 7952.2 1685 7812.2 1685Q 7706.2 1685 7641.2 1648.5Q 7576.2 1612 7541.2 1565.5Q 7506.2 1519 7487.2 1488H 7473.2V 2079ZM 7785.2 1524Q 7890.2 1524 7960.7 1467.5Q 8031.2 1411 8066.7 1315.5Q 8102.2 1220 8102.2 1103Q 8102.2 987 8067.2 893.5Q 8032.2 800 7961.7 745Q 7891.2 690 7785.2 690Q 7631.2 690 7551.2 804Q 7471.2 918 7471.2 1103Q 7471.2 1290 7552.2 1407Q 7633.2 1524 7785.2 1524Z M 8547.2 2079V 543H 8721.2V 722H 8741.2Q 8760.2 692 8794.2 646.5Q 8828.2 601 8892.2 565Q 8956.2 529 9065.2 529Q 9205.2 529 9311.7 599Q 9418.2 669 9478.7 798.5Q 9539.2 928 9539.2 1105Q 9539.2 1283 9479.2 1413Q 9419.2 1543 9312.7 1614Q 9206.2 1685 9066.2 1685Q 8960.2 1685 8895.2 1648.5Q 8830.2 1612 8795.2 1565.5Q 8760.2 1519 8741.2 1488H 8727.2V 2079ZM 9039.2 1524Q 9144.2 1524 9214.7 1467.5Q 9285.2 1411 9320.7 1315.5Q 9356.2 1220 9356.2 1103Q 9356.2 987 9321.2 893.5Q 9286.2 800 9215.7 745Q 9145.2 690 9039.2 690Q 8885.2 690 8805.2 804Q 8725.2 918 8725.2 1103Q 8725.2 1290 8806.2 1407Q 8887.2 1524 9039.2 1524Z"/></svg><svg class="logo-si" viewBox="0 0 1986.60 1680.80" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z"/></svg></a>`;
   }
 
   function nav(route) {
     const name = route.name;
     const music = name === "music" && window.SIntelMusic;
     const brand = music ? window.SIntelMusic.brand() : brandLink();
-    const links = music ? window.SIntelMusic.links(route, navItem) : `${navItem("#/", "home", "Home", name === "home")}
-        ${navItem("#/explore", "search", "Explore", name === "explore")}
-        ${navItem("#/notifications", "bell", "Notifications", name === "notifications")}
-        ${navItem("#/messages", "mail", "Messages", name === "messages")}
-        ${navItem("#/feeds", "spark", "Feeds", name === "feeds")}
-        ${navItem("#/lists", "lists", "Lists", name === "lists" || name === "list")}
-        ${navItem("#/history", "clock", "History", name === "history")}
-        ${navItem("#/music", "muNote", "Music", false)}
-        ${navItem(subsHash(STATE.settings.subsGroup), "subs", "Subscriptions", name === "subscriptions")}
-        ${navItem("#/settings", "more", "More", name === "settings")}`;
+    const links = music ? window.SIntelMusic.links(route, navItem) : `${navItem("#/", "home", tr("Home"), name === "home")}
+        ${navItem("#/explore", "search", tr("Explore"), name === "explore")}
+        ${navItem("#/notifications", "bell", tr("Notifications"), name === "notifications")}
+        ${navItem("#/messages", "mail", tr("Messages"), name === "messages")}
+        ${navItem("#/feeds", "spark", tr("Feeds"), name === "feeds")}
+        ${navItem("#/lists", "lists", tr("Lists"), name === "lists" || name === "list")}
+        ${navItem("#/history", "clock", tr("History"), name === "history")}
+        ${navItem("#/music", "muNote", tr("Music"), false)}
+        ${navItem(subsHash(STATE.settings.subsGroup), "subs", tr("Subscriptions"), name === "subscriptions")}
+        ${navItem("#/settings", "more", tr("More"), name === "settings")}`;
     const post = music
-      ? `<button class="post-btn" data-act="music-add" aria-label="Add song"><span class="post-label">Add song</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
-      : `<button class="post-btn" data-act="compose" aria-label="Post"><span class="post-label">Post</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
+      ? `<button class="post-btn" data-act="music-add" aria-label="${tr("Add song")}"><span class="post-label">${tr("Add song")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
+      : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
     return `<header class="nav">
-      <div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize sidebar" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>
+      <div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>
       <div class="nav-scroll">
         ${brand}
         ${links}
         ${post}
       </div>
-      <button class="account-pill" data-act="drawer" aria-label="Account menu">
+      <button class="account-pill" data-act="drawer" aria-label="${tr("Account menu")}">
         <span class="ava initials">Y</span>
-        <span class="account-meta"><b>You</b><span>@reader</span></span>
+        <span class="account-meta"><b>${tr("You")}</b><span>@reader</span></span>
         <span class="dots">${icon("more")}</span>
       </button>
     </header>`;
@@ -5033,25 +5032,25 @@ const here = parseRoute();
     </div>`).join("");
     return `<aside class="side">
       <form class="side-search" data-act="search-form">
-        <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="Search" aria-label="Search"></label>
+        <label class="search"><span class="sr">${icon("search")}</span><input id="side-q" type="search" placeholder="${tr("Search")}" aria-label="${tr("Search")}"></label>
       </form>
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
-      ${people.length ? `<section class="card"><h2>Who to follow</h2>${rows}<a class="show-more-row" href="#/feeds">Show more</a></section>` : ""}
-      <div class="fineprint"><span>SuperintelApp</span><span>Preview snapshot</span><a href="https://github.com/${GITHUB_REPO}">GitHub</a><span>Not affiliated with X</span></div>
+      ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
+      <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><a href="https://github.com/${GITHUB_REPO}">GitHub</a><span>${tr("Not affiliated with X")}</span></div>
     </aside>`;
   }
 
   function bottom(route) {
     if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.bottomHtml) return window.SIntelMusic.bottomHtml(route, icon);
     const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(name)}${name === "bell" ? bellBadgeHtml() : ""}</span></a>`;
-    return `<nav class="bottom-nav" aria-label="Primary">
-      ${item("#/", route.name === "home" ? "homeOn" : "home", "Home", route.name === "home")}
-      ${item("#/explore", "search", "Search", route.name === "explore")}
-      ${item("#/feeds", "spark", "Feeds", route.name === "feeds")}
-      ${item("#/notifications", "bell", "Notifications", route.name === "notifications")}
-      ${item("#/messages", "mail", "Messages", route.name === "messages")}
+    return `<nav class="bottom-nav" aria-label="${tr("Primary")}">
+      ${item("#/", route.name === "home" ? "homeOn" : "home", tr("Home"), route.name === "home")}
+      ${item("#/explore", "search", tr("Search"), route.name === "explore")}
+      ${item("#/feeds", "spark", tr("Feeds"), route.name === "feeds")}
+      ${item("#/notifications", "bell", tr("Notifications"), route.name === "notifications")}
+      ${item("#/messages", "mail", tr("Messages"), route.name === "messages")}
     </nav>
-    <button class="fab" data-act="compose" aria-label="Post">${icon("plus")}</button>`;
+    <button class="fab" data-act="compose" aria-label="${tr("Post")}">${icon("plus")}</button>`;
   }
 
   function listSortOf(list) {
@@ -5223,25 +5222,25 @@ const here = parseRoute();
     const tabWithMenu = (id, label, face, noteId) => {
       if (tab !== id) return tabBtn(id, label, false, face, noteId);
       const expanded = STATE.tabMenu === id;
-      return `<div class="tab-pair on">${tabBtn(id, label, true, face, noteId)}<button class="tab-caret" type="button" data-act="tab-options" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
+      return `<div class="tab-pair on">${tabBtn(id, label, true, face, noteId)}<button class="tab-caret" type="button" data-act="tab-options" data-tab="${esc(id)}" aria-label="${esc(tr("{label} options", { label: label }))}" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
     };
     return `<div class="topbar tall">
-      <h1 class="vh">Home</h1>
+      <h1 class="vh">${tr("Home")}</h1>
       <div class="mhead">
-        <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
-        <a class="m-logo" href="#/" aria-label="SuperintelApp"><svg class="logo-full" viewBox="0 0 9539.20 2079.00" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5774.2 1661 6315.2 171H 6535.2L 7083.2 1661H 6883.2L 6734.2 1245H 6120.2L 5976.2 1661ZM 6178.2 1079H 6675.2L 6567.2 777Q 6540.2 702 6506.2 593.5Q 6472.2 485 6424.2 323Q 6377.2 488 6342.2 598Q 6307.2 708 6283.2 777Z M 7293.2 2079V 543H 7467.2V 722H 7487.2Q 7506.2 692 7540.2 646.5Q 7574.2 601 7638.2 565Q 7702.2 529 7811.2 529Q 7951.2 529 8057.7 599Q 8164.2 669 8224.7 798.5Q 8285.2 928 8285.2 1105Q 8285.2 1283 8225.2 1413Q 8165.2 1543 8058.7 1614Q 7952.2 1685 7812.2 1685Q 7706.2 1685 7641.2 1648.5Q 7576.2 1612 7541.2 1565.5Q 7506.2 1519 7487.2 1488H 7473.2V 2079ZM 7785.2 1524Q 7890.2 1524 7960.7 1467.5Q 8031.2 1411 8066.7 1315.5Q 8102.2 1220 8102.2 1103Q 8102.2 987 8067.2 893.5Q 8032.2 800 7961.7 745Q 7891.2 690 7785.2 690Q 7631.2 690 7551.2 804Q 7471.2 918 7471.2 1103Q 7471.2 1290 7552.2 1407Q 7633.2 1524 7785.2 1524Z M 8547.2 2079V 543H 8721.2V 722H 8741.2Q 8760.2 692 8794.2 646.5Q 8828.2 601 8892.2 565Q 8956.2 529 9065.2 529Q 9205.2 529 9311.7 599Q 9418.2 669 9478.7 798.5Q 9539.2 928 9539.2 1105Q 9539.2 1283 9479.2 1413Q 9419.2 1543 9312.7 1614Q 9206.2 1685 9066.2 1685Q 8960.2 1685 8895.2 1648.5Q 8830.2 1612 8795.2 1565.5Q 8760.2 1519 8741.2 1488H 8727.2V 2079ZM 9039.2 1524Q 9144.2 1524 9214.7 1467.5Q 9285.2 1411 9320.7 1315.5Q 9356.2 1220 9356.2 1103Q 9356.2 987 9321.2 893.5Q 9286.2 800 9215.7 745Q 9145.2 690 9039.2 690Q 8885.2 690 8805.2 804Q 8725.2 918 8725.2 1103Q 8725.2 1290 8806.2 1407Q 8887.2 1524 9039.2 1524Z"/></svg></a>
-        <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
+        <button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button>
+        <a class="m-logo" href="#/" aria-label="${productName("app")}"><svg class="logo-full" viewBox="0 0 9539.20 2079.00" fill="currentColor" aria-hidden="true"><path d="M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5774.2 1661 6315.2 171H 6535.2L 7083.2 1661H 6883.2L 6734.2 1245H 6120.2L 5976.2 1661ZM 6178.2 1079H 6675.2L 6567.2 777Q 6540.2 702 6506.2 593.5Q 6472.2 485 6424.2 323Q 6377.2 488 6342.2 598Q 6307.2 708 6283.2 777Z M 7293.2 2079V 543H 7467.2V 722H 7487.2Q 7506.2 692 7540.2 646.5Q 7574.2 601 7638.2 565Q 7702.2 529 7811.2 529Q 7951.2 529 8057.7 599Q 8164.2 669 8224.7 798.5Q 8285.2 928 8285.2 1105Q 8285.2 1283 8225.2 1413Q 8165.2 1543 8058.7 1614Q 7952.2 1685 7812.2 1685Q 7706.2 1685 7641.2 1648.5Q 7576.2 1612 7541.2 1565.5Q 7506.2 1519 7487.2 1488H 7473.2V 2079ZM 7785.2 1524Q 7890.2 1524 7960.7 1467.5Q 8031.2 1411 8066.7 1315.5Q 8102.2 1220 8102.2 1103Q 8102.2 987 8067.2 893.5Q 8032.2 800 7961.7 745Q 7891.2 690 7785.2 690Q 7631.2 690 7551.2 804Q 7471.2 918 7471.2 1103Q 7471.2 1290 7552.2 1407Q 7633.2 1524 7785.2 1524Z M 8547.2 2079V 543H 8721.2V 722H 8741.2Q 8760.2 692 8794.2 646.5Q 8828.2 601 8892.2 565Q 8956.2 529 9065.2 529Q 9205.2 529 9311.7 599Q 9418.2 669 9478.7 798.5Q 9539.2 928 9539.2 1105Q 9539.2 1283 9479.2 1413Q 9419.2 1543 9312.7 1614Q 9206.2 1685 9066.2 1685Q 8960.2 1685 8895.2 1648.5Q 8830.2 1612 8795.2 1565.5Q 8760.2 1519 8741.2 1488H 8727.2V 2079ZM 9039.2 1524Q 9144.2 1524 9214.7 1467.5Q 9285.2 1411 9320.7 1315.5Q 9356.2 1220 9356.2 1103Q 9356.2 987 9321.2 893.5Q 9286.2 800 9215.7 745Q 9145.2 690 9039.2 690Q 8885.2 690 8805.2 804Q 8725.2 918 8725.2 1103Q 8725.2 1290 8806.2 1407Q 8887.2 1524 9039.2 1524Z"/></svg></a>
+        <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
       <div class="tabs-bar">
-        <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="Scroll tabs left" hidden>${icon("chevL")}</button>
-        <div class="tabs" role="tablist" aria-label="Home timeline">
-          ${tabWithMenu("foryou", "For you")}
-          ${tabWithMenu("following", "Following")}
+        <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button>
+        <div class="tabs" role="tablist" aria-label="${tr("Home timeline")}">
+          ${tabWithMenu("foryou", tr("For you"))}
+          ${tabWithMenu("following", tr("Following"))}
           ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, "", item.id)).join("")}
           ${lists.map((l) => tabWithMenu("list:" + l.id, l.name)).join("")}
         </div>
-        <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button>
-        <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="Manage tabs">${icon("sliders")}</button>
+        <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
+        <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${window.Spaces && window.Spaces.homeRow ? window.Spaces.homeRow() : ""}
@@ -5268,30 +5267,30 @@ const here = parseRoute();
     const cat = catId ? feedTabById(catId) : null;
     if (catId && (!cat || cat.showHome === false)) return "";
     let body = "";
-    let label = "Home options";
+    let label = tr("Home options");
     const viewItems = (tab) => {
       const view = tabView(tab);
       const item = (id, text) => tabChoice("menuitemradio", `data-act="tab-view" data-view="${id}" data-tab="${esc(tab)}"`, text, view === id, id === "reposts" ? "repost" : "posts", "radio");
-      return `<div class="tab-menu-gap"></div><div class="tab-menu-label">Show</div>${item("all", "All posts")}${item("reposts", "Reposts only")}`;
+      return `<div class="tab-menu-gap"></div><div class="tab-menu-label">${tr("Show")}</div>${item("all", tr("All posts"))}${item("reposts", tr("Reposts only"))}`;
     };
     if (which === "foryou") {
-      label = "For you options";
+      label = tr("For you options");
       const box = (key, text, on, glyph) => tabChoice("menuitemcheckbox", `data-act="foryou-toggle" data-key="${key}"`, text, on, glyph, "check");
-      body = box("reposts", "Show reposts", STATE.settings.forYouReposts !== false, "repost") + box("replies", "Show replies", STATE.settings.forYouReplies !== false, "reply") + viewItems("foryou");
+      body = box("reposts", tr("Show reposts"), STATE.settings.forYouReposts !== false, "repost") + box("replies", tr("Show replies in tab"), STATE.settings.forYouReplies !== false, "reply") + viewItems("foryou");
     } else if (cat) {
-      label = cat.name + " options";
+      label = tr("{label} options", { label: cat.name });
       const sort = cat.sort === "popular" ? "popular" : "recent";
       const sortItem = (id, text) => tabChoice("menuitemradio", `data-act="follow-sort" data-sort="${id}" data-cat="${esc(cat.id)}"`, text, sort === id, id === "popular" ? "rocket" : "clock", "radio");
       const flag = (key, text, on, glyph) => tabChoice("menuitemcheckbox", `data-act="feed-tab-flag" data-key="${key}" data-id="${esc(cat.id)}"`, text, on, glyph, "check");
-      body = `<div class="tab-menu-label">Sort by</div>${sortItem("recent", "Recent")}${sortItem("popular", "Popular")}` + viewItems(which) + `<div class="tab-menu-gap"></div><div class="tab-menu-label">Tab</div>${tabChoice("menuitem", `data-act="feed-tab-edit" data-id="${esc(cat.id)}"`, "Edit tab", null, "pencil", "")}${flag("showHome", "Show on Home", cat.showHome !== false, "pin")}${flag("showNotes", "Show in Notifications", cat.showNotes !== false, "bell")}`;
+      body = `<div class="tab-menu-label">${tr("Sort by")}</div>${sortItem("recent", tr("Recent"))}${sortItem("popular", tr("Popular"))}` + viewItems(which) + `<div class="tab-menu-gap"></div><div class="tab-menu-label">${tr("Tab")}</div>${tabChoice("menuitem", `data-act="feed-tab-edit" data-id="${esc(cat.id)}"`, tr("Edit tab"), null, "pencil", "")}${flag("showHome", tr("Show on Home"), cat.showHome !== false, "pin")}${flag("showNotes", tr("Show in Notifications"), cat.showNotes !== false, "bell")}`;
     } else {
-      label = list ? list.name + " options" : "Following options";
+      label = list ? tr("{label} options", { label: list.name }) : tr("Following options");
       const sort = list ? listSortOf(list) : (STATE.settings.followingSort === "popular" ? "popular" : "recent");
       const sortItem = (id, text) => tabChoice("menuitemradio", `data-act="follow-sort" data-sort="${id}"${list ? ` data-list="${esc(list.id)}"` : ""}`, text, sort === id, id === "popular" ? "rocket" : "clock", "radio");
-      const extra = list ? `<div class="tab-menu-gap"></div><div class="tab-menu-label">List</div>${tabChoice("menuitem", `data-act="edit-list" data-id="${esc(list.id)}"`, "Edit list", null, "pencil", "")}${tabChoice("menuitem", `data-act="tab-unpin" data-id="${esc(list.id)}"`, "Unpin from Home", null, "pin", "")}` : "";
-      body = `<div class="tab-menu-label">Sort by</div>${sortItem("recent", "Recent")}${sortItem("popular", "Popular")}` + viewItems(which) + extra;
+      const extra = list ? `<div class="tab-menu-gap"></div><div class="tab-menu-label">${tr("List")}</div>${tabChoice("menuitem", `data-act="edit-list" data-id="${esc(list.id)}"`, tr("Edit list"), null, "pencil", "")}${tabChoice("menuitem", `data-act="tab-unpin" data-id="${esc(list.id)}"`, tr("Unpin from Home"), null, "pin", "")}` : "";
+      body = `<div class="tab-menu-label">${tr("Sort by")}</div>${sortItem("recent", tr("Recent"))}${sortItem("popular", tr("Popular"))}` + viewItems(which) + extra;
     }
-    const manage = `<div class="tab-menu-gap"></div>${tabChoice("menuitem", `data-act="manage-tabs"`, "Manage tabs", null, "gear", "")}`;
+    const manage = `<div class="tab-menu-gap"></div>${tabChoice("menuitem", `data-act="manage-tabs"`, tr("Manage tabs"), null, "gear", "")}`;
     return `<div class="tab-sheet" data-act="close-tab-menu"><div class="menu tab-menu" data-act="stop" role="menu" aria-label="${esc(label)}"><div class="tab-grab" aria-hidden="true"></div>${body}${manage}</div></div>`;
   }
 
@@ -5304,7 +5303,7 @@ const here = parseRoute();
       const on = mode === id;
       return `<button class="bell-choice" type="button" role="menuitemradio" aria-checked="${on ? "true" : "false"}" data-act="bell-mode" data-mode="${id}" data-id="${esc(menu.id)}"><span class="bell-choice-ico">${bellGlyph(glyph)}</span><span class="bell-choice-label">${text}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
     };
-    return `<div class="bell-sheet" data-act="close-bell"><div class="menu bell-menu" data-act="stop" role="menu" aria-label="Notify"><div class="bell-grab" aria-hidden="true"></div>${choice("all", "All posts", "outline")}${choice("live", "Only posts with live video", "video")}${choice("off", "Off", "off")}<div class="bell-split"></div>${feedTabChoices(menu.id)}<p class="bell-note">Without Web Push, alerts arrive when the app checks in the background (Android/Chrome installed app) or on next open (iOS).</p></div></div>`;
+    return `<div class="bell-sheet" data-act="close-bell"><div class="menu bell-menu" data-act="stop" role="menu" aria-label="${tr("Notify")}"><div class="bell-grab" aria-hidden="true"></div>${choice("all", tr("All posts"), "outline")}${choice("live", tr("Only posts with live video"), "video")}${choice("off", tr("Off"), "off")}<div class="bell-split"></div>${feedTabChoices(menu.id)}<p class="bell-note">${tr("Without Web Push, alerts arrive when the app checks in the background (Android/Chrome installed app) or on next open (iOS).")}</p></div></div>`;
   }
 
   function listMembersPosts(list) {
@@ -5329,8 +5328,8 @@ const here = parseRoute();
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
     const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
-      repostsOnly ? "No reposts yet" : tab === "following" ? "Nothing to see here — yet" : catTab ? "No posts in this tab" : tab.startsWith("list:") ? "No posts in this List" : "No posts yet",
-      repostsOnly ? "Reposts and forwards on this tab show up here." : tab === "following" ? "When you follow accounts, their posts show up here." : catTab ? "Posts from accounts in this tab show up here." : tab.startsWith("list:") ? "Posts from members of this List will show up here." : "Posts from your feeds will show up here."
+      repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
+      repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     );
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
     return homeHeader(tab) + spaceCard + body + archiveSentinel();
@@ -5338,10 +5337,10 @@ const here = parseRoute();
 
   function pageHead(title, extra, back, action) {
     return `<div class="topbar tall"><div class="mhead">
-        <button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button>
-        <a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a>
+        <button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button>
+        <a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a>
       </div>
-      <div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>` : ""}<div class="head-text grow"><h1>${esc(title)}</h1>${extra || ""}</div>${action || ""}</div></div>`;
+      <div class="page-head">${back ? `<button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>` : ""}<div class="head-text grow"><h1>${esc(title)}</h1>${extra || ""}</div>${action || ""}</div></div>`;
   }
 
   function liveKey(platform, handle) {
@@ -6153,18 +6152,18 @@ const here = parseRoute();
 
   function liveTabs(row) {
     if (!row) return [];
-    if ((row.platform || "") === "telegram") return [["posts", "Posts"], ["media", "Media"]];
+    if ((row.platform || "") === "telegram") return [["posts", tr("Posts")], ["media", tr("Media")]];
     if (row.limited) return [];
     if ((row.platform || "") === "youtube") {
       const tabs = [];
-      if ((row.videos || []).length || row.cursor.videos) tabs.push(["videos", "Videos"]);
-      if ((row.community || []).length || row.cursor.community) tabs.push(["community", "Community"]);
-      if (!tabs.length) tabs.push(["videos", "Videos"]);
+      if ((row.videos || []).length || row.cursor.videos) tabs.push(["videos", tr("Videos")]);
+      if ((row.community || []).length || row.cursor.community) tabs.push(["community", tr("Community")]);
+      if (!tabs.length) tabs.push(["videos", tr("Videos")]);
       return tabs;
     }
-    const tabs = [["posts", "Posts"]];
-    if ((row.replies || []).length || row.cursor.replies) tabs.push(["replies", "Replies"]);
-    if ((row.media || []).length || row.cursor.media) tabs.push(["media", "Media"]);
+    const tabs = [["posts", tr("Posts")]];
+    if ((row.replies || []).length || row.cursor.replies) tabs.push(["replies", tr("Replies")]);
+    if ((row.media || []).length || row.cursor.media) tabs.push(["media", tr("Media")]);
     return tabs;
   }
 
@@ -6221,15 +6220,15 @@ const here = parseRoute();
   }
 
   function openLabel(platform) {
-    if (platform === "instagram") return "Open on Instagram";
-    if (platform === "threads") return "Open on Threads";
-    if (platform === "youtube") return "View on YouTube";
-    if (platform === "x") return "View on X";
-    return "View on " + (PLATFORM[platform] || "web");
+    if (platform === "instagram") return tr("Open on Instagram");
+    if (platform === "threads") return tr("Open on Threads");
+    if (platform === "youtube") return tr("View on YouTube");
+    if (platform === "x") return tr("View on X");
+    return tr("View on {platform}", { platform: PLATFORM[platform] || tr("Web") });
   }
 
   function profileLinkLabel(platform) {
-    return PLATFORM[platform] || "Web";
+    return PLATFORM[platform] || tr("Web");
   }
 
   function userView(route) {
@@ -6245,7 +6244,7 @@ const here = parseRoute();
         setTimeout(() => {
           if ((location.hash || "") !== next) location.replace(next);
         }, 0);
-        return `<div class="reply-empty">Loading…</div>`;
+        return `<div class="reply-empty">${tr("Loading…")}</div>`;
       }
     }
     const row = ensureLiveUser(route.platform, route.handle);
@@ -6269,27 +6268,27 @@ const here = parseRoute();
       profile.joined ? `<span>${icon("cal")}${esc(joinedLabel(profile.joined))}</span>` : ""
     ].join("");
     const counts = audienceCounts(profile);
-    const count = profile.postsCount != null ? formatCount(profile.postsCount) + " posts" : "";
+    const count = profile.postsCount != null ? tr("{count} posts", { count: formatCount(profile.postsCount) }) : "";
     const tabHtml = tabs.map((pair) => {
       const href = accountHash(profile.platform, profile.channelId || profile.handle) + (pair[0] === tabs[0][0] ? "" : "?tab=" + pair[0]);
       return `<a class="tab${tab === pair[0] ? " on" : ""}" role="tab" aria-selected="${tab === pair[0] ? "true" : "false"}" href="${esc(href)}"><span>${pair[1]}</span></a>`;
     }).join("");
-    const note = needsSyncNote(profile) ? `<p class="pfollow-note">Follow saves this account on this device. Add it to feeds.config.json and sync before its posts join the home timeline.</p>` : "";
-    const limited = row.limited ? `<p class="pfollow-note">Posts from this account can’t be loaded in the browser.</p>` : "";
-    const saved = row.saved ? `<p class="pfollow-note">Showing saved posts. The live timeline didn’t load.</p>` : "";
+    const note = needsSyncNote(profile) ? `<p class="pfollow-note">${tr("Follow saves this account on this device. Add it to feeds.config.json and sync before its posts join the home timeline.")}</p>` : "";
+    const limited = row.limited ? `<p class="pfollow-note">${tr("Posts from this account can’t be loaded in the browser.")}</p>` : "";
+    const saved = row.saved ? `<p class="pfollow-note">${tr("Showing saved posts. The live timeline didn’t load.")}</p>` : "";
     const fresh = row.fetchedAt ? `<p class="source-checked">${esc(freshLabel(row.fetchedAt))}</p>` : "";
     let body = "";
     if (!tabs.length) body = "";
-    else if (row.loading && !list.length) body = `<div class="reply-empty">Loading…</div>`;
+    else if (row.loading && !list.length) body = `<div class="reply-empty">${tr("Loading…")}</div>`;
     else if (list.length) body = list.map((post) => card(post, post.repostedBy ? "" : "author")).join("");
     else body = emptyBlock(
-      tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : tab === "community" ? "No community posts yet" : tab === "videos" ? "No videos yet" : "No posts yet",
-      row.error === "thin" && !row.saved ? "The live timeline didn’t load from the public sources." : (tab === "replies" ? "Replies from this account will show up here." : tab === "media" ? "Photos and videos from this account will show up here." : "Posts from this account will show up here.")
+      tab === "replies" ? tr("No replies yet") : tab === "media" ? tr("No media yet") : tab === "community" ? tr("No community posts yet") : tab === "videos" ? tr("No videos yet") : tr("No posts yet"),
+      row.error === "thin" && !row.saved ? tr("The live timeline didn’t load from the public sources.") : (tab === "replies" ? tr("Replies from this account will show up here.") : tab === "media" ? tr("Photos and videos from this account will show up here.") : tr("Posts from this account will show up here."))
     );
-    const more = tab && row.cursor[tab] && !row.saved ? `<div id="live-more" class="live-more">${row.paging === tab ? "Loading…" : ""}</div>` : "";
+    const more = tab && row.cursor[tab] && !row.saved ? `<div id="live-more" class="live-more">${row.paging === tab ? tr("Loading…") : ""}</div>` : "";
     return `<div class="topbar profile-bar">
       <div class="page-head">
-        <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
+        <button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>
         <div class="head-text"><div class="pt-name">${esc(profile.name || profile.handle)}</div>${count ? `<div class="pt-count">${esc(count)}</div>` : ""}</div>
       </div>
     </div>
@@ -6298,7 +6297,7 @@ const here = parseRoute();
       <div class="pava-row">
         ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(profile.avatar, profile.name, "pava"), profile.platform, profile.handle) : avatar(profile.avatar, profile.name, "pava")}
         <div class="pactions">
-          <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(profile.id || (profile.platform + ":" + profile.handle))}" aria-label="Share">${icon("share")}</button>
+          <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(profile.id || (profile.platform + ":" + profile.handle))}" aria-label="${tr("Share")}">${icon("share")}</button>
           ${bellButton(liveFollowId(profile), profile.handle)}
           ${followButtonClean(liveFollowId(profile), true)}
           <a class="outline" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(profile))}" aria-label="${esc(openLabel(profile.platform))}">${esc(profileLinkLabel(profile.platform))}</a>
@@ -6316,7 +6315,7 @@ const here = parseRoute();
       ${note}
     </div>
     ${window.Spaces && window.Spaces.profileCard ? window.Spaces.profileCard(profile.platform, profile.handle) : ""}
-    ${tabs.length ? `<div class="tabs ptabs" role="tablist" aria-label="Profile">${tabHtml}</div>` : ""}
+    ${tabs.length ? `<div class="tabs ptabs" role="tablist" aria-label="${tr("Profile")}">${tabHtml}</div>` : ""}
     ${body}${more}`;
   }
 
@@ -6355,8 +6354,8 @@ const here = parseRoute();
       feed.website ? `<a href="${esc(feed.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(feed.website).replace(/^https?:\/\//, ""))}</a>` : "",
       feed.joined ? `<span>${icon("cal")}${esc(joinedLabel(feed.joined))}</span>` : ""
     ].join("");
-    const counts = audienceCounts(feed, feed.platform === "youtube" || feed.platform === "telegram" ? "Subscribers" : feed.platform === "discord" ? "Members" : "Followers");
-    const tabIds = youtube ? [["posts", "Posts"], ["videos", "Videos"], ["community", "Community"]] : feed.platform === "telegram" ? [["posts", "Posts"], ["media", "Media"]] : [["posts", "Posts"], ["replies", "Replies"], ["media", "Media"]];
+    const counts = audienceCounts(feed, feed.platform === "youtube" || feed.platform === "telegram" ? tr("Subscribers") : feed.platform === "discord" ? tr("Members") : tr("Followers"));
+    const tabIds = youtube ? [["posts", tr("Posts")], ["videos", tr("Videos")], ["community", tr("Community")]] : feed.platform === "telegram" ? [["posts", tr("Posts")], ["media", tr("Media")]] : [["posts", tr("Posts")], ["replies", tr("Replies")], ["media", tr("Media")]];
     const tabs = tabIds.map((pair) => {
       const id = pair[0];
       const href = profileHash(feed.platform, feed.handle) + (id === "posts" ? "" : "?tab=" + id);
@@ -6364,7 +6363,7 @@ const here = parseRoute();
     }).join("");
     return `<div class="topbar profile-bar">
       <div class="page-head">
-        <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
+        <button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>
         <div class="head-text"><div class="pt-name">${esc(feed.name || feed.handle)}</div><div class="pt-count">${esc(count)} posts</div></div>
       </div>
     </div>
@@ -6373,10 +6372,10 @@ const here = parseRoute();
       <div class="pava-row">
         ${window.Spaces && window.Spaces.avatar ? window.Spaces.avatar(avatar(feed.avatar, feed.name, "pava"), feed.platform, feed.handle) : avatar(feed.avatar, feed.name, "pava")}
         <div class="pactions">
-          <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(feed.id)}" aria-label="Share">${icon("share")}</button>
+          <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(feed.id)}" aria-label="${tr("Share")}">${icon("share")}</button>
           ${bellButton(feed.id, feed.handle)}
           ${followButtonClean(feed.id, true)}
-          <a class="outline" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(feed))}" aria-label="View on ${esc(PLATFORM[feed.platform] || "web")}">${esc(profileLinkLabel(feed.platform))}</a>
+          <a class="outline" target="_blank" rel="noopener noreferrer" href="${esc(externalProfile(feed))}" aria-label="${esc(tr("View on {platform}", { platform: PLATFORM[feed.platform] || tr("Web") }))}">${esc(profileLinkLabel(feed.platform))}</a>
         </div>
       </div>
       <h1 class="pname">${esc(feed.name || feed.handle)}${badge(feed.verifiedType)}</h1>
@@ -6387,12 +6386,12 @@ const here = parseRoute();
       ${counts}
     </div>
     ${window.Spaces && window.Spaces.profileCard ? window.Spaces.profileCard(feed.platform, feed.handle) : ""}
-    <div class="tabs ptabs" role="tablist" aria-label="Profile">${tabs}</div>
+    <div class="tabs ptabs" role="tablist" aria-label="${tr("Profile")}">${tabs}</div>
     ${list.length ? list.map((p) => {
       return card(p, carriedBy(p, feed) ? "" : "author");
     }).join("") : emptyBlock(
-      tab === "replies" ? "No replies yet" : tab === "media" ? "No media yet" : tab === "videos" ? "No videos yet" : tab === "community" ? "No community posts yet" : "No posts yet",
-      tab === "replies" ? "Replies by this account will show up here." : tab === "community" ? "Community posts from this channel will show up here." : "Posts from this account will show up here."
+      tab === "replies" ? tr("No replies yet") : tab === "media" ? tr("No media yet") : tab === "videos" ? tr("No videos yet") : tab === "community" ? tr("No community posts yet") : tr("No posts yet"),
+      tab === "replies" ? tr("Replies by this account will show up here.") : tab === "community" ? tr("Community posts from this channel will show up here.") : tr("Posts from this account will show up here.")
     )}` + archiveSentinel();
   }
 
@@ -6407,7 +6406,7 @@ const here = parseRoute();
       }
     }
     if (post && post.tombstone) {
-      return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>` + tombstoneCard(post);
+      return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><h1 class="grow">${tr("Post noun")}</h1></div></div>` + tombstoneCard(post);
     }
     if (post) {
       creditCarried(post);
@@ -6424,9 +6423,9 @@ const here = parseRoute();
           STATE.sharedState[key] = "loading";
           loadSharedStatus(route);
         }
-        return pageHead("Post", "", true) + `<div class="reply-empty">Loading…</div>`;
+        return pageHead(tr("Post noun"), "", true) + `<div class="reply-empty">${tr("Loading…")}</div>`;
       }
-      return pageHead("Post", "", true) + emptyBlock("Post unavailable", "This post isn’t in the current snapshot.");
+      return pageHead(tr("Post noun"), "", true) + emptyBlock(tr("Post unavailable"), tr("This post isn’t in the current snapshot."));
     }
     STATE.focusId = postKey(post);
     const stats = post.stats || {};
@@ -6434,19 +6433,19 @@ const here = parseRoute();
     const talk = telegramTalk(post);
     const slice = talk == null ? replySlice(post) : { loading: false, shown: [] };
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
-    const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">Replying to <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">${tr("Replying to")} <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const parentCard = post.platform === "telegram" && post.replyParent ? contextCard(post.replyParent) : "";
     const body = `${parentCard}${forwardLine(post)}${replyLine}
         ${textBlock(post, post.id, true, "status-text")}
-        ${hiddenPost(post) ? `<p class="phandle">Muted on this device.</p>` : ""}
+        ${hiddenPost(post) ? `<p class="phandle">${tr("Muted on this device.")}</p>` : ""}
         ${pollHtml(post)}
         ${discordMeta(post)}
         ${articleCardHtml(post)}
         ${mediaHtml(post.media, false, post)}
         ${postCards(post)}
         ${quoteCard(post.quoted)}
-        <div class="status-time">${esc(fullTime(post.date))}${post.edited ? " · Edited" : ""}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">View on ${esc(PLATFORM[post.platform] || "web")}</a>` : ""}</div>
-        ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> Views</div>` : `<div class="status-views"></div>`}
+        <div class="status-time">${esc(fullTime(post.date))}${post.edited ? " · " + tr("Edited") : ""}${post.url ? ` · <a target="_blank" rel="noopener noreferrer" href="${esc(post.url)}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a>` : ""}</div>
+        ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> ${tr("Views")}</div>` : `<div class="status-views"></div>`}
         ${actionBar(post)}`;
     const face = authorFace(post);
     const names = `<div>
@@ -6456,9 +6455,9 @@ const here = parseRoute();
           <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${(post.platform === "discord" && post.guildId) || post.handle ? followButtonClean(post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
     const article = threaded
-      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
-      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
-    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Post</h1></div></div>
+      ? `<article class="status has-thread${parented}"><div class="status-thread"><div class="ava-col"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a><div class="thread-line"></div></div><div class="status-main"><div class="status-author">${names}</div>${body}</div></div></article>`
+      : `<article class="status${parented}"><div class="status-author"><a data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author)}</a>${names}</div>${body}</article>`;
+    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><h1 class="grow">${tr("Post noun")}</h1></div></div>
       ${ancestorBlock(post, chain)}
       ${repostBanner(post)}
       ${article}
@@ -6471,7 +6470,7 @@ const here = parseRoute();
     const handle = post.handle || "";
     const id = post.statusId || post.id || "";
     const src = "https://t.me/" + encodeURIComponent(handle) + "/" + encodeURIComponent(id) + "?embed=1&discussion=1";
-    return `<div class="tg-comments"><iframe src="${esc(src)}" title="Telegram comments" loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
+    return `<div class="tg-comments"><iframe src="${esc(src)}" title="${tr("Telegram comments")}" loading="lazy" referrerpolicy="no-referrer"></iframe></div>`;
   }
 
   const SEARCH_SUFFIX = "searches-v1";
@@ -6504,10 +6503,10 @@ const here = parseRoute();
   }
 
   function themeLabel(mode) {
-    if (mode === "dim") return "Dim";
-    if (mode === "default") return "Light";
-    if (mode === "auto") return "Auto";
-    return "Lights out";
+    if (mode === "dim") return tr("Dim");
+    if (mode === "default") return tr("Light");
+    if (mode === "auto") return tr("Auto");
+    return tr("Lights out");
   }
 
   function postHay(post) {
@@ -6597,19 +6596,19 @@ const here = parseRoute();
     if (!recent.length && !accounts.length && !trends.length) return "";
     let html = "";
     if (recent.length) {
-      html += `<div class="gsuggest-label">Recent</div>`;
+      html += `<div class="gsuggest-label">${tr("Recent")}</div>`;
       recent.forEach((item) => {
         html += `<div class="gsuggest-row"><button type="button" class="gsuggest-pick" data-pick data-act="explore-pick" data-q="${esc(item)}"><span class="gsuggest-ico">${icon("clock")}</span><span class="gsuggest-text">${esc(item)}</span></button><button type="button" class="gsuggest-x" data-act="explore-forget" data-q="${esc(item)}" aria-label="Remove ${esc(item)}">${icon("close")}</button></div>`;
       });
     }
     if (accounts.length) {
-      html += `<div class="gsuggest-label">Accounts</div>`;
+      html += `<div class="gsuggest-label">${tr("Accounts")}</div>`;
       accounts.forEach((f) => {
         html += `<a class="gsuggest-pick" data-pick data-act="explore-account" data-q="${esc(f.handle || f.name || "")}" href="${esc(accountHash(f.platform, f.channelId || f.handle))}">${avatar(f.avatar, f.name)}<span class="gsuggest-copy"><span class="name">${esc(f.name || f.handle || "")}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle || "")}</span></span></a>`;
       });
     }
     if (trends.length) {
-      html += `<div class="gsuggest-label">Trending</div>`;
+      html += `<div class="gsuggest-label">${tr("Trending")}</div>`;
       trends.forEach((item) => {
         const hash = item.q.charAt(0) === "#";
         const mark = hash ? `<span class="gsuggest-hash">#</span>` : icon("spark");
@@ -6698,7 +6697,7 @@ const here = parseRoute();
     const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
     const box = document.querySelector(".gsearch");
     if (!Rec) {
-      toast("Voice search isn’t available in this browser");
+      toast(tr("Voice search isn’t available in this browser"));
       return;
     }
     if (exploreMic) {
@@ -6710,7 +6709,7 @@ const here = parseRoute();
     let rec;
     try { rec = new Rec(); }
     catch (err) {
-      toast("Voice search isn’t available in this browser");
+      toast(tr("Voice search isn’t available in this browser"));
       return;
     }
     rec.lang = navigator.language || "en-US";
@@ -6739,7 +6738,7 @@ const here = parseRoute();
     catch (err) {
       exploreMic = null;
       if (box) box.classList.remove("is-listening");
-      toast("Voice search isn’t available in this browser");
+      toast(tr("Voice search isn’t available in this browser"));
     }
   }
 
@@ -6781,7 +6780,7 @@ const here = parseRoute();
     if (act === "explore-lucky") {
       const list = posts().filter((post) => post && post.id && !hiddenPost(post)).sort(byStamp).slice(0, 40);
       if (!list.length) {
-        toast("No posts yet");
+        toast(tr("No posts yet"));
         return;
       }
       goHash(statusHash(list[Math.floor(Math.random() * list.length)]));
@@ -6831,7 +6830,7 @@ const here = parseRoute();
 
   function exploreSearchField(q) {
     const text = q || "";
-    return `<div class="gform-box"><label class="search gsearch"><span class="gsearch-lead">${icon("search")}</span><input id="explore-q" type="text" value="${esc(text)}" placeholder="Search" aria-label="Search" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-autocomplete="list" aria-controls="explore-suggest" aria-expanded="false"><span class="gsearch-tools"><button class="gsearch-clear" type="button" data-act="explore-clear" aria-label="Clear"${text ? "" : " hidden"}>${icon("close")}</button><button class="gsearch-mic" type="button" data-act="explore-mic" aria-label="Search by voice">${icon("mic")}</button></span></label><div id="explore-suggest" class="gsuggest" role="listbox" aria-label="Suggestions" hidden></div></div>`;
+    return `<div class="gform-box"><label class="search gsearch"><span class="gsearch-lead">${icon("search")}</span><input id="explore-q" type="text" value="${esc(text)}" placeholder="${tr("Search")}" aria-label="${tr("Search")}" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-autocomplete="list" aria-controls="explore-suggest" aria-expanded="false"><span class="gsearch-tools"><button class="gsearch-clear" type="button" data-act="explore-clear" aria-label="${tr("Clear")}"${text ? "" : " hidden"}>${icon("close")}</button><button class="gsearch-mic" type="button" data-act="explore-mic" aria-label="${tr("Search by voice")}">${icon("mic")}</button></span></label><div id="explore-suggest" class="gsuggest" role="listbox" aria-label="${tr("Suggestions")}" hidden></div></div>`;
   }
 
   function exploreHome() {
@@ -6840,13 +6839,13 @@ const here = parseRoute();
     const trends = trendTopics().slice(0, 8);
     const chips = trends.map((item) => `<button type="button" class="gchip" data-act="explore-pick" data-q="${esc(item.q)}">${esc(item.label)}</button>`).join("");
     const trend = trends.length ? `<div class="gtrend"><button type="button" class="gtrend-toggle" data-act="explore-trends" aria-expanded="${open ? "true" : "false"}">Trending ${icon("caret")}</button><div class="gtrend-chips"${open ? "" : " hidden"}>${chips}</div></div>` : "";
-    return `<div class="ghome"><div class="ghome-mid"><div class="ghome-logo">${wordmarkSvg("ghome-mark")}</div><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField("")}</form><div class="gactions"><button class="gbtn fill" type="submit" form="explore-form">Search SIntelApp</button><button class="gbtn line" type="button" data-act="explore-lucky">Surprise me</button></div>${trend}</div><footer class="ghome-foot"><a href="#/settings">About</a><a href="#/settings">Settings</a><button type="button" data-act="explore-theme" aria-label="Theme"><span class="gtheme-label">${esc(themeLabel(mode))}</span></button></footer></div>`;
+    return `<div class="ghome"><div class="ghome-mid"><div class="ghome-logo">${wordmarkSvg("ghome-mark")}</div><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField("")}</form><div class="gactions"><button class="gbtn fill" type="submit" form="explore-form">${tr("Search {app}", { app: productName("app") })}</button><button class="gbtn line" type="button" data-act="explore-lucky">${tr("Surprise me")}</button></div>${trend}</div><footer class="ghome-foot"><a href="#/settings">${tr("About")}</a><a href="#/settings">${tr("Settings")}</a><button type="button" data-act="explore-theme" aria-label="${tr("Theme")}"><span class="gtheme-label">${esc(themeLabel(mode))}</span></button></footer></div>`;
   }
 
   function exploreTabs(tab) {
-    const items = [["top", "Top"], ["latest", "Latest"], ["people", "People"], ["media", "Media"], ["videos", "Videos"]];
+    const items = [["top", tr("Top")], ["latest", tr("Latest")], ["people", tr("People")], ["media", tr("Media")], ["videos", tr("Videos")]];
     const buttons = items.map((pair) => `<button class="tab${tab === pair[0] ? " on" : ""}" type="button" role="tab" aria-selected="${tab === pair[0] ? "true" : "false"}" data-act="explore-tab" data-tab="${pair[0]}"><span>${pair[1]}</span></button>`).join("");
-    return `<div class="tabs-bar gresults-tabs"><div class="tabs" role="tablist" aria-label="Search results">${buttons}</div></div>`;
+    return `<div class="tabs-bar gresults-tabs"><div class="tabs" role="tablist" aria-label="${tr("Search results")}">${buttons}</div></div>`;
   }
 
   function exploreResults(route, q) {
@@ -6855,21 +6854,21 @@ const here = parseRoute();
     const tab = names[requested] ? requested : "top";
     const pack = exploreHits(q);
     let body = "";
-    const missed = "Nothing matched “" + q + "”.";
-    if (tab === "people") body = pack.accounts.length ? `<div class="gpeople">${pack.accounts.map((f) => accountRow(f)).join("")}</div>` : emptyBlock("No accounts", missed);
+    const missed = tr("Nothing matched “{q}”", { q: q });
+    if (tab === "people") body = pack.accounts.length ? `<div class="gpeople">${pack.accounts.map((f) => accountRow(f)).join("")}</div>` : emptyBlock(tr("No accounts"), missed);
     else if (tab === "media") {
       const list = pack.posts.filter(postHasVisual);
-      body = list.length ? list.map((p) => card(p)).join("") : emptyBlock("No media", missed);
+      body = list.length ? list.map((p) => card(p)).join("") : emptyBlock(tr("No media"), missed);
     } else if (tab === "videos") {
       const list = pack.posts.filter((p) => isVideoPost(p));
-      body = list.length ? list.map((p) => card(p)).join("") : emptyBlock("No videos", missed);
-    } else if (tab === "latest") body = pack.posts.length ? pack.posts.map((p) => card(p)).join("") : emptyBlock("No results", missed);
+      body = list.length ? list.map((p) => card(p)).join("") : emptyBlock(tr("No videos"), missed);
+    } else if (tab === "latest") body = pack.posts.length ? pack.posts.map((p) => card(p)).join("") : emptyBlock(tr("No results"), missed);
     else {
-      const accounts = pack.accounts.length ? `<section class="card"><h2>Accounts</h2>${pack.accounts.map(accountRow).join("")}</section>` : "";
+      const accounts = pack.accounts.length ? `<section class="card"><h2>${tr("Accounts")}</h2>${pack.accounts.map(accountRow).join("")}</section>` : "";
       const list = pack.top.length ? pack.top.map((p) => card(p)).join("") : "";
-      body = (accounts + list) || emptyBlock("No results", missed);
+      body = (accounts + list) || emptyBlock(tr("No results"), missed);
     }
-    return `<div class="gresults"><div class="gresults-head"><div class="gresults-row"><a class="gresults-logo" href="#/explore" aria-label="SIntelApp">${wordmarkSvg("gresults-mark")}</a><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField(q)}</form></div>${exploreTabs(tab)}</div><div class="gresults-list">${body}</div></div>`;
+    return `<div class="gresults"><div class="gresults-head"><div class="gresults-row"><a class="gresults-logo" href="#/explore" aria-label="${productName("app")}">${wordmarkSvg("gresults-mark")}</a><form id="explore-form" class="gform" data-act="search-form" role="search">${exploreSearchField(q)}</form></div>${exploreTabs(tab)}</div><div class="gresults-list">${body}</div></div>`;
   }
 
   function exploreView(route) {
@@ -6889,7 +6888,7 @@ const here = parseRoute();
     const when = from.at ? relTime(from.at) : "";
     if (!who && !when) return "";
     const bits = [];
-    if (who) bits.push("Reposted by " + who);
+    if (who) bits.push(tr("Reposted by {who}", { who: who }));
     if (when) bits.push(when);
     return `<span class="added-from">${esc(bits.join(" · "))}</span>`;
   }
@@ -6897,10 +6896,10 @@ const here = parseRoute();
   function accountRow(f, opts) {
     const site = !!(f && (f.configured || f.origin === "repost"));
     const remove = opts && opts.remove && site
-      ? `<button type="button" class="follow remove-pill" data-act="ask-remove" data-id="${esc(f.id)}">Remove</button>`
+      ? `<button type="button" class="follow remove-pill" data-act="ask-remove" data-id="${esc(f.id)}">${tr("Remove")}</button>`
       : "";
     const added = f && f.origin === "repost" && !isFollowed(f.id);
-    const pill = added ? `<span class="added-pill">Added</span>` : "";
+    const pill = added ? `<span class="added-pill">${tr("Added")}</span>` : "";
     const follow = followButtonClean(f.id);
     const actions = (pill || remove) ? `<span class="row-actions">${pill}${follow}${remove}</span>` : follow;
     return `<div class="acct-row"><a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span>${addedNote(f)}</span></a>${actions}</div>`;
@@ -6911,39 +6910,39 @@ const here = parseRoute();
     const byName = (a, b) => (a.name || "").localeCompare(b.name || "");
     const added = all.filter((f) => f && f.origin === "repost").sort(byName);
     const rest = all.filter((f) => f && f.origin !== "repost").sort((a, b) => Number(b.configured) - Number(a.configured) || byName(a, b));
-    const box = `<form class="add-account"><label class="search"><span>${icon("search")}</span><input id="add-account" placeholder="Add account URL or @handle" aria-label="Add account"></label><button class="follow" type="submit">Add</button></form>`;
-    const addedBlock = added.length ? `<section class="feed-section"><h2>Added</h2>${added.map((f) => accountRow(f, { remove: true })).join("")}</section>` : "";
+    const box = `<form class="add-account"><label class="search"><span>${icon("search")}</span><input id="add-account" placeholder="${tr("Add account URL or @handle")}" aria-label="${tr("Add account")}"></label><button class="follow" type="submit">${tr("Add")}</button></form>`;
+    const addedBlock = added.length ? `<section class="feed-section"><h2>${tr("Added accounts")}</h2>${added.map((f) => accountRow(f, { remove: true })).join("")}</section>` : "";
     const restBlock = rest.length ? `<div>${rest.map((f) => accountRow(f, { remove: true })).join("")}</div>` : "";
-    return pageHead("Feeds") + box + (added.length || rest.length ? addedBlock + restBlock : emptyBlock("No accounts", "Paste a profile URL or @handle above."));
+    return pageHead(tr("Feeds")) + box + (added.length || rest.length ? addedBlock + restBlock : emptyBlock(tr("No accounts"), tr("Paste a profile URL or @handle above.")));
   }
 
   function listsView() {
     const pinned = STATE.settings.lists.filter((l) => l.pinned);
     const yours = STATE.settings.lists.filter((l) => !l.pinned);
-    const row = (l) => `<div class="list-row"><a class="list-main" href="#/lists/${esc(l.id)}"><span class="color-chip" style="background:${esc(l.bannerColor || COLORS[0])}"></span><span class="list-copy"><span class="name">${esc(l.name)}</span><span class="meta">${(l.members || []).length} members</span></span></a><button class="icon-btn pin${l.pinned ? " on" : ""}" data-act="pin" data-id="${esc(l.id)}" aria-label="${l.pinned ? "Unpin" : "Pin"} list">${icon("pin")}</button></div>`;
+    const row = (l) => `<div class="list-row"><a class="list-main" href="#/lists/${esc(l.id)}"><span class="color-chip" style="background:${esc(l.bannerColor || COLORS[0])}"></span><span class="list-copy"><span class="name">${esc(l.name)}</span><span class="meta">${trn("members", (l.members || []).length)}</span></span></a><button class="icon-btn pin${l.pinned ? " on" : ""}" data-act="pin" data-id="${esc(l.id)}" aria-label="${esc(l.pinned ? tr("Unpin list") : tr("Pin list"))}">${icon("pin")}</button></div>`;
     const section = (title, items) => items.length ? `<section class="list-section"><h2>${title}</h2>${items.map(row).join("")}</section>` : "";
-    const create = `<button class="icon-btn" data-act="new-list" aria-label="Create list">${icon("plus")}</button>`;
-    return pageHead("Lists", "", false, create) +
-      (STATE.settings.lists.length ? section("Pinned Lists", pinned) + (yours.length ? section("Your Lists", yours) : "") : emptyBlock("Save posts into Lists", "Create a List to group the accounts you follow.")) +
-      (!STATE.settings.lists.length ? `<div class="empty-action"><button class="save" data-act="new-list">Create a List</button></div>` : "");
+    const create = `<button class="icon-btn" data-act="new-list" aria-label="${tr("Create list")}">${icon("plus")}</button>`;
+    return pageHead(tr("Lists"), "", false, create) +
+      (STATE.settings.lists.length ? section(tr("Pinned Lists"), pinned) + (yours.length ? section(tr("Your Lists"), yours) : "") : emptyBlock(tr("Save posts into Lists"), tr("Create a List to group the accounts you follow."))) +
+      (!STATE.settings.lists.length ? `<div class="empty-action"><button class="save" data-act="new-list">${tr("Create a List")}</button></div>` : "");
   }
 
   function listView(route) {
     const list = STATE.settings.lists.find((l) => l.id === route.id);
-    if (!list) return pageHead("List", "", true) + emptyBlock("List not found", "It may have been deleted.");
+    if (!list) return pageHead(tr("List"), "", true) + emptyBlock(tr("List not found"), tr("It may have been deleted."));
     const items = listMembersPosts(list).filter((post) => inTimeline(post) && !hiddenPost(post));
     return `<div class="topbar"><div class="page-head">
-        <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
-        <div class="head-text grow"><div class="pt-name">${esc(list.name)}</div><div class="pt-count">${(list.members || []).length} members</div></div>
-        <button class="icon-btn pin${list.pinned ? " on" : ""}" data-act="pin" data-id="${esc(list.id)}" aria-label="Pin list">${icon("pin")}</button>
+        <button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>
+        <div class="head-text grow"><div class="pt-name">${esc(list.name)}</div><div class="pt-count">${trn("members", (list.members || []).length)}</div></div>
+        <button class="icon-btn pin${list.pinned ? " on" : ""}" data-act="pin" data-id="${esc(list.id)}" aria-label="${tr("Pin list")}">${icon("pin")}</button>
       </div></div>
       <div class="list-banner" style="background:${esc(list.bannerColor || COLORS[0])}"></div>
       <div class="list-body">
-        <div class="list-tools"><div><h1>${esc(list.name)}</h1>${list.description ? `<div class="bio">${esc(list.description)}</div>` : ""}<div class="phandle">${(list.members || []).length} Members</div></div>
-        <button class="outline" data-act="edit-list" data-id="${esc(list.id)}">Edit List</button></div>
-        <button class="show-more" data-act="members" data-id="${esc(list.id)}">Manage members</button>
+        <div class="list-tools"><div><h1>${esc(list.name)}</h1>${list.description ? `<div class="bio">${esc(list.description)}</div>` : ""}<div class="phandle">${trn("members", (list.members || []).length)}</div></div>
+        <button class="outline" data-act="edit-list" data-id="${esc(list.id)}">${tr("Edit List")}</button></div>
+        <button class="show-more" data-act="members" data-id="${esc(list.id)}">${tr("Manage members")}</button>
       </div>
-      ${items.length ? items.map((p) => card(p)).join("") : emptyBlock("No posts in this List", "Add members to see their posts here.")}` + archiveSentinel();
+      ${items.length ? items.map((p) => card(p)).join("") : emptyBlock(tr("No posts in this List"), tr("Add members to see their posts here."))}` + archiveSentinel();
   }
 
   function bookmarkedPosts() {
@@ -7291,7 +7290,7 @@ const here = parseRoute();
     const cover = art.cover ? `<img class="xa-cover" src="${esc(art.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
     const title = art.title ? `<div class="xa-title">${esc(art.title)}</div>` : "";
     const preview = art.preview ? `<div class="xa-preview">${esc(art.preview)}</div>` : "";
-    return `<a class="xa" href="${esc(articleHash(post))}" data-act="open-article" data-id="${esc(post.id)}">${cover}<div class="xa-copy">${title}${preview}<span class="xa-label">${icon("article")}<span>Article</span></span></div></a>`;
+    return `<a class="xa" href="${esc(articleHash(post))}" data-act="open-article" data-id="${esc(post.id)}">${cover}<div class="xa-copy">${title}${preview}<span class="xa-label">${icon("article")}<span>${tr("Article")}</span></span></div></a>`;
   }
 
   function watchArticle(post) {
@@ -7510,7 +7509,7 @@ const here = parseRoute();
         STATE.embedBudget = (STATE.embedBudget || 0) + 1;
         hydrateEmbed(block.tweetId);
       }
-      return `<a class="xa-embed-link" href="#/x/i/status/${encodeURIComponent(block.tweetId)}">View post</a>`;
+      return `<a class="xa-embed-link" href="#/x/i/status/${encodeURIComponent(block.tweetId)}">${tr("View post")}</a>`;
     }
     if (block.type === "ul" || block.type === "ol") return "";
     return `<p>${inlineRich(block)}</p>`;
@@ -7521,7 +7520,7 @@ const here = parseRoute();
     if (!blocks.length) {
       const preview = art && art.preview ? `<div class="xa-fallback">${esc(art.preview)}</div>` : "";
       const href = (art && art.url) || "";
-      const btn = href ? `<a class="xa-full" target="_blank" rel="noopener noreferrer" href="${esc(href)}">Read full article on X</a>` : "";
+      const btn = href ? `<a class="xa-full" target="_blank" rel="noopener noreferrer" href="${esc(href)}">${tr("Read full article on X")}</a>` : "";
       return preview + btn;
     }
     let html = "";
@@ -7541,7 +7540,7 @@ const here = parseRoute();
       html += articleBlockHtml(block);
       i += 1;
     }
-    if (art.url) html += `<p class="xa-view"><a target="_blank" rel="noopener noreferrer" href="${esc(art.url)}">View on X</a></p>`;
+    if (art.url) html += `<p class="xa-view"><a target="_blank" rel="noopener noreferrer" href="${esc(art.url)}">${tr("View on X")}</a></p>`;
     return html;
   }
 
@@ -7599,7 +7598,7 @@ const here = parseRoute();
   }
 
   function articleHead() {
-    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">Article</h1></div></div>`;
+    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><h1 class="grow">${tr("Article")}</h1></div></div>`;
   }
 
   function articleDate(iso) {
@@ -7611,7 +7610,7 @@ const here = parseRoute();
   function articleView(route) {
     const post = findArticle(route.id);
     if (!post || !articleOf(post)) {
-      return articleHead() + emptyBlock("Article isn’t available", "This article isn’t in the current snapshot.");
+      return articleHead() + emptyBlock(tr("Article isn’t available"), tr("This article isn’t in the current snapshot."));
     }
     ensureArticleBody(post);
     if (STATE.notedArticle !== post.id) {
@@ -7627,9 +7626,9 @@ const here = parseRoute();
     const when = articleDate(post.date);
     return `${articleHead()}<article class="xa-page">
       ${cover}
-      <h1 class="xa-title-lg">${esc(art.title || "Article")}</h1>
+      <h1 class="xa-title-lg">${esc(art.title || tr("Article"))}</h1>
       <div class="xa-author">
-        <a href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}" aria-label="${esc(post.author || who || "Profile")}">${avatar(face.avatar || post.avatar, post.author)}</a>
+        <a href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}" aria-label="${esc(post.author || who || tr("Profile"))}">${avatar(face.avatar || post.avatar, post.author)}</a>
         <div class="who">
           <a class="name" href="${esc(accountHash(post.platform, who))}" data-card="${esc((post.platform || "x") + ":" + who)}">${esc(post.author || who)}${badge(face.verified || post.verifiedType)}</a>
           ${who ? `<a class="handle" href="${esc(accountHash(post.platform, who))}">@${esc(who)}</a>` : ""}
@@ -7670,12 +7669,12 @@ const here = parseRoute();
 
   function histDay(at) {
     const ms = Number(at) || 0;
-    if (ms < 100000) return "Earlier";
+    if (ms < 100000) return tr("Earlier");
     const now = new Date();
     const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    if (ms >= start) return "Today";
-    if (ms >= start - 86400000) return "Yesterday";
-    return "Earlier";
+    if (ms >= start) return tr("Today");
+    if (ms >= start - 86400000) return tr("Yesterday");
+    return tr("Earlier");
   }
 
   function histList(rows) {
@@ -7694,11 +7693,11 @@ const here = parseRoute();
   }
 
   function histEmpty(tab, searching) {
-    if (searching) return emptyBlock("No results", "Nothing in this tab matches your search.");
-    if (tab === "likes") return emptyBlock("You don’t have any likes yet", "Tap the heart on any post to show it some love. When you do, it’ll show up here.");
-    if (tab === "videos") return emptyBlock("No videos yet", "Videos you watch show up here, so you can pick up where you left off.");
-    if (tab === "articles") return emptyBlock("No articles yet", "Articles and long posts you open show up here.");
-    return emptyBlock("Save posts for later", "Bookmark posts to easily find them again in the future.");
+    if (searching) return emptyBlock(tr("No results"), tr("Nothing in this tab matches your search."));
+    if (tab === "likes") return emptyBlock(tr("You don’t have any likes yet"), tr("Tap the heart on any post to show it some love. When you do, it’ll show up here."));
+    if (tab === "videos") return emptyBlock(tr("No videos yet"), tr("Videos you watch show up here, so you can pick up where you left off."));
+    if (tab === "articles") return emptyBlock(tr("No articles yet"), tr("Articles and long posts you open show up here."));
+    return emptyBlock(tr("Save posts for later"), tr("Bookmark posts to easily find them again in the future."));
   }
 
   function histChips(tab) {
@@ -7707,29 +7706,29 @@ const here = parseRoute();
     const order = ["x", "youtube", "threads", "instagram", "vk", "rss", "discord", "telegram"].filter((name) => present[name]);
     if (!order.length) return "";
     const plat = order.indexOf(STATE.histPlat) >= 0 ? STATE.histPlat : "";
-    const chips = [`<button class="hist-chip${!plat ? " on" : ""}" type="button" data-act="hist-chip" data-plat="">All</button>`];
+    const chips = [`<button class="hist-chip${!plat ? " on" : ""}" type="button" data-act="hist-chip" data-plat="">${tr("All")}</button>`];
     order.forEach((name) => {
       chips.push(`<button class="hist-chip${plat === name ? " on" : ""}" type="button" data-act="hist-chip" data-plat="${name}">${esc(PLATFORM[name] || name)}</button>`);
     });
-    return `<div class="hist-chips" aria-label="Platforms">${chips.join("")}</div>`;
+    return `<div class="hist-chips" aria-label="${tr("Platforms")}">${chips.join("")}</div>`;
   }
 
   function historyView(route) {
     const tab = ["likes", "videos", "articles"].indexOf(route.tab) >= 0 ? route.tab : "bookmarks";
     const q = STATE.histQ || "";
     const rows = histRows(tab);
-    const tabs = [["bookmarks", "Bookmarks"], ["likes", "Likes"], ["videos", "Videos"], ["articles", "Articles"]].map((item) => {
+    const tabs = [["bookmarks", tr("Bookmarks")], ["likes", tr("Likes")], ["videos", tr("Videos")], ["articles", tr("Articles")]].map((item) => {
       return `<a class="tab${tab === item[0] ? " on" : ""}" href="#/history/${item[0]}"><span>${item[1]}</span></a>`;
     }).join("");
     const pause = tab === "videos" || tab === "articles"
-      ? `<button class="outline hist-pause${historyPaused(tab) ? " on" : ""}" type="button" data-act="hist-pause" data-tab="${tab}">${historyPaused(tab) ? "Resume history" : "Pause history"}</button>`
+      ? `<button class="outline hist-pause${historyPaused(tab) ? " on" : ""}" type="button" data-act="hist-pause" data-tab="${tab}">${historyPaused(tab) ? tr("Resume history") : tr("Pause history")}</button>`
       : "";
-    const note = tab === "likes" ? `<p class="hist-note">Your likes are private. Only you can see them.</p>` : "";
+    const note = tab === "likes" ? `<p class="hist-note">${tr("Your likes are private. Only you can see them.")}</p>` : "";
     const body = rows.length ? histList(rows) : histEmpty(tab, !!String(q).trim() || !!(STATE.histPlat));
-    return `<div class="topbar tall hist-bar"><div class="page-head"><button class="icon-btn hist-back" type="button" data-act="back" aria-label="Back">${icon("back")}</button><h1 class="grow">History</h1></div><div class="tabs" role="tablist" aria-label="History">${tabs}</div></div>
-      <form class="hist-search"><label class="search"><span>${icon("search")}</span><input id="hist-q" type="search" value="${esc(q)}" placeholder="Search History" aria-label="Search History"></label></form>
+    return `<div class="topbar tall hist-bar"><div class="page-head"><button class="icon-btn hist-back" type="button" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><h1 class="grow">${tr("History")}</h1></div><div class="tabs" role="tablist" aria-label="${tr("History")}">${tabs}</div></div>
+      <form class="hist-search"><label class="search"><span>${icon("search")}</span><input id="hist-q" type="search" value="${esc(q)}" placeholder="${tr("Search History")}" aria-label="${tr("Search History")}"></label></form>
       ${histChips(tab)}
-      <div class="hist-tools">${pause}<button class="outline hist-clear" type="button" data-act="hist-clear" data-tab="${tab}">Clear all</button></div>
+      <div class="hist-tools">${pause}<button class="outline hist-clear" type="button" data-act="hist-clear" data-tab="${tab}">${tr("Clear all")}</button></div>
       ${note}
       ${body}`;
   }
@@ -7737,7 +7736,7 @@ const here = parseRoute();
 
   function bookmarksView() {
     const list = bookmarkedPosts();
-    return pageHead("Bookmarks", `<div class="subhead">@reader</div>`) + (list.length ? list.map((p) => card(p)).join("") : emptyBlock("Save posts for later", "Bookmark posts to easily find them again in the future."));
+    return pageHead(tr("Bookmarks"), `<div class="subhead">@reader</div>`) + (list.length ? list.map((p) => card(p)).join("") : emptyBlock(tr("Save posts for later"), tr("Bookmark posts to easily find them again in the future.")));
   }
 
   function notesView(title, headline, body) {
@@ -7811,24 +7810,24 @@ const here = parseRoute();
       const on = tabHasProfile(tab, id);
       return `<button class="bell-choice" type="button" role="menuitemcheckbox" aria-checked="${on ? "true" : "false"}" data-act="feed-tab-member" data-tab="${esc(tab.id)}" data-id="${esc(id)}"><span class="bell-choice-ico">${tabMark(tab)}</span><span class="bell-choice-label">${esc(tab.name)}</span><span class="bell-mark">${on ? icon("tick") : ""}</span></button>`;
     }).join("");
-    return `<div class="tab-menu-label">Add to tab…</div>${rows}<button class="bell-choice" type="button" data-act="feed-tab-new" data-id="${esc(id)}"><span class="bell-choice-ico">${icon("plus")}</span><span class="bell-choice-label">New tab</span></button>`;
+    return `<div class="tab-menu-label">${tr("Add to tab…")}</div>${rows}<button class="bell-choice" type="button" data-act="feed-tab-new" data-id="${esc(id)}"><span class="bell-choice-ico">${icon("plus")}</span><span class="bell-choice-label">${tr("New tab")}</span></button>`;
   }
 
   function tabAssignMenu() {
     const menu = STATE.tabAssign;
     if (!menu || !menu.id) return "";
-    return `<div class="bell-sheet" data-act="close-assign"><div class="menu bell-menu assign-menu" data-act="stop" role="menu" aria-label="Add to tab" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div>${feedTabChoices(menu.id)}</div></div>`;
+    return `<div class="bell-sheet" data-act="close-assign"><div class="menu bell-menu assign-menu" data-act="stop" role="menu" aria-label="${tr("Add to tab")}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div>${feedTabChoices(menu.id)}</div></div>`;
   }
 
   function tabContextMenu() {
     const menu = STATE.tabContext;
     if (!menu || !menu.id) return "";
     if (menu.id === "all") {
-      return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="All" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-new"><span class="bell-choice-ico">${icon("plus")}</span><span class="bell-choice-label">New tab</span></button><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">Manage tabs</span></button></div></div>`;
+      return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${tr("All")}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-new"><span class="bell-choice-ico">${icon("plus")}</span><span class="bell-choice-label">${tr("New tab")}</span></button><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">${tr("Manage tabs")}</span></button></div></div>`;
     }
     if (!feedTabById(menu.id)) return "";
     const tab = feedTabById(menu.id);
-    return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${esc(tab.name)}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("pencil")}</span><span class="bell-choice-label">Edit tab</span></button><button class="bell-choice" type="button" data-act="feed-tab-ask-delete" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">Delete tab</span></button></div></div>`;
+    return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${esc(tab.name)}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("pencil")}</span><span class="bell-choice-label">${tr("Edit tab")}</span></button><button class="bell-choice" type="button" data-act="feed-tab-ask-delete" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">${tr("Delete tab")}</span></button></div></div>`;
   }
 
   function settleNoteTab(route) {
@@ -7877,14 +7876,14 @@ const here = parseRoute();
     const btn = `<button class="tab${on ? " on" : ""}" data-act="note-tab" data-tab="${esc(id)}" data-note-tab="${esc(id)}" role="tab" aria-selected="${on ? "true" : "false"}"><span>${esc(label)}</span></button>`;
     if (!on) return btn;
     const expanded = !!(STATE.tabContext && STATE.tabContext.id === id);
-    return `<div class="tab-pair on">${btn}<button class="tab-caret" type="button" data-act="note-tab-menu" data-tab="${esc(id)}" aria-label="${esc(label)} options" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
+    return `<div class="tab-pair on">${btn}<button class="tab-caret" type="button" data-act="note-tab-menu" data-tab="${esc(id)}" aria-label="${esc(tr("{label} options", { label: label }))}" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
   }
 
   function noteRow(note) {
     const who = note.handle || note.name || "account";
     const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
     const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
-    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">New post notifications for @${esc(who)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
+    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${tr("New post notifications for @{handle}", { handle: esc(who) })}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
   }
 
   function notificationsView(route) {
@@ -7893,13 +7892,13 @@ const here = parseRoute();
     const tabs = feedTabs().filter((tab) => tab.showNotes !== false);
     const current = active === "all" ? null : feedTabById(active);
     const notes = current ? notesForTab(current) : ((STATE.settings && STATE.settings.bellNotes) || []);
-    const buttons = noteTabButton("all", "All", active === "all") + tabs.map((tab) => noteTabButton(tab.id, tab.name, active === tab.id)).join("");
-    const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="Scroll tabs left" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="Notification tabs">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="Scroll tabs right" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="Manage tabs">${menuIcon("gear")}</button>`;
-    const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="Settings">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>Notifications</h1></div>${gear}</div>${bar}</div>`;
+    const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, tab.name, active === tab.id)).join("");
+    const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
+    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
+    const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
     let body = "";
-    if (!notes.length && active === "all") body = emptyBlock("Nothing to see here — yet", "From likes to reposts and a whole lot more, this is where all the action happens.");
-    else if (!notes.length) body = emptyBlock("Nothing in " + (current ? current.name : "this tab") + " yet", "New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All.");
+    if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
+    else if (!notes.length) body = emptyBlock(tr("Nothing in {name} yet", { name: current ? current.name : tr("the current tab") }), tr("New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All."));
     else body = `<div class="notes">${notes.map(noteRow).join("")}</div>`;
     return head + body;
   }
@@ -7970,7 +7969,7 @@ const here = parseRoute();
     let tab = draft.id ? tabs.find((item) => item.id === draft.id) : null;
     if (!tab) {
       if (tabs.length >= 500) {
-        toast("That’s as many tabs as this device can keep");
+        toast(tr("That’s as many tabs as this device can keep"));
         return;
       }
       tab = { id: newFeedTabId(), readAt: 0, members: [], sort: "recent" };
@@ -8009,7 +8008,7 @@ const here = parseRoute();
 
   function openAssign(feedId, x, y) {
     if (!feedId) {
-      toast("This post has no account to file");
+      toast(tr("This post has no account to file"));
       return;
     }
     STATE.tabAssign = { id: feedId, left: x, top: y };
@@ -8036,7 +8035,7 @@ const here = parseRoute();
       if (inDraft(feed)) return false;
       return ((feed.name || "") + " " + (feed.handle || "") + " " + (feed.platform || "")).toLowerCase().indexOf(q) >= 0;
     }).slice(0, 40) : [];
-    const row = (feed, on) => `<div class="acct-row">${avatar(feed.avatar, feed.name)}<span class="who-copy"><span class="name">${esc(feed.name || feed.handle || "")}</span><span class="handle">@${esc(feed.handle || "")}</span></span><button class="follow${on ? " following" : ""}" type="button" data-act="feed-tab-pick" data-id="${esc(feed.id)}">${on ? "<span class='f'>Added</span><span class='u'>Remove</span>" : "Add"}</button></div>`;
+    const row = (feed, on) => `<div class="acct-row">${avatar(feed.avatar, feed.name)}<span class="who-copy"><span class="name">${esc(feed.name || feed.handle || "")}</span><span class="handle">@${esc(feed.handle || "")}</span></span><button class="follow${on ? " following" : ""}" type="button" data-act="feed-tab-pick" data-id="${esc(feed.id)}">${on ? ("<span class='f'" + ">" + tr("Added") + "<" + "/span><span class='u'" + ">" + tr("Remove") + "<" + "/span>") : tr("Add")}</button></div>`;
     const known = {};
     memberRows.forEach((feed) => { known[feed.id] = true; });
     const extra = memberSet.filter((id) => !known[id]).map((id) => {
@@ -8044,9 +8043,9 @@ const here = parseRoute();
       return { id: id, name: cut > 0 ? id.slice(cut + 1) : id, handle: cut > 0 ? id.slice(cut + 1) : id, avatar: "" };
     });
     const switches = (key, label) => `<button class="tab-switch${draft[key] !== false ? " on" : ""}" type="button" role="switch" aria-checked="${draft[key] !== false ? "true" : "false"}" data-act="feed-tab-draft-flag" data-key="${key}"><span>${label}</span><i></i></button>`;
-    const swatches = `<button class="swatch swatch-none${draft.color ? "" : " on"}" type="button" data-act="feed-tab-color" data-color="" aria-label="No colour">None</button>` + COLORS.map((color) => `<button class="swatch${draft.color === color ? " on" : ""}" type="button" style="background:${color}" data-act="feed-tab-color" data-color="${color}" aria-label="Tab colour"></button>`).join("");
-    const order = feedTabs().length > 1 ? `<h3>Order</h3><p class="phandle">Drag the handle to reorder. The same order is used on Home.</p>${feedTabs().map((tab) => `<div class="tab-order-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="Drag to reorder"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="tab-order-name">${esc(tab.name)}</span></div>`).join("")}` : "";
-    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? "Edit tab" : "New tab"}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>${draft.id ? "Edit tab" : "New tab"}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>Save</button></div><div class="modal-body"><label class="field"><span>Name</span><input id="feed-tab-name" data-field="name" maxlength="40" value="${esc(draft.name || "")}"></label><label class="field"><span>Emoji</span><input id="feed-tab-emoji" data-field="emoji" maxlength="8" placeholder="Optional" value="${esc(draft.emoji || "")}"></label><div class="field"><span>Colour</span><div class="swatches">${swatches}</div></div>${switches("showHome", "Show on Home")}${switches("showNotes", "Show in Notifications")}<h3>Accounts</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="Search accounts" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">Search to add accounts. Profiles with no tab stay in All.</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">Delete tab</button>` : ""}</div></div></div>`;
+    const swatches = `<button class="swatch swatch-none${draft.color ? "" : " on"}" type="button" data-act="feed-tab-color" data-color="" aria-label="${tr("No colour")}">${tr("None")}</button>` + COLORS.map((color) => `<button class="swatch${draft.color === color ? " on" : ""}" type="button" style="background:${color}" data-act="feed-tab-color" data-color="${color}" aria-label="${tr("Tab colour")}"></button>`).join("");
+    const order = feedTabs().length > 1 ? `<h3>${tr("Order")}</h3><p class="phandle">${tr("Drag the handle to reorder. The same order is used on Home.")}</p>${feedTabs().map((tab) => `<div class="tab-order-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="${tr("Drag to reorder")}"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="tab-order-name">${esc(tab.name)}</span></div>`).join("")}` : "";
+    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? tr("Edit tab") : tr("New tab")}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${draft.id ? tr("Edit tab") : tr("New tab")}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>${tr("Save")}</button></div><div class="modal-body"><label class="field"><span>${tr("Name")}</span><input id="feed-tab-name" data-field="name" maxlength="40" value="${esc(draft.name || "")}"></label><label class="field"><span>${tr("Emoji")}</span><input id="feed-tab-emoji" data-field="emoji" maxlength="8" placeholder="${tr("Optional")}" value="${esc(draft.emoji || "")}"></label><div class="field"><span>${tr("Colour")}</span><div class="swatches">${swatches}</div></div>${switches("showHome", tr("Show on Home"))}${switches("showNotes", tr("Show in Notifications"))}<h3>${tr("Accounts")}</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="${tr("Search accounts")}" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">${tr("Search to add accounts. Profiles with no tab stay in All.")}</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">${tr("Delete tab")}</button>` : ""}</div></div></div>`;
   }
 
   function isStandalone() {
@@ -8055,67 +8054,181 @@ const here = parseRoute();
 
   function installControl() {
     if (isStandalone()) return "";
-    return `<button class="primary" type="button" data-act="install">Install app</button>`;
+    return `<button class="primary" type="button" data-act="install">${tr("Install app")}</button>`;
+  }
+
+  function routeTitle(route, liveName, personName, discordTitle) {
+    const titleSuffix = " / " + productName("app");
+    if (discordTitle) return discordTitle + titleSuffix;
+    if (personName) return personName + titleSuffix;
+    const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
+    if (route.name === "explore") return (exploreQ ? tr("{q} - Explore", { q: exploreQ }) : tr("Explore")) + titleSuffix;
+    if (route.name === "user") return (liveName || route.handle || tr("Profile")) + titleSuffix;
+    let key = "";
+    if (route.name === "home") key = tr("Home");
+    else if (route.name === "status") key = tr("Post noun");
+    else if (route.name === "incoming") key = tr("Add account");
+    else if (route.name === "settings") {
+      const section = route.section || "";
+      const sub = route.sub || "";
+      if (sub === "display-language" || section === "display-language") key = tr("Display language");
+      else if (section === "accessibility") key = tr("Accessibility, display and languages");
+      else if (section === "display") key = tr("Display");
+      else if (section === "languages") key = tr("Languages");
+      else if (section === "data") key = tr("Data usage");
+      else if (section === "notifications") key = tr("Notifications");
+      else if (section === "privacy") key = tr("Privacy and safety");
+      else if (section === "content") key = tr("Custom tabs");
+      else if (section === "resources") key = tr("Additional resources");
+      else key = tr("Settings");
+    } else {
+      const map = {
+        notifications: tr("Notifications"),
+        messages: tr("Messages"),
+        feeds: tr("Feeds"),
+        lists: tr("Lists"),
+        list: tr("List"),
+        history: tr("History"),
+        bookmarks: tr("Bookmarks"),
+        subscriptions: tr("Subscriptions"),
+        watch: tr("Video"),
+        article: tr("Article"),
+        sources: tr("Sources"),
+        profile: tr("Profile"),
+        person: tr("Profile"),
+        spaces: tr("Space")
+      };
+      key = map[route.name] || "";
+    }
+    const label = key ? tr(key) : (route.name ? route.name.charAt(0).toUpperCase() + route.name.slice(1) : tr("Home"));
+    return label + titleSuffix;
+  }
+
+  function settingsHead(title, backHref) {
+    const back = backHref
+      ? `<a class="icon-btn" href="${backHref}" aria-label="${esc(tr("Back"))}">${icon("back")}</a>`
+      : `<button class="icon-btn" type="button" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button>`;
+    return `<div class="topbar tall"><div class="mhead">
+        <button class="m-ava" type="button" data-act="drawer" aria-label="${esc(tr("Menu"))}"><span class="ava initials">Y</span></button>
+        <a class="m-icon" href="#/settings" aria-label="${esc(tr("Settings"))}">${icon("spark")}</a>
+      </div>
+      <div class="page-head settings-head">${back}<div class="head-text grow"><h1>${esc(title)}</h1></div></div></div>`;
+  }
+
+  function settingsRow(href, title, sub) {
+    return `<a class="set-row" href="${href}"><span class="set-copy"><b>${esc(title)}</b>${sub ? `<span class="set-sub">${esc(sub)}</span>` : ""}</span><span class="set-chev" aria-hidden="true">${icon("chevR")}</span></a>`;
   }
 
   function settingsView() {
+    const route = parseRoute();
+    const section = route.section || "";
+    const sub = route.sub || "";
     const appearance = (STATE.settings && STATE.settings.appearance) || "lightsout";
     const autoplay = (STATE.settings && STATE.settings.autoplay) || "all";
-    const themeBtn = (id, label) => `<button class="outline${appearance === id ? " on" : ""}" type="button" data-act="theme" data-theme="${id}">${label}</button>`;
-    const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${label}</button>`;
+    const themeBtn = (id, label) => `<button class="outline${appearance === id ? " on" : ""}" type="button" data-act="theme" data-theme="${id}">${esc(label)}</button>`;
+    const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${esc(label)}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
-    return pageHead("Settings", "", true) + `<div class="modal-body">
-<p class="phandle">Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser.</p>
-      <h2>Appearance</h2>
-      <div class="theme-row">
-        ${themeBtn("auto", "Auto")}
-        ${themeBtn("default", "Default")}
-        ${themeBtn("dim", "Dim")}
-        ${themeBtn("lightsout", "Lights out")}
-      </div>
-      ${window.FeedsTV ? window.FeedsTV.settingsHtml() : "<h2>Display</h2>"}
-      <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">Collapse sidebar</button></div>
-      <h2>Accessibility</h2>
-      <p class="phandle">Data · Autoplay videos</p>
-      <div class="theme-row" role="group" aria-label="Autoplay videos">
-        ${autoBtn("all", "On cellular and Wi-Fi")}
-        ${autoBtn("wifi", "Wi-Fi only")}
-        ${autoBtn("never", "Never")}
-      </div>
-      ${installControl()}
-      ${window.FeedsTranslate ? window.FeedsTranslate.settingsHtml() : ""}
-      <h2>Privacy</h2>
-      <h3>Mute and block</h3>
-      <p class="phandle">Muted words, muted accounts, and reposts you turn off stay on this device.</p>
-      <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="Word or phrase" aria-label="Mute a word" maxlength="80"></label><button class="follow" type="submit">Add</button></form>
-      ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">Remove</button></div>`).join("")}
-      <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="@handle" aria-label="Mute an account" maxlength="80"></label><button class="follow" type="submit">Add</button></form>
-      ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">Remove</button></div>`).join("")}
-      <button class="primary" type="button" data-act="notify">${notifyOn ? "Notifications on" : "Notify me about new posts"}</button>
-      <h2>Custom tabs</h2>
-      <p class="phandle">Group accounts into tabs on Home and in Notifications.</p>
-      ${feedTabs().map((tab) => `<div class="tab-edit-row"><span>${tab.color && !tab.emoji ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}${esc((tab.emoji ? tab.emoji + " " : "") + tab.name)}</span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">Edit</button></div>`).join("")}
-      <button class="outline" type="button" data-act="feed-tab-new">New tab</button>
-      <button class="primary" data-act="export">Export settings</button>
-      <label class="primary import-btn">Import settings<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
-      <h2>About</h2>
-      <p class="phandle">SuperintelApp. Posts from accounts you follow stay in this browser. Not affiliated with X.</p>
+    const lang = window.SI18n ? window.SI18n.getLang() : "en";
+    if ((section === "accessibility" && sub === "display-language") || section === "display-language") {
+      const q = String(STATE.langQ || "").trim().toLowerCase();
+      const choices = [
+        { code: "en", name: "English", find: "english английский ingles inglés" },
+        { code: "es", name: "Español", find: "spanish español espanol испанский" },
+        { code: "ru", name: "Русский", find: "russian русский ruso" }
+      ].filter((row) => !q || (row.name + " " + row.find).toLowerCase().indexOf(q) >= 0);
+      const radios = choices.map((row) => {
+        const on = row.code === lang;
+        return `<button class="lang-row" type="button" role="radio" aria-checked="${on ? "true" : "false"}" data-act="ui-lang" data-lang="${row.code}"><span>${esc(row.name)}</span><span class="lang-radio${on ? " on" : ""}" aria-hidden="true"></span></button>`;
+      }).join("") || `<p class="phandle set-block">${esc(tr("No results"))}</p>`;
+      return settingsHead(tr("Display language"), "#/settings/languages") + `<div class="lang-search"><label class="search"><span class="sr">${icon("search")}</span><input id="lang-q" type="search" placeholder="${esc(tr("Search languages"))}" aria-label="${esc(tr("Search languages"))}" value="${esc(STATE.langQ || "")}"></label></div><p class="phandle set-block">${esc(tr("This changes the language of buttons, menus, and labels. It does not translate posts."))}</p><div class="lang-list" role="radiogroup" aria-label="${esc(tr("Display language"))}">${radios}</div>`;
+    }
+    if (section === "accessibility" && !sub) {
+      return settingsHead(tr("Accessibility, display and languages"), "#/settings") + `<div class="set-list">
+        ${settingsRow("#/settings/display", tr("Display"))}
+        ${settingsRow("#/settings/languages", tr("Languages"))}
+        ${settingsRow("#/settings/data", tr("Data usage"))}
+      </div>`;
+    }
+    if (section === "display") {
+      return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
+        <h2>${esc(tr("Appearance"))}</h2>
+        <div class="theme-row">
+          ${themeBtn("auto", tr("Auto"))}
+          ${themeBtn("default", tr("Default"))}
+          ${themeBtn("dim", tr("Dim"))}
+          ${themeBtn("lightsout", tr("Lights out"))}
+        </div>
+        ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
+        <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">${esc(tr("Collapse sidebar"))}</button></div>
+      </div>`;
+    }
+    if (section === "languages") {
+      const endonym = window.SI18n ? window.SI18n.endonym(lang) : "English";
+      return settingsHead(tr("Languages"), "#/settings/accessibility") + `<div class="set-list">${settingsRow("#/settings/display-language", tr("Display language"), endonym)}</div><div class="set-block">${window.FeedsTranslate ? window.FeedsTranslate.settingsHtml() : ""}</div>`;
+    }
+    if (section === "data") {
+      return settingsHead(tr("Data usage"), "#/settings/accessibility") + `<div class="set-block">
+        <h2>${esc(tr("Autoplay videos"))}</h2>
+        <div class="theme-row" role="group" aria-label="${esc(tr("Autoplay videos"))}">
+          ${autoBtn("all", tr("On cellular and Wi-Fi"))}
+          ${autoBtn("wifi", tr("Wi-Fi only"))}
+          ${autoBtn("never", tr("Never"))}
+        </div>
+      </div>`;
+    }
+    if (section === "notifications") {
+      return settingsHead(tr("Notifications"), "#/settings") + `<div class="set-block">
+        <button class="primary" type="button" data-act="notify">${esc(notifyOn ? tr("Notifications on") : tr("Notify me about new posts"))}</button>
+      </div>`;
+    }
+    if (section === "privacy") {
+      return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
+        <h2>${esc(tr("Mute and block"))}</h2>
+        <p class="phandle">${esc(tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
+        <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+        ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">${esc(tr("Remove"))}</button></div>`).join("")}
+        <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="${esc(tr("@handle"))}" aria-label="${esc(tr("Mute an account"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+        ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">${esc(tr("Remove"))}</button></div>`).join("")}
+      </div>`;
+    }
+    if (section === "content") {
+      return settingsHead(tr("Custom tabs"), "#/settings") + `<div class="set-block">
+        <p class="phandle">${esc(tr("Group accounts into tabs on Home and in Notifications."))}</p>
+        ${feedTabs().map((tab) => `<div class="tab-edit-row"><span>${tab.color && !tab.emoji ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}${esc((tab.emoji ? tab.emoji + " " : "") + tab.name)}</span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">${esc(tr("Edit"))}</button></div>`).join("")}
+        <button class="outline" type="button" data-act="feed-tab-new">${esc(tr("New tab"))}</button>
+      </div>`;
+    }
+    if (section === "resources") {
+      return settingsHead(tr("Additional resources"), "#/settings") + `<div class="set-block">
+        ${installControl()}
+        <button class="primary" type="button" data-act="export">${esc(tr("Export settings"))}</button>
+        <label class="primary import-btn">${esc(tr("Import settings"))}<input id="import-file" data-act="import" type="file" accept="application/json" hidden></label>
+        <h2>${esc(tr("About"))}</h2>
+        <p class="phandle">${esc(tr("{app}. Posts from accounts you follow stay in this browser. Not affiliated with X.", { app: productName("app") }))}</p>
+      </div>`;
+    }
+    return settingsHead(tr("Settings"), "") + `<div class="set-block"><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list">
+      ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
+      ${settingsRow("#/settings/notifications", tr("Notifications"))}
+      ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
+      ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
+      ${settingsRow("#/settings/resources", tr("Additional resources"))}
     </div>`;
   }
 
   function drawer() {
     if (!STATE.drawer) return "";
     const music = parseRoute().name === "music" && window.SIntelMusic;
-    const links = music ? window.SIntelMusic.drawerLinks(icon) : `<a href="#/lists">${icon("lists")} Lists</a>
-      <a href="#/history">${icon("clock")} History</a>
-      <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} Subscriptions</a>
-      <a href="#/feeds">${icon("spark")} Feeds</a>
-      <a href="#/music">${icon("muNote")} Music</a>
-      <a href="#/settings">${icon("more")} Settings</a>`;
+    const links = music ? window.SIntelMusic.drawerLinks(icon) : `<a href="#/lists">${icon("lists")} ${tr("Lists")}</a>
+      <a href="#/history">${icon("clock")} ${tr("History")}</a>
+      <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} ${tr("Subscriptions")}</a>
+      <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
+      <a href="#/music">${icon("muNote")} ${tr("Music")}</a>
+      <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
-      <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>You</b><div class="phandle">@reader</div></div></div>
+      <div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>${tr("You")}</b><div class="phandle">@reader</div></div></div>
       ${links}
-      ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} Install app</button>`}
+      ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${tr("Install app")}</button>`}
     </div></div>`;
   }
 
@@ -8123,67 +8236,67 @@ const here = parseRoute();
     const pending = STATE.removeFeed;
     if (!pending) return "";
     const handle = String(pending.handle || "").replace(/^@/, "");
-    const title = handle ? "Remove @" + handle + "?" : "Remove this account?";
+    const title = handle ? tr("Remove @{handle}?", { handle: handle }) : tr("Remove this account?");
     const body = handle
-      ? "@" + handle + " will be removed from the whole site, not just hidden from your feeds."
-      : "This account will be removed from the whole site, not just hidden from your feeds.";
-    return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">Remove</button><button type="button" class="remove-cancel" data-act="close-remove">Cancel</button></div></div>`;
+      ? tr("@{handle} will be removed from the whole site, not just hidden from your feeds.", { handle: handle })
+      : tr("This account will be removed from the whole site, not just hidden from your feeds.");
+    return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">${tr("Remove")}</button><button type="button" class="remove-cancel" data-act="close-remove">${tr("Cancel")}</button></div></div>`;
   }
 
   function modal() {
     if (STATE.removeFeed) return removeFeedDialog();
 if (STATE.histClear) {
       const tab = STATE.histClear;
-      const label = tab === "bookmarks" ? "bookmarks" : tab === "likes" ? "likes" : tab === "videos" ? "videos" : "articles";
+      const label = tab === "bookmarks" ? tr("Bookmarks") : tab === "likes" ? tr("Likes") : tab === "videos" ? tr("Videos") : tr("Articles");
       return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" style="max-width:320px;margin-top:20vh;padding:8px 0 16px" data-act="stop">
-        <div class="modal-body"><h2>Clear all ${esc(label)}?</h2><p class="phandle">This removes them from this device only.</p>
-        <button class="primary" data-act="hist-clear-go" style="background:#f4212e">Clear all</button>
-        <button class="outline" data-act="close-modal" style="margin-left:8px">Cancel</button></div></div></div>`;
+        <div class="modal-body"><h2>${tr("Clear all {label}?", { label: esc(label) })}</h2><p class="phandle">${tr("This removes them from this device only.")}</p>
+        <button class="primary" data-act="hist-clear-go" style="background:#f4212e">${tr("Clear all")}</button>
+        <button class="outline" data-act="close-modal" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (STATE.confirm && STATE.confirm.kind === "feed-tab") {
       const tab = feedTabById(STATE.confirm.id);
-      const name = tab ? tab.name : "this tab";
-      return `<div class="modal-back"><div class="modal" role="dialog" aria-label="Delete tab" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
-        <div class="modal-body"><h2>Delete ${esc(name)}?</h2><p class="phandle">This can’t be undone. Accounts stay followed.</p>
-        <button class="primary" data-act="confirm-delete" style="background:#f4212e">Delete</button>
-        <button class="outline" data-act="close-confirm" style="margin-left:8px">Cancel</button></div></div></div>`;
+      const name = tab ? tab.name : tr("this tab");
+      return `<div class="modal-back"><div class="modal" role="dialog" aria-label="${tr("Delete tab")}" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
+        <div class="modal-body"><h2>${tr("Delete {name}?", { name: esc(name) })}</h2><p class="phandle">${tr("This can’t be undone. Accounts stay followed.")}</p>
+        <button class="primary" data-act="confirm-delete" style="background:#f4212e">${tr("Delete")}</button>
+        <button class="outline" data-act="close-confirm" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (STATE.confirm) {
       return `<div class="modal-back"><div class="modal" role="dialog" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
-        <div class="modal-body"><h2>Delete this List?</h2><p class="phandle">This can’t be undone.</p>
-        <button class="primary" data-act="confirm-delete" style="background:#f4212e">Delete</button>
-        <button class="outline" data-act="close-modal" style="margin-left:8px">Cancel</button></div></div></div>`;
+        <div class="modal-body"><h2>${tr("Delete this List?")}</h2><p class="phandle">${tr("This can’t be undone.")}</p>
+        <button class="primary" data-act="confirm-delete" style="background:#f4212e">${tr("Delete")}</button>
+        <button class="outline" data-act="close-modal" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (!STATE.modal) return "";
     if (STATE.modal === "install") {
       const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
       const steps = ios
-        ? `<div class="install-step"><span>1</span> Tap Share in Safari</div><div class="install-step"><span>2</span> Choose Add to Home Screen</div><div class="install-step"><span>3</span> Tap Add</div>`
-        : `<p>Use the install icon in the address bar, or open the browser menu and choose Install app.</p>`;
+        ? `<div class="install-step"><span>1</span> ${tr("Tap Share in Safari")}</div><div class="install-step"><span>2</span> ${tr("Choose Add to Home Screen")}</div><div class="install-step"><span>3</span> ${tr("Tap Add")}</div>`
+        : `<p>${tr("Use the install icon in the address bar, or open the browser menu and choose Install app.")}</p>`;
       return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" data-act="stop">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>Install app</h2></div>
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Install app")}</h2></div>
         <div class="modal-body install-sheet">${steps}</div>
       </div></div>`;
     }
     if (STATE.modal === "compose") {
       return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" data-act="stop">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><div class="grow"></div></div>
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div></div>
         <div class="modal-body" style="display:flex;gap:12px">
           <span class="ava initials">Y</span>
-          <div style="flex:1"><textarea id="compose-text" placeholder="What is happening?!" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none"></textarea>
-          <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post" disabled>Post</button></div>
-          <p class="phandle">This reader doesn’t publish. Posts come from your feeds.</p></div>
+          <div style="flex:1"><textarea id="compose-text" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none"></textarea>
+          <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post" disabled>${tr("Post")}</button></div>
+          <p class="phandle">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p></div>
         </div></div></div>`;
     }
     if (STATE.modal === "list") {
       const d = STATE.draft;
       return `<div class="modal-back"><div class="modal" role="dialog">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>${d.id ? "Edit List" : "Create a new List"}</h2><button class="save" data-act="save-list" ${d.name && d.name.trim() ? "" : "disabled"}>Save</button></div>
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${d.id ? tr("Edit List") : tr("Create a new List")}</h2><button class="save" data-act="save-list" ${d.name && d.name.trim() ? "" : "disabled"}>${tr("Save")}</button></div>
         <div class="modal-body">
-          <label class="field"><span>Name</span><input id="list-name" data-field="name" maxlength="50" value="${esc(d.name || "")}"></label>
-          <label class="field"><span>Description</span><textarea id="list-desc" data-field="description" maxlength="160">${esc(d.description || "")}</textarea></label>
-          <div class="field"><span>Banner</span><div class="swatches">${COLORS.map((c) => `<button class="swatch${d.bannerColor === c ? " on" : ""}" style="background:${c}" data-act="color" data-color="${c}" aria-label="Banner color"></button>`).join("")}</div></div>
-          ${d.id ? `<button class="danger" data-act="ask-delete">Delete List</button>` : ""}
+          <label class="field"><span>${tr("Name")}</span><input id="list-name" data-field="name" maxlength="50" value="${esc(d.name || "")}"></label>
+          <label class="field"><span>${tr("Description")}</span><textarea id="list-desc" data-field="description" maxlength="160">${esc(d.description || "")}</textarea></label>
+          <div class="field"><span>${tr("Banner")}</span><div class="swatches">${COLORS.map((c) => `<button class="swatch${d.bannerColor === c ? " on" : ""}" style="background:${c}" data-act="color" data-color="${c}" aria-label="${tr("Banner color")}"></button>`).join("")}</div></div>
+          ${d.id ? `<button class="danger" data-act="ask-delete">${tr("Delete List")}</button>` : ""}
         </div></div></div>`;
     }
     if (STATE.modal === "members") {
@@ -8192,11 +8305,11 @@ if (STATE.histClear) {
       const q = (STATE.draft.q || "").toLowerCase();
       const rows = feeds().filter((f) => !q || (f.name + " " + f.handle).toLowerCase().includes(q)).map((f) => {
         const on = (list.members || []).includes(f.id);
-        return `<div class="acct-row">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}</span><span class="handle">@${esc(f.handle)}</span></span><button class="follow${on ? " following" : ""}" data-act="${on ? "member-remove" : "member-add"}" data-id="${esc(f.id)}">${on ? "<span class='f'>Member</span><span class='u'>Remove</span>" : "Add"}</button></div>`;
+        return `<div class="acct-row">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}</span><span class="handle">@${esc(f.handle)}</span></span><button class="follow${on ? " following" : ""}" data-act="${on ? "member-remove" : "member-add"}" data-id="${esc(f.id)}">${on ? ("<span class='f'" + ">" + tr("Member") + "<" + "/span><span class='u'" + ">" + tr("Remove") + "<" + "/span>") : tr("Add")}</button></div>`;
       }).join("");
       return `<div class="modal-back"><div class="modal" role="dialog">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>Manage members</h2></div>
-        <div class="modal-body"><input id="member-q" class="member-search" data-field="q" placeholder="Search accounts" value="${esc(STATE.draft.q || "")}">${rows || emptyBlock("No accounts", "Accounts appear here after feeds.json loads.")}</div>
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Manage members")}</h2></div>
+        <div class="modal-body"><input id="member-q" class="member-search" data-field="q" placeholder="${tr("Search accounts")}" value="${esc(STATE.draft.q || "")}">${rows || emptyBlock(tr("No accounts"), tr("Accounts appear here after feeds.json loads."))}</div>
       </div></div>`;
     }
     if (STATE.modal === "group") {
@@ -8213,33 +8326,33 @@ if (STATE.histClear) {
       }).join("");
       const face = groupFace({ icon: d.icon, members: d.members }, true);
       const named = String(d.name || "").replace(/\s+/g, " ").trim();
-      return `<div class="modal-back" data-act="close-modal"><div class="modal group-sheet" role="dialog" aria-label="${d.id ? "Edit group" : "New group"}" data-act="stop">
+      return `<div class="modal-back" data-act="close-modal"><div class="modal group-sheet" role="dialog" aria-label="${d.id ? tr("Edit group") : tr("New group")}" data-act="stop">
         <div class="share-grab" aria-hidden="true"></div>
-        <div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>${d.id ? "Edit group" : "New group"}</h2><button class="save" type="button" data-act="group-save"${named ? "" : " disabled"}>Save</button></div>
+        <div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${d.id ? tr("Edit group") : tr("New group")}</h2><button class="save" type="button" data-act="group-save"${named ? "" : " disabled"}>${tr("Save")}</button></div>
         <div class="modal-body">
           <div class="group-face">${face}</div>
-          <label class="field"><span>Name</span><input id="group-name" data-field="name" maxlength="40" value="${esc(d.name || "")}"></label>
-          <label class="field"><span>Icon</span><input id="group-icon" data-field="icon" maxlength="300" placeholder="https://" value="${esc(d.icon || "")}"></label>
-          <input id="group-q" class="member-search" data-field="gq" placeholder="Search channels" value="${esc(d.gq || "")}">
-          ${rows || emptyBlock("No channels", "Follow accounts that post videos, then pick them here.")}
-          ${d.id ? `<button class="danger" type="button" data-act="group-delete" data-group="${esc(d.id)}">Delete group</button>` : ""}
-          <button class="outline" type="button" data-act="group-publish">Save groups to the site</button>
+          <label class="field"><span>${tr("Name")}</span><input id="group-name" data-field="name" maxlength="40" value="${esc(d.name || "")}"></label>
+          <label class="field"><span>${tr("Icon")}</span><input id="group-icon" data-field="icon" maxlength="300" placeholder="https://" value="${esc(d.icon || "")}"></label>
+          <input id="group-q" class="member-search" data-field="gq" placeholder="${tr("Search channels")}" value="${esc(d.gq || "")}">
+          ${rows || emptyBlock(tr("No channels"), tr("Follow accounts that post videos, then pick them here."))}
+          ${d.id ? `<button class="danger" type="button" data-act="group-delete" data-group="${esc(d.id)}">${tr("Delete group")}</button>` : ""}
+          <button class="outline" type="button" data-act="group-publish">${tr("Save groups to the site")}</button>
         </div>
       </div></div>`;
     }
     if (STATE.modal === "feed-tab") return feedTabEditor();
     if (STATE.modal === "tabs") {
       const pinned = STATE.settings.lists.filter((list) => list.pinned);
-      const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${(list.members || []).length} members</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="Move ${esc(list.name)} left"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="Move ${esc(list.name)} right"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">Unpin</button></div>`).join("");
-      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-label="Manage tabs" data-act="stop">
-        <div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="Close">${icon("close")}</button><h2>Manage tabs</h2></div>
+      const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${trn("members", (list.members || []).length)}</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="${esc(tr("Move {name} left", { name: list.name }))}"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="${esc(tr("Move {name} right", { name: list.name }))}"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">${tr("Unpin")}</button></div>`).join("");
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-label="${tr("Manage tabs")}" data-act="stop">
+        <div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Manage tabs")}</h2></div>
         <div class="modal-body">
-          <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">For you</span><span class="handle">Always on Home</span></span></div>
-          <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">Following</span><span class="handle">Always on Home</span></span></div>
-          ${rows || `<p class="phandle">Pin a List to add it beside Following.</p>`}
-          <h3>Custom tabs</h3>
-          <button class="outline" type="button" data-act="feed-tab-new" aria-label="New tab">New tab</button>
-          ${feedTabs().map((tab) => `<div class="acct-row tab-manage-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="Drag to reorder"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="who-copy"><span class="name">${esc(tab.name)}</span><span class="handle">${tab.showHome === false ? "Hidden on Home" : "On Home"}${tab.showNotes === false ? " · Hidden in Notifications" : ""}</span></span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">Edit</button></div>`).join("") || `<p class="phandle">Create a tab to group accounts on Home and in Notifications.</p>`}
+          <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">${tr("For you")}</span><span class="handle">${tr("Always on Home")}</span></span></div>
+          <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">${tr("Following")}</span><span class="handle">${tr("Always on Home")}</span></span></div>
+          ${rows || `<p class="phandle">${tr("Pin a List to add it beside Following.")}</p>`}
+          <h3>${tr("Custom tabs")}</h3>
+          <button class="outline" type="button" data-act="feed-tab-new" aria-label="${tr("New tab")}">${tr("New tab")}</button>
+          ${feedTabs().map((tab) => `<div class="acct-row tab-manage-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="${tr("Drag to reorder")}"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="who-copy"><span class="name">${esc(tab.name)}</span><span class="handle">${tab.showHome === false ? tr("Hidden on Home") : tr("On Home")}${tab.showNotes === false ? " · " + tr("Hidden in Notifications") : ""}</span></span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">${tr("Edit")}</button></div>`).join("") || `<p class="phandle">${tr("Create a tab to group accounts on Home and in Notifications.")}</p>`}
         </div>
       </div></div>`;
     }
@@ -8255,7 +8368,7 @@ if (STATE.histClear) {
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const top = (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
-    return `<button class="skip" type="button" data-act="skip">Skip to content</button><div class="app${mode}">${nav(route)}<main class="center" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
 
   function watchHash(post) {
@@ -8391,10 +8504,10 @@ if (STATE.histClear) {
     if (!post || mode === "author" || mode === "status" || !isRepost(post)) return "";
     const by = post.repostedBy || {};
     const name = String(by.name || by.handle || "").trim();
-    if (!name) return `<div class="repost-line">${icon("repost")}<span>Reposted</span></div>`;
+    if (!name) return `<div class="repost-line">${icon("repost")}<span>${tr("Reposted")}</span></div>`;
     const platform = by.platform || post.platform || "x";
     const who = by.channelId || by.handle || "";
-    const label = esc(by.name || by.handle) + " reposted";
+    const label = tr("{name} reposted", { name: esc(by.name || by.handle) });
     if (!who) return `<div class="repost-line">${icon("repost")}<span>${label}</span></div>`;
     return `<div class="repost-line">${icon("repost")}<a data-act="stop" data-card="${esc(platform + ":" + who)}" href="${esc(accountHash(platform, who))}">${label}</a></div>`;
   }
@@ -8412,7 +8525,7 @@ if (STATE.histClear) {
     return `<div class="quote"${open}>
       <div class="quote-head">
         ${avatar(by.avatar, by.name || by.handle)}
-        <span class="name">${esc(by.name || by.handle || "Repost")}</span>
+        <span class="name">${esc(by.name || by.handle || tr("Repost"))}</span>
         ${by.handle ? `<span class="handle">@${esc(by.handle)}</span>` : ""}
       </div>
       <div class="quote-text">${esc(text)}</div>
@@ -8565,22 +8678,22 @@ if (STATE.histClear) {
   }
 
   function videoMeta(post) {
-    const views = post.stats && post.stats.views != null ? formatCount(post.stats.views) + " views" : "";
+    const views = post.stats && post.stats.views != null ? tr("{count} views", { count: formatCount(post.stats.views) }) : "";
     const when = relTime(post.date);
     return [views, when].filter(Boolean).join(" • ");
   }
 
   function dayBucket(iso) {
     const date = new Date(iso || "");
-    if (isNaN(date.getTime())) return "Older";
+    if (isNaN(date.getTime())) return tr("Older");
     const now = new Date();
     const start = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
     const diff = Math.round((start(now) - start(date)) / 86400000);
-    if (diff <= 0) return "Today";
-    if (diff === 1) return "Yesterday";
-    if (diff < 7) return "This week";
-    if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) return "This month";
-    return "Older";
+    if (diff <= 0) return tr("Today");
+    if (diff === 1) return tr("Yesterday");
+    if (diff < 7) return tr("This week");
+    if (date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear()) return tr("This month");
+    return tr("Older");
   }
 
   function platMark(platform) {
@@ -8613,7 +8726,7 @@ if (STATE.histClear) {
         <div class="yt-card row" data-feed="${esc(creator.id || "")}" data-open="${esc(dest)}">
           <a class="yt-open" href="${esc(dest)}">${subsThumb(post)}</a>
           <div class="yt-meta">
-            <a data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}" aria-label="${esc(name || "Channel")}">${avatar(creator.avatar || post.avatar, name, "yt-ava")}</a>
+            <a data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}" aria-label="${esc(name || tr("Channel"))}">${avatar(creator.avatar || post.avatar, name, "yt-ava")}</a>
             <div class="yt-copy">
               <a class="yt-open" href="${esc(dest)}"><h3 class="yt-title">${esc(title)}</h3></a>
               ${byline}
@@ -8626,7 +8739,7 @@ if (STATE.histClear) {
     return `<div class="yt-item" data-feed="${esc(creator.id || "")}" data-open="${esc(dest)}">
       <div class="yt-label">${banner}</div>
       <a class="yt-open yt-shot" href="${esc(dest)}">${subsThumb(post)}</a>
-      <a class="yt-face" data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}" aria-label="${esc(name || "Channel")}">${avatar(creator.avatar || post.avatar, name, "yt-ava")}</a>
+      <a class="yt-face" data-act="stop" href="${esc(profile)}" data-card="${esc(cardId)}" aria-label="${esc(name || tr("Channel"))}">${avatar(creator.avatar || post.avatar, name, "yt-ava")}</a>
       <a class="yt-open yt-title-link" href="${esc(dest)}"><h3 class="yt-title">${esc(title)}</h3></a>
       <div class="yt-lines">${byline}${quote}</div>
     </div>`;
@@ -8754,11 +8867,11 @@ if (STATE.histClear) {
       const group = groups[index];
       return `<div class="group-menu" role="menu" aria-label="${esc(group.name)}" data-act="stop" style="left:${menu.left}px;top:${menu.top}px">
         <div class="share-grab" aria-hidden="true"></div>
-        <button type="button" role="menuitem" data-act="group-edit" data-group="${esc(menu.id)}">Rename</button>
-        <button type="button" role="menuitem" data-act="group-edit" data-group="${esc(menu.id)}">Edit channels</button>
-        <button type="button" role="menuitem" data-act="group-move" data-group="${esc(menu.id)}" data-dir="-1"${index <= 0 ? " disabled" : ""}>Move left</button>
-        <button type="button" role="menuitem" data-act="group-move" data-group="${esc(menu.id)}" data-dir="1"${index >= groups.length - 1 ? " disabled" : ""}>Move right</button>
-        <button type="button" role="menuitem" data-act="group-delete" data-group="${esc(menu.id)}">Delete</button>
+        <button type="button" role="menuitem" data-act="group-edit" data-group="${esc(menu.id)}">${tr("Rename")}</button>
+        <button type="button" role="menuitem" data-act="group-edit" data-group="${esc(menu.id)}">${tr("Edit channels")}</button>
+        <button type="button" role="menuitem" data-act="group-move" data-group="${esc(menu.id)}" data-dir="-1"${index <= 0 ? " disabled" : ""}>${tr("Move left")}</button>
+        <button type="button" role="menuitem" data-act="group-move" data-group="${esc(menu.id)}" data-dir="1"${index >= groups.length - 1 ? " disabled" : ""}>${tr("Move right")}</button>
+        <button type="button" role="menuitem" data-act="group-delete" data-group="${esc(menu.id)}">${tr("Delete")}</button>
       </div>`;
     }
     const groups = STATE.settings.groups || [];
@@ -8767,12 +8880,12 @@ if (STATE.histClear) {
       const on = draftHas(group, feed);
       return `<button type="button" role="menuitemcheckbox" aria-pressed="${on ? "true" : "false"}" data-act="group-add" data-group="${esc(group.id)}" data-feed="${esc(menu.id)}">${esc(group.name)}</button>`;
     }).join("");
-    const empty = groups.length ? "" : `<div class="group-menu-empty">No groups yet</div>`;
-    return `<div class="group-menu" role="menu" aria-label="Add to group" data-act="stop" style="left:${menu.left}px;top:${menu.top}px">
+    const empty = groups.length ? "" : `<div class="group-menu-empty">${tr("No groups yet")}</div>`;
+    return `<div class="group-menu" role="menu" aria-label="${tr("Add to group")}" data-act="stop" style="left:${menu.left}px;top:${menu.top}px">
       <div class="share-grab" aria-hidden="true"></div>
-      <div class="group-menu-title">Add to group</div>
+      <div class="group-menu-title">${tr("Add to group")}</div>
       ${empty}${rows}
-      <button type="button" role="menuitem" data-act="group-new" data-feed="${esc(menu.id)}">New group</button>
+      <button type="button" role="menuitem" data-act="group-new" data-feed="${esc(menu.id)}">${tr("New group")}</button>
     </div>`;
   }
 
@@ -8787,8 +8900,8 @@ if (STATE.histClear) {
 
   function subsView(route) {
     const layout = STATE.subsLayout === "list" ? "list" : "grid";
-    const toggles = `<div class="yt-toggle"><button class="${layout === "grid" ? "on" : ""}" data-act="subs-layout" data-layout="grid" aria-label="Grid">${icon("grid")}</button><button class="${layout === "list" ? "on" : ""}" data-act="subs-layout" data-layout="list" aria-label="List">${icon("rows")}</button></div>`;
-    const head = pageHead("Subscriptions", "", false, toggles);
+    const toggles = `<div class="yt-toggle"><button class="${layout === "grid" ? "on" : ""}" data-act="subs-layout" data-layout="grid" aria-label="${tr("Grid")}">${icon("grid")}</button><button class="${layout === "list" ? "on" : ""}" data-act="subs-layout" data-layout="list" aria-label="${tr("List")}">${icon("rows")}</button></div>`;
+    const head = pageHead(tr("Subscriptions"), "", false, toggles);
     const picked = String((route.query && route.query.get("group")) || "");
     const active = (STATE.settings.groups || []).find((group) => group.id === picked) || null;
     const remembered = active ? active.id : "";
@@ -8798,11 +8911,11 @@ if (STATE.histClear) {
     }
     const here = subsChannelHash(remembered, "");
     const channels = videoFeeds().filter((feed) => !active || memberOn(active, feed));
-    const chips = `<div class="yt-chips" aria-label="Subscription groups"><button class="yt-chip${!active ? " on" : ""}" type="button" data-act="subs-group" data-group="" aria-pressed="${!active ? "true" : "false"}">All</button>${(STATE.settings.groups || []).map((group) => {
+    const chips = `<div class="yt-chips" aria-label="${tr("Subscription groups")}"><button class="yt-chip${!active ? " on" : ""}" type="button" data-act="subs-group" data-group="" aria-pressed="${!active ? "true" : "false"}">${tr("All")}</button>${(STATE.settings.groups || []).map((group) => {
       const on = active && active.id === group.id;
       return `<button class="yt-chip${on ? " on" : ""}" type="button" data-act="subs-group" data-group="${esc(group.id)}" aria-pressed="${on ? "true" : "false"}">${groupFace(group)}<span>${esc(group.name)}</span></button>`;
-    }).join("")}<button class="yt-chip yt-chip-add" type="button" data-act="group-new" aria-pressed="false" aria-label="New group">${icon("plus")}<span>New group</span></button></div>`;
-    const strip = `<div class="yt-strip" aria-label="Channels"><a class="yt-ch${!route.channel ? " on" : ""}" href="${esc(here)}"${!route.channel ? ' aria-current="page"' : ""}><span class="yt-all">All</span><span class="ch-name">All</span></a>${channels.map((feed) => {
+    }).join("")}<button class="yt-chip yt-chip-add" type="button" data-act="group-new" aria-pressed="false" aria-label="${tr("New group")}">${icon("plus")}<span>${tr("New group")}</span></button></div>`;
+    const strip = `<div class="yt-strip" aria-label="${tr("Channels")}"><a class="yt-ch${!route.channel ? " on" : ""}" href="${esc(here)}"${!route.channel ? ' aria-current="page"' : ""}><span class="yt-all">${tr("All")}</span><span class="ch-name">${tr("All")}</span></a>${channels.map((feed) => {
       const on = route.channel === feed.id;
       const href = on ? here : subsChannelHash(remembered, feed.id);
       return `<a class="yt-ch${on ? " on" : ""}" data-feed="${esc(feed.id)}" href="${esc(href)}"${on ? ' aria-current="page"' : ""}>${avatar(feed.avatar, feed.name, "ch")}<span class="ch-name">${esc(feed.name || feed.handle)}</span></a>`;
@@ -8812,19 +8925,19 @@ if (STATE.histClear) {
     if (route.channel) list = list.filter((post) => onChannel(post, route.channel));
     channels.forEach(ensureYtSubs);
     list.forEach(ensureYtMeta);
-    const save = STATE.settings.groupsOwn ? `<button class="group-save" type="button" data-act="group-publish">Save groups to the site</button>` : "";
+    const save = STATE.settings.groupsOwn ? `<button class="group-save" type="button" data-act="group-publish">${tr("Save groups to the site")}</button>` : "";
     let body = "";
-    if (!STATE.settings.follows.length) body = emptyBlock("No videos yet", "Follow accounts to see their videos here.");
-    else if (active && !(active.members || []).length) body = emptyBlock("No channels in this group", "Edit the group and pick channels.");
-    else if (!list.length) body = emptyBlock(route.channel ? "No videos from this channel" : active ? "No videos in this group" : "No videos yet", route.channel ? "This channel's videos will show up here." : active ? "Videos from these channels will show up here." : "Videos from accounts you follow will show up here.");
+    if (!STATE.settings.follows.length) body = emptyBlock(tr("No videos yet"), tr("Follow accounts to see their videos here."));
+    else if (active && !(active.members || []).length) body = emptyBlock(tr("No channels in this group"), tr("Edit the group and pick channels."));
+    else if (!list.length) body = emptyBlock(route.channel ? tr("No videos from this channel") : active ? tr("No videos in this group") : tr("No videos yet"), route.channel ? tr("This channel's videos will show up here.") : active ? tr("Videos from these channels will show up here.") : tr("Videos from accounts you follow will show up here."));
     else {
       const shorts = list.filter((post) => post.short);
       const rest = list.filter((post) => !post.short);
-      const shelf = shorts.length ? `<section class="yt-sec shorts-sec"><h2>Shorts</h2><div class="shorts">${shorts.map((post) => {
+      const shelf = shorts.length ? `<section class="yt-sec shorts-sec"><h2>${tr("Shorts")}</h2><div class="shorts">${shorts.map((post) => {
         const feed = feedOf(post);
         return `<a class="short-card" data-feed="${esc(feed.id || "")}" href="${esc(watchHash(post))}">${subsThumb(post)}<h3 class="yt-title">${esc(post.title || post.text || "")}</h3></a>`;
       }).join("")}</div></section>` : "";
-      const order = ["Today", "Yesterday", "This week", "This month", "Older"];
+      const order = [tr("Today"), tr("Yesterday"), tr("This week"), tr("This month"), tr("Older")];
       const buckets = {};
       rest.forEach((post) => {
         const name = dayBucket(post.date);
@@ -8834,7 +8947,7 @@ if (STATE.histClear) {
       body = shelf + sections;
     }
     const addedAccounts = feeds().filter((feed) => feed && feed.origin === "repost");
-    const addedBox = addedAccounts.length ? `<section class="feed-section"><h2>Added</h2>${addedAccounts.map((feed) => accountRow(feed, { remove: true })).join("")}</section>` : "";
+    const addedBox = addedAccounts.length ? `<section class="feed-section"><h2>${tr("Added accounts")}</h2>${addedAccounts.map((feed) => accountRow(feed, { remove: true })).join("")}</section>` : "";
     return `<div class="subs ${layout}">${head}${strip}${chips}${save}<div class="subs-feed">${addedBox}${body}</div></div>`;
   }
 
@@ -8884,11 +8997,11 @@ if (STATE.histClear) {
     const when = comment.date ? relTime(comment.date) : (comment.timeLabel || "");
     const open = !!STATE.threadsOpen[comment.id];
     const kids = comment.replies || [];
-    const toggle = count > 0 ? `<button class="yt-replies" type="button" data-act="yt-replies" data-id="${esc(comment.id)}">${open ? "Hide replies" : esc(formatCount(count) || String(count)) + " replies"}</button>` : "";
-    const nested = open ? `<div class="yt-kids">${kids.length ? kids.map(ytComment).join("") : `<div class="reply-empty">Replies aren’t available.</div>`}</div>` : "";
+    const toggle = count > 0 ? `<button class="yt-replies" type="button" data-act="yt-replies" data-id="${esc(comment.id)}">${open ? tr("Hide replies") : tr("{count} replies", { count: formatCount(count) || String(count) })}</button>` : "";
+    const nested = open ? `<div class="yt-kids">${kids.length ? kids.map(ytComment).join("") : `<div class="reply-empty">${tr("Replies aren’t available.")}</div>`}</div>` : "";
     const href = comment.channelId ? accountHash("youtube", comment.channelId) : "";
     const cardId = comment.channelId ? ` data-card="youtube:${esc(comment.channelId)}"` : "";
-    const face = href ? `<a href="${esc(href)}"${cardId} aria-label="${esc(comment.author || comment.handle || "Profile")}">${avatar(comment.avatar, comment.author || comment.handle)}</a>` : avatar(comment.avatar, comment.author || comment.handle);
+    const face = href ? `<a href="${esc(href)}"${cardId} aria-label="${esc(comment.author || comment.handle || tr("Profile"))}">${avatar(comment.avatar, comment.author || comment.handle)}</a>` : avatar(comment.avatar, comment.author || comment.handle);
     const name = href ? `<a class="name" href="${esc(href)}"${cardId}>${esc(comment.author || comment.handle || "")}</a>` : esc(comment.author || comment.handle || "");
     return `<div class="yt-c">
       ${face}
@@ -8904,7 +9017,7 @@ if (STATE.histClear) {
 
   function watchView(route) {
     const post = posts().find((item) => item.platform === route.platform && String(item.statusId || item.id) === String(route.id)) || STATE.shared[String(route.id)];
-    if (!post) return pageHead("Watch", "", true) + emptyBlock("Not in this snapshot", "This video isn’t in the current snapshot.");
+    if (!post) return pageHead(tr("Watch"), "", true) + emptyBlock(tr("Not in this snapshot"), tr("This video isn’t in the current snapshot."));
     creditCarried(post);
     const creator = creatorOf(post);
     ensureYtMeta(post);
@@ -8920,8 +9033,8 @@ if (STATE.histClear) {
     const player = clip
       ? playerTile(post, media, mediaIndex).replace('class="tile vplay"', 'class="player vplay"')
       : ((media.poster || media.url) ? `<div class="player"><img src="${esc(media.poster || media.url)}" alt="" referrerpolicy="no-referrer"></div>` : "");
-    const pip = clip && document.pictureInPictureEnabled ? `<button class="text-btn" type="button" data-act="pip">${icon("pip")} Picture in picture</button>` : "";
-    const subs = creator.platform === "youtube" && creator.followers != null ? formatCount(creator.followers) + " subscribers" : (creator.followers != null ? formatCount(creator.followers) + " followers" : "");
+    const pip = clip && document.pictureInPictureEnabled ? `<button class="text-btn" type="button" data-act="pip">${icon("pip")} ${tr("Picture in picture")}</button>` : "";
+    const subs = creator.platform === "youtube" && creator.followers != null ? tr("{count} subscribers", { count: formatCount(creator.followers) }) : (creator.followers != null ? tr("{count} followers", { count: formatCount(creator.followers) }) : "");
     const liked = !!STATE.settings.likes[post.id];
     const booked = !!STATE.settings.bookmarks[post.id];
     const disliked = !!STATE.disliked[post.id];
@@ -8932,8 +9045,8 @@ if (STATE.histClear) {
     const bucket = watchComments(post);
     const sort = replySortMode();
     let comments = "";
-    if (bucket.loading) comments = `<div class="reply-empty">Loading comments…</div>`;
-    else if (bucket.missing || !bucket.doc) comments = `<div class="reply-empty">Comments aren’t available for this video.</div>`;
+    if (bucket.loading) comments = `<div class="reply-empty">${tr("Loading comments…")}</div>`;
+    else if (bucket.missing || !bucket.doc) comments = `<div class="reply-empty">${tr("Comments aren’t available for this video.")}</div>`;
     else {
       const top = (bucket.doc.replies || []).slice();
       const newest = (bucket.doc.newest || []).slice();
@@ -8955,15 +9068,15 @@ if (STATE.histClear) {
       const total = bucket.doc.commentCount != null ? bucket.doc.commentCount : rows.length;
       const stamped = bucket.fetchedAt || ytFetchedAt(bucket.doc);
       const label = freshLabel(stamped);
-      comments = (rows.length ? rows.map(ytComment).join("") : `<div class="reply-empty">No comments yet.</div>`);
-      comments = `<h3>${esc(formatCount(total) || "0")} Comments</h3><div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}${comments}`;
+      comments = (rows.length ? rows.map(ytComment).join("") : `<div class="reply-empty">${tr("No comments yet.")}</div>`);
+      comments = `<h3>${tr("{count} comments", { count: formatCount(total) || "0" })}</h3><div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}${comments}`;
     }
     const up = posts().filter((item) => isVideoPost(item) && followedPost(item) && postKey(item) !== id).sort(byStamp).slice(0, 16);
-    const upHtml = up.length ? `<aside class="upnext"><h2>Up next</h2>${up.map((item) => {
+    const upHtml = up.length ? `<aside class="upnext"><h2>${tr("Up next")}</h2>${up.map((item) => {
       const thumb = ((item.media || [])[0] || {}).poster || "";
       return `<a class="up-row" href="${esc(watchHash(item))}"><div class="yt-thumb">${thumb ? `<img src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}${platMark(item.platform)}</div><div><h3 class="yt-title">${esc(item.title || item.text || "")}</h3><div class="yt-by">${esc(item.author || item.handle || "")}</div><div class="yt-sub">${esc(videoMeta(item))}</div></div></a>`;
-    }).join("")}</aside>` : `<aside class="upnext"><h2>Up next</h2><p class="yt-sub">No other videos from accounts you follow.</p></aside>`;
-    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button><div class="pt-name grow">Watch</div></div></div>
+    }).join("")}</aside>` : `<aside class="upnext"><h2>${tr("Up next")}</h2><p class="yt-sub">${tr("No other videos from accounts you follow.")}</p></aside>`;
+    return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><div class="pt-name grow">${tr("Watch")}</div></div></div>
       <div class="watch">
         <div class="watch-main">
           ${player}
@@ -8971,22 +9084,22 @@ if (STATE.histClear) {
           ${repostBanner(post)}
           <h1 class="watch-title">${esc(post.title || post.text || "")}</h1>
           <div class="watch-chan">
-            <a data-card="${esc((creator.platform || post.platform) + ":" + (creator.channelId || creator.handle))}" href="${esc(accountHash(creator.platform || post.platform, creator.channelId || creator.handle))}" aria-label="${esc(creator.name || post.author || "Channel")}">${avatar(creator.avatar || post.avatar, creator.name || post.author)}</a>
+            <a data-card="${esc((creator.platform || post.platform) + ":" + (creator.channelId || creator.handle))}" href="${esc(accountHash(creator.platform || post.platform, creator.channelId || creator.handle))}" aria-label="${esc(creator.name || post.author || tr("Channel"))}">${avatar(creator.avatar || post.avatar, creator.name || post.author)}</a>
             <div class="watch-who"><a class="name" data-card="${esc((creator.platform || post.platform) + ":" + (creator.channelId || creator.handle))}" href="${esc(accountHash(creator.platform || post.platform, creator.channelId || creator.handle))}">${esc(creator.name || post.author || "")}${badge(creator.verifiedType || post.verifiedType)}</a><div class="yt-sub">${esc(subs)}</div></div>
             ${followButtonClean(creator.id, true)}
           </div>
           <div class="pills">
             <div class="pill-group">
-              <button class="pill${liked ? " on" : ""}" type="button" data-act="like" data-id="${esc(post.id)}" aria-label="Like">${icon("thumb")}${likeCount ? `<span>${esc(likeCount)}</span>` : ""}</button>
-              <button class="pill${disliked ? " on" : ""}" type="button" data-act="dislike" data-id="${esc(post.id)}" aria-label="Dislike">${icon("thumbDown")}${dislikeCount ? `<span>${esc(dislikeCount)}</span>` : ""}</button>
+              <button class="pill${liked ? " on" : ""}" type="button" data-act="like" data-id="${esc(post.id)}" aria-label="${tr("Like")}">${icon("thumb")}${likeCount ? `<span>${esc(likeCount)}</span>` : ""}</button>
+              <button class="pill${disliked ? " on" : ""}" type="button" data-act="dislike" data-id="${esc(post.id)}" aria-label="${tr("Dislike")}">${icon("thumbDown")}${dislikeCount ? `<span>${esc(dislikeCount)}</span>` : ""}</button>
             </div>
-            <button class="pill" type="button" data-act="share" data-kind="watch" data-id="${esc(post.id)}">${icon("share")}<span>Share</span></button>
-            <button class="pill${booked ? " on" : ""}" type="button" data-act="bookmark" data-id="${esc(post.id)}">${icon(booked ? "bookmarkOn" : "bookmark")}<span>${booked ? "Saved" : "Save"}</span></button>
+            <button class="pill" type="button" data-act="share" data-kind="watch" data-id="${esc(post.id)}">${icon("share")}<span>${tr("Share")}</span></button>
+            <button class="pill${booked ? " on" : ""}" type="button" data-act="bookmark" data-id="${esc(post.id)}">${icon(booked ? "bookmarkOn" : "bookmark")}<span>${booked ? tr("Saved") : tr("Save")}</span></button>
           </div>
           <div class="desc${openDesc || !desc ? "" : " clamped"}">
             <div class="yt-sub">${esc(videoMeta(post))}</div>
             <div class="desc-body">${linkify(desc || post.text || "", post.links, post.platform, post.handle)}</div>
-            ${desc ? `<button class="text-btn" type="button" data-act="more" data-key="desc:${esc(id)}">${openDesc ? "Show less" : "Show more"}</button>` : ""}
+            ${desc ? `<button class="text-btn" type="button" data-act="more" data-key="desc:${esc(id)}">${openDesc ? tr("Show less") : tr("Show more")}</button>` : ""}
           </div>
           ${repostQuote(post)}
           <section class="watch-comments">${comments}</section>
@@ -9050,7 +9163,7 @@ if (STATE.histClear) {
         title: feed.name || feed.handle || "",
         text: feed.bio || feed.name || "",
         platform: PLATFORM[feed.platform] || "web",
-        via: "Share profile via…"
+        via: tr("Share profile via…")
       };
     }
     const post = findAnyPost(share.id);
@@ -9064,7 +9177,7 @@ if (STATE.histClear) {
       title: post.title || post.author || "",
       text: post.text || post.title || "",
       platform: PLATFORM[post.platform] || "web",
-      via: "Share post via…"
+      via: tr("Share post via…")
     };
   }
 
@@ -9089,13 +9202,13 @@ if (STATE.histClear) {
     const place = STATE.share.anchor ? sharePlace(STATE.share.anchor, rows) : "top:72px;left:16px";
     const via = canNative ? `<button type="button" role="menuitem" data-act="native-share">${icon("share")} ${esc(ctx.via)}</button>` : "";
     const extra = original ? `<div class="share-rule"></div>
-      <button type="button" role="menuitem" data-act="copy" data-copy="original" data-url="${esc(original)}">${icon("link")} Copy original link</button>
-      <a role="menuitem" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(original)}">${icon("external")} Open original on ${esc(ctx.platform)}</a>` : "";
+      <button type="button" role="menuitem" data-act="copy" data-copy="original" data-url="${esc(original)}">${icon("link")} ${tr("Copy original link")}</button>
+      <a role="menuitem" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(original)}">${icon("external")} ${tr("Open original on {platform}", { platform: esc(ctx.platform) })}</a>` : "";
     const note = ctx.note ? `<p class="share-note">${esc(ctx.note)}</p>` : "";
-    return `<div class="share-back" data-act="close-share"><div class="share-pop" data-act="stop" role="menu" aria-label="Share" style="${place}">
+    return `<div class="share-back" data-act="close-share"><div class="share-pop" data-act="stop" role="menu" aria-label="${tr("Share")}" style="${place}">
       <div class="share-grab" aria-hidden="true"></div>
       ${note}
-      <button type="button" role="menuitem" data-act="copy" data-copy="site" data-url="${esc(ctx.permalink)}"${ctx.note ? ` data-note="${esc(ctx.note)}"` : ""}>${icon("link")} Copy link</button>
+      <button type="button" role="menuitem" data-act="copy" data-copy="site" data-url="${esc(ctx.permalink)}"${ctx.note ? ` data-note="${esc(ctx.note)}"` : ""}>${icon("link")} ${tr("Copy link")}</button>
       ${via}
       ${extra}
     </div></div>`;
@@ -9167,10 +9280,10 @@ if (STATE.histClear) {
 
   function ancestorCard(post) {
     const showReply = !!(post.replyingTo && post.replyingTo.handle);
-    const reply = showReply ? `<div class="replying">Replying to <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
     const face = authorFace(post);
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
-      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || "Profile")}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
+      <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
         <div class="byline">
           <a class="name" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
@@ -9192,12 +9305,12 @@ if (STATE.histClear) {
     let html = "";
     if (chain.nodes.length > 3 && !STATE.threadMore[id]) {
       html = ancestorCard(chain.nodes[0]) +
-        `<div class="ancestor-gap"><div class="ava-col"><div class="thread-line"></div></div><button class="ancestor-more" type="button" data-act="thread-more" data-id="${esc(id)}">Show more</button></div>` +
+        `<div class="ancestor-gap"><div class="ava-col"><div class="thread-line"></div></div><button class="ancestor-more" type="button" data-act="thread-more" data-id="${esc(id)}">${tr("Show more")}</button></div>` +
         ancestorCard(chain.nodes[chain.nodes.length - 1]);
     } else {
       html = chain.nodes.map(ancestorCard).join("");
     }
-    if (chain.loading) html += `<div class="ancestor-loading">Loading…</div>`;
+    if (chain.loading) html += `<div class="ancestor-loading">${tr("Loading…")}</div>`;
     return html;
   }
 
@@ -9273,43 +9386,43 @@ if (STATE.histClear) {
     const feed = shared.handle ? findFeed(shared.platform || "x", shared.handle) : null;
     const q = shared.handle || "";
     const matches = q ? shownFeeds(feeds()).filter((item) => (item.name + " " + item.handle + " " + (item.aliases || "")).toLowerCase().includes(q.toLowerCase())).slice(0, 8) : [];
-    return pageHead("Add account", "", true) + `<div class="modal-body">
+    return pageHead(tr("Add account"), "", true) + `<div class="modal-body">
       <p>${esc((STATE.incoming && (STATE.incoming.text || STATE.incoming.url)) || shared.url || "")}</p>
-      ${shared.handle ? `<p class="phandle">${esc(PLATFORM[shared.platform] || shared.platform)} · @${esc(shared.handle)}</p>` : `<p class="phandle">Search for an account, or follow one that’s already in your feeds.</p>`}
+      ${shared.handle ? `<p class="phandle">${esc(PLATFORM[shared.platform] || shared.platform)} · @${esc(shared.handle)}</p>` : `<p class="phandle">${tr("Search for an account, or follow one that’s already in your feeds.")}</p>`}
       ${feed ? followButtonClean(feed.id, true) : (shared.handle ? `<p class="phandle">@${esc(shared.handle)} isn’t in the catalog yet. Add the account in feeds.config.json, then sync.</p>` : "")}
-      <form data-act="search-form" class="explore-form"><label class="search"><span>${icon("search")}</span><input id="explore-q" value="${esc(q)}" placeholder="Search accounts" aria-label="Search accounts"></label></form>
+      <form data-act="search-form" class="explore-form"><label class="search"><span>${icon("search")}</span><input id="explore-q" value="${esc(q)}" placeholder="${tr("Search accounts")}" aria-label="${tr("Search accounts")}"></label></form>
       ${matches.map(accountRow).join("")}
     </div>`;
   }
 
   function sourcesView() {
-    const head = pageHead("Sources", "", true);
+    const head = pageHead(tr("Sources"), "", true);
     if (!LIVE.statusLoaded) {
       loadStatus().then(() => render());
-      return head + `<div class="reply-empty">Checking sources…</div>`;
+      return head + `<div class="reply-empty">${tr("Checking sources…")}</div>`;
     }
     const doc = LIVE.status;
-    if (!doc || !(doc.sources || []).length) return head + emptyBlock("No status yet", "The sync publishes status.json with the site. This copy doesn’t have one.");
+    if (!doc || !(doc.sources || []).length) return head + emptyBlock(tr("No status yet"), tr("The sync publishes status.json with the site. This copy doesn’t have one."));
     const rows = (doc.sources || []).map((row) => {
       const up = !!row.up;
-      return `<div class="source-row"><span class="source-state ${up ? "up" : "down"}">${up ? "Up" : "Down"}</span><div><div class="source-name">${esc((row.group || "") + " · " + (row.id || ""))}</div><div class="source-detail">${esc(row.detail || "")}</div></div></div>`;
+      return `<div class="source-row"><span class="source-state ${up ? "up" : "down"}">${up ? tr("Up") : tr("Down")}</span><div><div class="source-name">${esc((row.group || "") + " · " + (row.id || ""))}</div><div class="source-detail">${esc(row.detail || "")}</div></div></div>`;
     }).join("");
     return head + `<p class="source-checked">${esc(freshLabel(doc.checkedAt))}</p>` + rows;
   }
 
   function view(route) {
-    if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead("SIntelMusic") + emptyBlock("SIntelMusic isn’t available", "Reload the page.");
+    if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
     if (STATE.loading) {
-      return `<div class="topbar"><div class="page-head"><h1>Home</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
+      return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
     if (STATE.error) {
-      return pageHead("Home") + `<div class="error-box"><h2>Couldn’t load posts</h2><p>feeds.json didn’t load. Check that the file is next to this page.</p><button class="retry" data-act="reload">Retry</button></div>`;
+      return pageHead(tr("Home")) + `<div class="error-box"><h2>${tr("Couldn’t load posts")}</h2><p>${tr("feeds.json didn’t load. Check that the file is next to this page.")}</p><button class="retry" data-act="reload">${tr("Retry")}</button></div>`;
     }
     const params = new URLSearchParams(location.search);
-    if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock("No posts yet", "When the accounts you follow post, their updates will show up here.");
+    if (params.get("empty") === "1" && route.name === "home") return homeHeader("foryou") + emptyBlock(tr("No posts yet"), tr("When the accounts you follow post, their updates will show up here."));
     if (route.name === "home") return homeView(route);
-    if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead("Profile", "", true) + emptyBlock("Profile isn’t available", "This person isn’t in people.json.");
-    if (route.name === "spaces") return (window.Spaces && window.Spaces.page && window.Spaces.page(route)) || pageHead("Space", "", true) + emptyBlock("This Space has ended", "This Space isn’t available.");
+    if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
+    if (route.name === "spaces") return (window.Spaces && window.Spaces.page && window.Spaces.page(route)) || pageHead(tr("Space"), "", true) + emptyBlock(tr("This Space has ended"), tr("This Space isn’t available."));
     if (route.name === "profile") return profileView(route);
     if (route.name === "user") return userView(route);
     if (route.name === "status") return statusView(route);
@@ -9325,7 +9438,7 @@ if (STATE.histClear) {
     if (route.name === "incoming") return incomingView();
     if (route.name === "notifications") return notificationsView(route);
     if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
-    if (route.name === "messages") return notesView("Messages", "Welcome to your inbox", "Private conversations aren’t part of this reader.");
+    if (route.name === "messages") return notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
     return homeView({ tab: "foryou", query: new URLSearchParams() });
   }
@@ -9592,7 +9705,7 @@ if (STATE.histClear) {
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
       const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
       if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = window.SIntelMusic.titleFor(route);
-      else document.title = (discordTitle || personName || (route.name === "home" ? "Home" : route.name === "explore" ? (exploreQ ? exploreQ + " - Explore" : "Explore") : route.name === "status" ? "Post" : route.name === "user" ? (liveName || route.handle || "Profile") : route.name === "incoming" ? "Add account" : route.name[0].toUpperCase() + route.name.slice(1))) + " / SuperintelApp";
+      else document.title = routeTitle(route, liveName, personName, discordTitle);
       window.scrollTo(0, y);
       if (focusId) {
         const el = document.getElementById(focusId);
@@ -9703,6 +9816,10 @@ if (STATE.histClear) {
     if (act === "stop") return;
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
+    if (act === "ui-lang") {
+      if (window.SI18n) window.SI18n.setLang(el.dataset.lang || "en");
+      return;
+    }
     if (act === "skip") {
       const main = document.querySelector("main.center");
       if (main) main.focus();
@@ -9748,7 +9865,7 @@ if (STATE.histClear) {
       render();
       return;
     }
-    if (act === "compose-post") { STATE.modal = null; render(); toast("Posts come from your feeds"); return; }
+    if (act === "compose-post") { STATE.modal = null; render(); toast(tr("Posts come from your feeds")); return; }
     if (act === "close-tab-menu") {
       closeTabMenu();
       return;
@@ -9886,7 +10003,7 @@ if (STATE.histClear) {
       const id = el.dataset.id;
       if (id && STATE.settings.follows.indexOf(id) < 0) STATE.settings.follows.push(id);
       saveSettings();
-      toast("Follow request opened. Submit it on GitHub and the next sync will add this account.");
+      toast(tr("Follow request opened. Submit it on GitHub and the next sync will add this account."));
       return;
     }
     if (act === "follow") {
@@ -9941,7 +10058,7 @@ if (STATE.histClear) {
         if (act === "bookmark") {
           rememberBookmark(id);
           histUpsert("bookmarks", likedPost || findAnyPost(id), { id: id });
-          if (!navigator.onLine) toast("Saved. Images download when you’re back online.");
+          if (!navigator.onLine) toast(tr("Saved. Images download when you’re back online."));
         }
         if (act === "like") histUpsert("likes", likedPost, { id: id });
       }
@@ -10251,7 +10368,7 @@ if (STATE.histClear) {
       STATE.menu = null;
       STATE.share = null;
       render();
-      toast(el.dataset.note || "Copied to clipboard");
+      toast(el.dataset.note || tr("Copied to clipboard"));
       return;
     }
     if (act === "open-status") {
@@ -10424,7 +10541,7 @@ if (STATE.histClear) {
       const editing = STATE.draft && STATE.draft.id;
       STATE.settings.groups = STATE.settings.groups || [];
       if (!editing && STATE.settings.groups.length >= 40) {
-        toast("You can keep 40 groups");
+        toast(tr("You can keep 40 groups"));
         return;
       }
       let id = editing || "";
@@ -10444,7 +10561,7 @@ if (STATE.histClear) {
       saveSettings();
       STATE.modal = null;
       STATE.draft = null;
-      if (typed && !icon) toast("Icon needs an https URL");
+      if (typed && !icon) toast(tr("Icon needs an https URL"));
       if (editing) render();
       else goSubs(id);
       return;
@@ -10493,11 +10610,11 @@ if (STATE.histClear) {
     }
     if (act === "group-publish") {
       window.open(groupsIssueUrl(), "_blank", "noopener,noreferrer");
-      toast("Submit the issue on GitHub. Groups stay on this device until that list is published.");
+      toast(tr("Submit the issue on GitHub. Groups stay on this device until that list is published."));
       return;
     }
     if (act === "export") {
-const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
+const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? window.SI18n.getLang() : "en", follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "superintelapp-settings.json";
@@ -10771,6 +10888,11 @@ const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.foll
       if (btn) btn.disabled = !el.value.trim();
       return;
     }
+    if (el.id === "lang-q") {
+      STATE.langQ = el.value;
+      render();
+      return;
+    }
     if (el.id === "hist-q") {
       STATE.histQ = el.value;
       render();
@@ -10829,11 +10951,11 @@ const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.foll
       const input = addForm.querySelector("input");
       const parsed = parseAccountInput(input && input.value);
       if (!parsed) {
-        toast("Use a profile URL, @handle, or an https feed");
+        toast(tr("Use a profile URL, @handle, or an https feed"));
         return;
       }
       window.open(followIssueUrl("follow", parsed.account, parsed.platform), "_blank", "noopener,noreferrer");
-      toast("Follow request opened. Submit it on GitHub and the next sync will add this account.");
+      toast(tr("Follow request opened. Submit it on GitHub and the next sync will add this account."));
       return;
     }
     const form = event.target.closest("[data-act='search-form']");
@@ -10860,6 +10982,7 @@ const blob = new Blob([JSON.stringify({ version: 1, follows: STATE.settings.foll
       try {
         const data = JSON.parse(String(reader.result));
         if (!data || !Array.isArray(data.follows) || !Array.isArray(data.lists)) throw new Error("bad");
+        if ((data.uiLang === "en" || data.uiLang === "ru" || data.uiLang === "es") && window.SI18n) window.SI18n.setLang(data.uiLang);
         STATE.settings.follows = data.follows;
         STATE.settings.lists = data.lists;
         STATE.settings.likes = data.likes || {};
@@ -10896,9 +11019,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         STATE.settings.initialized = true;
         saveSettings();
         render();
-        toast("Settings imported");
+        toast(tr("Settings imported"));
       } catch (err) {
-        toast("Couldn’t read that file");
+        toast(tr("Couldn’t read that file"));
       }
     };
     reader.readAsText(file);
@@ -11347,7 +11470,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       faces.push(src);
     });
     const avatars = faces.map((src) => `<img class="pill-ava" alt="" src="${esc(src)}">`).join("");
-    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>New posts</span>";
+    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + tr("New posts") + "</span>";
     el.hidden = false;
   }
 
@@ -11807,7 +11930,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const fresh = added.filter((post) => followedSince(post, since) && !coveredByBell(post));
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) {
-        try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
+        try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
       }
     } catch (err) { /* keep the posts already on screen */ }
   }
@@ -11827,8 +11950,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (poster) artwork.unshift({ src: poster, sizes: "1280x720", type: "image/jpeg" });
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
-        title: post.title || String(post.text || "").slice(0, 80) || "Video",
-        artist: post.author || post.handle || "SuperintelApp",
+        title: post.title || String(post.text || "").slice(0, 80) || tr("Video"),
+        artist: post.author || post.handle || productName("app"),
         artwork: artwork
       });
       const video = document.querySelector(".player video");
@@ -11843,9 +11966,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!el) return;
     const was = !el.hidden;
     el.hidden = !offline;
-    el.textContent = "You're offline. Showing saved posts.";
+    el.textContent = tr("You're offline. Showing saved posts.");
     if (was && !offline) {
-      toast("You're back online");
+      toast(tr("You're back online"));
       flushBookmarkQueue();
     }
   }
@@ -11895,7 +12018,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const post = findAnyPost(view.id);
       const media = view.media || ((post && post.media) || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || {};
       box.hidden = false;
-      box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="Close">×</button><video id="viewer-video" playsinline controls></video>`;
+      box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button><video id="viewer-video" playsinline controls></video>`;
       const video = document.getElementById("viewer-video");
       if (!video) return;
       video.playsInline = true;
@@ -11930,7 +12053,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!file) {
           const poster = (media && (media.poster || media.url)) || "";
           const href = originalOf(post || {}, media);
-          box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="Close">×</button>${poster ? `<img alt="" src="${esc(poster)}" referrerpolicy="no-referrer">` : ""}<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}">${esc(watchOn((post && post.platform) || ""))}</a>`;
+          box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>${poster ? `<img alt="" src="${esc(poster)}" referrerpolicy="no-referrer">` : ""}<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}">${esc(watchOn((post && post.platform) || ""))}</a>`;
           return;
         }
         startFile(file.url, file.kind === "hls" ? "hls" : "mp4");
@@ -11942,7 +12065,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const item = photos[view.index] || photos[0];
     if (!item) { STATE.viewer = null; box.hidden = true; box.innerHTML = ""; return; }
     box.hidden = false;
-    box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="Close">×</button><img id="viewer-img" alt="${esc(item.alt || "")}" src="${esc(item.url || item.poster)}" referrerpolicy="no-referrer" decoding="async" draggable="false"><div class="viewer-count">${photos.length > 1 ? (view.index + 1) + " / " + photos.length : ""}</div>`;
+    box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button><img id="viewer-img" alt="${esc(item.alt || "")}" src="${esc(item.url || item.poster)}" referrerpolicy="no-referrer" decoding="async" draggable="false"><div class="viewer-count">${photos.length > 1 ? (view.index + 1) + " / " + photos.length : ""}</div>`;
     const img = document.getElementById("viewer-img");
     if (img) img.style.transform = "translate3d(0,0,0) scale(1)";
   }
@@ -12244,7 +12367,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!note || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
       const item = new Notification(note.name || ("@" + (note.handle || "post")), {
-        body: note.text || "New post",
+        body: note.text || tr("New post"),
         icon: note.avatar || "icons/icon-192.png",
         tag: "bell-" + note.id
       });
@@ -12258,7 +12381,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function showPageNotification(note) {
     const payload = {
-      body: note.text || "New post",
+      body: note.text || tr("New post"),
       icon: note.avatar || "icons/icon-192.png",
       image: note.image || undefined,
       tag: "bell-" + note.id,
@@ -12370,7 +12493,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     render();
     const allowed = await ensureNotifyPermission();
     if (!allowed) {
-      toast("Notifications stay off");
+      toast(tr("Notifications stay off"));
       return;
     }
     STATE.settings.bells[key] = {
@@ -12385,18 +12508,18 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     saveSettings();
     registerPeriodic();
     render();
-    toast("You'll get notified when @" + STATE.settings.bells[key].handle + " posts.");
+    toast(tr("You'll get notified when @{handle} posts.", { handle: STATE.settings.bells[key].handle }));
   }
 
   async function enableNotifications() {
-    if (typeof Notification === "undefined") { toast("Notifications aren’t available"); return; }
+    if (typeof Notification === "undefined") { toast(tr("Notifications aren’t available")); return; }
     let permission = Notification.permission;
     if (permission !== "granted") permission = await Notification.requestPermission();
     STATE.settings.notify = permission === "granted";
     saveSettings();
     if (STATE.settings.notify) registerPeriodic();
     render();
-    toast(STATE.settings.notify ? "Notifications on" : "Notifications stay off");
+    toast(STATE.settings.notify ? tr("Notifications on") : tr("Notifications stay off"));
   }
 
   function registerPeriodic() {
@@ -12420,7 +12543,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       mutedWords: STATE.settings.mutedWords || [],
       mutedAccounts: STATE.settings.mutedAccounts || [],
       repostOff: STATE.settings.repostOff || [],
-      notifyAll: !!STATE.settings.notify
+      notifyAll: !!STATE.settings.notify,
+      uiLang: window.SI18n ? window.SI18n.getLang() : "en"
     });
   }
 
@@ -12711,7 +12835,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post));
       const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
       if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        try { new Notification("New posts", { body: fresh.length + " new posts from accounts you follow", icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
+        try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
       }
       if (document.visibilityState === "visible") {
         writeStored(localStorage, "seen-at", String(Date.now()));
@@ -12748,6 +12872,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   document.addEventListener("pointerup", flushSplitRender);
   document.addEventListener("pointercancel", flushSplitRender);
 
+  if (window.SI18n) window.SI18n.onChange(function () { render(); syncWorkerState(); });
   if (window.FeedsTV && window.FeedsTV.attach) window.FeedsTV.attach();
   if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
   if (window.FeedsPeople) {

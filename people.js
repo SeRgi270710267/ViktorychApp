@@ -1,5 +1,23 @@
 /* Unified profiles. people.json is the only source of linked accounts. */
 (function (root) {
+
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
+    return fn ? fn(key, vars) : key;
+  }
+  function trn(key, n, vars) {
+    var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
+    return fn ? fn(key, n, vars) : String(n);
+  }
+  function productName(kind) {
+    var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
+    if (api && api.productName) return api.productName(kind);
+    if (kind === "musicShort") return "ViktrychMusic";
+    if (kind === "music") return "ViktorychMusic";
+    if (kind === "pwa") return "ViktrychApp";
+    return "ViktorychApp";
+  }
+
   const NET = {
     x: "X",
     threads: "Threads",
@@ -193,12 +211,12 @@
   function tabsFor(person, rows) {
     const platforms = {};
     (person.accounts || []).forEach((account) => { platforms[account.platform || "x"] = true; });
-    const tabs = [["posts", "Posts"]];
-    if (platforms.youtube || platforms.x || rows.some(isVideo)) tabs.push(["videos", "Videos"]);
+    const tabs = [["posts", tr("Posts")]];
+    if (platforms.youtube || platforms.x || rows.some(isVideo)) tabs.push(["videos", tr("Videos")]);
     if (platforms.youtube || rows.some(isShort)) tabs.push(["shorts", "Shorts"]);
-    if (platforms.youtube || rows.some((post) => post.kind === "community")) tabs.push(["community", "Community"]);
-    if (platforms.x || platforms.threads || rows.some((post) => post.kind === "reply")) tabs.push(["replies", "Replies"]);
-    if (platforms.x || platforms.instagram || platforms.threads || platforms.vk || platforms.telegram || platforms.discord || rows.some(hasMedia)) tabs.push(["media", "Media"]);
+    if (platforms.youtube || rows.some((post) => post.kind === "community")) tabs.push(["community", tr("Community")]);
+    if (platforms.x || platforms.threads || rows.some((post) => post.kind === "reply")) tabs.push(["replies", tr("Replies")]);
+    if (platforms.x || platforms.instagram || platforms.threads || platforms.vk || platforms.telegram || platforms.discord || rows.some(hasMedia)) tabs.push(["media", tr("Media")]);
     return tabs;
   }
 
@@ -316,11 +334,11 @@
     });
     const bits = followerRows.map((row) => {
       const label = followerRows.length > 1
-        ? (row.platform === "youtube" ? "YouTube subscribers" : (NET[row.platform] || "Followers") + " followers")
-        : (row.platform === "youtube" ? "Subscribers" : "Followers");
+        ? (row.platform === "youtube" ? tr("YouTube subscribers") : tr("{platform} followers", { platform: NET[row.platform] || row.platform || "" }))
+        : (row.platform === "youtube" ? tr("Subscribers") : tr("Followers"));
       return `<div><b>${esc(format(row.value))}</b> <span>${esc(label)}</span></div>`;
     });
-    if (following != null) bits.push(`<div><b>${esc(format(following))}</b> <span>Following</span></div>`);
+    if (following != null) bits.push(`<div><b>${esc(format(following))}</b> <span>${tr("Following count")}</span></div>`);
     return bits.length ? `<div class="counts">${bits.join("")}</div>` : "";
   }
 
@@ -349,12 +367,12 @@
   }
 
   function emptyCopy(tab) {
-    if (tab === "replies") return ["No replies yet", "Replies from these accounts will show up here."];
-    if (tab === "media") return ["No media yet", "Photos and videos from these accounts will show up here."];
-    if (tab === "videos") return ["No videos yet", "YouTube videos and videos from X will show up here."];
-    if (tab === "shorts") return ["No Shorts yet", "Short videos from these accounts will show up here."];
-    if (tab === "community") return ["No community posts yet", "Community posts from this channel will show up here."];
-    return ["No posts yet", "Posts from these accounts will show up here."];
+    if (tab === "replies") return [tr("No replies yet"), tr("Replies from these accounts will show up here.")];
+    if (tab === "media") return [tr("No media yet"), tr("Photos and videos from these accounts will show up here.")];
+    if (tab === "videos") return [tr("No videos yet"), tr("YouTube videos and videos from X will show up here.")];
+    if (tab === "shorts") return [tr("No Shorts yet"), tr("Short videos from these accounts will show up here.")];
+    if (tab === "community") return [tr("No community posts yet"), tr("Community posts from this channel will show up here.")];
+    return [tr("No posts yet"), tr("Posts from these accounts will show up here.")];
   }
 
   function page(route) {
@@ -410,7 +428,7 @@
     }
     return `<div class="topbar profile-bar">
       <div class="page-head">
-        <button class="icon-btn" data-act="back" aria-label="Back">${icon("back")}</button>
+        <button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button>
         <div class="head-text"><div class="pt-name">${esc(person.name || person.id)}</div><div class="pt-count">${esc(count)}</div></div>
       </div>
     </div>
@@ -419,7 +437,7 @@
       <div class="pava-row">
         ${avatar}
         <div class="pactions">
-          <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(shareId)}" aria-label="Share">${icon("share")}</button>
+          <button class="icon-btn" type="button" data-act="share" data-kind="profile" data-id="${esc(shareId)}" aria-label="${tr("Share")}">${icon("share")}</button>
           ${bell}
           ${follow}
         </div>
@@ -430,7 +448,7 @@
       ${countHtml(person)}
     </div>
     ${liveCard}
-    <div class="tabs ptabs" role="tablist" aria-label="Profile">${tabHtml}</div>
+    <div class="tabs ptabs" role="tablist" aria-label="${tr("Profile")}">${tabHtml}</div>
     ${body}${tail}`;
   }
 

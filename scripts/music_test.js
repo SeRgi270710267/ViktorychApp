@@ -132,7 +132,7 @@ assert.strictEqual(L.sameSection({ name: "music", section: "home", id: "" }, "#/
 assert.strictEqual(L.publishable(merged.songs).length, 1);
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "superintel13-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "superintel14-__SW_VERSION__"'));
 assert.ok(worker.includes("sintel-music-offline"));
 assert.ok(worker.includes("function isCatalogMedia(url)"));
 const fetchAt = worker.indexOf('self.addEventListener("fetch"');

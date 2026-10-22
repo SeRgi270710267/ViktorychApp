@@ -2,7 +2,7 @@
   "id": "./",
   "name": "SIntelApp",
   "short_name": "SIntelApp",
-  "description": "An X-style home for posts from X, Threads, Instagram, YouTube, VK, and RSS.",
+  "description": "An X-style home for posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.",
   "scope": "./",
   "start_url": "./#/home",
   "display": "standalone",

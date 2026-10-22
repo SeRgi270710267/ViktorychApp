@@ -3,6 +3,24 @@
    translation endpoints that send their own CORS header. A Google Translate
    link is only shown when every in-place engine fails. No API keys. */
 (function (root) {
+
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
+    return fn ? fn(key, vars) : key;
+  }
+  function trn(key, n, vars) {
+    var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
+    return fn ? fn(key, n, vars) : String(n);
+  }
+  function productName(kind) {
+    var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
+    if (api && api.productName) return api.productName(kind);
+    if (kind === "musicShort") return "ViktrychMusic";
+    if (kind === "music") return "ViktorychMusic";
+    if (kind === "pwa") return "ViktrychApp";
+    return "ViktorychApp";
+  }
+
   const CACHE_KEY = "superintelapp-translate-v1";
   const HEALTH_KEY = "superintelapp-translate-health-v1";
   const SICK_MS = 10 * 60 * 1000;
@@ -74,11 +92,16 @@
     return normalize(settings && settings.translateTo);
   }
 
+  let nameLocale = "";
   function languageName(code) {
     const key = String(code || "").toLowerCase().split("-")[0];
     if (!key) return "";
+    const loc = (typeof window !== "undefined" && window.SI18n && window.SI18n.locale) ? window.SI18n.locale() : "en";
     try {
-      if (!names) names = new Intl.DisplayNames(["en"], { type: "language" });
+      if (!names || nameLocale !== loc) {
+        names = new Intl.DisplayNames([loc], { type: "language" });
+        nameLocale = loc;
+      }
       const label = names.of(key);
       if (label && label.toLowerCase() !== key) return label.charAt(0).toUpperCase() + label.slice(1);
     } catch (err) { /* Intl can be missing the language */ }
@@ -270,22 +293,22 @@
   }
 
   function kindLabel(kind) {
-    if (kind === "reply") return "Translate reply";
-    if (kind === "bio") return "Translate bio";
-    return "Translate post";
+    if (kind === "reply") return tr("Translate reply");
+    if (kind === "bio") return tr("Translate bio");
+    return tr("Translate post");
   }
 
   function creditInner(key) {
     const box = state();
     const fallback = box.translateFallback && box.translateFallback[key];
     if (fallback) {
-      return `<a class="show-more tr-fallback" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(fallback)}">Open in Google Translate</a>`;
+      return `<a class="show-more tr-fallback" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(fallback)}">${tr("Open in Google Translate")}</a>`;
     }
     if (!textFor(key)) return "";
     const meta = (box.translateMeta && box.translateMeta[key]) || {};
-    const engine = meta.engine || "translation";
-    const from = meta.source ? "Translated from " + languageName(meta.source) + " by " + engine : "Translated by " + engine;
-    return `<span>${esc(from)}</span> <button class="show-more" type="button" data-act="show-original" data-key="${esc(key)}">Show original</button>`;
+    const engine = meta.engine || tr("translation");
+    const from = meta.source ? tr("Translated from {language} by {engine}", { language: languageName(meta.source), engine: engine }) : tr("Translated by {engine}", { engine: engine });
+    return `<span>${esc(from)}</span> <button class="show-more" type="button" data-act="show-original" data-key="${esc(key)}">${tr("Show original")}</button>`;
   }
 
   function block(post, key, cls, inner) {
@@ -324,7 +347,7 @@
     });
     translateButtons(key).forEach((btn) => {
       btn.disabled = !!on;
-      if (on) btn.textContent = "Translating...";
+      if (on) btn.textContent = tr("Translating...");
     });
     if (!on) nodes("data-tr-progress", key).forEach((el) => el.remove());
   }
@@ -811,8 +834,8 @@
 
   function settingsHtml() {
     const current = targetLang();
-    const options = LANGS.map((row) => `<option value="${esc(row[0])}"${row[0] === current ? " selected" : ""}>${esc(row[1])}</option>`).join("");
-    return `<h2>Translation</h2><div class="tr-settings"><p class="phandle">Translate to</p><label class="vh" for="translate-to">Translate to</label><select id="translate-to" class="tr-select">${options}</select></div>`;
+    const options = LANGS.map((row) => `<option value="${esc(row[0])}"${row[0] === current ? " selected" : ""}>${esc(languageName(row[0]))}</option>`).join("");
+    return `<h2>${tr("Translate posts to")}</h2><p class="phandle">${tr("Choose which language posts are translated into. Names and post text stay as written until you translate a post.")}</p><div class="tr-settings"><label class="vh" for="translate-to">${tr("Translate posts to")}</label><select id="translate-to" class="tr-select">${options}</select></div>`;
   }
 
   function rotateLive(list, prefix, cursor) {

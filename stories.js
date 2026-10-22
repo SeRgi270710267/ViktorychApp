@@ -3,6 +3,24 @@
 (function (root) {
   "use strict";
 
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
+    return fn ? fn(key, vars) : key;
+  }
+  function trn(key, n, vars) {
+    var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
+    return fn ? fn(key, n, vars) : String(n);
+  }
+  function productName(kind) {
+    var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
+    if (api && api.productName) return api.productName(kind);
+    if (kind === "musicShort") return "ViktrychMusic";
+    if (kind === "music") return "ViktorychMusic";
+    if (kind === "pwa") return "ViktrychApp";
+    return "ViktorychApp";
+  }
+
+
   var DAY = 24 * 60 * 60 * 1000;
   var PHOTO_MS = 5000;
   var SEEN_KEY = "rss-stories-seen-v1";
@@ -145,10 +163,10 @@
   function homeTray() {
     var list = rows();
     if (!list.length) return "";
-    return '<div class="story-tray" role="list" aria-label="Stories">' + list.map(function (account) {
+    return ("<div class=\"story-tray\" role=\"list\" " + "aria-label=\"" + tr("Stories") + "\"" + ">") + list.map(function (account) {
       var seen = readSeen();
       var fresh = unseen(account, seen);
-      var label = (account.name || account.handle || "Story") + (fresh ? ", unseen story" : ", story");
+      var label = (account.name || account.handle || tr("Story")) + (fresh ? tr(", unseen story") : tr(", story"));
       return '<button type="button" class="story-card' + (fresh ? " unseen" : " seen") + '" role="listitem" data-act="story" data-id="' + esc(account.id) + '" aria-label="' + esc(label) + '">' +
         '<span class="story-ring"><span class="story-face">' + face(account) + "</span>" + badge(account.platform) + "</span>" +
         '<span class="story-name">' + esc(account.name || account.handle || "") + "</span></button>";
@@ -156,15 +174,16 @@
   }
 
   function ago(iso) {
+    if (typeof window !== "undefined" && window.SI18n && window.SI18n.storyAge) return window.SI18n.storyAge(iso);
     var then = stamp(iso);
     if (!then) return "";
     var seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
-    if (seconds < 45) return "now";
+    if (seconds < 45) return tr("now");
     var minutes = Math.round(seconds / 60);
     if (minutes < 60) return minutes + "m";
     var hours = Math.round(minutes / 60);
     if (hours < 24) return hours + "h";
-    return "24h";
+    return tr("24h");
   }
 
   function platformName(platform) {
@@ -172,7 +191,7 @@
     if (platform === "vk") return "VK";
     if (platform === "telegram") return "Telegram";
     if (platform === "youtube") return "YouTube";
-    return "the original";
+    return tr("the original");
   }
 
   function box() {
@@ -295,23 +314,23 @@
         (row.index === 0 ? ' fetchpriority="high"' : "") + ' referrerpolicy="no-referrer">';
     }
     var sound = item.type === "video"
-      ? '<button type="button" class="story-icon" data-story-act="sound" aria-label="' + (soundOn ? "Mute" : "Unmute") + '" aria-pressed="' + (soundOn ? "true" : "false") + '">' +
-        (deps.icon ? deps.icon(soundOn ? "vol" : "volOff") : (soundOn ? "Mute" : "Unmute")) + "</button>"
+      ? '<button type="button" class="story-icon" data-story-act="sound" aria-label="' + (soundOn ? tr("Mute") : tr("Unmute")) + '" aria-pressed="' + (soundOn ? "true" : "false") + '">' +
+        (deps.icon ? deps.icon(soundOn ? "vol" : "volOff") : (soundOn ? tr("Mute") : tr("Unmute"))) + "</button>"
       : "";
     var open = https(item.open);
     var menu = '<div class="story-menu" hidden>' +
       (open ? '<a href="' + esc(open) + '" target="_blank" rel="noopener noreferrer">Open on ' + esc(platformName(account.platform)) + "</a>" : "") +
-      '<button type="button" data-story-act="close">Close</button></div>';
+      ("<button type=\"button\" data-story-act=\"close\"" + ">" + tr("Close") + "<" + "/button></div>");
     node.innerHTML = '<div class="story-top"><div class="story-bars">' + bars + '</div><div class="story-head">' +
       '<span class="story-mini"><span class="story-face">' + face(account) + "</span></span>" +
       '<span class="story-who"><b>' + esc(account.name || account.handle) + "</b><span>" + esc(ago(item.date)) + "</span></span>" +
       sound +
-      '<button type="button" class="story-icon" data-story-act="menu" aria-label="More" aria-expanded="false">' +
+      ("<button type=\"button\" class=\"story-icon\" data-story-act=\"menu\" " + "aria-label=\"" + tr("More") + "\"" + " aria-expanded=\"false\">") +
       (deps.icon ? deps.icon("more") : "···") + "</button></div></div>" +
-      '<div class="story-stage">' + media + '<p class="story-miss" hidden>Couldn’t load this story.</p></div>' +
+      '<div class="story-stage">' + media + ("<p class=\"story-miss\" hidden" + ">" + tr("Couldn’t load this story.") + "<" + "/p></div>") +
       (item.caption ? '<p class="story-caption">' + esc(item.caption) + "</p>" : "") + menu;
     node.hidden = false;
-    node.setAttribute("aria-label", (account.name || "Story") + " stories");
+    node.setAttribute("aria-label", (account.name || tr("Story")) + " stories");
     document.documentElement.classList.add("stories-open");
     var video = node.querySelector("video");
     if (video) {
@@ -498,9 +517,9 @@
         video.muted = !soundOn;
         video.play().catch(function () { /* the control still reflects the choice */ });
       }
-      act.setAttribute("aria-label", soundOn ? "Mute" : "Unmute");
+      act.setAttribute("aria-label", soundOn ? tr("Mute") : tr("Unmute"));
       act.setAttribute("aria-pressed", soundOn ? "true" : "false");
-      act.innerHTML = deps.icon ? deps.icon(soundOn ? "vol" : "volOff") : (soundOn ? "Mute" : "Unmute");
+      act.innerHTML = deps.icon ? deps.icon(soundOn ? "vol" : "volOff") : (soundOn ? tr("Mute") : tr("Unmute"));
     }
   }
 

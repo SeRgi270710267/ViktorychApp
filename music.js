@@ -4,7 +4,24 @@
 (function (root) {
   "use strict";
 
-  var BRAND = "SIntelMusic";
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
+    return fn ? fn(key, vars) : key;
+  }
+  function trn(key, n, vars) {
+    var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
+    return fn ? fn(key, n, vars) : String(n);
+  }
+  function productName(kind) {
+    var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
+    if (api && api.productName) return api.productName(kind);
+    if (kind === "musicShort") return "ViktrychMusic";
+    if (kind === "music") return "ViktorychMusic";
+    if (kind === "pwa") return "ViktrychApp";
+    return "ViktorychApp";
+  }
+
+
   var STORE = "sintel-music-v1";
   var WORD_BOX = "0 0 11430.20 2079.00";
   var SI_BOX = "0 0 1986.60 1680.80";
@@ -276,18 +293,18 @@
       (remote.playlists || []).forEach(function (list) {
         if (!list || !list.id || used[list.id]) return;
         used[list.id] = true;
-        playlists.push({ id: list.id, name: String(list.name || "Playlist"), songIds: (list.songIds || []).slice() });
+        playlists.push({ id: list.id, name: String(list.name || tr("Playlist")), songIds: (list.songIds || []).slice() });
       });
     } else {
       (local.playlists || []).forEach(function (list) {
         if (!list || !list.id || used[list.id]) return;
         used[list.id] = true;
-        playlists.push({ id: list.id, name: String(list.name || "Playlist"), songIds: (list.songIds || []).slice() });
+        playlists.push({ id: list.id, name: String(list.name || tr("Playlist")), songIds: (list.songIds || []).slice() });
       });
       (remote.playlists || []).forEach(function (list) {
         if (!list || !list.id || used[list.id]) return;
         used[list.id] = true;
-        playlists.push({ id: list.id, name: String(list.name || "Playlist"), songIds: (list.songIds || []).slice() });
+        playlists.push({ id: list.id, name: String(list.name || tr("Playlist")), songIds: (list.songIds || []).slice() });
       });
     }
     return { songs: songs, playlists: playlists };
@@ -422,32 +439,32 @@
   }
 
   function brand() {
-    return '<a class="logo" href="#/" aria-label="' + BRAND + '">' + wordmark("logo-full") +
+    return '<a class="logo" href="#/" aria-label="' + productName("music") + '">' + wordmark("logo-full") +
       '<svg class="logo-si" viewBox="' + SI_BOX + '" fill="currentColor" aria-hidden="true"><path d="' + SI_PATH + '"/></svg></a>';
   }
 
   function links(route, navItem) {
     var section = (route && route.section) || "home";
     var id = (route && route.id) || "";
-    return navItem("#/music", "muHome", "Home", section === "home") +
-      navItem("#/music/search", "muSearch", "Search", section === "search") +
-      navItem("#/music/library", "muLibrary", "Your Library", section === "library") +
-      navItem("#/music/playlists", "muList", "Playlists", section === "playlists" || section === "playlist") +
-      navItem("#/music/liked", "muHeart", "Liked songs", section === "liked") +
-      navItem("#/music/add", "muAdd", "Add song", section === "add" || section === "edit") +
-      navItem("#/music/radio", "muRadio", "Radio", section === "radio") +
-      navItem("#/", "muBack", "Back to SIntelApp", false, "Back to SIntelApp");
+    return navItem("#/music", "muHome", tr("Home"), section === "home") +
+      navItem("#/music/search", "muSearch", tr("Search"), section === "search") +
+      navItem("#/music/library", "muLibrary", tr("Your Library"), section === "library") +
+      navItem("#/music/playlists", "muList", tr("Playlists"), section === "playlists" || section === "playlist") +
+      navItem("#/music/liked", "muHeart", tr("Liked songs"), section === "liked") +
+      navItem("#/music/add", "muAdd", tr("Add song"), section === "add" || section === "edit") +
+      navItem("#/music/radio", "muRadio", tr("Radio"), section === "radio") +
+      navItem("#/", "muBack", tr("Back to {app}", { app: productName("app") }), false, tr("Back to {app}", { app: productName("app") }));
   }
 
   function drawerLinks(icon) {
-    return '<a href="#/music">' + icon("muHome") + " Home</a>" +
-      '<a href="#/music/search">' + icon("muSearch") + " Search</a>" +
-      '<a href="#/music/library">' + icon("muLibrary") + " Your Library</a>" +
-      '<a href="#/music/playlists">' + icon("muList") + " Playlists</a>" +
-      '<a href="#/music/liked">' + icon("muHeart") + " Liked songs</a>" +
-      '<a href="#/music/add">' + icon("muAdd") + " Add song</a>" +
-      '<a href="#/music/radio">' + icon("muRadio") + " Radio</a>" +
-      '<a href="#/">' + icon("muBack") + " Back to SIntelApp</a>";
+    return '<a href="#/music">' + icon("muHome") + " " + tr("Home") + "</a>" +
+      '<a href="#/music/search">' + icon("muSearch") + " " + tr("Search") + "</a>" +
+      '<a href="#/music/library">' + icon("muLibrary") + " " + tr("Your Library") + "</a>" +
+      '<a href="#/music/playlists">' + icon("muList") + " " + tr("Playlists") + "</a>" +
+      '<a href="#/music/liked">' + icon("muHeart") + " " + tr("Liked songs") + "</a>" +
+      '<a href="#/music/add">' + icon("muAdd") + " " + tr("Add song") + "</a>" +
+      '<a href="#/music/radio">' + icon("muRadio") + " " + tr("Radio") + "</a>" +
+      '<a href="#/">' + icon("muBack") + " " + tr("Back to {app}", { app: productName("app") }) + "</a>";
   }
 
   function bottomHtml(route, icon) {
@@ -455,24 +472,24 @@
     var item = function (href, name, label, on) {
       return '<a href="' + href + '" class="' + (on ? "on" : "") + '" aria-label="' + esc(label) + '"' + (on ? ' aria-current="page"' : "") + '><span class="nav-ico">' + icon(name) + "</span></a>";
     };
-    return '<nav class="bottom-nav" aria-label="SIntelMusic">' +
-      item("#/music", section === "home" ? "muHomeOn" : "muHome", "Home", section === "home") +
-      item("#/music/search", section === "search" ? "muSearchOn" : "muSearch", "Search", section === "search") +
-      item("#/music/library", section === "library" ? "muLibraryOn" : "muLibrary", "Your Library", section === "library") +
-      item("#/music/playlists", section === "playlists" || section === "playlist" ? "muListOn" : "muList", "Playlists", section === "playlists" || section === "playlist") +
-      item("#/music/liked", section === "liked" ? "muHeartOn" : "muHeart", "Liked songs", section === "liked") +
-      '</nav><button class="fab" data-act="music-add" aria-label="Add song">' + icon("plus") + "</button>";
+    return '<nav class="bottom-nav" aria-label="' + productName("music") + '">' +
+      item("#/music", section === "home" ? "muHomeOn" : "muHome", tr("Home"), section === "home") +
+      item("#/music/search", section === "search" ? "muSearchOn" : "muSearch", tr("Search"), section === "search") +
+      item("#/music/library", section === "library" ? "muLibraryOn" : "muLibrary", tr("Your Library"), section === "library") +
+      item("#/music/playlists", section === "playlists" || section === "playlist" ? "muListOn" : "muList", tr("Playlists"), section === "playlists" || section === "playlist") +
+      item("#/music/liked", section === "liked" ? "muHeartOn" : "muHeart", tr("Liked songs"), section === "liked") +
+      ("</nav><button class=\"fab\" data-act=\"music-add\" " + "aria-label=\"" + tr("Add song") + "\"" + ">") + icon("plus") + "</button>";
   }
 
   function titleFor(route) {
     var section = (route && route.section) || "home";
-    var names = { home: "Home", search: "Search", library: "Your Library", playlists: "Playlists", playlist: "Playlist", liked: "Liked songs", add: "Add song", edit: "Edit song", radio: "Radio" };
-    var label = names[section] || "Home";
+    var names = { home: tr("Home"), search: tr("Search"), library: tr("Your Library"), playlists: tr("Playlists"), playlist: tr("Playlist"), liked: tr("Liked songs"), add: tr("Add song"), edit: tr("Edit song"), radio: tr("Radio") };
+    var label = names[section] || tr("Home");
     if (section === "playlist") {
       var list = playlistById(route.id || "");
       if (list) label = list.name;
     }
-    return label + " / " + BRAND;
+    return label + " / " + productName("music");
   }
 
   function playlistById(id) {
@@ -482,14 +499,14 @@
   }
 
   function head(title, tools) {
-    var logo = '<div class="mhead"><button class="m-ava" data-act="drawer" aria-label="Menu"><span class="ava initials">Y</span></button><a class="m-logo" href="#/" aria-label="' + BRAND + '">' + wordmark("") + "</a></div>";
+    var logo = ("<div class=\"mhead\"><button class=\"m-ava\" data-act=\"drawer\" " + "aria-label=\"" + tr("Menu") + "\"" + "><span class=\"ava initials\">Y</span></button><a class=\"m-logo\" href=\"#/\" aria-label=\"") + productName("music") + '">' + wordmark("") + "</a></div>";
     // Home already shows the SIntelMusic logo. A second heading would repeat it.
-    if (title === BRAND) return '<div class="topbar"><h1 class="vh">' + esc(title) + "</h1>" + logo + "</div>";
+    if (title === productName("music")) return '<div class="topbar"><h1 class="vh">' + esc(title) + "</h1>" + logo + "</div>";
     return '<div class="topbar tall">' + logo + '<div class="page-head"><div class="head-text grow"><h1>' + esc(title) + "</h1></div>" + (tools || "") + "</div></div>";
   }
 
   function letter(song) {
-    var text = (song && (song.title || song.artist)) || BRAND;
+    var text = (song && (song.title || song.artist)) || productName("music");
     return esc(String(text).trim().charAt(0).toUpperCase() || "S");
   }
 
@@ -509,17 +526,17 @@
 
   function offlineText(id) {
     var state = offlineState(id);
-    if (state === "busy" && ui.offline && ui.offline.total) return "Downloading " + ui.offline.done + "/" + ui.offline.total;
-    if (state === "busy") return "Downloading";
-    if (state === "ready") return "Downloaded";
-    return "Download";
+    if (state === "busy" && ui.offline && ui.offline.total) return tr("Downloading {done}/{total}", { done: ui.offline.done, total: ui.offline.total });
+    if (state === "busy") return tr("Downloading");
+    if (state === "ready") return tr("Downloaded");
+    return tr("Download");
   }
 
   function offlineAria(id) {
     var state = offlineState(id);
     if (state === "busy") return offlineText(id);
-    if (state === "ready") return "Remove download";
-    return "Download for offline";
+    if (state === "ready") return tr("Remove download");
+    return tr("Download for offline");
   }
 
   function offlineButton(song, withLabel) {
@@ -542,21 +559,21 @@
     if (song && song.genre) meta.push(song.genre);
     if (when) meta.push(when);
     return '<article class="mu-release" data-mu-id="' + esc(song.id) + '">' +
-      '<button class="mu-release-play" type="button" data-act="music-play" data-id="' + esc(song.id) + '" aria-label="Play ' + esc(song.title || "song") + '">' + art(song, "mu-release-cover") + "</button>" +
-      '<div class="mu-release-copy"><p class="mu-kicker">New release</p><h2>' + esc(song.title || "Untitled") + "</h2>" +
-      '<p class="mu-by">' + esc(song.artist || "Unknown artist") + "</p>" +
+      '<button class="mu-release-play" type="button" data-act="music-play" data-id="' + esc(song.id) + '" aria-label="' + esc(tr("Play {title}", { title: song.title || tr("song") })) + '">' + art(song, "mu-release-cover") + "</button>" +
+      '<div class="mu-release-copy"><p class="mu-kicker">' + tr("New release") + "</p><h2>" + esc(song.title || tr("Untitled")) + "</h2>" +
+      '<p class="mu-by">' + esc(song.artist || tr("Unknown artist")) + "</p>" +
       (song && song.style ? '<p class="mu-style">' + esc(song.style) + "</p>" : "") +
       '<p class="mu-meta">' + esc(meta.join(" · ")) + "</p>" +
-      '<div class="mu-pills">' + (song && song.lossless ? '<span class="mu-badge">Lossless</span>' : "") + "</div>" +
-      '<div class="mu-release-actions"><button class="mu-play-pill" type="button" data-act="music-play" data-id="' + esc(song.id) + '">Play</button>' + offlineButton(song, true) + "</div></div></article>";
+      '<div class="mu-pills">' + (song && song.lossless ? '<span class="mu-badge">' + tr("Lossless") + "</span>" : "") + "</div>" +
+      '<div class="mu-release-actions"><button class="mu-play-pill" type="button" data-act="music-play" data-id="' + esc(song.id) + '">' + tr("Play") + "</button>" + offlineButton(song, true) + "</div></div></article>";
   }
 
   function tile(song) {
     var on = currentSong() && currentSong().id === song.id;
     return '<button class="mu-tile' + (on ? " is-current" : "") + '" type="button" data-act="music-play" data-id="' + esc(song.id) + '" data-mu-id="' + esc(song.id) + '">' +
-      art(song, "mu-cover") + "<b>" + esc(song.title || "Untitled") + "</b><span>" + esc(song.artist || "Unknown artist") + "</span>" +
+      art(song, "mu-cover") + "<b>" + esc(song.title || tr("Untitled")) + "</b><span>" + esc(song.artist || tr("Unknown artist")) + "</span>" +
       '<span class="mu-sub">' + esc(song.duration ? formatTime(song.duration) : "") + "</span>" +
-      (song.lossless ? '<span class="mu-badge">Lossless</span>' : "") + "</button>";
+      (song.lossless ? '<span class="mu-badge">' + tr("Lossless") + "</span>" : "") + "</button>";
   }
 
   function row(song, listName) {
@@ -564,14 +581,14 @@
     var eq = on && play.playing ? '<span class="mu-eq" aria-hidden="true"><i></i><i></i><i></i></span>' : "";
     return '<div class="mu-row' + (on ? " is-current" : "") + '" draggable="true" data-mu-drag="' + esc(listName || "library") + '" data-id="' + esc(song.id) + '" data-mu-id="' + esc(song.id) + '">' +
       '<button class="mu-open" type="button" data-act="music-play" data-id="' + esc(song.id) + '">' + art(song, "mu-art") +
-      '<span class="mu-copy"><b>' + esc(song.title || "Untitled") + "</b><span>" + esc(song.artist || "Unknown artist") + "</span></span></button>" +
+      '<span class="mu-copy"><b>' + esc(song.title || tr("Untitled")) + "</b><span>" + esc(song.artist || tr("Unknown artist")) + "</span></span></button>" +
       eq + '<span class="mu-dur">' + esc(song.duration ? formatTime(song.duration) : "") + "</span>" +
-      (song.lossless ? '<span class="mu-badge">Lossless</span>' : "") +
-      '<span class="mu-actions">' + offlineButton(song, false) + '<button class="icon-btn mu-like' + (liked(song.id) ? " on" : "") + '" type="button" data-act="music-like" data-id="' + esc(song.id) + '" aria-label="Liked songs">' + svg(liked(song.id) ? HEART_ON : HEART) + "</button>" +
-      '<button class="icon-btn" type="button" data-act="music-up" data-id="' + esc(song.id) + '" data-list="' + esc(listName || "library") + '" aria-label="Move up">' + svg(CTRL.up) + "</button>" +
-      '<button class="icon-btn" type="button" data-act="music-down" data-id="' + esc(song.id) + '" data-list="' + esc(listName || "library") + '" aria-label="Move down">' + svg(CTRL.down) + "</button>" +
-      '<a class="icon-btn" href="#/music/edit/' + encodeURIComponent(song.id) + '" aria-label="Edit song">Edit</a>' +
-      '<button class="icon-btn" type="button" data-act="music-ask-delete" data-id="' + esc(song.id) + '" aria-label="Delete">Delete</button></span></div>';
+      (song.lossless ? '<span class="mu-badge">' + tr("Lossless") + "</span>" : "") +
+      '<span class="mu-actions">' + offlineButton(song, false) + '<button class="icon-btn mu-like' + (liked(song.id) ? " on" : "") + '" type="button" data-act="music-like" data-id="' + esc(song.id) + '" aria-label="' + tr("Liked songs") + '">' + svg(liked(song.id) ? HEART_ON : HEART) + "</button>" +
+      '<button class="icon-btn" type="button" data-act="music-up" data-id="' + esc(song.id) + '" data-list="' + esc(listName || "library") + '" aria-label="' + tr("Move up") + '">' + svg(CTRL.up) + "</button>" +
+      '<button class="icon-btn" type="button" data-act="music-down" data-id="' + esc(song.id) + '" data-list="' + esc(listName || "library") + '" aria-label="' + tr("Move down") + '">' + svg(CTRL.down) + "</button>" +
+      '<a class="icon-btn" href="#/music/edit/' + encodeURIComponent(song.id) + '" aria-label="' + tr("Edit song") + '">' + tr("Edit") + "</a>" +
+      '<button class="icon-btn" type="button" data-act="music-ask-delete" data-id="' + esc(song.id) + '" aria-label="' + tr("Delete") + '">' + tr("Delete") + "</button></span></div>";
   }
 
   function shelf(title, body) {
@@ -579,16 +596,16 @@
   }
 
   function empty(title, body) {
-    return '<div class="empty"><h2>' + esc(title) + "</h2><p>" + esc(body) + '</p><p><a href="#/music/add">Add song</a></p></div>';
+    return '<div class="empty"><h2>' + esc(title) + "</h2><p>" + esc(body) + ("</p><p><a href=\"#/music/add\"" + ">" + tr("Add song") + "<" + "/a></p></div>");
   }
 
   function viewTools() {
     var grid = local.view !== "list";
-    return '<div class="mu-tools"><div class="mu-view"><button type="button" class="' + (grid ? "on" : "") + '" data-act="music-view" data-view="grid" aria-label="Grid">' + svg("M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z") + '</button><button type="button" class="' + (grid ? "" : "on") + '" data-act="music-view" data-view="list" aria-label="List">' + svg("M4 5h16v3H4V5zm0 5.5h16v3H4v-3zM4 16h16v3H4v-3z") + "</button></div></div>";
+    return '<div class="mu-tools"><div class="mu-view"><button type="button" class="' + (grid ? "on" : "") + ("\" data-act=\"music-view\" data-view=\"grid\" " + "aria-label=\"" + tr("Grid") + "\"" + ">") + svg("M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z") + '</button><button type="button" class="' + (grid ? "" : "on") + ("\" data-act=\"music-view\" data-view=\"list\" " + "aria-label=\"" + tr("List") + "\"" + ">") + svg("M4 5h16v3H4V5zm0 5.5h16v3H4v-3zM4 16h16v3H4v-3z") + "</button></div></div>";
   }
 
   function songList(list, name) {
-    if (!list.length) return empty("No songs yet", "Add a song with a direct audio link, a YouTube link, or a file on this device.");
+    if (!list.length) return empty(tr("No songs yet"), tr("Add a song with a direct audio link, a YouTube link, or a file on this device."));
     if (local.view === "list" || name !== "library") return '<div class="mu-list">' + list.map(function (song) { return row(song, name); }).join("") + "</div>";
     return '<div class="mu-grid">' + list.map(tile).join("") + "</div>";
   }
@@ -608,16 +625,16 @@
       return fallback || "";
     };
     return '<form class="mu-form" data-act="music-save-form">' +
-      '<label class="field"><span>Title</span><input id="mu-title" value="' + esc(value("mu-title", song && song.title)) + '" maxlength="200" required></label>' +
-      '<label class="field"><span>Artist</span><input id="mu-artist" value="' + esc(value("mu-artist", song && song.artist)) + '" maxlength="200"></label>' +
-      '<label class="field"><span>Album</span><input id="mu-album" value="' + esc(value("mu-album", song && song.album)) + '" maxlength="200"></label>' +
-      '<label class="field"><span>Cover URL</span><input id="mu-cover-url" type="url" inputmode="url" placeholder="https://" value="' + esc(value("mu-cover-url", song && song.cover && song.cover.indexOf("https://") === 0 ? song.cover : "")) + '"></label>' +
-      '<label class="mu-file">Cover file<input id="mu-cover-file" type="file" accept="image/*"></label>' +
-      '<label class="field"><span>Audio URL</span><input id="mu-audio-url" type="url" inputmode="url" placeholder="https:// or a YouTube link" value="' + esc(value("mu-audio-url", song && song.kind !== "hls" && song.source && song.source.indexOf("idb:") !== 0 ? song.source : "")) + '"></label>' +
-      '<label class="mu-file">Audio file<input id="mu-audio-file" type="file" accept="audio/*,.mp3,.m4a,.ogg,.opus,.aac,.wav"></label>' +
+      '<label class="field"><span>' + tr("Title") + '</span><input id="mu-title" value="' + esc(value("mu-title", song && song.title)) + '" maxlength="200" required></label>' +
+      '<label class="field"><span>' + tr("Artist") + '</span><input id="mu-artist" value="' + esc(value("mu-artist", song && song.artist)) + '" maxlength="200"></label>' +
+      '<label class="field"><span>' + tr("Album") + '</span><input id="mu-album" value="' + esc(value("mu-album", song && song.album)) + '" maxlength="200"></label>' +
+      '<label class="field"><span>' + tr("Cover URL") + '</span><input id="mu-cover-url" type="url" inputmode="url" placeholder="https://" value="' + esc(value("mu-cover-url", song && song.cover && song.cover.indexOf("https://") === 0 ? song.cover : "")) + '"></label>' +
+      '<label class="mu-file">' + tr("Cover file") + '<input id="mu-cover-file" type="file" accept="image/*"></label>' +
+      '<label class="field"><span>' + tr("Audio URL") + '</span><input id="mu-audio-url" type="url" inputmode="url" placeholder="' + tr("https:// or a YouTube link") + '" value="' + esc(value("mu-audio-url", song && song.kind !== "hls" && song.source && song.source.indexOf("idb:") !== 0 ? song.source : "")) + '"></label>' +
+      '<label class="mu-file">' + tr("Audio file") + '<input id="mu-audio-file" type="file" accept="audio/*,.mp3,.m4a,.ogg,.opus,.aac,.wav"></label>' +
       (song ? '<input type="hidden" id="mu-edit-id" value="' + esc(song.id) + '">' : "") +
-      '<p class="mu-note">A file stays on this device. A direct https link can be published to the site by the owner. Radio shuffles this library. No paid catalog is used.</p>' +
-      '<div class="row-actions"><button class="save" type="button" data-act="music-save">' + (song ? "Save" : "Add song") + '</button><button class="save" type="button" data-act="music-publish">Publish library to the site</button></div></form>';
+      ("<p class=\"mu-note\"" + ">" + tr("A file stays on this device. A direct https link can be published to the site by the owner. Radio shuffles this library. No paid catalog is used.") + "<" + "/p>") +
+      '<div class="row-actions"><button class="save" type="button" data-act="music-save">' + (song ? tr("Save") : tr("Add song")) + ("</button><button class=\"save\" type=\"button\" data-act=\"music-publish\"" + ">" + tr("Publish library to the site") + "<" + "/button></div></form>");
   }
 
   function page(route) {
@@ -625,57 +642,57 @@
     var id = (route && route.id) || "";
     var all = songs();
     if (section === "search") {
-      return head("Search") + '<div class="mu-search"><label class="search"><input id="mu-q" type="search" placeholder="Search songs" aria-label="Search songs" value="' + esc(ui.q) + '"></label></div><div class="mu-results">' + (ui.q ? songList(filtered(ui.q), "library") : empty("Search SIntelMusic", "Find a song by title, artist, or album.")) + "</div>";
+      return head(tr("Search")) + ("<div class=\"mu-search\"><label class=\"search\"><input id=\"mu-q\" type=\"search\" " + "placeholder=\"" + tr("Search songs") + "\"" + " " + "aria-label=\"" + tr("Search songs") + "\"" + " value=\"") + esc(ui.q) + '"></label></div><div class="mu-results">' + (ui.q ? songList(filtered(ui.q), "library") : empty(tr("Search {music}", { music: productName("music") }), tr("Find a song by title, artist, or album."))) + "</div>";
     }
     if (section === "library") {
-      return head("Your Library", viewTools()) + songList(all, "library") + confirmHtml() + '<div class="mu-form"><button class="save" type="button" data-act="music-publish">Publish library to the site</button></div>';
+      return head(tr("Your Library"), viewTools()) + songList(all, "library") + confirmHtml() + ("<div class=\"mu-form\"><button class=\"save\" type=\"button\" data-act=\"music-publish\"" + ">" + tr("Publish library to the site") + "<" + "/button></div>");
     }
     if (section === "playlists") {
       var cards = playlists().map(function (list) {
-        return '<a class="mu-tile" href="#/music/playlist/' + encodeURIComponent(list.id) + '">' + art({ title: list.name }, "mu-cover") + "<b>" + esc(list.name) + "</b><span>" + esc(String((list.songIds || []).length) + " songs") + "</span></a>";
+        return '<a class="mu-tile" href="#/music/playlist/' + encodeURIComponent(list.id) + '">' + art({ title: list.name }, "mu-cover") + "<b>" + esc(list.name) + "</b><span>" + esc(trn("songs", (list.songIds || []).length)) + "</span></a>";
       }).join("");
-      return head("Playlists") + (cards ? '<div class="mu-grid">' + cards + "</div>" : empty("No playlists yet", "Name one below.")) +
-        '<form class="mu-form" data-act="music-pl-form"><label class="field"><span>New playlist</span><input id="mu-pl-name" value="' + esc(ui.plName) + '" maxlength="80"></label><button class="save" type="button" data-act="music-pl-create">Create playlist</button></form>';
+      return head(tr("Playlists")) + (cards ? '<div class="mu-grid">' + cards + "</div>" : empty(tr("No playlists yet"), tr("Name one below."))) +
+        ("<form class=\"mu-form\" data-act=\"music-pl-form\"><label class=\"field\"><span" + ">" + tr("New playlist") + "<" + "/span><input id=\"mu-pl-name\" value=\"") + esc(ui.plName) + ("\" maxlength=\"80\"></label><button class=\"save\" type=\"button\" data-act=\"music-pl-create\"" + ">" + tr("Create playlist") + "<" + "/button></form>");
     }
     if (section === "playlist") {
       var list = playlistById(id);
-      if (!list) return head("Playlist") + empty("Playlist not found", "It may have been removed on this device.");
+      if (!list) return head(tr("Playlist")) + empty(tr("Playlist not found"), tr("It may have been removed on this device."));
       var rows = (list.songIds || []).map(songById).filter(Boolean);
       var rest = all.filter(function (song) { return (list.songIds || []).indexOf(song.id) < 0; });
-      var add = rest.length ? '<div class="mu-shelf-head"><h2>Add songs</h2></div><div class="mu-list">' + rest.map(function (song) {
+      var add = rest.length ? ("<div class=\"mu-shelf-head\"><h2" + ">" + tr("Add songs") + "<" + "/h2></div><div class=\"mu-list\">") + rest.map(function (song) {
         return '<div class="mu-row"><button class="mu-open" type="button" data-act="music-pl-add" data-id="' + esc(song.id) + '" data-list="' + esc(list.id) + '">' + art(song, "mu-art") + '<span class="mu-copy"><b>' + esc(song.title) + "</b><span>" + esc(song.artist) + "</span></span></button></div>";
       }).join("") + "</div>" : "";
       return head(list.name) + songList(rows, "playlist:" + list.id) + add;
     }
     if (section === "liked") {
       var loved = all.filter(function (song) { return liked(song.id); });
-      return head("Liked songs") + (loved.length ? songList(loved, "liked") : empty("No liked songs", "Hearts you tap stay on this device."));
+      return head(tr("Liked songs")) + (loved.length ? songList(loved, "liked") : empty(tr("No liked songs"), tr("Hearts you tap stay on this device.")));
     }
-    if (section === "add") return head("Add song") + form(null);
+    if (section === "add") return head(tr("Add song")) + form(null);
     if (section === "edit") {
       var editing = songById(id);
-      if (!editing) return head("Edit song") + empty("Song not found", "It is not in this library.");
-      return head("Edit song") + form(editing) + confirmHtml();
+      if (!editing) return head(tr("Edit song")) + empty(tr("Song not found"), tr("It is not in this library."));
+      return head(tr("Edit song")) + form(editing) + confirmHtml();
     }
     if (section === "radio") {
-      return head("Radio") + '<div class="mu-form"><p class="mu-note">Radio shuffles every song in this library. Nothing is recommended by a paid service.</p><button class="save" type="button" data-act="music-radio"' + (all.length ? "" : " disabled") + ">Start radio</button></div>" + (all.length ? songList(all, "library") : empty("No songs yet", "Add a song before starting radio."));
+      return head(tr("Radio")) + '<div class="mu-form"><p class="mu-note">' + tr("Radio shuffles every song in this library. Nothing is recommended by a paid service.") + '</p><button class="save" type="button" data-act="music-radio"' + (all.length ? "" : " disabled") + (">" + tr("Start radio") + "<" + "/button></div>") + (all.length ? songList(all, "library") : empty(tr("No songs yet"), tr("Add a song before starting radio.")));
     }
     var fresh = releases();
     var recent = all.slice(0, 12);
     var pl = playlists().slice(0, 8).map(function (list) {
-      return '<a class="mu-card" href="#/music/playlist/' + encodeURIComponent(list.id) + '">' + art({ title: list.name }, "mu-cover") + "<b>" + esc(list.name) + "</b><span>" + esc(String((list.songIds || []).length) + " songs") + "</span></a>";
+      return '<a class="mu-card" href="#/music/playlist/' + encodeURIComponent(list.id) + '">' + art({ title: list.name }, "mu-cover") + "<b>" + esc(list.name) + "</b><span>" + esc(trn("songs", (list.songIds || []).length)) + "</span></a>";
     }).join("");
-    return head(BRAND) +
-      (fresh.length ? shelf("New release", fresh.map(function (song) { return releaseHtml(song); }).join("")) : "") +
-      (recent.length ? shelf("Songs", '<div class="mu-hscroll">' + recent.map(tile).join("") + "</div>") : empty("No songs yet", "Add a song with a direct audio link, a YouTube link, or a file on this device.")) +
-      (pl ? shelf("Playlists", '<div class="mu-hscroll">' + pl + "</div>") : "") +
-      shelf("Library", '<div class="mu-grid"><a class="mu-tile" href="#/music/library">' + art({ title: "Library" }, "mu-cover") + "<b>Your Library</b><span>" + esc(String(all.length) + " songs") + '</span></a><a class="mu-tile" href="#/music/liked">' + art({ title: "Liked" }, "mu-cover") + "<b>Liked songs</b><span>" + esc(String((local.likes || []).length)) + "</span></a></div>");
+    return head(productName("music")) +
+      (fresh.length ? shelf(tr("New release"), fresh.map(function (song) { return releaseHtml(song); }).join("")) : "") +
+      (recent.length ? shelf(tr("Songs"), '<div class="mu-hscroll">' + recent.map(tile).join("") + "</div>") : empty(tr("No songs yet"), tr("Add a song with a direct audio link, a YouTube link, or a file on this device."))) +
+      (pl ? shelf(tr("Playlists"), '<div class="mu-hscroll">' + pl + "</div>") : "") +
+      shelf(tr("Library"), '<div class="mu-grid"><a class="mu-tile" href="#/music/library">' + art({ title: tr("Library") }, "mu-cover") + "<b>" + tr("Your Library") + "</b><span>" + esc(trn("songs", all.length)) + '</span></a><a class="mu-tile" href="#/music/liked">' + art({ title: tr("Liked") }, "mu-cover") + "<b>" + tr("Liked songs") + "</b><span>" + esc(String((local.likes || []).length)) + "</span></a></div>");
   }
 
   function confirmHtml() {
     if (!ui.confirm) return "";
     var song = songById(ui.confirm);
-    return '<div class="mu-confirm">Delete ' + esc(song ? song.title : "this song") + '? <button class="save" type="button" data-act="music-delete" data-id="' + esc(ui.confirm) + '">Delete</button><button class="save" type="button" data-act="music-cancel-delete">Cancel</button></div>';
+    return '<div class="mu-confirm">' + tr("Delete {title}?", { title: esc(song ? song.title : tr("this song")) }) + ' <button class="save" type="button" data-act="music-delete" data-id="' + esc(ui.confirm) + ("\"" + ">" + tr("Delete") + "<" + "/button><button class=\"save\" type=\"button\" data-act=\"music-cancel-delete\"" + ">" + tr("Cancel") + "<" + "/button></div>");
   }
 
   function field(id) {
@@ -830,25 +847,25 @@
 
   function saveForm() {
     var title = field("mu-title");
-    if (!title) { hooks.toast("Add a title"); return; }
+    if (!title) { hooks.toast(tr("Add a title")); return; }
     var audioFile = fileOf("mu-audio-file");
     var coverFile = fileOf("mu-cover-file");
-    if (audioFile && audioFile.size > 40 * 1024 * 1024) { hooks.toast("Audio files stay under 40 MB"); return; }
-    if (coverFile && coverFile.size > 3 * 1024 * 1024) { hooks.toast("Cover images stay under 3 MB"); return; }
+    if (audioFile && audioFile.size > 40 * 1024 * 1024) { hooks.toast(tr("Audio files stay under 40 MB")); return; }
+    if (coverFile && coverFile.size > 3 * 1024 * 1024) { hooks.toast(tr("Cover images stay under 3 MB")); return; }
     var existing = songById(field("mu-edit-id"));
     var sourceText = field("mu-audio-url");
     var coverText = field("mu-cover-url");
     var ready = Promise.resolve({ source: existing ? existing.source : "", kind: existing ? existing.kind : "", cover: existing ? existing.cover : "" });
     if (coverText) {
       if (coverText.indexOf("https://") !== 0 || localHost((function () { try { return new URL(coverText).hostname; } catch (err) { return "bad"; } })())) {
-        hooks.toast("Cover links use https");
+        hooks.toast(tr("Cover links use https"));
         return;
       }
     }
     if (!audioFile && sourceText) {
       var streamKind = classifyStream(sourceText);
       var kind = streamKind.ok ? { ok: true, kind: "hls", url: streamKind.url } : classifySource(sourceText);
-      if (!kind.ok) { hooks.toast("Use an https audio, YouTube, or Archive link"); return; }
+      if (!kind.ok) { hooks.toast(tr("Use an https audio, YouTube, or Archive link")); return; }
       if (kind.kind === "archive") {
         ready = resolveArchive(kind.id).then(function (url) {
           return { source: url, kind: "audio", cover: coverText };
@@ -859,7 +876,7 @@
         ready = Promise.resolve({ source: kind.url, kind: kind.kind === "youtube" ? "youtube" : "audio", cover: coverText });
       }
     } else if (!audioFile && !existing) {
-      hooks.toast("Add an audio link or a file");
+      hooks.toast(tr("Add an audio link or a file"));
       return;
     } else if (coverText) {
       ready = Promise.resolve({ source: existing ? existing.source : "", kind: existing ? existing.kind : "audio", cover: coverText });
@@ -906,9 +923,9 @@
       if ((existing && existing.lossless) || stored.kind === "hls") stored.lossless = true;
       writeSong(stored);
       ui.draft = {};
-      hooks.toast("Saved on this device");
+      hooks.toast(tr("Saved on this device"));
       hooks.go("#/music/library");
-    }).catch(function () { hooks.toast("That audio link didn’t resolve"); });
+    }).catch(function () { hooks.toast(tr("That audio link didn’t resolve")); });
   }
 
   function publishBody() {
@@ -945,12 +962,12 @@
   function publish() {
     var body = publishBody();
     var repo = hooks.repo() || "owner-account/SuperintelApp";
-    var base = "https://github.com/" + repo + "/issues/new?template=music-catalog.yml&title=" + encodeURIComponent("Music catalog");
+    var base = "https://github.com/" + repo + "/issues/new?template=music-catalog.yml&title=" + encodeURIComponent(tr("Music catalog"));
     var url = base + "&catalog=" + encodeURIComponent(body);
-    var note = "Only an issue opened by the owner is applied. Uploaded files stay on this device.";
+    var note = tr("Only an issue opened by the owner is applied. Uploaded files stay on this device.");
     if (url.length > 6000) {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(body).catch(function () {});
-      hooks.toast("Catalog copied. Paste it into the issue. " + note);
+      hooks.toast(tr("Catalog copied. Paste it into the issue.") + " " + note);
       window.open(base, "_blank", "noopener");
       return;
     }
@@ -1097,7 +1114,7 @@
     var url = classifyStream(song && song.stream).url || "";
     if (!url) {
       play.playing = false;
-      hooks.toast("That song isn’t available");
+      hooks.toast(tr("That song isn’t available"));
       paint();
       return;
     }
@@ -1112,7 +1129,7 @@
         player.on(HlsCtor.Events.ERROR, function (_evt, data) {
           if (!data || !data.fatal || token !== playToken) return;
           play.playing = false;
-          hooks.toast("Couldn’t play that song");
+          hooks.toast(tr("Couldn’t play that song"));
           paint();
         });
         player.on(HlsCtor.Events.MANIFEST_PARSED, function () {
@@ -1138,7 +1155,7 @@
         return;
       }
       play.playing = false;
-      hooks.toast("Couldn’t play that song");
+      hooks.toast(tr("Couldn’t play that song"));
       paint();
     });
     if (!fromUser) paint();
@@ -1161,7 +1178,7 @@
       session(song);
     }).catch(function () {
       play.playing = false;
-      hooks.toast("Couldn’t play that song");
+      hooks.toast(tr("Couldn’t play that song"));
       paint();
     });
     if (!fromUser) paint();
@@ -1187,7 +1204,7 @@
     destroyHls();
     if (audio) { audio.pause(); }
     var id = youtubeId(song.source);
-    if (!id) { hooks.toast("That YouTube link has no video id"); return; }
+    if (!id) { hooks.toast(tr("That YouTube link has no video id")); return; }
     ytPending = id;
     ensureYouTube(function () {
       if (!document.getElementById("mu-yt")) return;
@@ -1303,7 +1320,7 @@
         else if (/\.webp(\?|$)/i.test(song.cover)) artType = "image/webp";
         artworks.push({ src: song.cover, sizes: "512x512", type: artType });
       }
-      navigator.mediaSession.metadata = new MediaMetadata({ title: song.title || BRAND, artist: song.artist || BRAND, album: song.album || "", artwork: artworks });
+      navigator.mediaSession.metadata = new MediaMetadata({ title: song.title || productName("music"), artist: song.artist || productName("music"), album: song.album || "", artwork: artworks });
       var set = function (name, fn) { try { navigator.mediaSession.setActionHandler(name, fn); } catch (err) { /* unsupported */ } };
       set("play", function () { if (!play.playing) toggle(); });
       set("pause", function () { if (play.playing) toggle(); });
@@ -1337,9 +1354,9 @@
     var song = currentSong();
     var dock = document.getElementById("mu-dock");
     if (dock) dock.hidden = false;
-    text("mu-dock-title", song ? (song.title || "Untitled") : "Not playing");
-    text("mu-dock-artist", song ? (song.artist || "") : BRAND);
-    text("mu-now-title", song ? (song.title || "Untitled") : "Not playing");
+    text("mu-dock-title", song ? (song.title || tr("Untitled")) : tr("Not playing"));
+    text("mu-dock-artist", song ? (song.artist || "") : productName("music"));
+    text("mu-now-title", song ? (song.title || tr("Untitled")) : tr("Not playing"));
     text("mu-now-artist", song ? (song.artist || "") : "");
     var pos = position();
     var seek = document.getElementById("mu-seek");
@@ -1362,7 +1379,7 @@
         var button = document.getElementById(key);
         if (!button) return;
         button.innerHTML = svg(play.playing ? CTRL.pause : CTRL.play);
-        button.setAttribute("aria-label", play.playing ? "Pause" : "Play");
+        button.setAttribute("aria-label", play.playing ? tr("Pause") : tr("Play"));
       });
     }
     var shuffle = document.querySelector("[data-act='music-shuffle']");
@@ -1370,7 +1387,7 @@
     var repeat = document.querySelector("[data-act='music-repeat']");
     if (repeat) {
       repeat.setAttribute("aria-pressed", local.repeat === "off" ? "false" : "true");
-      repeat.setAttribute("aria-label", local.repeat === "one" ? "Repeat one" : local.repeat === "all" ? "Repeat all" : "Repeat");
+      repeat.setAttribute("aria-label", local.repeat === "one" ? tr("Repeat one") : local.repeat === "all" ? tr("Repeat all") : tr("Repeat"));
       var badge = repeat.querySelector("i");
       if (badge) badge.textContent = local.repeat === "one" ? "1" : "";
     }
@@ -1386,7 +1403,7 @@
       paintArt("mu-dock-art", song);
       paintArt("mu-now-art", song);
       var pills = document.getElementById("mu-now-pills");
-      if (pills) pills.innerHTML = song && song.lossless ? '<span class="mu-badge">Lossless</span>' : "";
+      if (pills) pills.innerHTML = song && song.lossless ? '<span class="mu-badge">' + tr("Lossless") + "</span>" : "";
     }
     var offlineBtn = document.getElementById("mu-now-offline");
     if (offlineBtn) {
@@ -1417,7 +1434,7 @@
   function paintArt(id, song) {
     var el = document.getElementById(id);
     if (!el) return;
-    el.innerHTML = art(song || { title: BRAND }, "mu-art");
+    el.innerHTML = art(song || { title: productName("music") }, "mu-art");
   }
 
   function mount() {
@@ -1426,15 +1443,15 @@
     dock.id = "mu-dock";
     dock.className = "mu-dock";
     dock.hidden = true;
-    dock.innerHTML = '<div class="mu-bar"><button class="mu-id" type="button" data-act="music-now" aria-label="Now playing"><span id="mu-dock-art"></span><span class="mu-copy"><b id="mu-dock-title">Not playing</b><span id="mu-dock-artist">' + BRAND + '</span></span></button>' +
-      '<div class="mu-transport"><button type="button" class="mu-shuffle" data-act="music-shuffle" aria-label="Shuffle" aria-pressed="false">' + svg(CTRL.shuffle) + '</button><button type="button" data-act="music-prev" aria-label="Previous">' + svg(CTRL.prev) + '</button><button id="mu-play" class="mu-play" type="button" data-act="music-toggle" aria-label="Play">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="Next">' + svg(CTRL.next) + '</button><button type="button" class="mu-rep" data-act="music-repeat" aria-label="Repeat" aria-pressed="false">' + svg(CTRL.repeat) + '<i></i></button></div>' +
-      '<div class="mu-seek"><span class="mu-time" id="mu-time">0:00</span><input id="mu-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek"><span class="mu-time" id="mu-end">0:00</span></div>' +
-      '<div class="mu-vol"><button type="button" aria-label="Volume">' + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="Volume"></div></div>';
+    dock.innerHTML = ("<div class=\"mu-bar\"><button class=\"mu-id\" type=\"button\" data-act=\"music-now\" " + "aria-label=\"" + tr("Now playing") + "\"" + "><span id=\"mu-dock-art\"></span><span class=\"mu-copy\"><b id=\"mu-dock-title\"" + ">" + tr("Not playing") + "<" + "/b><span id=\"mu-dock-artist\">") + productName("music") + '</span></span></button>' +
+      ("<div class=\"mu-transport\"><button type=\"button\" class=\"mu-shuffle\" data-act=\"music-shuffle\" " + "aria-label=\"" + tr("Shuffle") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.shuffle) + ("</button><button type=\"button\" data-act=\"music-prev\" " + "aria-label=\"" + tr("Previous") + "\"" + ">") + svg(CTRL.prev) + ("</button><button id=\"mu-play\" class=\"mu-play\" type=\"button\" data-act=\"music-toggle\" " + "aria-label=\"" + tr("Play") + "\"" + ">") + svg(CTRL.play) + ("</button><button type=\"button\" data-act=\"music-next\" " + "aria-label=\"" + tr("Next") + "\"" + ">") + svg(CTRL.next) + ("</button><button type=\"button\" class=\"mu-rep\" data-act=\"music-repeat\" " + "aria-label=\"" + tr("Repeat") + "\"" + " aria-pressed=\"false\">") + svg(CTRL.repeat) + '<i></i></button></div>' +
+      ("<div class=\"mu-seek\"><span class=\"mu-time\" id=\"mu-time\">0:00</span><input id=\"mu-seek\" class=\"mu-range\" type=\"range\" min=\"0\" max=\"0\" value=\"0\" step=\"0.1\" " + "aria-label=\"" + tr("Seek") + "\"" + "><span class=\"mu-time\" id=\"mu-end\">0:00</span></div>") +
+      ("<div class=\"mu-vol\"><button type=\"button\" " + "aria-label=\"" + tr("Volume") + "\"" + ">") + svg(CTRL.vol) + '</button><input id="mu-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + ("\" " + "aria-label=\"" + tr("Volume") + "\"" + "></div></div>");
     var now = document.createElement("div");
     now.id = "mu-now";
     now.className = "mu-now";
     now.hidden = true;
-    now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="Close">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + BRAND + '</div><button id="mu-now-offline" class="mu-save" type="button" data-act="music-offline" hidden aria-label="Download for offline">' + svg(CTRL.save) + '</button></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">Not playing</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-pills" id="mu-now-pills"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="Previous">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="Play">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="Next">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="Volume">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="Volume"></div>';
+    now.innerHTML = '<div class="mu-now-top"><button class="mu-ctl" type="button" data-act="music-now-close" aria-label="' + tr("Close") + '">' + svg(CTRL.down) + '</button><div class="mu-now-kicker">' + productName("music") + '</div><button id="mu-now-offline" class="mu-save" type="button" data-act="music-offline" hidden aria-label="' + tr("Download for offline") + '">' + svg(CTRL.save) + '</button></div><div id="mu-now-art" class="mu-now-art"></div><h2 id="mu-now-title">' + tr("Not playing") + '</h2><div class="mu-by" id="mu-now-artist"></div><div class="mu-pills" id="mu-now-pills"></div><div class="mu-seek"><span class="mu-time" id="mu-now-time">0:00</span><input id="mu-now-seek" class="mu-range" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + tr("Seek") + '"><span class="mu-time" id="mu-now-end">0:00</span></div><div class="mu-transport"><button type="button" data-act="music-prev" aria-label="' + tr("Previous") + '">' + svg(CTRL.prev) + '</button><button id="mu-now-play" class="mu-play" type="button" data-act="music-toggle" aria-label="' + tr("Play") + '">' + svg(CTRL.play) + '</button><button type="button" data-act="music-next" aria-label="' + tr("Next") + '">' + svg(CTRL.next) + '</button></div><div class="mu-vol"><button type="button" aria-label="' + tr("Volume") + '">' + svg(CTRL.vol) + '</button><input id="mu-now-volume" class="mu-volume" type="range" min="0" max="1" step="0.01" value="' + String(local.volume) + '" aria-label="' + tr("Volume") + '"></div>';
     var host = document.createElement("div");
     host.id = "mu-yt-host";
     host.innerHTML = '<div id="mu-yt"></div>';
@@ -1503,7 +1520,7 @@
     if (target.id === "mu-q") {
       ui.q = target.value;
       var box = document.querySelector(".mu-results");
-      if (box) box.innerHTML = ui.q ? songList(filtered(ui.q), "library") : empty("Search SIntelMusic", "Find a song by title, artist, or album.");
+      if (box) box.innerHTML = ui.q ? songList(filtered(ui.q), "library") : empty(tr("Search {music}", { music: productName("music") }), tr("Find a song by title, artist, or album."));
       return;
     }
     if (target.id === "mu-title" || target.id === "mu-artist" || target.id === "mu-album" || target.id === "mu-cover-url" || target.id === "mu-audio-url" || target.id === "mu-pl-name") {
@@ -1599,7 +1616,7 @@
       removeSong(id);
       ui.confirm = "";
       if (currentSong() && currentSong().id === id) pauseAll();
-      hooks.toast("Removed on this device");
+      hooks.toast(tr("Removed on this device"));
       hooks.render();
       return true;
     }
@@ -1608,7 +1625,7 @@
     if (act === "music-view") { local.view = el.dataset.view === "list" ? "list" : "grid"; save(); hooks.render(); return true; }
     if (act === "music-pl-create") {
       var name = field("mu-pl-name");
-      if (!name) { hooks.toast("Name the playlist"); return true; }
+      if (!name) { hooks.toast(tr("Name the playlist")); return true; }
       touchPlaylists();
       local.playlists.push({ id: newId(), name: name, songIds: [] });
       ui.plName = "";
@@ -1632,7 +1649,7 @@
     }
     if (act === "music-radio") {
       var all = songs();
-      if (!all.length) { hooks.toast("Add a song first"); return true; }
+      if (!all.length) { hooks.toast(tr("Add a song first")); return true; }
       local.shuffle = true;
       save();
       playSong(all[Math.floor(Math.random() * all.length)].id, all.map(function (song) { return song.id; }));
@@ -1732,7 +1749,7 @@
 
   function saveOffline(song) {
     var url = classifyStream(song && song.stream).url || "";
-    if (!url || !root.caches) { hooks.toast("Offline save isn’t available for this song"); return; }
+    if (!url || !root.caches) { hooks.toast(tr("Offline save isn’t available for this song")); return; }
     ui.offline = { id: song.id, done: 0, total: 0 };
     paintOfflineButtons();
     var lists = [];
@@ -1752,12 +1769,12 @@
       local.offline[song.id] = urls;
       ui.offline = null;
       save();
-      hooks.toast("Saved for offline");
+      hooks.toast(tr("Saved for offline"));
       hooks.render();
     }).catch(function () {
       ui.offline = null;
       paintOfflineButtons();
-      hooks.toast("Couldn’t save that song for offline");
+      hooks.toast(tr("Couldn’t save that song for offline"));
     });
   }
 
@@ -1769,7 +1786,7 @@
       return Promise.all(urls.map(function (url) { return cache.delete(url); }));
     }) : Promise.resolve();
     done.then(function () {
-      hooks.toast("Removed from this device");
+      hooks.toast(tr("Removed from this device"));
       hooks.render();
     }).catch(function () { hooks.render(); });
   }

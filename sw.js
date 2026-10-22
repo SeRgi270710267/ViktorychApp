@@ -1,5 +1,31 @@
-/* SuperintelApp service worker. Cache names are superintel13- plus the deploy SHA. */
-const VERSION = "superintel13-__SW_VERSION__";
+/* SuperintelApp service worker. Cache names are superintel14- plus the deploy SHA. */
+const VERSION = "superintel14-__SW_VERSION__";
+importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
+function tr(key, vars) {
+  var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
+  return fn ? fn(key, vars) : key;
+}
+function trn(key, n, vars) {
+  var fn = (typeof self !== "undefined" && self.tn) ? self.tn : null;
+  return fn ? fn(key, n, vars) : String(n);
+}
+async function ensureUiLang() {
+  try {
+    const db = await idb();
+    const savedLang = await idbGet(db, "ui-lang");
+    if ((savedLang === "en" || savedLang === "ru" || savedLang === "es") && self.SI18n) self.SI18n.setLang(savedLang);
+  } catch (err) { /* English until the page sends a language */ }
+}
+async function brandManifestResponse(response) {
+  await ensureUiLang();
+  try {
+    const data = await response.clone().json();
+    const next = (self.SI18n && self.SI18n.brandManifest) ? self.SI18n.brandManifest(data) : data;
+    return new Response(JSON.stringify(next), { status: 200, headers: { "Content-Type": "application/manifest+json" } });
+  } catch (err) {
+    return response;
+  }
+}
 const SHELL = "shell-" + VERSION;
 const DATA = "data-" + VERSION;
 const MEDIA = "media-" + VERSION;
@@ -11,6 +37,10 @@ const SHELL_FILES = [
   "./",
   "./index.html",
   "./styles.css",
+  "./i18n.js",
+  "./i18n/en.js",
+  "./i18n/ru.js",
+  "./i18n/es.js",
   "./app.js",
   "./translate.js",
   "./translate.css",
@@ -301,6 +331,10 @@ self.addEventListener("message", (event) => {
       if (Array.isArray(data.mutedAccounts)) await idbSet(db, "muted-accounts", data.mutedAccounts);
       if (Array.isArray(data.repostOff)) await idbSet(db, "repost-off", data.repostOff);
       if (typeof data.notifyAll === "boolean") await idbSet(db, "notify-all", data.notifyAll);
+      if (data.uiLang === "en" || data.uiLang === "ru" || data.uiLang === "es") {
+        await idbSet(db, "ui-lang", data.uiLang);
+        if (self.SI18n) self.SI18n.setLang(data.uiLang);
+      }
     }));
   }
   if (data.type === "bell-deliver") {
@@ -373,9 +407,12 @@ self.addEventListener("fetch", (event) => {
           const cache = await caches.open(SHELL);
           cache.put(request, res.clone());
         }
+        if (res && url.pathname.endsWith("manifest.webmanifest")) return brandManifestResponse(res);
         if (res) return res;
       } catch (err) { /* offline falls back to the shell copied at install */ }
-      return (await caches.match(request)) || Response.error();
+      const cachedShell = await caches.match(request);
+      if (cachedShell && url.pathname.endsWith("manifest.webmanifest")) return brandManifestResponse(cachedShell);
+      return cachedShell || Response.error();
     })());
     return;
   }
@@ -394,7 +431,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|hls-1\.7\.3\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest)$/.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
+  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|hls-1\.7\.3\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path);
 }
 
 function canonicalNotifyId(post) {
@@ -509,6 +546,7 @@ function deliverBellNotes(notes) {
 }
 
 async function deliverBellNotesNow(notes) {
+  await ensureUiLang();
   const list = (notes || []).filter((note) => note && note.id);
   if (!list.length) return [];
   const db = await idb();
@@ -522,7 +560,7 @@ async function deliverBellNotesNow(notes) {
     if (Notification.permission !== "granted") continue;
     try {
       await self.registration.showNotification(note.name || ("@" + (note.handle || "post")), {
-        body: note.text || "New post",
+        body: note.text || tr("New post"),
         icon: note.avatar || "icons/icon-192.png",
         image: note.image || undefined,
         tag: "bell-" + id,
@@ -570,6 +608,7 @@ async function bellNotesFor(doc) {
 }
 
 async function refreshAndNotify() {
+  await ensureUiLang();
   const feedUrl = new URL("feeds.json", self.registration.scope).href;
   const res = await fetch(feedUrl, { cache: "no-store" });
   if (!res.ok) return;
@@ -603,8 +642,8 @@ async function refreshAndNotify() {
     try { await navigator.setAppBadge(fresh.length); } catch (err) { /* badges are optional */ }
   }
   if (Notification.permission === "granted") {
-    await self.registration.showNotification("New posts", {
-      body: fresh.length + " new posts from accounts you follow",
+    await self.registration.showNotification(tr("New posts"), {
+      body: trn("newPosts", fresh.length),
       icon: "icons/icon-192.png",
       tag: "feeds",
       data: { hash: "#/" }

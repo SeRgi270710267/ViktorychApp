@@ -26,7 +26,23 @@ from site_paths import pages_base
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASE = pages_base()
-SITE_NAME = "SuperintelApp"
+def product_name(kind="app"):
+    text = (ROOT / "i18n" / "en.js").read_text(encoding="utf-8")
+    pack = json.loads(text[text.index("{"):text.rindex("}") + 1])
+    short = pack.get("brand.short") or "Viktrych"
+    name = pack.get("brand.name") or "Viktorych"
+    app = pack.get("brand.app") or "App"
+    music = pack.get("brand.music") or "Music"
+    if kind == "musicShort":
+        return short + music
+    if kind == "music":
+        return name + music
+    if kind == "pwa":
+        return short + app
+    return name + app
+
+
+SITE_NAME = product_name("app")
 SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,120}$")
 SAFE_HANDLE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 PLATFORM = {
@@ -56,7 +72,14 @@ FONT = {
     "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
     "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
     "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "C": ("01110", "10001", "10000", "10000", "10000", "10001", "01110"),
+    "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
+    "K": ("10001", "10010", "10100", "11000", "10100", "10010", "10001"),
+    "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
+    "V": ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
+    "Y": ("10001", "10001", "01010", "00100", "00100", "00100", "00100"),
 }
+BLANK_GLYPH = ("00000", "00000", "00000", "00000", "00000", "00000", "00000")
 
 
 def esc(value) -> str:
@@ -352,7 +375,7 @@ def png_card() -> bytes:
         local_y = row
         if local_x >= 5 * scale or local_y >= 7 * scale:
             return (0, 0, 0)
-        glyph = FONT[word[index]]
+        glyph = FONT.get(word[index], BLANK_GLYPH)
         if glyph[local_y // scale][local_x // scale] == "1":
             return (255, 255, 255)
         return (0, 0, 0)

@@ -2,6 +2,24 @@
    Remote: arrows, Enter/OK, Back (Escape, Backspace, 10009, 461),
    media play/seek, and the colour keys. */
 (function () {
+
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
+    return fn ? fn(key, vars) : key;
+  }
+  function trn(key, n, vars) {
+    var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
+    return fn ? fn(key, n, vars) : String(n);
+  }
+  function productName(kind) {
+    var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
+    if (api && api.productName) return api.productName(kind);
+    if (kind === "musicShort") return "ViktrychMusic";
+    if (kind === "music") return "ViktorychMusic";
+    if (kind === "pwa") return "ViktrychApp";
+    return "ViktorychApp";
+  }
+
   var KEY = "superintelapp-settings-v1";
   var TV = {
     on: false,
@@ -108,7 +126,7 @@
   function settingsHtml() {
     var settings = TV.settings || loadSettings();
     var on = !!(TV.on || settings.tvMode === "on");
-    return '<h2>Display</h2><div class="theme-row"><button class="outline' + (on ? " on" : "") + '" type="button" data-tv-toggle="1" aria-pressed="' + (on ? "true" : "false") + '">TV mode</button></div>';
+    return ("<h2" + ">" + tr("Display") + "<" + "/h2><div class=\"theme-row\"><button class=\"outline") + (on ? " on" : "") + '" type="button" data-tv-toggle="1" aria-pressed="' + (on ? "true" : "false") + ("\"" + ">" + tr("TV mode") + "<" + "/button></div>");
   }
 
   function fit() {

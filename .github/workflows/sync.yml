@@ -118,6 +118,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Check interface strings
+        run: python3 scripts/check_i18n.py
+
       - name: Wait for local feed services
         run: |
           python3 - <<'PY'
@@ -266,7 +269,9 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html app.js styles.css translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css hls-1.7.3.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html app.js styles.css i18n.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css hls-1.7.3.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          mkdir -p _site/i18n
+          cp i18n/*.js _site/i18n/
           if [ -f data/music.json ]; then mkdir -p _site/data; cp data/music.json _site/data/; fi
           if [ -d live ]; then mkdir -p _site/live; cp live/*.json _site/live/; fi
           mkdir -p _site/icons _site/splash _site/screenshots

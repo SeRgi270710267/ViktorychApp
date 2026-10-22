@@ -1,6 +1,24 @@
 /* X-styled Discord inbox. Text is escaped before it is inserted.
    Servers and channels come from the config. Nothing here is special to one server. */
 (function (root) {
+
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
+    return fn ? fn(key, vars) : key;
+  }
+  function trn(key, n, vars) {
+    var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
+    return fn ? fn(key, n, vars) : String(n);
+  }
+  function productName(kind) {
+    var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
+    if (api && api.productName) return api.productName(kind);
+    if (kind === "musicShort") return "ViktrychMusic";
+    if (kind === "music") return "ViktorychMusic";
+    if (kind === "pwa") return "ViktrychApp";
+    return "ViktorychApp";
+  }
+
   const TOPIC = "superintelmusic-discord-th-7f3a91c2";
   const SEEN_KEY = "superintelapp-discord-seen-v1";
   const PREFS_KEY = "superintelapp-discord-prefs-v1";
@@ -28,10 +46,10 @@
       id: "169256939211980800",
       name: "Discord Town Hall",
       channels: [
-        { id: "1502285163009409175", name: "rules", category: "Information", mode: "messages" },
-        { id: "739179537933533264", name: "support", category: "Information", mode: "messages" },
-        { id: "1106365828842139668", name: "account-safety", category: "Information", mode: "messages" },
-        { id: "1514784753293852702", name: "wellbeing-resources", category: "Information", mode: "messages" },
+        { id: "1502285163009409175", name: "rules", category: tr("Information"), mode: "messages" },
+        { id: "739179537933533264", name: "support", category: tr("Information"), mode: "messages" },
+        { id: "1106365828842139668", name: "account-safety", category: tr("Information"), mode: "messages" },
+        { id: "1514784753293852702", name: "wellbeing-resources", category: tr("Information"), mode: "messages" },
         { id: "889949624218042420", name: "product-updates", category: "Announcements", mode: "posts" },
         { id: "889960284020699156", name: "discord-updates", category: "Announcements", mode: "posts" },
         { id: "1337485085737484360", name: "collab-announcements", category: "Announcements", mode: "posts" },
@@ -76,11 +94,11 @@
   };
 
   const MUTE_CHOICES = [
-    { label: "For 15 minutes", ms: 15 * 60 * 1000 },
-    { label: "For 1 hour", ms: 60 * 60 * 1000 },
-    { label: "For 8 hours", ms: 8 * 60 * 60 * 1000 },
-    { label: "For 24 hours", ms: 24 * 60 * 60 * 1000 },
-    { label: "Until I turn it back on", ms: 0 }
+    { label: tr("For 15 minutes"), ms: 15 * 60 * 1000 },
+    { label: tr("For 1 hour"), ms: 60 * 60 * 1000 },
+    { label: tr("For 8 hours"), ms: 8 * 60 * 60 * 1000 },
+    { label: tr("For 24 hours"), ms: 24 * 60 * 60 * 1000 },
+    { label: tr("Until I turn it back on"), ms: 0 }
   ];
 
   function msg(id, authorId, name, color, avatarIndex, date, body) {
@@ -392,7 +410,7 @@
     return {
       id: String(row.id),
       authorId: String(row.author || ""),
-      name: String(author.name || "Unknown").slice(0, 80),
+      name: String(author.name || tr("Unknown")).slice(0, 80),
       avatar: cdnUrl(author.avatar),
       color: hexColor(author.color),
       body: String(row.content || row.text || ""),
@@ -412,7 +430,7 @@
     return {
       id: m.id,
       authorId: m.author.id,
-      name: m.author.name || "Someone",
+      name: m.author.name || tr("Someone"),
       avatar: m.author.avatar || "",
       color: hexColor(m.author.color),
       body: m.content || "",
@@ -471,7 +489,7 @@
     const author = m.author && typeof m.author === "object" ? m.author : {};
     const aid = String(author.id || "");
     if (aid && !snowflake(aid)) return null;
-    const name = String(author.name || "Someone").replace(/\u0000/g, "").slice(0, 80);
+    const name = String(author.name || tr("Someone")).replace(/\u0000/g, "").slice(0, 80);
     const att = [];
     (Array.isArray(m.att) ? m.att.slice(0, 8) : []).forEach(function (item) {
       if (!item || typeof item !== "object") return;
@@ -622,8 +640,8 @@
     const rows = messagesFor(channelId).slice().reverse();
     if (!rows.length) {
       const waiting = state.loading[channelId] && !state.fixture;
-      const title = waiting ? "Loading messages" : (state.paused ? "Discord paused" : "No messages yet");
-      const body = waiting ? "Reading the saved transcript." : (state.paused ? "Saved messages stay here. New reads wait until the account can see the server again." : "The next sync reads the latest 50. This view keeps a rolling window of 300.");
+      const title = waiting ? tr("Loading messages") : (state.paused ? tr("Discord paused") : tr("No messages yet"));
+      const body = waiting ? tr("Reading the saved transcript.") : (state.paused ? tr("Saved messages stay here. New reads wait until the account can see the server again.") : tr("The next sync reads the latest 50. This view keeps a rolling window of 300."));
       return '<div class="dmsgs-placeholder"><h2>' + title + "</h2><p>" + esc(body) + "</p></div>";
     }
     const byId = new Map();
@@ -641,7 +659,7 @@
       prev = row;
       return day + '<article class="dmsg' + (fresh ? " group" : " cont") + '" data-mid="' + esc(row.id) + '"><div class="dmsg-gutter">' + gutter + "</div>" +
         '<div class="dmsg-body">' + head + replyHtml(row, byId) +
-        '<div class="dmsg-bubble"><div class="dmsg-text">' + format(row.body, row.emojis) + (row.edited ? ' <span class="dmsg-edited">(edited)</span>' : "") + "</div>" +
+        '<div class="dmsg-bubble"><div class="dmsg-text">' + format(row.body, row.emojis) + (row.edited ? (" <span class=\"dmsg-edited\"" + ">" + tr("(edited)") + "<" + "/span>") : "") + "</div>" +
         mediaHtml(row) + embedHtml(row) + reactionHtml(row) +
         "</div></div></article>";
     }).join("");
@@ -953,11 +971,11 @@
     return '<div class="dmsgs-ch-row' + (muted ? " muted" : "") + (pinned ? " pinned" : "") + '">' +
       '<a class="dmsgs-ch' + (on ? " on" : "") + (unread ? " unread" : "") + '" data-ch="' + esc(ch.id) + '" data-name="' + esc(ch.name) + '" data-cat="' + esc(category || ch.category || "") + '" href="' + channelHref(ch.id) + '">' +
       '<span class="dmsgs-hash" aria-hidden="true">#</span><span class="dmsgs-ch-name" title="' + esc(ch.name) + '">' + esc(ch.name) + "</span>" +
-      (pinned ? '<span class="dmsgs-pinmark" aria-label="Pinned">' + iconSvg("pin") + "</span>" : "") +
-      (muted ? '<span class="dmsgs-bell" aria-label="Muted">' + iconSvg("mute") + "</span>" : "") +
-      (unread ? '<span class="dmsgs-dot" aria-label="Unread"></span>' : "") +
+      (pinned ? ("<span class=\"dmsgs-pinmark\" " + "aria-label=\"" + tr("Pinned") + "\"" + ">") + iconSvg("pin") + "</span>" : "") +
+      (muted ? ("<span class=\"dmsgs-bell\" " + "aria-label=\"" + tr("Muted") + "\"" + ">") + iconSvg("mute") + "</span>" : "") +
+      (unread ? ("<span class=\"dmsgs-dot\" " + "aria-label=\"" + tr("Unread") + "\"" + "></span>") : "") +
       "</a>" +
-      '<button type="button" class="dmsgs-more" data-discord="menu" data-id="' + esc(ch.id) + '" aria-label="More">' + iconSvg("more") + "</button>" +
+      '<button type="button" class="dmsgs-more" data-discord="menu" data-id="' + esc(ch.id) + ("\" " + "aria-label=\"" + tr("More") + "\"" + ">") + iconSvg("more") + "</button>" +
       "</div>";
   }
 
@@ -981,7 +999,7 @@
     const count = unreadCount(server, route);
     const muted = serverMuted(server.id);
     const pinned = hasId(prefs().pinnedServers, server.id);
-    const preview = state.paused ? "Discord paused" : (latest ? (latest.row.name + ": " + previewText(latest.row)) : "No messages yet");
+    const preview = state.paused ? tr("Discord paused") : (latest ? (latest.row.name + ": " + previewText(latest.row)) : tr("No messages yet"));
     const time = !state.paused && latest ? formatShort(msgTime(latest.row)) : "";
     const badge = !muted && count ? '<span class="dmsgs-badge" aria-label="' + count + ' unread">' + (count > 99 ? "99+" : String(count)) + "</span>" : "";
     const icon = server.icon
@@ -1003,44 +1021,44 @@
   }
 
   function listHtml(route) {
-    const head = '<header class="dmsgs-head"><h1>Messages</h1></header>';
+    const head = ("<header class=\"dmsgs-head\"><h1" + ">" + tr("Messages") + "<" + "/h1></header>");
     const text = state.channels.filter(function (ch) { return ch.mode === "messages" && !ch.inaccessible; });
     if (!text.length) {
-      return head + '<div class="dmsgs-placeholder"><h2>No conversations yet</h2><p>Channels set to messages show up here. None are configured yet.</p></div>';
+      return head + ("<div class=\"dmsgs-placeholder\"><h2" + ">" + tr("No conversations yet") + "<" + "/h2><p" + ">" + tr("Channels set to messages show up here. None are configured yet.") + "<" + "/p></div>");
     }
     const rows = serverOrder().map(function (server) { return serverBlock(server, route); }).join("");
     const filtering = state.query ? " is-filtering" : "";
     return head +
       '<label class="search dmsgs-search"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 20.3 16.7 16a7.5 7.5 0 1 0-.7.7L20.3 21 21 20.3zM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0z"/></svg>' +
-      '<input id="dmsgs-q" class="dmsgs-q" type="search" placeholder="Search Direct Messages" aria-label="Search Direct Messages" value="' + esc(state.query) + '"></label>' +
+      ("<input id=\"dmsgs-q\" class=\"dmsgs-q\" type=\"search\" " + "placeholder=\"" + tr("Search Direct Messages") + "\"" + " " + "aria-label=\"" + tr("Search Direct Messages") + "\"" + " value=\"") + esc(state.query) + '"></label>' +
       '<div class="dmsgs-channels' + filtering + '">' + rows + "</div>";
   }
 
   function conversationHtml(route) {
     const id = route && route.channel || "";
     if (!id) {
-      return '<section class="dmsgs-conv dmsgs-conv-empty"><div class="dmsgs-placeholder"><h2>Select a message</h2><p>Choose from your existing conversations, or just keep swimming.</p></div></section>';
+      return ("<section class=\"dmsgs-conv dmsgs-conv-empty\"><div class=\"dmsgs-placeholder\"><h2" + ">" + tr("Select a message") + "<" + "/h2><p" + ">" + tr("Choose from your existing conversations, or just keep swimming.") + "<" + "/p></div></section>");
     }
     const ch = channelById(id);
     if (!ch) {
-      return '<section class="dmsgs-conv"><header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a><div><b>Channel</b></div></header><div class="dmsgs-log"><div class="dmsgs-placeholder"><h2>This channel isn’t available</h2><p>It isn’t in the Discord list.</p></div></div></section>';
+      return '<section class="dmsgs-conv"><header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a><div><b" + ">" + tr("Channel") + "<" + "/b></div></header><div class=\"dmsgs-log\"><div class=\"dmsgs-placeholder\"><h2" + ">" + tr("This channel isn’t available") + "<" + "/h2><p" + ">" + tr("It isn’t in the Discord list.") + "<" + "/p></div></div></section>");
     }
     if (ch.mode !== "messages") {
-      return '<section class="dmsgs-conv"><header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a><span class="dmsgs-hash lg" aria-hidden="true">#</span><div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(ch.category) + '">' + esc(ch.category) + '</span></div></header><div class="dmsgs-log"><div class="dmsgs-placeholder"><h2>Posted on Home</h2><p>Announcement channels are published with the rest of the feed.</p></div></div></section>';
+      return '<section class="dmsgs-conv"><header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a><span class=\"dmsgs-hash lg\" aria-hidden=\"true\">#</span><div class=\"dmsgs-conv-title\"><b title=\"") + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(ch.category) + '">' + esc(ch.category) + ("</span></div></header><div class=\"dmsgs-log\"><div class=\"dmsgs-placeholder\"><h2" + ">" + tr("Posted on Home") + "<" + "/h2><p" + ">" + tr("Announcement channels are published with the rest of the feed.") + "<" + "/p></div></div></section>");
     }
     const server = serverById(ch.serverId);
     const who = messagesFor(id)[0];
     const face = who && who.avatar
       ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>'
       : '<span class="dmsgs-head-face initials" aria-hidden="true">' + esc((ch.name || "?").slice(0, 1).toUpperCase()) + "</span>";
-    const pinBtn = pinsBlocked(ch) ? "" : '<button type="button" class="dmsgs-iconbtn dmsgs-pins' + (state.pinsOpen === id ? " on" : "") + '" data-discord="pins" data-id="' + esc(id) + '" aria-label="Pinned messages" aria-expanded="' + (state.pinsOpen === id ? "true" : "false") + '">' + iconSvg("pin") + "</button>";
+    const pinBtn = pinsBlocked(ch) ? "" : '<button type="button" class="dmsgs-iconbtn dmsgs-pins' + (state.pinsOpen === id ? " on" : "") + '" data-discord="pins" data-id="' + esc(id) + ("\" " + "aria-label=\"" + tr("Pinned messages") + "\"" + " aria-expanded=\"") + (state.pinsOpen === id ? "true" : "false") + '">' + iconSvg("pin") + "</button>";
     const place = (server && server.name) || ch.category || "Discord";
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + '" aria-label="Back">‹</a>' + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + esc(place) + "</span></div>" + pinBtn + "</header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + esc(place) + "</span></div>" + pinBtn + "</header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
       pinPanelHtml(id) +
-      '<button type="button" class="dmsgs-jump" hidden>Jump to present</button>' +
-      '<div class="dmsgs-compose"><div class="dmsgs-compose-box" role="textbox" aria-disabled="true" aria-label="Read-only channel"><span>Read-only channel</span></div></div>' +
+      ("<button type=\"button\" class=\"dmsgs-jump\" hidden" + ">" + tr("Jump to present") + "<" + "/button>") +
+      ("<div class=\"dmsgs-compose\"><div class=\"dmsgs-compose-box\" role=\"textbox\" aria-disabled=\"true\" " + "aria-label=\"" + tr("Read-only channel") + "\"" + "><span" + ">" + tr("Read-only channel") + "<" + "/span></div></div>") +
       "</section>";
   }
 
@@ -1051,16 +1069,16 @@
     const rows = pinRows(id);
     const waiting = !state.fixture && !state.pinFiles[id];
     let body = "";
-    if (waiting) body = '<p class="dmsgs-pinempty">Loading pinned messages</p>';
-    else if (!rows.length) body = '<p class="dmsgs-pinempty">No pinned messages</p>';
+    if (waiting) body = ("<p class=\"dmsgs-pinempty\"" + ">" + tr("Loading pinned messages") + "<" + "/p>");
+    else if (!rows.length) body = ("<p class=\"dmsgs-pinempty\"" + ">" + tr("No pinned messages") + "<" + "/p>");
     else body = rows.map(function (row) {
       const when = formatClock({ id: row.id, date: row.date });
       return '<button type="button" class="dmsgs-pinrow" data-discord="jump" data-mid="' + esc(row.id) + '">' +
-        '<span class="dmsgs-pinrow-top"><b>' + esc(row.author || "Someone") + "</b>" + (when ? "<time>" + esc(when) + "</time>" : "") + "</span>" +
-        '<span class="dmsgs-pinrow-text">' + esc(row.text || "Pinned message") + "</span></button>";
+        '<span class="dmsgs-pinrow-top"><b>' + esc(row.author || tr("Someone")) + "</b>" + (when ? "<time>" + esc(when) + "</time>" : "") + "</span>" +
+        '<span class="dmsgs-pinrow-text">' + esc(row.text || tr("Pinned message")) + "</span></button>";
     }).join("");
-    return '<div class="dmsgs-pinpanel" role="dialog" aria-label="Pinned messages">' +
-      '<header class="dmsgs-pinhead"><span class="dmsgs-grab" aria-hidden="true"></span><b>Pinned messages</b><button type="button" class="dmsgs-iconbtn" data-discord="pins-close" aria-label="Close">×</button></header>' +
+    return ("<div class=\"dmsgs-pinpanel\" role=\"dialog\" " + "aria-label=\"" + tr("Pinned messages") + "\"" + ">") +
+      ("<header class=\"dmsgs-pinhead\"><span class=\"dmsgs-grab\" aria-hidden=\"true\"></span><b" + ">" + tr("Pinned messages") + "<" + "/b><button type=\"button\" class=\"dmsgs-iconbtn\" data-discord=\"pins-close\" " + "aria-label=\"" + tr("Close") + "\"" + ">×</button></header>") +
       '<div class="dmsgs-pinlist">' + body + "</div></div>";
   }
 
@@ -1073,18 +1091,18 @@
     const muted = channelMuteOnly(ch.id);
     let items = "";
     if (menu.durations) {
-      items = '<div class="dmsgs-menu-title">Mute channel</div>' + MUTE_CHOICES.map(function (choice) {
+      items = ("<div class=\"dmsgs-menu-title\"" + ">" + tr("Mute channel") + "<" + "/div>") + MUTE_CHOICES.map(function (choice) {
         return '<button type="button" role="menuitem" data-discord="mute-for" data-id="' + esc(ch.id) + '" data-ms="' + choice.ms + '">' + esc(choice.label) + "</button>";
       }).join("");
     } else {
-      items = '<button type="button" role="menuitem" data-discord="pin-channel" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("pin") + "</span>" + (pinned ? "Unpin channel" : "Pin channel") + "</button>" +
+      items = '<button type="button" role="menuitem" data-discord="pin-channel" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("pin") + "</span>" + (pinned ? tr("Unpin channel") : tr("Pin channel")) + "</button>" +
         (muted
-          ? '<button type="button" role="menuitem" data-discord="unmute-channel" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + "</span>Unmute channel</button>"
-          : '<button type="button" role="menuitem" data-discord="mute-menu" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + "</span>Mute channel</button>");
+          ? '<button type="button" role="menuitem" data-discord="unmute-channel" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + ("</span" + ">" + tr("Unmute channel") + "<" + "/button>")
+          : '<button type="button" role="menuitem" data-discord="mute-menu" data-id="' + esc(ch.id) + '"><span class="dmsgs-mi">' + iconSvg("mute") + ("</span" + ">" + tr("Mute channel") + "<" + "/button>"));
     }
     const x = Math.round(Number(menu.x) || 16);
     const y = Math.round(Number(menu.y) || 16);
-    return '<button type="button" class="dmsgs-scrim" data-discord="menu-close" aria-label="Close menu"></button>' +
+    return ("<button type=\"button\" class=\"dmsgs-scrim\" data-discord=\"menu-close\" " + "aria-label=\"" + tr("Close menu") + "\"" + "></button>") +
       '<div class="dmsgs-menu" role="menu" style="left:' + x + 'px;top:' + y + 'px"><span class="dmsgs-grab" aria-hidden="true"></span>' + items + "</div>";
   }
 
@@ -1112,7 +1130,7 @@
     const open = id ? " has-channel" : "";
     return '<div class="dmsgs' + open + '" data-discord-root>' +
       '<aside class="dmsgs-list" id="dmsgs-list">' + listHtml(route) +
-      '<div class="dmsgs-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize message list" aria-controls="dmsgs-list" aria-valuemin="300" aria-valuemax="440" aria-valuenow="440"></div></aside>' +
+      ("<div class=\"dmsgs-split\" role=\"separator\" tabindex=\"0\" aria-orientation=\"vertical\" " + "aria-label=\"" + tr("Resize message list") + "\"" + " aria-controls=\"dmsgs-list\" aria-valuemin=\"300\" aria-valuemax=\"440\" aria-valuenow=\"440\"></div></aside>") +
       conversationHtml(route) +
       menuHtml() +
       "</div>";
@@ -1177,7 +1195,7 @@
       if (unread && !dot) {
         dot = document.createElement("span");
         dot.className = "dmsgs-dot";
-        dot.setAttribute("aria-label", "Unread");
+        dot.setAttribute("aria-label", tr("Unread"));
         el.appendChild(dot);
       } else if (!unread && dot) {
         dot.remove();
@@ -1203,7 +1221,7 @@
       const latest = latestMessage(server);
       const preview = srv.querySelector(".dmsgs-srv-preview");
       if (preview) {
-        preview.textContent = state.paused ? "Discord paused" : (latest ? (latest.row.name + ": " + previewText(latest.row)) : "No messages yet");
+        preview.textContent = state.paused ? tr("Discord paused") : (latest ? (latest.row.name + ": " + previewText(latest.row)) : tr("No messages yet"));
       }
     });
     paintNavBadge();
@@ -1475,7 +1493,7 @@
     restoreWindow();
     try {
       const title = titleFor(route);
-      document.title = (title || "Messages") + " / Feeds";
+      document.title = (title || tr("Messages")) + " / " + productName("app");
     } catch (err) { /* ignore */ }
     if (typeof requestAnimationFrame === "function") {
       requestAnimationFrame(function () {
@@ -1617,7 +1635,7 @@
         if (!mid) return;
         pins.push({
           id: mid,
-          author: String((row && row.author) || "Someone").slice(0, 80),
+          author: String((row && row.author) || tr("Someone")).slice(0, 80),
           text: String((row && row.text) || "").slice(0, 180),
           date: String((row && row.date) || "").slice(0, 40)
         });

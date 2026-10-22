@@ -3,6 +3,24 @@
 (function (root) {
   "use strict";
 
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
+    return fn ? fn(key, vars) : key;
+  }
+  function trn(key, n, vars) {
+    var fn = (typeof window !== "undefined" && window.tn) ? window.tn : ((typeof self !== "undefined" && self.tn) ? self.tn : null);
+    return fn ? fn(key, n, vars) : String(n);
+  }
+  function productName(kind) {
+    var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
+    if (api && api.productName) return api.productName(kind);
+    if (kind === "musicShort") return "ViktrychMusic";
+    if (kind === "music") return "ViktorychMusic";
+    if (kind === "pwa") return "ViktrychApp";
+    return "ViktorychApp";
+  }
+
+
   function homePills(items, follows) {
     const set = Object.create(null);
     (follows || []).forEach((id) => { set[String(id)] = true; });
@@ -328,7 +346,7 @@
 
   function hostFace(space) {
     const host = (space && space.host) || {};
-    let name = host.name || "Host";
+    let name = host.name || tr("Host");
     let avatar = host.avatar || (space && space.cover) || "";
     if (hooks.findFeed && host.platform && host.handle) {
       const feed = hooks.findFeed(host.platform, host.handle);
@@ -408,7 +426,7 @@
     return extras.map((item) => ({
       id: item.id,
       kind: "video",
-      title: item.title || "LIVE",
+      title: item.title || tr("LIVE"),
       cover: "",
       followId: item.followId || "",
       host: { name: "", handle: "", platform: "", avatar: "" },
@@ -457,10 +475,8 @@
     if (n == null || n === "") return "";
     const value = Math.floor(Number(n));
     if (!Number.isFinite(value) || value < 0) return "";
-    let text = String(value);
-    if (value >= 1000000) text = (value / 1000000).toFixed(value >= 10000000 ? 0 : 1).replace(/\.0$/, "") + "M";
-    else if (value >= 10000) text = Math.round(value / 1000) + "K";
-    return text + " listening";
+    const text = (typeof window !== "undefined" && window.SI18n) ? window.SI18n.formatCount(value) : String(value);
+    return tr("{count} listening", { count: text });
   }
 
   function marquee(text) {
@@ -480,7 +496,7 @@
 
   function pill(item) {
     if (item.kind === "video") {
-      const label = /live/i.test(item.title || "") ? item.title : (item.title || "LIVE") + " LIVE";
+      const label = /live/i.test(item.title || "") ? item.title : (item.title || tr("LIVE")) + " LIVE";
       return '<a class="sp-pill sp-pill-video" href="' + esc(item.href || "#/") + '"><span class="sp-pill-text">' + marquee(label) + '</span><span class="sp-dot" aria-hidden="true"></span></a>';
     }
     const reconnect = item.state === "reconnecting";
@@ -490,7 +506,7 @@
   function cardHtml(item) {
     const count = countLabel(item.listeners);
     const reconnect = item.state === "reconnecting";
-    return '<a class="sp-card' + (reconnect ? " is-reconnect" : "") + '" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '" data-space-state="' + esc(item.state || "") + '"><span class="sp-card-top"><span class="sp-live-pill">LIVE</span>' + (reconnect ? '<span class="sp-reconnect-dot" aria-hidden="true"></span>' : "") + '<span class="sp-eq' + (reconnect ? " is-quiet" : "") + '" aria-hidden="true"><i></i><i></i><i></i><i></i></span></span><span class="sp-card-title">' + esc(item.title) + '</span><span class="sp-card-foot">' + stack(item) + (count ? '<span class="sp-count">' + esc(count) + "</span>" : "") + "</span></a>";
+    return '<a class="sp-card' + (reconnect ? " is-reconnect" : "") + '" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '" data-space-state="' + esc(item.state || "") + '"><span class="sp-card-top"><span class="sp-live-pill">' + tr("LIVE") + "</span>" + (reconnect ? '<span class="sp-reconnect-dot" aria-hidden="true"></span>' : "") + '<span class="sp-eq' + (reconnect ? " is-quiet" : "") + '" aria-hidden="true"><i></i><i></i><i></i><i></i></span></span><span class="sp-card-title">' + esc(item.title) + '</span><span class="sp-card-foot">' + stack(item) + (count ? '<span class="sp-count">' + esc(count) + "</span>" : "") + "</span></a>";
   }
 
   function homeRow() {
@@ -525,7 +541,7 @@
     if (!inner || String(inner).indexOf("sp-live-wrap") >= 0) return inner;
     const item = models().filter((entry) => entry.kind !== "video" && profileLive(entry, platform, handle))[0];
     if (!item) return inner;
-    return '<a class="sp-live-wrap" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '">' + inner + '<span class="sp-live-badge">LIVE</span></a>';
+    return '<a class="sp-live-wrap" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '">' + inner + ("<span class=\"sp-live-badge\"" + ">" + tr("LIVE") + "<" + "/span></a>");
   }
 
   function sheet(item) {
@@ -535,32 +551,32 @@
     const speaking = player.active && player.spaceId === item.id && (state === "live" || state === "reconnecting");
     const pulse = speaking && player.noAnalyser ? " pulse" : "";
     let body = "";
-    if (state === "ended") body = '<div class="sp-notice"><h2>This Space has ended</h2></div>';
-    else if (state === "scheduled") body = '<div class="sp-notice"><h2>Scheduled</h2></div>';
-    else if (state === "loading") body = '<div class="sp-notice"><h2>Connecting…</h2></div>';
+    if (state === "ended") body = ("<div class=\"sp-notice\"><h2" + ">" + tr("This Space has ended") + "<" + "/h2></div>");
+    else if (state === "scheduled") body = ("<div class=\"sp-notice\"><h2" + ">" + tr("Scheduled") + "<" + "/h2></div>");
+    else if (state === "loading") body = ("<div class=\"sp-notice\"><h2" + ">" + tr("Connecting…") + "<" + "/h2></div>");
     else {
       const count = countLabel(item.listeners);
       body = '<div class="sp-stage">'
         + (item.cover ? '<img class="sp-cover" src="' + esc(item.cover) + '" alt="" referrerpolicy="no-referrer">' : "")
-        + '<section class="sp-people"><h2>Host</h2><div class="sp-person"><div class="sp-ava sp-speak' + pulse + '" style="--level:0"><span class="sp-ring"></span>'
+        + ("<section class=\"sp-people\"><h2" + ">" + tr("Host") + "<" + "/h2><div class=\"sp-person\"><div class=\"sp-ava sp-speak") + pulse + '" style="--level:0"><span class="sp-ring"></span>'
         + faceHtml(host.avatar, host.name, "sp-host")
-        + '</div>' + (hostLink ? '<a class="sp-name" href="' + esc(hostLink) + '">' + esc(host.name || "Host") + "</a>" : '<div class="sp-name">' + esc(host.name || "Host") + "</div>")
-        + '<div class="sp-role">Host</div></div></section>'
-        + '<section class="sp-listeners"><h2>Listeners</h2>' + (count ? "<p>" + esc(count) + "</p>" : "") + "</section></div>";
+        + '</div>' + (hostLink ? '<a class="sp-name" href="' + esc(hostLink) + '">' + esc(host.name || tr("Host")) + "</a>" : '<div class="sp-name">' + esc(host.name || tr("Host")) + "</div>")
+        + ("<div class=\"sp-role\"" + ">" + tr("Host") + "<" + "/div></div></section>")
+        + ("<section class=\"sp-listeners\"><h2" + ">" + tr("Listeners") + "<" + "/h2>") + (count ? "<p>" + esc(count) + "</p>" : "") + "</section></div>";
     }
     const joined = player.active && player.spaceId === item.id;
     const tunable = state === "live" || state === "reconnecting";
     const controls = !tunable ? "" : joined
-      ? '<div class="sp-controls"><button class="sp-round" type="button" data-space-act="mic" aria-label="Request to speak">' + svg(ICON.mic) + '</button><button class="sp-round sp-emoji-btn" type="button" data-space-act="emoji" aria-label="React">' + EMOJIS[0] + '</button><button class="sp-round" type="button" data-space-act="share" aria-label="Share">' + svg(ICON.share) + '</button><button class="sp-round" type="button" data-space-act="comment" aria-label="Comment">' + svg(ICON.comment) + "</button></div>"
-      : '<div class="sp-controls"><button class="sp-start" type="button" data-space-act="listen">Start listening</button></div>';
+      ? '<div class="sp-controls"><button class="sp-round" type="button" data-space-act="mic" aria-label="' + tr("Request to speak") + '">' + svg(ICON.mic) + '</button><button class="sp-round sp-emoji-btn" type="button" data-space-act="emoji" aria-label="' + tr("React") + '">' + EMOJIS[0] + '</button><button class="sp-round" type="button" data-space-act="share" aria-label="' + tr("Share") + '">' + svg(ICON.share) + '</button><button class="sp-round" type="button" data-space-act="comment" aria-label="' + tr("Comment") + '">' + svg(ICON.comment) + "</button></div>"
+      : '<div class="sp-controls"><button class="sp-start" type="button" data-space-act="listen">' + tr("Start listening") + "</button></div>";
     const reactions = EMOJIS.map((emoji) => '<button type="button" data-space-act="react" data-emoji="' + emoji + '">' + emoji + "</button>").join("");
-    const reconnect = state === "reconnecting" ? '<p class="sp-reconnect" role="status">' + esc(ui("Reconnecting…")) + "</p>" : "";
-    return '<div class="sp-sheet' + (state === "reconnecting" ? " is-reconnect" : "") + '" data-space-id="' + esc(item.id || "") + '" data-space-state="' + esc(state) + '"><header class="sp-sheet-bar"><button class="sp-icon" type="button" data-space-act="min" aria-label="Minimize">' + svg(ICON.down) + '</button><button class="sp-icon" type="button" data-space-act="more" aria-label="More">' + svg(ICON.more) + '</button><button class="sp-leave" type="button" data-space-act="leave">Leave</button></header><div class="sp-more" hidden><button type="button" data-space-act="copy">Copy link</button></div><div class="sp-react" hidden>' + reactions + '</div><h1 class="sp-sheet-title">' + esc(item.title || "Space") + "</h1>" + reconnect + body + controls + "</div>";
+    const reconnect = state === "reconnecting" ? '<p class="sp-reconnect" role="status">' + esc(tr("Reconnecting…")) + "</p>" : "";
+    return '<div class="sp-sheet' + (state === "reconnecting" ? " is-reconnect" : "") + '" data-space-id="' + esc(item.id || "") + '" data-space-state="' + esc(state) + '"><header class="sp-sheet-bar"><button class="sp-icon" type="button" data-space-act="min" aria-label="' + tr("Minimize") + '">' + svg(ICON.down) + '</button><button class="sp-icon" type="button" data-space-act="more" aria-label="' + tr("More") + '">' + svg(ICON.more) + '</button><button class="sp-leave" type="button" data-space-act="leave">' + tr("Leave") + '</button></header><div class="sp-more" hidden><button type="button" data-space-act="copy">' + tr("Copy link") + '</button></div><div class="sp-react" hidden>' + reactions + '</div><h1 class="sp-sheet-title">' + esc(item.title || tr("Space")) + "</h1>" + reconnect + body + controls + "</div>";
   }
 
   function page(route) {
     const item = spaceModel(route && route.id);
-    if (!item) return sheet({ id: "", title: "Space", state: "ended", host: {}, cover: "" });
+    if (!item) return sheet({ id: "", title: tr("Space"), state: "ended", host: {}, cover: "" });
     return sheet(item);
   }
 
@@ -1137,8 +1153,8 @@
     player.dockKey = key;
     const playing = player.audio && !player.audio.paused;
     dock.classList.toggle("is-reconnect", reconnect);
-    const status = reconnect ? '<span class="sp-reconnect sp-reconnect-dock">' + esc(ui("Reconnecting…")) + "</span>" : "";
-    dock.innerHTML = '<a class="sp-dock-open" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '">' + stack(item) + '<span class="sp-dock-copy"><span class="sp-dock-title">' + marquee(item.title) + "</span>" + status + "</span></a><button class=\"sp-icon\" type=\"button\" data-space-act=\"" + (playing ? "pause" : "play") + '" aria-label="' + (playing ? "Pause" : "Play") + '">' + svg(playing ? ICON.pause : ICON.play) + '</button><button class="sp-icon" type="button" data-space-open="' + esc(item.id) + '" aria-label="Expand">' + svg(ICON.up) + "</button>";
+    const status = reconnect ? '<span class="sp-reconnect sp-reconnect-dock">' + esc(tr("Reconnecting…")) + "</span>" : "";
+    dock.innerHTML = '<a class="sp-dock-open" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '">' + stack(item) + '<span class="sp-dock-copy"><span class="sp-dock-title">' + marquee(item.title) + "</span>" + status + "</span></a><button class=\"sp-icon\" type=\"button\" data-space-act=\"" + (playing ? "pause" : "play") + '" aria-label="' + (playing ? tr("Pause") : tr("Play")) + '">' + svg(playing ? ICON.pause : ICON.play) + '</button><button class="sp-icon" type="button" data-space-open="' + esc(item.id) + '" aria-label="' + tr("Expand") + '">' + svg(ICON.up) + "</button>";
     bindMarquees(dock);
   }
 
@@ -1162,7 +1178,7 @@
   }
 
   function copyText(url) {
-    const done = () => { if (hooks.toast) hooks.toast("Copied link"); };
+    const done = () => { if (hooks.toast) hooks.toast(tr("Copied link")); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(url).then(done).catch(() => {
         const input = document.createElement("textarea");
@@ -1234,8 +1250,8 @@
     if (act === "pause") { pause(); return; }
     if (act === "play") { resume(); return; }
     if (act === "share" || act === "copy") { share(id); closePopups(); return; }
-    if (act === "mic") { if (hooks.toast) hooks.toast("Request to speak isn’t available."); return; }
-    if (act === "comment") { if (hooks.toast) hooks.toast("Replies aren’t available in this Space."); return; }
+    if (act === "mic") { if (hooks.toast) hooks.toast(tr("Request to speak isn’t available.")); return; }
+    if (act === "comment") { if (hooks.toast) hooks.toast(tr("Replies aren’t available in this Space.")); return; }
     if (act === "more") {
       const menu = document.querySelector(".sp-more");
       if (menu) menu.hidden = !menu.hidden;
@@ -1477,7 +1493,7 @@
     }
     if (route && route.name === "spaces") {
       const item = spaceModel(route.id);
-      if (item) document.title = item.title + " / SuperintelApp";
+      if (item) document.title = item.title + " / " + productName("app");
     }
   }
 
@@ -1486,7 +1502,7 @@
     const id = String(item.id);
     const row = {
       id: id,
-      title: String(item.title || "LIVE"),
+      title: String(item.title || tr("LIVE")),
       followId: String(item.followId || ""),
       live: !!item.live,
       href: String(item.href || "#/")

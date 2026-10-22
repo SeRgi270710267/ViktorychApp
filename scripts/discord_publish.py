@@ -39,6 +39,10 @@ SITE_FILES = (
     "spaces.css",
     "music.js",
     "music.css",
+    "i18n.js",
+    "stories.js",
+    "stories.css",
+    "404.html",
     "favicon.svg",
     "favicon.ico",
     "manifest.webmanifest",
@@ -46,7 +50,7 @@ SITE_FILES = (
     ".nojekyll",
     "feeds.config.json",
 )
-COPY_DIRS = ("icons", "splash", "screenshots")
+COPY_DIRS = ("icons", "splash", "screenshots", "i18n")
 UA = "superintel-preview/1.0"
 
 
