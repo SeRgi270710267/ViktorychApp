@@ -246,10 +246,20 @@
     }
   }
 
+  function archiveStoreUrl(url) {
+    return /^https:\/\/(?:[a-z0-9-]+\.)+workers\.dev\/v1\/archive\/[a-f0-9]{64}\.[a-z0-9]{1,8}$/i.test(String(url || ""));
+  }
+
   function iaDownloadUrl(url) {
     const parts = iaParts(url);
     if (!parts) return "";
     return "https://archive.org/download/" + parts.id + "/" + encodeURIComponent(parts.file).replace(/%2F/g, "/");
+  }
+
+  function iaPlaybackUrl(url) {
+    const raw = String(url || "");
+    if (archiveStoreUrl(raw)) return raw;
+    return iaDownloadUrl(raw);
   }
 
   function iaCorsUrl(url) {
@@ -277,7 +287,7 @@
     const shardMap = doc && doc.shards && typeof doc.shards === "object" ? doc.shards : {};
     Object.keys(shardMap).forEach((key) => {
       const value = String(shardMap[key] || "");
-      if (/^https:\/\/archive\.org\/download\/x[0-9a-f]{32}\//.test(value)) IA.shards[key] = value;
+      if (/^https:\/\/archive\.org\/download\/x[0-9a-f]{32}\//.test(value) || (archiveStoreUrl(value) && /\.json$/i.test(value))) IA.shards[key] = value;
     });
     if (!doc || Number(doc.v) !== 1 || !Array.isArray(doc.files)) {
       retryWaitingImages();
@@ -297,14 +307,26 @@
     retryWaitingImages();
   }
 
-  function iaForUrl(url) {
-    let found = "";
+  function iaRecord(url) {
+    let found = null;
     iaCandidates(url).forEach((item) => {
       if (found) return;
       const file = IA.byUrl[item];
-      if (file) found = iaDownloadUrl(file.a);
+      if (file) found = file;
     });
     return found;
+  }
+
+  function iaForUrl(url) {
+    const file = iaRecord(url);
+    if (!file) return "";
+    return iaPlaybackUrl(file.a);
+  }
+
+  function iaLegacyUrl(url) {
+    const file = iaRecord(url);
+    if (!file || !file.ia) return "";
+    return iaDownloadUrl(file.ia);
   }
 
   function nextIaUrl(img) {
@@ -314,8 +336,15 @@
     if (step === "") {
       const found = iaForUrl(origin);
       if (found && found !== img.src) {
-        img.dataset.iaStep = "download";
+        img.dataset.iaStep = "store";
         return found;
+      }
+    }
+    if (step !== "legacy" && step !== "cors") {
+      const legacy = iaLegacyUrl(origin);
+      if (legacy && legacy !== img.src) {
+        img.dataset.iaStep = "legacy";
+        return legacy;
       }
     }
     if (step !== "cors") {
@@ -373,8 +402,9 @@
     let avatar = "";
     const media = [];
     rows.forEach((file) => {
-      const playback = iaDownloadUrl(file.a);
-      const cors = iaCorsUrl(file.a);
+      const playback = iaPlaybackUrl(file.a);
+      const legacy = file.ia ? iaDownloadUrl(file.ia) : "";
+      const cors = iaCorsUrl(file.ia || file.a);
       if (!playback) return;
       if (file.k === "avatar") {
         avatar = playback;
@@ -384,12 +414,12 @@
         media.push({
           type: file.k === "animated_gif" ? "animated_gif" : "video",
           url: playback,
-          fallback: cors,
+          fallback: legacy || cors,
           poster: file.p ? iaForUrl(file.p) : ""
         });
         return;
       }
-      media.push({ type: "photo", url: playback, fallback: cors });
+      media.push({ type: "photo", url: playback, fallback: legacy || cors });
     });
     if (!media.length && !avatar) return null;
     return Object.assign({}, stub, {

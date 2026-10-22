@@ -129,7 +129,12 @@ async function takeOverClients() {
   }
 }
 
+function isArchiveStore(url) {
+  return /\/v1\/archive\/[a-f0-9]{64}\.[a-z0-9]{1,8}$/i.test(url.pathname);
+}
+
 function isData(url) {
+  if (isArchiveStore(url)) return false;
   if (/\/archive\/[^/]+\.json$/.test(url.pathname)) return true;
   // data/music.json is the ViktorychMusic catalog
   if (url.origin === self.location.origin && /\/data\/music\.json$/.test(url.pathname)) return true;
@@ -447,6 +452,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (isArchiveStore(url)) return;
   if (isOwnerPlay(url) || isAccountMedia(url)) {
     event.respondWith((async () => {
       const headers = new Headers();

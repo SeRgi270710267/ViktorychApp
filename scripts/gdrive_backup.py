@@ -60,8 +60,21 @@ def scrub(text: str, secrets) -> str:
     return re.sub(r"(https?://[^\s\"']+)\?[^\s\"']+", r"\1", out)
 
 
+def archive_store_url(url: str) -> bool:
+    """Public read URL for one file in the private R2 archive. Not account data."""
+    parsed = urllib.parse.urlparse(str(url or "").strip())
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme.lower() != "https" or parsed.username or parsed.password or not host:
+        return False
+    if not (host == "workers.dev" or host.endswith(".workers.dev")):
+        return False
+    return re.fullmatch(r"/v1/archive/[a-f0-9]{64}\.[a-z0-9]{1,8}", parsed.path or "") is not None
+
+
 def account_data_url(url: str) -> bool:
     raw = str(url or "").strip()
+    if archive_store_url(raw):
+        return False
     parsed = urllib.parse.urlparse(raw)
     if parsed.username or parsed.password:
         return True
@@ -311,7 +324,8 @@ def media_plan(posts, manifest: dict, policy: dict) -> list:
             logical = "media:" + url.split("?", 1)[0]
             if not url or logical in seen:
                 continue
-            item = _item("media", logical, url, _hosts_of(url, ("archive.org",)), str(key))
+            hosts = ("workers.dev",) if archive_store_url(url) else ("archive.org",)
+            item = _item("media", logical, url, _hosts_of(url, hosts), str(key))
             if item:
                 seen.add(logical)
                 items.append(item)

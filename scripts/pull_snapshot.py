@@ -126,9 +126,11 @@ def shard_url(manifest: dict, rel: str) -> str:
         url = str(shards.get(name[:-5]) or "")
     else:
         url = ""
-    if not re.match(r"https://archive\.org/download/x[0-9a-f]{32}/", url):
-        return ""
-    return url
+    if re.match(r"https://archive\.org/download/x[0-9a-f]{32}/", url):
+        return url
+    if re.match(r"https://(?:[a-z0-9-]+\.)+workers\.dev/v1/archive/[a-f0-9]{64}\.json$", url, re.I):
+        return url
+    return ""
 
 
 def manifest_archive_fetch(manifest: dict, get):

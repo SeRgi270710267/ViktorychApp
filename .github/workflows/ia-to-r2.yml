@@ -1,0 +1,59 @@
+name: Copy Internet Archive media to R2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/ia-to-r2.once
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ia-to-r2
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Copy referenced files into private R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/ia_to_r2.py
+
+      - name: Publish the rewritten manifest on the data branch
+        run: |
+          if [ ! -f archive/ia-manifest.json ]; then
+            echo "[r2] no manifest to publish"
+            exit 1
+          fi
+          cp archive/ia-manifest.json /tmp/ia-manifest.json
+          cp archive/ia-state.json /tmp/ia-state.json
+          if ! git fetch -q --depth=1 origin data; then
+            echo "[r2] data branch is not available"
+            exit 1
+          fi
+          git checkout -B ia-data-publish origin/data
+          mkdir -p archive
+          cp /tmp/ia-manifest.json archive/ia-manifest.json
+          cp /tmp/ia-state.json archive/ia-state.json
+          git add -f archive/ia-manifest.json archive/ia-state.json
+          if git diff --cached --quiet; then
+            echo "[r2] manifest unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Point archive media at private R2"
+          git push origin HEAD:data

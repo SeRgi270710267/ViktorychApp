@@ -596,3 +596,22 @@ test("sync history keeps the newest 300 and a clear", async () => {
   assert.equal(merged[0].at, 30);
   assert.equal(merged[0].progress, 0.6);
 });
+
+test("archive copies are public and account objects stay hidden", async () => {
+  const name = "ab".repeat(32) + ".jpg";
+  await bindings.DATA.put("archive/" + name, new Uint8Array([0xff, 0xd8, 0xff, 0xd9]), {
+    httpMetadata: { contentType: "image/jpeg" }
+  });
+  await bindings.DATA.put("owner/tiktok.json", "{}");
+  const ok = await mf.dispatchFetch("https://accounts.test/v1/archive/" + name, {
+    headers: { Origin: "https://viktorychgroup.github.io" }
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.headers.get("content-type"), "image/jpeg");
+  assert.equal(ok.headers.get("access-control-allow-origin"), "https://viktorychgroup.github.io");
+  assert.equal(new Uint8Array(await ok.arrayBuffer())[0], 0xff);
+  const missing = await mf.dispatchFetch("https://accounts.test/v1/archive/" + "cd".repeat(32) + ".jpg");
+  assert.equal(missing.status, 404);
+  const hidden = await mf.dispatchFetch("https://accounts.test/v1/archive/owner/tiktok.json");
+  assert.equal(hidden.status, 404);
+});

@@ -1,0 +1,3 @@
+Copy referenced Internet Archive files into the private R2 bucket.
+
+Pushing this file starts that copy. It does not delete anything on archive.org.

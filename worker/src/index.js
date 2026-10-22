@@ -1060,6 +1060,77 @@ async function handleHandle(env, url) {
   return json(200, { ok: true, owner: !!checked.owner });
 }
 
+const ARCHIVE_NAME = /^[a-f0-9]{64}\.(?:jpe?g|png|webp|gif|mp4|webm|json)$/;
+
+function archiveType(name) {
+  const ext = name.slice(name.lastIndexOf(".") + 1);
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "webm") return "video/webm";
+  return "application/json; charset=utf-8";
+}
+
+function archiveRange(header, size) {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(String(header || "").trim());
+  if (!match || size < 1) return null;
+  let start = match[1] === "" ? null : Number(match[1]);
+  let end = match[2] === "" ? null : Number(match[2]);
+  if (start === null && end === null) return null;
+  if (start === null) {
+    const tail = end;
+    if (!Number.isFinite(tail) || tail <= 0) return null;
+    start = Math.max(0, size - tail);
+    end = size - 1;
+  } else if (end === null) {
+    end = size - 1;
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start || start >= size) return null;
+  end = Math.min(end, size - 1);
+  return { offset: start, length: end - start + 1, end };
+}
+
+async function handleArchive(request, env, name) {
+  if (!ARCHIVE_NAME.test(name)) return json(404, { error: "not_found" });
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const key = "archive/" + name;
+  if (request.method === "HEAD") {
+    const head = await env.DATA.head(key);
+    if (!head) return json(404, { error: "not_found" });
+    const headers = {
+      "content-type": archiveType(name),
+      "cache-control": "public, max-age=31536000, immutable",
+      "accept-ranges": "bytes",
+      "x-content-type-options": "nosniff"
+    };
+    if (head.size) headers["content-length"] = String(head.size);
+    return new Response(null, { status: 200, headers });
+  }
+  const head = await env.DATA.head(key);
+  if (!head) return json(404, { error: "not_found" });
+  const size = Number(head.size || 0);
+  const rangeHeader = request.headers.get("Range");
+  const range = rangeHeader ? archiveRange(rangeHeader, size) : null;
+  if (rangeHeader && !range) return new Response(null, { status: 416, headers: { "content-range": "bytes */" + size } });
+  const object = range ? await env.DATA.get(key, { range: { offset: range.offset, length: range.length } }) : await env.DATA.get(key);
+  if (!object) return json(404, { error: "not_found" });
+  const headers = {
+    "content-type": archiveType(name),
+    "cache-control": "public, max-age=31536000, immutable",
+    "accept-ranges": "bytes",
+    "x-content-type-options": "nosniff"
+  };
+  if (range) {
+    headers["content-range"] = "bytes " + range.offset + "-" + range.end + "/" + size;
+    headers["content-length"] = String(range.length);
+    return new Response(object.body, { status: 206, headers });
+  }
+  if (object.size) headers["content-length"] = String(object.size);
+  return new Response(object.body, { status: 200, headers });
+}
+
 async function handleAccountMedia(request, env, kind, publicId, file) {
   const viewer = await sessionAccount(env, request);
   if (!viewer) return json(401, { error: "unauthorized" });
@@ -1090,6 +1161,8 @@ async function route(request, env) {
   if (path === "/v1/health" && request.method === "GET") {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET });
   }
+  const archiveMedia = path.match(/^\/v1\/archive\/([a-f0-9]{64}\.[a-z0-9]{1,8})$/);
+  if (archiveMedia && (request.method === "GET" || request.method === "HEAD")) return handleArchive(request, env, archiveMedia[1]);
   const accountMedia = path.match(/^\/v1\/media\/(avatars|banners)\/(\d{12})\/([a-f0-9]{64}\.(?:webp|jpg|png))$/);
   if (accountMedia && request.method === "GET") return handleAccountMedia(request, env, accountMedia[1], accountMedia[2], accountMedia[3]);
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path);

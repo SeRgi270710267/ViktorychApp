@@ -3238,6 +3238,25 @@ def ia_backup_checks() -> None:
     totals = r2_usage.latest_totals(samples)
     check(totals["payload"] == 75 and totals["metadata"] == 1 and totals["objects"] == 4 and totals["buckets"] == 2, "R2 usage keeps the latest sample per bucket")
     check("sentinel-token-value" not in r2_usage.scrub("bearer sentinel-token-value", ["sentinel-token-value"]), "R2 logs do not keep the API token")
+    import ia_to_r2
+    old = "https://archive.org/download/x" + ("ab" * 16) + "/abc.jpg"
+    new = ia_to_r2.public_url(("cd" * 32) + ".jpg")
+    moved, moved_state = ia_to_r2.rewrite(
+        {"v": 1, "files": [{"u": "https://cdn.example/a.jpg", "a": old, "k": "photo"}], "shards": {"2026-10": old[:-3] + "json"}, "posts": {}},
+        {"byHash": {"abc": {"a": old}}, "shardUrls": {"2026-10": old[:-3] + "json"}},
+        {old: new, old[:-3] + "json": new[:-3] + "json"},
+    )
+    check(moved["files"][0]["a"] == new and moved["files"][0]["ia"] == old and moved_state["byHash"]["abc"]["a"] == new, "the manifest points at the R2 copy and remembers the old URL")
+    budget = [
+        {"name": "new.mp4", "kind": "video", "size": 40 * 1024 * 1024, "recent": "2026-10"},
+        {"name": "old.mp4", "kind": "video", "size": 40 * 1024 * 1024, "recent": "2022-10"},
+        {"name": "pic.jpg", "kind": "photo", "size": 100 * 1024, "recent": "2024-01"},
+    ]
+    planned = ia_to_r2.plan_copies(budget, 8 * 1000 ** 3, limit=8 * 1000 ** 3 + 20 * 1024 * 1024)
+    actions = {row["name"]: row["action"] for row in planned}
+    check(actions["pic.jpg"] == "copy" and actions["new.mp4"] == "shrink" and actions["old.mp4"] == "drop", "a tight R2 budget keeps the photo, shrinks the newest video, and drops the old one")
+    copy_wf = (ROOT / ".github" / "workflows" / "ia-to-r2.yml").read_text(encoding="utf-8")
+    check("ia-to-r2.once" in copy_wf and "IA_ACCESS_KEY" not in copy_wf and "IA_SECRET_KEY" not in copy_wf and 'echo "$CLOUDFLARE' not in copy_wf and "schedule:" not in copy_wf, "the R2 copy is a push, does not use the Internet Archive keys, and does not print the token")
     os.environ.pop("IA_UPLOADS_ENABLED", None)
     class Boom:
         def open(self, *args, **kwargs):
@@ -3255,6 +3274,8 @@ def ia_backup_checks() -> None:
     check("feeds-archive" not in snap and "def shard_url(" in snap and '("ia",' not in snap, "snapshot reads archive shards from the manifest")
     anon = "x" + ("ab" * 16)
     check(shard_url({"shards": {"2026-10": "https://archive.org/download/" + anon + "/abc.json"}}, "archive/2026-10.json").endswith("/abc.json"), "a manifest shard url is accepted")
+    stored_shard = "https://viktorych-accounts.example.workers.dev/v1/archive/" + ("cd" * 32) + ".json"
+    check(shard_url({"shards": {"2026-10": stored_shard}}, "archive/2026-10.json") == stored_shard, "a private R2 shard url is accepted")
     check(shard_url({"shards": {"2026-10": "https://archive.org/download/superintelapp-2026-10/2026-10.json"}}, "archive/2026-10.json") == "", "a named item url is not used")
 
     sample = b"hello-archive"
@@ -4111,6 +4132,8 @@ def gdrive_checks() -> None:
     rendered = gdrive_backup.rclone_config_text(parsed)
     check("scope = drive.file" in rendered and "rt-secret-value" in rendered and "rt-secret-value" not in gdrive_backup.scrub("saw rt-secret-value", gdrive_backup.secret_values(parsed)), "the rclone config is drive.file and logs are scrubbed")
     check(gdrive_backup.account_data_url("https://pub-example.r2.dev/media/avatars/a.png") and gdrive_backup.account_data_url("https://app.workers.dev/v1/me") and not gdrive_backup.account_data_url("https://pub-example.r2.dev/music/song/cover.png"), "account avatars and the worker API stay off Drive")
+    store = "https://viktorych-accounts.viktorych-accounts.workers.dev/v1/archive/" + ("ab" * 32) + ".mp4"
+    check(gdrive_backup.archive_store_url(store) and not gdrive_backup.account_data_url(store), "an archive copy on the accounts worker is not account data")
     music = json.loads((ROOT / "data" / "music.json").read_text(encoding="utf-8"))
     songs = gdrive_backup.music_plan(music)
     check(any(row["kind"] == "covers" and row["label"] == "america-dont-sit-still" for row in songs) and any(row["kind"] == "music" and row["playlist"] for row in songs), "song audio and covers are planned for Drive")
