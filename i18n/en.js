@@ -851,5 +851,12 @@ SI18n.addPack("en", {
   "Full screen": "Full screen",
   "Exit full screen": "Exit full screen",
   "Playing ReGone on {app}": "Playing ReGone on {app}",
-  "That game isn’t here.": "That game isn’t here."
+  "That game isn’t here.": "That game isn’t here.",
+  "added accounts": "added accounts",
+  "Original quality": "Original quality",
+  "No added accounts yet.": "No added accounts yet.",
+  "That doesn’t look like a TikTok account.": "That doesn’t look like a TikTok account.",
+  "Couldn’t preview this profile. It will still be saved.": "Couldn’t preview this profile. It will still be saved.",
+  "Couldn’t save this account.": "Couldn’t save this account.",
+  "New videos show up after the next sync.": "New videos show up after the next sync."
 });

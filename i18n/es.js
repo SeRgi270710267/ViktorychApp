@@ -851,5 +851,12 @@ SI18n.addPack("es", {
   "Full screen": "Pantalla completa",
   "Exit full screen": "Salir de pantalla completa",
   "Playing ReGone on {app}": "Jugando a ReGone en {app}",
-  "That game isn’t here.": "Ese juego no está aquí."
+  "That game isn’t here.": "Ese juego no está aquí.",
+  "added accounts": "cuentas añadidas",
+  "Original quality": "Calidad original",
+  "No added accounts yet.": "Aún no hay cuentas añadidas.",
+  "That doesn’t look like a TikTok account.": "Eso no parece una cuenta de TikTok.",
+  "Couldn’t preview this profile. It will still be saved.": "No se pudo previsualizar el perfil. Se guardará igual.",
+  "Couldn’t save this account.": "No se pudo guardar esta cuenta.",
+  "New videos show up after the next sync.": "Los vídeos nuevos aparecen tras la próxima sincronización."
 });

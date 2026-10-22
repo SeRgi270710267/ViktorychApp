@@ -65,6 +65,18 @@ def hevc_codec(fmt: dict) -> bool:
     return any(marker in name for marker in ("h265", "hevc", "bytevc1", "hvc1", "hev1"))
 
 
+def codec_label(fmt: dict) -> str:
+    """Short name for the chosen original. Empty when the row has no video codec."""
+    if not isinstance(fmt, dict):
+        return ""
+    name = codec_name(fmt)
+    if hevc_codec(fmt):
+        return "bytevc1" if "bytevc1" in name else "HEVC"
+    if "avc" in name or "h264" in name:
+        return "H.264"
+    return ""
+
+
 def format_rank(fmt: dict) -> tuple:
     rate = 0.0
     for key in ("tbr", "vbr", "bitrate"):
@@ -169,6 +181,9 @@ def entry_to_post(entry: dict, handle: str) -> dict | None:
     width = int((best or {}).get("width") or 0)
     height = int((best or {}).get("height") or 0)
     video = {"type": "video", "poster": poster, "width": width, "height": height}
+    label = codec_label(best or {})
+    if label:
+        video["codec"] = label
     play = str((best or {}).get("url") or "")
     if play.startswith("https://"):
         video["url"] = play
@@ -409,30 +424,206 @@ def fetch_entries(handle: str) -> list[dict] | None:
     return entries
 
 
-def sync_handles(config: dict | None) -> list[str]:
-    """Current TikTok handles from the config, then any sync handle not already listed."""
+def parse_accounts(raw: str) -> dict:
+    try:
+        data = json.loads(raw) if raw and raw.strip() else {}
+    except json.JSONDecodeError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    added = [row for row in (data.get("added") or []) if isinstance(row, dict)]
+    removed = []
+    for item in data.get("removed") or []:
+        if isinstance(item, str) and item.strip():
+            removed.append(item.strip())
+    return {"added": added, "removed": removed}
+
+
+def accounts_path() -> Path:
+    return ROOT / "owner" / "tiktok-accounts.json"
+
+
+def cloudflare_env() -> tuple[str, str]:
+    import os
+
+    token = (os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
+    account = (os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "").strip()
+    return token, account
+
+
+def r2_get(key: str) -> bytes | None:
+    token, account = cloudflare_env()
+    if not token or not account:
+        return None
+    quoted = urllib.request.quote(key, safe="/")
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/viktorych-data/objects/{quoted}"
+    req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res:
+            if getattr(res, "status", 200) != 200:
+                return None
+            return res.read()
+    except urllib.error.HTTPError:
+        return None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return None
+
+
+def r2_put(key: str, payload: bytes) -> bool:
+    token, account = cloudflare_env()
+    if not token or not account:
+        return False
+    quoted = urllib.request.quote(key, safe="/")
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/viktorych-data/objects/{quoted}"
+    req = urllib.request.Request(url, data=payload, method="PUT", headers={
+        "Authorization": "Bearer " + token,
+        "content-type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=60):
+            return True
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def load_added_accounts(path: Path | None = None) -> dict:
+    """Owner list from R2 when the Actions token is set, else a local file."""
+    path = path or accounts_path()
+    blob = r2_get("owner/tiktok-accounts.json")
+    if blob is not None:
+        return parse_accounts(blob.decode("utf-8", "replace"))
+    if path.is_file():
+        return parse_accounts(path.read_text(encoding="utf-8"))
+    return {"added": [], "removed": []}
+
+
+def save_added_accounts(doc: dict, path: Path | None = None) -> None:
+    path = path or accounts_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps({
+        "added": doc.get("added") or [],
+        "removed": doc.get("removed") or [],
+    }, ensure_ascii=False) + "\n").encode("utf-8")
+    path.write_bytes(payload)
+    r2_put("owner/tiktok-accounts.json", payload)
+
+
+def removed_handles(doc: dict | None) -> set[str]:
+    from account_identity import norm_handle
+
+    found = set()
+    for item in (doc or {}).get("removed") or []:
+        name = norm_handle(item)
+        if name:
+            found.add(name.casefold())
+    return found
+
+
+def sync_handles(config: dict | None, accounts: dict | None = None) -> list[str]:
+    """Private added handles, then config rows, then the fallback list.
+
+    A handle in the removed list stays out, including a fallback handle.
+    """
     from account_identity import norm_handle
 
     config = config if isinstance(config, dict) else {}
+    accounts = accounts if isinstance(accounts, dict) else {}
     handles = []
     seen = set()
+    blocked = removed_handles(accounts)
 
     def add(name: str) -> None:
         name = norm_handle(name)
-        if not HANDLE_RE.fullmatch(name) or name.casefold() in seen:
+        if not HANDLE_RE.fullmatch(name) or name.casefold() in seen or name.casefold() in blocked:
             return
         seen.add(name.casefold())
         handles.append(name)
 
+    def alias(row: dict) -> None:
+        for item in row.get("previousHandles") or []:
+            name = norm_handle(item)
+            if name:
+                seen.add(name.casefold())
+
+    for row in accounts.get("added") or []:
+        if not isinstance(row, dict):
+            continue
+        add(str(row.get("handle") or ""))
+        alias(row)
     for row in config.get("tiktok") or []:
         if not isinstance(row, dict):
             continue
         add(str(row.get("handle") or ""))
-        for item in row.get("previousHandles") or []:
-            seen.add(norm_handle(item).casefold())
+        alias(row)
     for row in TRACKED:
         add(row)
     return handles
+
+
+def _private_row(accounts: dict | None, handle: str) -> dict | None:
+    from account_identity import handles_equal
+
+    for row in (accounts or {}).get("added") or []:
+        if not isinstance(row, dict):
+            continue
+        if handles_equal(row.get("handle"), handle) or any(handles_equal(item, handle) for item in row.get("previousHandles") or []):
+            row["platform"] = "tiktok"
+            return row
+    return None
+
+
+def note_private(accounts: dict, requested: str, info: dict) -> str:
+    from account_identity import apply_observation, tiktok_identity
+
+    row = _private_row(accounts, requested)
+    if not row:
+        return ""
+    observed = tiktok_identity(info, requested)
+    if not observed:
+        return ""
+    before = str(row.get("handle") or "")
+    decision = apply_observation(row, observed, [])
+    for line in decision.get("logs") or []:
+        print(line)
+    if decision.get("action") == "rename":
+        return decision.get("old") or before
+    return ""
+
+
+def apply_fetch_identity(config: dict | None, accounts: dict | None, handle: str, info: dict | None) -> str:
+    """Keep owner-added identity on the private row so it is not committed."""
+    accounts = accounts if isinstance(accounts, dict) else {"added": [], "removed": []}
+    if _private_row(accounts, handle):
+        return note_private(accounts, handle, info or {})
+    if isinstance(config, dict):
+        from account_identity import note_tiktok
+
+        return note_tiktok(config, handle, info or {})
+    return ""
+
+
+def apply_failed_identity(config: dict | None, accounts: dict | None, handle: str) -> str:
+    row = _private_row(accounts or {}, handle)
+    if row:
+        from account_identity import resolve_failed
+
+        return resolve_failed({"people": [], "tiktok": [row]}, row)
+    if isinstance(config, dict):
+        found = _tiktok_row(config, handle)
+        if found:
+            from account_identity import resolve_failed
+
+            return resolve_failed(config, found)
+    return ""
+
+
+def active_handle(config: dict | None, accounts: dict | None, handle: str) -> str:
+    row = _private_row(accounts or {}, handle)
+    if not row and isinstance(config, dict):
+        row = _tiktok_row(config, handle)
+    if row and row.get("handle"):
+        return str(row.get("handle"))
+    return handle
 
 
 def _tiktok_row(config: dict, handle: str) -> dict | None:
@@ -447,7 +638,7 @@ def _tiktok_row(config: dict, handle: str) -> dict | None:
     return None
 
 
-def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config: dict | None = None) -> dict:
+def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config: dict | None = None, accounts: dict | None = None) -> dict:
     previous = previous if isinstance(previous, dict) else {}
     prev_live = previous.get("live") if isinstance(previous.get("live"), dict) else {}
     feeds = []
@@ -460,22 +651,11 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
                 old_feeds = [row for row in (previous.get("feeds") or []) if row.get("handle") == handle]
                 posts.extend(old_posts)
                 feeds.extend(old_feeds)
-                if isinstance(config, dict):
-                    row = _tiktok_row(config, handle)
-                    if row:
-                        from account_identity import resolve_failed
-
-                        resolve_failed(config, row)
+                apply_failed_identity(config, accounts, handle)
                 continue
-            if isinstance(config, dict) and isinstance(info, dict):
-                from account_identity import note_tiktok
-
-                note_tiktok(config, handle, info)
-            active = handle
-            if isinstance(config, dict):
-                row = _tiktok_row(config, handle)
-                if row and row.get("handle"):
-                    active = str(row.get("handle"))
+            if isinstance(info, dict):
+                apply_fetch_identity(config, accounts, handle, info)
+            active = active_handle(config, accounts, handle)
             built = []
             avatar = ""
             name = active
@@ -494,8 +674,7 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
                 print("[tiktok] " + str(len(built)) + " posts for " + handle)
             feeds.append(feed_row(active, name, avatar))
             posts.extend(built)
-        if isinstance(config, dict):
-            handles = sync_handles(config)
+        handles = sync_handles(config, accounts)
     else:
         feeds = list(previous.get("feeds") or [])
         posts = list(previous.get("posts") or [])
@@ -545,21 +724,11 @@ def load_owner(path: Path) -> dict:
 
 
 def upload_owner(path: Path) -> None:
-    token = (__import__("os").environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
-    account = (__import__("os").environ.get("CLOUDFLARE_ACCOUNT_ID") or "").strip()
-    if not token or not account or not path.is_file():
+    if not path.is_file():
         return
-    quoted = urllib.request.quote("owner/tiktok.json", safe="/")
-    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/viktorych-data/objects/{quoted}"
-    payload = path.read_bytes()
-    req = urllib.request.Request(url, data=payload, method="PUT", headers={
-        "Authorization": "Bearer " + token,
-        "content-type": "application/json",
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=60):
-            print("[tiktok] live status updated")
-    except (urllib.error.URLError, TimeoutError, OSError):
+    if r2_put("owner/tiktok.json", path.read_bytes()):
+        print("[tiktok] live status updated")
+    elif cloudflare_env()[0] and cloudflare_env()[1]:
         print("[tiktok] live status upload failed")
 
 
@@ -578,15 +747,21 @@ def main(argv: list[str] | None = None) -> int:
             parsed = {}
         if isinstance(parsed, dict):
             config = parsed
-    handles = sync_handles(config)
+    accounts = load_added_accounts()
+    before_accounts = json.dumps(accounts, sort_keys=True, ensure_ascii=False)
+    handles = sync_handles(config, accounts)
     owner_path = ROOT / "owner" / "tiktok.json"
+    downloaded = r2_get("owner/tiktok.json")
+    if downloaded is not None:
+        owner_path.parent.mkdir(parents=True, exist_ok=True)
+        owner_path.write_bytes(downloaded)
     try:
         previous = load_owner(owner_path)
         if live_only and not previous:
             print("[tiktok] owner data is not uploaded yet")
             return 0
         mode = read_audience()
-        doc = build_doc(handles, previous, posts_ok=not live_only, config=config)
+        doc = build_doc(handles, previous, posts_ok=not live_only, config=config, accounts=accounts)
         doc["audience"] = mode
         if live_only:
             doc["feeds"] = previous.get("feeds") or []
@@ -595,8 +770,9 @@ def main(argv: list[str] | None = None) -> int:
         place(doc, "owner" if live_only else mode, ROOT / "feeds.json", owner_path)
         if not live_only and config_path.is_file():
             commit_file(config_path, config)
-        if live_only:
-            upload_owner(owner_path)
+        if json.dumps(accounts, sort_keys=True, ensure_ascii=False) != before_accounts:
+            save_added_accounts(accounts)
+        upload_owner(owner_path)
     except Exception:
         print("[tiktok] " + BLOCKED)
     return 0

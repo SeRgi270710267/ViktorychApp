@@ -1500,6 +1500,244 @@ async function handleTelegram(request, env, path) {
   return rangedTelegram(request, env, row, loopGroupKey(key));
 }
 
+const TIKTOK_ACCOUNTS_KEY = "owner/tiktok-accounts.json";
+const TIKTOK_ACCOUNT_CAP = 50;
+
+function emptyTikTokAccounts() {
+  return { added: [], removed: [] };
+}
+
+function foldHandle(value) {
+  return String(value || "").toLowerCase();
+}
+
+function sameTikTokHandle(left, right) {
+  const a = foldHandle(left);
+  const b = foldHandle(right);
+  return !!a && a === b;
+}
+
+function normalizeTikTokInput(raw) {
+  let text = String(raw || "").trim();
+  if (!text || text.length > 300) return "";
+  if (/^https?:\/\//i.test(text)) {
+    let url;
+    try { url = new URL(text); }
+    catch (err) { return ""; }
+    const host = url.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host !== "tiktok.com" && host !== "m.tiktok.com") return "";
+    const match = url.pathname.match(/\/@([A-Za-z0-9._]{2,24})/);
+    return match ? match[1] : "";
+  }
+  text = text.replace(/^@+/, "");
+  const bare = text.match(/^([A-Za-z0-9._]{2,24})$/);
+  return bare ? bare[1] : "";
+}
+
+function publicTikTokAccount(row) {
+  return {
+    handle: row.handle,
+    name: row.name || "",
+    avatar: row.avatar || "",
+    addedAt: row.addedAt || ""
+  };
+}
+
+async function readTikTokAccounts(env) {
+  if (!env.DATA) return emptyTikTokAccounts();
+  const object = await env.DATA.get(TIKTOK_ACCOUNTS_KEY);
+  if (!object) return emptyTikTokAccounts();
+  try {
+    const parsed = JSON.parse(await object.text());
+    if (!parsed || typeof parsed !== "object") return emptyTikTokAccounts();
+    const added = Array.isArray(parsed.added) ? parsed.added.filter((row) => row && typeof row === "object" && normalizeTikTokInput(row.handle)) : [];
+    const removed = Array.isArray(parsed.removed) ? parsed.removed.map((item) => normalizeTikTokInput(item)).filter(Boolean) : [];
+    return { added, removed };
+  } catch (err) {
+    return emptyTikTokAccounts();
+  }
+}
+
+async function writeTikTokAccounts(env, doc) {
+  const body = JSON.stringify({
+    added: (doc.added || []).slice(0, TIKTOK_ACCOUNT_CAP),
+    removed: (doc.removed || []).slice(-200)
+  });
+  await env.DATA.put(TIKTOK_ACCOUNTS_KEY, body, {
+    httpMetadata: { contentType: "application/json; charset=utf-8" }
+  });
+}
+
+function unescapeJson(value) {
+  try { return JSON.parse('"' + value + '"'); }
+  catch (err) { return value; }
+}
+
+function previewFromHtml(html, handle) {
+  const text = String(html || "");
+  const low = text.toLowerCase();
+  if (low.indexOf("captcha") >= 0 || low.indexOf("captcha-verify") >= 0) return null;
+  let name = "";
+  let avatar = "";
+  let unique = "";
+  const nick = text.match(/"nickname"\s*:\s*"((?:\\.|[^"\\])*)"/);
+  if (nick) name = unescapeJson(nick[1]);
+  if (!name) {
+    const og = text.match(/property="og:title"\s+content="([^"]+)"/i) || text.match(/content="([^"]+)"\s+property="og:title"/i);
+    if (og) name = og[1].replace(/\s*\(@[^)]*\)\s*$/, "").replace(/\s*\| TikTok\s*$/i, "").trim();
+  }
+  const uniqueMatch = text.match(/"uniqueId"\s*:\s*"([A-Za-z0-9._]{2,24})"/);
+  if (uniqueMatch) unique = uniqueMatch[1];
+  const avatarMatch = text.match(/"avatarLarger"\s*:\s*"((?:\\.|[^"\\])*)"/);
+  if (avatarMatch) avatar = unescapeJson(avatarMatch[1]);
+  if (!avatar) {
+    const ogi = text.match(/property="og:image"\s+content="([^"]+)"/i);
+    if (ogi) avatar = ogi[1];
+  }
+  if (avatar.indexOf("http://") === 0) avatar = "https://" + avatar.slice(7);
+  if (avatar && !/^https:\/\//.test(avatar)) avatar = "";
+  if (Array.from(name).length > 80) name = Array.from(name).slice(0, 80).join("");
+  return { name, avatar, handle: unique && TIKTOK_HANDLE.test(unique) ? unique : handle };
+}
+
+async function previewTikTokProfile(handle) {
+  try {
+    const page = await fetchPublic("https://www.tiktok.com/@" + encodeURIComponent(handle));
+    if (page.status === 403 || page.status === 429 || page.status === 503) {
+      return { handle, name: "", avatar: "", preview: false };
+    }
+    const parsed = previewFromHtml(page.text, handle);
+    if (!parsed) return { handle, name: "", avatar: "", preview: false };
+    const next = parsed.handle && TIKTOK_HANDLE.test(parsed.handle) ? parsed.handle : handle;
+    return { handle: next, name: parsed.name || "", avatar: parsed.avatar || "", preview: !!(parsed.name || parsed.avatar) };
+  } catch (err) {
+    return { handle, name: "", avatar: "", preview: false };
+  }
+}
+
+function tiktokRowMatches(row, handle) {
+  if (sameTikTokHandle(row.handle, handle)) return true;
+  const previous = Array.isArray(row.previousHandles) ? row.previousHandles : [];
+  return previous.some((item) => sameTikTokHandle(item, handle));
+}
+
+async function dispatchAddedAccounts(env) {
+  const token = String(env.GITHUB_DISPATCH_TOKEN || "").trim();
+  if (!token) return false;
+  const files = ["tiktok-added.yml", "media-extract.yml"];
+  let ok = false;
+  for (let i = 0; i < files.length; i++) {
+    try {
+      const res = await fetch("https://api.github.com/repos/ViktorychGroup/ViktorychApp/actions/workflows/" + files[i] + "/dispatches", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "viktorych-accounts",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ ref: "main" })
+      });
+      if (res.status === 204 || res.ok) ok = true;
+    } catch (err) { /* the next scheduled run still picks the account up */ }
+  }
+  return ok;
+}
+
+async function requireOwner(request, env) {
+  const row = await sessionAccount(env, request);
+  if (!row) return { error: json(401, { error: "unauthorized" }) };
+  if (row.owner !== 1) return { error: json(403, { error: "forbidden" }) };
+  return { row };
+}
+
+async function handleTikTokAccounts(request, env) {
+  const gate = await requireOwner(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const bucket = "tiktok-accounts:" + gate.row.public_id;
+  if (request.method === "GET") {
+    const hit = await rateHit(env, bucket + ":list", 60, 10 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const doc = await readTikTokAccounts(env);
+    return json(200, { added: doc.added.map(publicTikTokAccount) });
+  }
+  if (request.method === "POST") {
+    const hit = await rateHit(env, bucket + ":add", 20, 60 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const body = await readJson(request, 2000);
+    if (body.error) return json(400, { error: body.error });
+    const typed = normalizeTikTokInput(body.handle || body.url || "");
+    if (!typed) return json(400, { error: "bad_handle" });
+    const doc = await readTikTokAccounts(env);
+    const existing = doc.added.find((item) => tiktokRowMatches(item, typed));
+    if (!existing && doc.added.length >= TIKTOK_ACCOUNT_CAP) return json(400, { error: "full" });
+    const preview = await previewTikTokProfile(typed);
+    const handle = preview.handle && TIKTOK_HANDLE.test(preview.handle) ? preview.handle : typed;
+    doc.removed = doc.removed.filter((item) => !sameTikTokHandle(item, handle) && !sameTikTokHandle(item, typed));
+    let row = doc.added.find((item) => tiktokRowMatches(item, handle) || tiktokRowMatches(item, typed));
+    if (!row) {
+      if (doc.added.length >= TIKTOK_ACCOUNT_CAP) return json(400, { error: "full" });
+      row = {
+        handle,
+        name: preview.name || "",
+        avatar: preview.avatar || "",
+        addedAt: stamp(),
+        permanentId: "",
+        secUid: "",
+        previousHandles: []
+      };
+      doc.added.push(row);
+    } else {
+      if (preview.name) row.name = preview.name;
+      if (preview.avatar) row.avatar = preview.avatar;
+      if (handle && !sameTikTokHandle(row.handle, handle)) {
+        const old = row.handle;
+        row.handle = handle;
+        row.previousHandles = Array.isArray(row.previousHandles) ? row.previousHandles : [];
+        if (old && !row.previousHandles.some((item) => sameTikTokHandle(item, old))) row.previousHandles.push(old);
+      }
+    }
+    await writeTikTokAccounts(env, doc);
+    let dispatched = false;
+    try { dispatched = await dispatchAddedAccounts(env); }
+    catch (err) { dispatched = false; }
+    return json(200, { account: publicTikTokAccount(row), preview: !!preview.preview, dispatched });
+  }
+  return json(405, { error: "method" });
+}
+
+async function handleTikTokAccountDelete(request, env, rawHandle) {
+  const gate = await requireOwner(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const hit = await rateHit(env, "tiktok-accounts:" + gate.row.public_id + ":remove", 30, 60 * 60 * 1000);
+  if (!hit.ok) return limited(hit);
+  let handle = rawHandle;
+  try { handle = decodeURIComponent(rawHandle); }
+  catch (err) { /* keep the raw segment */ }
+  handle = normalizeTikTokInput(handle);
+  if (!handle) return json(400, { error: "bad_handle" });
+  const doc = await readTikTokAccounts(env);
+  const row = doc.added.find((item) => tiktokRowMatches(item, handle));
+  const gone = [];
+  if (row) {
+    gone.push(row.handle);
+    (row.previousHandles || []).forEach((item) => gone.push(item));
+  } else {
+    gone.push(handle);
+  }
+  doc.added = doc.added.filter((item) => !tiktokRowMatches(item, handle));
+  gone.forEach((item) => {
+    const text = normalizeTikTokInput(item);
+    if (!text) return;
+    if (!doc.removed.some((have) => sameTikTokHandle(have, text))) doc.removed.push(text);
+  });
+  await writeTikTokAccounts(env, doc);
+  return json(200, { removed: true, added: doc.added.map(publicTikTokAccount) });
+}
+
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -1516,6 +1754,9 @@ async function route(request, env) {
   const accountMedia = path.match(/^\/v1\/media\/(avatars|banners)\/(\d{12})\/([a-f0-9]{64}\.(?:webp|jpg|png))$/);
   if (accountMedia && request.method === "GET") return handleAccountMedia(request, env, accountMedia[1], accountMedia[2], accountMedia[3]);
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path);
+  if (path === "/v1/owner/tiktok/accounts" && (request.method === "GET" || request.method === "POST")) return handleTikTokAccounts(request, env);
+  const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
+  if (ownerAccount && request.method === "DELETE") return handleTikTokAccountDelete(request, env, ownerAccount[1]);
   if (path === "/v1/owner/tiktok" && request.method === "GET") return handleOwnerTiktok(request, env);
   if (path === "/v1/owner/play" && request.method === "GET") return handleOwnerPlay(request, env, url);
   if (path === "/v1/owner/media" && request.method === "GET") return handleOwnerMedia(request, env, url);

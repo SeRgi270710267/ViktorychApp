@@ -5,6 +5,10 @@ workers_dev = true
 
 # TELEGRAM_BOT_TOKEN is a Worker secret, not a var:
 # npx wrangler secret put TELEGRAM_BOT_TOKEN
+# GITHUB_DISPATCH_TOKEN is a Worker secret the owner adds, not a var.
+# Fine-grained PAT, repository ViktorychGroup/ViktorychApp, Actions: Read and write.
+# npx wrangler secret put GITHUB_DISPATCH_TOKEN
+# When it is unset, an added TikTok account waits for the next scheduled sync.
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io"
 PBKDF2_ITERATIONS = "8000"
