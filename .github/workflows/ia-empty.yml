@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ia-empty
+  group: ia-empty-pass2
   cancel-in-progress: false
 
 jobs:

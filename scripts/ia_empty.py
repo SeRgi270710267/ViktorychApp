@@ -136,19 +136,13 @@ def empty_items(items: list[str], *, urlopen, opener, access: str, secret: str, 
                 notes.append(f"[ia-empty] could not remove {item}/{name} ({code})")
             if pace:
                 sleep(pace)
-        original, extra = split_files(doc)
-        delay = 5.0
-        for _ in range(4):
-            status, doc = _read(metadata_base, item, urlopen)
-            if status == 404:
-                original, extra = [], []
-                break
-            if status == 200 and doc is not None:
-                original, extra = split_files(doc)
-                if not original and not extra:
-                    break
-            sleep(delay)
-            delay = min(delay * 2, 15)
+        status, doc = _read(metadata_base, item, urlopen)
+        if status == 404:
+            original, extra = [], []
+        elif status == 200 and doc is not None:
+            original, extra = split_files(doc)
+        else:
+            original, extra = ["unread"], []
         if original:
             holding[item] = original
             notes.append(f"[ia-empty] {item} still lists {len(original)} original files")
