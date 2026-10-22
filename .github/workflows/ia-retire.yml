@@ -46,6 +46,14 @@ jobs:
           fi
           cp archive/ia-manifest.json /tmp/ia-manifest.json
           cp archive/ia-state.json /tmp/ia-state.json
+          head=$(git rev-parse HEAD)
+          restore() {
+            git checkout -f "$head"
+            mkdir -p archive
+            cp /tmp/ia-manifest.json archive/ia-manifest.json
+            cp /tmp/ia-state.json archive/ia-state.json
+          }
+          trap restore EXIT
           if ! git fetch -q --depth=1 origin data; then
             echo "[ia-retire] data branch is not available"
             exit 1

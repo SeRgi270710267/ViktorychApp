@@ -224,7 +224,11 @@ def blank_metadata(config: dict, sleep=time.sleep) -> dict:
         fields = {}
         for key in BLANK_FIELDS:
             if key not in before or before.get(key) in (None, "", [], {}):
-                fields[key] = "absent"
+                if key in ("title", "description"):
+                    ia_backup._patch_metadata(item, {key: "files"}, (), access, secret, urlopen, opener, metadata_base, sleep)
+                    fields[key] = "pending"
+                else:
+                    fields[key] = "absent"
                 continue
             ia_backup._patch_metadata(item, {}, (key,), access, secret, urlopen, opener, metadata_base, sleep)
             if key in ("title", "description"):
@@ -278,6 +282,19 @@ def blank_metadata(config: dict, sleep=time.sleep) -> dict:
         "uploader_left": uploader_left,
         "notes": [ia_backup.scrub(line, [access, secret]) for line in notes],
     }
+
+
+def _kept_and_blocking(remaining: dict) -> tuple[list, list]:
+    """System catalogs IA will not delete are separate from files that must go."""
+    kept_system = []
+    still_there = []
+    for names in remaining.values():
+        for name in names:
+            if str(name).endswith(("_meta.xml", "_files.xml")):
+                kept_system.append(name)
+            else:
+                still_there.append(name)
+    return kept_system, still_there
 
 
 def _print_notes(notes) -> None:
@@ -334,14 +351,7 @@ def main(argv: list[str] | None = None) -> int:
             f"anonymous items {blanked['anonymous']}, "
             f"uploader still set on {blanked['uploader_left']}"
         )
-        kept_system = []
-        still_there = []
-        for names in purged["remaining"].values():
-            for name in names:
-                if name.endswith(("_meta.xml", "_files.xml")):
-                    kept_system.append(name)
-                else:
-                    still_there.append(name)
+        kept_system, still_there = _kept_and_blocking(purged["remaining"])
         if kept_system:
             print(f"[ia-retire] system catalog files kept {len(kept_system)}")
         return 1 if still_there else 0
