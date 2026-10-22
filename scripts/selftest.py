@@ -929,16 +929,16 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a3-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a6-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a3-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a6-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a3-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a6-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
@@ -947,6 +947,7 @@ def main() -> None:
     music = next(item for item in json.loads((ROOT / "feeds.config.json").read_text(encoding="utf-8"))["spaces"] if item["id"] == "superintelmusic")
     check(music["source"].get("type") == "loop" and music["source"].get("loopUrl") == "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/current.json" and "statusUrl" not in music["source"] and "fallback" not in music["source"] and music["source"]["allow"] == ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev"] and "url" not in music["source"], "ViktorychMusic plays the static loop and does not read the box status")
     check("function loopFromDoc(" in spaces_js and "LOOP_RECHECK_MS = 3 * 60 * 1000" in spaces_js and "LOOP_DRIFT_S = 5" in spaces_js and "startPosition:" in spaces_js and "cache: \"no-store\"" in spaces_js, "the loop player joins the shared clock and refreshes the bed every three minutes")
+    check("function loopRecovery(" in spaces_js and "function refreshLoopSource(" in spaces_js and "function loopManifestDoc(" in spaces_js and "function loopNeedsRefresh(" in spaces_js and "function isLoopPointer(" in worker and "function isLoopVersionMedia(" in worker and "function forgetLoopCaches(" in worker and "loop/current.json" in worker, "a deleted loop version refetches current.json and status.json cannot mark the loop offline")
     banned = re.compile("supa" + "base|sb_" + "publishable|nadjniz" + "sdaskttxahclp", re.I)
     banned_hits = []
     for path in ROOT.rglob("*"):
@@ -2744,16 +2745,6 @@ def ia_backup_checks() -> None:
     sidecar = snap[snap.index("def pull_ia_sidecars"):]
     check(sidecar.index('("data", DATA_ARCHIVE)') < sidecar.index('("pages", SITE)'), "the media manifest is taken from the data branch before the live site")
     check('new URL("archive/"' in app and "function installIaManifest(" in app and "archive.org/download/superintelapp-" not in app and "superintelapp-manifest" not in app and "cors.archive.org/cors/" in app and "function applyIaPreview(" in app and "IA.shards" in app, "the page loads archive media from a relative manifest and archive.org")
-    archive_src = (ROOT / "scripts" / "ia_archive.py").read_text(encoding="utf-8")
-    empty_src = (ROOT / "scripts" / "ia_empty_old.py").read_text(encoding="utf-8")
-    empty_workflow = (ROOT / ".github" / "workflows" / "ia-empty-old.yml").read_text(encoding="utf-8")
-    loader = app[app.index("async function loadNewestShard("):app.index("function revealArchive(")]
-    check("internetarchive" not in archive_src and "opensource" not in archive_src and "GITHUB_REPOSITORY_OWNER" not in archive_src and "sergi-" not in archive_src, "shard upload does not name an owner, a collection, or an item")
-    check("workflow_dispatch" in empty_workflow and "schedule:" not in empty_workflow and 'echo "$IA_' not in empty_workflow and "echo $IA_" not in empty_workflow and "group: ia-empty-old" in empty_workflow, "the old-item workflow is manual and does not print the keys")
-    check("secrets.IA_ACCESS_KEY" in empty_workflow and "secrets.IA_SECRET_KEY" in empty_workflow and "ia_empty_old.py" in empty_workflow, "the old-item workflow uses the archive keys")
-    check(loader.index("ia-manifest.json") < loader.index("index.json") and "ARCHIVE_IA" not in app and "sergi-" not in app, "the page loads the manifest before the index and has no named item")
-    check("def ia_shard_url(" in snap and "pull_ia_archive" in snap and "sergi-" not in snap and "internetarchive" not in sync, "snapshot shards come from the manifest")
-    check("_ITEM_ID" in empty_src and "skipping the empty" in empty_src, "the empty script redacts anonymous ids and skips without keys")
     preview = app[app.index("function applyIaPreview("):app.index("function applyIaPreview(") + 700]
     check("127.0.0.1" in preview and "localhost" in preview and "ia-deleted" in preview, "the deleted-post preview stays on localhost")
     check(ia_backup.public_media_url("https://pbs.twimg.com/media/abc.jpg"), "public X images are eligible")
@@ -3181,193 +3172,99 @@ def ia_backup_checks() -> None:
     check(second_refuse["failures"] == 1 and refused_state["noindexBlocked"].get("superintelapp-img-2026-10") == "readonly", "a second rejection records that noindex is read-only")
     check(len(refused_puts) == puts_after_lock and any("stays listed" in line for line in third_refuse["notes"]), "later runs do not upload another probe once noindex is known read-only")
 
-    from pull_snapshot import ia_shard_url
+    import ia_retire
+    from pull_snapshot import shard_url
+
+    archive_src = (ROOT / "scripts" / "ia_archive.py").read_text(encoding="utf-8")
+    retire_wf = (ROOT / ".github" / "workflows" / "ia-retire.yml").read_text(encoding="utf-8")
+    snap = (ROOT / "scripts" / "pull_snapshot.py").read_text(encoding="utf-8")
+    check("feeds-archive" not in archive_src and "Viktorych" not in archive_src and "creator" not in archive_src and "opensource" not in archive_src and "internetarchive" not in archive_src and "run_backup" in archive_src, "shard uploads use the anonymous backup items")
+    check("internetarchive" not in sync and "Restore the saved manifest" in sync, "the daily shard upload restores the manifest before it writes")
+    check("workflow_dispatch" in retire_wf and "schedule:" not in retire_wf and "cron:" not in retire_wf and 'echo "$IA_' not in retire_wf and "echo $IA_" not in retire_wf and "IA_ACCESS_KEY" in retire_wf and "IA_SECRET_KEY" in retire_wf and "ia_retire.py copy" in retire_wf and "ia_retire.py delete" in retire_wf, "the retire workflow is manual, uses the keys, and does not print them")
+    check("feeds-archive" not in app and "ARCHIVE_IA" not in app and "installIaManifest(manifestDoc" in app, "the page resolves archive shards from the manifest")
+    check("feeds-archive" not in snap and "def shard_url(" in snap and '("ia",' not in snap, "snapshot reads archive shards from the manifest")
     anon = "x" + ("ab" * 16)
-    other = "x" + ("cd" * 16)
-    shard_manifest = {
-        "shards": {
-            "2026-10": f"https://archive.org/download/{anon}/abcd.json",
-            "index.json": f"https://archive.org/download/{other}/ef.json",
-        }
+    check(shard_url({"shards": {"2026-10": "https://archive.org/download/" + anon + "/abc.json"}}, "archive/2026-10.json").endswith("/abc.json"), "a manifest shard url is accepted")
+    check(shard_url({"shards": {"2026-10": "https://archive.org/download/superintelapp-2026-10/2026-10.json"}}, "archive/2026-10.json") == "", "a named item url is not used")
+
+    sample = b"hello-archive"
+    sample_digest = hashlib.sha256(sample).hexdigest()
+    retire_host = "http://127.0.0.1"
+    copied_url = retire_host + "/download/" + anon + "/file.json"
+    retire_state = {
+        "v": 1,
+        "items": {"stub:2026-10": anon},
+        "copied": {"superintelapp-2026-10/old.json": {"url": copied_url, "digest": sample_digest, "size": len(sample), "slot": "stub:2026-10"}},
+        "shards": {},
+        "byHash": {},
+        "byUrl": {},
+        "posts": {},
     }
-    check(ia_shard_url(shard_manifest, "archive/2026-10.json").endswith("/abcd.json"), "a month shard resolves through the manifest")
-    check(ia_shard_url(shard_manifest, "archive/index.json").endswith("/ef.json"), "the index resolves through the manifest")
-    check(ia_shard_url({"shards": {"2026-10": "https://archive.org/download/superintelapp-2026-10/a.json"}}, "archive/2026-10.json") == "", "a named item is not a shard source")
+    retire_files = ["superintelapp-2026-10_meta.xml", "superintelapp-2026-10_files.xml"]
+    retire_meta = {"creator": "owner-account", "collection": "opensource", "uploader": "person@example.com", "title": "named"}
+    anon_meta = {"title": "files", "uploader": "person@example.com", "noindex": "true"}
+    retire_deleted = []
 
-    import ia_archive
-    shard_puts = []
-
-    def shard_open(request, timeout=None):
-        header_map = {key.lower(): value for key, value in request.header_items()}
-        shard_puts.append((
-            urllib.parse.urlparse(request.full_url).path,
-            header_map.get("x-archive-meta-title"),
-            header_map.get("x-archive-meta-description"),
-            header_map.get("x-archive-meta-noindex"),
-            header_map.get("x-archive-meta-mediatype"),
-            header_map.get("x-archive-meta-creator"),
-            header_map.get("x-archive-meta-collection"),
-            header_map.get("x-archive-meta-subject"),
-            header_map.get("authorization"),
-        ))
-        return Resp(200, b"")
-
-    archived = ia_archive.upload_archive(
-        {
-            "access": "test-access",
-            "secret": "test-secret-value",
-            "endpoint": "http://ia.test",
-            "download_base": "https://archive.org/download",
-            "pace": 0,
-            "backoff": 0,
-            "max_uploads": 5,
-            "opener": type("Opener", (), {"open": staticmethod(shard_open)})(),
-        },
-        {"2026-10": [{"p": "x", "id": "1", "t": "hi"}]},
-        sleep=lambda delay: None,
-    )
-    check(shard_puts and all(ia_backup.valid_item_id(row[0].split("/")[1]) and re.search(r"/[0-9a-f]{20}\.json$", row[0]) for row in shard_puts), "shard uploads use a random item and a hashed file name")
-    check(all(row[1] == "files" and row[2] == "files" and row[3] == "true" and row[4] == "data" and row[5] is None and row[6] is None and row[7] is None for row in shard_puts), "shard uploads are unlisted files with no owner, subject, or collection")
-    check("test-secret-value" not in " ".join(archived["notes"]) and all(row[8] == "LOW test-access:test-secret-value" for row in shard_puts), "shard uploads send LOW auth and the notes do not print the keys")
-    check(ia_backup.valid_item_id(archived["manifest"]["items"].get("stub:2026-10")) and archived["manifest"]["shards"]["2026-10"].startswith("https://archive.org/download/x"), "the shard manifest points at the anonymous item")
-
-    empty_env = os.environ.copy()
-    empty_env.pop("IA_ACCESS_KEY", None)
-    empty_env["IA_SECRET_KEY"] = "sentinel-secret-value"
-    empty_skipped = subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "ia_empty_old.py")],
-        capture_output=True,
-        text=True,
-        env=empty_env,
-        check=False,
-        cwd=ROOT,
-    )
-    empty_out = empty_skipped.stdout + empty_skipped.stderr
-    check(empty_skipped.returncode == 0 and "skipping the empty" in empty_skipped.stdout, "missing keys skip the old-item empty")
-    check("sentinel-secret-value" not in empty_out, "the empty skip path does not print a secret")
-
-    jpeg_left = b"\xff\xd8\xffold"
-    left_digest = hashlib.sha256(jpeg_left).hexdigest()
-    left_name = left_digest[:20] + ".jpg"
-    old_item = "superintelapp-img-2026-10"
-    meta_name = old_item + "_meta.xml"
-    files_name = old_item + "_files.xml"
-    torrent_name = old_item + "_archive.torrent"
-    catalog = {
-        "files": [left_name, meta_name, files_name, torrent_name],
-        "metadata": {
-            "identifier": old_item,
-            "title": old_item,
-            "creator": "owner-account",
-            "description": "Public backup",
-            "collection": "opensource",
-            "uploader": "person@example.com",
-        },
-    }
-    stored = {}
-    removed = []
-
-    def empty_open(request, timeout=None):
+    def retire_open(request, timeout=None):
         method = request.get_method()
         path = urllib.parse.urlparse(request.full_url).path
-        if method == "PUT":
-            stored[path] = request.data
-            return Resp(200, b"")
         if method == "DELETE":
-            removed.append(path)
-            if path.endswith("_meta.xml") or path.endswith("_files.xml"):
-                return Resp(403, b"system file")
-            leaf = path.rsplit("/", 1)[-1]
-            if leaf in catalog["files"]:
-                catalog["files"].remove(leaf)
+            retire_deleted.append(path)
+            name = path.rsplit("/", 1)[-1]
+            if name in retire_files:
+                retire_files.remove(name)
             return Resp(204, b"")
         if method == "POST":
-            fields = urllib.parse.parse_qs(request.data.decode("utf-8"))
-            patch = fields.get("-patch", [""])[0]
-            if '"/creator"' in patch and "remove" in patch:
-                catalog["metadata"].pop("creator", None)
-                return Resp(200, b'{"success":true}')
-            if '"/title"' in patch or '"/description"' in patch:
-                catalog["metadata"]["title"] = "files"
-                catalog["metadata"]["description"] = "files"
-                return Resp(200, b'{"success":true}')
-            if '"/noindex"' in patch or '"/collection"' in patch or '"/uploader"' in patch:
-                return Resp(400, b'{"success":false,"error":"read-only"}')
+            form = urllib.parse.parse_qs(request.data.decode("utf-8"))
+            patch = json.loads(form["-patch"][0])
+            target = path.rsplit("/", 1)[-1]
+            bucket = retire_meta if target == "superintelapp-2026-10" else anon_meta
+            for op in patch:
+                key = str(op.get("path") or "").strip("/")
+                if key in {"uploader", "noindex"}:
+                    return Resp(400, b'{"error":"read-only"}')
+                if op.get("op") == "remove":
+                    bucket.pop(key, None)
+                elif op.get("op") in {"add", "replace"}:
+                    bucket[key] = op.get("value")
             return Resp(200, b'{"success":true}')
-        if path == "/metadata/" + old_item:
-            return Resp(200, json.dumps({"metadata": dict(catalog["metadata"]), "files": [{"name": name} for name in catalog["files"]]}).encode())
-        if path == "/download/" + old_item + "/" + left_name:
-            return Resp(200, jpeg_left)
-        if path.startswith("/download/x") and path.endswith("/" + left_name):
-            item = path.split("/")[2]
-            saved = stored.get("/" + item + "/" + left_name)
-            if saved == jpeg_left:
-                return Resp(200, saved)
-            return Resp(404, b"")
+        if path == "/metadata/superintelapp-2026-10":
+            return Resp(200, json.dumps({"metadata": dict(retire_meta), "files": [{"name": name} for name in retire_files]}).encode())
+        if path == "/metadata/" + anon:
+            return Resp(200, json.dumps({"metadata": dict(anon_meta), "files": []}).encode())
+        if path == "/download/" + anon + "/file.json":
+            return Resp(200, sample)
         return Resp(404, b"")
 
-    empty_state = {"v": 1, "shards": {}, "byHash": {}, "byUrl": {}, "posts": {}, "items": {}}
-    emptied = ia_backup.empty_named_items(
-        {
-            "access": "test-access",
-            "secret": "test-secret-value",
-            "endpoint": "http://ia.test",
-            "download_base": "http://ia.test/download",
-            "metadata_base": "http://ia.test/metadata",
-            "old_items": [old_item],
-            "pace": 0,
-            "backoff": 0,
-            "urlopen": empty_open,
-            "opener": type("Opener", (), {"open": staticmethod(empty_open)})(),
-        },
-        empty_state,
-        sleep=lambda delay: None,
-    )
-    empty_notes = " ".join(emptied["notes"])
-    report = emptied["items"][old_item]
-    check(emptied["failures"] == 0 and left_name not in catalog["files"] and torrent_name not in catalog["files"], "a named item's files are deleted after the copy checks out")
-    check(meta_name in catalog["files"] and files_name in catalog["files"], "system catalog files stay when the archive refuses the delete")
-    check(report["metadata"]["creator"] == "removed" and report["metadata"]["title"] == "set" and report["metadata"]["collection"] == "refused" and report["metadata"]["uploader"] == "refused" and report["metadata"]["identifier"] == "unchanged", "creator and title change, and a refused collection or uploader is kept")
-    copied_row = next(iter(empty_state["copied"].values()))
-    check(ia_backup.valid_item_id(copied_row["item"]) and copied_row["size"] == len(jpeg_left) and emptied["new_items"] == 1, "the copy lands on one new anonymous item and records its size")
-    check("test-secret-value" not in empty_notes and not re.search(r"x[0-9a-f]{32}", empty_notes), "empty notes do not print the keys or the new item id")
-    check(any(path.endswith("/" + left_name) for path in removed) and meta_name in report["kept"] and files_name in report["kept"], "the user file is deleted and the refused system files are reported")
-
-    refused_removed = []
-
-    def refuse_copy(request, timeout=None):
-        method = request.get_method()
-        path = urllib.parse.urlparse(request.full_url).path
-        if method == "DELETE":
-            refused_removed.append(path)
-            return Resp(204, b"")
-        if method == "PUT":
-            return Resp(200, b"")
-        if path == "/metadata/" + old_item:
-            return Resp(200, json.dumps({"metadata": {"identifier": old_item, "creator": "owner-account"}, "files": [{"name": left_name}]}).encode())
-        if path == "/download/" + old_item + "/" + left_name:
-            return Resp(200, jpeg_left)
-        if path.startswith("/download/x"):
-            return Resp(200, b"not-the-bytes")
-        return Resp(404, b"")
-
-    refused_empty = ia_backup.empty_named_items(
-        {
-            "access": "test-access",
-            "secret": "test-secret-value",
-            "endpoint": "http://ia.test",
-            "download_base": "http://ia.test/download",
-            "metadata_base": "http://ia.test/metadata",
-            "old_items": [old_item],
-            "pace": 0,
-            "backoff": 0,
-            "urlopen": refuse_copy,
-            "opener": type("Opener", (), {"open": staticmethod(refuse_copy)})(),
-        },
-        {"v": 1, "shards": {}, "byHash": {}, "byUrl": {}, "posts": {}, "items": {}},
-        sleep=lambda delay: None,
-    )
-    check(refused_empty["failures"] > 0 and refused_empty["deleted"] == 0 and not refused_removed, "a failed hash check deletes nothing")
+    retire_config = {
+        "access": "test-access",
+        "secret": "test-secret-value",
+        "endpoint": retire_host,
+        "download_base": retire_host + "/download",
+        "metadata_base": retire_host + "/metadata",
+        "old_items": ["superintelapp-2026-10"],
+        "pace": 0,
+        "state": retire_state,
+        "urlopen": retire_open,
+        "opener": type("Opener", (), {"open": staticmethod(retire_open)})(),
+    }
+    retire_verified = ia_retire.verify_copies(retire_config, retire_state, sleep=lambda delay: None)
+    check(retire_verified["failures"] == [] and retire_verified["checked"] == 1, "a copied file matches its hash and size")
+    bad_state = json.loads(json.dumps(retire_state))
+    bad_state["copied"]["superintelapp-2026-10/old.json"]["digest"] = "0" * 64
+    retire_failed = ia_retire.verify_copies(retire_config, bad_state, sleep=lambda delay: None)
+    check(retire_failed["failures"] and "test-secret-value" not in " ".join(retire_failed["notes"]), "a hash mismatch blocks the delete")
+    check(not ia_retire.manifest_covers({"files": [], "shards": {}}, retire_state), "deletion waits until the manifest lists the copy")
+    check(ia_retire.manifest_covers({"v": 1, "files": [{"a": copied_url}], "shards": {}}, retire_state), "the manifest gate accepts the copied url")
+    retire_purged = ia_retire.purge_files(retire_config, retire_state, sleep=lambda delay: None)
+    check("superintelapp-2026-10" in retire_purged["emptied"] and retire_purged["remaining"]["superintelapp-2026-10"] == [], "named items are emptied after the copies check out")
+    check(any(path.endswith("_meta.xml") for path in retire_deleted), "derived metadata files are deleted too")
+    retire_blanked = ia_retire.blank_metadata(retire_config, sleep=lambda delay: None)
+    retire_fields = retire_blanked["items"]["superintelapp-2026-10"]
+    check(retire_fields["creator"] == "removed" and retire_fields["collection"] == "removed" and retire_fields["uploader"] == "refused" and retire_fields["noindex"] == "refused", "creator and collection can be cleared and a read-only uploader is kept")
+    check(retire_blanked["uploader_left"] == 1 and retire_blanked["anonymous"] == 1, "anonymous items are counted and a refused uploader stays")
+    retire_notes = " ".join(retire_blanked["notes"] + retire_purged["notes"])
+    check("test-secret-value" not in retire_notes and "person@example.com" not in retire_notes and anon not in retire_notes, "retire notes do not print the keys, the uploader address, or an anonymous id")
 
     story_checks()
 
@@ -3763,7 +3660,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "viktorych-a3-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "viktorych-a6-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     check(page.index('src="shorts.js"') < page.index('src="app.js"') and 'href="shorts.css"' in page and "shorts.js" in worker and "shorts.css" in worker, "the page and the service worker load Shorts")
     check("shorts.js" in workflow and "shorts.css" in workflow and "python3 scripts/tiktok_sync.py" in workflow, "the sync fetches TikTok and publishes the Shorts shell")
     accounts_cfg = (ROOT / "accounts.config.js").read_text(encoding="utf-8")

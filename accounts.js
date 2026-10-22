@@ -14,6 +14,7 @@
   var form = {};
   var errorText = "";
   var legalTitle = "";
+  var painted = "";
   var pushTimer = 0;
   var pushing = false;
 
@@ -108,7 +109,8 @@
   }
   function tellSW(on) {
     if (!navigator.serviceWorker) return;
-    var msg = { type: "auth", on: !!on };
+    var session = on ? readSession() : null;
+    var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "" };
     try {
       if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage(msg);
     } catch (err) { /* the worker may still be installing */ }
@@ -194,17 +196,45 @@
     if (code === "rate_limited") return tr("Too many attempts. Try again later.");
     if (code === "invalid_credentials") return tr("Could not sign in.");
     if (code === "invalid_name") return tr("What should we call you?");
+    if (code === "invalid_location") return tr("That location is too long.");
+    if (code === "invalid_website") return tr("That website is too long.");
+    if (code === "too_large") return tr("Could not save that photo.");
     return tr("Something went wrong. Try again.");
   }
   function layer() {
     return document.getElementById("account-layer");
   }
-  function field(name, label, type) {
+  function fieldCount(name, value, max) {
+    var raw = name === "accountNumber" ? String(value || "").replace(/\D/g, "") : String(value || "");
+    return Array.from(raw).length + " / " + max;
+  }
+  function field(name, label, type, max) {
     var value = form[name] == null ? "" : String(form[name]);
-    return '<label class="acct-field"><input name="' + esc(name) + '" type="' + (type || "text") + '" placeholder=" " autocomplete="' + (name === "accountNumber" ? "off" : "nickname") + '" value="' + esc(value) + '"><label>' + esc(label) + "</label></label>";
+    var id = "acct-" + name;
+    var limit = name === "accountNumber" ? 16 : max;
+    var maxAttr = "";
+    if (name === "accountNumber") maxAttr = ' data-max="16" inputmode="numeric"';
+    else if (limit) maxAttr = ' maxlength="' + limit + '" data-max="' + limit + '"';
+    var count = limit ? '<span class="acct-count">' + fieldCount(name, value, limit) + "</span>" : "";
+    var autocomplete = name === "accountNumber" || name === "claimCode" ? "off" : name === "website" ? "url" : name === "location" ? "address-level2" : "nickname";
+    return '<div class="acct-field"><input id="' + id + '" name="' + esc(name) + '" type="' + (type || "text") + '"' + maxAttr + ' placeholder=" " autocomplete="' + autocomplete + '" value="' + esc(value) + '"><label for="' + id + '">' + esc(label) + "</label>" + count + "</div>";
+  }
+  function textArea(name, label, max) {
+    var value = form[name] == null ? "" : String(form[name]);
+    var id = "acct-" + name;
+    return '<div class="acct-field tall"><textarea id="' + id + '" name="' + esc(name) + '" maxlength="' + max + '" data-max="' + max + '" placeholder=" ">' + esc(value) + '</textarea><label for="' + id + '">' + esc(label) + '</label><span class="acct-count">' + fieldCount(name, value, max) + "</span></div>";
   }
   function closeIcon() {
     return '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M10.6 12 4.8 6.2l1.4-1.4L12 10.6l5.8-5.8 1.4 1.4L13.4 12l5.8 5.8-1.4 1.4L12 13.4l-5.8 5.8-1.4-1.4L10.6 12z"/></svg>';
+  }
+  function cameraIcon() {
+    return '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M9.4 6.4 8.1 8H5.5A1.5 1.5 0 0 0 4 9.5v8A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 18.5 8h-2.6l-1.3-1.6H9.4zm2.6 10.1a3.25 3.25 0 1 1 0-6.5 3.25 3.25 0 0 1 0 6.5z"/></svg>';
+  }
+  function siteHref(value) {
+    var text = String(value || "").trim();
+    if (!text || /^(javascript|data|file):/i.test(text)) return "";
+    if (/^https?:\/\//i.test(text)) return text;
+    return "https://" + text.replace(/^\/+/, "");
   }
   function modal(title, body, extra) {
     return '<div class="acct-back"><div class="acct-modal" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head"><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button><div class="acct-logo">' + mark("") + '</div><span></span></div><div class="acct-body"><h1>' + esc(title) + "</h1>" + body + (extra || "") + "</div></div></div>";
@@ -229,18 +259,51 @@
     }
     if (step === 1) {
       var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : '<button class="acct-quiet" type="button" data-acct="claim">' + esc(tr("Have a claim code?")) + "</button>";
-      return '<p class="acct-sub">' + esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters.")) + "</p>" + field("handle", tr("Choose a handle")) + claim + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
+      return '<p class="acct-sub">' + esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters.")) + "</p>" + field("handle", tr("Choose a handle"), "text", 15) + claim + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
     }
-    return '<p class="acct-sub">' + esc(tr("Your name is shown on your profile.")) + "</p>" + field("displayName", tr("Name")) + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
+    return '<p class="acct-sub">' + esc(tr("Your name is shown on your profile.")) + "</p>" + field("displayName", tr("Name"), "text", 50) + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
   }
   function loginBody() {
     return field("accountNumber", tr("Account number")) + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="do-login">' + esc(tr("Log in")) + '</button><p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + "</button></p>";
   }
-  function editBody() {
+  function photoHtml(url, cls) {
+    if (!url) return "";
+    var remote = url.indexOf("/v1/media/") >= 0;
+    var classAttr = cls ? ' class="' + cls + '"' : "";
+    return "<img" + classAttr + ' alt="" src="' + esc(url) + '"' + (remote ? ' data-photo="' + esc(url) + '"' : "") + ">";
+  }
+  function currentPhoto(kind) {
     var session = readSession();
     var account = session && session.account || {};
-    var locked = account.owner ? '<p class="acct-sub">@' + esc(account.handle) + "</p>" : field("handle", tr("Choose a handle"));
-    return field("displayName", tr("Name")) + locked + '<label class="acct-field tall"><textarea name="bio" maxlength="160" placeholder=" ">' + esc(form.bio || "") + "</textarea><label>" + esc(tr("Bio")) + '</label></label><label class="acct-file">' + esc(tr("Profile photo")) + '<input name="avatar" type="file" accept="image/jpeg,image/png,image/webp"></label><label class="acct-file">' + esc(tr("Banner")) + '<input name="banner" type="file" accept="image/jpeg,image/png,image/webp"></label><p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="save-profile">' + esc(tr("Save")) + "</button>";
+    if (kind === "banner") return form.bannerTouched ? (form.banner || "") : (account.banner || "");
+    return form.avatarTouched ? (form.avatar || "") : (account.avatar || "");
+  }
+  function editMedia() {
+    var session = readSession();
+    var account = session && session.account || {};
+    var banner = currentPhoto("banner");
+    var avatar = currentPhoto("avatar");
+    var bannerImg = banner ? photoHtml(banner, "") : "";
+    var remove = banner ? '<button class="acct-cam acct-banner-x" type="button" data-acct="banner-clear" aria-label="' + esc(tr("Remove banner")) + '">' + closeIcon() + "</button>" : "";
+    var face = avatar
+      ? photoHtml(avatar, "")
+      : '<span class="acct-initials">' + esc(initials(form.displayName || account.displayName || account.handle)) + "</span>";
+    return '<div class="acct-hero"><div class="acct-banner">' + bannerImg +
+      '<button class="acct-cam" type="button" data-acct="pick-banner" aria-label="' + esc(tr("Add photo")) + '">' + cameraIcon() + "</button>" + remove +
+      '</div><div class="acct-ava">' + face +
+      '<button class="acct-cam" type="button" data-acct="pick-avatar" aria-label="' + esc(tr("Add photo")) + '">' + cameraIcon() + "</button></div></div>" +
+      '<input class="acct-hidden" name="avatar" type="file" accept="image/jpeg,image/png,image/webp" tabindex="-1">' +
+      '<input class="acct-hidden" name="banner" type="file" accept="image/jpeg,image/png,image/webp" tabindex="-1">';
+  }
+  function editBody() {
+    return editMedia() + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + '<p class="acct-error">' + esc(errorText) + "</p>";
+  }
+  function editModal(body) {
+    return '<div class="acct-back"><div class="acct-modal acct-edit" role="dialog" aria-modal="true" aria-label="' + esc(tr("Edit profile")) + '"><div class="acct-head acct-edit-head"><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button><h1>' + esc(tr("Edit profile")) + '</h1><button class="acct-save" type="button" data-acct="save-profile">' + esc(tr("Save")) + '</button></div><div class="acct-body acct-edit-body">' + body + "</div></div></div>";
+  }
+  function cropModal() {
+    var title = form.cropKind === "banner" ? tr("Edit banner") : tr("Edit photo");
+    return '<div class="acct-back"><div class="acct-modal acct-edit" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head acct-edit-head"><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button><h1>' + esc(title) + '</h1><button class="acct-save" type="button" data-acct="crop-apply">' + esc(tr("Apply")) + '</button></div><div class="acct-body acct-edit-body"><div class="acct-crop-stage" data-kind="' + (form.cropKind === "banner" ? "banner" : "avatar") + '"><img alt="" src="' + esc(form.cropUrl || "") + '"></div><input class="acct-zoom" name="cropZoom" type="range" min="1" max="3" step="0.01" value="' + esc(String(form.cropZoom || 1)) + '" aria-label="' + esc(title) + '"><p class="acct-error">' + esc(errorText) + "</p></div></div></div>";
   }
   function legalBody() {
     return '<p class="acct-sub">' + esc(tr("Not affiliated with X.")) + "</p>";
@@ -252,10 +315,20 @@
     if (blocking()) html += landing();
     if (view === "signup") html += modal(tr("Create your account"), signupBody());
     else if (view === "login") html += modal(tr("Sign in to {app}", { app: appName() }), loginBody());
-    else if (view === "edit") html += modal(tr("Edit profile"), editBody());
+    else if (view === "edit") html += editModal(editBody());
+    else if (view === "crop") html += cropModal();
     else if (view === "legal") html += modal(legalTitle || tr("About"), legalBody());
     else if (view === "leave") html += modal(tr("Save your account number"), '<p class="acct-sub">' + esc(tr("Leave without saving the account number?")) + '</p><button class="acct-next" type="button" data-acct="abandon">' + esc(tr("Close")) + '</button><button class="acct-line" type="button" data-acct="stay" style="width:100%;margin-top:12px">' + esc(tr("Back")) + "</button>");
     root.innerHTML = html;
+    var mark = (view || "") + ":" + step + ":" + (form.claimOpen ? "1" : "0");
+    if (mark !== painted) {
+      painted = mark;
+      if (view !== "edit" && view !== "crop") {
+        var input = form.claimOpen ? root.querySelector('input[name="claimCode"]') : root.querySelector(".acct-field input, .acct-field textarea");
+        if (input) input.focus();
+      }
+    }
+    if (view === "crop" && !layoutCrop()) requestAnimationFrame(layoutCrop);
     if (config().turnstileSiteKey && !document.getElementById("turnstile-js")) {
       var script = document.createElement("script");
       script.id = "turnstile-js";
@@ -272,12 +345,25 @@
     if (next === "edit") {
       var account = (readSession() || {}).account || {};
       form.displayName = account.displayName || "";
-      form.handle = account.handle || "";
       form.bio = account.bio || "";
+      form.location = account.location || "";
+      form.website = account.website || "";
+      form.avatar = account.avatar || "";
+      form.banner = account.banner || "";
+      form.avatarTouched = false;
+      form.bannerTouched = false;
     }
     paint();
   }
   function closeAuth() {
+    if (view === "crop") {
+      if (form.cropUrl) URL.revokeObjectURL(form.cropUrl);
+      form.cropUrl = "";
+      form.cropReady = false;
+      view = "edit";
+      paint();
+      return;
+    }
     if (view === "signup" && step === 2 && readPending()) {
       view = "leave";
       paint();
@@ -325,7 +411,7 @@
   }
   function snapshotFrom(settings) {
     settings = settings || {};
-    return {
+    var snap = {
       follows: settings.follows || [],
       seenFeeds: settings.seenFeeds || [],
       seenDefaults: settings.seenDefaults || [],
@@ -350,8 +436,15 @@
       forYouReposts: settings.forYouReposts !== false,
       forYouReplies: settings.forYouReplies !== false,
       historyPause: settings.historyPause || { videos: false, articles: false },
+      historyCut: settings.historyCut || { video: 0, article: 0 },
       lang: readLang()
     };
+    var live = window.ViktorychAccounts && window.ViktorychAccounts.readHistory && window.ViktorychAccounts.readHistory();
+    if (live) {
+      snap.history = live.history || [];
+      snap.historyCut = live.historyCut || snap.historyCut;
+    }
+    return snap;
   }
   function localSnapshot() {
     var raw = readStored("settings-v1");
@@ -379,9 +472,54 @@
     (local || []).forEach(function (item) { if (item && item.id) map[item.id] = item; });
     return Object.keys(map).map(function (key) { return map[key]; });
   }
+  function historyCutOf(local, remote) {
+    function n(src, key) {
+      var value = src && src.historyCut ? Number(src.historyCut[key]) : 0;
+      return isFinite(value) && value > 0 ? value : 0;
+    }
+    return {
+      video: Math.max(n(local, "video"), n(remote, "video")),
+      article: Math.max(n(local, "article"), n(remote, "article"))
+    };
+  }
+  function mergeHistory(local, remote, cut) {
+    var map = {};
+    function take(row) {
+      if (!row || (row.kind !== "video" && row.kind !== "article")) return;
+      var id = String(row.id || "").replace(/[\u0000-\u001F\u007F]/g, "").slice(0, 80);
+      var at = Number(row.at);
+      if (!id || !isFinite(at) || at <= 0) return;
+      if (cut && at <= (Number(cut[row.kind]) || 0)) return;
+      var progress = Number(row.progress);
+      var item = {
+        id: id,
+        kind: row.kind,
+        platform: String(row.platform || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24),
+        at: Math.floor(at)
+      };
+      if (isFinite(progress) && progress > 0 && progress <= 1) item.progress = Math.round(progress * 1000) / 1000;
+      var key = item.kind + ":" + item.id;
+      var prev = map[key];
+      if (!prev || item.at >= prev.at) map[key] = item;
+    }
+    (Array.isArray(remote) ? remote : []).forEach(take);
+    (Array.isArray(local) ? local : []).forEach(take);
+    return Object.keys(map).map(function (key) { return map[key]; }).sort(function (a, b) { return b.at - a.at; }).slice(0, 300);
+  }
   function mergePayload(local, remote) {
     remote = remote || {};
     var follows = uniq([].concat(local.follows || [], remote.follows || []));
+    var cut = historyCutOf(local, remote);
+    var pause = local.historyPause || remote.historyPause || { videos: false, articles: false };
+    var localHistory = local.history;
+    if (Array.isArray(localHistory) && ((local.historyPause && local.historyPause.videos) || (local.historyPause && local.historyPause.articles))) {
+      localHistory = localHistory.filter(function (row) {
+        if (local.historyPause.videos && row && row.kind === "video") return false;
+        if (local.historyPause.articles && row && row.kind === "article") return false;
+        return true;
+      });
+    }
+    var history = mergeHistory(localHistory, remote.history, cut);
     return {
       follows: follows,
       seenFeeds: uniq([].concat(local.seenFeeds || [], remote.seenFeeds || [], follows)),
@@ -406,7 +544,9 @@
       followingSort: local.followingSort === "popular" || remote.followingSort === "popular" ? (local.followingSort || remote.followingSort) : "recent",
       forYouReposts: local.forYouReposts !== false,
       forYouReplies: local.forYouReplies !== false,
-      historyPause: local.historyPause || remote.historyPause || { videos: false, articles: false },
+      historyPause: pause,
+      historyCut: cut,
+      history: history,
       lang: local.lang || remote.lang || "en"
     };
   }
@@ -415,10 +555,11 @@
     var settings = {};
     try { settings = raw ? JSON.parse(raw) : {}; } catch (err) { settings = {}; }
     Object.keys(payload || {}).forEach(function (key) {
-      if (key === "lang") return;
+      if (key === "lang" || key === "history") return;
       settings[key] = payload[key];
     });
     writeStored("settings-v1", JSON.stringify(settings));
+    if (window.ViktorychAccounts && window.ViktorychAccounts.writeHistory) window.ViktorychAccounts.writeHistory(payload);
     if (payload && (payload.lang === "en" || payload.lang === "ru" || payload.lang === "es")) {
       try { localStorage.setItem("superintelapp-lang", payload.lang); } catch (err) { /* the page language stays */ }
     }
@@ -457,6 +598,12 @@
       applySnapshot(merged);
       return pushPayload(merged, body.updatedAt || 0);
     }).catch(function () {});
+  }
+  var historyBooted = false;
+  function onHistoryReady() {
+    if (historyBooted) return;
+    historyBooted = true;
+    if (readSession()) mergeSync();
   }
   function onLocalChange() {
     if (!readSession() || !config().api || pushing) return;
@@ -611,27 +758,138 @@
       img.src = url;
     });
   }
-  function saveProfile() {
-    var session = readSession();
-    if (!session) return;
-    var avatarInput = document.querySelector("#account-layer input[name=avatar]");
-    var bannerInput = document.querySelector("#account-layer input[name=banner]");
-    var avatarFile = avatarInput && avatarInput.files && avatarInput.files[0];
-    var bannerFile = bannerInput && bannerInput.files && bannerInput.files[0];
-    Promise.all([fitImage(avatarFile, 400, 150000), fitImage(bannerFile, 1500, 280000)]).then(function (images) {
-      if ((avatarFile && !images[0]) || (bannerFile && !images[1])) {
+  function layoutCrop() {
+    var stage = document.querySelector("#account-layer .acct-crop-stage");
+    if (!stage || !form.cropW || !form.cropH) return null;
+    var frameW = stage.clientWidth;
+    var frameH = stage.clientHeight;
+    if (!frameW || !frameH) return null;
+    var zoom = Math.min(3, Math.max(1, Number(form.cropZoom) || 1));
+    form.cropZoom = zoom;
+    var base = Math.max(frameW / form.cropW, frameH / form.cropH);
+    var dispW = form.cropW * base * zoom;
+    var dispH = form.cropH * base * zoom;
+    if (!form.cropReady) {
+      form.cropX = (frameW - dispW) / 2;
+      form.cropY = (frameH - dispH) / 2;
+      form.cropReady = true;
+    }
+    form.cropX = Math.min(0, Math.max(Math.min(0, frameW - dispW), form.cropX || 0));
+    form.cropY = Math.min(0, Math.max(Math.min(0, frameH - dispH), form.cropY || 0));
+    var img = stage.querySelector("img");
+    if (!img) return null;
+    img.style.position = "absolute";
+    img.style.left = "0";
+    img.style.top = "0";
+    img.style.maxWidth = "none";
+    img.style.width = dispW + "px";
+    img.style.height = dispH + "px";
+    img.style.transform = "translate(" + form.cropX + "px," + form.cropY + "px)";
+    return { frameW: frameW, frameH: frameH, dispW: dispW, dispH: dispH };
+  }
+  function startCrop(file, kind) {
+    if (!file) return;
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function () {
+      if (form.cropUrl) URL.revokeObjectURL(form.cropUrl);
+      form.cropUrl = url;
+      form.cropKind = kind;
+      form.cropW = img.naturalWidth || img.width;
+      form.cropH = img.naturalHeight || img.height;
+      form.cropZoom = 1;
+      form.cropX = 0;
+      form.cropY = 0;
+      form.cropReady = false;
+      view = "crop";
+      errorText = "";
+      paint();
+    };
+    img.onerror = function () {
+      URL.revokeObjectURL(url);
+      errorText = tr("Could not save that photo.");
+      view = "edit";
+      paint();
+    };
+    img.src = url;
+  }
+  function applyCrop() {
+    var frame = layoutCrop();
+    var image = document.querySelector("#account-layer .acct-crop-stage img");
+    if (!frame || !image) return;
+    var avatar = form.cropKind !== "banner";
+    var outW = avatar ? 400 : 1500;
+    var outH = avatar ? 400 : 500;
+    var scale = form.cropW / frame.dispW;
+    var sx = Math.max(0, -form.cropX * scale);
+    var sy = Math.max(0, -form.cropY * scale);
+    var sw = Math.min(form.cropW - sx, frame.frameW * scale);
+    var sh = Math.min(form.cropH - sy, frame.frameH * scale);
+    var canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+    canvas.getContext("2d").drawImage(image, sx, sy, sw, sh, 0, 0, outW, outH);
+    var maxBytes = avatar ? 60 * 1024 : 150 * 1024;
+    encodeWebp(canvas, maxBytes).then(function (blob) {
+      if (form.cropUrl) URL.revokeObjectURL(form.cropUrl);
+      form.cropUrl = "";
+      form.cropReady = false;
+      view = "edit";
+      if (!blob) {
         errorText = tr("Could not save that photo.");
         paint();
         return;
       }
-      var body = {
-        displayName: String(form.displayName || "").trim(),
-        bio: String(form.bio || "")
+      var reader = new FileReader();
+      reader.onload = function () {
+        var data = String(reader.result || "");
+        if (avatar) {
+          form.avatar = data;
+          form.avatarTouched = true;
+        } else {
+          form.banner = data;
+          form.bannerTouched = true;
+        }
+        errorText = "";
+        paint();
       };
-      if (!session.account.owner) body.handle = String(form.handle || "").trim().replace(/^@/, "");
-      if (images[0]) body.avatar = images[0];
-      if (images[1]) body.banner = images[1];
-      return api("/v1/profile", { method: "PATCH", token: session.token, body: body }).then(function (res) {
+      reader.onerror = function () {
+        errorText = tr("Could not save that photo.");
+        paint();
+      };
+      reader.readAsDataURL(blob);
+    }).catch(function () {
+      errorText = tr("Could not save that photo.");
+      view = "edit";
+      paint();
+    });
+  }
+  function encodeWebp(canvas, maxBytes) {
+    var quality = 0.82;
+    return new Promise(function (resolve) {
+      function step() {
+        if (!canvas.toBlob) { resolve(null); return; }
+        canvas.toBlob(function (blob) {
+          if (!blob || blob.type !== "image/webp") { resolve(null); return; }
+          if (blob.size <= maxBytes || quality <= 0.42) resolve(blob.size <= maxBytes ? blob : null);
+          else { quality = Math.round((quality - 0.08) * 100) / 100; step(); }
+        }, "image/webp", quality);
+      }
+      step();
+    });
+  }
+  function saveProfile() {
+    var session = readSession();
+    if (!session) return;
+    var body = {
+      displayName: String(form.displayName || "").trim(),
+      bio: String(form.bio || ""),
+      location: String(form.location || "").trim(),
+      website: String(form.website || "").trim()
+    };
+    if (form.avatarTouched) body.avatar = form.avatar || "";
+    if (form.bannerTouched) body.banner = form.banner || "";
+    api("/v1/profile", { method: "PATCH", token: session.token, body: body }).then(function (res) {
         if (res.status !== 200 || !res.account) {
           errorText = errorMessage(res.error);
           paint();
@@ -643,7 +901,6 @@
         view = "";
         paint();
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-      });
     }).catch(function () {
       errorText = tr("Something went wrong. Try again.");
       paint();
@@ -669,11 +926,11 @@
     var session = readSession();
     var mine = session && session.account && session.account.publicId === account.publicId;
     var photo = account.avatar
-      ? '<img class="pava" src="' + esc(account.avatar) + '" alt="">'
+      ? photoHtml(account.avatar, "pava")
       : '<span class="ava pava initials">' + esc(initials(account.displayName)) + "</span>";
-    var banner = account.banner ? '<img class="pbanner" src="' + esc(account.banner) + '" alt="">' : '<div class="pbanner"></div>';
+    var banner = account.banner ? photoHtml(account.banner, "pbanner") : '<div class="pbanner"></div>';
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: "0" })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div><div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + '<div class="counts"><div><b>0</b> <span>' + esc(tr("Following count")) + "</span></div><div><b>0</b> <span>" + esc(tr("Followers")) + "</span></div></div></div>" + '<div class="tabs ptabs" role="tablist"><a class="tab on" role="tab" aria-selected="true"><span>' + esc(tr("Profile")) + "</span></a></div>" + '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>";
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: "0" })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div><div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + '<div class="counts"><div><b>0</b> <span>' + esc(tr("Following count")) + "</span></div><div><b>0</b> <span>" + esc(tr("Followers")) + "</span></div></div></div>" + '<div class="tabs ptabs" role="tablist"><a class="tab on" role="tab" aria-selected="true"><span>' + esc(tr("Profile")) + "</span></a></div>" + '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>";
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -691,7 +948,7 @@
     if (!session || !session.account) return "";
     var account = session.account;
     var photo = account.avatar
-      ? '<img class="ava" src="' + esc(account.avatar) + '" alt="">'
+      ? photoHtml(account.avatar, "ava")
       : '<span class="ava initials">' + esc(initials(account.displayName)) + "</span>";
     return photo + '<span class="account-meta"><b>' + esc(account.displayName || "") + "</b><span>@" + esc(account.handle || "") + "</span></span>";
   }
@@ -700,7 +957,7 @@
     if (!session || !session.account) return "";
     var account = session.account;
     var photo = account.avatar
-      ? '<img class="ava" src="' + esc(account.avatar) + '" alt="">'
+      ? photoHtml(account.avatar, "ava")
       : '<span class="ava initials">' + esc(initials(account.displayName)) + "</span>";
     return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(account.displayName || "") + '</b><div class="phandle">@' + esc(account.handle || "") + "</div></div></a>";
   }
@@ -729,10 +986,58 @@
     else if (act === "abandon") abandon();
     else if (act === "edit") openAuth("edit");
     else if (act === "save-profile") saveProfile();
+    else if (act === "pick-avatar" || act === "pick-banner") {
+      var input = document.querySelector('#account-layer input[name="' + (act === "pick-avatar" ? "avatar" : "banner") + '"]');
+      if (input) input.click();
+    }
+    else if (act === "banner-clear") { form.banner = ""; form.bannerTouched = true; paint(); }
+    else if (act === "crop-apply") applyCrop();
     else if (act === "logout") logout(false);
     else if (act === "logout-all") logout(true);
     else if (act === "legal") { legalTitle = acct.dataset.title || tr("About"); view = "legal"; paint(); }
   }
+  var cropDrag = null;
+  document.addEventListener("pointerdown", function (event) {
+    var stage = event.target && event.target.closest ? event.target.closest(".acct-crop-stage") : null;
+    if (!stage || view !== "crop") return;
+    cropDrag = { x: event.clientX, y: event.clientY, ox: form.cropX || 0, oy: form.cropY || 0, id: event.pointerId };
+    if (stage.setPointerCapture) stage.setPointerCapture(event.pointerId);
+  }, true);
+  document.addEventListener("pointermove", function (event) {
+    if (!cropDrag || event.pointerId !== cropDrag.id) return;
+    form.cropX = cropDrag.ox + (event.clientX - cropDrag.x);
+    form.cropY = cropDrag.oy + (event.clientY - cropDrag.y);
+    layoutCrop();
+  }, true);
+  document.addEventListener("pointerup", function (event) {
+    if (cropDrag && event.pointerId === cropDrag.id) cropDrag = null;
+  }, true);
+  document.addEventListener("pointercancel", function (event) {
+    if (cropDrag && event.pointerId === cropDrag.id) cropDrag = null;
+  }, true);
+  var photoBlobs = {};
+  function loadPhoto(url) {
+    if (photoBlobs[url]) return Promise.resolve(photoBlobs[url]);
+    var session = readSession();
+    if (!session || !session.token) return Promise.resolve("");
+    return fetch(url, { headers: { Authorization: "Bearer " + session.token }, cache: "no-store", credentials: "omit" }).then(function (res) {
+      if (!res.ok) return null;
+      return res.blob();
+    }).then(function (blob) {
+      if (!blob) return "";
+      var objectUrl = URL.createObjectURL(blob);
+      photoBlobs[url] = objectUrl;
+      return objectUrl;
+    }).catch(function () { return ""; });
+  }
+  document.addEventListener("error", function (event) {
+    var img = event.target;
+    if (!img || img.tagName !== "IMG") return;
+    var url = img.getAttribute("data-photo");
+    if (!url || img.getAttribute("data-photo-tried")) return;
+    img.setAttribute("data-photo-tried", "1");
+    loadPhoto(url).then(function (objectUrl) { if (objectUrl) img.src = objectUrl; });
+  }, true);
   document.addEventListener("click", onClick, true);
   document.addEventListener("input", function (event) {
     var el = event.target;
@@ -741,13 +1046,29 @@
       var digits = String(el.value || "").replace(/\D/g, "").slice(0, 16);
       el.value = grouped(digits);
       form.accountNumber = digits;
+      var numberCount = el.parentNode && el.parentNode.querySelector(".acct-count");
+      if (numberCount) numberCount.textContent = fieldCount("accountNumber", digits, 16);
+      return;
+    }
+    if (el.name === "cropZoom") {
+      form.cropZoom = el.value;
+      layoutCrop();
       return;
     }
     form[el.name] = el.value;
+    var count = el.parentNode && el.parentNode.querySelector(".acct-count");
+    var max = Number(el.getAttribute("data-max") || 0);
+    if (count && max) count.textContent = fieldCount(el.name, el.value, max);
   }, true);
   document.addEventListener("change", function (event) {
     var el = event.target;
     if (!el || !el.closest || !el.closest("#account-layer")) return;
+    if (el.type === "file" && (el.name === "avatar" || el.name === "banner")) {
+      var file = el.files && el.files[0];
+      el.value = "";
+      if (file) startCrop(file, el.name);
+      return;
+    }
     if (el.name === "saved") {
       form.saved = !!el.checked;
       var button = document.querySelector('#account-layer [data-acct="saved"]');
@@ -781,6 +1102,7 @@
     drawerHead: drawerHead,
     settingsHtml: settingsHtml,
     onLocalChange: onLocalChange,
+    onHistoryReady: onHistoryReady,
     requestRender: null,
     account: function () {
       var session = readSession();

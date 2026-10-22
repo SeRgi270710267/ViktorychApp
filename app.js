@@ -1832,7 +1832,28 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return out;
   }
 
+  function tiktokPlayId(post) {
+    const direct = String((post && post.statusId) || "");
+    if (/^\d{8,22}$/.test(direct)) return direct;
+    const match = String((post && post.id) || "").match(/(\d{8,22})/);
+    return match ? match[1] : "";
+  }
+
+  function tiktokPlayUrl(post) {
+    const id = tiktokPlayId(post);
+    const handle = String((post && post.handle) || "");
+    const api = String((window.VIKTORYCH_ACCOUNTS && window.VIKTORYCH_ACCOUNTS.api) || "").replace(/\/$/, "");
+    if (!id || !/^[A-Za-z0-9._]{2,24}$/.test(handle) || !api) return "";
+    return api + "/v1/owner/play?id=" + encodeURIComponent(id) + "&handle=" + encodeURIComponent(handle);
+  }
+
   function sourcesFor(post, media, depth) {
+    if (post && post.platform === "tiktok") {
+      const src = tiktokPlayUrl(post);
+      const out = [];
+      if (src) pushSource(out, { kind: "mp4", url: src });
+      return Promise.resolve(out);
+    }
     const yt = youtubeId(post, media);
     if (yt) return youtubeSources(yt);
     const files = fileSources(post, media);
@@ -1911,16 +1932,27 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (retry) retry.hidden = false;
     const play = el.querySelector(".play");
     if (play) play.hidden = true;
+    if (post && post.platform === "tiktok") {
+      const src = tiktokPlayUrl(post);
+      const token = window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : "";
+      if (src && token) {
+        fetch(src + "&meta=1", { headers: { Authorization: "Bearer " + token }, cache: "no-store" }).then((res) => res.json()).then((body) => {
+          if (!body || body.ok || !body.detail || !el.isConnected) return;
+          const span = el.querySelector(".vfallback span");
+          if (span) span.textContent = body.detail;
+        }).catch(() => {});
+      }
+    }
   }
 
-  function armStall(el, video, gen, fail) {
+  function armStall(el, video, gen, fail, wait) {
     if (el._stall) clearTimeout(el._stall);
     const started = video.currentTime;
     el._stall = setTimeout(() => {
       if (el._gen !== gen) return;
       if (video.currentTime > started + 0.2) return;
       fail();
-    }, 5000);
+    }, wait || 5000);
     const clear = () => {
       if (video.currentTime > 0.2 && el._stall) { clearTimeout(el._stall); el._stall = 0; }
     };
@@ -2080,7 +2112,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         if (video.readyState >= 1) seek();
         else video.addEventListener("loadedmetadata", seek, { once: true });
       }
-      armStall(el, video, gen, fail);
+      armStall(el, video, gen, fail, source && source.url && source.url.indexOf("/v1/owner/play") >= 0 ? 15000 : 5000);
       const played = video.play();
       notePlay(el, "play-called");
       if (played && played.then) {
@@ -4392,12 +4424,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     ARCHIVE.order = [];
     ARCHIVE.loaded = {};
     ARCHIVE.posts = [];
+    let manifestDoc = null;
     try {
-      const doc = await fetchArchive("ia-manifest.json", true);
-      installIaManifest(doc || { v: 1, files: [], posts: {} });
+      manifestDoc = await fetchArchive("ia-manifest.json", true);
     } catch (err) {
-      installIaManifest({ v: 1, files: [], posts: {} });
+      manifestDoc = null;
     }
+    installIaManifest(manifestDoc || { v: 1, files: [], posts: {} });
     try {
       const index = await fetchArchive("index.json", true);
       if (index) {
@@ -7113,6 +7146,104 @@ const here = parseRoute();
     return { videos: src.videos === true, articles: src.articles === true };
   }
 
+  function cleanHistoryCut(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const n = (value) => {
+      const num = Number(value) || 0;
+      return Number.isFinite(num) && num > 0 ? Math.floor(num) : 0;
+    };
+    return { video: n(src.video), article: n(src.article) };
+  }
+
+  function historyProgressOf(row, kind) {
+    if (!row) return 0;
+    if (kind === "video" && row.duration > 1 && row.position > 0) return Math.max(0, Math.min(1, row.position / row.duration));
+    if (kind === "article" && Number(row.scroll) > 0) return Math.max(0, Math.min(1, Number(row.scroll) || 0));
+    const progress = Number(row.progress) || 0;
+    return progress > 0 && progress <= 1 ? progress : 0;
+  }
+
+  function readHistory() {
+    if (!STATE.history) return null;
+    const cut = cleanHistoryCut(STATE.settings && STATE.settings.historyCut);
+    const pause = cleanHistoryPause(STATE.settings && STATE.settings.historyPause);
+    const map = new Map();
+    function take(row, fromLocal) {
+      if (!row || (row.kind !== "video" && row.kind !== "article") || !row.id) return;
+      if (fromLocal && row.kind === "video" && pause.videos) return;
+      if (fromLocal && row.kind === "article" && pause.articles) return;
+      const at = Number(row.at) || 0;
+      if (at <= (cut[row.kind] || 0)) return;
+      const item = { id: String(row.id).slice(0, 80), kind: row.kind, platform: String(row.platform || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24), at: at };
+      const progress = fromLocal ? historyProgressOf(row, row.kind) : Number(row.progress) || 0;
+      if (progress > 0 && progress <= 1) item.progress = Math.round(progress * 1000) / 1000;
+      const key = item.kind + ":" + item.id;
+      const prev = map.get(key);
+      if (!prev || item.at >= prev.at) map.set(key, item);
+    }
+    (STATE.syncedHistory || []).forEach((row) => take(row, false));
+    [["videos", "video"], ["articles", "article"]].forEach((pair) => {
+      (STATE.history[pair[0]] || []).forEach((row) => take(Object.assign({}, row, { kind: pair[1] }), true));
+    });
+    const out = Array.from(map.values()).sort((a, b) => b.at - a.at).slice(0, 300);
+    return { history: out, historyCut: cut };
+  }
+
+  function writeHistory(payload) {
+    if (!payload || !STATE.history) return;
+    const cut = cleanHistoryCut(payload.historyCut || (STATE.settings && STATE.settings.historyCut));
+    STATE.settings.historyCut = cut;
+    const rows = Array.isArray(payload.history) ? payload.history : [];
+    STATE.syncedHistory = rows.slice();
+    STATE.historyApplying = true;
+    try {
+      [["videos", "video"], ["articles", "article"]].forEach((pair) => {
+        const tab = pair[0];
+        const kind = pair[1];
+        const map = new Map();
+        (STATE.history[tab] || []).forEach((row) => {
+          if (!row || !row.id) return;
+          if ((Number(row.at) || 0) <= (cut[kind] || 0)) {
+            histDrop(row.key);
+            return;
+          }
+          map.set(String(row.id), row);
+        });
+        rows.forEach((row) => {
+          if (!row || row.kind !== kind || !row.id) return;
+          const at = Number(row.at) || 0;
+          if (at <= (cut[kind] || 0)) return;
+          const id = String(row.id);
+          const prev = map.get(id);
+          if (prev && (Number(prev.at) || 0) > at) return;
+          const entry = prev ? Object.assign({}, prev) : {
+            key: tab + ":" + id,
+            tab: tab,
+            id: id,
+            platform: row.platform || "",
+            position: 0,
+            duration: 0,
+            scroll: 0,
+            progress: 0,
+            post: { id: id, platform: row.platform || "", text: "", media: [] }
+          };
+          entry.at = at;
+          entry.platform = row.platform || entry.platform || "";
+          if (row.progress != null && Number(row.progress) > 0) {
+            entry.progress = Number(row.progress);
+            if (kind === "article") entry.scroll = entry.progress;
+          }
+          map.set(id, entry);
+          histPut(entry);
+        });
+        STATE.history[tab] = Array.from(map.values()).sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, HIST_CAP);
+      });
+      histMirror();
+    } finally {
+      STATE.historyApplying = false;
+    }
+  }
+
   function historyPaused(tab) {
     const pause = (STATE.settings && STATE.settings.historyPause) || {};
     return tab === "videos" ? !!pause.videos : tab === "articles" ? !!pause.articles : false;
@@ -7195,8 +7326,13 @@ const here = parseRoute();
   function flushHist() {
     const pending = STATE.histPending || {};
     STATE.histPending = {};
-    Object.keys(pending).forEach((key) => histPut(pending[key]));
+    let watch = false;
+    Object.keys(pending).forEach((key) => {
+      histPut(pending[key]);
+      if (pending[key] && (pending[key].tab === "videos" || pending[key].tab === "articles")) watch = true;
+    });
     histMirror();
+    if (watch && !STATE.historyApplying && window.ViktorychAccounts && window.ViktorychAccounts.onLocalChange) window.ViktorychAccounts.onLocalChange();
   }
 
   function queueHist(entry, soon) {
@@ -7247,7 +7383,9 @@ const here = parseRoute();
       catch (err) { finish(readHistLocal()); return; }
       req.onsuccess = () => finish(req.result && req.result.length ? req.result : readHistLocal());
       req.onerror = () => finish(readHistLocal());
-    })).then(() => histMirror());
+    })).then(() => histMirror()).then(() => {
+      if (window.ViktorychAccounts && window.ViktorychAccounts.onHistoryReady) window.ViktorychAccounts.onHistoryReady();
+    });
     return STATE.histLoading;
   }
 
@@ -7344,6 +7482,9 @@ const here = parseRoute();
     } else if (tab === "likes") {
       STATE.settings.likes = {};
       saveSettings();
+    } else if (tab === "videos" || tab === "articles") {
+      STATE.settings.historyCut = cleanHistoryCut(STATE.settings.historyCut);
+      STATE.settings.historyCut[tab === "videos" ? "video" : "article"] = Date.now();
     }
     (histEnsure()[tab] || []).forEach((row) => {
       if (!row || !row.key) return;
@@ -7352,6 +7493,7 @@ const here = parseRoute();
     });
     STATE.history[tab] = [];
     histMirror();
+    if (tab === "videos" || tab === "articles") saveSettings();
   }
 
   function histSyncSaves() {
@@ -13144,6 +13286,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       logo: function () { return markSvg("app", "logo-full") + markSvg("appShort", "logo-short"); }
     });
   }
-  if (window.ViktorychAccounts) window.ViktorychAccounts.requestRender = function () { render(); };
+  if (window.ViktorychAccounts) {
+    window.ViktorychAccounts.requestRender = function () { render(); };
+    window.ViktorychAccounts.readHistory = readHistory;
+    window.ViktorychAccounts.writeHistory = writeHistory;
+  }
   boot();
 })();

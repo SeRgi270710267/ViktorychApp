@@ -1,8 +1,9 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a3-__SW_VERSION__";
+const VERSION = "viktorych-a6-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
+let playToken = "";
 importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
@@ -100,6 +101,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC).map((key) => caches.delete(key)));
+    try { await forgetLoopCaches(); } catch (err) { /* a stuck loop playlist must not block the new shell */ }
     await self.clients.claim();
     await takeOverClients();
   })());
@@ -161,6 +163,50 @@ function isSpaceAsset(url) {
   return spaceHost(url.hostname);
 }
 
+// loop/current.json is the version pointer. Never cache it: a stored copy keeps
+// a deleted loop version after the publisher swaps the bed.
+function isLoopPointer(url) {
+  return spaceHost(url.hostname) && /\/loop\/current\.json$/i.test(url.pathname);
+}
+
+// Versioned playlists and segments are immutable on R2 (a year of cache).
+// Do not keep them in Cache Storage, or a deleted version 404s forever.
+function isLoopVersionMedia(url) {
+  return spaceHost(url.hostname) && /\/loop\/v[^/]+\//i.test(url.pathname);
+}
+
+async function forgetLoopCaches() {
+  const names = await caches.keys();
+  await Promise.all(names.map(async (name) => {
+    const cache = await caches.open(name);
+    const keys = await cache.keys();
+    await Promise.all(keys.map((req) => {
+      let parsed;
+      try { parsed = new URL(req.url); } catch (err) { return null; }
+      if (isLoopPointer(parsed) || isLoopVersionMedia(parsed)) return cache.delete(req);
+      return null;
+    }));
+  }));
+}
+
+async function fetchLoopPointer(request) {
+  const url = new URL(request.url);
+  url.searchParams.set("_", String(Date.now()));
+  const mode = request.mode === "navigate" ? "cors" : request.mode;
+  try {
+    return await fetch(new Request(url.href, {
+      method: "GET",
+      headers: request.headers,
+      mode: mode,
+      credentials: "omit",
+      cache: "no-store",
+      redirect: "follow"
+    }));
+  } catch (err) {
+    return fetch(url.href, { cache: "no-store", redirect: "follow" });
+  }
+}
+
 // ViktorychMusic catalog audio (HLS playlist, key, init, segments, cover) is not
 // handled here. The page streams it directly and, only after Download, stores
 // an offline copy in sintel-music-offline. That cache is not this worker's.
@@ -175,6 +221,14 @@ function isAppJson(url) {
 
 function isOwnerTiktok(url) {
   return url.origin === self.location.origin && /\/owner\/tiktok\.json$/.test(url.pathname);
+}
+
+function isOwnerPlay(url) {
+  return /\/v1\/owner\/play$/.test(url.pathname) && url.searchParams.has("id");
+}
+
+function isAccountMedia(url) {
+  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname);
 }
 
 function privateData(url) {
@@ -346,6 +400,7 @@ self.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data.type === "auth") {
     accountsAuthed = !!data.on;
+    playToken = data.on && typeof data.token === "string" ? data.token : "";
     if (!data.on) {
       event.waitUntil((async () => {
         await caches.delete(DATA);
@@ -392,11 +447,25 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (isOwnerPlay(url) || isAccountMedia(url)) {
+    event.respondWith((async () => {
+      const headers = new Headers();
+      if (playToken) headers.set("Authorization", "Bearer " + playToken);
+      const range = request.headers.get("Range");
+      if (range && isOwnerPlay(url)) headers.set("Range", range);
+      return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });
+    })());
+    return;
+  }
   if (ACCOUNTS_WALL && !accountsAuthed && privateData(url)) {
     event.respondWith(new Response("", { status: 401, headers: { "cache-control": "no-store" } }));
     return;
   }
   if (isCatalogMedia(url)) return;
+  if (isLoopPointer(url)) {
+    event.respondWith(fetchLoopPointer(request));
+    return;
+  }
   if (isSpaceStatus(url) || isSpaceAsset(url)) {
     event.respondWith(fetch(new Request(request, { cache: "no-store" })));
     return;

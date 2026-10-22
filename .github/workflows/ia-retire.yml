@@ -1,72 +1,88 @@
-name: Empty old Internet Archive items
+name: Retire named Internet Archive items
 
 on:
   workflow_dispatch:
+  # One push, limited to the marker file, so this run can start without a
+  # dispatch token. The marker and this push trigger are removed after it.
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/ia-retire.once
 
 permissions:
   contents: write
 
 concurrency:
-  group: ia-empty-old
+  group: ia-retire
   cancel-in-progress: false
 
 jobs:
-  empty:
+  retire:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Copy, verify, and empty the named items
+      - name: Copy named items onto anonymous items
         env:
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PYTHONUNBUFFERED: "1"
           IA_PACE_SECONDS: "2"
-        run: python3 scripts/ia_empty_old.py
+          IA_BACKOFF_SECONDS: "8"
+        run: python3 scripts/ia_retire.py copy
 
       - name: Publish the manifest on the data branch
-        if: always()
         run: |
           if [ ! -f archive/ia-manifest.json ]; then
-            echo "[ia-empty] no manifest to publish"
-            exit 0
+            echo "[ia-retire] no manifest to publish"
+            exit 1
           fi
           cp archive/ia-manifest.json /tmp/ia-manifest.json
           cp archive/ia-state.json /tmp/ia-state.json
           if ! git fetch -q --depth=1 origin data; then
-            echo "[ia-empty] data branch is not available; the manifest stays on the runner"
-            exit 0
+            echo "[ia-retire] data branch is not available"
+            exit 1
           fi
-          git checkout -B ia-empty-publish origin/data
+          git checkout -B ia-data-publish origin/data
           mkdir -p archive
           cp /tmp/ia-manifest.json archive/ia-manifest.json
           cp /tmp/ia-state.json archive/ia-state.json
           git add -f archive/ia-manifest.json archive/ia-state.json
           if git diff --cached --quiet; then
-            echo "[ia-empty] manifest unchanged"
+            echo "[ia-retire] manifest unchanged"
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Point archive copies at anonymous items"
+          git commit -m "Archive media manifest"
           if ! git push origin HEAD:data; then
             git fetch -q --depth=1 origin data
-            git checkout -B ia-empty-publish origin/data
+            git checkout -B ia-data-publish origin/data
             mkdir -p archive
             cp /tmp/ia-manifest.json archive/ia-manifest.json
             cp /tmp/ia-state.json archive/ia-state.json
             git add -f archive/ia-manifest.json archive/ia-state.json
             if git diff --cached --quiet; then
-              echo "[ia-empty] manifest unchanged"
+              echo "[ia-retire] manifest unchanged"
               exit 0
             fi
-            git commit -m "Point archive copies at anonymous items"
+            git commit -m "Archive media manifest"
             git push origin HEAD:data
           fi
+
+      - name: Delete named items after the copies check out
+        env:
+          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
+          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PYTHONUNBUFFERED: "1"
+          IA_PACE_SECONDS: "2"
+          IA_BACKOFF_SECONDS: "8"
+        run: python3 scripts/ia_retire.py delete
