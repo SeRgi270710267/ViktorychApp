@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Back up public stubs and media to the Internet Archive.
+"""Internet Archive helpers. New uploads are off unless explicitly enabled.
+
+uploads_enabled() is true only when IA_UPLOADS_ENABLED is the word true.
+Workflows set it to false, and an unset variable is the same as false, so
+main() exits 0 before any archive.org request even when IA_ACCESS_KEY and
+IA_SECRET_KEY are present. Existing download URLs stay readable. Nothing
+here deletes or rewrites an item while that switch is off.
 
 Each item identifier is x plus 32 hex characters from a CSPRNG. The month and
 type for that identifier live only in archive/ia-manifest.json. File names are
@@ -48,6 +54,11 @@ S3_ENDPOINT = "https://s3.us.archive.org"
 DOWNLOAD_BASE = "https://archive.org/download"
 METADATA_BASE = "https://archive.org/metadata"
 UA = "archive-backup/1.0"
+
+
+def uploads_enabled() -> bool:
+    """True only for the literal env value true. Every other value, including unset, is off."""
+    return (os.environ.get("IA_UPLOADS_ENABLED") or "").strip().lower() == "true"
 ITEM_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,90}$")
 ITEM_ID_RE = re.compile(r"^x[0-9a-f]{32}$")
 NEUTRAL_TITLE = "files"
@@ -410,6 +421,8 @@ def download_public(url: str, *, limit: int, allow_hosts=(), allow_http: bool = 
 
 
 def _s3_once(endpoint: str, item: str, name: str, body: bytes, headers: dict, access: str, secret: str, opener) -> tuple[int, bytes]:
+    if not uploads_enabled():
+        return 0, b"uploads disabled"
     if not ITEM_RE.match(item):
         raise ValueError("unsafe item identifier")
     if not re.fullmatch(r"[A-Za-z0-9._-]{1,80}", name):
@@ -437,6 +450,9 @@ def _s3_once(endpoint: str, item: str, name: str, body: bytes, headers: dict, ac
 
 
 def upload_bytes(endpoint, item, name, body, *, content_type, access, secret, opener, sleep, backoff, notes, secrets_for_log) -> bool:
+    if not uploads_enabled():
+        notes.append("[ia-backup] uploads are disabled; skipping the upload")
+        return False
     headers = {
         "Content-Type": content_type,
         "x-archive-meta-mediatype": "data",
@@ -586,6 +602,15 @@ def manifest_from_state(state: dict) -> dict:
 def run_backup(config: dict, posts, shards, state: dict | None = None, sleep=time.sleep) -> dict:
     """Upload shards and new public media. config carries endpoint, keys, and limits."""
     state = state or _blank_state()
+    if not uploads_enabled():
+        return {
+            "state": state,
+            "manifest": manifest_from_state(state),
+            "uploaded": [],
+            "skipped": 0,
+            "failures": 0,
+            "notes": ["[ia-backup] uploads are disabled; skipping the upload"],
+        }
     state.setdefault("v", 1)
     state.setdefault("shards", {})
     state.setdefault("byHash", {})
@@ -920,6 +945,8 @@ def _rewrite_pointer(state: dict, old_item: str, old_name: str, url: str, digest
 
 def migrate_copies(config: dict, state: dict, sleep=time.sleep) -> dict:
     """Copy files off guessable items. Nothing is deleted here."""
+    if not uploads_enabled():
+        return {"notes": ["[ia-backup] uploads are disabled; skipping the upload"], "failures": 0}
     notes = []
     failures = 0
     urlopen = config.get("urlopen") or urllib.request.urlopen
@@ -1023,6 +1050,8 @@ def live_manifest_ready(state: dict, urlopen, origin: str) -> bool:
 
 
 def _delete_status(endpoint: str, item: str, name: str, access: str, secret: str, opener, extra=None) -> int:
+    if not uploads_enabled():
+        return 0
     if not ITEM_RE.match(item) or not re.fullmatch(r"[A-Za-z0-9._-]{1,180}", name):
         return 0
     url = endpoint.rstrip("/") + "/" + urllib.parse.quote(item) + "/" + urllib.parse.quote(name)
@@ -1048,6 +1077,8 @@ def _delete_object(endpoint: str, item: str, name: str, access: str, secret: str
 
 
 def _patch_metadata(item: str, want: dict, remove: tuple, access: str, secret: str, urlopen, opener, metadata_base: str, sleep=time.sleep) -> tuple[bool, str]:
+    if not uploads_enabled():
+        return False, "uploads disabled"
     doc = _http_json(metadata_base.rstrip("/") + "/" + urllib.parse.quote(item), urlopen) or {}
     current = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
     patch = []
@@ -1164,6 +1195,8 @@ def _write_hidden(item: str, title: str, description: str, access: str, secret: 
 
 
 def stamp_items(config: dict, state: dict) -> dict:
+    if not uploads_enabled():
+        return {"notes": ["[ia-backup] uploads are disabled. Nothing was uploaded, deleted, or changed."], "failures": 0}
     urlopen = config.get("urlopen") or urllib.request.urlopen
     opener = config.get("opener") or _opener()
     metadata_base = (config.get("metadata_base") or METADATA_BASE).rstrip("/")
@@ -1194,6 +1227,8 @@ def stamp_items(config: dict, state: dict) -> dict:
 
 def hide_old_items(config: dict, state: dict, sleep=time.sleep) -> dict:
     """Keep the old files, but drop them from search and clear identifying metadata."""
+    if not uploads_enabled():
+        return {"notes": ["[ia-backup] uploads are disabled. Nothing was uploaded, deleted, or changed."], "failures": 0}
     urlopen = config.get("urlopen") or urllib.request.urlopen
     opener = config.get("opener") or _opener()
     metadata_base = (config.get("metadata_base") or METADATA_BASE).rstrip("/")
@@ -1239,6 +1274,8 @@ def hide_old_items(config: dict, state: dict, sleep=time.sleep) -> dict:
 
 def retire_old(config: dict, state: dict, sleep=time.sleep) -> dict:
     """Delete guessable files only after the site manifest and the new downloads check out."""
+    if not uploads_enabled():
+        return {"notes": ["[ia-backup] uploads are disabled. Nothing was deleted or changed."], "deleted": 0}
     notes = []
     urlopen = config.get("urlopen") or urllib.request.urlopen
     opener = config.get("opener") or _opener()
@@ -1308,6 +1345,9 @@ def retire_old(config: dict, state: dict, sleep=time.sleep) -> dict:
 
 
 def main() -> int:
+    if not uploads_enabled():
+        print("[ia-backup] IA_UPLOADS_ENABLED is not true. Internet Archive uploads are off. Nothing was uploaded, deleted, or changed.")
+        return 0
     keys = _keys()
     if not keys:
         return 0

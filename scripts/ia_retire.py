@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Copy anything still needed off named Internet Archive items, then delete them.
 
+Both commands exit 0 before any request unless IA_UPLOADS_ENABLED is true.
+Workflows do not set that, so a run copies nothing, deletes nothing, and
+changes no item even when the S3 keys are present. The keys are never printed.
+
 `copy` uploads remaining files onto anonymous items, checks the new bytes,
 and writes archive/ia-manifest.json. `delete` runs only after that manifest
 is on the data branch and every copied file still matches its hash. It then
@@ -8,8 +12,7 @@ removes every file on the named items. Catalog files that the file API leaves
 in place are removed by asking Internet Archive to delete that named item.
 Anonymous items are never deleted. The run also tries to blank creator, title,
 description, subject, and collection. A refusal is recorded and does not stop
-the rest. The access keys are never printed, and anonymous item ids are counted
-rather than listed.
+the rest. Anonymous item ids are counted rather than listed.
 
 IA_ACCESS_KEY and IA_SECRET_KEY come from the environment.
 """
@@ -190,6 +193,8 @@ def _task_accepted(status: int, payload: bytes) -> bool:
 
 def _submit_delete_task(item: str, access: str, secret: str, opener, tasks_url: str, sleep) -> str:
     """Ask Internet Archive to delete one named item. Returns accepted or refused."""
+    if not ia_backup.uploads_enabled():
+        return "refused"
     if not _named_item(item):
         return "refused"
     body = json.dumps({"identifier": item, "cmd": "delete.php", "args": {}}, separators=(",", ":")).encode()
@@ -251,6 +256,15 @@ def _wait_until_clear(metadata_base: str, item: str, urlopen, sleep, wait: float
 
 def purge_files(config: dict, state: dict, sleep=time.sleep) -> dict:
     """Delete every file on the named items. Nothing here uploads."""
+    if not ia_backup.uploads_enabled():
+        return {
+            "notes": ["[ia-retire] uploads are disabled. Nothing was copied, deleted, or changed."],
+            "deleted": 0,
+            "remaining": {},
+            "emptied": [],
+            "tasks_accepted": 0,
+            "tasks_refused": 0,
+        }
     urlopen = config.get("urlopen") or urllib.request.urlopen
     opener = config.get("opener") or ia_backup._opener()
     metadata_base = (config.get("metadata_base") or ia_backup.METADATA_BASE).rstrip("/")
@@ -338,6 +352,13 @@ def _field_status(before, after, key: str) -> str:
 
 def blank_metadata(config: dict, sleep=time.sleep) -> dict:
     """Clear identifying metadata. Each field is its own write so one refusal stands alone."""
+    if not ia_backup.uploads_enabled():
+        return {
+            "items": {},
+            "anonymous": 0,
+            "uploader_left": 0,
+            "notes": ["[ia-retire] uploads are disabled. Nothing was copied, deleted, or changed."],
+        }
     urlopen = config.get("urlopen") or urllib.request.urlopen
     opener = config.get("opener") or ia_backup._opener()
     metadata_base = (config.get("metadata_base") or ia_backup.METADATA_BASE).rstrip("/")
@@ -431,6 +452,9 @@ def main(argv: list[str] | None = None) -> int:
     if mode not in {"copy", "delete"}:
         print("[ia-retire] use copy or delete", file=sys.stderr)
         return 2
+    if not ia_backup.uploads_enabled():
+        print("[ia-retire] IA_UPLOADS_ENABLED is not true. Nothing was copied, deleted, or changed.")
+        return 0
     keys = _keys()
     if not keys:
         return 1

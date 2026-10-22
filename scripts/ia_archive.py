@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Upload archive shards to anonymous Internet Archive items.
 
+The upload runs only when IA_UPLOADS_ENABLED is true. Otherwise this exits 0
+and uploads nothing, including when the S3 keys are set. The keys are never
+printed.
+
 Item identifiers are x plus 32 hex characters, the same scheme as the media
 backup, and they are reused from archive/ia-state.json. The month for each
 identifier is recorded only in archive/ia-manifest.json. Items use mediatype
@@ -9,7 +13,7 @@ send an owner, a subject, or a collection. Shards are filtered by the same
 default-deny source list as the media backup.
 
 IA_ACCESS_KEY and IA_SECRET_KEY come from the environment. When either is
-empty this exits 0 and uploads nothing. The keys are never printed.
+empty this exits 0 and uploads nothing.
 """
 
 from __future__ import annotations
@@ -43,6 +47,9 @@ def _same(path: Path, doc) -> bool:
 
 
 def main() -> int:
+    if not ia_backup.uploads_enabled():
+        print("[archive] Internet Archive uploads are disabled; skipping the upload")
+        return 0
     keys = _keys()
     if not keys:
         print("[archive] Internet Archive keys are not set; skipping the upload")

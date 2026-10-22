@@ -6,7 +6,7 @@ on:
     # GitHub often drops one of these slots, so the staggered line is a backup.
     - cron: "*/30 * * * *"
     - cron: "15,45 * * * *"
-    # Once a day, upload shards and squash them onto the orphan data branch.
+    # Once a day, squash the data branch. This does not upload to archive.org.
     - cron: "17 6 * * *"
   workflow_dispatch:
     inputs:
@@ -516,14 +516,13 @@ jobs:
           git fetch -q --depth=1 origin data || true
           git checkout origin/data -- archive/ia-manifest.json archive/ia-state.json stories.json 2>/dev/null || true
 
-      - name: Upload shards to the Internet Archive
+      - name: Check Cloudflare R2 usage
         if: steps.wallgate.outputs.skip != '1'
-        continue-on-error: true
         env:
-          IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
-          IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PYTHONUNBUFFERED: "1"
-        run: python3 scripts/ia_archive.py
+        run: python3 scripts/r2_usage.py
 
       - name: Publish the squashed data branch
         if: steps.wallgate.outputs.skip != '1'

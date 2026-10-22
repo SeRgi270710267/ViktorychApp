@@ -1,13 +1,10 @@
 name: Internet Archive backup
 
 on:
-  schedule:
-    # After the 06:17 UTC data-branch publish. GitHub may skip a slot; Run workflow still works.
-    - cron: "47 7 * * *"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ia-backup
@@ -23,51 +20,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Back up stubs and public media
+      - name: Internet Archive uploads are off
         env:
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          IA_UPLOADS_ENABLED: "false"
           GITHUB_REPOSITORY: ${{ github.repository }}
           PYTHONUNBUFFERED: "1"
-          IA_PACE_SECONDS: "4"
-          IA_BACKOFF_SECONDS: "8"
         run: python3 scripts/ia_backup.py
-
-      - name: Publish the media manifest on the data branch
-        run: |
-          if [ ! -f archive/ia-manifest.json ]; then
-            echo "[ia-backup] no manifest to publish"
-            exit 0
-          fi
-          cp archive/ia-manifest.json /tmp/ia-manifest.json
-          cp archive/ia-state.json /tmp/ia-state.json
-          if ! git fetch -q --depth=1 origin data; then
-            echo "[ia-backup] data branch is not available yet; the manifest item on archive.org still has the copy"
-            exit 0
-          fi
-          git checkout -B ia-data-publish origin/data
-          mkdir -p archive
-          cp /tmp/ia-manifest.json archive/ia-manifest.json
-          cp /tmp/ia-state.json archive/ia-state.json
-          git add -f archive/ia-manifest.json archive/ia-state.json
-          if git diff --cached --quiet; then
-            echo "[ia-backup] manifest unchanged"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Archive media manifest"
-          if ! git push origin HEAD:data; then
-            git fetch -q --depth=1 origin data
-            git checkout -B ia-data-publish origin/data
-            mkdir -p archive
-            cp /tmp/ia-manifest.json archive/ia-manifest.json
-            cp /tmp/ia-state.json archive/ia-state.json
-            git add -f archive/ia-manifest.json archive/ia-state.json
-            if git diff --cached --quiet; then
-              echo "[ia-backup] manifest unchanged"
-              exit 0
-            fi
-            git commit -m "Archive media manifest"
-            git push origin HEAD:data
-          fi

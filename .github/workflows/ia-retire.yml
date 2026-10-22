@@ -2,16 +2,9 @@ name: Retire named Internet Archive items
 
 on:
   workflow_dispatch:
-  # One push, limited to the marker file, so this run can start without a
-  # dispatch token. The marker and this push trigger are removed after it.
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/ia-retire.once
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ia-retire
@@ -29,9 +22,11 @@ jobs:
           python-version: "3.12"
 
       - name: Copy named items onto anonymous items
+        if: false
         env:
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          IA_UPLOADS_ENABLED: "false"
           GITHUB_REPOSITORY: ${{ github.repository }}
           PYTHONUNBUFFERED: "1"
           IA_PACE_SECONDS: "2"
@@ -39,6 +34,7 @@ jobs:
         run: python3 scripts/ia_retire.py copy
 
       - name: Publish the manifest on the data branch
+        if: false
         run: |
           if [ ! -f archive/ia-manifest.json ]; then
             echo "[ia-retire] no manifest to publish"
@@ -86,13 +82,15 @@ jobs:
           fi
 
       - name: Return to this commit
-        if: always()
+        if: false
         run: git checkout --force "$GITHUB_SHA"
 
       - name: Delete named items after the copies check out
+        if: false
         env:
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}
           IA_SECRET_KEY: ${{ secrets.IA_SECRET_KEY }}
+          IA_UPLOADS_ENABLED: "false"
           GITHUB_REPOSITORY: ${{ github.repository }}
           PYTHONUNBUFFERED: "1"
           IA_PACE_SECONDS: "2"

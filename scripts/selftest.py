@@ -2734,6 +2734,7 @@ def ia_backup_checks() -> None:
 
     import ia_backup
 
+    os.environ["IA_UPLOADS_ENABLED"] = "true"
     source = (ROOT / "scripts" / "ia_backup.py").read_text(encoding="utf-8")
     workflow = (ROOT / ".github" / "workflows" / "ia-backup.yml").read_text(encoding="utf-8")
     sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
@@ -2741,7 +2742,7 @@ def ia_backup_checks() -> None:
     old_site = "rss-" + "feeds"
     check(old_site not in source and old_site not in workflow, "the new backup does not hard-code the old site path")
     check("token_hex" in source and "x-archive-meta-noindex" in source and "Authorization" in source and "LOW" in source, "backup items are random, unlisted, and use LOW auth")
-    check("group: ia-backup" in workflow and "workflow_dispatch" in workflow and 'cron: "47 7 * * *"' in workflow, "the backup workflow is scheduled, manual, and in its own group")
+    check("group: ia-backup" in workflow and "workflow_dispatch" in workflow and "schedule:" not in workflow and 'cron: "47 7 * * *"' not in workflow and 'IA_UPLOADS_ENABLED: "false"' in workflow, "the backup workflow is manual, unscheduled, and uploads are off")
     check("group: pages" not in workflow and "echo \"$IA_" not in workflow and "echo $IA_" not in workflow, "the backup workflow does not take the pages lock or print the keys")
     check("ia-manifest.json" in sync and "ia-state.json" in sync, "the daily data push keeps the media manifest")
     snap = (ROOT / "scripts" / "pull_snapshot.py").read_text(encoding="utf-8")
@@ -2770,6 +2771,33 @@ def ia_backup_checks() -> None:
     skipped_out = skipped.stdout + skipped.stderr
     check(skipped.returncode == 0 and "not set" in skipped.stdout and "Nothing was uploaded" in skipped.stdout, "missing backup keys skip the run")
     check("sentinel-secret-value" not in skipped_out, "the backup skip path does not print a secret")
+    check(ia_backup.uploads_enabled() is True, "the literal true is the only value that enables uploads")
+    os.environ["IA_UPLOADS_ENABLED"] = "false"
+    check(ia_backup.uploads_enabled() is False, "false does not enable uploads")
+    os.environ.pop("IA_UPLOADS_ENABLED", None)
+    check(ia_backup.uploads_enabled() is False, "uploads are off when the switch is unset")
+    blocked = os.environ.copy()
+    blocked.pop("IA_UPLOADS_ENABLED", None)
+    blocked["IA_ACCESS_KEY"] = "sentinel-access-value"
+    blocked["IA_SECRET_KEY"] = "sentinel-secret-value"
+    for script, args, needle in (
+        ("ia_backup.py", [], "Nothing was uploaded"),
+        ("ia_archive.py", [], "skipping the upload"),
+        ("ia_retire.py", ["copy"], "Nothing was copied"),
+        ("ia_retire.py", ["delete"], "Nothing was copied"),
+    ):
+        stopped = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / script), *args],
+            capture_output=True,
+            text=True,
+            env=blocked,
+            check=False,
+            cwd=ROOT,
+        )
+        stopped_out = stopped.stdout + stopped.stderr
+        check(stopped.returncode == 0 and needle in stopped.stdout, script + " exits before an upload when the keys exist and the switch is off")
+        check("sentinel-access-value" not in stopped_out and "sentinel-secret-value" not in stopped_out, script + " does not print the keys when uploads are off")
+    os.environ["IA_UPLOADS_ENABLED"] = "true"
 
     jpeg = b"\xff\xd8\xff\xd9"
     calls = []
@@ -3193,9 +3221,36 @@ def ia_backup_checks() -> None:
     retire_wf = (ROOT / ".github" / "workflows" / "ia-retire.yml").read_text(encoding="utf-8")
     snap = (ROOT / "scripts" / "pull_snapshot.py").read_text(encoding="utf-8")
     check("feeds-archive" not in archive_src and "Viktorych" not in archive_src and "creator" not in archive_src and "opensource" not in archive_src and "internetarchive" not in archive_src and "run_backup" in archive_src, "shard uploads use the anonymous backup items")
-    check("internetarchive" not in sync and "Restore the saved manifest" in sync, "the daily shard upload restores the manifest before it writes")
-    check("workflow_dispatch" in retire_wf and "schedule:" not in retire_wf and "cron:" not in retire_wf and 'echo "$IA_' not in retire_wf and "echo $IA_" not in retire_wf and "IA_ACCESS_KEY" in retire_wf and "IA_SECRET_KEY" in retire_wf and "ia_retire.py copy" in retire_wf and "ia_retire.py delete" in retire_wf and 'git checkout -f "$head"' in retire_wf, "the retire workflow is manual, uses the keys, and does not print them")
+    check("internetarchive" not in sync and "ia_archive.py" not in sync and "r2_usage.py" in sync and "Restore the saved manifest" in sync and 'echo "$CLOUDFLARE' not in sync and "echo $CLOUDFLARE" not in sync, "the daily job restores the manifest and checks R2 without calling archive.org")
+    check("workflow_dispatch" in retire_wf and "schedule:" not in retire_wf and "cron:" not in retire_wf and "push:" not in retire_wf and "ia-retire.once" not in retire_wf and 'echo "$IA_' not in retire_wf and "echo $IA_" not in retire_wf and "IA_ACCESS_KEY" in retire_wf and "IA_SECRET_KEY" in retire_wf and "ia_retire.py copy" in retire_wf and "ia_retire.py delete" in retire_wf and 'git checkout -f "$head"' in retire_wf and retire_wf.count("if: false") >= 4, "the retire workflow is manual, its write steps do not run, and it does not print the keys")
     check(retire_wf.index('git checkout --force "$GITHUB_SHA"') < retire_wf.index("ia_retire.py delete"), "delete runs from this commit after the data branch publish")
+    import r2_usage
+    check(r2_usage.kept_copy("video", 20 * 1024 * 1024) == "source", "a big video stays on the source URL")
+    check(r2_usage.kept_copy("photo", 80 * 1024) == "r2", "a small photo may stay on R2")
+    check(r2_usage.should_warn(8 * 1024 ** 3 - 1) is False and r2_usage.should_warn(8 * 1024 ** 3) is True, "R2 warns at 8 GB")
+    warned = r2_usage.warn_line(8 * 1024 ** 3)
+    check("[r2] warning:" in warned and "8 GB" in warned and "10 GB" in warned and r2_usage.warn_line(8 * 1024 ** 3 - 1) == "", "the warning names 8 GB and the 10 GB free tier")
+    samples = [
+        {"dimensions": {"bucketName": "a", "datetime": "2026-10-21T00:00:00Z"}, "max": {"payloadSize": 100, "metadataSize": 1, "objectCount": 2}},
+        {"dimensions": {"bucketName": "a", "datetime": "2026-10-22T00:00:00Z"}, "max": {"payloadSize": 50, "metadataSize": 1, "objectCount": 1}},
+        {"dimensions": {"bucketName": "b", "datetime": "2026-10-22T00:00:00Z"}, "max": {"payloadSize": 25, "metadataSize": 0, "objectCount": 3}},
+    ]
+    totals = r2_usage.latest_totals(samples)
+    check(totals["payload"] == 75 and totals["metadata"] == 1 and totals["objects"] == 4 and totals["buckets"] == 2, "R2 usage keeps the latest sample per bucket")
+    check("sentinel-token-value" not in r2_usage.scrub("bearer sentinel-token-value", ["sentinel-token-value"]), "R2 logs do not keep the API token")
+    os.environ.pop("IA_UPLOADS_ENABLED", None)
+    class Boom:
+        def open(self, *args, **kwargs):
+            raise AssertionError("network")
+    quiet = ia_backup.run_backup({"access": "a", "secret": "b", "opener": Boom(), "endpoint": "http://127.0.0.1"}, [], {}, sleep=lambda delay: None)
+    check(quiet["uploaded"] == [] and quiet["failures"] == 0 and "skipping the upload" in " ".join(quiet["notes"]), "a disabled backup does not upload")
+    held = []
+    check(ia_backup.upload_bytes("http://127.0.0.1", "x" + "ab" * 16, "a.jpg", b"hi", content_type="image/jpeg", access="k", secret="sentinel-secret-value", opener=Boom(), sleep=lambda delay: None, backoff=0, notes=held, secrets_for_log=["sentinel-secret-value"]) is False and "skipping the upload" in " ".join(held), "upload_bytes returns before any request when uploads are off")
+    check(ia_backup._delete_status("http://127.0.0.1", "item", "a.jpg", "k", "sentinel-secret-value", Boom()) == 0, "a disabled delete does not call the network")
+    patched, _detail = ia_backup._patch_metadata("item", {"title": "x"}, (), "k", "sentinel-secret-value", Boom().open, Boom(), "http://127.0.0.1")
+    check(patched is False, "a disabled metadata write does not call the network")
+    check(ia_retire._submit_delete_task("superintelapp-2026-10", "k", "sentinel-secret-value", Boom(), "http://127.0.0.1/tasks", lambda delay: None) == "refused", "a disabled delete task is refused before any request")
+    os.environ["IA_UPLOADS_ENABLED"] = "true"
     check("feeds-archive" not in app and "ARCHIVE_IA" not in app and "installIaManifest(manifestDoc" in app, "the page resolves archive shards from the manifest")
     check("feeds-archive" not in snap and "def shard_url(" in snap and '("ia",' not in snap, "snapshot reads archive shards from the manifest")
     anon = "x" + ("ab" * 16)
@@ -3349,6 +3404,7 @@ def ia_backup_checks() -> None:
     check(stuck_item not in refused_task["emptied"] and refused_task["tasks_refused"] == 1 and refused_task["remaining"][stuck_item] == refused_files, "a refused item delete leaves the files and continues")
     check(refused_tasks and refused_tasks[0]["identifier"] == stuck_item and "test-secret-value" not in refused_task_notes and "delete task refused" in refused_task_notes, "a refused item delete is recorded without the keys")
 
+    os.environ.pop("IA_UPLOADS_ENABLED", None)
     story_checks()
 
 
