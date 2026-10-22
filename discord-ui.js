@@ -588,9 +588,21 @@
     return '<div class="dmsg-reply"><span class="dmsg-reply-name">' + esc(name) + '</span><span class="dmsg-reply-text">' + quote(text) + "</span></div>";
   }
 
+  function faceMode(src) {
+    const root = typeof window === "undefined" ? null : window;
+    const faces = root && root.ViktorychFaces;
+    return faces && faces.picture ? faces.picture(src) : (src ? "photo" : "default");
+  }
+
+  function silhouetteHtml(cls) {
+    return '<span class="' + cls + ' silhouette" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"/></svg></span>';
+  }
+
   function avatarHtml(row) {
-    if (row.avatar) return '<img class="dmsg-ava" src="' + esc(row.avatar) + '" alt="" referrerpolicy="no-referrer">';
-    return '<span class="dmsg-ava initials" aria-hidden="true">' + esc((row.name || "?").slice(0, 1).toUpperCase()) + "</span>";
+    const mode = faceMode(row.avatar);
+    if (mode === "none") return '<span class="ava-none"></span>';
+    if (mode === "default" || !row.avatar) return silhouetteHtml("dmsg-ava ava");
+    return '<img class="dmsg-ava" src="' + esc(row.avatar) + '" alt="" referrerpolicy="no-referrer">';
   }
 
   function mediaHtml(row) {
@@ -644,8 +656,10 @@
     const byId = new Map();
     rows.forEach(function (row) { byId.set(row.id, row); });
     let prev = null;
+    let faceOff = false;
     return rows.map(function (row) {
       const fresh = !prev || prev.authorId !== row.authorId || row.replyId || (msgTime(row) - msgTime(prev) > 7 * 60 * 1000) || dayKey(prev) !== dayKey(row);
+      if (fresh) faceOff = faceMode(row.avatar) === "none";
       const showDay = !prev || dayKey(prev) !== dayKey(row);
       const day = showDay ? '<div class="dmsg-day"><span>' + esc(formatDay(row)) + "</span></div>" : "";
       const color = hexColor(row.color);
@@ -654,7 +668,7 @@
         : "";
       const gutter = fresh ? avatarHtml(row) : "";
       prev = row;
-      return day + '<article class="dmsg' + (fresh ? " group" : " cont") + '" data-mid="' + esc(row.id) + '"><div class="dmsg-gutter">' + gutter + "</div>" +
+      return day + '<article class="dmsg' + (fresh ? " group" : " cont") + (faceOff ? " no-face" : "") + '" data-mid="' + esc(row.id) + '"><div class="dmsg-gutter">' + gutter + "</div>" +
         '<div class="dmsg-body">' + head + replyHtml(row, byId) +
         '<div class="dmsg-bubble"><div class="dmsg-text">' + format(row.body, row.emojis) + (row.edited ? (" <span class=\"dmsg-edited\"" + ">" + tr("(edited)") + "<" + "/span>") : "") + "</div>" +
         mediaHtml(row) + embedHtml(row) + reactionHtml(row) +
@@ -1045,9 +1059,8 @@
     }
     const server = serverById(ch.serverId);
     const who = messagesFor(id)[0];
-    const face = who && who.avatar
-      ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>'
-      : '<span class="dmsgs-head-face initials" aria-hidden="true">' + esc((ch.name || "?").slice(0, 1).toUpperCase()) + "</span>";
+    const headMode = faceMode(who && who.avatar);
+    const face = headMode === "none" ? "" : (headMode === "photo" ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>' : silhouetteHtml("dmsgs-head-face"));
     const pinBtn = pinsBlocked(ch) ? "" : '<button type="button" class="dmsgs-iconbtn dmsgs-pins' + (state.pinsOpen === id ? " on" : "") + '" data-discord="pins" data-id="' + esc(id) + ("\" " + "aria-label=\"" + tr("Pinned messages") + "\"" + " aria-expanded=\"") + (state.pinsOpen === id ? "true" : "false") + '">' + iconSvg("pin") + "</button>";
     const place = (server && server.name) || ch.category || "Discord";
     return '<section class="dmsgs-conv">' +

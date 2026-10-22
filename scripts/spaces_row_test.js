@@ -290,7 +290,7 @@ assert.strictEqual(turnedOff.url, "");
 assert.strictEqual(src.includes('"/hls/stream.m3u8"'), src.includes('server + "/hls/stream.m3u8"'));
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "viktorych-a7-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "viktorych-a8-__SW_VERSION__"'));
 assert.ok(worker.includes("./spaces.js") && worker.includes("./spaces.css"));
 assert.ok(!worker.includes("superintelmusic.json"));
 assert.ok(worker.includes("isSpaceStatus"));

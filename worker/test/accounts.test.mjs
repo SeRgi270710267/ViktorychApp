@@ -490,6 +490,62 @@ test("profile photos go to R2 and a data URL already in D1 is moved", async () =
   assert.equal(await bindings.DATA.get(next.avatar), null);
 });
 
+test("a hidden avatar is not returned and an empty banner can take no space", async () => {
+  const created = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.170",
+    body: { displayName: "Face", handle: "face_f" }
+  });
+  assert.equal(created.status, 201);
+  assert.equal(created.body.account.avatar, "");
+  assert.equal(created.body.account.avatarFace, "default");
+  assert.equal(created.body.account.bannerFace, "default");
+  const token = created.body.token;
+  const saved = await call("/v1/profile", {
+    method: "PATCH",
+    ip: "203.0.113.171",
+    token,
+    body: { avatar: dataUrl(tinyWebp(), "image/webp"), bannerEmpty: "none", avatarEmpty: "none" }
+  });
+  assert.equal(saved.status, 200);
+  assert.match(saved.body.account.avatar, /\/v1\/media\/avatars\//);
+  assert.equal(saved.body.account.bannerFace, "none");
+  assert.equal(saved.body.account.avatarEmpty, "none");
+  const hidden = await call("/v1/profile", {
+    method: "PATCH",
+    ip: "203.0.113.172",
+    token,
+    body: { hideAvatar: "none" }
+  });
+  assert.equal(hidden.status, 200);
+  assert.match(hidden.body.account.avatar, /\/v1\/media\/avatars\//);
+  assert.equal(hidden.body.account.avatarFace, "none");
+  const other = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.173",
+    body: { displayName: "Other", handle: "other_o" }
+  });
+  const seen = await call("/v1/profile/face_f", { ip: "203.0.113.174", token: other.body.token });
+  assert.equal(seen.status, 200);
+  assert.equal(seen.body.account.avatar, "");
+  assert.equal(seen.body.account.avatarFace, "none");
+  assert.equal(seen.body.account.bannerFace, "none");
+  const key = new URL(hidden.body.account.avatar).pathname;
+  const blocked = await call(key, { ip: "203.0.113.175", token: other.body.token });
+  assert.equal(blocked.status, 404);
+  const mine = await call(key, { ip: "203.0.113.176", token });
+  assert.equal(mine.status, 200);
+  const cleared = await call("/v1/profile", {
+    method: "PATCH",
+    ip: "203.0.113.177",
+    token,
+    body: { avatar: "", hideAvatar: "" }
+  });
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.body.account.avatar, "");
+  assert.equal(cleared.body.account.avatarFace, "none");
+});
+
 test("sync history keeps the newest 300 and a clear", async () => {
   const created = await call("/v1/signup", {
     method: "POST",

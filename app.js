@@ -707,7 +707,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all" });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all" });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -723,6 +723,8 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.reposts = parsed.reposts || {};
       parsed.savedPosts = parsed.savedPosts || {};
       if (!parsed.appearance) parsed.appearance = "lightsout";
+      if (parsed.showPictures !== "default" && parsed.showPictures !== "none") parsed.showPictures = "show";
+      if (parsed.showBanners !== "default" && parsed.showBanners !== "none") parsed.showBanners = "show";
       if (parsed.notify !== true) parsed.notify = false;
       if (parsed.autoplay !== "wifi" && parsed.autoplay !== "never") parsed.autoplay = "all";
       parsed.mutedWords = Array.isArray(parsed.mutedWords) ? parsed.mutedWords : [];
@@ -1175,10 +1177,28 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return esc(t.slice(0, 1).toUpperCase() || "?");
   }
 
-  function avatar(src, name, cls) {
-    const letter = initials(name);
+  function faceSetting(name) {
+    const value = STATE.settings && STATE.settings[name];
+    return value === "default" || value === "none" ? value : "show";
+  }
+
+  function faceChoice(kind, src, accountFace) {
+    const viewer = faceSetting(kind === "banner" ? "showBanners" : "showPictures");
+    if (viewer === "none" || viewer === "default") return viewer;
+    if (accountFace === "none" || accountFace === "default") return accountFace;
+    return src ? "photo" : "default";
+  }
+
+  function silhouette(extra) {
+    return `<span class="ava silhouette${extra}" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"/></svg></span>`;
+  }
+
+  function avatar(src, name, cls, accountFace) {
     const extra = cls ? " " + cls : "";
-    if (!src) return `<span class="ava initials${extra}">${letter}</span>`;
+    const face = faceChoice("picture", src, accountFace);
+    if (face === "none") return `<span class="ava-none"></span>`;
+    if (face === "default") return silhouette(extra);
+    const letter = initials(name);
     return `<img class="ava${extra}" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
   }
 
@@ -6444,7 +6464,8 @@ const here = parseRoute();
     else if (tab === "media") list = list.filter((p) => (p.media || []).length);
     else list = list.filter((p) => p.kind !== "reply");
     const count = formatCount(total);
-    const banner = feed.banner ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : feed.bannerColor ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : `<div class="pbanner"></div>`;
+    const bannerFace = faceChoice("banner", feed.banner);
+    const banner = bannerFace === "none" ? "" : bannerFace === "photo" ? `<img class="pbanner" src="${esc(feed.banner)}" alt="">` : (feed.bannerColor && faceSetting("showBanners") === "show" ? `<div class="pbanner theme" style="background:${esc(feed.bannerColor)}"></div>` : `<div class="pbanner"></div>`);
     const meta = [
       feed.location ? `<span>${icon("loc")}${esc(feed.location)}</span>` : "",
       feed.website ? `<a href="${esc(feed.website)}" target="_blank" rel="noopener noreferrer">${icon("link")}${esc(String(feed.website).replace(/^https?:\/\//, ""))}</a>` : "",
@@ -8418,6 +8439,10 @@ const here = parseRoute();
     const appearance = (STATE.settings && STATE.settings.appearance) || "lightsout";
     const autoplay = (STATE.settings && STATE.settings.autoplay) || "all";
     const themeBtn = (id, label) => `<button class="outline${appearance === id ? " on" : ""}" type="button" data-act="theme" data-theme="${id}">${esc(label)}</button>`;
+    const faceBtn = (kind, mode, label) => {
+      const current = kind === "banners" ? faceSetting("showBanners") : faceSetting("showPictures");
+      return `<button class="outline${current === mode ? " on" : ""}" type="button" data-act="face-pref" data-kind="${kind}" data-mode="${mode}">${esc(label)}</button>`;
+    };
     const autoBtn = (id, label) => `<button class="outline${autoplay === id ? " on" : ""}" type="button" data-act="autoplay" data-mode="${id}">${esc(label)}</button>`;
     const notifyOn = !!(STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted");
     const lang = window.SI18n ? window.SI18n.getLang() : "en";
@@ -8449,6 +8474,18 @@ const here = parseRoute();
           ${themeBtn("default", tr("Default"))}
           ${themeBtn("dim", tr("Dim"))}
           ${themeBtn("lightsout", tr("Lights out"))}
+        </div>
+        <h2>${esc(tr("Profile pictures"))}</h2>
+        <div class="theme-row" role="group" aria-label="${esc(tr("Profile pictures"))}">
+          ${faceBtn("pictures", "show", tr("Show"))}
+          ${faceBtn("pictures", "default", tr("Default"))}
+          ${faceBtn("pictures", "none", tr("None"))}
+        </div>
+        <h2>${esc(tr("Banners"))}</h2>
+        <div class="theme-row" role="group" aria-label="${esc(tr("Banners"))}">
+          ${faceBtn("banners", "show", tr("Show"))}
+          ${faceBtn("banners", "default", tr("Default"))}
+          ${faceBtn("banners", "none", tr("None"))}
         </div>
         ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
         <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">${esc(tr("Collapse sidebar"))}</button></div>
@@ -10447,6 +10484,14 @@ if (STATE.histClear) {
       render();
       return;
     }
+    if (act === "face-pref") {
+      const mode = el.dataset.mode === "default" || el.dataset.mode === "none" ? el.dataset.mode : "show";
+      if (el.dataset.kind === "banners") STATE.settings.showBanners = mode;
+      else STATE.settings.showPictures = mode;
+      saveSettings();
+      render();
+      return;
+    }
     if (act === "nav-collapse") {
       if (window.FeedsSplit && window.FeedsSplit.sidebar) {
         const saved = window.FeedsSplit.read("sidebar");
@@ -10920,7 +10965,7 @@ if (STATE.histClear) {
       return;
     }
     if (act === "export") {
-const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? window.SI18n.getLang() : "en", follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
+const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? window.SI18n.getLang() : "en", follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", showPictures: faceSetting("showPictures"), showBanners: faceSetting("showBanners"), notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "viktorychapp-settings.json";
@@ -11300,6 +11345,8 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
         if (Array.isArray(data.seenFeeds)) STATE.settings.seenFeeds = data.seenFeeds;
         if (Array.isArray(STATE.settings.seenDefaults)) STATE.settings.seenFeeds = STATE.settings.seenDefaults.slice();
         if (data.appearance) STATE.settings.appearance = data.appearance;
+        if (data.showPictures === "show" || data.showPictures === "default" || data.showPictures === "none") STATE.settings.showPictures = data.showPictures;
+        if (data.showBanners === "show" || data.showBanners === "default" || data.showBanners === "none") STATE.settings.showBanners = data.showBanners;
         if (data.autoplay === "all" || data.autoplay === "wifi" || data.autoplay === "never") STATE.settings.autoplay = data.autoplay;
         if (Array.isArray(data.mutedWords)) STATE.settings.mutedWords = data.mutedWords;
         if (Array.isArray(data.mutedAccounts)) STATE.settings.mutedAccounts = data.mutedAccounts;
@@ -11538,7 +11585,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!box || !profile) return;
     const handle = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
     const id = liveFollowId(profile);
-    box.innerHTML = `<div class="hcard"><div class="hbanner" style="background:${profile.banner ? "url(" + encodeURI(profile.banner) + ") center/cover" : "var(--banner)"}"></div><div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava")}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
+    const bannerFace = faceChoice("banner", profile.banner, profile.bannerFace);
+    const banner = bannerFace === "none" ? "" : (bannerFace === "photo" ? `<div class="hbanner" style="background:url(${encodeURI(profile.banner)}) center/cover"></div>` : `<div class="hbanner"></div>`);
+    box.innerHTML = `<div class="hcard">${banner}<div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava", profile.avatarFace)}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
     const left = Math.min(rect.left, window.innerWidth - 320);
     box.style.left = Math.max(8, left) + "px";
     box.style.top = (rect.bottom + 8) + "px";
@@ -13293,5 +13342,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.ViktorychAccounts.readHistory = readHistory;
     window.ViktorychAccounts.writeHistory = writeHistory;
   }
+  window.ViktorychFaces = {
+    picture: function (src, accountFace) { return faceChoice("picture", src, accountFace); },
+    banner: function (src, accountFace) { return faceChoice("banner", src, accountFace); }
+  };
   boot();
 })();

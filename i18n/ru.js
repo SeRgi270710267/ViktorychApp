@@ -741,5 +741,11 @@ SI18n.addPack("ru", {
   "Open on TikTok": "Открыть в TikTok",
   "Not live right now": "Сейчас не в эфире",
   "Last live {time}": "Последний эфир {time}",
-  "{count} watching": "{count} смотрят"
+  "{count} watching": "{count} смотрят",
+  "Hide my profile picture": "Скрыть мою фотографию профиля",
+  "Other people see this instead of your photo.": "Другие люди видят это вместо вашей фотографии.",
+  "Show my picture": "Показывать мою фотографию",
+  "Profile pictures": "Фотографии профиля",
+  "Banners": "Обложки",
+  "Remove photo": "Удалить фото"
 });

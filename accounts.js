@@ -278,20 +278,57 @@
     if (kind === "banner") return form.bannerTouched ? (form.banner || "") : (account.banner || "");
     return form.avatarTouched ? (form.avatar || "") : (account.avatar || "");
   }
+  var PERSON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"/></svg>';
+  function emptyMode(kind) {
+    return (kind === "banner" ? form.bannerEmpty : form.avatarEmpty) === "none" ? "none" : "default";
+  }
+  function faceOf(kind, src, accountFace) {
+    var faces = window.ViktorychFaces;
+    var pick = faces && (kind === "banner" ? faces.banner : faces.picture);
+    if (pick) return pick(src, accountFace);
+    if (accountFace === "none" || accountFace === "default") return accountFace;
+    return src ? "photo" : "default";
+  }
+  function publicAvatar(src, accountFace, cls) {
+    var mode = faceOf("picture", src, accountFace);
+    if (mode === "none") return '<span class="ava-none"></span>';
+    var classes = "ava" + (cls ? " " + cls : "") + (mode === "default" ? " silhouette" : "");
+    if (mode === "photo") return photoHtml(src, classes);
+    return '<span class="' + classes + '" aria-hidden="true">' + PERSON + "</span>";
+  }
+  function publicBanner(src, accountFace) {
+    var mode = faceOf("banner", src, accountFace);
+    if (mode === "none") return "";
+    if (mode === "photo") return photoHtml(src, "pbanner");
+    return '<div class="pbanner"></div>';
+  }
+  function mediaMenu(kind) {
+    if (form.mediaMenu !== kind) return "";
+    var mode = emptyMode(kind);
+    var photo = currentPhoto(kind);
+    function item(label, attrs, on) {
+      return '<button type="button" role="menuitemradio" aria-checked="' + (on ? "true" : "false") + '" ' + attrs + ">" + esc(label) + "</button>";
+    }
+    return '<div class="acct-pop for-' + kind + '" role="menu">' +
+      item(tr("Add photo"), 'data-acct="pick-' + kind + '"', false) +
+      item(tr("Default"), 'data-acct="face" data-kind="' + kind + '" data-mode="default"', !photo && mode === "default") +
+      item(tr("None"), 'data-acct="face" data-kind="' + kind + '" data-mode="none"', !photo && mode === "none") +
+      "</div>";
+  }
   function editMedia() {
-    var session = readSession();
-    var account = session && session.account || {};
     var banner = currentPhoto("banner");
     var avatar = currentPhoto("avatar");
-    var bannerImg = banner ? photoHtml(banner, "") : "";
-    var remove = banner ? '<button class="acct-cam acct-banner-x" type="button" data-acct="banner-clear" aria-label="' + esc(tr("Remove banner")) + '">' + closeIcon() + "</button>" : "";
-    var face = avatar
-      ? photoHtml(avatar, "")
-      : '<span class="acct-initials">' + esc(initials(form.displayName || account.displayName || account.handle)) + "</span>";
-    return '<div class="acct-hero"><div class="acct-banner">' + bannerImg +
-      '<button class="acct-cam" type="button" data-acct="pick-banner" aria-label="' + esc(tr("Add photo")) + '">' + cameraIcon() + "</button>" + remove +
-      '</div><div class="acct-ava">' + face +
-      '<button class="acct-cam" type="button" data-acct="pick-avatar" aria-label="' + esc(tr("Add photo")) + '">' + cameraIcon() + "</button></div></div>" +
+    var bannerNone = !banner && emptyMode("banner") === "none";
+    var avatarNone = !avatar && emptyMode("avatar") === "none";
+    var hero = "acct-hero" + (bannerNone ? " banner-none" : "") + (avatarNone ? " avatar-none" : "");
+    var removeBanner = banner ? '<button class="acct-cam acct-banner-x" type="button" data-acct="banner-clear" aria-label="' + esc(tr("Remove banner")) + '">' + closeIcon() + "</button>" : "";
+    var removeAvatar = avatar ? '<button class="acct-cam acct-ava-x" type="button" data-acct="avatar-clear" aria-label="' + esc(tr("Remove photo")) + '">' + closeIcon() + "</button>" : "";
+    var face = avatar ? photoHtml(avatar, "") : (avatarNone ? "" : '<span class="acct-silhouette">' + PERSON + "</span>");
+    return '<div class="' + hero + '"><div class="acct-banner">' + (banner ? photoHtml(banner, "") : "") +
+      '<button class="acct-cam" type="button" data-acct="media-menu" data-kind="banner" aria-label="' + esc(tr("Add photo")) + '" aria-expanded="' + (form.mediaMenu === "banner" ? "true" : "false") + '">' + cameraIcon() + "</button>" + removeBanner +
+      '</div><div class="acct-ava' + (avatarNone ? " is-none" : "") + '">' + face +
+      '<button class="acct-cam" type="button" data-acct="media-menu" data-kind="avatar" aria-label="' + esc(tr("Add photo")) + '" aria-expanded="' + (form.mediaMenu === "avatar" ? "true" : "false") + '">' + cameraIcon() + "</button>" + removeAvatar +
+      "</div>" + mediaMenu("banner") + mediaMenu("avatar") + "</div>" +
       '<input class="acct-hidden" name="avatar" type="file" accept="image/jpeg,image/png,image/webp" tabindex="-1">' +
       '<input class="acct-hidden" name="banner" type="file" accept="image/jpeg,image/png,image/webp" tabindex="-1">';
   }
@@ -350,8 +387,11 @@
       form.website = account.website || "";
       form.avatar = account.avatar || "";
       form.banner = account.banner || "";
+      form.avatarEmpty = account.avatarEmpty === "none" ? "none" : "default";
+      form.bannerEmpty = account.bannerEmpty === "none" ? "none" : "default";
       form.avatarTouched = false;
       form.bannerTouched = false;
+      form.mediaMenu = "";
     }
     paint();
   }
@@ -433,6 +473,8 @@
       translateTo: settings.translateTo || "en",
       tabViews: settings.tabViews || {},
       followingSort: settings.followingSort === "popular" ? "popular" : "recent",
+      showPictures: settings.showPictures === "default" || settings.showPictures === "none" ? settings.showPictures : "show",
+      showBanners: settings.showBanners === "default" || settings.showBanners === "none" ? settings.showBanners : "show",
       forYouReposts: settings.forYouReposts !== false,
       forYouReplies: settings.forYouReplies !== false,
       historyPause: settings.historyPause || { videos: false, articles: false },
@@ -506,6 +548,11 @@
     (Array.isArray(local) ? local : []).forEach(take);
     return Object.keys(map).map(function (key) { return map[key]; }).sort(function (a, b) { return b.at - a.at; }).slice(0, 300);
   }
+  function facePick(local, remote) {
+    if (local === "show" || local === "default" || local === "none") return local;
+    if (remote === "show" || remote === "default" || remote === "none") return remote;
+    return "show";
+  }
   function mergePayload(local, remote) {
     remote = remote || {};
     var follows = uniq([].concat(local.follows || [], remote.follows || []));
@@ -542,6 +589,8 @@
       notify: local.notify != null ? !!local.notify : !!remote.notify,
       translateTo: local.translateTo || remote.translateTo || "en",
       followingSort: local.followingSort === "popular" || remote.followingSort === "popular" ? (local.followingSort || remote.followingSort) : "recent",
+      showPictures: facePick(local.showPictures, remote.showPictures),
+      showBanners: facePick(local.showBanners, remote.showBanners),
       forYouReposts: local.forYouReposts !== false,
       forYouReplies: local.forYouReplies !== false,
       historyPause: pause,
@@ -887,6 +936,8 @@
       location: String(form.location || "").trim(),
       website: String(form.website || "").trim()
     };
+    body.avatarEmpty = form.avatarEmpty === "none" ? "none" : "default";
+    body.bannerEmpty = form.bannerEmpty === "none" ? "none" : "default";
     if (form.avatarTouched) body.avatar = form.avatar || "";
     if (form.bannerTouched) body.banner = form.banner || "";
     api("/v1/profile", { method: "PATCH", token: session.token, body: body }).then(function (res) {
@@ -925,10 +976,8 @@
   function accountPage(account) {
     var session = readSession();
     var mine = session && session.account && session.account.publicId === account.publicId;
-    var photo = account.avatar
-      ? photoHtml(account.avatar, "pava")
-      : '<span class="ava pava initials">' + esc(initials(account.displayName)) + "</span>";
-    var banner = account.banner ? photoHtml(account.banner, "pbanner") : '<div class="pbanner"></div>';
+    var photo = publicAvatar(account.avatar, account.avatarFace, "pava");
+    var banner = publicBanner(account.banner, account.bannerFace);
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
     return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: "0" })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div><div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + '<div class="counts"><div><b>0</b> <span>' + esc(tr("Following count")) + "</span></div><div><b>0</b> <span>" + esc(tr("Followers")) + "</span></div></div></div>" + '<div class="tabs ptabs" role="tablist"><a class="tab on" role="tab" aria-selected="true"><span>' + esc(tr("Profile")) + "</span></a></div>" + '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>";
   }
@@ -947,25 +996,25 @@
     var session = readSession();
     if (!session || !session.account) return "";
     var account = session.account;
-    var photo = account.avatar
-      ? photoHtml(account.avatar, "ava")
-      : '<span class="ava initials">' + esc(initials(account.displayName)) + "</span>";
+    var photo = publicAvatar(account.avatar, account.avatarFace, "");
     return photo + '<span class="account-meta"><b>' + esc(account.displayName || "") + "</b><span>@" + esc(account.handle || "") + "</span></span>";
   }
   function drawerHead() {
     var session = readSession();
     if (!session || !session.account) return "";
     var account = session.account;
-    var photo = account.avatar
-      ? photoHtml(account.avatar, "ava")
-      : '<span class="ava initials">' + esc(initials(account.displayName)) + "</span>";
+    var photo = publicAvatar(account.avatar, account.avatarFace, "");
     return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(account.displayName || "") + '</b><div class="phandle">@' + esc(account.handle || "") + "</div></div></a>";
   }
   function settingsHtml() {
     var session = readSession();
     if (!session || !session.account) return "";
     var account = session.account;
-    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>";
+    var hidden = account.hideAvatar === "none" || account.hideAvatar === "default" ? account.hideAvatar : "";
+    function hideBtn(mode, label) {
+      return '<button class="outline' + (hidden === mode ? " on" : "") + '" type="button" data-acct="hide-avatar" data-mode="' + mode + '">' + esc(label) + "</button>";
+    }
+    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>";
   }
   function onClick(event) {
     var acct = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;
@@ -986,18 +1035,63 @@
     else if (act === "abandon") abandon();
     else if (act === "edit") openAuth("edit");
     else if (act === "save-profile") saveProfile();
+    else if (act === "media-menu") {
+      var kind = acct.dataset.kind === "banner" ? "banner" : "avatar";
+      form.mediaMenu = form.mediaMenu === kind ? "" : kind;
+      paint();
+    }
     else if (act === "pick-avatar" || act === "pick-banner") {
+      form.mediaMenu = "";
       var input = document.querySelector('#account-layer input[name="' + (act === "pick-avatar" ? "avatar" : "banner") + '"]');
       if (input) input.click();
+      else paint();
     }
-    else if (act === "banner-clear") { form.banner = ""; form.bannerTouched = true; paint(); }
+    else if (act === "face") {
+      var faceKind = acct.dataset.kind === "banner" ? "banner" : "avatar";
+      var faceMode = acct.dataset.mode === "none" ? "none" : "default";
+      if (faceKind === "banner") {
+        form.banner = "";
+        form.bannerTouched = true;
+        form.bannerEmpty = faceMode;
+      } else {
+        form.avatar = "";
+        form.avatarTouched = true;
+        form.avatarEmpty = faceMode;
+      }
+      form.mediaMenu = "";
+      paint();
+    }
+    else if (act === "banner-clear") { form.banner = ""; form.bannerTouched = true; form.bannerEmpty = "default"; form.mediaMenu = ""; paint(); }
+    else if (act === "avatar-clear") { form.avatar = ""; form.avatarTouched = true; form.avatarEmpty = "default"; form.mediaMenu = ""; paint(); }
+    else if (act === "hide-avatar") hideAvatar(acct.dataset.mode || "");
     else if (act === "crop-apply") applyCrop();
     else if (act === "logout") logout(false);
     else if (act === "logout-all") logout(true);
     else if (act === "legal") { legalTitle = acct.dataset.title || tr("About"); view = "legal"; paint(); }
   }
   var cropDrag = null;
+  function hideAvatar(mode) {
+    var session = readSession();
+    if (!session) return;
+    var next = mode === "none" || mode === "default" ? mode : "";
+    var current = session.account && (session.account.hideAvatar === "none" || session.account.hideAvatar === "default") ? session.account.hideAvatar : "";
+    if (next === current) return;
+    api("/v1/profile", { method: "PATCH", token: session.token, body: { hideAvatar: next } }).then(function (res) {
+      if (!res || res.status !== 200 || !res.account) return;
+      session.account = res.account;
+      writeSession(session);
+      remember(res.account);
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
   document.addEventListener("pointerdown", function (event) {
+    if (view === "edit" && form.mediaMenu) {
+      var inside = event.target && event.target.closest && event.target.closest(".acct-pop, [data-acct='media-menu']");
+      if (!inside) {
+        form.mediaMenu = "";
+        paint();
+      }
+    }
     var stage = event.target && event.target.closest ? event.target.closest(".acct-crop-stage") : null;
     if (!stage || view !== "crop") return;
     cropDrag = { x: event.clientX, y: event.clientY, ox: form.cropX || 0, oy: form.cropY || 0, id: event.pointerId };

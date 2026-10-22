@@ -708,6 +708,19 @@ html.is-split-drag * {
   flex: none;
 }
 .ava { overflow: hidden; }
+.ava.silhouette { display: flex; align-items: center; justify-content: center; color: var(--muted); }
+.ava.silhouette svg { width: 68%; height: 68%; display: block; }
+.ava-none { display: none; }
+a:not(:has(> :not(.ava-none))):has(> .ava-none),
+.ava-col:has(.ava-none),
+.sp-ava:has(.ava-none),
+.sp-stack:has(.ava-none),
+.dmsgs-head-face:has(.ava-none) { display: none; }
+.post:has(.post-row > a:has(> .ava-none)) .repost-line,
+.post:has(.ava-col:has(.ava-none)) .repost-line { margin-left: 0; }
+.pava-row:not(:has(.ava)):not(:has(.pava)) { margin-top: 0; min-height: 0; align-items: center; }
+.profile-bar + .pinfo .pava-row,
+.hcard:not(:has(.hbanner)) .pava-row { margin-top: 0; min-height: 0; }
 .initials {
   display: inline-flex;
   align-items: center;

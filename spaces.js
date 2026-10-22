@@ -591,8 +591,12 @@
   }
 
   function faceHtml(src, name, cls) {
-    if (src) return '<img class="' + cls + '" src="' + esc(src) + '" alt="" referrerpolicy="no-referrer">';
-    return '<span class="' + cls + ' sp-initial">' + esc(String(name || "?").trim().slice(0, 1).toUpperCase() || "?") + "</span>";
+    const root = typeof window === "undefined" ? null : window;
+    const faces = root && root.ViktorychFaces;
+    const mode = faces && faces.picture ? faces.picture(src) : (src ? "photo" : "default");
+    if (mode === "none") return '<span class="ava-none"></span>';
+    if (mode === "default" || !src) return '<span class="' + cls + ' ava silhouette" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"/></svg></span>';
+    return '<img class="' + cls + '" src="' + esc(src) + '" alt="" referrerpolicy="no-referrer">';
   }
 
   function stack(item) {

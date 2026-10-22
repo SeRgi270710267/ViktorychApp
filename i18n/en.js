@@ -741,5 +741,11 @@ SI18n.addPack("en", {
   "Open on TikTok": "Open on TikTok",
   "Not live right now": "Not live right now",
   "Last live {time}": "Last live {time}",
-  "{count} watching": "{count} watching"
+  "{count} watching": "{count} watching",
+  "Hide my profile picture": "Hide my profile picture",
+  "Other people see this instead of your photo.": "Other people see this instead of your photo.",
+  "Show my picture": "Show my picture",
+  "Profile pictures": "Profile pictures",
+  "Banners": "Banners",
+  "Remove photo": "Remove photo"
 });

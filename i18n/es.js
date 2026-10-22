@@ -741,5 +741,11 @@ SI18n.addPack("es", {
   "Open on TikTok": "Abrir en TikTok",
   "Not live right now": "No está en vivo ahora",
   "Last live {time}": "Último en vivo {time}",
-  "{count} watching": "{count} viendo"
+  "{count} watching": "{count} viendo",
+  "Hide my profile picture": "Ocultar mi foto de perfil",
+  "Other people see this instead of your photo.": "Las demás personas ven esto en lugar de tu foto.",
+  "Show my picture": "Mostrar mi foto",
+  "Profile pictures": "Fotos de perfil",
+  "Banners": "Portadas",
+  "Remove photo": "Quitar foto"
 });

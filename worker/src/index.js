@@ -11,6 +11,7 @@ const BANNER_BYTES = 150 * 1024;
 const AVATAR_TEXT = 90000;
 const BANNER_TEXT = 220000;
 const MEDIA_KEY = /^media\/(avatars|banners)\/(\d{12})\/([a-f0-9]{64})\.(webp|jpg|png)$/;
+const ACCOUNT_COLS = "public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, hide_avatar, avatar_empty, banner_empty";
 let schemaReady = null;
 let mediaReady = null;
 
@@ -129,7 +130,7 @@ async function slowHash(number, saltBytes, rounds) {
 function ensureSchema(env) {
   if (!schemaReady) {
     schemaReady = env.DB.batch([
-      env.DB.prepare("CREATE TABLE IF NOT EXISTS accounts (public_id TEXT PRIMARY KEY, handle TEXT NOT NULL, skeleton TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT '', banner TEXT NOT NULL DEFAULT '', bio TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', owner INTEGER NOT NULL DEFAULT 0, number_lookup TEXT NOT NULL UNIQUE, number_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at INTEGER NOT NULL)"),
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS accounts (public_id TEXT PRIMARY KEY, handle TEXT NOT NULL, skeleton TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT '', banner TEXT NOT NULL DEFAULT '', bio TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', hide_avatar TEXT NOT NULL DEFAULT '', avatar_empty TEXT NOT NULL DEFAULT 'default', banner_empty TEXT NOT NULL DEFAULT 'default', owner INTEGER NOT NULL DEFAULT 0, number_lookup TEXT NOT NULL UNIQUE, number_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS accounts_one_owner ON accounts(owner) WHERE owner = 1"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS sessions_account ON sessions(public_id)"),
@@ -146,7 +147,10 @@ function ensureSchema(env) {
 async function addProfileColumns(env) {
   const statements = [
     "ALTER TABLE accounts ADD COLUMN location TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE accounts ADD COLUMN website TEXT NOT NULL DEFAULT ''"
+    "ALTER TABLE accounts ADD COLUMN website TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE accounts ADD COLUMN hide_avatar TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE accounts ADD COLUMN avatar_empty TEXT NOT NULL DEFAULT 'default'",
+    "ALTER TABLE accounts ADD COLUMN banner_empty TEXT NOT NULL DEFAULT 'default'"
   ];
   for (let i = 0; i < statements.length; i++) {
     try {
@@ -319,13 +323,38 @@ function mediaPublicUrl(request, key) {
   return new URL("/v1/" + text, request.url).toString();
 }
 
-function publicAccount(row, request) {
+function cleanGap(value, fallback) {
+  if (value === "none" || value === "default") return value;
+  return fallback === "none" ? "none" : "default";
+}
+
+function cleanHide(value, fallback) {
+  if (value === "none" || value === "default" || value === "") return value;
+  return fallback === "none" || fallback === "default" ? fallback : "";
+}
+
+function cleanFaceChoice(value, fallback) {
+  if (value === "show" || value === "default" || value === "none") return value;
+  return fallback === "default" || fallback === "none" ? fallback : "show";
+}
+
+function publicAccount(row, request, own) {
+  const hidden = cleanHide(row.hide_avatar);
+  const avatarUrl = mediaPublicUrl(request, row.avatar);
+  const bannerUrl = mediaPublicUrl(request, row.banner);
+  const avatarFace = hidden || (avatarUrl ? "photo" : cleanGap(row.avatar_empty));
+  const bannerFace = bannerUrl ? "photo" : cleanGap(row.banner_empty);
   return {
     publicId: row.public_id,
     handle: row.handle,
     displayName: row.display_name,
-    avatar: mediaPublicUrl(request, row.avatar),
-    banner: mediaPublicUrl(request, row.banner),
+    avatar: hidden && !own ? "" : avatarUrl,
+    avatarFace,
+    avatarEmpty: cleanGap(row.avatar_empty),
+    banner: bannerUrl,
+    bannerFace,
+    bannerEmpty: cleanGap(row.banner_empty),
+    hideAvatar: hidden,
     bio: row.bio || "",
     location: row.location || "",
     website: row.website || "",
@@ -334,9 +363,9 @@ function publicAccount(row, request) {
   };
 }
 
-async function presentAccount(env, request, row) {
+async function presentAccount(env, request, row, own) {
   const next = await ensureMediaKeys(env, row);
-  return publicAccount(next, request);
+  return publicAccount(next, request, !!own);
 }
 
 async function readJson(request, max) {
@@ -360,7 +389,7 @@ async function sessionAccount(env, request) {
   if (!token || token.length > 200) return null;
   const hash = await sha256Hex(token);
   const now = Date.now();
-  const row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
+  const row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
   return row || null;
 }
 
@@ -418,9 +447,9 @@ async function createAccount(env, request, fields) {
     if (/UNIQUE/i.test(message)) return { error: fields.owner ? "handle_taken" : "handle_taken" };
     throw err;
   }
-  const row = await env.DB.prepare("SELECT public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at FROM accounts WHERE public_id = ?").bind(publicId).first();
+  const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicId).first();
   const token = await mintSession(env, publicId);
-  return { token, accountNumber: number, account: await presentAccount(env, request, row) };
+  return { token, accountNumber: number, account: await presentAccount(env, request, row, true) };
 }
 
 async function handleSignup(request, env) {
@@ -483,18 +512,18 @@ async function handleLogin(request, env) {
     return json(401, { error: "invalid_credentials" });
   }
   const lookup = await hmacHex(env.ACCOUNT_PEPPER, digits);
-  const row = await env.DB.prepare("SELECT public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, number_hash, salt FROM accounts WHERE number_lookup = ?").bind(lookup).first();
+  const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + ", number_hash, salt FROM accounts WHERE number_lookup = ?").bind(lookup).first();
   const salt = row ? b64ToBytes(row.salt) : dummySalt;
   const hash = await slowHash(digits, salt, rounds);
   if (!row || !timingEqual(hash, row.number_hash)) return json(401, { error: "invalid_credentials" });
   const token = await mintSession(env, row.public_id);
-  return json(200, { token, account: await presentAccount(env, request, row) });
+  return json(200, { token, account: await presentAccount(env, request, row, true) });
 }
 
 async function handleSession(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
-  return json(200, { account: await presentAccount(env, request, row) });
+  return json(200, { account: await presentAccount(env, request, row, true) });
 }
 
 async function handleLogout(request, env, all) {
@@ -512,9 +541,11 @@ async function handleProfileGet(request, env, handle) {
   const checked = inspectHandle(handle);
   const skel = checked.skeleton || "";
   if (!skel) return json(404, { error: "not_found" });
-  const row = await env.DB.prepare("SELECT public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at FROM accounts WHERE skeleton = ?").bind(skel).first();
+  const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE skeleton = ?").bind(skel).first();
   if (!row) return json(404, { error: "not_found" });
-  return json(200, { account: await presentAccount(env, request, row) });
+  const viewer = await sessionAccount(env, request);
+  const own = !!(viewer && viewer.public_id === row.public_id);
+  return json(200, { account: await presentAccount(env, request, row, own) });
 }
 
 async function handleProfilePatch(request, env) {
@@ -555,13 +586,16 @@ async function handleProfilePatch(request, env) {
     banner = saved.key;
     row.banner = banner;
   }
+  const hideAvatar = body.hideAvatar == null ? cleanHide(row.hide_avatar) : cleanHide(body.hideAvatar, row.hide_avatar);
+  const avatarEmpty = body.avatarEmpty == null ? cleanGap(row.avatar_empty) : cleanGap(body.avatarEmpty, row.avatar_empty);
+  const bannerEmpty = body.bannerEmpty == null ? cleanGap(row.banner_empty) : cleanGap(body.bannerEmpty, row.banner_empty);
   if (skeleton) {
-    await env.DB.prepare("UPDATE accounts SET handle = ?, skeleton = ?, display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ? WHERE public_id = ?").bind(handle, skeleton, displayName, bio, location, website, avatar, banner, row.public_id).run();
+    await env.DB.prepare("UPDATE accounts SET handle = ?, skeleton = ?, display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ? WHERE public_id = ?").bind(handle, skeleton, displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, row.public_id).run();
   } else {
-    await env.DB.prepare("UPDATE accounts SET display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ? WHERE public_id = ?").bind(displayName, bio, location, website, avatar, banner, row.public_id).run();
+    await env.DB.prepare("UPDATE accounts SET display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ? WHERE public_id = ?").bind(displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, row.public_id).run();
   }
-  const next = await env.DB.prepare("SELECT public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at FROM accounts WHERE public_id = ?").bind(row.public_id).first();
-  return json(200, { account: await presentAccount(env, request, next) });
+  const next = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(row.public_id).first();
+  return json(200, { account: await presentAccount(env, request, next, true) });
 }
 
 async function handleSyncGet(request, env) {
@@ -595,6 +629,8 @@ async function handleSyncPut(request, env) {
   };
   const rows = Array.isArray(payload.history) ? payload.history : (previous && previous.history);
   payload.history = cleanHistoryList(rows, payload.historyCut);
+  payload.showPictures = cleanFaceChoice(payload.showPictures, previous && previous.showPictures);
+  payload.showBanners = cleanFaceChoice(payload.showBanners, previous && previous.showBanners);
   const text = JSON.stringify(payload);
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });
   const base = Number(body.baseUpdatedAt || 0);
@@ -1029,8 +1065,9 @@ async function handleAccountMedia(request, env, kind, publicId, file) {
   if (!viewer) return json(401, { error: "unauthorized" });
   const key = "media/" + kind + "/" + publicId + "/" + file;
   if (!mediaOwned(key, publicId, kind)) return json(404, { error: "not_found" });
-  const owner = await env.DB.prepare("SELECT avatar, banner FROM accounts WHERE public_id = ?").bind(publicId).first();
+  const owner = await env.DB.prepare("SELECT avatar, banner, hide_avatar FROM accounts WHERE public_id = ?").bind(publicId).first();
   if (!owner || (owner.avatar !== key && owner.banner !== key)) return json(404, { error: "not_found" });
+  if (kind === "avatars" && cleanHide(owner.hide_avatar) && viewer.public_id !== publicId) return json(404, { error: "not_found" });
   if (!env.DATA) return json(503, { error: "not_configured" });
   const object = await env.DATA.get(key);
   if (!object) return json(404, { error: "not_found" });

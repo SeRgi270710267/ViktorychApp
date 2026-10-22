@@ -383,9 +383,8 @@
     const list = filterTab(all, tab);
     const posted = all.filter((post) => countsAsOwn(post, person)).length;
     const count = (h.formatCount ? h.formatCount(posted) : String(posted)) + " posts";
-    const banner = person.banner
-      ? `<img class="pbanner" src="${esc(person.banner)}" alt="">`
-      : `<div class="pbanner"></div>`;
+    const bannerFace = root.ViktorychFaces && root.ViktorychFaces.banner ? root.ViktorychFaces.banner(person.banner, person.bannerFace) : (person.banner ? "photo" : "default");
+    const banner = bannerFace === "none" ? "" : (bannerFace === "photo" ? `<img class="pbanner" src="${esc(person.banner)}" alt="">` : `<div class="pbanner"></div>`);
     const base = baseFeed(person);
     const follow = h.followButtonClean ? h.followButtonClean(base.id, true) : "";
     const who = preferred(person) || base;

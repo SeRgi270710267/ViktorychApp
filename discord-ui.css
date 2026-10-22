@@ -469,6 +469,8 @@ a[href="#/messages"] .dmsgs-tab-badge {
 }
 .dmsg.group { margin-top: 14px; align-items: flex-start; }
 .dmsg-gutter { width: 40px; flex: none; }
+.dmsg.no-face .dmsg-gutter,
+.dmsg-gutter:has(> .ava-none) { width: 0; }
 .dmsg-bubble {
   display: inline-block;
   max-width: min(520px, 100%);
@@ -494,6 +496,8 @@ a[href="#/messages"] .dmsgs-tab-badge {
   font-weight: 700;
   overflow: hidden;
 }
+.dmsgs-head-face.silhouette { color: var(--muted); }
+.dmsgs-head-face.silhouette svg { width: 68%; height: 68%; display: block; }
 .dmsg-ava,
 .dmsg-ava img {
   width: 40px;
