@@ -21,13 +21,13 @@ The manifest is `backup/telegram-manifest.json` in the private R2 bucket (prefer
 7. Optional Actions secret `TG_BACKUP_KEY`: a passphrase of at least 16 characters. It encrypts account data with `openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt`. Those copies are not played in the app and are not deleted from R2. Without the key, account data is not uploaded.
 8. Optional Actions variables: `TG_MAX_MB` (default `19`, cap `1950`) is the single-document limit. `TG_DELETE_FROM_R2` defaults to on. Set it to `false` to keep every R2 object. `TG_WORKER_URL` overrides the discovered `viktorych-accounts` workers.dev host used to verify a file before deleting it.
 
-The Worker has its own copy of the bot token. It is not the Actions secret. From `worker/`:
+The Worker has its own copy of the bot token. It is not the Actions secret. Pushing `.github/telegram-worker-secret` to `main` runs this in `worker/`, with the Actions secret on stdin and `CLOUDFLARE_API_TOKEN` plus `CLOUDFLARE_ACCOUNT_ID` for Wrangler:
 
 ```sh
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 ```
 
-The same command exists in the Cloudflare dashboard for the `viktorych-accounts` Worker. Until that secret is set, `GET /tg/…` returns 503 and the app uses the next source. The token is never sent to the browser.
+The value is never printed. Until that Worker secret is set, a signed-in `GET /tg/…` returns 503 and the app uses the next source. The token is never sent to the browser.
 
 Pushing `.github/telegram-probe` to `main` runs a check that prints `true` or `false` for each of the four secret names, calls `getMe` and `getChat`, and uploads one tiny text file. It does not print secret values.
 
