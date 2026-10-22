@@ -25,9 +25,6 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_BASE = "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev"
 EPOCH = 1792627200
 SEGMENT_S = 10
-# The player reads this from loop/current.json. "tg" plays Telegram first.
-# Any other value plays R2 first. Changing this string is the whole switch.
-LOOP_PRIMARY = "r2"
 # Heard order of the Radio masters. File ids are build inputs, not playback URLs.
 MASTERS = (
     ("america.wav", "1szR2F6ttCOiopBdmrsd78JYAxzkGKBWW"),
@@ -82,10 +79,6 @@ def raise_target(text: str) -> str:
     return body
 
 
-def loop_primary(value: str = LOOP_PRIMARY) -> str:
-    return "tg" if str(value or "").strip().lower() == "tg" else "r2"
-
-
 def build_manifest(version: str, duration: float, updated: str) -> dict:
     base = PUBLIC_BASE + "/loop/" + version
     return {
@@ -101,7 +94,6 @@ def build_manifest(version: str, duration: float, updated: str) -> dict:
         "epoch": EPOCH,
         "segment_duration": SEGMENT_S,
         "version": version,
-        "primary": loop_primary(),
         "updated": updated,
     }
 
@@ -333,7 +325,6 @@ def self_check() -> int:
     assert doc["codec"] == "flac" and doc["sample_rate"] == 44100 and doc["bits"] == 16
     assert doc["url"].endswith("/loop/v1/index.m3u8")
     assert doc["fallback"].endswith("/loop/v1/aac/index.m3u8")
-    assert doc["primary"] == "r2" and loop_primary("tg") == "tg" and loop_primary("nope") == "r2"
     assert doc["epoch"] == EPOCH and health_index_ok(doc["duration"], doc["segment_duration"], 221)
     print("radio loop self-check ok")
     return 0

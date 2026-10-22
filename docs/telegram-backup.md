@@ -21,13 +21,13 @@ The manifest is `backup/telegram-manifest.json` in the private R2 bucket (prefer
 7. Optional Actions secret `TG_BACKUP_KEY`: a passphrase of at least 16 characters. It encrypts account data with `openssl enc -aes-256-cbc -pbkdf2 -iter 100000 -salt`. Those copies are not played in the app and are not deleted from R2. Without the key, account data is not uploaded.
 8. Optional Actions variables: `TG_MAX_MB` (default `19`, cap `1950`) is the single-document limit. `TG_DELETE_FROM_R2` defaults to on. Set it to `false` to keep every R2 object. `TG_WORKER_URL` overrides the discovered `viktorych-accounts` workers.dev host used to verify a file before deleting it.
 
-The Worker has its own copy of the bot token. It is not the Actions secret. From `worker/`:
+The Worker has its own copy of the bot token. It is not the Actions secret. Pushing `.github/telegram-worker-secret` to `main` runs this in `worker/`, with the Actions secret on stdin and `CLOUDFLARE_API_TOKEN` plus `CLOUDFLARE_ACCOUNT_ID` for Wrangler:
 
 ```sh
 npx wrangler secret put TELEGRAM_BOT_TOKEN
 ```
 
-The same command exists in the Cloudflare dashboard for the `viktorych-accounts` Worker. Until that secret is set, `GET /tg/…` returns 503 and the app uses the next source. The token is never sent to the browser.
+The value is never printed. Until that Worker secret is set, a signed-in `GET /tg/…` returns 503 and the app uses the next source. The token is never sent to the browser.
 
 Pushing `.github/telegram-probe` to `main` runs a check that prints `true` or `false` for each of the four secret names, calls `getMe` and `getChat`, and uploads one tiny text file. It does not print secret values.
 
@@ -41,7 +41,7 @@ The radio loop stays on R2 and is also copied to Telegram. Every version under `
 
 ViktorychMusic songs under `music/` are copied as they already are: the playlist, the init file, and the encrypted lossless pieces. Cover images under `covers/` and `music/` are copied too. They are not re-encoded and they are never deleted from R2. The app still plays R2 first and uses `/tg/…` only after that request fails. The AES key is not uploaded. A playlist's `#EXT-X-KEY` URI, a `key.bin` file, a `music/` file ending in `.bin`, and any object whose name contains `token` or `secret` stay on R2. Playback from Telegram still asks R2 for that key.
 
-`loop/current.json` includes `"primary": "r2"` or `"primary": "tg"`. A missing field, or any value other than `tg`, means `r2`. The player reads it each time it refreshes that file, about every three minutes. `r2` plays the R2 playlist. `tg` plays `/tg/loop/<version>/index.m3u8` first. If the playlist or a segment fails — a network error, or an HTTP 4xx or 5xx after one retry — the player continues the same version from the other source at the same position. A failure of that source switches back. The next loop version starts on `primary` again. `scripts/radio_loop.py` writes `"primary": "r2"` (`LOOP_PRIMARY`). Changing that one string to `"tg"` and publishing `loop/current.json` is the whole switch. No other player change is required. The default stays `r2`.
+`loop/current.json` includes `"primary": "r2"` or `"primary": "tg"`. A missing field, or any value other than `tg`, means `r2`. The player reads it each time it refreshes that file, about every three minutes. `r2` plays the R2 playlist. `tg` plays `/tg/loop/<version>/index.m3u8` first. If the playlist or a segment fails — a network error, or an HTTP 4xx or 5xx after one retry — the player continues the same version from the other source at the same position. A failure of that source switches back. The next loop version starts on `primary` again. `LOOP_PRIMARY` in `scripts/radio_loop.py` is the switch. The live `loop/current.json` has no `primary` field yet, so the player stays on `r2`. Setting `LOOP_PRIMARY` to `"tg"` and publishing writes `"primary": "tg"`. No other player change is required. The default stays `r2`.
 
 While `primary` is `r2`, a listener uses `/tg` only after falling back. That is about 6 segments a minute (the loop segments are 10 seconds): 360 Worker requests an hour, 8,640 a day. The Workers free tier of 100,000 requests a day covers about 277 listener-hours of Telegram playback, or about 11 listeners if they stayed on Telegram all day. Playback from R2 does not use this budget. While `primary` is `tg`, every listener uses that budget, and an R2 fallback uses none. `workers.dev` still runs the Worker on a cache hit, so the estimate counts every segment. `/tg/loop/` allows 800 requests an hour per IP, enough for one listener and a second tab. Other `/tg` routes stay signed in.
 
