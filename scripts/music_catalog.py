@@ -265,7 +265,7 @@ def _selftest() -> None:
         "songs": [{
             "id": "tone",
             "title": "Tone",
-            "artist": "SIntelMusic",
+            "artist": "ViktorychMusic",
             "album": "",
             "cover": "",
             "source": "https://archive.org/download/example/tone.mp3",
@@ -284,7 +284,7 @@ def _selftest() -> None:
         "songs": [{
             "id": "america-dont-sit-still",
             "title": "America Don't Sit Still",
-            "artist": "SuperintelMusic",
+            "artist": "ViktorychMusic",
             "album": "America Don't Sit Still",
             "cover": "https://cdn.example/cover.png",
             "source": "",
@@ -345,11 +345,11 @@ def main() -> int:
     subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)
     subprocess.run(["git", "add", "data/music.json"], check=True)
     commit = subprocess.run(["git", "diff", "--cached", "--quiet"])
-    message = "Updated the SIntelMusic catalog (" + str(len(catalog["songs"])) + " songs)."
+    message = "Updated the ViktorychMusic catalog (" + str(len(catalog["songs"])) + " songs)."
     if commit.returncode == 0:
         message += " No file change."
     else:
-        subprocess.run(["git", "commit", "-m", "Update the SIntelMusic catalog"], check=True)
+        subprocess.run(["git", "commit", "-m", "Update the ViktorychMusic catalog"], check=True)
         subprocess.run(["git", "push", "origin", "HEAD:main"], check=True)
         subprocess.run(["gh", "workflow", "run", "sync.yml", "--repo", repo], check=False, env=os.environ)
         message += " A sync is queued."

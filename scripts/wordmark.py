@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw the SIntelApp wordmark from Inter outlines.
+"""Draw wordmarks from Inter outlines. The shipped marks come from brand_assets.py.
 
 SI is Inter Black and a little larger. ntelApp is Inter Regular.
 The spelling is S-I-n-t-e-l-A-p-p. The files are vectors, not a scaled photo.
@@ -111,7 +111,7 @@ def compose(fill: str) -> tuple[str, str]:
         max(heavy_box[2], light_box[2]),
         max(heavy_box[3], light_box[3]),
     )
-    full = fit(black, heavy, light, box, fill, "SIntelApp")
+    full = fit(black, heavy, light, box, fill, "ViktorychApp")
     si = fit_si(black, heavy, fill)
     return full, si
 
@@ -216,7 +216,7 @@ def favicon_svg(si: str) -> str:
     y = (size - draw_h) / 2
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
-        "<!-- SIntelApp -->"
+        "<!-- ViktorychApp -->"
         '<rect width="32" height="32" rx="7" fill="#000"/>'
         f'<g transform="translate({x:.2f} {y:.2f}) scale({scale:.6f})">'
         f'<path fill="#fff" d="{path_of(si)}"/></g></svg>'
@@ -387,7 +387,7 @@ def icon_svg(size: int, kind: str, si, sub) -> str:
         bg = f'<rect width="{size}" height="{size}" rx="{radius}" fill="#fff"/>'
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
-        f"<!-- SIntelApp -->{bg}{body}</svg>"
+        f"<!-- ViktorychApp -->{bg}{body}</svg>"
     )
 
 
@@ -400,7 +400,7 @@ def favicon_document(si) -> str:
     body = centered(group, target, draw_h, size)
     return (
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
-        "<!-- SIntelApp -->"
+        "<!-- ViktorychApp -->"
         '<rect width="32" height="32" rx="6" fill="#fff"/>'
         f"{body}</svg>"
     )
@@ -489,6 +489,12 @@ def main() -> None:
         f'<g transform="translate(20 20) scale({80 / view_of(si)[1]:.4f})"><path fill="#fff" d="{path_of(si)}"/></g></svg>',
         240, 120,
     ))
+
+
+def main() -> None:
+    """Draw the Viktorych marks. The previous SIntel lockup is not shipped."""
+    from brand_assets import generate
+    generate()
 
 
 if __name__ == "__main__":

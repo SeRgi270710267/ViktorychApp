@@ -13,14 +13,11 @@
   }
   function productName(kind) {
     var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
-    if (api && api.productName) return api.productName(kind);
-    if (kind === "musicShort") return "ViktrychMusic";
-    if (kind === "music") return "ViktorychMusic";
-    if (kind === "pwa") return "ViktrychApp";
-    return "ViktorychApp";
+    return (api && api.productName) ? api.productName(kind) : "";
   }
 
-  var KEY = "superintelapp-settings-v1";
+  var KEY = "viktorychapp-settings-v1";
+  var LEGACY = "superintelapp-settings-v1";
   var TV = {
     on: false,
     forced: "",
@@ -39,11 +36,10 @@
   function loadSettings() {
     try {
       var raw = localStorage.getItem(KEY);
-      if (!raw) {
-        raw = localStorage.getItem("rss-" + "feeds-settings-v1");
-        if (raw) {
-          try { localStorage.setItem(KEY, raw); } catch (err) {}
-        }
+      if (!raw) raw = localStorage.getItem(LEGACY);
+      if (!raw) raw = localStorage.getItem("rss-" + "feeds-settings-v1");
+      if (raw) {
+        try { localStorage.setItem(KEY, raw); } catch (err) {}
       }
       if (!raw) return {};
       var parsed = JSON.parse(raw);

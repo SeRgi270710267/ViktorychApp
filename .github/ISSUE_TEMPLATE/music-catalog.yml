@@ -1,5 +1,5 @@
 name: Music catalog
-description: Publish the SIntelMusic library. Only an issue opened by the repo owner is applied.
+description: Publish the ViktorychMusic library. Only an issue opened by the repo owner is applied.
 title: "Music catalog"
 labels: []
 body:
@@ -7,7 +7,7 @@ body:
     id: catalog
     attributes:
       label: Catalog
-      description: JSON for SIntelMusic. Songs need a direct https audio or YouTube link. Files uploaded on a device stay on that device.
+      description: JSON for ViktorychMusic. Songs need a direct https audio or YouTube link. Files uploaded on a device stay on that device.
       placeholder: |
         {
           "songs": [],

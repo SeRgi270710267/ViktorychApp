@@ -32,7 +32,7 @@ async function main() {
       accept: "application/vnd.github+json",
       "content-type": "application/json",
       "x-github-api-version": "2022-11-28",
-      "user-agent": "superintel-discord-live"
+      "user-agent": "viktorych-discord-live"
     },
     body: JSON.stringify({
       artifact_id: artifactId,

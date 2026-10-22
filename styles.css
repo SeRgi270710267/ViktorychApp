@@ -195,7 +195,8 @@ img { max-width: 100%; }
   padding: 0 12px;
   color: #fff;
 }
-.logo .logo-full { display: block; height: 28px; width: auto; }
+.logo .logo-full { display: block; height: 28px; width: auto; max-width: 100%; }
+.logo .logo-short { display: none; }
 .logo .logo-si { display: none; }
 html[data-theme="default"] .logo,
 html[data-theme="default"] .m-logo { color: #000; }
@@ -257,7 +258,8 @@ html[data-nav="icons"] .nav {
 }
 html[data-nav="icons"] .nav-scroll { align-items: center; }
 html[data-nav="icons"] .logo { width: 50px; height: 50px; margin: 2px 0; padding: 0; justify-content: center; }
-html[data-nav="icons"] .logo .logo-full { display: none; }
+html[data-nav="icons"] .logo .logo-full,
+html[data-nav="icons"] .logo .logo-short { display: none; }
 html[data-nav="icons"] .logo .logo-si { display: block; height: 26px; width: auto; }
 html[data-nav="icons"] .nav-label,
 html[data-nav="icons"] .account-meta,
@@ -1802,7 +1804,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   .nav { width: 88px; flex-basis: 88px; padding: 0 4px; align-items: center; }
   .nav-scroll { align-items: center; }
   .logo { width: 50px; height: 50px; margin: 2px 0; padding: 0; justify-content: center; }
-  .logo .logo-full { display: none; }
+  .logo .logo-full, .logo .logo-short { display: none; }
   .logo .logo-si { display: block; height: 26px; width: auto; }
   .nav-label, .account-meta, .post-label, .account-pill .dots { display: none; }
   .nav-item { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; }
@@ -1818,6 +1820,10 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 @media (min-width: 1000px) and (max-width: 1279px) {
   .side { display: block; width: 320px; flex: 0 0 320px; padding-left: 16px; }
   .center { width: auto; flex: 1 1 auto; max-width: 600px; }
+}
+@media (max-width: 359px) {
+  .m-logo .logo-full { display: none; }
+  .m-logo .logo-short { display: block; height: 22px; width: auto; }
 }
 @media (max-width: 499px) {
   .nav, .side { display: none; }
@@ -1859,7 +1865,8 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
     color: #fff;
     text-decoration: none;
   }
-  .m-logo svg { display: block; height: 22px; width: auto; }
+  .m-logo .logo-short { display: none; }
+  .m-logo svg { display: block; height: 22px; width: auto; max-width: 70vw; }
   .m-ava { width: 32px; height: 32px; padding: 0; }
   .m-ava .ava, .m-ava .initials { width: 32px; height: 32px; font-size: 14px; }
   .bottom-nav {

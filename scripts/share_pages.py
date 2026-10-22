@@ -26,13 +26,15 @@ from site_paths import pages_base
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_BASE = pages_base()
+
+
 def product_name(kind="app"):
     text = (ROOT / "i18n" / "en.js").read_text(encoding="utf-8")
     pack = json.loads(text[text.index("{"):text.rindex("}") + 1])
-    short = pack.get("brand.short") or "Viktrych"
-    name = pack.get("brand.name") or "Viktorych"
-    app = pack.get("brand.app") or "App"
-    music = pack.get("brand.music") or "Music"
+    short = pack.get("brand.short") or ""
+    name = pack.get("brand.name") or ""
+    app = pack.get("brand.app") or ""
+    music = pack.get("brand.music") or ""
     if kind == "musicShort":
         return short + music
     if kind == "music":
@@ -72,9 +74,10 @@ FONT = {
     "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
     "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
     "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
-    "C": ("01110", "10001", "10000", "10000", "10000", "10001", "01110"),
+    "C": ("01111", "10000", "10000", "10000", "10000", "10000", "01111"),
     "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
     "K": ("10001", "10010", "10100", "11000", "10100", "10010", "10001"),
+    "M": ("10001", "11011", "10101", "10101", "10001", "10001", "10001"),
     "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
     "V": ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
     "Y": ("10001", "10001", "01010", "00100", "00100", "00100", "00100"),

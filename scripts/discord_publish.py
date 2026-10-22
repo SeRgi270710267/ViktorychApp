@@ -51,7 +51,7 @@ SITE_FILES = (
     "feeds.config.json",
 )
 COPY_DIRS = ("icons", "splash", "screenshots", "i18n")
-UA = "superintel-preview/1.0"
+UA = "viktorych-preview/1.0"
 
 
 def _token_clean(root: Path, token: str) -> None:

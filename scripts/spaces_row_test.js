@@ -189,7 +189,7 @@ const feed = config.feeds.find((item) => item.id === "telegram:redacted_handle")
 assert.ok(feed, "telegram host feed");
 assert.deepStrictEqual([...feed.profile.name].map((ch) => ch.codePointAt(0)), [0x53, 0x435, 0x420, 0x67, 0x418, 0x33, 0x37, 0x37, 0x35, 0x39, 0x39, 0x36, 0x38, 0x33, 0x34]);
 const space = config.spaces.find((item) => item.id === "superintelmusic");
-assert.strictEqual(space.title, "SuperintelMusic");
+assert.strictEqual(space.title, "ViktorychMusic");
 assert.strictEqual(space.host.followId, "telegram:redacted_handle");
 assert.strictEqual(space.source.type, "hls");
 assert.strictEqual(space.source.statusUrl, "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/status.json");
@@ -198,7 +198,7 @@ assert.deepStrictEqual(space.source.allow, ["pub-bf9b5e3ebb2b421aa49e7af484f3c22
 assert.ok(!space.source.url);
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "superintel14-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "viktorych-__SW_VERSION__"'));
 assert.ok(worker.includes("./spaces.js") && worker.includes("./spaces.css"));
 assert.ok(!worker.includes("superintelmusic.json"));
 assert.ok(worker.includes("isSpaceStatus"));

@@ -10,27 +10,27 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="application-name" content="SIntelApp">
-  <meta name="apple-mobile-web-app-title" content="SIntelApp">
+  <meta name="application-name" content="ViktorychApp">
+  <meta name="apple-mobile-web-app-title" content="ViktrychApp">
   <meta name="msapplication-TileColor" content="#ffffff">
-  <meta name="msapplication-TileImage" content="icons/icon-512.png?v=6">
+  <meta name="msapplication-TileImage" content="icons/icon-512.png?v=7">
   <meta name="referrer" content="no-referrer">
   <meta name="description" content="An X-style home for posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
   <meta property="og:type" content="website">
-  <meta property="og:title" content="SuperintelApp">
+  <meta property="og:title" content="ViktorychApp">
   <meta property="og:description" content="Posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
-  <meta property="og:url" content="__SITE_BASE__">
-  <meta property="og:site_name" content="SuperintelApp">
-  <meta property="og:image" content="__SITE_BASE__icons/icon-512.png?v=6">
+  <meta property="og:url" content="">
+  <meta property="og:site_name" content="ViktorychApp">
+  <meta property="og:image" content="icons/icon-512.png?v=7">
   <meta property="og:image:width" content="512">
   <meta property="og:image:height" content="512">
-  <meta property="og:image:alt" content="SuperintelApp">
+  <meta property="og:image:alt" content="ViktorychApp">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="SuperintelApp">
+  <meta name="twitter:title" content="ViktorychApp">
   <meta name="twitter:description" content="Posts from X, Threads, Instagram, YouTube, VK, Discord, Telegram, and RSS.">
-  <meta name="twitter:image" content="__SITE_BASE__icons/icon-512.png?v=6">
-  <link rel="canonical" href="__SITE_BASE__">
-  <title>Home / SuperintelApp</title>
+  <meta name="twitter:image" content="icons/icon-512.png?v=7">
+  <link rel="canonical" href="">
+  <title>Home / ViktorychApp</title>
   <script>
     (function () {
       var key = "superintelapp-lang";
@@ -58,21 +58,22 @@
       path = path.replace(/\/(?:s|u)\/[^/]+$/, "/");
       if (path.slice(-1) !== "/") path += "/";
       var base = location.origin + path;
-      var nodes = document.querySelectorAll("meta[content], link[href]");
-      for (var i = 0; i < nodes.length; i++) {
-        var el = nodes[i];
-        ["content", "href"].forEach(function (attr) {
-          var value = el.getAttribute(attr);
-          if (!value || value.indexOf("__SITE_BASE__") < 0) return;
-          el.setAttribute(attr, value.split("__SITE_BASE__").join(base));
-        });
+      var canon = document.querySelector('link[rel="canonical"]');
+      if (canon && !canon.getAttribute("href")) canon.setAttribute("href", base);
+      var ogUrl = document.querySelector('meta[property="og:url"]');
+      if (ogUrl && !ogUrl.getAttribute("content")) ogUrl.setAttribute("content", base);
+      var images = document.querySelectorAll('meta[property="og:image"], meta[name="twitter:image"]');
+      for (var i = 0; i < images.length; i++) {
+        var value = images[i].getAttribute("content") || "";
+        if (!value || /^https?:/i.test(value)) continue;
+        images[i].setAttribute("content", base + value.replace(/^\.\//, ""));
       }
     })();
   </script>
-  <link rel="manifest" href="manifest.webmanifest?v=6">
-  <link rel="icon" href="favicon.ico?v=6" sizes="16x16 32x32 48x48 256x256">
-  <link rel="icon" href="favicon.svg?v=6" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=6">
+  <link rel="manifest" href="manifest.webmanifest?v=7">
+  <link rel="icon" href="favicon.ico?v=7" sizes="16x16 32x32 48x48 256x256">
+  <link rel="icon" href="favicon.svg?v=7" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=7">
   <link rel="apple-touch-startup-image" media="screen and (device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/iphone-se.png">
   <link rel="apple-touch-startup-image" media="screen and (device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" href="splash/iphone-8.png">
   <link rel="apple-touch-startup-image" media="screen and (device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" href="splash/iphone-8-plus.png">
@@ -92,8 +93,12 @@
     (function () {
       try {
         var narrow = window.matchMedia && window.matchMedia("(max-width: 1279px)").matches;
-        var raw = localStorage.getItem("superintelapp-splits-v1");
+        var raw = localStorage.getItem("viktorychapp-splits-v1");
+        if (!raw) raw = localStorage.getItem("superintelapp-splits-v1");
         if (!raw) raw = localStorage.getItem("rss-" + "feeds-splits-v1");
+        if (raw) {
+          try { localStorage.setItem("viktorychapp-splits-v1", raw); } catch (err) {}
+        }
         var n = 275;
         if (raw) {
           var map = JSON.parse(raw);
@@ -130,14 +135,12 @@
   <script>
     (function () {
       try {
-        var key = "superintelapp-settings-v1";
+        var key = "viktorychapp-settings-v1";
         var raw = localStorage.getItem(key);
-        if (!raw) {
-          var previous = localStorage.getItem("rss-" + "feeds-settings-v1");
-          if (previous) {
-            raw = previous;
-            try { localStorage.setItem(key, previous); } catch (err) {}
-          }
+        if (!raw) raw = localStorage.getItem("superintelapp-settings-v1");
+        if (!raw) raw = localStorage.getItem("rss-" + "feeds-settings-v1");
+        if (raw) {
+          try { localStorage.setItem(key, raw); } catch (err) {}
         }
         var mode = raw ? (JSON.parse(raw).appearance || "lightsout") : "lightsout";
         if (mode === "auto") mode = matchMedia("(prefers-color-scheme: light)").matches ? "default" : "lightsout";
@@ -169,6 +172,7 @@
   <script src="i18n/en.js" defer></script>
   <script src="i18n/ru.js" defer></script>
   <script src="i18n/es.js" defer></script>
+  <script src="marks.js" defer></script>
   <script src="translate.js" defer></script>
   <script src="people.js" defer></script>
   <script src="tv.js" defer></script>

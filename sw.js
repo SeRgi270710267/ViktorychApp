@@ -1,5 +1,6 @@
-/* SuperintelApp service worker. Cache names are superintel14- plus the deploy SHA. */
-const VERSION = "superintel14-__SW_VERSION__";
+/* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
+   Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
+const VERSION = "viktorych-__SW_VERSION__";
 importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
@@ -55,6 +56,7 @@ const SHELL_FILES = [
   "./spaces.css",
   "./stories.js",
   "./stories.css",
+  "./marks.js",
   "./music.js",
   "./music.css",
   "./hls-1.7.3.min.js",
@@ -65,7 +67,10 @@ const SHELL_FILES = [
   "./icons/icon-512.png",
   "./icons/icon-maskable-512.png",
   "./icons/icon-monochrome-512.png",
-  "./icons/apple-touch-icon.png"
+  "./icons/apple-touch-icon.png",
+  "./icons/music-192.png",
+  "./icons/music-512.png",
+  "./icons/music-maskable-512.png"
 ];
 
 self.addEventListener("install", (event) => {
@@ -116,7 +121,7 @@ async function takeOverClients() {
 
 function isData(url) {
   if (/\/archive\/[^/]+\.json$/.test(url.pathname)) return true;
-  // data/music.json is the SIntelMusic catalog
+  // data/music.json is the ViktorychMusic catalog
   if (url.origin === self.location.origin && /\/data\/music\.json$/.test(url.pathname)) return true;
   if (url.origin === self.location.origin && /\/discord\/(?:index|state|messages\/\d{1,22}|pins\/\d{1,22})\.json$/.test(url.pathname)) return true;
   return url.origin === self.location.origin && /\/(?:feeds|people|suggestions|stories)\.json$/.test(url.pathname);
@@ -148,7 +153,7 @@ function isSpaceAsset(url) {
   return spaceHost(url.hostname);
 }
 
-// SIntelMusic catalog audio (HLS playlist, key, init, segments, cover) is not
+// ViktorychMusic catalog audio (HLS playlist, key, init, segments, cover) is not
 // handled here. The page streams it directly and, only after Download, stores
 // an offline copy in sintel-music-offline. That cache is not this worker's.
 function isCatalogMedia(url) {

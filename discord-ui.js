@@ -12,23 +12,20 @@
   }
   function productName(kind) {
     var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
-    if (api && api.productName) return api.productName(kind);
-    if (kind === "musicShort") return "ViktrychMusic";
-    if (kind === "music") return "ViktorychMusic";
-    if (kind === "pwa") return "ViktrychApp";
-    return "ViktorychApp";
+    return (api && api.productName) ? api.productName(kind) : "";
   }
 
   const TOPIC = "superintelmusic-discord-th-7f3a91c2";
-  const SEEN_KEY = "superintelapp-discord-seen-v1";
-  const PREFS_KEY = "superintelapp-discord-prefs-v1";
-  const SCROLL_KEY = "superintelapp-discord-scroll-v1";
+  const SEEN_KEY = "viktorychapp-discord-seen-v1";
+  const PREFS_KEY = "viktorychapp-discord-prefs-v1";
+  const SCROLL_KEY = "viktorychapp-discord-scroll-v1";
 
   function readStore(store, name) {
     try {
       const current = store.getItem(name);
       if (current != null) return current;
-      const previous = store.getItem(String(name).replace("superintelapp-", "rss-" + "feeds-"));
+      const legacy = store.getItem(String(name).replace("viktorychapp-", "superintelapp-"));
+      const previous = legacy != null ? legacy : store.getItem(String(name).replace("viktorychapp-", "rss-" + "feeds-"));
       if (previous != null) {
         try { store.setItem(name, previous); } catch (err) { /* private mode can refuse */ }
         return previous;

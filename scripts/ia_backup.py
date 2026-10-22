@@ -108,10 +108,10 @@ def scrub(text: str, secrets) -> str:
 
 
 def pages_origin() -> str:
-    repo = (os.environ.get("GITHUB_REPOSITORY") or "owner-account/SuperintelApp").strip()
+    repo = (os.environ.get("GITHUB_REPOSITORY") or "").strip()
     owner, _, name = repo.partition("/")
-    if not owner or not name:
-        owner, name = "owner-account", "SuperintelApp"
+    if not owner or not name or "/" in name:
+        return ""
     return f"https://{owner.lower()}.github.io/{name}/"
 
 

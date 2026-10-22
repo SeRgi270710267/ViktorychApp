@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Install icons and splash screens.
 
-The shipped mark is the SIntelApp wordmark from scripts/wordmark.py.
+The shipped mark is the Viktorych V from scripts/brand_assets.py.
 This file no longer draws a logo of its own.
 """
 
@@ -17,7 +17,7 @@ WHITE = (255, 255, 255, 255)
 BLACK = (0, 0, 0, 255)
 
 # 5x7 glyphs for the splash wordmark. The home-screen icons stay the feed glyph.
-SITE_WORD = "SUPERINTELAPP"
+SITE_WORD = "VIKTORYCHAPP"
 FONT = {
     "A": ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
     "E": ["11110", "10000", "11100", "10000", "10000", "10000", "11110"],
@@ -29,6 +29,13 @@ FONT = {
     "S": ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
     "T": ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
     "U": ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "C": ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+    "H": ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+    "K": ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+    "M": ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+    "O": ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+    "V": ["10001", "10001", "10001", "10001", "10001", "01010", "00100"],
+    "Y": ["10001", "10001", "01010", "00100", "00100", "00100", "00100"],
 }
 
 
@@ -174,8 +181,8 @@ def draw_monochrome(size: int) -> bytearray:
 
 
 def main() -> None:
-    from wordmark import main as draw_wordmark
-    draw_wordmark()
+    from brand_assets import generate
+    generate()
 
 
 if __name__ == "__main__":

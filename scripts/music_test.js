@@ -1,4 +1,4 @@
-/* SIntelMusic library rules. No document, no playback. */
+/* ViktorychMusic library rules. No document, no playback. */
 const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
@@ -6,7 +6,9 @@ const vm = require("vm");
 const context = { console, URL };
 context.globalThis = context;
 vm.createContext(context);
-vm.runInContext(fs.readFileSync("music.js", "utf8"), context);
+["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "music.js"].forEach(function (file) {
+  vm.runInContext(fs.readFileSync(file, "utf8"), context);
+});
 const L = context.MusicLogic;
 assert.ok(L, "music.js exports MusicLogic without a document");
 assert.strictEqual(typeof context.SIntelMusic.install, "function");
@@ -14,23 +16,22 @@ assert.strictEqual(typeof context.SIntelMusic.install, "function");
 const src = fs.readFileSync("music.js", "utf8");
 const css = fs.readFileSync("music.css", "utf8");
 const data = fs.readFileSync("data/music.json", "utf8");
-const logo = fs.readFileSync("logo/sintelmusic.svg", "utf8");
-const si = fs.readFileSync("logo/si.svg", "utf8");
-const siPath = si.slice(si.indexOf('d="') + 3, si.indexOf('"', si.indexOf('d="') + 3));
-assert.ok(src.includes(siPath.slice(0, 40)), "the SI mark matches the sidebar logo");
-assert.ok(src.includes("M 2510.2 991V 1661H 2330.2"), "the light run starts where SIntelApp starts");
-assert.ok(src.includes("11430.20"), "the wordmark keeps the SI cap height");
-assert.ok(src.includes("SIntelMusic"));
+const logo = fs.readFileSync("logo/viktorychmusic.svg", "utf8");
+const mark = fs.readFileSync("logo/v.svg", "utf8");
+assert.ok(src.includes("ViktorychMarks"), "the wordmark comes from the shared marks");
+assert.ok(src.includes('productName("music")'), "the music name comes from the language packs");
+assert.ok(!src.includes("ViktorychMusic") && !src.includes("ViktrychMusic"));
 assert.ok(!src.includes("SuperintelMusic"));
+assert.ok(!src.includes("SIntelMusic") || src.includes("root.SIntelMusic"));
 assert.ok(!css.includes("SuperintelMusic"));
-assert.ok(!logo.includes("SuperintelMusic"));
+assert.ok(logo.includes('aria-label="ViktorychMusic"'));
+assert.ok(mark.includes("currentColor") || mark.includes("d="));
 const catalog = JSON.parse(data);
-const credited = data.replace(/"artist": "SuperintelMusic"/g, '"artist": "SIntelMusic"');
-assert.ok(!credited.includes("SuperintelMusic"));
+assert.ok(!data.includes("SuperintelMusic"));
 const release = catalog.songs.find((song) => song.id === "america-dont-sit-still");
 assert.ok(release, "the release is in the catalog");
 assert.strictEqual(release.title, "America Don't Sit Still");
-assert.strictEqual(release.artist, "SuperintelMusic");
+assert.strictEqual(release.artist, "ViktorychMusic");
 assert.strictEqual(release.kind, "hls");
 assert.strictEqual(release.lossless, true);
 assert.strictEqual(release.duration, 222.11);
@@ -43,7 +44,7 @@ assert.ok(src.includes('controlsList", "nodownload"') || src.includes('controlsL
 assert.ok(src.includes("nodownload"));
 assert.ok(src.includes("hls-1.7.3.min.js"));
 assert.ok(src.includes("sintel-music-offline"));
-assert.ok(logo.includes('aria-label="SIntelMusic"'));
+assert.ok(logo.includes('aria-label="ViktorychMusic"'));
 
 assert.strictEqual(L.classifySource("http://example.com/a.mp3").ok, false);
 assert.strictEqual(L.classifySource("javascript:alert(1)").ok, false);
@@ -105,7 +106,7 @@ assert.strictEqual(master.playlists.join("\n"), "https://cdn.example/music/x/aud
 const card = L.releaseHtml({
   id: "america-dont-sit-still",
   title: "America Don't Sit Still",
-  artist: "SuperintelMusic",
+  artist: "ViktorychMusic",
   cover: "https://cdn.example/cover.png",
   stream: "https://cdn.example/music/secret/index.m3u8",
   kind: "hls",
@@ -132,7 +133,9 @@ assert.strictEqual(L.sameSection({ name: "music", section: "home", id: "" }, "#/
 assert.strictEqual(L.publishable(merged.songs).length, 1);
 
 const worker = fs.readFileSync("sw.js", "utf8");
-assert.ok(worker.includes('VERSION = "superintel14-__SW_VERSION__"'));
+assert.ok(worker.includes('VERSION = "viktorych-__SW_VERSION__"'));
+assert.ok(worker.includes("./marks.js") && !worker.includes("./brand.js"));
+assert.ok(worker.includes("./icons/music-192.png"));
 assert.ok(worker.includes("sintel-music-offline"));
 assert.ok(worker.includes("function isCatalogMedia(url)"));
 const fetchAt = worker.indexOf('self.addEventListener("fetch"');

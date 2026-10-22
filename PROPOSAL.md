@@ -15,7 +15,7 @@ One Worker script, deployed with `wrangler` from that Cloudflare account:
 - `GET /threads?user=&code=` fetches the public mobile post page and returns the visible replies (author, text, time, likes) as JSON.
 - `GET /x?id=` fetches the public syndication embed and returns the post text and counts. Reply bodies are not in that embed, so this route would not invent them. A later live reply list still needs a source that publishes replies without a login.
 - `GET /instagram?code=` fetches public oembed and returns the caption, author, and thumbnail. The public oembed has no comment list, so this route cannot add one without a logged-in session, which this project will not store.
-- Responses set `Access-Control-Allow-Origin` to `https://owner-account.github.io` only.
+- Responses set `Access-Control-Allow-Origin` to the Pages origin (`https://<owner>.github.io`) only.
 - Cache each response for about two minutes, then the browser falls back to `fallback/*.json` and `comments/*.json`.
 - The worker does not forward cookies, does not call `api.x.com` / `api.twitter.com`, and does not retry a 429 or a captcha.
 

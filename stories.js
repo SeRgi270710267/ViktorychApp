@@ -13,11 +13,7 @@
   }
   function productName(kind) {
     var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
-    if (api && api.productName) return api.productName(kind);
-    if (kind === "musicShort") return "ViktrychMusic";
-    if (kind === "music") return "ViktorychMusic";
-    if (kind === "pwa") return "ViktrychApp";
-    return "ViktorychApp";
+    return (api && api.productName) ? api.productName(kind) : "";
   }
 
 

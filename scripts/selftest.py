@@ -845,15 +845,17 @@ def main() -> None:
     import struct
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
     workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
-    check(manifest["display"] == "standalone" and manifest["scope"] == "./" and manifest["id"] == "./" and manifest["name"] == "SIntelApp" and manifest["short_name"] == "SIntelApp", "the installed shortcut name is SIntelApp, and scope and id follow the manifest directory")
-    check("404.html" in workflow and "__SITE_BASE__" in workflow and "GITHUB_REPOSITORY" in workflow, "the deploy publishes the 404 fallback and stamps the Pages URL from the repository")
+    check(manifest["display"] == "standalone" and manifest["scope"] == "./" and manifest["id"] == "./" and manifest["name"] == "ViktorychApp" and manifest["short_name"] == "ViktrychApp", "the installed shortcut name is ViktrychApp, and scope and id follow the manifest directory")
+    check("404.html" in workflow and "__SITE_BASE__" not in workflow and "brand.js" not in workflow and "i18n.js" in workflow and "marks.js" in workflow, "the deploy publishes the 404 fallback, translations, and marks without baking a repository path")
     missing = ROOT / "404.html"
     missing_text = missing.read_text(encoding="utf-8")
-    check("location.replace" in missing_text and "SuperintelApp" in missing_text and 'toLowerCase() === "superintelapp"' in missing_text, "a missing page under this site redirects to SuperintelApp")
+    check("location.replace" in missing_text and "ViktorychApp" in missing_text and "SuperintelApp" not in missing_text and "github.io" in missing_text and "parts[0]" in missing_text, "a missing page returns to this site's directory")
     from site_paths import pages_base, raw_data, cdn_data
     saved_repo = os.environ.pop("GITHUB_REPOSITORY", None)
     try:
-        check(pages_base() == "https://owner-account.github.io/SuperintelApp/" and raw_data().endswith("/SuperintelApp/data/") and "SuperintelApp@data/" in cdn_data(), "Pages, raw, and jsDelivr URLs default to SuperintelApp")
+        check(pages_base() == "" and raw_data() == "" and cdn_data() == "", "Pages URLs are empty until GITHUB_REPOSITORY is set")
+        os.environ["GITHUB_REPOSITORY"] = "ViktorychGroup/ViktorychApp"
+        check(pages_base() == "https://viktorychgroup.github.io/ViktorychApp/" and raw_data().endswith("/ViktorychApp/data/") and "ViktorychGroup/ViktorychApp@data/" in cdn_data(), "Pages, raw, and jsDelivr URLs follow the repository")
         os.environ["GITHUB_REPOSITORY"] = "Example/Other"
         check(pages_base() == "https://example.github.io/Other/", "a renamed repository follows GITHUB_REPOSITORY")
     finally:
@@ -874,9 +876,9 @@ def main() -> None:
     check("window-controls-overlay" in manifest["display_override"], "desktop installs can use the window controls overlay")
     purposes = [icon.get("purpose") for icon in manifest["icons"]]
     sizes = {icon.get("sizes") for icon in manifest["icons"]}
-    check("192x192" in sizes and "512x512" in sizes and "any" in purposes and "maskable" in purposes and "monochrome" in purposes and all(" " not in (item or "") for item in purposes) and all("?v=6" in icon["src"] for icon in manifest["icons"]), "the manifest has separate any, maskable, and monochrome icons with a cache-busting query")
+    check("192x192" in sizes and "512x512" in sizes and "any" in purposes and "maskable" in purposes and "monochrome" in purposes and all(" " not in (item or "") for item in purposes) and all("?v=7" in icon["src"] for icon in manifest["icons"]), "the manifest has separate any, maskable, and monochrome icons with a cache-busting query")
     shortcut_names = [item["name"] for item in manifest["shortcuts"]]
-    check(shortcut_names == ["Search", "Bookmarks", "Subscriptions", "Notifications", "SIntelMusic"], "the manifest shortcuts are Search, Bookmarks, Subscriptions, Notifications, and SIntelMusic")
+    check(shortcut_names == ["Search", "Bookmarks", "Subscriptions", "Notifications", "ViktorychMusic"], "the manifest shortcuts are Search, Bookmarks, Subscriptions, Notifications, and ViktorychMusic")
     check(manifest["share_target"]["method"] == "GET" and manifest["share_target"]["enctype"] == "application/x-www-form-urlencoded" and "url" in manifest["share_target"]["params"], "sharing a link into the app is a GET share target")
     worker = (ROOT / "sw.js").read_text(encoding="utf-8")
     check("__SW_VERSION__" in worker and "150 * 1024 * 1024" in worker and "staleWhileRevalidate" in worker, "the service worker versions its cache and caps media")
@@ -927,23 +929,23 @@ def main() -> None:
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
     check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow and "people.json" in workflow and "suggestions.json" in workflow and "feeds.config.json _site/" in workflow, "the deploy publishes translation and people files")
-    check("people.js" in worker and "people.css" in worker and 'VERSION = "superintel14-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
+    check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
-    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "superintel14-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
+    check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
     check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
     check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
-    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "superintel14-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
+    check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
     spaces_js = (ROOT / "spaces.js").read_text(encoding="utf-8")
     check("STATUS_MAX_AGE = 2 * 60 * 1000" in spaces_js and "STATUS_OFFLINE_AGE = 8 * 60 * 1000" in spaces_js and "function remoteStatusUrl(" in spaces_js and "function statusStale(" in spaces_js and "function statusOffline(" in spaces_js and "source.fallback" in spaces_js and "recoverMediaError" in spaces_js and "startLoad" in spaces_js and "liveSyncDurationCount: 3" in spaces_js and "maxBufferLength: 60" in spaces_js and "Reconnecting…" in spaces_js, "a remote Space stays up through a short stall, recovers the player, and goes offline after eight minutes or live:false")
     check("isSpaceAsset" in worker and "pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev" in worker and '"r2.dev"' in worker and '"trycloudflare.com"' in worker and "isSpaceStatus(url) || isSpaceAsset(url)" in worker and 'cache: "no-store"' in worker, "the service worker does not cache the remote radio status or its segments")
     music = next(item for item in json.loads((ROOT / "feeds.config.json").read_text(encoding="utf-8"))["spaces"] if item["id"] == "superintelmusic")
-    check(music["source"]["statusUrl"] == "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/status.json" and music["source"]["fallback"] == "live/superintelmusic.json" and music["source"]["allow"] == ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev", "trycloudflare.com"] and "url" not in music["source"], "SuperintelMusic reads the R2 status and falls back to the offline file")
+    check(music["source"]["statusUrl"] == "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/status.json" and music["source"]["fallback"] == "live/superintelmusic.json" and music["source"]["allow"] == ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev", "trycloudflare.com"] and "url" not in music["source"], "ViktorychMusic reads the R2 status and falls back to the offline file")
     banned = re.compile("supa" + "base|sb_" + "publishable|nadjniz" + "sdaskttxahclp", re.I)
     banned_hits = []
     for path in ROOT.rglob("*"):
@@ -952,25 +954,26 @@ def main() -> None:
         if banned.search(path.read_text(encoding="utf-8", errors="ignore")):
             banned_hits.append(str(path.relative_to(ROOT)))
     check(not banned_hits, "the old radio host is gone: " + ", ".join(banned_hits))
-    check(page.index('src="music.js"') < page.index('src="app.js"') and 'href="music.css"' in page, "the page loads SIntelMusic before the app")
-    check("music.js" in worker and "music.css" in worker and "data/music.json" in worker, "the service worker precaches SIntelMusic and refreshes its catalog")
-    check("music.js" in workflow and "music.css" in workflow and "hls-1.7.3.min.js" in workflow and "data/music.json" in workflow and '"music.js"' in (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8"), "the deploy publishes SIntelMusic")
+    check(page.index('src="i18n.js"') < page.index('src="marks.js"') < page.index('src="music.js"') < page.index('src="app.js"') and "brand.js" not in page and 'href="music.css"' in page, "the page loads translations and marks before music")
+    check("music.js" in worker and "music.css" in worker and "i18n.js" in worker and "marks.js" in worker and "brand.js" not in worker and "data/music.json" in worker, "the service worker precaches music mode and refreshes its catalog")
+    check("music.js" in workflow and "music.css" in workflow and "hls-1.7.3.min.js" in workflow and "data/music.json" in workflow and '"music.js"' in (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8"), "the deploy publishes ViktorychMusic")
     music_js = (ROOT / "music.js").read_text(encoding="utf-8")
     music_css = (ROOT / "music.css").read_text(encoding="utf-8")
     music_data = (ROOT / "data" / "music.json").read_text(encoding="utf-8")
     music_catalog = json.loads(music_data)
-    music_artist = music_data.replace('"artist": "SuperintelMusic"', '"artist": "SIntelMusic"')
-    check("SIntelMusic" in music_js and "SuperintelMusic" not in music_js and "SuperintelMusic" not in music_css and "SuperintelMusic" not in music_artist and "SuperintelMusic" not in (ROOT / "logo" / "sintelmusic.svg").read_text(encoding="utf-8"), "SIntelMusic is the music mode name")
-    check(any(song.get("id") == "america-dont-sit-still" and song.get("artist") == "SuperintelMusic" and song.get("kind") == "hls" and str(song.get("stream") or "").endswith("/index.m3u8") and song.get("stream") not in music_js for song in music_catalog.get("songs") or []), "the lossless release is credited in the catalog and its stream stays out of the script")
-    check('parts[0] === "music"' in app and 'href="#/music"' in app and 'classList.add("music-on")' in music_js and 'classList.remove("music-on")' in music_js and "audio.pause" in music_js, "SIntelMusic opens from its route and pauses on the way out")
-    check('title === productName("music")' in music_js and '<h1 class="vh">' in music_js and 'const musicHome = route.name === "music"' in app and "tall && !musicHome ? 106" in app, "SIntelMusic home shows the logo without a second title")
+    check('productName("music")' in music_js and "SuperintelMusic" not in music_js and "SuperintelMusic" not in music_css and "SuperintelMusic" not in music_data and 'aria-label="ViktorychMusic"' in (ROOT / "logo" / "viktorychmusic.svg").read_text(encoding="utf-8"), "the music mode name comes from the language packs")
+    check(any(song.get("id") == "america-dont-sit-still" and song.get("artist") == "ViktorychMusic" and song.get("kind") == "hls" and str(song.get("stream") or "").endswith("/index.m3u8") and song.get("stream") not in music_js for song in music_catalog.get("songs") or []), "the lossless release is credited in the catalog and its stream stays out of the script")
+    check('parts[0] === "music"' in app and 'href="#/music"' in app and 'classList.add("music-on")' in music_js and 'classList.remove("music-on")' in music_js and "audio.pause" in music_js, "music mode opens from its route and pauses on the way out")
+    check('title === productName("music")' in music_js and '<h1 class="vh">' in music_js and 'const musicHome = route.name === "music"' in app and "tall && !musicHome ? 106" in app, "music home shows the logo without a second title")
     music_row = subprocess.run(["node", "scripts/music_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(music_row.returncode == 0, "SIntelMusic library checks passed\n" + music_row.stdout + music_row.stderr)
     catalog = subprocess.run([sys.executable, "scripts/music_catalog.py", "--selftest"], cwd=ROOT, capture_output=True, text=True)
     check(catalog.returncode == 0, "the SIntelMusic catalog issue check passed\n" + catalog.stdout + catalog.stderr)
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
     follows_workflow = (ROOT / ".github" / "workflows" / "follows.yml").read_text(encoding="utf-8")
-    check("github.actor == github.repository_owner" in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues from anyone but the owner are ignored")
+    music_workflow = (ROOT / ".github" / "workflows" / "music.yml").read_text(encoding="utf-8")
+    check("github.actor == 'owner-account'" in follows_workflow and "github.actor == github.repository_owner" not in follows_workflow and "OWNER: owner-account" in follows_workflow and "OWNER: ${{ github.repository_owner }}" not in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues are applied only for the human owner, not the organization")
+    check("github.actor == 'owner-account'" in music_workflow and "github.actor == github.repository_owner" not in music_workflow and "OWNER: owner-account" in music_workflow and "REPO: ${{ github.repository }}" in music_workflow, "the music catalog issue is applied only for the human owner")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "groups.yml").is_file(), "subscription group issue form exists")
     check("feeds.config.json _site/" in workflow, "the deploy publishes feeds.config.json")
     chips_css = css[css.index(".yt-chips"):css.index(".yt-chips") + 500]
@@ -1002,7 +1005,7 @@ def main() -> None:
     check(".tabs-bar.notes-tabs" in css and ".tab-grip" in css and ".tab-switch" in css and ".note-gear" in css and ".tab-count" not in css and ".tab-plus" not in css, "notification tabs use the home underline bar, and reorder handles stay in the editor")
     check("pinned.slice" not in app and "lists.slice(0," not in app, "pinned home tabs are not capped")
     check("function sharePostUrl(" in app and "function shareProfileUrl(" in app and "isn’t in the published snapshot" in app and 's/watch-"' in app and 's/" + (post.platform' in app and "function notePublished(" in app and "PUBLISHED.posts" in app, "share and copy use the static preview pages, and a live post outside the snapshot does not")
-    check('og:image" content="__SITE_BASE__icons/icon-512.png?v=6"' in page and 'rel="canonical" href="__SITE_BASE__"' in page and 'og:site_name" content="SuperintelApp"' in page and "<title>Home / SuperintelApp</title>" in page and 'apple-mobile-web-app-title" content="SIntelApp"' in page and "manifest.webmanifest?v=6" in page and "favicon.ico?v=6" in page and 'productName("app")' in app and 'titleSuffix' in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'class="logo-full"' in app and 'class="logo-si"' in app and "function githubRepo(" in app and "superintelapp-settings-v1" in page and 'readStored(localStorage, "settings-v1")' in app and "function shareRoot(" in app and "function pagesDirectory(" in app, "the home page names SuperintelApp, the shortcut label is SIntelApp, and copied links stay on this site")
+    check('og:image" content="icons/icon-512.png?v=7"' in page and 'rel="canonical"' in page and "location.origin" in page and "__SITE_BASE__" not in page and "SuperintelApp/" not in page and "owner-account.github.io" not in page and 'og:site_name" content="ViktorychApp"' in page and "<title>Home / ViktorychApp</title>" in page and 'apple-mobile-web-app-title" content="ViktrychApp"' in page and "manifest.webmanifest?v=7" in page and "favicon.ico?v=7" in page and 'productName("app")' in app and "function routeTitle(" in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'markSvg("app", "logo-full")' in app and 'markSvg("appShort", "logo-short")' in app and 'markSvg("mark", "logo-si")' in app and "function githubRepo(" in app and "owner-account" not in app and "viktorychapp-settings-v1" in page and "superintelapp-settings-v1" in page and 'readStored(localStorage, "settings-v1")' in app and "function shareRoot(" in app and "function pagesDirectory(" in app, "the home page names the app, the shortcut label is the short form, and copied links stay on this site")
     check('tr("Search {app}"' in app and "Surprise me" in app and "explore-mode" in app and 'const SEARCH_SUFFIX = "searches-v1"' in app and "readStored(localStorage, SEARCH_SUFFIX)" in app and 'id="explore-q"' in app and "function exploreHome(" in app and "function wordmarkSvg(" in app and '["videos", tr("Videos")]' in app and "ghome-logo" in css and 'html[data-theme="default"] .ghome-logo' in css, "explore is a search home with themed wordmark, suggestions, and result tabs")
     check("function shellDocument(" in worker and "/\\/(?:s|u)\\/" in worker, "a share-page navigation does not replace the cached app shell")
     check("python3 scripts/share_pages.py --site _site" in workflow, "the deploy rebuilds share pages inside the artifact")
@@ -1020,7 +1023,7 @@ def main() -> None:
                 {"platform": "discord", "id": "discord:10:20", "statusId": "discord:10:20", "handle": "ada", "author": "Ada", "text": "hello", "url": "https://discord.com/channels/1/10/20"},
                 {"platform": "x", "id": "nitter", "statusId": "nitter", "handle": "ada", "author": "Ada", "text": "From nitter", "media": [{"type": "photo", "url": "http://nitter.example/pic/media%2Fabc.jpg"}]},
                 {"platform": "x", "id": "mp4", "statusId": "mp4", "handle": "ada", "author": "Ada", "text": "Clip", "media": [{"type": "video", "url": "http://video.twimg.com/amplify_video/1/vid/avc1/720x720/a.mp4", "poster": "https://pbs.twimg.com/amplify_video_thumb/1/img/a.jpg"}]},
-                {"platform": "x", "id": "cdn", "statusId": "cdn", "handle": "cdn", "author": "CDN", "text": "skip", "avatar": "https://cdn.jsdelivr.net/gh/owner-account/SuperintelApp@data/archive/x.jpg", "media": [{"type": "photo", "url": "https://raw.githubusercontent.com/owner-account/SuperintelApp/data/archive/x.jpg"}]},
+                {"platform": "x", "id": "cdn", "statusId": "cdn", "handle": "cdn", "author": "CDN", "text": "skip", "avatar": "https://cdn.jsdelivr.net/gh/Example/Other@data/archive/x.jpg", "media": [{"type": "photo", "url": "https://raw.githubusercontent.com/Example/Other/data/archive/x.jpg"}]},
                 {"platform": "vk", "id": "-220923985_58381", "statusId": "-220923985_58381", "feedId": "vk:vk", "handle": "vkfandomfest", "author": "Фандом Фест", "text": "Фестиваль", "kind": "repost", "repostedBy": {"name": "ВКонтакте", "handle": "vk", "platform": "vk", "feedId": "vk:vk"}},
             ],
         }), encoding="utf-8")
@@ -1032,9 +1035,10 @@ def main() -> None:
         ]), encoding="utf-8")
         (share_root / "s").mkdir()
         (share_root / "s" / "stale.html").write_text("old", encoding="utf-8")
+        share_base = "https://example.github.io/Other/"
         counts = build_share_pages(
             share_root,
-            "https://owner-account.github.io/SuperintelApp/",
+            share_base,
             thumb_probe=lambda url: "maxresdefault.jpg" in url,
         )
         post_html = (share_root / "s" / "x-100.html").read_text(encoding="utf-8")
@@ -1046,12 +1050,12 @@ def main() -> None:
         vk_share = (share_root / "s" / "vk--220923985_58381.html").read_text(encoding="utf-8")
         check('class="repost"' in vk_share and "ВКонтакте reposted" in vk_share and 'href="../u/vk-vk.html"' in vk_share and "Фандом Фест" in vk_share, "a share page names who reposted and keeps the original author")
         space_html = (share_root / "s" / "space-superintelmusic.html").read_text(encoding="utf-8")
-        check('og:title" content="SuperintelMusic"' in space_html and 'og:description" content="Live Space"' in space_html and "#/spaces/superintelmusic" in space_html and "streamTitle" not in space_html and old_repo not in space_html and 'src="../icons/' in space_html and 'og:url" content="https://owner-account.github.io/SuperintelApp/s/space-superintelmusic.html"' in space_html, "a Space share page uses the station title, the new site URL, and a relative cover")
+        check('og:title" content="ViktorychMusic"' in space_html and 'og:description" content="Live Space"' in space_html and "#/spaces/superintelmusic" in space_html and "streamTitle" not in space_html and old_repo not in space_html and 'src="../icons/' in space_html and f'og:url" content="{share_base}s/space-superintelmusic.html"' in space_html, "a Space share page uses the station title, the caller site URL, and a relative cover")
         discord_html = (share_root / "s" / "discord-discord-10-20.html").read_text(encoding="utf-8")
         check('og:title" content="Ada (@ada) on Discord"' in discord_html and "#/discord/ada/status/discord%3A10%3A20" in discord_html, "an id with colons still gets a share page and opens that post")
         check(not (share_root / "s" / "stale.html").exists(), "rebuilding share pages removes pages from the previous deploy")
         check("Ada &lt;script&gt;" in post_html and "<script>alert" not in post_html and "A &lt;b&gt;post&lt;/b&gt;" in post_html, "share page text is escaped")
-        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and f'og:site_name" content="{SHARE_SITE}"' in post_html and 'name="theme-color" content="#000000"' in post_html and 'rel="canonical" href="https://owner-account.github.io/SuperintelApp/s/x-100.html"' in post_html and 'og:url" content="https://owner-account.github.io/SuperintelApp/s/x-100.html"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL on this site")
+        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and f'og:site_name" content="{SHARE_SITE}"' in post_html and 'name="theme-color" content="#000000"' in post_html and f'rel="canonical" href="{share_base}s/x-100.html"' in post_html and f'og:url" content="{share_base}s/x-100.html"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL on this site")
         description = html_lib.unescape(post_html.split('og:description" content="', 1)[1].split('"', 1)[0])
         check("name=large" in post_html and 'og:image:width" content="2048"' in post_html and 'twitter:card" content="summary_large_image"' in post_html and description.endswith("…") and len(description) <= 200, "a wide image is preferred and the description stays near 200 characters")
         from share_pages import sized as size_share_image
@@ -1479,7 +1483,7 @@ def main() -> None:
     check((ROOT / "scripts" / "pwa_assets.py").read_text(encoding="utf-8").find("M18.244") < 0, "the install mark is not the X logo")
     check("M18.244" not in (ROOT / "app.js").read_text(encoding="utf-8") and "M18.244" not in (ROOT / "favicon.svg").read_text(encoding="utf-8") and 'icon("logo")' not in (ROOT / "app.js").read_text(encoding="utf-8"), "the X logo is not in the app chrome or the favicon")
     favicon = (ROOT / "favicon.svg").read_text(encoding="utf-8")
-    check("SIntelApp" in favicon and 'fill="#fff"' in favicon and 'fill="#000"' in favicon and "M12 2.2l1.7 5.4" not in favicon and "function sourceBadge(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the favicon is a black SI on white, and posts keep their source badges")
+    check("ViktorychApp" in favicon and 'fill="#fff"' in favicon and 'fill="#000"' in favicon and "M12 2.2l1.7 5.4" not in favicon and "function sourceBadge(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the favicon is a black V on white, and posts keep their source badges")
     ico = (ROOT / "favicon.ico").read_bytes()
     ico_count = struct.unpack_from("<H", ico, 4)[0]
     check(ico[:4] == b"\x00\x00\x01\x00" and ico_count == 4, "favicon.ico carries the 16, 32, 48, and 256 tiles")
@@ -2511,7 +2515,7 @@ def discord_checks() -> None:
     messages_css = (ROOT / "discord-ui.css").read_text(encoding="utf-8")
     messages_ui = (ROOT / "discord-ui.js").read_text(encoding="utf-8")
     publish = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
-    check("FeedsSplit" in split_js and "superintelapp-splits-v1" in split_js and '"rss-" + "feeds-splits-v1"' in split_js and "requestAnimationFrame" in split_js and "function bind(" in split_js and ('role="separator"' in messages_ui or 'role=\\"separator\\"' in messages_ui) and "FeedsSplit.bind" in messages_ui and "--dmsgs-list, 440px" in messages_css and "col-resize" in messages_css and "min-width: 300px" in messages_css and "max-width: 60%" in messages_css and ".dmsgs-split { display: none; }" in messages_css and "split.js" in workflow and '"split.js"' in publish, "the message list divider drags between 300px and 60 percent and remembers the width")
+    check("FeedsSplit" in split_js and "viktorychapp-splits-v1" in split_js and "superintelapp-splits-v1" in split_js and '"rss-" + "feeds-splits-v1"' in split_js and "requestAnimationFrame" in split_js and "function bind(" in split_js and ('role="separator"' in messages_ui or 'role=\\"separator\\"' in messages_ui) and "FeedsSplit.bind" in messages_ui and "--dmsgs-list, 440px" in messages_css and "col-resize" in messages_css and "min-width: 300px" in messages_css and "max-width: 60%" in messages_css and ".dmsgs-split { display: none; }" in messages_css and "split.js" in workflow and '"split.js"' in publish, "the message list divider drags between 300px and 60 percent and remembers the width")
     styles = (ROOT / "styles.css").read_text(encoding="utf-8")
     shell = (ROOT / "app.js").read_text(encoding="utf-8")
     check('class="nav-split"' in shell and 'role="separator"' in shell and "sidebar: sidebar" in split_js and "snapBelow" in split_js and "Collapse sidebar" in shell and 'data-act="nav-collapse"' in shell and 'html[data-nav="icons"]' in styles and "--nav-w" in styles and "width: 88px" in styles and "History" in shell and ".nav-split { display: none; }" in styles and 'matchMedia("(max-width: 1279px)")' in split_js and 'matchMedia("(max-width: 1279px)")' in (ROOT / "index.html").read_text(encoding="utf-8"), "the sidebar divider drags between icons-only and full width and narrow windows still force the icon rail")
@@ -2702,7 +2706,7 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
     live_script = (ROOT / "scripts" / "discord_live.py").read_text(encoding="utf-8")
     check("group: discord-live" in live_workflow and "cancel-in-progress: false" in live_workflow and "add-mask" in live_workflow and "timeout-minutes: 350" in live_workflow and 'cron: "*/5 * * * *"' in live_workflow, "the live workflow is one long job that does not cancel itself")
     old_site = "rss-" + "feeds"
-    check("owner-account.github.io/SuperintelApp/" in live_workflow and old_site not in live_workflow and old_site not in live_script, "the live job uses the renamed site and no old feed URL")
+    check("github.repository" in live_workflow and "SuperintelApp" not in live_workflow and old_site not in live_workflow and old_site not in live_script, "the live job follows the repository and no old feed URL")
     check("/pins" not in live_script, "the live poller does not read pins")
 
 
@@ -3551,7 +3555,7 @@ def story_checks() -> None:
     styles = (ROOT / "stories.css").read_text(encoding="utf-8")
     check(page.index('src="stories.js"') < page.index('src="app.js"') and 'href="stories.css"' in page and 'id="stories"' in page, "the page loads the story tray before the app")
     check('act === "story"' in app and "window.Stories.open" in app and "window.Stories.homeTray" in app and "window.Stories.trayExtra" in app and "stories.json" in app, "home opens a story and reserves room for the tray")
-    check("stories.js" in worker and "stories.css" in worker and "superintel14-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
+    check("stories.js" in worker and "stories.css" in worker and "viktorych-__SW_VERSION__" in worker and "stories)\\.json" in worker, "the service worker precaches the story shell and refreshes stories.json")
     check("IG_SESSION" in workflow and "::add-mask::${IG_SESSION}" in workflow and "stories.json" in workflow and "publish-stories" in workflow, "the sync masks the story session and publishes stories.json")
     check("VK_USER_TOKEN: ${{ secrets.VK_USER_TOKEN }}" in workflow and 'echo "::add-mask::${VK_USER_TOKEN}"' in workflow, "the sync masks the VK user token and does not print it")
     instructions = (ROOT / "docs" / "vk-stories-token.md").read_text(encoding="utf-8")

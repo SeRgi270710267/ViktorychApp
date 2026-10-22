@@ -1,4 +1,4 @@
-# SuperintelApp
+# ViktorychApp
 
 An X-style home for posts from X, Threads, Instagram, YouTube, VK, and other RSS sources. The page is a static site (`index.html`, `styles.css`, `app.js`). GitHub Actions builds the timeline and publishes it. The repository keeps the code, the config, and a small `feeds.json` seed. X replies and YouTube comments load in the browser when a post opens.
 
@@ -25,7 +25,7 @@ The file is not part of `feeds.json`. Pages serves it, and the data branch store
 python3 -m http.server 8080
 ```
 
-Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHub Pages. The manifest `id`, `scope`, and `start_url` are relative (`./`), so the installable app is the directory that serves it. On GitHub Pages that directory is `/SuperintelApp/`. More and the mobile menu include Install app. `sw.js` is registered as `sw.js` with no extra scope, caches the shell, refreshes `feeds.json` and archive shards in the background, and keeps bookmarked images for offline reading. Notifications stay off until that setting is tapped.
+Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHub Pages. The manifest `id`, `scope`, and `start_url` are relative (`./`), so the installable app is the directory that serves it. On GitHub Pages that directory is the repository name, currently `/ViktorychApp/`. More and the mobile menu include Install app. `sw.js` is registered as `sw.js` with no extra scope, caches the shell, refreshes `feeds.json` and archive shards in the background, and keeps bookmarked images for offline reading. Notifications stay off until that setting is tapped.
 
 | Route | Page |
 | --- | --- |
@@ -52,11 +52,11 @@ Open `http://127.0.0.1:8080/`. Hash routes keep the back button working on GitHu
 
 `?empty=1` shows the empty timeline. `?error=1` shows the load-failure state.
 
-Share and Copy link use the `/s/` and `/u/` pages under `https://owner-account.github.io/SuperintelApp/`. Each deploy rebuilds them from the current `feeds.json` posts, archive stubs, and accounts, and the previous set is deleted. Those files are not stored in git. Canonical and `og:url` tags use that same origin. A comment, a streamed profile, or any other post that is not in that snapshot shares the original platform URL instead, and the share sheet says why.
+Share and Copy link use the `/s/` and `/u/` pages under the site origin. The origin is `https://<owner>.github.io/<repo>/`, from `github.repository` in Actions and from the page location in the browser. Each deploy rebuilds them from the current `feeds.json` posts, archive stubs, and accounts, and the previous set is deleted. Those files are not stored in git. Canonical and `og:url` tags use that same origin. A comment, a streamed profile, or any other post that is not in that snapshot shares the original platform URL instead, and the share sheet says why.
 
 ## What the page does
 
-Everything below is stored in `localStorage` under `superintelapp-settings-v1` for a single reader on this browser. The first load copies a value saved under the previous key name.
+Everything below is stored in `localStorage` under `viktorychapp-settings-v1` for a single reader on this browser. The first load copies a value saved under `superintelapp-settings-v1`, then the older key.
 
 - **For you** shows every post, newest first (`sortDate`, otherwise `date`). **Following** shows posts from accounts you follow. **Pinned Lists** appear as extra tabs. The row scrolls sideways with momentum, fading the edge that still has tabs. On a desktop hover, a round chevron on that fade moves about one screen of tabs. The selected tab starts in view. The manage-tabs button stays pinned at the end. The selected tab has the blue underline and a chevron. At the top of the timeline that chevron opens a sheet (a dropdown on a wide screen) for Recent or Popular (Following and Lists) or Show reposts and Show replies (For you). Each of those menus also chooses Show: All posts or Reposts only, and Manage tabs opens the tab editor. Reposts only keeps retweets, reposts, and forwards, newest first by the repost time, and says “No reposts yet” when there are none. The choice is kept on this device, per tab, and in the tab’s URL. Tapping the selected tab, the current section’s nav icon, or the phone header while scrolled down returns to the top first. A further tap on the nav icon at the top loads new posts. Each tab and section keeps its own scroll position, including when you come back from a post.
 - **Follow** is a light pill. **Following** is an outline pill that turns into a red **Unfollow** on hover. On the first visit every configured account is followed. Accounts discovered inside posts are not. They show up in **Who to follow**.
@@ -176,13 +176,13 @@ The seed built from the current `feeds.json` is 35 stubs. Each stub averages **2
 
 The 300 KB/year figure is the same stub at a busier pace: `1400 × 213 bytes ≈ 298 KB`, about four posts a day. At the volume in this seed, a year of shards is a few dozen kilobytes.
 
-The browser reads the `data` branch. On a `github.io` host it takes the repository name from the first path segment, so `archive/index.json`, the current UTC month, and the newest shard are requested from `https://raw.githubusercontent.com/<owner>/<repo>/data/archive/<file>` first, because jsDelivr keeps a branch name cached for about 12 hours. Older months start at `https://cdn.jsdelivr.net/gh/<owner>/<repo>@data/archive/<file>`. For this repository that is `owner-account/SuperintelApp` and `https://cdn.jsdelivr.net/gh/owner-account/SuperintelApp@data/archive/<file>`. After that host, the page tries the other GitHub URL, then the Internet Archive download for the existing item (`scripts/ia_archive.py`). All three respond with `Access-Control-Allow-Origin: *`. That item id is not a site path, so the shards already stored there keep their address.
+The browser reads the `data` branch. On a `github.io` host it takes the repository name from the first path segment, so `archive/index.json`, the current UTC month, and the newest shard are requested from `https://raw.githubusercontent.com/<owner>/<repo>/data/archive/<file>` first, because jsDelivr keeps a branch name cached for about 12 hours. Older months start at `https://cdn.jsdelivr.net/gh/<owner>/<repo>@data/archive/<file>`. The owner and repository in those URLs are the ones from the page location, not a name stored in the script. After that host, the page tries the other GitHub URL, then the Internet Archive download for the existing item (`scripts/ia_archive.py`). All three respond with `Access-Control-Allow-Origin: *`. That item id is not a site path, so the shards already stored there keep their address.
 
 Each sync merges a complete archive from the live site, then from the raw `data` branch, then from that Internet Archive item. Stubs already stored keep their first text. A partial download leaves the local files alone, and a source that omits a month leaves that month in place. The half-hour run copies `archive/` into the Pages artifact and does not push the `data` branch. A post that drops out of `feeds.json` between daily updates is in that artifact, and the next build merges it when the live site still has the file. The shards the browser reads change when the daily `data` push lands.
 
 Once a day, at 06:17 UTC, the workflow uploads the shards to that same Internet Archive item and force-pushes one squashed commit onto the orphan `data` branch. That branch contains only `archive/`. Squashing keeps it at a single commit so the history stays small. The Internet Archive item is the copy to download again if that commit is replaced. The upload runs when `IA_ACCESS_KEY` and `IA_SECRET_KEY` are both set. With either one missing, the step prints a skip line, exits 0, and the `data` branch is still updated. A push made with `GITHUB_TOKEN` does not start another run. Add the two keys under Settings → Secrets and variables → Actions. They are never written to the repo or printed in the log.
 
-When a stub scrolls into view, the browser fills it in and keeps a successful result in IndexedDB (`superintelapp-live`, key `arch:`) for about 24 hours. A failed request is not stored as a deleted post.
+When a stub scrolls into view, the browser fills it in and keeps a successful result in IndexedDB (`viktorychapp-live`, key `arch:`) for about 24 hours. A failed request is not stored as a deleted post.
 
 - **X.** `https://api.fxtwitter.com/2/status/<id>` allows every origin and returns the full text, media, counts, and quotes. A 404, or fxtwitter code 404 or 144, is the tombstone below. A network miss keeps the stored snippet.
 - **YouTube.** The card uses `https://i.ytimg.com/vi/<id>/hqdefault.jpg` immediately. That host sends `Cross-Origin-Resource-Policy: cross-origin`, so the image loads in an `<img>`. Title, duration, and view count come from Invidious or Piped when the card is on screen. Comments still load on the watch page.
@@ -193,7 +193,7 @@ Comments stay on demand. X and YouTube load them in the browser. Instagram and T
 
 A post the source says is gone uses X’s tombstone, including the sentence **This post is unavailable.** A network miss does not.
 
-Live responses sit in memory, then `sessionStorage`, then IndexedDB (`superintelapp-live`) when that quota is full. The cache lasts about 12 minutes. `fetchedAt` is not shown.
+Live responses sit in memory, then `sessionStorage`, then IndexedDB (`viktorychapp-live`) when that quota is full. The cache lasts about 12 minutes. `fetchedAt` is not shown.
 
 X reply order matches the old stored list: the author’s self-thread first, then `likes + replies*2 + reposts`, with a bump for a verified account. Giveaway, link-only, duplicate, and new-account replies sit behind **Show probable spam**. The number on the post stays the source count. Opening a post also loads replies for about 10 of its busiest replies, about 20 each, and stops there. Opening one of those replies loads the next level the same way. A failed live call, with no snapshot, is “Replies aren’t available for this post.”
 
@@ -271,7 +271,7 @@ Edit `feeds.config.json` and add an object under `feeds`. A push to `main` runs 
 
 The new account is followed in a fresh browser. An existing browser keeps its saved follow list until you follow the account from the Feeds page.
 
-Follow on a profile that is not in this file, or Add account on the Feeds page, opens a prefilled GitHub issue (`Follow request` or `Unfollow request`). The workflow applies it only when `github.actor` is the repository owner: it checks the source, updates this file, closes the issue, and starts a sync. Issues from anyone else are ignored.
+Follow on a profile that is not in this file, or Add account on the Feeds page, opens a prefilled GitHub issue (`Follow request` or `Unfollow request`). The workflow applies it only when `github.actor` is the user `owner-account`. The repository belongs to an organization, so `github.repository_owner` is not that user. It checks the source, updates this file, closes the issue, and starts a sync. Issues from anyone else are ignored.
 
 Subscription groups are saved on this device immediately. **Save groups to the site** opens a prefilled issue titled `Subscription groups`. The same owner-only workflow writes the `groups` field in this file and starts a sync, so the groups show up on every device. Edits on this device win until the published list matches. Issues from anyone else are ignored.
 
@@ -536,4 +536,4 @@ Periodic background sync is registered only after notifications are turned on, a
 
 ## GitHub Pages
 
-Pages has to be built by GitHub Actions (Settings → Pages → Build and deployment → Source: GitHub Actions). A deploy-from-branch source will not pick up this workflow. `.nojekyll` is in the artifact so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`), so the site works at `/` or under the repository directory. The published path is `https://owner-account.github.io/SuperintelApp/`. `404.html` sends a missing file under that directory back to the matching hash route. Saved settings stay under `superintelapp-settings-v1` and the other `superintelapp-` keys. The first load copies the previous keys so a path change does not drop them.
+Pages has to be built by GitHub Actions (Settings → Pages → Build and deployment → Source: GitHub Actions). A deploy-from-branch source will not pick up this workflow. `.nojekyll` is in the artifact so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`), so the site works at `/` or under the repository directory. The published path follows the repository: `https://<owner>.github.io/<repo>/`. `404.html` sends a missing file under that directory back to the matching hash route. Saved settings stay under `viktorychapp-settings-v1` and the other `viktorychapp-` keys. The first load copies `superintelapp-` keys, then the older keys, so a rename does not drop them.

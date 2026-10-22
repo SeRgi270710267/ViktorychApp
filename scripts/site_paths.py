@@ -1,7 +1,8 @@
 """GitHub Pages and repository URLs.
 
-Actions sets GITHUB_REPOSITORY to owner/name, so a later rename follows the
-repo without editing these strings. Locally the fallback is this repo.
+Actions sets GITHUB_REPOSITORY to owner/name. Nothing here stores an owner
+or a repository name. Without that variable the helpers return an empty
+string, and the browser derives the same pair from location.
 
 The Internet Archive item id is not a repository path. It stays the item
 that already holds the shards.
@@ -11,39 +12,48 @@ from __future__ import annotations
 
 import os
 
-FALLBACK_REPOSITORY = "owner-account/SuperintelApp"
-
 
 def repository() -> str:
-    full = os.environ.get("GITHUB_REPOSITORY") or FALLBACK_REPOSITORY
-    if full.count("/") != 1 or full.startswith("/") or full.endswith("/"):
-        return FALLBACK_REPOSITORY
+    full = (os.environ.get("GITHUB_REPOSITORY") or "").strip()
+    if full.count("/") != 1 or full.startswith("/") or full.endswith("/") or " " in full:
+        return ""
+    owner_name, repo_name = full.split("/", 1)
+    if not owner_name or not repo_name:
+        return ""
     return full
 
 
 def owner() -> str:
-    return repository().split("/", 1)[0]
+    repo = repository()
+    return repo.split("/", 1)[0] if repo else ""
 
 
 def name() -> str:
-    return repository().split("/", 1)[1]
+    repo = repository()
+    return repo.split("/", 1)[1] if repo else ""
 
 
 def pages_base() -> str:
+    if not repository():
+        return ""
     return f"https://{owner().lower()}.github.io/{name()}/"
 
 
 def github_web() -> str:
-    return f"https://github.com/{repository()}"
+    repo = repository()
+    return f"https://github.com/{repo}" if repo else ""
 
 
 def raw_data() -> str:
-    return f"https://raw.githubusercontent.com/{repository()}/data/"
+    repo = repository()
+    return f"https://raw.githubusercontent.com/{repo}/data/" if repo else ""
 
 
 def cdn_data() -> str:
-    return f"https://cdn.jsdelivr.net/gh/{repository()}@data/"
+    repo = repository()
+    return f"https://cdn.jsdelivr.net/gh/{repo}@data/" if repo else ""
 
 
 def user_agent() -> str:
-    return f"SuperintelApp-preview/1.0 (+{github_web()})"
+    web = github_web()
+    return f"ViktorychApp-preview/1.0 (+{web})" if web else "ViktorychApp-preview/1.0"

@@ -53,14 +53,17 @@ def main() -> int:
             debug=False,
         )
         item = session.get_item(ITEM)
+        creator = (os.environ.get("GITHUB_REPOSITORY_OWNER") or "").strip()
+        metadata = {
+            "mediatype": "data",
+            "collection": "opensource",
+            "title": "ViktorychApp archive stubs",
+        }
+        if creator:
+            metadata["creator"] = creator
         responses = item.upload(
             files,
-            metadata={
-                "mediatype": "data",
-                "collection": "opensource",
-                "title": "SuperintelApp archive stubs",
-                "creator": "owner-account",
-            },
+            metadata=metadata,
             verbose=False,
             debug=False,
             checksum=True,

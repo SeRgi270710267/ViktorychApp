@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   apply:
-    if: github.actor == github.repository_owner && startsWith(github.event.issue.title, 'Music catalog')
+    # The repository owner is the org. Only the human who opens issues may apply them.
+    if: github.actor == 'owner-account' && startsWith(github.event.issue.title, 'Music catalog')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +26,7 @@ jobs:
       - name: Update data/music.json
         env:
           ACTOR: ${{ github.actor }}
-          OWNER: ${{ github.repository_owner }}
+          OWNER: owner-account
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}

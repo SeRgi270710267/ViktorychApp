@@ -1,7 +1,8 @@
-/* SuperintelMusic Space. Audio-only HLS, no video surface.
+/* Music Space. The visible name is productName("music"). Audio-only HLS, no video surface.
    Pure helpers stay usable under node (no document). */
 (function (root) {
   "use strict";
+
 
   function tr(key, vars) {
     var fn = (typeof window !== "undefined" && window.t) ? window.t : ((typeof self !== "undefined" && self.t) ? self.t : null);
@@ -13,13 +14,8 @@
   }
   function productName(kind) {
     var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
-    if (api && api.productName) return api.productName(kind);
-    if (kind === "musicShort") return "ViktrychMusic";
-    if (kind === "music") return "ViktorychMusic";
-    if (kind === "pwa") return "ViktrychApp";
-    return "ViktorychApp";
+    return (api && api.productName) ? api.productName(kind) : "";
   }
-
 
   function homePills(items, follows) {
     const set = Object.create(null);
@@ -408,7 +404,7 @@
     return {
       id: space.id,
       kind: play.kind || "hls",
-      title: space.title || "SuperintelMusic",
+      title: space.title || productName("music"),
       cover: space.cover || face.avatar || "",
       followId: face.followId,
       host: { name: face.name, handle: face.handle, platform: face.platform, avatar: face.avatar },
@@ -839,7 +835,7 @@
     const artwork = art ? [{ src: art, sizes: "320x320", type: artworkType(art) }] : [];
     try {
       navigator.mediaSession.metadata = new root.MediaMetadata({
-        title: item.title || "SuperintelMusic",
+        title: item.title || productName("music"),
         artist: (item.host && item.host.name) || "",
         artwork: artwork
       });
@@ -1197,7 +1193,7 @@
   function share(id) {
     const item = spaceModel(id);
     const url = shareUrl(id);
-    const title = (item && item.title) || "SuperintelMusic";
+    const title = (item && item.title) || productName("music");
     if (navigator.share) {
       navigator.share({ title: title, url: url }).catch((err) => {
         if (err && err.name === "AbortError") return;
@@ -1364,7 +1360,7 @@
     const list = Array.isArray(doc.spaces) ? doc.spaces : [];
     spaces = list.filter((item) => item && /^[A-Za-z0-9_-]{1,120}$/.test(String(item.id || ""))).map((item) => ({
       id: String(item.id),
-      title: String(item.title || "SuperintelMusic"),
+      title: String(item.title || productName("music")),
       cover: typeof item.cover === "string" ? item.cover : "",
       host: {
         name: item.host && item.host.name ? String(item.host.name) : "",

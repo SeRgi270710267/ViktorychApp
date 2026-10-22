@@ -59,7 +59,7 @@ DEPLOY_EVERY = 600
 RUN_LIMIT = (5 * 60 + 40) * 60
 NTFY_LIMIT = 3800
 DEFAULT_TOPIC = "superintelmusic-discord-th-7f3a91c2"
-UA = "superintel-preview/1.0"
+UA = "viktorych-preview/1.0"
 
 STOP = {"now": False}
 

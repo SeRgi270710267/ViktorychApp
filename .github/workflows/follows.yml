@@ -11,7 +11,8 @@ permissions:
 
 jobs:
   apply:
-    if: github.actor == github.repository_owner && (startsWith(github.event.issue.title, 'Follow request') || startsWith(github.event.issue.title, 'Unfollow request') || startsWith(github.event.issue.title, 'Subscription groups') || startsWith(github.event.issue.title, 'Link accounts'))
+    # The repository owner is the org. Only the human who opens issues may apply them.
+    if: github.actor == 'owner-account' && (startsWith(github.event.issue.title, 'Follow request') || startsWith(github.event.issue.title, 'Unfollow request') || startsWith(github.event.issue.title, 'Subscription groups') || startsWith(github.event.issue.title, 'Link accounts'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +26,7 @@ jobs:
       - name: Update feeds.config.json
         env:
           ACTOR: ${{ github.actor }}
-          OWNER: ${{ github.repository_owner }}
+          OWNER: owner-account
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}

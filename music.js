@@ -1,6 +1,9 @@
-/* SIntelMusic. The normal app stays SIntelApp until the Music sidebar entry
-   (or a direct #/music URL) opens this mode. Leaving pauses playback.
-   Pure helpers stay usable under node (no document). */
+/* Music mode. The visible name is productName("music") from the language packs.
+   The normal app stays in place until the Music sidebar entry (or a direct
+   #/music URL) opens this mode. Leaving pauses playback.
+   Pure helpers stay usable under node (no document).
+   Offline files stay in the sintel-music database and the sintel-music-offline
+   cache so a rebrand does not drop downloads already saved on this device. */
 (function (root) {
   "use strict";
 
@@ -14,19 +17,11 @@
   }
   function productName(kind) {
     var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
-    if (api && api.productName) return api.productName(kind);
-    if (kind === "musicShort") return "ViktrychMusic";
-    if (kind === "music") return "ViktorychMusic";
-    if (kind === "pwa") return "ViktrychApp";
-    return "ViktorychApp";
+    return (api && api.productName) ? api.productName(kind) : "";
   }
 
-
-  var STORE = "sintel-music-v1";
-  var WORD_BOX = "0 0 11430.20 2079.00";
-  var SI_BOX = "0 0 1986.60 1680.80";
-  var WORD_PATH = "M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z M 2510.2 991V 1661H 2330.2V 543H 2503.2L 2504.2 750Q 2558.2 631 2645.7 580Q 2733.2 529 2846.2 529Q 3016.2 529 3120.2 634Q 3224.2 739 3224.2 951V 1661H 3044.2V 966Q 3044.2 837 2976.7 764Q 2909.2 691 2792.2 691Q 2671.2 691 2590.7 769.5Q 2510.2 848 2510.2 991Z M 3980.2 543V 697H 3750.2V 1371Q 3750.2 1446 3780.7 1480.5Q 3811.2 1515 3882.2 1515Q 3899.2 1515 3925.7 1511Q 3952.2 1507 3974.2 1503L 4011.2 1655Q 3983.2 1665 3947.7 1670Q 3912.2 1675 3877.2 1675Q 3732.2 1675 3651.2 1598.5Q 3570.2 1522 3570.2 1385V 697H 3402.2V 543H 3570.2V 277H 3750.2V 543Z M 4660.2 1685Q 4498.2 1685 4380.7 1613Q 4263.2 1541 4199.7 1412Q 4136.2 1283 4136.2 1111Q 4136.2 939 4198.2 808Q 4260.2 677 4373.7 603Q 4487.2 529 4639.2 529Q 4728.2 529 4814.7 558.5Q 4901.2 588 4971.7 653.5Q 5042.2 719 5084.2 826Q 5126.2 933 5126.2 1088V 1163H 4318.2Q 4325.2 1338 4418.7 1431.5Q 4512.2 1525 4661.2 1525Q 4760.2 1525 4831.7 1481.5Q 4903.2 1438 4934.2 1353L 5108.2 1401Q 5069.2 1528 4950.7 1606.5Q 4832.2 1685 4660.2 1685ZM 4319.2 1011H 4943.2Q 4930.2 868 4853.7 778.5Q 4777.2 689 4639.2 689Q 4543.2 689 4473.7 734Q 4404.2 779 4364.2 852Q 4324.2 925 4319.2 1011Z M 5564.2 171V 1661H 5384.2V 171Z M 5902.2 1661V 171H 6172.2L 6539.2 1111Q 6560.2 1165 6591.2 1262Q 6622.2 1359 6649.2 1450Q 6675.2 1362 6706.2 1264.5Q 6737.2 1167 6759.2 1111L 7121.2 171H 7392.2V 1661H 7205.2V 810Q 7205.2 728 7207.2 609Q 7209.2 490 7212.2 374Q 7171.2 502 7129.7 623Q 7088.2 744 7062.2 810L 6729.2 1661H 6564.2L 6226.2 810Q 6201.2 747 6160.7 627.5Q 6120.2 508 6076.2 377Q 6078.2 483 6080.7 603.5Q 6083.2 724 6083.2 810V 1661Z M 8109.2 1675Q 7940.2 1675 7835.2 1570Q 7730.2 1465 7730.2 1253V 543H 7910.2V 1238Q 7910.2 1367 7978.2 1440Q 8046.2 1513 8163.2 1513Q 8283.2 1513 8363.7 1434.5Q 8444.2 1356 8444.2 1213V 543H 8625.2V 1661H 8451.2V 1452Q 8396.2 1574 8307.7 1624.5Q 8219.2 1675 8109.2 1675Z M 9321.2 1685Q 9149.2 1685 9035.2 1610Q 8921.2 1535 8891.2 1390L 9062.2 1349Q 9086.2 1441 9152.7 1484Q 9219.2 1527 9319.2 1527Q 9436.2 1527 9505.7 1477Q 9575.2 1427 9575.2 1358Q 9575.2 1243 9411.2 1204L 9225.2 1160Q 8925.2 1089 8925.2 855Q 8925.2 759 8979.2 685.5Q 9033.2 612 9126.7 570.5Q 9220.2 529 9339.2 529Q 9512.2 529 9607.7 604.5Q 9703.2 680 9741.2 798L 9578.2 840Q 9555.2 780 9501.7 731Q 9448.2 682 9340.2 682Q 9240.2 682 9173.7 728Q 9107.2 774 9107.2 844Q 9107.2 906 9152.2 943.5Q 9197.2 981 9295.2 1004L 9464.2 1044Q 9616.2 1080 9689.2 1155.5Q 9762.2 1231 9762.2 1346Q 9762.2 1444 9706.7 1520.5Q 9651.2 1597 9551.7 1641Q 9452.2 1685 9321.2 1685Z M 10022.2 1661V 543H 10202.2V 1661ZM 10113.2 360Q 10062.2 360 10025.2 325Q 9988.2 290 9988.2 241Q 9988.2 191 10025.2 156.5Q 10062.2 122 10113.2 122Q 10165.2 122 10202.2 156.5Q 10239.2 191 10239.2 241Q 10239.2 290 10202.2 325Q 10165.2 360 10113.2 360Z M 10973.2 1685Q 10821.2 1685 10706.7 1613Q 10592.2 1541 10528.2 1411Q 10464.2 1281 10464.2 1109Q 10464.2 934 10528.2 803.5Q 10592.2 673 10706.7 601Q 10821.2 529 10973.2 529Q 11135.2 529 11257.7 610.5Q 11380.2 692 11426.2 838L 11253.2 887Q 11228.2 801 11155.7 745.5Q 11083.2 690 10973.2 690Q 10861.2 690 10789.2 748.5Q 10717.2 807 10682.2 902Q 10647.2 997 10647.2 1109Q 10647.2 1219 10682.2 1313.5Q 10717.2 1408 10789.2 1466Q 10861.2 1524 10973.2 1524Q 11086.2 1524 11159.7 1466.5Q 11233.2 1409 11258.2 1318L 11430.2 1367Q 11385.2 1516 11261.2 1600.5Q 11137.2 1685 10973.2 1685Z";
-  var SI_PATH = "M 708.4 1680.8Q 495 1680.8 336.05 1617.55Q 177.1 1554.3 89.1 1422.3Q 1.1 1290.3 0 1084.6H 422.4Q 426.8 1159.4 460.35 1211.1Q 493.9 1262.8 554.95 1289.2Q 616 1315.6 701.8 1315.6Q 773.3 1315.6 821.7 1298Q 870.1 1280.4 894.85 1249.05Q 919.6 1217.7 919.6 1177Q 919.6 1139.6 895.95 1111.55Q 872.3 1083.5 818.4 1060.4Q 764.5 1037.3 673.2 1018.6L 508.2 983.4Q 291.5 937.2 166.65 825.55Q 41.8 713.9 41.8 521.4Q 41.8 365.2 126.5 248.05Q 211.2 130.9 360.25 65.45Q 509.3 0 704 0Q 903.1 0 1047.75 66.55Q 1192.4 133.1 1271.05 253.55Q 1349.7 374 1350.8 534.6H 924Q 918.5 454.3 865.15 409.75Q 811.8 365.2 704 365.2Q 635.8 365.2 591.8 381.15Q 547.8 397.1 526.9 425.7Q 506 454.3 506 490.6Q 506 529.1 528.55 558.25Q 551.1 587.4 600.05 608.85Q 649 630.3 726 646.8L 860.2 675.4Q 995.5 704 1092.85 751.3Q 1190.2 798.6 1252.35 861.85Q 1314.5 925.1 1343.65 1004.3Q 1372.8 1083.5 1372.8 1177Q 1372.8 1338.7 1293.05 1451.45Q 1213.3 1564.2 1064.8 1622.5Q 916.3 1680.8 708.4 1680.8Z M 1986.6 22V 1661H 1542.2V 22Z";
+  var STORE = "viktorych-music-v1";
+  var STORE_PREV = "sintel-music-v1";
   var EXTRA = {"muLibrary": "M8.80 3.05H19.00A1.65 1.65 0 0 1 20.65 4.70V4.75A1.65 1.65 0 0 1 19.00 6.40H8.80A1.65 1.65 0 0 1 7.15 4.75V4.70A1.65 1.65 0 0 1 8.80 3.05ZM5.80 5.85H15.60A2.70 2.70 0 0 1 18.30 8.55V18.20A2.70 2.70 0 0 1 15.60 20.90H5.80A2.70 2.70 0 0 1 3.10 18.20V8.55A2.70 2.70 0 0 1 5.80 5.85ZM5.80 7.60A0.95 0.95 0 0 0 4.85 8.55V18.20A0.95 0.95 0 0 0 5.80 19.15H15.60A0.95 0.95 0 0 0 16.55 18.20V8.55A0.95 0.95 0 0 0 15.60 7.60Z", "muLibraryOn": "M9.25 3.05H18.30A2.55 2.55 0 0 1 20.85 5.60V13.40A2.55 2.55 0 0 1 18.30 15.95H9.25A2.55 2.55 0 0 1 6.70 13.40V5.60A2.55 2.55 0 0 1 9.25 3.05ZM5.80 6.15H15.10A2.70 2.70 0 0 1 17.80 8.85V18.15A2.70 2.70 0 0 1 15.10 20.85H5.80A2.70 2.70 0 0 1 3.10 18.15V8.85A2.70 2.70 0 0 1 5.80 6.15Z", "muList": "M4.07 4.55H12.53A1.02 1.02 0 0 1 13.55 5.57V5.57A1.02 1.02 0 0 1 12.53 6.60H4.07A1.02 1.02 0 0 1 3.05 5.57V5.57A1.02 1.02 0 0 1 4.07 4.55ZM4.07 10.95H12.53A1.02 1.02 0 0 1 13.55 11.97V11.97A1.02 1.02 0 0 1 12.53 13.00H4.07A1.02 1.02 0 0 1 3.05 11.97V11.97A1.02 1.02 0 0 1 4.07 10.95ZM4.07 17.35H8.32A1.02 1.02 0 0 1 9.35 18.38V18.38A1.02 1.02 0 0 1 8.32 19.40H4.07A1.02 1.02 0 0 1 3.05 18.38V18.38A1.02 1.02 0 0 1 4.07 17.35ZM13.20 17.25a3.00 3.00 0 1 1 6.00 0a3.00 3.00 0 1 1 -6.00 0zM14.65 17.25a1.55 1.55 0 1 0 3.10 0a1.55 1.55 0 1 0 -3.10 0zM19.20 4.90H19.20A0.85 0.85 0 0 1 20.05 5.75V14.45A0.85 0.85 0 0 1 19.20 15.30H19.20A0.85 0.85 0 0 1 18.35 14.45V5.75A0.85 0.85 0 0 1 19.20 4.90ZM20.05 4.9C22.2 6.15 23.4 7.7 23.4 9.4H21.65C21.65 8.3 20.95 7.4 19.5 6.5L20.05 4.9Z", "muListOn": "M4.07 4.55H12.53A1.02 1.02 0 0 1 13.55 5.57V5.57A1.02 1.02 0 0 1 12.53 6.60H4.07A1.02 1.02 0 0 1 3.05 5.57V5.57A1.02 1.02 0 0 1 4.07 4.55ZM4.07 10.95H12.53A1.02 1.02 0 0 1 13.55 11.97V11.97A1.02 1.02 0 0 1 12.53 13.00H4.07A1.02 1.02 0 0 1 3.05 11.97V11.97A1.02 1.02 0 0 1 4.07 10.95ZM4.07 17.35H8.32A1.02 1.02 0 0 1 9.35 18.38V18.38A1.02 1.02 0 0 1 8.32 19.40H4.07A1.02 1.02 0 0 1 3.05 18.38V18.38A1.02 1.02 0 0 1 4.07 17.35ZM13.15 17.25a3.05 3.05 0 1 1 6.10 0a3.05 3.05 0 1 1 -6.10 0zM19.27 4.85H19.27A0.88 0.88 0 0 1 20.15 5.72V16.48A0.88 0.88 0 0 1 19.27 17.35H19.27A0.88 0.88 0 0 1 18.40 16.48V5.72A0.88 0.88 0 0 1 19.27 4.85ZM20.15 4.85C22.55 6.25 23.7 8 23.7 10H21.8C21.8 8.65 21.05 7.55 19.45 6.5L20.15 4.85Z", "muRadio": "M4.15 16.90a1.75 1.75 0 1 1 3.50 0a1.75 1.75 0 1 1 -3.50 0zM9.28 11.88A6.05 6.05 0 0 1 9.28 21.92L8.33 20.51A4.35 4.35 0 0 0 8.33 13.29ZM11.27 8.94A9.60 9.60 0 0 1 11.27 24.86L10.32 23.45A7.90 7.90 0 0 0 10.32 10.35Z", "muRadioOn": "M3.75 16.90a2.15 2.15 0 1 1 4.30 0a2.15 2.15 0 1 1 -4.30 0zM9.48 11.59A6.40 6.40 0 0 1 9.48 22.21L8.14 20.22A4.00 4.00 0 0 0 8.14 13.58ZM11.49 8.61A10.00 10.00 0 0 1 11.49 25.19L10.15 23.20A7.60 7.60 0 0 0 10.15 10.60Z", "muAdd": "M2.80 12.00a9.20 9.20 0 1 1 18.40 0a9.20 9.20 0 1 1 -18.40 0zM4.55 12.00a7.45 7.45 0 1 0 14.90 0a7.45 7.45 0 1 0 -14.90 0zM11.15 7.95L12.85 7.95L12.85 11.15L16.05 11.15L16.05 12.85L12.85 12.85L12.85 16.05L11.15 16.05L11.15 12.85L7.95 12.85L7.95 11.15L11.15 11.15Z", "muAddOn": "M2.80 12.00a9.20 9.20 0 1 1 18.40 0a9.20 9.20 0 1 1 -18.40 0zM11.07 11.07L7.90 11.07L7.90 12.93L11.07 12.93L11.07 16.10L12.93 16.10L12.93 12.93L16.10 12.93L16.10 11.07L12.93 11.07L12.93 7.90L11.07 7.90Z", "muBack": "M14.6 4.65 7.25 12l7.35 7.35 1.75-1.75L10.75 12l5.6-5.6-1.75-1.75zM11.05 11.1H20.5v1.8H11.05z", "muBackOn": "M20.3 10.1H8.65l4.2-4.2-1.95-1.95L4.25 12l6.65 7.05 1.95-1.95-4.2-4.2H20.3z", "muNote": "M6.75 16.70a3.40 3.40 0 1 1 6.80 0a3.40 3.40 0 1 1 -6.80 0zM8.35 16.70a1.80 1.80 0 1 0 3.60 0a1.80 1.80 0 1 0 -3.60 0zM13.62 3.70H13.62A0.93 0.93 0 0 1 14.55 4.62V13.47A0.93 0.93 0 0 1 13.62 14.40H13.62A0.93 0.93 0 0 1 12.70 13.47V4.62A0.93 0.93 0 0 1 13.62 3.70ZM14.55 3.7C17.2 5.2 18.75 7.05 18.75 9.2H16.8C16.8 7.75 15.9 6.6 14.05 5.5L14.55 3.7Z", "muNoteOn": "M6.70 16.70a3.45 3.45 0 1 1 6.90 0a3.45 3.45 0 1 1 -6.90 0zM13.70 3.65H13.70A0.95 0.95 0 0 1 14.65 4.60V15.85A0.95 0.95 0 0 1 13.70 16.80H13.70A0.95 0.95 0 0 1 12.75 15.85V4.60A0.95 0.95 0 0 1 13.70 3.65ZM14.65 3.65C17.5 5.3 19.15 7.4 19.15 9.8H16.95C16.95 8.1 15.9 6.75 13.9 5.45L14.65 3.65Z", "muSearchOn": "M10.25 2.15a8.1 8.1 0 1 0 5.02 14.45l4.48 4.48 1.6-1.6-4.48-4.48A8.1 8.1 0 0 0 10.25 2.15z"};
   var HEART = "M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z";
   var HEART_ON = "M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z";
@@ -107,7 +102,7 @@
       relative = true;
     }
     var url;
-    try { url = new URL(raw, "https://owner-account.github.io/SuperintelApp/"); }
+    try { url = new URL(raw, (typeof location !== "undefined" && location.href) || "https://example.invalid/"); }
     catch (err) { return { ok: false, reason: "url" }; }
     if (url.protocol !== "https:") return { ok: false, reason: "https" };
     if (url.username || url.password) return { ok: false, reason: "auth" };
@@ -358,7 +353,7 @@
     render: function () {},
     toast: function () {},
     go: function () {},
-    repo: function () { return "owner-account/SuperintelApp"; }
+    repo: function () { return ""; }
   };
   var remote = { songs: [], playlists: [] };
   var local = { songs: [], edits: {}, hidden: [], order: [], playlists: [], playlistTouched: false, likes: [], offline: {}, volume: 1, shuffle: false, repeat: "off", view: "grid" };
@@ -403,6 +398,12 @@
   function restore() {
     try {
       var raw = localStorage.getItem(STORE);
+      if (!raw) {
+        raw = localStorage.getItem(STORE_PREV);
+        if (raw) {
+          try { localStorage.setItem(STORE, raw); } catch (err) { /* private mode */ }
+        }
+      }
       if (!raw) return;
       var data = JSON.parse(raw);
       if (!data || typeof data !== "object") return;
@@ -434,13 +435,20 @@
     }).catch(function () {});
   }
 
-  function wordmark(cls) {
-    return '<svg class="' + cls + '" viewBox="' + WORD_BOX + '" fill="currentColor" aria-hidden="true"><path d="' + WORD_PATH + '"/></svg>';
+  function markOf(name) {
+    var marks = root.ViktorychMarks || {};
+    return marks[name] || { box: "0 0 1 1", body: "" };
+  }
+
+  function wordmark(cls, name) {
+    var mark = markOf(name || "music");
+    var klass = cls ? ' class="' + cls + '"' : "";
+    return '<svg' + klass + ' viewBox="' + mark.box + '" fill="currentColor" aria-hidden="true">' + mark.body + '</svg>';
   }
 
   function brand() {
-    return '<a class="logo" href="#/" aria-label="' + productName("music") + '">' + wordmark("logo-full") +
-      '<svg class="logo-si" viewBox="' + SI_BOX + '" fill="currentColor" aria-hidden="true"><path d="' + SI_PATH + '"/></svg></a>';
+    return '<a class="logo" href="#/" aria-label="' + productName("music") + '">' + wordmark("logo-full", "music") +
+      wordmark("logo-short", "musicShort") + wordmark("logo-si", "musicMark") + '</a>';
   }
 
   function links(route, navItem) {
@@ -499,15 +507,15 @@
   }
 
   function head(title, tools) {
-    var logo = ("<div class=\"mhead\"><button class=\"m-ava\" data-act=\"drawer\" " + "aria-label=\"" + tr("Menu") + "\"" + "><span class=\"ava initials\">Y</span></button><a class=\"m-logo\" href=\"#/\" aria-label=\"") + productName("music") + '">' + wordmark("") + "</a></div>";
-    // Home already shows the SIntelMusic logo. A second heading would repeat it.
+    var logo = '<div class="mhead"><button class="m-ava" data-act="drawer" aria-label="' + tr("Menu") + '"><span class="ava initials">Y</span></button><a class="m-logo" href="#/" aria-label="' + productName("music") + '">' + wordmark("logo-full", "music") + wordmark("logo-short", "musicShort") + "</a></div>";
+    // Home already shows the music logo. A second heading would repeat it.
     if (title === productName("music")) return '<div class="topbar"><h1 class="vh">' + esc(title) + "</h1>" + logo + "</div>";
     return '<div class="topbar tall">' + logo + '<div class="page-head"><div class="head-text grow"><h1>' + esc(title) + "</h1></div>" + (tools || "") + "</div></div>";
   }
 
   function letter(song) {
     var text = (song && (song.title || song.artist)) || productName("music");
-    return esc(String(text).trim().charAt(0).toUpperCase() || "S");
+    return esc(String(text).trim().charAt(0).toUpperCase() || "V");
   }
 
   function art(song, cls) {
@@ -708,7 +716,7 @@
   function idb() {
     return new Promise(function (resolve, reject) {
       if (!root.indexedDB) { reject(new Error("storage")); return; }
-      var req = root.indexedDB.open("sintel-music", 1);
+      var req = root.indexedDB.open("sintel-music", 1); /* kept so saved audio files stay */
       req.onupgradeneeded = function () {
         if (!req.result.objectStoreNames.contains("files")) req.result.createObjectStore("files");
       };
@@ -961,10 +969,15 @@
 
   function publish() {
     var body = publishBody();
-    var repo = hooks.repo() || "owner-account/SuperintelApp";
+    var repo = hooks.repo() || "";
+    var note = tr("Only an issue opened by the owner is applied. Uploaded files stay on this device.");
+    if (!repo) {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(body).catch(function () {});
+      hooks.toast(tr("Catalog copied. Paste it into the issue.") + " " + note);
+      return;
+    }
     var base = "https://github.com/" + repo + "/issues/new?template=music-catalog.yml&title=" + encodeURIComponent(tr("Music catalog"));
     var url = base + "&catalog=" + encodeURIComponent(body);
-    var note = tr("Only an issue opened by the owner is applied. Uploaded files stay on this device.");
     if (url.length > 6000) {
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(body).catch(function () {});
       hooks.toast(tr("Catalog copied. Paste it into the issue.") + " " + note);

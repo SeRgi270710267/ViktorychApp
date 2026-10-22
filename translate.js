@@ -14,15 +14,11 @@
   }
   function productName(kind) {
     var api = (typeof SI18n !== "undefined") ? SI18n : ((typeof window !== "undefined" && window.SI18n) ? window.SI18n : ((typeof self !== "undefined" && self.SI18n) ? self.SI18n : null));
-    if (api && api.productName) return api.productName(kind);
-    if (kind === "musicShort") return "ViktrychMusic";
-    if (kind === "music") return "ViktorychMusic";
-    if (kind === "pwa") return "ViktrychApp";
-    return "ViktorychApp";
+    return (api && api.productName) ? api.productName(kind) : "";
   }
 
-  const CACHE_KEY = "superintelapp-translate-v1";
-  const HEALTH_KEY = "superintelapp-translate-health-v1";
+  const CACHE_KEY = "viktorychapp-translate-v1";
+  const HEALTH_KEY = "viktorychapp-translate-health-v1";
   const SICK_MS = 10 * 60 * 1000;
   const LANGS = [
     ["en", "English"],
@@ -134,7 +130,8 @@
     try {
       let raw = sessionStorage.getItem(name);
       if (!raw) {
-        const previous = sessionStorage.getItem(String(name).replace("superintelapp-", "rss-" + "feeds-"));
+        const legacy = sessionStorage.getItem(String(name).replace("viktorychapp-", "superintelapp-"));
+        const previous = legacy || sessionStorage.getItem(String(name).replace("viktorychapp-", "rss-" + "feeds-"));
         if (previous) {
           raw = previous;
           try { sessionStorage.setItem(name, previous); } catch (err) { /* the current tab can keep using the copy it just read */ }
