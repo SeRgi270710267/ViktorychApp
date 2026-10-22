@@ -615,3 +615,117 @@ test("archive copies are public and account objects stay hidden", async () => {
   const hidden = await mf.dispatchFetch("https://accounts.test/v1/archive/owner/tiktok.json");
   assert.equal(hidden.status, 404);
 });
+
+test("reposts and quotes stay on the account and show on that profile", async () => {
+  const ada = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.180",
+    body: { displayName: "Ada Lovelace", handle: "ada_rp" }
+  });
+  assert.equal(ada.status, 201);
+  const bea = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.181",
+    body: { displayName: "Bea", handle: "bea_rp" }
+  });
+  assert.equal(bea.status, 201);
+  const feed = {
+    id: "yt1",
+    statusId: "yt1",
+    platform: "youtube",
+    handle: "addedchannel",
+    author: "Added Channel",
+    text: "a video from an added account",
+    url: "https://www.youtube.com/watch?v=yt1",
+    date: "2026-10-22T12:00:00.000Z",
+    stats: { reposts: 4 }
+  };
+  const denied = await call("/v1/reposts", { method: "PUT", ip: "203.0.113.182", body: { kind: "repost", post: feed } });
+  assert.equal(denied.status, 401);
+
+  const saved = await call("/v1/reposts", {
+    method: "PUT",
+    ip: "203.0.113.183",
+    token: ada.body.token,
+    body: { kind: "repost", post: feed }
+  });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal(saved.body.repost.postKey, "r:youtube:yt1");
+  assert.equal(saved.body.repost.kind, "repost");
+
+  const quoteKey = "q:x:99:" + Date.now();
+  const quoted = await call("/v1/reposts", {
+    method: "PUT",
+    ip: "203.0.113.184",
+    token: ada.body.token,
+    body: {
+      kind: "quote",
+      postKey: quoteKey,
+      comment: "a take on an added account",
+      post: { id: "99", statusId: "99", platform: "x", handle: "addedx", author: "Added X", text: "original post", url: "https://x.com/addedx/status/99" }
+    }
+  });
+  assert.equal(quoted.status, 200, JSON.stringify(quoted.body));
+
+  const seen = await call("/v1/profile/" + encodeURIComponent("ada_rp"), { ip: "203.0.113.185", token: bea.body.token });
+  assert.equal(seen.status, 200);
+  assert.equal(seen.body.account.displayName, "Ada Lovelace");
+  const keys = seen.body.reposts.map((row) => row.postKey);
+  assert.ok(keys.includes("r:youtube:yt1"));
+  assert.ok(keys.includes(quoteKey));
+  assert.equal(seen.body.reposts[0].createdAt >= seen.body.reposts[1].createdAt, true);
+
+  const quoteRow = seen.body.reposts.find((row) => row.kind === "quote");
+  const repostOfQuote = await call("/v1/reposts", {
+    method: "PUT",
+    ip: "203.0.113.186",
+    token: bea.body.token,
+    body: {
+      kind: "repost",
+      post: {
+        id: quoteRow.postKey,
+        statusId: quoteRow.postKey,
+        platform: "app",
+        handle: "ada_rp",
+        author: "Ada Lovelace",
+        text: quoteRow.comment,
+        kind: "quote",
+        quoted: quoteRow.post
+      }
+    }
+  });
+  assert.equal(repostOfQuote.status, 200, JSON.stringify(repostOfQuote.body));
+  const beaProfile = await call("/v1/profile/bea_rp", { ip: "203.0.113.187", token: ada.body.token });
+  assert.equal(beaProfile.body.reposts.length, 1);
+  assert.equal(beaProfile.body.reposts[0].kind, "repost");
+  assert.equal(beaProfile.body.reposts[0].post.platform, "app");
+  assert.equal(beaProfile.body.reposts[0].post.text, "a take on an added account");
+  assert.equal(beaProfile.body.reposts[0].post.quoted.text, "original post");
+
+  const undone = await call("/v1/reposts", {
+    method: "DELETE",
+    ip: "203.0.113.188",
+    token: ada.body.token,
+    body: { postKey: "r:youtube:yt1" }
+  });
+  assert.equal(undone.status, 200);
+  const after = await call("/v1/profile/ada_rp", { ip: "203.0.113.189", token: bea.body.token });
+  assert.equal(after.body.reposts.some((row) => row.postKey === "r:youtube:yt1"), false);
+  assert.equal(after.body.reposts.some((row) => row.kind === "quote"), true);
+
+  const platforms = ["x", "threads", "instagram", "rss", "vk", "discord", "telegram", "tiktok"];
+  for (let i = 0; i < platforms.length; i++) {
+    const platform = platforms[i];
+    const put = await call("/v1/reposts", {
+      method: "PUT",
+      ip: "203.0.113.190",
+      token: bea.body.token,
+      body: { kind: "repost", post: { id: "p" + i, statusId: "p" + i, platform: platform, handle: "added", author: "Added", text: platform } }
+    });
+    assert.equal(put.status, 200, platform + " " + JSON.stringify(put.body));
+  }
+  const all = await call("/v1/profile/bea_rp", { ip: "203.0.113.191", token: ada.body.token });
+  platforms.forEach((platform) => {
+    assert.equal(all.body.reposts.some((row) => row.post && row.post.platform === platform), true, platform);
+  });
+});

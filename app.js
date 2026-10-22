@@ -146,6 +146,8 @@
     bellMenu: null,
     tabAssign: null,
     tabContext: null,
+    repostMenu: null,
+    quoteTarget: "",
     shared: {},
     sharedState: {},
     chain: {},
@@ -953,6 +955,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return rows.find((feed) => (feed.previousHandles || []).some((item) => String(item || "").replace(/^@/, "").toLowerCase() === lower)) || null;
   }
   function accountHash(platform, handle) {
+    if ((platform || "") === "app") return profileHash("x", handle);
     if (window.FeedsPeople) {
       const merged = window.FeedsPeople.hashFor(platform, handle);
       if (merged) return merged;
@@ -1269,7 +1272,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function sourceBadge(platform) {
-    if (!platform || platform === "x") return "";
+    if (!platform || platform === "x" || platform === "app") return "";
     const name = platform === "instagram" ? "ig" : platform === "threads" ? "threads" : platform === "youtube" ? "subs" : platform === "vk" ? "vk" : platform === "telegram" ? "tg" : platform === "discord" ? "discord" : platform === "tiktok" ? "tiktok" : "rss";
     return `<span class="src" title="${esc(PLATFORM[platform] || "RSS")}">${icon(name)}</span>`;
   }
@@ -3151,10 +3154,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       </button>`;
     const replyCount = shownCount(stats.replies, 0);
     const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="${tr("Replies")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
+    const menuOpen = STATE.repostMenu === id;
+    const repostMenu = menuOpen ? `<div class="menu repost-menu" data-act="stop" role="menu" aria-label="${esc(tr("Repost"))}"><button type="button" data-act="repost-do" data-id="${esc(id)}">${reposted ? tr("Undo repost") : tr("Repost")}</button><button type="button" data-act="quote-open" data-id="${esc(id)}">${tr("Quote")}</button></div>` : "";
+    const repostBtn = `<span class="repost-wrap">${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0))}${repostMenu}</span>`;
     return `<div class="actions">
       <div class="action-stats">
         ${replyLink}
-        ${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0))}
+        ${repostBtn}
         ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0))}
         ${btn("views", "open-status", "views", tr("Views"), shownCount(stats.views, 0))}
       </div>
@@ -5296,7 +5302,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const shareNote = sharePostUrl(post, "post") ? "" : unpublishedNote("post", post.platform, !!post.url);
 const here = parseRoute();
     const histItem = here.name === "history" ? `<button data-act="hist-remove" data-id="${esc(post.id)}" data-tab="${esc(here.tab || "bookmarks")}">${tr("Remove from History")}</button>` : "";
-    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${histItem}${repostItem}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
+    const quoteDelete = post.ownQuote ? `<button data-act="quote-delete" data-id="${esc(post.id)}">${tr("Delete")}</button>` : "";
+    const menu = STATE.menu === post.id ? `<div class="menu" data-act="stop"><button data-act="copy" data-url="${esc(shareLink)}"${shareNote ? ` data-note="${esc(shareNote)}"` : ""}>${tr("Copy link")}</button><button data-act="add-to-tab" data-id="${esc(post.id)}">${tr("Add to tab…")}</button>${histItem}${repostItem}${quoteDelete}<a data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(post.url || "#")}">${tr("View on {platform}", { platform: PLATFORM[post.platform] || tr("Web") })}</a></div>` : "";
     const continues = !!opts.continues;
     const face = authorFace(post);
     const creator = isRepost(post) ? creatorOf(post) : null;
@@ -5410,7 +5417,7 @@ const here = parseRoute();
     if (parts[0].startsWith("@")) {
       handle = parts[0].slice(1);
       rest = parts.slice(1);
-    } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord", "telegram", "tiktok"].includes(parts[0])) {
+    } else if (["x", "threads", "instagram", "rss", "youtube", "vk", "discord", "telegram", "tiktok", "app"].includes(parts[0])) {
       platform = parts[0];
       handle = parts[1] || "";
       rest = parts.slice(2);
@@ -6796,6 +6803,9 @@ const here = parseRoute();
     if (window.ViktorychAccounts && window.ViktorychAccounts.profileHtml) {
       const accountPage = window.ViktorychAccounts.profileHtml(route);
       if (accountPage) return accountPage;
+      if (window.ViktorychAccounts.profilePending && window.ViktorychAccounts.profilePending(route.handle) && !findFeed(route.platform, route.handle)) {
+        return `<div class="reply-empty">${tr("Loading…")}</div>`;
+      }
     }
     posts().forEach(creditCarried);
     if (window.FeedsPeople) {
@@ -6892,6 +6902,19 @@ const here = parseRoute();
       if (knownShape) {
         post = expandStub(archived || { p: route.platform, id: route.id, h: route.handle });
         if (post) STATE.shared[String(route.id)] = post;
+      }
+    }
+    if (!post && route.platform === "app") {
+      post = repostPostById(route.handle, route.id);
+      if (post) STATE.shared[String(route.id)] = post;
+      else {
+        const accounts = window.ViktorychAccounts;
+        const ready = accounts && accounts.profileReady ? accounts.profileReady(route.handle) : false;
+        if (accounts && accounts.ensureProfile && !ready) {
+          accounts.ensureProfile(route.handle);
+          return pageHead(tr("Post noun"), "", true) + `<div class="reply-empty">${tr("Loading…")}</div>`;
+        }
+        STATE.sharedState[String(route.id)] = "miss";
       }
     }
     if (post && post.tombstone) {
@@ -8990,6 +9013,16 @@ if (STATE.histClear) {
           <p class="phandle">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p></div>
         </div></div></div>`;
     }
+    if (STATE.modal === "quote") {
+      const mine = signedAccount();
+      const face = mine ? avatar(mine.avatar, mine.displayName || mine.handle) : `<span class="ava initials">Y</span>`;
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-label="${esc(tr("Quote"))}" data-act="stop">
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Quote")}</h2><button id="quote-post" class="save" data-act="quote-post" disabled>${tr("Post")}</button></div>
+        <div class="modal-body" style="display:flex;gap:12px">
+          ${face}
+          <div style="flex:1"><textarea id="quote-text" maxlength="280" placeholder="${tr("Add a comment")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none"></textarea></div>
+        </div></div></div>`;
+    }
     if (STATE.modal === "list") {
       const d = STATE.draft;
       return `<div class="modal-back"><div class="modal" role="dialog">
@@ -9094,6 +9127,275 @@ if (STATE.histClear) {
     saveSettings();
     if (parseRoute().name !== "shorts") render();
     return !!STATE.settings[bucket][id];
+  }
+
+  let pendingReposts = {};
+  let repostCacheText = "";
+
+  function repostLib() {
+    return window.AccountReposts || null;
+  }
+
+  function signedAccount() {
+    const accounts = window.ViktorychAccounts;
+    if (!accounts || !accounts.account) return null;
+    return accounts.account() || null;
+  }
+
+  function isMyAccount(account) {
+    const mine = signedAccount();
+    return !!(mine && account && mine.publicId && mine.publicId === account.publicId);
+  }
+
+  function accountCall(path, opts) {
+    const accounts = window.ViktorychAccounts;
+    if (!accounts || !accounts.call) return Promise.resolve(null);
+    const token = accounts.token ? accounts.token() : "";
+    if (!token) return Promise.resolve(null);
+    return accounts.call(path, Object.assign({ token: token }, opts || {}));
+  }
+
+  function readRepostCache() {
+    const account = signedAccount();
+    if (!account || !account.publicId) return [];
+    try {
+      const doc = JSON.parse(readStored(localStorage, "reposts-v1") || "null");
+      if (!doc || doc.publicId !== account.publicId || !Array.isArray(doc.rows)) return [];
+      return doc.rows;
+    } catch (err) { return []; }
+  }
+
+  function writeRepostCache(rows) {
+    const account = signedAccount();
+    if (!account || !account.publicId) return;
+    const text = JSON.stringify({ publicId: account.publicId, rows: (rows || []).slice(0, 80) });
+    if (text === repostCacheText || text.length > 400000) return;
+    repostCacheText = text;
+    writeStored(localStorage, "reposts-v1", text);
+  }
+
+  function rowsForAccount(account) {
+    const lib = repostLib();
+    if (!account) return [];
+    const mine = isMyAccount(account);
+    const loaded = !!(account.repostsLoaded && Array.isArray(account.reposts));
+    const remote = loaded ? account.reposts : (mine ? readRepostCache() : []);
+    const map = {};
+    remote.forEach((row) => {
+      if (row && row.postKey && !row.removed) map[row.postKey] = row;
+    });
+    if (mine) {
+      Object.keys(pendingReposts).forEach((key) => {
+        const row = pendingReposts[key];
+        if (!row) return;
+        if (row.removed) delete map[key];
+        else map[key] = row;
+      });
+    }
+    const rows = Object.keys(map).map((key) => map[key]);
+    return lib ? lib.sortReposts(rows) : rows;
+  }
+
+  function storedRows() {
+    const account = signedAccount();
+    const live = window.ViktorychAccounts && window.ViktorychAccounts.storedAccount && account ? window.ViktorychAccounts.storedAccount(account.handle) : null;
+    if (live && live.repostsLoaded && Array.isArray(live.reposts)) return live.reposts.slice();
+    return readRepostCache();
+  }
+
+  function rememberServerRows(rows) {
+    const account = signedAccount();
+    if (!account) return;
+    const list = (rows || []).filter((row) => row && row.postKey && !row.removed).slice(0, 80);
+    writeRepostCache(list);
+    if (window.ViktorychAccounts && window.ViktorychAccounts.setReposts) window.ViktorychAccounts.setReposts(account.handle, list);
+  }
+
+  function absorbServerRow(row) {
+    if (!row || !row.postKey) return;
+    const list = storedRows().filter((item) => item && item.postKey !== row.postKey);
+    list.push(row);
+    rememberServerRows(list);
+    delete pendingReposts[row.postKey];
+  }
+
+  function dropServerRow(postKey) {
+    rememberServerRows(storedRows().filter((item) => item && item.postKey !== postKey));
+    delete pendingReposts[postKey];
+  }
+
+  function profilePostsHtml(account) {
+    const lib = repostLib();
+    if (!lib || !account) return { html: "", count: 0 };
+    const mine = isMyAccount(account);
+    if (!account.repostsLoaded && !rowsForAccount(account).length) {
+      return { html: `<div class="reply-empty">${tr("Loading…")}</div>`, count: 0 };
+    }
+    const rows = rowsForAccount(account);
+    if (mine) writeRepostCache(rows);
+    const posts = [];
+    rows.forEach((row) => {
+      const post = lib.toProfilePost(row, account, { self: mine });
+      if (!post) return;
+      if (post.kind === "quote" && mine) post.ownQuote = true;
+      if (post.platform === "app" || !findAnyPost(post.id)) STATE.shared[String(post.id)] = post;
+      posts.push(post);
+    });
+    return { html: posts.map((post) => card(post, "")).join(""), count: posts.length };
+  }
+
+  function repostPostById(handle, id) {
+    const lib = repostLib();
+    const key = String(id || "");
+    if (!lib || !key) return null;
+    const accounts = window.ViktorychAccounts;
+    const stored = accounts && accounts.storedAccount ? accounts.storedAccount(handle) : null;
+    const mine = signedAccount();
+    const account = stored || (mine && String(mine.handle || "") === String(handle || "") ? mine : null);
+    if (!account) return null;
+    const row = rowsForAccount(account).find((item) => item && (item.postKey === key || (item.post && (item.post.id === key || item.post.statusId === key))));
+    if (!row) return null;
+    const post = lib.toProfilePost(row, account, { self: isMyAccount(account) });
+    if (post && post.kind === "quote" && isMyAccount(account)) post.ownQuote = true;
+    return post;
+  }
+
+  function locatePost(id) {
+    const key = String(id || "");
+    if (!key) return null;
+    const direct = findAnyPost(key);
+    if (direct) return direct;
+    const users = STATE.liveUsers || {};
+    const names = Object.keys(users);
+    for (let i = 0; i < names.length; i++) {
+      const row = users[names[i]] || {};
+      const lists = [row.posts, row.replies, row.media, row.videos, row.community];
+      for (let j = 0; j < lists.length; j++) {
+        const list = lists[j] || [];
+        for (let k = 0; k < list.length; k++) {
+          const post = list[k];
+          if (post && (post.id === key || String(post.statusId || "") === key)) return post;
+        }
+      }
+    }
+    return null;
+  }
+
+  function repostKeyFor(post) {
+    const lib = repostLib();
+    if (!post) return "";
+    const snap = lib ? lib.snapshotPost(post) : null;
+    const source = snap && lib.sourceKey(snap);
+    if (source) return "r:" + source;
+    const id = String(post.id || post.statusId || "");
+    const found = storedRows().find((row) => row && row.kind !== "quote" && row.post && (row.post.id === id || row.post.statusId === id || row.postKey === id));
+    return found ? found.postKey : "";
+  }
+
+  function finishRepost(post, postKey, on, body) {
+    if (!body || body.status !== 200) {
+      if (on) {
+        if (post && post.id) delete STATE.settings.reposts[post.id];
+        delete pendingReposts[postKey];
+      } else if (post && post.id) {
+        STATE.settings.reposts[post.id] = Date.now();
+        delete pendingReposts[postKey];
+      }
+      saveSettings();
+      toast(tr("Couldn't save that repost."));
+      render();
+      return;
+    }
+    if (on && body.repost) absorbServerRow(body.repost);
+    else dropServerRow(postKey);
+    render();
+  }
+
+  function commitRepost(post, on) {
+    const lib = repostLib();
+    if (!post || !post.id || !STATE.settings || !STATE.settings.reposts) return;
+    const postKey = repostKeyFor(post);
+    const snap = lib ? lib.snapshotPost(post) : null;
+    if (on) {
+      STATE.settings.reposts[post.id] = Date.now();
+      if (postKey && snap) pendingReposts[postKey] = { postKey: postKey, kind: "repost", comment: "", createdAt: Date.now(), post: snap, inflight: true };
+    } else {
+      delete STATE.settings.reposts[post.id];
+      if (postKey) pendingReposts[postKey] = { postKey: postKey, removed: true, inflight: true };
+    }
+    saveSettings();
+    STATE.repostMenu = null;
+    if (parseRoute().name !== "shorts") render();
+    if (!postKey || (on && !snap)) {
+      if (on) delete STATE.settings.reposts[post.id];
+      else STATE.settings.reposts[post.id] = Date.now();
+      delete pendingReposts[postKey];
+      saveSettings();
+      toast(tr("Couldn't save that repost."));
+      render();
+      return;
+    }
+    const req = on
+      ? accountCall("/v1/reposts", { method: "PUT", body: { kind: "repost", post: snap } })
+      : accountCall("/v1/reposts", { method: "DELETE", body: { postKey: postKey } });
+    Promise.resolve(req).then((body) => finishRepost(post, postKey, on, body)).catch(() => finishRepost(post, postKey, on, null));
+  }
+
+  function publishQuote() {
+    const lib = repostLib();
+    const post = locatePost(STATE.quoteTarget);
+    const field = document.getElementById("quote-text");
+    const comment = String(field && field.value || "").trim().slice(0, 280);
+    if (!lib || !post || !comment) return;
+    const snap = lib.snapshotPost(post);
+    const source = snap && lib.sourceKey(snap);
+    if (!snap || !source) {
+      toast(tr("Couldn't save that repost."));
+      return;
+    }
+    const postKey = "q:" + source + ":" + Date.now();
+    const row = { postKey: postKey, kind: "quote", comment: comment, createdAt: Date.now(), post: snap, inflight: true };
+    pendingReposts[postKey] = row;
+    STATE.modal = null;
+    STATE.quoteTarget = "";
+    STATE.repostMenu = null;
+    render();
+    accountCall("/v1/reposts", { method: "PUT", body: { kind: "quote", postKey: postKey, comment: comment, post: snap } }).then((body) => {
+      if (!body || body.status !== 200) {
+        delete pendingReposts[postKey];
+        toast(tr("Couldn't save that repost."));
+        render();
+        return;
+      }
+      absorbServerRow(body.repost || row);
+      render();
+    }).catch(() => {
+      delete pendingReposts[postKey];
+      toast(tr("Couldn't save that repost."));
+      render();
+    });
+  }
+
+  function deleteQuote(id) {
+    const key = String(id || "");
+    if (!key) return;
+    pendingReposts[key] = { postKey: key, removed: true, inflight: true };
+    STATE.menu = null;
+    render();
+    accountCall("/v1/reposts", { method: "DELETE", body: { postKey: key } }).then((body) => {
+      if (!body || body.status !== 200) {
+        delete pendingReposts[key];
+        toast(tr("Couldn't save that repost."));
+        render();
+        return;
+      }
+      dropServerRow(key);
+      render();
+    }).catch(() => {
+      delete pendingReposts[key];
+      toast(tr("Couldn't save that repost."));
+      render();
+    });
   }
 
   function watchHash(post) {
@@ -9229,6 +9531,7 @@ if (STATE.histClear) {
   function repostBanner(post, mode) {
     if (!post || mode === "author" || mode === "status" || !isRepost(post)) return "";
     const by = post.repostedBy || {};
+    if (by.self) return `<div class="repost-line">${icon("repost")}<span>${tr("You reposted")}</span></div>`;
     const name = String(by.name || by.handle || "").trim();
     if (!name) return `<div class="repost-line">${icon("repost")}<span>${tr("Reposted")}</span></div>`;
     const platform = by.platform || post.platform || "x";
@@ -10778,8 +11081,37 @@ if (STATE.histClear) {
       render();
       return;
     }
-    if (act === "like" || act === "bookmark" || act === "repost") {
+    if (act === "like" || act === "bookmark") {
       toggleReaction(act, el.dataset.id);
+      return;
+    }
+    if (act === "repost") {
+      STATE.repostMenu = STATE.repostMenu === el.dataset.id ? null : el.dataset.id;
+      render();
+      return;
+    }
+    if (act === "repost-do") {
+      const post = locatePost(el.dataset.id);
+      STATE.repostMenu = null;
+      if (!post) { render(); return; }
+      commitRepost(post, !STATE.settings.reposts[post.id]);
+      return;
+    }
+    if (act === "quote-open") {
+      const post = locatePost(el.dataset.id);
+      STATE.repostMenu = null;
+      if (!post) { render(); return; }
+      STATE.quoteTarget = post.id;
+      STATE.modal = "quote";
+      render();
+      return;
+    }
+    if (act === "quote-post") {
+      publishQuote();
+      return;
+    }
+    if (act === "quote-delete") {
+      deleteQuote(el.dataset.id);
       return;
     }
     if (act === "open-article") {
@@ -11458,6 +11790,10 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       return;
     }
     const actEl = event.target.closest("[data-act]");
+    if (STATE.repostMenu && !(event.target.closest && event.target.closest(".repost-menu, [data-act='repost']"))) {
+      STATE.repostMenu = null;
+      if (!actEl) render();
+    }
     if (actEl && actEl.dataset.act === "search-form" && actEl.tagName === "FORM") return;
     if (actEl) {
       if (actEl.dataset.act !== "stop" && actEl.tagName !== "A") event.preventDefault();
@@ -11610,6 +11946,11 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     if (el.id === "compose-text") {
       const btn = document.getElementById("compose-post");
       if (btn) btn.disabled = !el.value.trim();
+      return;
+    }
+    if (el.id === "quote-text") {
+      const btn = document.getElementById("quote-post");
+      if (btn) btn.disabled = !String(el.value || "").trim();
       return;
     }
     if (el.id === "lang-q") {
@@ -12129,6 +12470,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
     showPill(pendingPillPosts());
+    STATE.repostMenu = null;
+    STATE.quoteTarget = "";
     render({
       y: y,
       done: () => {
@@ -13833,6 +14176,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.ViktorychAccounts.requestRender = function () { render(); };
     window.ViktorychAccounts.readHistory = readHistory;
     window.ViktorychAccounts.writeHistory = writeHistory;
+    window.ViktorychAccounts.profilePostsHtml = profilePostsHtml;
   }
   window.ViktorychFaces = {
     picture: function (src, accountFace) { return faceChoice("picture", src, accountFace); },

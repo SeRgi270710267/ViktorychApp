@@ -8,6 +8,8 @@
   var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
   var profiles = {};
   var profileLoads = {};
+  var profileMiss = {};
+  var profileEpoch = {};
   var entered = false;
   var view = "";
   var step = 0;
@@ -964,14 +966,39 @@
   function loadProfile(handle) {
     var key = skel(handle);
     var session = readSession();
-    if (!session || profiles[key] || profileLoads[key] || !config().api) return;
+    if (!session || profileLoads[key] || profileMiss[key] || !config().api) return;
+    if (profiles[key] && profiles[key].repostsLoaded) return;
     profileLoads[key] = true;
+    var epoch = profileEpoch[key] || 0;
     api("/v1/profile/" + encodeURIComponent(handle), { token: session.token }).then(function (body) {
-      if (body && body.account) {
-        remember(body.account);
+      profileLoads[key] = false;
+      if (!body || body.status === 404 || !body.account) {
+        if ((profileEpoch[key] || 0) === epoch) profileMiss[key] = true;
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        return;
       }
-    }).catch(function () {});
+      if ((profileEpoch[key] || 0) !== epoch && profiles[key]) {
+        body.account.reposts = profiles[key].reposts || [];
+        body.account.repostsLoaded = true;
+      } else {
+        body.account.reposts = Array.isArray(body.reposts) ? body.reposts : [];
+        body.account.repostsLoaded = true;
+      }
+      remember(body.account);
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () { profileLoads[key] = false; });
+  }
+  function setReposts(handle, rows) {
+    var key = skel(handle);
+    profileEpoch[key] = (profileEpoch[key] || 0) + 1;
+    profileMiss[key] = false;
+    if (!profiles[key]) {
+      var session = readSession();
+      if (session && session.account && skel(session.account.handle) === key) profiles[key] = Object.assign({}, session.account);
+    }
+    if (!profiles[key]) return;
+    profiles[key].reposts = Array.isArray(rows) ? rows : [];
+    profiles[key].repostsLoaded = true;
   }
   function accountPage(account) {
     var session = readSession();
@@ -979,18 +1006,37 @@
     var photo = publicAvatar(account.avatar, account.avatarFace, "pava");
     var banner = publicBanner(account.banner, account.bannerFace);
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: "0" })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div><div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + '<div class="counts"><div><b>0</b> <span>' + esc(tr("Following count")) + "</span></div><div><b>0</b> <span>" + esc(tr("Followers")) + "</span></div></div></div>" + '<div class="tabs ptabs" role="tablist"><a class="tab on" role="tab" aria-selected="true"><span>' + esc(tr("Profile")) + "</span></a></div>" + '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>";
+    var pack = { html: "", count: 0 };
+    if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account) || pack;
+    var count = String(pack.count || 0);
+    var body = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>");
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div><div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + '<div class="counts"><div><b>0</b> <span>' + esc(tr("Following count")) + "</span></div><div><b>0</b> <span>" + esc(tr("Followers")) + "</span></div></div></div>" + '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '"><a class="tab on" role="tab" aria-selected="true"><span>' + esc(tr("Posts")) + "</span></a></div>" + body;
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
-    var account = profiles[skel(route.handle)];
+    var key = skel(route.handle);
+    if (profileMiss[key]) return "";
+    var account = profiles[key];
     var session = readSession();
-    if (!account && session && session.account && skel(session.account.handle) === skel(route.handle)) account = session.account;
+    if (!account && session && session.account && skel(session.account.handle) === key) account = session.account;
     if (!account) {
       loadProfile(route.handle);
       return "";
     }
+    if (!account.repostsLoaded) loadProfile(route.handle);
     return accountPage(account);
+  }
+  function profilePending(handle) {
+    var key = skel(handle);
+    return !!(profileLoads[key] && !profiles[key] && !profileMiss[key]);
+  }
+  function profileReady(handle) {
+    var key = skel(handle);
+    if (profileMiss[key]) return true;
+    return !!(profiles[key] && profiles[key].repostsLoaded);
+  }
+  function storedAccount(handle) {
+    return profiles[skel(handle)] || null;
   }
   function pillInner() {
     var session = readSession();
@@ -1198,6 +1244,13 @@
     onLocalChange: onLocalChange,
     onHistoryReady: onHistoryReady,
     requestRender: null,
+    profilePostsHtml: null,
+    call: api,
+    setReposts: setReposts,
+    ensureProfile: loadProfile,
+    profilePending: profilePending,
+    profileReady: profileReady,
+    storedAccount: storedAccount,
     account: function () {
       var session = readSession();
       return session && session.account ? session.account : null;

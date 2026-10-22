@@ -1096,6 +1096,15 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .action.reply:hover .ic::after { background: var(--blue-dim); }
 .action.repost:hover, .action.repost.on { color: var(--green); }
 .action.repost:hover .ic::after { background: var(--green-dim); }
+.repost-wrap { position: relative; display: inline-flex; }
+.menu.repost-menu {
+  left: 0;
+  right: auto;
+  bottom: calc(100% + 6px);
+  top: auto;
+  min-width: 168px;
+  z-index: 8;
+}
 .action.like:hover, .action.like.on { color: var(--pink); }
 .action.like:hover .ic::after { background: var(--pink-dim); }
 .action.views:hover, .action.bookmark:hover, .action.share:hover { color: var(--blue); }

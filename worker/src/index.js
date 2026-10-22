@@ -2,6 +2,7 @@ import { OWNER_HANDLE, inspectHandle } from "../../shared/handle-skeleton.js";
 import { parseRoomId, pickStreams } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
+import { cleanRepostKey, cleanRepostWrite } from "../../shared/reposts.js";
 import { socialKeysForPost } from "../../shared/social-keys.js";
 import { buildPlaylist, parseRange, safeTelegramPath } from "./telegram.js";
 
@@ -138,7 +139,9 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS sessions_account ON sessions(public_id)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS sync_state (public_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket TEXT PRIMARY KEY, hits INTEGER NOT NULL, reset_at INTEGER NOT NULL)"),
-      env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_files (object_key TEXT NOT NULL, kind TEXT NOT NULL, part_index INTEGER NOT NULL, bucket TEXT NOT NULL DEFAULT '', file_id TEXT NOT NULL, message_id INTEGER NOT NULL DEFAULT 0, size INTEGER NOT NULL, sha256 TEXT NOT NULL, mime TEXT NOT NULL DEFAULT 'application/octet-stream', duration REAL NOT NULL DEFAULT 0, serve INTEGER NOT NULL DEFAULT 0, verified INTEGER NOT NULL DEFAULT 0, encrypted INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (object_key, kind, part_index))")
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_files (object_key TEXT NOT NULL, kind TEXT NOT NULL, part_index INTEGER NOT NULL, bucket TEXT NOT NULL DEFAULT '', file_id TEXT NOT NULL, message_id INTEGER NOT NULL DEFAULT 0, size INTEGER NOT NULL, sha256 TEXT NOT NULL, mime TEXT NOT NULL DEFAULT 'application/octet-stream', duration REAL NOT NULL DEFAULT 0, serve INTEGER NOT NULL DEFAULT 0, verified INTEGER NOT NULL DEFAULT 0, encrypted INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (object_key, kind, part_index))"),
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS account_reposts (public_id TEXT NOT NULL, post_key TEXT NOT NULL, kind TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '', snapshot TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (public_id, post_key))"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS account_reposts_recent ON account_reposts(public_id, created_at DESC)")
     ]).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
       schemaReady = null;
       throw err;
@@ -540,6 +543,35 @@ async function handleLogout(request, env, all) {
   return json(200, { ok: true });
 }
 
+async function listReposts(env, publicId) {
+  const listed = await env.DB.prepare("SELECT post_key, kind, comment, snapshot, created_at FROM account_reposts WHERE public_id = ? ORDER BY created_at DESC LIMIT 80").bind(publicId).all();
+  const rows = (listed && listed.results) || [];
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    let post = null;
+    try { post = JSON.parse(row.snapshot); }
+    catch (err) { post = null; }
+    if (!post || typeof post !== "object") continue;
+    out.push({
+      postKey: row.post_key,
+      kind: row.kind === "quote" ? "quote" : "repost",
+      comment: row.comment || "",
+      createdAt: row.created_at,
+      post: post
+    });
+  }
+  return out;
+}
+
+async function trimReposts(env, publicId) {
+  const extra = await env.DB.prepare("SELECT post_key FROM account_reposts WHERE public_id = ? ORDER BY created_at DESC LIMIT 200 OFFSET 80").bind(publicId).all();
+  const rows = (extra && extra.results) || [];
+  for (let i = 0; i < rows.length; i++) {
+    await env.DB.prepare("DELETE FROM account_reposts WHERE public_id = ? AND post_key = ?").bind(publicId, rows[i].post_key).run();
+  }
+}
+
 async function handleProfileGet(request, env, handle) {
   const checked = inspectHandle(handle);
   const skel = checked.skeleton || "";
@@ -548,7 +580,35 @@ async function handleProfileGet(request, env, handle) {
   if (!row) return json(404, { error: "not_found" });
   const viewer = await sessionAccount(env, request);
   const own = !!(viewer && viewer.public_id === row.public_id);
-  return json(200, { account: await presentAccount(env, request, row, own) });
+  return json(200, { account: await presentAccount(env, request, row, own), reposts: await listReposts(env, row.public_id) });
+}
+
+async function handleRepostPut(request, env) {
+  const row = await sessionAccount(env, request);
+  if (!row) return json(401, { error: "unauthorized" });
+  const paced = await rateHit(env, "repost:" + row.public_id, 40, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  const body = await readJson(request, 20000);
+  if (body.error) return json(body.error === "too_large" ? 413 : 400, { error: body.error });
+  const cleaned = cleanRepostWrite(body);
+  if (cleaned.error) return json(400, { error: cleaned.error });
+  const now = Date.now();
+  const existing = await env.DB.prepare("SELECT created_at FROM account_reposts WHERE public_id = ? AND post_key = ?").bind(row.public_id, cleaned.postKey).first();
+  const created = existing ? Number(existing.created_at) : now;
+  await env.DB.prepare("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, post_key) DO UPDATE SET kind = excluded.kind, comment = excluded.comment, snapshot = excluded.snapshot").bind(row.public_id, cleaned.postKey, cleaned.kind, cleaned.comment, JSON.stringify(cleaned.post), created).run();
+  await trimReposts(env, row.public_id);
+  return json(200, { ok: true, repost: { postKey: cleaned.postKey, kind: cleaned.kind, comment: cleaned.comment, createdAt: created, post: cleaned.post } });
+}
+
+async function handleRepostDelete(request, env) {
+  const row = await sessionAccount(env, request);
+  if (!row) return json(401, { error: "unauthorized" });
+  const body = await readJson(request, 4000);
+  if (body.error) return json(body.error === "too_large" ? 413 : 400, { error: body.error });
+  const postKey = cleanRepostKey(body.postKey);
+  if (!postKey) return json(400, { error: "bad_repost" });
+  await env.DB.prepare("DELETE FROM account_reposts WHERE public_id = ? AND post_key = ?").bind(row.public_id, postKey).run();
+  return json(200, { ok: true });
 }
 
 async function handleProfilePatch(request, env) {
@@ -1468,6 +1528,8 @@ async function route(request, env) {
   if (path === "/v1/profile" && request.method === "PATCH") return handleProfilePatch(request, env);
   if (path === "/v1/sync" && request.method === "GET") return handleSyncGet(request, env);
   if (path === "/v1/sync" && request.method === "PUT") return handleSyncPut(request, env);
+  if (path === "/v1/reposts" && request.method === "PUT") return handleRepostPut(request, env);
+  if (path === "/v1/reposts" && request.method === "DELETE") return handleRepostDelete(request, env);
   if (path === "/v1/handle" && request.method === "GET") return handleHandle(env, url);
   const profile = path.match(/^\/v1\/profile\/([^/]+)$/);
   if (profile && request.method === "GET") {

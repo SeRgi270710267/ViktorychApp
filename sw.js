@@ -1,6 +1,6 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a8-__SW_VERSION__";
+const VERSION = "viktorych-a9-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -68,6 +68,7 @@ const SHELL_FILES = [
   "./shorts.js",
   "./shorts.css",
   "./shared/handle-skeleton.js",
+  "./shared/reposts.js",
   "./hls-1.7.3.min.js",
   "./favicon.svg",
   "./favicon.ico",
