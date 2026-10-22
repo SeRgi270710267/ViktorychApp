@@ -87,13 +87,13 @@ def account_url(platform: str, handle: str, channel_id: str = "") -> str:
     return ""
 
 
-def accounts_from(config: dict, tiktok_handles: list) -> list:
-    """Added accounts from feeds.config.json, plus TikTok handles the sync already follows."""
+def accounts_from(config: dict, tiktok_handles: list, accounts_doc: dict | None = None) -> list:
+    """Private added TikTok rows, config rows, then the fallback handles."""
     from account_identity import tiktok_accounts
 
     rows = []
     seen = set()
-    for source in tiktok_accounts(config, tiktok_handles):
+    for source in tiktok_accounts(config, tiktok_handles, accounts_doc):
         key = ("tiktok", source["handle"].lower())
         if key in seen:
             continue
@@ -307,6 +307,66 @@ def selector_for(platform: str) -> str:
     return tb.YTDLP_FORMAT
 
 
+def tiktok_download_selector(formats) -> str:
+    """Top HEVC or bytevc1 format id. The h264 string is only the fallback."""
+    return tb.tiktok_selector(formats or []) or tb.TIKTOK_FALLBACK
+
+
+def list_tiktok_entries(ytdlp: list, page: str, limit: int) -> tuple:
+    cmd = ytdlp + [
+        "--ignore-config",
+        "--no-cookies",
+        "--no-cookies-from-browser",
+        "--no-warnings",
+        "--no-progress",
+        "--no-flat-playlist",
+        "-J",
+        "--skip-download",
+        "--playlist-end", str(max(1, limit)),
+        "--socket-timeout", "30",
+        page,
+    ]
+    return run_tool(cmd, 180)
+
+
+def download_tiktok(ytdlp: list, account: dict, work: Path, archive: Path, limit: int) -> tuple:
+    """One public video at a time, using the top original format id."""
+    _code, out, err = list_tiktok_entries(ytdlp, account["url"], limit)
+    text = out + "\n" + err
+    if tb.runner_blocked(text):
+        return "blocked", text
+    info = {}
+    try:
+        parsed = json.loads(out) if out.strip() else {}
+    except json.JSONDecodeError:
+        parsed = {}
+    if isinstance(parsed, dict):
+        info = parsed
+    entries = info.get("entries") if isinstance(info.get("entries"), list) else None
+    if not entries and info.get("id"):
+        entries = [info]
+    if not entries:
+        _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for("tiktok"), limit), 600)
+        text = out + "\n" + err
+        return ("blocked" if tb.runner_blocked(text) else "ok"), text
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        page = str(entry.get("webpage_url") or "")
+        if "tiktok.com" not in page:
+            page = str(entry.get("url") or "")
+        if "tiktok.com" not in page:
+            continue
+        selector = tiktok_download_selector(entry.get("formats") or [])
+        args = video_args(page, work, archive, selector, 1)
+        args.insert(1, "--no-playlist")
+        _code, out, err = run_tool(ytdlp + args, 600)
+        text = out + "\n" + err
+        if tb.runner_blocked(text):
+            return "blocked", text
+    return "ok", ""
+
+
 def publish_file(path: Path, key: str, role: str, info: dict, cf: dict, manifest: dict, state: dict, directory: Path) -> str:
     if not key or not path.is_file() or path.stat().st_size <= 0:
         return "skip"
@@ -407,7 +467,13 @@ def extract() -> int:
         config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
     except json.JSONDecodeError:
         config = {}
-    accounts = accounts_from(config if isinstance(config, dict) else {}, list(TRACKED))
+    from tiktok_sync import load_added_accounts
+
+    try:
+        accounts_doc = load_added_accounts()
+    except Exception:
+        accounts_doc = {"added": [], "removed": []}
+    accounts = accounts_from(config if isinstance(config, dict) else {}, list(TRACKED), accounts_doc)
     if not accounts:
         log("[media-extract] no added accounts")
         return 0
@@ -452,9 +518,13 @@ def extract() -> int:
                 shutil.rmtree(work, ignore_errors=True)
             work.mkdir(parents=True)
             log("[media-extract] added account %s %s" % (account["platform"], account["handle"]))
-            _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for(account["platform"]), room), 600)
-            text = out + "\n" + err
-            if tb.runner_blocked(text):
+            if account["platform"] == "tiktok":
+                status, text = download_tiktok(ytdlp, account, work, archive, room)
+            else:
+                _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for(account["platform"]), room), 600)
+                text = out + "\n" + err
+                status = "blocked" if tb.runner_blocked(text) else "ok"
+            if status == "blocked":
                 log("[media-extract] skipped_blocked %s/%s" % (account["platform"], account["handle"]))
                 shutil.rmtree(work, ignore_errors=True)
                 put_text(cf, bucket, ARCHIVE_KEY, text_file(archive))
@@ -559,6 +629,17 @@ def selftest() -> int:
     check("--write-info-json" in args and "--write-thumbnail" in args and "--download-archive" in args and str(Path("archive.txt")) in args, "the video command writes info, a thumbnail, and archive.txt")
     check("--no-cookies" in args and "--cookies" not in args and "--cookies-from-browser" not in args, "the video command sends no cookies")
     check(selector_for("tiktok").endswith("/bv*+ba/b") and "bytevc1" in selector_for("tiktok"), "TikTok prefers bytevc1 or h265, then bv*+ba/b")
+    formats = [
+        {"format_id": "h264-1080", "vcodec": "h264", "acodec": "none", "height": 1080, "tbr": 2500},
+        {"format_id": "bytevc1-720", "vcodec": "bytevc1", "acodec": "none", "height": 720, "tbr": 4000},
+        {"format_id": "audio", "vcodec": "none", "acodec": "aac", "tbr": 128},
+    ]
+    picked = tiktok_download_selector(formats)
+    check(picked.startswith("bytevc1-720+") and "h264" not in picked.split("/")[0], "TikTok takes the top original bytevc1, not the h264 fallback")
+    check("--recode-video" not in video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), picked, 1), "TikTok is remuxed and not re-encoded")
+    private = accounts_from({}, ["gabii_g5"], {"added": [{"handle": "new_name", "permanentId": "123456"}], "removed": ["gabii_g5"]})
+    private_urls = {row["url"] for row in private}
+    check("https://www.tiktok.com/@new_name" in private_urls and "https://www.tiktok.com/@gabii_g5" not in private_urls, "a removed account stays out and a private added account is included")
     photos = photo_args("https://www.instagram.com/redacted_handle/", Path("photos"), Path("gallery.txt"), 2)
     check("--write-metadata" in photos and "--download-archive" in photos and "--cookies" not in photos and "--config-ignore" in photos, "gallery-dl writes metadata and records the archive")
     catalog = remember_tiktok({}, {"uploader_id": "99", "channel_id": "MS4wLjABAAAA12345678", "uploader": "gabii_g5"})
@@ -573,7 +654,7 @@ def selftest() -> int:
     check("archive.txt" in doc and "user_id" in doc and "sec_uid" in doc and "17 */3 * * *" in doc, "the docs describe the archive, the catalog, and the schedule")
     check("added account" in doc and "tracked account" not in doc and "name: Extract added accounts" in workflow, "added accounts is the name for profiles in feeds.config.json")
     source = Path(__file__).read_text(encoding="utf-8")
-    check(("photos" + ".read_text(") not in source and "gallery-archive.sqlite" in source, "the gallery-dl archive is a sqlite file, not text")
+    check(("photos" + ".read_text(") not in source and "gallery-archive.sqlite" in source and "load_added_accounts" in source, "the gallery-dl archive is a sqlite file, and TikTok reads the owner list")
     sample = Path("gallery-sample.sqlite")
     try:
         blob = b"SQLite format 3\x00" + bytes(range(83)) + b"\x89"

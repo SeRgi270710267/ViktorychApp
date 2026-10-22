@@ -733,14 +733,23 @@ def note_tiktok(config: dict, requested: str, info: dict) -> str:
     return ""
 
 
-def tiktok_accounts(config: dict, tracked: list) -> list:
-    """Added TikTok rows from the config, then handles the sync already follows."""
+def tiktok_accounts(config: dict, tracked: list, extra: dict | None = None) -> list:
+    """Private added rows, then config rows, then the fallback handles.
+
+    Handles in the removed list stay out, including a fallback handle.
+    """
     rows = []
     seen = set()
+    extra = extra if isinstance(extra, dict) else {}
+    blocked = set()
+    for item in extra.get("removed") or []:
+        name = norm_handle(item)
+        if name:
+            blocked.add(name.casefold())
 
     def add(handle: str, source: dict | None) -> None:
         handle = norm_handle(handle)
-        if not handle_ok(handle) or handle.casefold() in seen:
+        if not handle_ok(handle) or handle.casefold() in seen or handle.casefold() in blocked:
             return
         source = source or {}
         seen.add(handle.casefold())
@@ -761,6 +770,9 @@ def tiktok_accounts(config: dict, tracked: list) -> list:
             row["previousHandles"] = previous
         rows.append(row)
 
+    for source in extra.get("added") or []:
+        if isinstance(source, dict):
+            add(str(source.get("handle") or ""), source)
     for source in (config or {}).get("tiktok") or []:
         if isinstance(source, dict):
             add(str(source.get("handle") or ""), source)

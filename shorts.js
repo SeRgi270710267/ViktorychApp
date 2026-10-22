@@ -22,6 +22,8 @@
   var lastTap = 0;
   var tapTimer = 0;
   var resolving = false;
+  var addedAccounts = [];
+  var addingAccount = false;
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -136,6 +138,22 @@
     return ((post && post.media) || []).filter(function (item) { return item && item.type === "video"; })[0] || ((post && post.media) || [])[0] || {};
   }
 
+  function qualityText(media) {
+    if (!media) return "";
+    var height = Number(media.height || 0);
+    var codec = String(media.codec || "");
+    if (!height && !codec) return "";
+    var bits = [];
+    if (height) bits.push(height + "p");
+    if (codec) bits.push(codec);
+    return tr("Original quality") + " · " + bits.join(" ");
+  }
+
+  function ownerHere() {
+    var row = account();
+    return !!(row && row.owner);
+  }
+
   function openText(post) {
     if (post && post.platform === "tiktok") return tr("Open on TikTok");
     if (post && post.platform === "youtube") return tr("View on YouTube");
@@ -205,6 +223,7 @@
       rail(post) +
       '<div class="shorts-meta"><a class="shorts-author" href="' + hooks.esc(profile) + '">@' + hooks.esc(post.handle || "") + "</a>" +
       (caption ? '<p class="shorts-caption">' + hooks.esc(caption) + "</p>" : "") +
+      (qualityText(media) ? '<p class="shorts-quality" hidden>' + hooks.esc(qualityText(media)) + "</p>" : "") +
       '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(post.url || "#") + '">' + hooks.esc(openText(post)) + "</a></div>" +
       "</div></article>";
   }
@@ -235,10 +254,27 @@
   }
 
   function tabs(live) {
-    return '<div class="tabs-bar"><div class="tabs" role="tablist">' +
+    var add = ownerHere()
+      ? '<button type="button" class="shorts-add" data-shorts="accounts">' + hooks.esc(tr("Add account")) + "</button>"
+      : "";
+    return '<div class="shorts-tabs"><div class="tabs-bar"><div class="tabs" role="tablist">' +
       '<a class="tab' + (live ? " on" : "") + '" href="#/shorts/live" role="tab" aria-selected="' + (live ? "true" : "false") + '"><span>' + hooks.esc(tr("Live")) + "</span></a>" +
       '<a class="tab' + (live ? "" : " on") + '" href="#/shorts" role="tab" aria-selected="' + (live ? "false" : "true") + '"><span>' + hooks.esc(tr("For you")) + "</span></a>" +
-      "</div></div>";
+      "</div></div>" + add + "</div>";
+  }
+
+  function accountSheet() {
+    if (!ownerHere()) return "";
+    return '<div class="shorts-sheet" id="shorts-accounts" hidden>' +
+      '<div class="shorts-sheet-card" role="dialog" aria-labelledby="shorts-accounts-title">' +
+      '<div class="shorts-sheet-head"><h2 id="shorts-accounts-title">' + hooks.esc(tr("Add account")) + "</h2>" +
+      '<button type="button" class="shorts-sheet-x" data-shorts="close-accounts" aria-label="' + hooks.esc(tr("Close")) + '">×</button></div>' +
+      '<form class="shorts-add-form">' +
+      '<input name="handle" autocomplete="off" spellcheck="false" placeholder="' + hooks.esc(tr("Add account URL or @handle")) + '" aria-label="' + hooks.esc(tr("Add account URL or @handle")) + '">' +
+      '<button type="submit">' + hooks.esc(tr("Add account")) + "</button></form>" +
+      '<p class="shorts-accounts-note" id="shorts-accounts-note"></p>' +
+      '<h3>' + hooks.esc(tr("added accounts")) + "</h3>" +
+      '<ul class="shorts-account-list" id="shorts-added"></ul></div></div>';
   }
 
   function mhead() {
@@ -255,7 +291,7 @@
       slides = '<article class="shorts-slide"><div class="shorts-stage"><div class="shorts-offline"><h2>' + hooks.esc(tr("No posts yet")) + "</h2></div></div></article>";
     }
     return '<div class="shorts-page"><div class="shorts-top">' + mhead() + tabs(live) + "</div>" +
-      '<div class="shorts-feed" id="shorts-feed">' + slides + "</div></div>";
+      '<div class="shorts-feed" id="shorts-feed">' + slides + "</div>" + accountSheet() + "</div>";
   }
 
   function destroyHls() {
@@ -418,7 +454,11 @@
       return;
     }
     video.dataset.tgArm = "1";
-    playTelegramFile(video, key, preload).catch(function () {
+    playTelegramFile(video, key, preload).then(function () {
+      var slideEl = video.closest(".shorts-slide");
+      var badge = slideEl && slideEl.querySelector(".shorts-quality");
+      if (badge) badge.hidden = false;
+    }).catch(function () {
       if (r2) {
         destroyHls();
         video.src = r2;
@@ -611,8 +651,152 @@
     }).catch(function () {});
   }
 
+  function renderAdded() {
+    var list = document.getElementById("shorts-added");
+    if (!list) return;
+    if (!addedAccounts.length) {
+      list.innerHTML = '<li class="shorts-account-empty">' + hooks.esc(tr("No added accounts yet.")) + "</li>";
+      return;
+    }
+    list.innerHTML = addedAccounts.map(function (row) {
+      var handle = String((row && row.handle) || "");
+      var name = String((row && row.name) || handle);
+      var face = row && row.avatar
+        ? '<img alt="" src="' + hooks.esc(row.avatar) + '" referrerpolicy="no-referrer">'
+        : hooks.avatar("", name);
+      return '<li class="shorts-account"><span class="shorts-account-face">' + face + "</span><span><b>" + hooks.esc(name) + "</b><small>@" + hooks.esc(handle) + "</small></span>" +
+        '<button type="button" data-shorts="remove-account" data-handle="' + hooks.esc(handle) + '">' + hooks.esc(tr("Remove")) + "</button></li>";
+    }).join("");
+  }
+
+  function accountsNote(text) {
+    var note = document.getElementById("shorts-accounts-note");
+    if (note) note.textContent = text || "";
+  }
+
+  function loadAccounts() {
+    var base = apiBase();
+    if (!base || !hooks.token() || !ownerHere()) {
+      renderAdded();
+      return Promise.resolve();
+    }
+    return fetch(base + "/v1/owner/tiktok/accounts", { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    }).then(function (body) {
+      addedAccounts = (body && body.added) || [];
+      renderAdded();
+    }).catch(function () {
+      accountsNote(tr("Try again"));
+      renderAdded();
+    });
+  }
+
+  function openAccounts() {
+    var sheet = document.getElementById("shorts-accounts");
+    if (!sheet) return;
+    sheet.hidden = false;
+    accountsNote("");
+    renderAdded();
+    var input = sheet.querySelector("input");
+    if (input) input.focus();
+    loadAccounts();
+  }
+
+  function closeAccounts() {
+    var sheet = document.getElementById("shorts-accounts");
+    if (sheet) sheet.hidden = true;
+  }
+
+  function saveAccount(raw) {
+    if (addingAccount) return;
+    var base = apiBase();
+    if (!base || !hooks.token()) return;
+    addingAccount = true;
+    accountsNote("");
+    fetch(base + "/v1/owner/tiktok/accounts", {
+      method: "POST",
+      headers: Object.assign({ "content-type": "application/json" }, authHeaders()),
+      body: JSON.stringify({ handle: raw })
+    }).then(function (res) {
+      return res.json().then(function (body) { return { ok: res.ok, status: res.status, body: body }; });
+    }).then(function (result) {
+      addingAccount = false;
+      if (!result.ok) {
+        accountsNote(result.status === 400 ? tr("That doesn’t look like a TikTok account.") : tr("Couldn’t save this account."));
+        return;
+      }
+      var accountRow = result.body && result.body.account;
+      if (accountRow && accountRow.handle) {
+        addedAccounts = addedAccounts.filter(function (row) { return !row || row.handle !== accountRow.handle; });
+        addedAccounts.unshift(accountRow);
+      }
+      renderAdded();
+      var form = document.querySelector(".shorts-add-form");
+      if (form) form.reset();
+      var lines = [];
+      if (result.body && result.body.preview === false) lines.push(tr("Couldn’t preview this profile. It will still be saved."));
+      lines.push(tr("New videos show up after the next sync."));
+      accountsNote(lines.join(" "));
+      pull();
+    }).catch(function () {
+      addingAccount = false;
+      accountsNote(tr("Couldn’t save this account."));
+    });
+  }
+
+  function removeAccount(handle) {
+    var base = apiBase();
+    if (!base || !hooks.token() || !handle) return;
+    fetch(base + "/v1/owner/tiktok/accounts/" + encodeURIComponent(handle), {
+      method: "DELETE",
+      headers: authHeaders()
+    }).then(function (res) {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    }).then(function (body) {
+      addedAccounts = (body && body.added) || [];
+      renderAdded();
+    }).catch(function () {
+      accountsNote(tr("Try again"));
+    });
+  }
+
+  function onPageClick(event) {
+    if (event.target && event.target.id === "shorts-accounts") {
+      closeAccounts();
+      return;
+    }
+    var button = event.target.closest ? event.target.closest("[data-shorts]") : null;
+    if (!button) return;
+    var kind = button.getAttribute("data-shorts");
+    if (kind === "accounts") {
+      event.preventDefault();
+      openAccounts();
+    } else if (kind === "close-accounts") {
+      event.preventDefault();
+      closeAccounts();
+    } else if (kind === "remove-account") {
+      event.preventDefault();
+      removeAccount(button.getAttribute("data-handle") || "");
+    }
+  }
+
+  function onAddSubmit(event) {
+    event.preventDefault();
+    var input = event.target.querySelector("input");
+    saveAccount(input ? input.value : "");
+  }
+
   function mount(route) {
     document.documentElement.classList.add("shorts-on");
+    var root = document.querySelector(".shorts-page");
+    if (root && !root.dataset.accountsBound) {
+      root.dataset.accountsBound = "1";
+      root.addEventListener("click", onPageClick);
+      var form = root.querySelector(".shorts-add-form");
+      if (form) form.addEventListener("submit", onAddSubmit);
+    }
     var feed = document.getElementById("shorts-feed");
     if (!feed) return;
     feed.addEventListener("click", onClick);

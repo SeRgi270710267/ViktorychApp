@@ -851,5 +851,12 @@ SI18n.addPack("ru", {
   "Full screen": "На весь экран",
   "Exit full screen": "Выйти из полного экрана",
   "Playing ReGone on {app}": "Играю в ReGone в {app}",
-  "That game isn’t here.": "Этой игры здесь нет."
+  "That game isn’t here.": "Этой игры здесь нет.",
+  "added accounts": "добавленные аккаунты",
+  "Original quality": "Исходное качество",
+  "No added accounts yet.": "Пока нет добавленных аккаунтов.",
+  "That doesn’t look like a TikTok account.": "Это не похоже на аккаунт TikTok.",
+  "Couldn’t preview this profile. It will still be saved.": "Профиль не удалось посмотреть. Аккаунт всё равно сохранится.",
+  "Couldn’t save this account.": "Не удалось сохранить этот аккаунт.",
+  "New videos show up after the next sync.": "Новые видео появятся после следующей синхронизации."
 });

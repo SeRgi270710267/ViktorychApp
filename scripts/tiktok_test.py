@@ -9,7 +9,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from tiktok_sync import audience_of, choose_format, entry_to_post, place, publish_iso  # noqa: E402
+from tiktok_sync import (  # noqa: E402
+    apply_fetch_identity,
+    audience_of,
+    choose_format,
+    entry_to_post,
+    place,
+    publish_iso,
+    sync_handles,
+)
 
 
 def main() -> int:
@@ -48,6 +56,8 @@ def main() -> int:
     assert post["short"] is True
     assert post["platform"] == "tiktok"
     assert post["media"][0]["url"].endswith("bytevc1.mp4")
+    assert post["media"][0]["codec"] == "bytevc1"
+    assert post["media"][0]["height"] == 720
     slides = entry_to_post({
         "id": "7695476356548660503",
         "timestamp": 1791742719,
@@ -85,6 +95,22 @@ def main() -> int:
     feeds.unlink()
     owner.unlink()
     tmp.rmdir()
+    config = {}
+    accounts = {"added": [{"handle": "old_name", "permanentId": "991122", "platform": "tiktok"}], "removed": ["gabii_g5"]}
+    renamed = apply_fetch_identity(config, accounts, "old_name", {
+        "uploader_id": "991122",
+        "channel_id": "MS4wLjABAAAA12345678",
+        "uploader": "new_name",
+    })
+    assert renamed == "old_name"
+    assert "tiktok" not in config
+    assert accounts["added"][0]["handle"] == "new_name"
+    assert "old_name" in accounts["added"][0]["previousHandles"]
+    assert accounts["added"][0]["secUid"] == "MS4wLjABAAAA12345678"
+    handles = sync_handles({"tiktok": [{"handle": "config_one"}]}, accounts)
+    assert handles[0] == "new_name"
+    assert "config_one" in handles
+    assert "gabii_g5" not in handles
     print("tiktok normalize ok")
     return 0
 
