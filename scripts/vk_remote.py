@@ -191,6 +191,48 @@ def wall_document(domain: str, count: int = 8) -> dict:
     return wall
 
 
+def wall_document_by_owner(owner_id: str, count: int = 8) -> dict:
+    """wall.get for a stored owner id, plus the community profile.
+
+    The owner id is the permanent id already stored for the added account.
+    A community id is negative. The token stays in this process.
+    """
+    owner_id = str(owner_id or "").strip()
+    if not re.fullmatch(r"-?\d{2,25}", owner_id) or owner_id in {"0", "-0"}:
+        raise ValueError("vk owner id is empty")
+    wall = api("wall.get", owner_id=owner_id, count=max(1, min(int(count or 8), 20)), extended=1)
+    response = wall.get("response") if isinstance(wall, dict) else None
+    if not isinstance(response, dict) or not isinstance(response.get("items"), list):
+        raise ValueError("wall.get returned no items")
+    group = {}
+    group_id = owner_id[1:] if owner_id.startswith("-") else ""
+    if group_id:
+        try:
+            group = api(
+                "groups.getById",
+                group_ids=group_id,
+                fields="description,members_count,counters,photo_200,cover,screen_name,verified,site",
+            )
+        except ValueError:
+            group = {}
+    groups = response.get("groups") if isinstance(response.get("groups"), list) else []
+    richer = _group_row(group)
+    if richer:
+        screen = (richer.get("screen_name") or "").lower()
+        replaced = False
+        merged = []
+        for row in groups:
+            if isinstance(row, dict) and (row.get("screen_name") or "").lower() == screen:
+                merged.append({**row, **richer})
+                replaced = True
+            else:
+                merged.append(row)
+        if not replaced:
+            merged.insert(0, richer)
+        response["groups"] = merged
+    return wall
+
+
 def wall_payload(domain: str, count: int = 8) -> str:
     return json.dumps(wall_document(domain, count), ensure_ascii=False)
 

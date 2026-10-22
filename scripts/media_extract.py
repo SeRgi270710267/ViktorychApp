@@ -89,16 +89,18 @@ def account_url(platform: str, handle: str, channel_id: str = "") -> str:
 
 def accounts_from(config: dict, tiktok_handles: list) -> list:
     """Added accounts from feeds.config.json, plus TikTok handles the sync already follows."""
+    from account_identity import tiktok_accounts
+
     rows = []
     seen = set()
-    for handle in tiktok_handles or []:
-        if not HANDLE_RE.fullmatch(str(handle or "")):
-            continue
-        key = ("tiktok", handle.lower())
+    for source in tiktok_accounts(config, tiktok_handles):
+        key = ("tiktok", source["handle"].lower())
         if key in seen:
             continue
         seen.add(key)
-        rows.append({"platform": "tiktok", "handle": handle, "url": account_url("tiktok", handle)})
+        for item in source.get("previousHandles") or []:
+            seen.add(("tiktok", str(item).lower()))
+        rows.append(source)
     for feed in (config or {}).get("feeds") or []:
         if not isinstance(feed, dict):
             continue
@@ -109,11 +111,18 @@ def accounts_from(config: dict, tiktok_handles: list) -> list:
         key = (platform, handle.lower())
         if key in seen:
             continue
-        url = account_url(platform, handle, str(feed.get("channelId") or ""))
+        url = account_url(platform, handle, str(feed.get("channelId") or feed.get("permanentId") or ""))
         if not tb.page_host_ok(url):
             continue
         seen.add(key)
-        rows.append({"platform": platform, "handle": handle, "url": url})
+        row = {"platform": platform, "handle": handle, "url": url}
+        if feed.get("permanentId"):
+            row["permanentId"] = str(feed.get("permanentId"))
+        if feed.get("secUid"):
+            row["secUid"] = str(feed.get("secUid"))
+        if feed.get("previousHandles"):
+            row["previousHandles"] = list(feed.get("previousHandles") or [])
+        rows.append(row)
     return rows
 
 
@@ -339,6 +348,10 @@ def video_posts(work: Path, account: dict, catalog: dict) -> list:
             "id": account["platform"] + ":" + ident,
             "url": account["url"],
         }
+        if account.get("permanentId"):
+            post["permanentId"] = account.get("permanentId")
+        if account.get("previousHandles"):
+            post["previousHandles"] = list(account.get("previousHandles") or [])
         key = tb.social_object_key(post, "video", 0)
         stats = tb.info_fields(info)
         thumbs = [item for item in work.glob(path.stem + ".*") if item.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}]
@@ -374,8 +387,12 @@ def photo_groups(work: Path, account: dict) -> list:
             "id": account["platform"] + ":" + ident,
             "url": account["url"],
         }
+        if account.get("permanentId"):
+            post["permanentId"] = account.get("permanentId")
+        if account.get("previousHandles"):
+            post["previousHandles"] = list(account.get("previousHandles") or [])
         for index, (path, stats) in enumerate(groups[ident]):
-            rows.append({"path": path, "key": tb.social_object_key(post, "photo", index), "stats": stats, "post": post})
+            rows.append({"path": path, "key": tb.social_object_key(post, "photo", index), "stats": stats, "post": post, "index": index})
     return rows
 
 
@@ -442,9 +459,21 @@ def extract() -> int:
                 shutil.rmtree(work, ignore_errors=True)
                 put_text(cf, bucket, ARCHIVE_KEY, text_file(archive))
                 continue
+            present = set()
+            for row in (manifest.get("files") or []):
+                if isinstance(row, dict) and row.get("key"):
+                    present.add(row["key"])
+            for row in links:
+                if row.get("key"):
+                    present.add(row["key"])
             for item in video_posts(work, account, catalog):
                 if stored >= limit:
                     break
+                candidates = tb.social_key_candidates(item["post"], "video", 0)
+                if any(key in present for key in candidates):
+                    log("[media-extract] already stored %s/%s" % (account["platform"], account["handle"]))
+                    continue
+                item["key"] = candidates[0] if candidates else item["key"]
                 result = publish_file(item["video"], item["key"], "video", item["stats"], cf, manifest, state, directory)
                 if result == "stop":
                     log("[media-extract] reached the run cap")
@@ -456,8 +485,10 @@ def extract() -> int:
                     log("[media-extract] linked %s" % item["key"])
                 if item["thumb"] and result == "ok":
                     role = "poster" if account["platform"] == "tiktok" else "thumb"
-                    thumb_key = tb.social_object_key(item["post"], role, 0)
-                    publish_file(item["thumb"], thumb_key, role, item["stats"], cf, manifest, state, directory)
+                    thumb_keys = tb.social_key_candidates(item["post"], role, 0)
+                    if not any(key in present for key in thumb_keys):
+                        thumb_key = thumb_keys[0] if thumb_keys else tb.social_object_key(item["post"], role, 0)
+                        publish_file(item["thumb"], thumb_key, role, item["stats"], cf, manifest, state, directory)
             photo_dir = work / "photos"
             photo_dir.mkdir(parents=True)
             if account["platform"] != "youtube" and stored < limit:
@@ -468,6 +499,11 @@ def extract() -> int:
                     for item in photo_groups(photo_dir, account):
                         if stored >= limit:
                             break
+                        photo_keys = tb.social_key_candidates(item["post"], "photo", int(item.get("index") or 0))
+                        if any(key in present for key in photo_keys):
+                            log("[media-extract] already stored %s/%s" % (account["platform"], account["handle"]))
+                            continue
+                        item["key"] = photo_keys[0] if photo_keys else item["key"]
                         result = publish_file(item["path"], item["key"], "photo", item["stats"], cf, manifest, state, directory)
                         if result == "stop":
                             stored = limit

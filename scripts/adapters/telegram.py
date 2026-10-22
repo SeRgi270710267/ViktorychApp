@@ -445,6 +445,13 @@ def _channel_info(html: str, feed: dict) -> dict:
     }
     if followers is not None:
         profile["followers"] = followers
+    from account_identity import telegram_channel_id
+
+    channel_id = telegram_channel_id(html)
+    stored = str(feed.get("permanentId") or "")
+    if channel_id and (not stored or stored == channel_id):
+        profile["permanentId"] = channel_id
+        profile["account"] = True
     return profile
 
 

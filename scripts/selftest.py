@@ -74,6 +74,9 @@ def telegram_checks() -> None:
 
 
 def main() -> None:
+    from account_identity import selftest as identity_selftest
+
+    identity_selftest()
     elon = parse_x((FIX / "x_api_v2_elon.json").read_text(encoding="utf-8"), {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"})
     posts = elon["posts"]
     check(len(posts) == 10, "elon parsed 10 tweets")
@@ -917,6 +920,7 @@ def main() -> None:
     profile_view = app[app.index("function profileView("):app.index("function statusView(")]
     yt_channel = app[app.index("function ytProfileFromPiped("):app.index("function loadLimited(")]
     check("function catalogAccount(" in app and "function accountHash(" in app and "accountHash(feed.platform, feed.channelId || feed.handle)" in app and "function stopWatchPlayback(" in app and "leavingWatch" in app and "Subscribers" in profile_view and "profileLinkLabel(feed.platform)" in profile_view, "a followed channel opens its synced profile and the watch player stops")
+    check("previousHandles" in app and "permanentId" in app and "data-tg-alts" in app, "an old handle opens the account and older media keys still play")
     check('"/channel/"' in yt_channel and "ytProfileFromPiped" in yt_channel and "filter=videos" in yt_channel and "PIPED_SEEDS.slice()" in yt_channel and "function ytImage(" in app, "a live YouTube channel uses the public channel fallback when Invidious misses")
     community_loader = app[app.index("function ivCommunityThread("):app.index("function ytStub(")]
     check("ucid=" in community_loader and "commentCount" in community_loader, "community comments pass the channel id and keep the source count")

@@ -909,18 +909,48 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!handle) return "#/";
     return "#/u/" + encodeURIComponent(platform || "x") + "/" + encodeURIComponent(handle);
   }
+  function catalogRows() {
+    const rows = feeds().slice();
+    const extra = STATE.catalog && STATE.catalog.feeds;
+    if (!Array.isArray(extra)) return rows;
+    extra.forEach((row) => {
+      if (!row || !row.id) return;
+      const have = rows.find((item) => item && item.id === row.id);
+      if (!have) {
+        rows.push(row);
+        return;
+      }
+      if (!have.permanentId && row.permanentId) have.permanentId = row.permanentId;
+      if (!have.secUid && row.secUid) have.secUid = row.secUid;
+      const previous = (have.previousHandles || []).slice();
+      (row.previousHandles || []).forEach((item) => {
+        if (item && !previous.some((name) => String(name).toLowerCase() === String(item).toLowerCase())) previous.push(item);
+      });
+      if (row.handle && have.handle && String(row.handle).toLowerCase() !== String(have.handle).toLowerCase()) {
+        const older = String(have.handle);
+        if (!previous.some((name) => String(name).toLowerCase() === older.toLowerCase())) previous.push(older);
+        have.handle = row.handle;
+      }
+      if (previous.length) have.previousHandles = previous;
+    });
+    return rows;
+  }
   function catalogAccount(platform, handle) {
     const key = String(handle || "").replace(/^@/, "");
     if (!key) return null;
     const platformName = platform || "x";
     const lower = key.toLowerCase();
-    return feeds().find((feed) => {
-      if ((feed.platform || "x") !== platformName) return false;
+    const rows = catalogRows().filter((feed) => (feed.platform || "x") === platformName);
+    const current = rows.find((feed) => {
       if (String(feed.handle || "").toLowerCase() === lower) return true;
       if (feed.channelId && feed.channelId === key) return true;
       if (feed.id === platformName + ":" + key) return true;
+      if (feed.permanentId && String(feed.permanentId) === key) return true;
+      if (feed.secUid && String(feed.secUid) === key) return true;
       return false;
-    }) || null;
+    });
+    if (current) return current;
+    return rows.find((feed) => (feed.previousHandles || []).some((item) => String(item || "").replace(/^@/, "").toLowerCase() === lower)) || null;
   }
   function accountHash(platform, handle) {
     if (window.FeedsPeople) {
@@ -1055,8 +1085,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function findFeed(platform, handle) {
-    const h = (handle || "").toLowerCase();
-    return feeds().find((f) => f.platform === platform && (f.handle || "").toLowerCase() === h);
+    return catalogAccount(platform, handle);
   }
 
   function sameAuthor(post, feed) {
@@ -1593,9 +1622,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const first = pack.urls[0];
     const face = first === pack.avatar ? " face" : "";
     const stored = r2ObjectKey(first);
-    const tgKey = socialStillKey(post, media) || stored;
+    const stills = stillCandidates(post, media);
+    const tgKey = stills[0] || stored;
     const lead = tgKey && accountToken() && !mirrorKey(stored || "");
-    const tg = lead ? ` data-tg="${esc(tgKey)}" data-tg-first="1" data-fallback-src="${esc(first)}"` : "";
+    const tg = lead ? tgLead(tgKey, stills.slice(1), first) : "";
     const src = lead ? "" : ` src="${esc(first)}"`;
     return `<img class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
   }
@@ -1737,10 +1767,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const first = eager && index === 0;
       const src = m.url || m.poster || "";
       const stored = r2ObjectKey(src);
-      const tgKey = socialStillKey(post, m) || stored;
+      const stills = stillCandidates(post, m);
+      const tgKey = stills[0] || stored;
       const lead = tgKey && accountToken() && !mirrorKey(stored || "");
       const sourceUrl = m.fallback && !r2ObjectKey(m.fallback) ? m.fallback : "";
-      const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"${lead ? ' data-tg-first="1" data-fallback-src="' + esc(src) + '"' : ""}` : "";
+      const altAttr = stills.slice(1).length ? ` data-tg-alts="${esc(stills.slice(1).join(","))}"` : "";
+      const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"${altAttr}${lead ? ' data-tg-first="1" data-fallback-src="' + esc(src) + '"' : ""}` : "";
       const sourceAttr = sourceUrl ? ` data-source="${esc(sourceUrl)}"` : "";
       const loading = first ? "eager" : "lazy";
       const priority = first ? ` fetchpriority="high"` : "";
@@ -1960,13 +1992,50 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return cleanSocialIdent(bare);
   }
 
+  function tiktokUserId(post) {
+    const raw = String((post && (post.permanentId || post.userId)) || "").trim();
+    return /^\d{5,22}$/.test(raw) ? raw : "";
+  }
+
+  function socialKeyCandidates(post, role, index) {
+    const platform = String((post && post.platform) || "").toLowerCase();
+    if (platform !== "tiktok") {
+      const key = socialObjectKey(post, role, index);
+      return key ? [key] : [];
+    }
+    const ident = stableSocialIdent(post);
+    const n = Math.max(0, Number(index) || 0);
+    let suffix = "";
+    if (role === "video") suffix = "/video";
+    else if (role === "poster") suffix = "/poster";
+    else if (role === "photo") suffix = "/photo/" + n;
+    if (!/^\d{8,22}$/.test(ident) || !suffix) return [];
+    const keys = [];
+    const userId = tiktokUserId(post);
+    if (userId) keys.push("tiktok/id/" + userId + "/" + ident + suffix);
+    const handles = [];
+    const current = String((post && post.handle) || "").replace(/^@/, "");
+    if (/^[A-Za-z0-9._]{2,24}$/.test(current)) handles.push(current);
+    ((post && post.previousHandles) || []).forEach((item) => {
+      const name = String(item || "").replace(/^@/, "");
+      if (/^[A-Za-z0-9._]{2,24}$/.test(name) && !handles.some((have) => have.toLowerCase() === name.toLowerCase())) handles.push(name);
+    });
+    handles.forEach((handle) => keys.push("tiktok/" + handle + "/" + ident + suffix));
+    return keys;
+  }
+
   function socialObjectKey(post, role, index) {
     const platform = String((post && post.platform) || "").toLowerCase();
     const n = Math.max(0, Number(index) || 0);
     if (platform === "tiktok") {
       const handle = String((post && post.handle) || "").replace(/^@/, "");
       const ident = stableSocialIdent(post);
-      if (!/^[A-Za-z0-9._]{2,24}$/.test(handle) || !/^\d{8,22}$/.test(ident)) return "";
+      const userId = tiktokUserId(post);
+      if (!/^\d{8,22}$/.test(ident)) return "";
+      if (userId && role === "video") return "tiktok/id/" + userId + "/" + ident + "/video";
+      if (userId && role === "poster") return "tiktok/id/" + userId + "/" + ident + "/poster";
+      if (userId && role === "photo") return "tiktok/id/" + userId + "/" + ident + "/photo/" + n;
+      if (!/^[A-Za-z0-9._]{2,24}$/.test(handle)) return "";
       if (role === "video") return "tiktok/" + handle + "/" + ident + "/video";
       if (role === "poster") return "tiktok/" + handle + "/" + ident + "/poster";
       if (role === "photo") return "tiktok/" + handle + "/" + ident + "/photo/" + n;
@@ -2021,6 +2090,26 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function mirrorKey(key) {
     return /^(?:music|covers|radio|loop)\//.test(String(key || ""));
+  }
+
+  function stillCandidates(post, media) {
+    const type = String((media && media.type) || "").toLowerCase();
+    const index = socialMediaIndex(post, media);
+    const platform = String((post && post.platform) || "").toLowerCase();
+    let role = "photo";
+    if (platform === "youtube") role = type === "photo" || type === "image" ? "photo" : "thumb";
+    else if (platform === "tiktok") role = type === "photo" || type === "image" ? "photo" : "poster";
+    else if (type === "video" || type === "animated_gif") role = "poster";
+    const keys = socialKeyCandidates(post, role, platform === "tiktok" && role !== "photo" ? 0 : index);
+    if (keys.length) return keys;
+    const one = socialStillKey(post, media);
+    return one ? [one] : [];
+  }
+
+  function tgLead(key, alts, fallback) {
+    const extra = (alts || []).filter((item) => item && item !== key);
+    const altAttr = extra.length ? ` data-tg-alts="${esc(extra.join(","))}"` : "";
+    return ` data-tg="${esc(key)}"${altAttr} data-tg-first="1" data-fallback-src="${esc(fallback)}"`;
   }
 
   function pushTelegram(out, key) {
@@ -2089,8 +2178,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function tiktokSources(post, media) {
     const out = [];
-    const key = socialFileKey(post, media);
-    if (key) pushTelegram(out, key);
+    const photo = media && (media.type === "photo" || media.type === "image");
+    const keys = socialKeyCandidates(post, photo ? "photo" : "video", photo ? socialMediaIndex(post, media) : 0);
+    (keys.length ? keys : [socialFileKey(post, media)]).forEach((key) => {
+      if (key) pushTelegram(out, key);
+    });
     [media && media.url, media && media.fallback, media && media.hls].forEach((url) => {
       if (!url || !r2ObjectKey(url)) return;
       pushSource(out, { kind: /\.m3u8(\?|$)/i.test(url) ? "hls" : "mp4", url: url });
@@ -2100,7 +2192,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       pushSource(out, { kind: /\.m3u8(\?|$)/i.test(direct) ? "hls" : "mp4", url: direct });
     }
     const src = tiktokPlayUrl(post);
-    const photo = media && (media.type === "photo" || media.type === "image");
     if (src && !photo) pushSource(out, { kind: "mp4", url: src });
     return out;
   }
@@ -6711,7 +6802,18 @@ const here = parseRoute();
       const merged = window.FeedsPeople.page(route);
       if (merged) return merged;
     }
-    const feed = findFeed(route.platform, route.handle) || {
+    const known = catalogAccount(route.platform, route.handle);
+    if (known && known.handle && String(known.handle).toLowerCase() !== String(route.handle || "").toLowerCase()) {
+      const tab = route.query.get("tab") || "";
+      const next = profileHash(known.platform, known.handle) + (tab && tab !== "posts" ? "?tab=" + encodeURIComponent(tab) : "");
+      if ((location.hash || "") !== next) {
+        setTimeout(() => {
+          if ((location.hash || "") !== next) location.replace(next);
+        }, 0);
+        return `<div class="reply-empty">${tr("Loading…")}</div>`;
+      }
+    }
+    const feed = known || {
       id: route.platform + ":" + route.handle,
       platform: route.platform,
       handle: route.handle,
@@ -11711,7 +11813,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     scope.querySelectorAll("img[data-tg-first='1']").forEach((img) => {
       if (img.dataset.tgPrimed === "1") return;
       img.dataset.tgPrimed = "1";
-      const url = tgMediaUrl(img.dataset.tg || "");
+      const keys = [];
+      [img.dataset.tg || ""].concat(String(img.dataset.tgAlts || "").split(",")).forEach((key) => {
+        const text = String(key || "").trim();
+        if (text && keys.indexOf(text) < 0) keys.push(text);
+      });
       const auth = accountToken();
       const give = () => {
         img.dataset.tgTried = "1";
@@ -11721,13 +11827,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         try { urls = JSON.parse(img.dataset.falls || "[]"); } catch (err) { urls = []; }
         if (urls[0]) img.src = urls[0];
       };
-      if (!url || !auth) { give(); return; }
-      fetch(url, { headers: { Authorization: "Bearer " + auth } }).then((res) => {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.blob();
-      }).then((blob) => {
-        if (img.isConnected) img.src = URL.createObjectURL(blob);
-      }).catch(() => { if (img.isConnected) give(); });
+      const loadKey = (index) => {
+        const url = tgMediaUrl(keys[index] || "");
+        if (!url || !auth) { give(); return; }
+        fetch(url, { headers: { Authorization: "Bearer " + auth } }).then((res) => {
+          if (!res.ok) throw new Error(String(res.status));
+          return res.blob();
+        }).then((blob) => {
+          if (img.isConnected) img.src = URL.createObjectURL(blob);
+        }).catch(() => {
+          if (!img.isConnected) return;
+          if (index + 1 < keys.length) loadKey(index + 1);
+          else give();
+        });
+      };
+      if (!keys.length || !auth) { give(); return; }
+      loadKey(0);
     });
   }
 
@@ -12755,11 +12870,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const showCover = () => {
         if (!STATE.viewer || !STATE.viewer.video) return;
         const poster = (media && (media.poster || media.url)) || "";
-        const posterKey = socialStillKey(post || {}, media);
+        const stills = stillCandidates(post || {}, media);
+        const posterKey = stills[0] || "";
         const href = originalOf(post || {}, media);
         const lead = posterKey && accountToken();
         const img = poster || posterKey
-          ? `<img alt="" referrerpolicy="no-referrer"${lead ? ` data-tg="${esc(posterKey)}" data-tg-first="1" data-fallback-src="${esc(poster)}"` : ` src="${esc(poster)}"`}>`
+          ? `<img alt="" referrerpolicy="no-referrer"${lead ? tgLead(posterKey, stills.slice(1), poster) : ` src="${esc(poster)}"`}>`
           : "";
         box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>${img}<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(href || "#")}">${esc(watchOn((post && post.platform) || ""))}</a>`;
         primeTelegramImages(box);
@@ -12816,10 +12932,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!item) { STATE.viewer = null; box.hidden = true; box.innerHTML = ""; return; }
     const direct = item.url || item.poster || "";
     const stored = r2ObjectKey(direct);
-    const tgKey = socialStillKey(post, item) || stored;
+    const stills = stillCandidates(post, item);
+    const tgKey = stills[0] || socialStillKey(post, item) || stored;
     const lead = tgKey && accountToken() && !mirrorKey(stored || "");
     box.hidden = false;
-    box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button><img id="viewer-img" alt="${esc(item.alt || "")}"${lead ? "" : ` src="${esc(direct)}"`}${lead ? ` data-tg="${esc(tgKey)}" data-tg-first="1" data-fallback-src="${esc(direct)}"` : ""} referrerpolicy="no-referrer" decoding="async" draggable="false"><div class="viewer-count">${photos.length > 1 ? (view.index + 1) + " / " + photos.length : ""}</div>`;
+    box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button><img id="viewer-img" alt="${esc(item.alt || "")}"${lead ? "" : ` src="${esc(direct)}"`}${lead ? tgLead(tgKey, stills.slice(1), direct) : ""} referrerpolicy="no-referrer" decoding="async" draggable="false"><div class="viewer-count">${photos.length > 1 ? (view.index + 1) + " / " + photos.length : ""}</div>`;
     const img = document.getElementById("viewer-img");
     if (img) img.style.transform = "translate3d(0,0,0) scale(1)";
     primeTelegramImages(box);

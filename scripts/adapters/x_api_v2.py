@@ -57,6 +57,9 @@ def _profile(user: dict) -> dict:
     banner = user.get("profile_banner_url") or ""
     if banner:
         profile["banner"] = banner
+    raw_id = str(user.get("id") or "")
+    if raw_id.isdigit():
+        profile["permanentId"] = raw_id
     return profile
 
 
@@ -240,11 +243,20 @@ def parse(payload, feed: dict | None = None) -> dict:
     posts = [_convert(tweet, ctx, feed, True) for tweet in payload.get("data") or []]
     profiles = []
     seen = set()
+    stored = str(feed.get("permanentId") or "")
+    wanted = (feed.get("handle") or "").lstrip("@").lower()
     for user in users.values():
         if not user.get("username") or user["username"] in seen:
             continue
         seen.add(user["username"])
-        profiles.append(_profile(user))
+        profile = _profile(user)
+        uid = str(profile.get("permanentId") or "")
+        screen = (user.get("username") or "").lstrip("@").lower()
+        if stored and uid == stored:
+            profile["account"] = True
+        elif not stored and screen == wanted and uid:
+            profile["account"] = True
+        profiles.append(profile)
     return {"posts": posts, "profiles": profiles}
 
 

@@ -352,12 +352,18 @@ def patch_extractor():
     TikTokBaseIE._parse_aweme_video_web = patched
 
 
-def fetch_entries(handle: str) -> list[dict] | None:
+def fetch_playlist(handle: str) -> tuple[list[dict] | None, dict | None]:
+    """Public posts, plus the playlist info the sync already downloads.
+
+    The list is None when TikTok blocks the runner. The playlist info can
+    carry the numeric user id and secUid. Callers that only need posts use
+    fetch_entries.
+    """
     try:
         from yt_dlp import YoutubeDL
     except ImportError:
         print("[tiktok] yt-dlp is not installed")
-        return None
+        return None, None
     patch_extractor()
 
     class Quiet:
@@ -390,33 +396,91 @@ def fetch_entries(handle: str) -> list[dict] | None:
             info = ydl.extract_info("https://www.tiktok.com/@" + handle, download=False)
     except Exception:
         print("[tiktok] " + BLOCKED)
-        return None
+        return None, None
     if not isinstance(info, dict):
         print("[tiktok] " + BLOCKED)
-        return None
+        return None, None
     entries = info.get("entries") or []
-    return [row for row in entries if isinstance(row, dict)]
+    return [row for row in entries if isinstance(row, dict)], info
 
 
-def build_doc(handles: list[str], previous: dict | None, posts_ok: bool) -> dict:
+def fetch_entries(handle: str) -> list[dict] | None:
+    entries, _info = fetch_playlist(handle)
+    return entries
+
+
+def sync_handles(config: dict | None) -> list[str]:
+    """Current TikTok handles from the config, then any sync handle not already listed."""
+    from account_identity import norm_handle
+
+    config = config if isinstance(config, dict) else {}
+    handles = []
+    seen = set()
+
+    def add(name: str) -> None:
+        name = norm_handle(name)
+        if not HANDLE_RE.fullmatch(name) or name.casefold() in seen:
+            return
+        seen.add(name.casefold())
+        handles.append(name)
+
+    for row in config.get("tiktok") or []:
+        if not isinstance(row, dict):
+            continue
+        add(str(row.get("handle") or ""))
+        for item in row.get("previousHandles") or []:
+            seen.add(norm_handle(item).casefold())
+    for row in TRACKED:
+        add(row)
+    return handles
+
+
+def _tiktok_row(config: dict, handle: str) -> dict | None:
+    from account_identity import handles_equal
+
+    for row in config.get("tiktok") or []:
+        if not isinstance(row, dict):
+            continue
+        if handles_equal(row.get("handle"), handle) or any(handles_equal(item, handle) for item in row.get("previousHandles") or []):
+            row["platform"] = "tiktok"
+            return row
+    return None
+
+
+def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config: dict | None = None) -> dict:
     previous = previous if isinstance(previous, dict) else {}
     prev_live = previous.get("live") if isinstance(previous.get("live"), dict) else {}
     feeds = []
     posts = []
     if posts_ok:
         for handle in handles:
-            entries = fetch_entries(handle)
+            entries, info = fetch_playlist(handle)
             if entries is None:
                 old_posts = [row for row in (previous.get("posts") or []) if row.get("handle") == handle]
                 old_feeds = [row for row in (previous.get("feeds") or []) if row.get("handle") == handle]
                 posts.extend(old_posts)
                 feeds.extend(old_feeds)
+                if isinstance(config, dict):
+                    row = _tiktok_row(config, handle)
+                    if row:
+                        from account_identity import resolve_failed
+
+                        resolve_failed(config, row)
                 continue
+            if isinstance(config, dict) and isinstance(info, dict):
+                from account_identity import note_tiktok
+
+                note_tiktok(config, handle, info)
+            active = handle
+            if isinstance(config, dict):
+                row = _tiktok_row(config, handle)
+                if row and row.get("handle"):
+                    active = str(row.get("handle"))
             built = []
             avatar = ""
-            name = handle
+            name = active
             for entry in entries:
-                post = entry_to_post(entry, handle)
+                post = entry_to_post(entry, active)
                 if not post:
                     continue
                 built.append(post)
@@ -428,8 +492,10 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool) -> dict
                 print("[tiktok] no public posts for " + handle)
             else:
                 print("[tiktok] " + str(len(built)) + " posts for " + handle)
-            feeds.append(feed_row(handle, name, avatar))
+            feeds.append(feed_row(active, name, avatar))
             posts.extend(built)
+        if isinstance(config, dict):
+            handles = sync_handles(config)
     else:
         feeds = list(previous.get("feeds") or [])
         posts = list(previous.get("posts") or [])
@@ -500,7 +566,19 @@ def upload_owner(path: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     live_only = "--live-only" in args
-    handles = [row for row in TRACKED if HANDLE_RE.match(row)]
+    from account_identity import begin_run, commit_file
+
+    begin_run()
+    config_path = ROOT / "feeds.config.json"
+    config = {}
+    if config_path.is_file():
+        try:
+            parsed = json.loads(config_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            parsed = {}
+        if isinstance(parsed, dict):
+            config = parsed
+    handles = sync_handles(config)
     owner_path = ROOT / "owner" / "tiktok.json"
     try:
         previous = load_owner(owner_path)
@@ -508,13 +586,15 @@ def main(argv: list[str] | None = None) -> int:
             print("[tiktok] owner data is not uploaded yet")
             return 0
         mode = read_audience()
-        doc = build_doc(handles, previous, posts_ok=not live_only)
+        doc = build_doc(handles, previous, posts_ok=not live_only, config=config)
         doc["audience"] = mode
         if live_only:
             doc["feeds"] = previous.get("feeds") or []
             doc["posts"] = previous.get("posts") or []
             doc["audience"] = previous.get("audience") or mode
         place(doc, "owner" if live_only else mode, ROOT / "feeds.json", owner_path)
+        if not live_only and config_path.is_file():
+            commit_file(config_path, config)
         if live_only:
             upload_owner(owner_path)
     except Exception:

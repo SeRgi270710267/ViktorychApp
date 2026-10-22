@@ -146,6 +146,8 @@ def parse(payload, feed: dict | None = None) -> dict:
     profile["url"] = f"https://www.youtube.com/channel/{channel_id}" if channel_id else profile_url("youtube", handle)
     if channel_id:
         profile["channelId"] = channel_id
+        profile["permanentId"] = channel_id
+        profile["account"] = True
     posts = []
     for entry in children(root, "entry"):
         video_id = _video_id(entry)

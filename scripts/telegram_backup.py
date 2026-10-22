@@ -500,6 +500,64 @@ def stable_ident(post: dict) -> str:
     return clean_ident(bare)
 
 
+def _tiktok_user_id(post: dict) -> str:
+    raw = str((post or {}).get("permanentId") or (post or {}).get("userId") or "").strip()
+    if re.fullmatch(r"\d{5,22}", raw):
+        return raw
+    return ""
+
+
+def _tiktok_handles(post: dict) -> list:
+    handles = []
+    current = str((post or {}).get("handle") or "").lstrip("@")
+    if re.fullmatch(r"[A-Za-z0-9._]{2,24}", current):
+        handles.append(current)
+    for item in (post or {}).get("previousHandles") or []:
+        name = str(item or "").lstrip("@")
+        if re.fullmatch(r"[A-Za-z0-9._]{2,24}", name) and name.lower() not in {row.lower() for row in handles}:
+            handles.append(name)
+    return handles
+
+
+def _tiktok_suffix(role: str, index: int) -> str:
+    if role == "video":
+        return "/video"
+    if role == "poster":
+        return "/poster"
+    if role == "photo":
+        return "/photo/" + str(index)
+    return ""
+
+
+def social_key_candidates(post: dict, role: str, index: int = 0) -> list:
+    """Id key first, then the current handle, then previous handles."""
+    platform = str((post or {}).get("platform") or "").lower()
+    if platform != "tiktok":
+        key = social_object_key(post, role, index)
+        return [key] if key else []
+    ident = stable_ident(post)
+    suffix = _tiktok_suffix(role, max(0, int(index or 0)))
+    if re.fullmatch(r"\d{8,22}", ident) is None or not suffix:
+        return []
+    keys = []
+    user_id = _tiktok_user_id(post)
+    if user_id:
+        keys.append("tiktok/id/" + user_id + "/" + ident + suffix)
+    for handle in _tiktok_handles(post):
+        keys.append("tiktok/" + handle + "/" + ident + suffix)
+    return keys
+
+
+def existing_social_key(post: dict, role: str, index: int, present) -> str:
+    """Keep a file that is already stored. Otherwise use the permanent-id key."""
+    found = set(present or ())
+    candidates = social_key_candidates(post, role, index)
+    for key in candidates:
+        if key in found:
+            return key
+    return candidates[0] if candidates else ""
+
+
 def social_object_key(post: dict, role: str, index: int = 0) -> str:
     """Same object keys as shared/social-keys.js."""
     platform = str((post or {}).get("platform") or "").lower()
@@ -508,7 +566,18 @@ def social_object_key(post: dict, role: str, index: int = 0) -> str:
         handle = str((post or {}).get("handle") or "").lstrip("@")
         ident = stable_ident(post)
         if re.fullmatch(r"[A-Za-z0-9._]{2,24}", handle) is None or re.fullmatch(r"\d{8,22}", ident) is None:
+            user_id = _tiktok_user_id(post)
+            suffix = _tiktok_suffix(role, n)
+            if user_id and suffix and re.fullmatch(r"\d{8,22}", ident or ""):
+                return "tiktok/id/" + user_id + "/" + ident + suffix
             return ""
+        user_id = _tiktok_user_id(post)
+        if user_id and role == "video":
+            return "tiktok/id/" + user_id + "/" + ident + "/video"
+        if user_id and role == "poster":
+            return "tiktok/id/" + user_id + "/" + ident + "/poster"
+        if user_id and role == "photo":
+            return "tiktok/id/" + user_id + "/" + ident + "/photo/" + str(n)
         if role == "video":
             return "tiktok/" + handle + "/" + ident + "/video"
         if role == "poster":
@@ -832,7 +901,7 @@ def plan_social(docs: list, present_keys) -> list:
                     continue
                 for role, url in media_candidates(post, media, index):
                     key_index = 0 if platform == "tiktok" and role in {"video", "poster"} else index
-                    key = social_object_key(post, role, key_index)
+                    key = existing_social_key(post, role, key_index, present)
                     if not key or key in seen:
                         continue
                     original = (role == "video" and platform in ORIGINAL_VIDEO) or (role == "photo" and platform in ORIGINAL_PHOTO)
@@ -2450,6 +2519,19 @@ def selftest() -> int:
     check(host_ok("https://v16.tiktokcdn.com/a.mp4") and not host_ok("https://www.youtube.com/watch?v=xtrFOsncOeo"), "only the existing CDN hosts are fetched")
     again = plan_social([{"posts": [tiktok_post]}], {"tiktok/gabii_g5/7695476356548660503/video"})
     check(any(row["key"] == "tiktok/gabii_g5/7695476356548660503/video" and row["original"] for row in again), "a TikTok video on R2 is still replaced by the original")
+    renamed_tiktok = dict(tiktok_post)
+    renamed_tiktok["permanentId"] = "123456789"
+    renamed_tiktok["previousHandles"] = ["old_gabii"]
+    renamed_keys = social_key_candidates(renamed_tiktok, "video", 0)
+    check(
+        renamed_keys
+        and renamed_keys[0] == "tiktok/id/123456789/7695476356548660503/video"
+        and "tiktok/gabii_g5/7695476356548660503/video" in renamed_keys
+        and "tiktok/old_gabii/7695476356548660503/video" in renamed_keys,
+        "a renamed TikTok account keeps the id key and the older handle keys",
+    )
+    kept = plan_social([{"posts": [renamed_tiktok]}], {"tiktok/gabii_g5/7695476356548660503/video"})
+    check(any(row["key"] == "tiktok/gabii_g5/7695476356548660503/video" for row in kept), "a file stored under the previous handle stays on that key")
     check("bv*+ba/b" in ytdlp_download_args("https://www.youtube.com/watch?v=xtrFOsncOeo", Path("out"), YTDLP_FORMAT), "yt-dlp uses bv*+ba/b")
     args = ytdlp_download_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), "bytevc1+audio/bv*+ba/b")
     check(args[args.index("-f") + 1].endswith("/bv*+ba/b") and args[args.index("--merge-output-format") + 1] == "mp4" and args[args.index("--remux-video") + 1] == "mp4" and "--no-cookies" in args and "--cookies" not in args, "the remux is mp4 and uses no cookies")

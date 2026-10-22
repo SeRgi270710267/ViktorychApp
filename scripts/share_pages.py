@@ -341,7 +341,17 @@ def feed_for(feeds: list, platform: str, handle: str) -> dict | None:
     if not handle:
         return None
     for feed in feeds:
-        if (feed.get("platform") or "x") == platform and str(feed.get("handle") or "").lower() == handle:
+        if (feed.get("platform") or "x") != platform:
+            continue
+        if str(feed.get("handle") or "").lower() == handle:
+            return feed
+        if str(feed.get("permanentId") or "") == handle or str(feed.get("channelId") or "") == handle:
+            return feed
+    for feed in feeds:
+        if (feed.get("platform") or "x") != platform:
+            continue
+        previous = [str(item or "").lstrip("@").lower() for item in (feed.get("previousHandles") or [])]
+        if handle in previous:
             return feed
     return None
 
@@ -695,6 +705,34 @@ def build(site: Path, base: str = DEFAULT_BASE, thumb_probe=None) -> dict:
             "body": str(feed.get("bio") or "").strip()[:2000],
         })
         counts["profiles"] += 1
+        # An old handle opens the account under its current handle.
+        current_route = route
+        for old in feed.get("previousHandles") or []:
+            alias = str(old or "").lstrip("@")
+            if not SAFE_HANDLE.match(alias) or alias.lower() == handle.lower():
+                continue
+            if any(
+                (other.get("platform") or "x") == platform and str(other.get("handle") or "").lstrip("@").lower() == alias.lower()
+                for other in feeds
+                if other is not feed
+            ):
+                continue
+            write_page(site / "u", f"{platform}-{alias}.html", {
+                "title": title_for(name, handle, platform),
+                "description": bio,
+                "url": join_url(base, f"u/{platform}-{alias}.html"),
+                "image": image,
+                "og_type": "profile",
+                "player": "",
+                "mp4": "",
+                "hash": current_route,
+                "open_href": "../" + current_route,
+                "author": name,
+                "byline": f"@{handle} · {platform_name(platform)}",
+                "avatar": avatar,
+                "banner": banner,
+                "body": str(feed.get("bio") or "").strip()[:2000],
+            })
 
     archive = site / "archive"
     if not archive.is_dir():
