@@ -14,8 +14,13 @@ IA_ACCESS_KEY and IA_SECRET_KEY are the S3 keys. When either is missing this
 prints a notice and exits 0. The key values are never printed.
 
 Uploads use the S3-like API (Authorization: LOW). A 503 or SlowDown waits
-and retries. Discord posts and any URL that is not a public media file are
-left out. Nothing is committed to git.
+and retries. Nothing is committed to git.
+
+Default is deny. A post is uploaded only when its recorded source is in
+ia_public_sources and that source fetches with no login, cookie, or session.
+TikTok is uploaded only for handles in ia_tiktok_allow, which is empty.
+Discord, token-backed sources, private accounts, DMs, app-account data,
+music, radio audio, and anything with no recorded source stay off IA.
 """
 
 from __future__ import annotations
@@ -91,7 +96,36 @@ BLOCK_SUFFIXES = (
     "githubusercontent.com",
     "jsdelivr.net",
     "archive.org",
+    "r2.dev",
+    "trycloudflare.com",
+    "workers.dev",
+    "cloudflarestorage.com",
 )
+# Sources that fetch the public post with no login, cookie, or session.
+# feeds.config.json can narrow this set. It cannot add a source.
+AUDITED_PUBLIC_SOURCES = frozenset({
+    "fxtwitter",
+    "youtube_rss",
+    "youtube_community",
+    "telegram",
+    "rsshub_instagram",
+    "rsshub_threads",
+})
+# Used only when the post does not name a source and the feed has no untrusted fallback.
+PLATFORM_SOURCE = {
+    "youtube": "youtube_rss",
+    "telegram": "telegram",
+}
+SOURCE_HOSTS = {
+    "fxtwitter": ("pbs.twimg.com", "video.twimg.com"),
+    "youtube_rss": ("i.ytimg.com", "ytimg.com", "ggpht.com", "googleusercontent.com"),
+    "youtube_community": ("i.ytimg.com", "ytimg.com", "ggpht.com", "googleusercontent.com"),
+    "telegram": ("telesco.pe", "telegram-cdn.org"),
+    "rsshub_instagram": ("cdninstagram.com",),
+    "rsshub_threads": ("cdninstagram.com", "fbcdn.net", "cdnthreads.net"),
+    "tiktok": ("tiktokcdn.com", "tiktokcdn-us.com", "tiktokcdn-eu.com", "tiktokv.com", "bytefcdn.com", "muscdn.com", "ibytedtos.com", "ibyteimg.com"),
+}
+AUDIO_SUFFIXES = (".mp3", ".m4a", ".aac", ".flac", ".wav", ".ogg", ".m3u8", ".m4s")
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -200,6 +234,111 @@ def public_media_url(url: str, *, allow_hosts=(), allow_http: bool = False) -> b
     if re.fullmatch(r"\d+\.\d+\.\d+\.\d+", host):
         return False
     return _suffix(host, ALLOW_SUFFIXES)
+
+
+def _config_list(key: str):
+    path = ROOT / "feeds.config.json"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(doc, dict) or key not in doc:
+        return None
+    value = doc.get(key)
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _feed_sources() -> dict:
+    path = ROOT / "feeds.config.json"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    feeds = {}
+    for feed in doc.get("feeds") or []:
+        if not isinstance(feed, dict) or not feed.get("id"):
+            continue
+        fallbacks = []
+        for row in feed.get("fallbacks") or []:
+            if isinstance(row, dict) and row.get("adapter"):
+                fallbacks.append(str(row.get("adapter")))
+        feeds[str(feed["id"])] = {"adapter": str(feed.get("adapter") or ""), "fallbacks": fallbacks}
+    return feeds
+
+
+def load_ia_policy(config: dict | None = None) -> dict:
+    """Effective allowlist. Unknown sources are denied. Config cannot add a source."""
+    config = config or {}
+    if "public_sources" in config:
+        listed = config.get("public_sources") or []
+    else:
+        listed = _config_list("ia_public_sources")
+        if listed is None:
+            listed = AUDITED_PUBLIC_SOURCES
+    sources = frozenset(str(item).strip() for item in listed if str(item).strip()) & AUDITED_PUBLIC_SOURCES
+    if "tiktok_allow" in config:
+        handles = config.get("tiktok_allow") or []
+    else:
+        handles = _config_list("ia_tiktok_allow") or []
+    tiktok = {str(item).strip().lstrip("@").lower() for item in handles if str(item).strip()}
+    feeds = config.get("feeds") if isinstance(config.get("feeds"), dict) else _feed_sources()
+    return {"sources": sources, "tiktok": tiktok, "feeds": feeds}
+
+
+def _private_url(url: str) -> bool:
+    host = _host(url)
+    if _suffix(host, ("r2.dev", "trycloudflare.com", "workers.dev", "cloudflarestorage.com", "discord.com", "discordapp.com", "discordapp.net", "discord.gg")):
+        return True
+    parsed = urllib.parse.urlparse(str(url or ""))
+    path = (parsed.path or "").lower()
+    if path.startswith("/music/") or path.startswith("/loop/") or "/media/avatars/" in path or "/media/banners/" in path or path.startswith("/v1/"):
+        return True
+    return any(path.endswith(suffix) for suffix in AUDIO_SUFFIXES)
+
+
+def ia_source_for_post(post: dict, policy: dict) -> str:
+    """The credential-free source for this post, or empty when it must stay off IA."""
+    if not isinstance(post, dict):
+        return ""
+    platform = str(post.get("platform") or post.get("p") or "").strip().lower()
+    kind = str(post.get("kind") or post.get("k") or "").strip().lower()
+    if post.get("protected") or post.get("private") or kind in {"dm", "direct"}:
+        return ""
+    if platform in {"discord", ""}:
+        return ""
+    handle = str(post.get("handle") or post.get("h") or "").strip().lstrip("@").lower()
+    if platform == "tiktok":
+        return "tiktok" if handle and handle in (policy.get("tiktok") or set()) else ""
+    explicit = str(post.get("iaSource") or post.get("adapter") or post.get("source") or post.get("s") or "").strip()
+    allowed = policy.get("sources") or frozenset()
+    if explicit:
+        return explicit if explicit in allowed else ""
+    feed = (policy.get("feeds") or {}).get(str(post.get("feedId") or ""))
+    if isinstance(feed, dict):
+        names = [str(feed.get("adapter") or "")]
+        names.extend(str(item) for item in (feed.get("fallbacks") or []))
+        names = [item for item in names if item]
+        if names and all(item in allowed for item in names):
+            return names[0]
+        return ""
+    mapped = PLATFORM_SOURCE.get(platform, "")
+    return mapped if mapped in allowed else ""
+
+
+def ia_url_ok(url: str, source: str, *, allow_hosts=()) -> bool:
+    if not source or _private_url(url):
+        return False
+    host = _host(url)
+    if not host:
+        return False
+    allowed_hosts = {str(item).lower() for item in allow_hosts or ()}
+    if host in allowed_hosts:
+        return True
+    return _suffix(host, SOURCE_HOSTS.get(source) or ())
 
 
 def _sniff(body: bytes, content_type: str) -> tuple[str, str, str] | None:
@@ -330,17 +469,18 @@ def _blank_state() -> dict:
     return {"v": 1, "shards": {}, "byHash": {}, "byUrl": {}, "posts": {}}
 
 
-def _public_rows(rows) -> list:
+def _public_rows(rows, policy: dict | None = None) -> list:
+    policy = policy if policy is not None else load_ia_policy()
     kept = []
     for row in rows or []:
         if not isinstance(row, dict):
             continue
         platform = str(row.get("p") or "").strip().lower()
         ident = str(row.get("id") or "").strip()
-        if platform == "discord" or not platform or not ident:
+        if not platform or not ident or not ia_source_for_post(row, policy):
             continue
         stub = {"p": platform, "id": ident}
-        for key in ("h", "d", "k", "t"):
+        for key in ("h", "d", "k", "t", "s"):
             value = row.get(key)
             if value:
                 stub[key] = value
@@ -364,15 +504,23 @@ def _remember(state: dict, key: str, entry: dict) -> None:
     rows.append(entry)
 
 
-def _jobs(posts) -> list:
+def _jobs(posts, policy: dict | None = None, allow_hosts=()) -> list:
+    policy = policy if policy is not None else load_ia_policy()
     found = []
 
-    def add(post, month):
+    def add(post, month, inherited=""):
+        source = ia_source_for_post(post, policy)
+        child_platform = str(post.get("platform") or post.get("p") or "").strip().lower()
+        explicit = str(post.get("iaSource") or post.get("adapter") or post.get("source") or post.get("s") or "").strip()
+        if not source and inherited and not explicit and child_platform not in {"discord", "vk", "tiktok"}:
+            source = inherited
+        if not source:
+            return
         key = _post_key(post)
         if not key:
             return
         avatar = str(post.get("avatar") or "").strip()
-        if avatar:
+        if avatar and ia_url_ok(avatar, source, allow_hosts=allow_hosts):
             found.append((month, key, "avatar", prefer_original(avatar), ""))
         for media in post.get("media") or []:
             if not isinstance(media, dict):
@@ -383,25 +531,21 @@ def _jobs(posts) -> list:
             variant = best_mp4(media.get("variants"))
             if kind in {"video", "animated_gif"}:
                 file_url = variant or url
-                if file_url:
-                    found.append((month, key, kind, prefer_original(file_url), prefer_original(poster) if poster else ""))
-                if poster:
+                if file_url and ia_url_ok(file_url, source, allow_hosts=allow_hosts):
+                    found.append((month, key, kind, prefer_original(file_url), prefer_original(poster) if poster and ia_url_ok(poster, source, allow_hosts=allow_hosts) else ""))
+                if poster and ia_url_ok(poster, source, allow_hosts=allow_hosts):
                     found.append((month, key, "photo", prefer_original(poster), ""))
                 continue
-            if url:
+            if url and ia_url_ok(url, source, allow_hosts=allow_hosts):
                 found.append((month, key, "photo" if kind not in {"photo", "image"} else "photo", prefer_original(url), ""))
-            elif poster:
+            elif poster and ia_url_ok(poster, source, allow_hosts=allow_hosts):
                 found.append((month, key, "photo", prefer_original(poster), ""))
         quoted = post.get("quoted")
         if isinstance(quoted, dict):
-            add(quoted, month_key(str(quoted.get("date") or "")) or month)
+            add(quoted, month_key(str(quoted.get("date") or "")) or month, source)
 
     for post in posts or []:
         if not isinstance(post, dict):
-            continue
-        if str(post.get("platform") or "").lower() == "discord":
-            continue
-        if post.get("protected") or post.get("private"):
             continue
         add(post, month_key(str(post.get("date") or post.get("sortDate") or "")))
     found.sort(key=lambda row: row[0], reverse=True)
@@ -458,6 +602,8 @@ def run_backup(config: dict, posts, shards, state: dict | None = None, sleep=tim
     backoff = float(config.get("backoff") if config.get("backoff") is not None else 2)
     limit = int(config.get("max_bytes") or 48 * 1024 * 1024)
     max_uploads = int(config.get("max_uploads") or 30)
+    policy = load_ia_policy(config)
+    allow_hosts = config.get("allow_hosts") or ()
 
     def put(item, name, body, content_type, counts=True):
         nonlocal failures
@@ -484,7 +630,7 @@ def run_backup(config: dict, posts, shards, state: dict | None = None, sleep=tim
         return ok
 
     for month in sorted((name for name in (shards or {}) if MONTH_RE.match(str(name))), reverse=True):
-        rows = _public_rows(shards.get(month) or [])
+        rows = _public_rows(shards.get(month) or [], policy)
         if not rows:
             continue
         body = (json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
@@ -502,7 +648,7 @@ def run_backup(config: dict, posts, shards, state: dict | None = None, sleep=tim
 
     seen_urls = set()
     new_uploads = 0
-    for month, key, kind, url, poster in _jobs(posts):
+    for month, key, kind, url, poster in _jobs(posts, policy, allow_hosts):
         if not url or url in seen_urls:
             if url and key:
                 digest = state["byUrl"].get(url)
