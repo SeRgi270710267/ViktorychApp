@@ -11391,6 +11391,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   document.addEventListener("error", (event) => {
     const img = event.target;
     if (!img || (img.tagName !== "IMG" && img.tagName !== "VIDEO")) return;
+    // Shorts keeps the video when TikTok refuses the file, so the slide can show what TikTok returned.
+    if (img.tagName === "VIDEO" && img.closest(".shorts-slide")) return;
     if (img.dataset.fallback === "avatar") {
       if (useArchiveMedia(img)) return;
       finishMediaError(img);
