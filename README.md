@@ -524,6 +524,10 @@ The code that used to upload is still default-deny: only a credential-free publi
 
 The folder is `ViktorychApp-backup/`. `music/` and `covers/` are ViktorychMusic songs and covers. `radio/` is the loop audio. `tiktok/` is TikTok that is not on `ia_tiktok_allow`. `media/` is video the Internet Archive rule rejects, largest first. Files already stored are skipped by SHA-256. One run uploads at most 400 MB and 500 new files, and it stops after 40 minutes. ViktorychApp account data is not uploaded. The Windows steps that create the token are in [docs/gdrive-backup.md](docs/gdrive-backup.md).
 
+## Telegram backup
+
+`.github/workflows/telegram-backup.yml` runs at 11:17 UTC and from **Run workflow**. It copies private R2 media into a private Telegram channel with `TELEGRAM_BOT_TOKEN`. A missing `TELEGRAM_BOT_TOKEN` or `TELEGRAM_CHANNEL_ID` skips the job and exits 0. The token is not printed. Files of at most 19 MB are one document the site can play through the accounts Worker at `/tg/<key>`. Larger video and long audio, other than radio, become short HLS segments the Worker can play. Larger archives are backup parts only. Radio, ViktorychMusic, and the live JSON stay on R2. Account data is uploaded only as ciphertext when `TG_BACKUP_KEY` is set, and it is not played and not deleted. The setup steps are in [docs/telegram-backup.md](docs/telegram-backup.md).
+
 ## Installed app
 
 A long-press on the icon opens Search, Bookmarks, Subscriptions, and Notifications. The manifest also has a description, phone and desktop screenshots, a maskable icon, and a monochrome icon. iOS startup images cover the common iPhone and iPad sizes. The theme color follows the appearance setting: white, dim (`#15202b`), or black.
