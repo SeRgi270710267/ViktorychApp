@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - cursor/accounts-deploy-7706
     paths:
       - "worker/**"
       - "shared/**"
