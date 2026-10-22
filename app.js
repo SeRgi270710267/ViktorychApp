@@ -2652,6 +2652,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     );
   }
 
+  function siteSource(id) {
+    const feed = feedById(id);
+    if (feed && (feed.configured || feed.origin === "repost")) return true;
+    return !!configuredFeed(id);
+  }
+
   function followButtonClean(id, large) {
     const ids = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(id) : [id];
     const primary = ids[0] || id;
@@ -2659,7 +2665,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (ids.some((item) => isFollowed(item))) {
       return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">Following</span><span class="u">Unfollow</span></button>`;
     }
-    if (!ids.some((item) => configuredFeed(item))) {
+    if (!ids.some((item) => siteSource(item))) {
       return `<a class="follow${large ? " lg" : ""}" data-act="follow-request" data-id="${esc(primary)}" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("follow", primary))}">Follow</a>`;
     }
     return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>Follow</button>`;
@@ -5388,7 +5394,8 @@ const here = parseRoute();
 
   function needsSyncNote(profile) {
     const feed = catalogFeed(profile);
-    return !feed || !feed.configured;
+    if (feed && (feed.configured || feed.origin === "repost")) return false;
+    return true;
   }
 
   function liveFollowId(profile) {
@@ -6299,6 +6306,7 @@ const here = parseRoute();
       </div>
       <h1 class="pname">${esc(profile.name || profile.handle)}${badge(profile.verifiedType)}</h1>
       ${shown ? `<div class="phandle">@${esc(shown)}</div>` : ""}
+      ${addedNote(catalogFeed(profile) || profile)}
       ${bioBlock(profile)}
       ${meta ? `<div class="pmeta">${meta}</div>` : ""}
       ${counts}
@@ -6373,6 +6381,7 @@ const here = parseRoute();
       </div>
       <h1 class="pname">${esc(feed.name || feed.handle)}${badge(feed.verifiedType)}</h1>
       <div class="phandle">@${esc(feed.handle)}</div>
+      ${addedNote(feed)}
       ${bioBlock(feed)}
       ${meta ? `<div class="pmeta">${meta}</div>` : ""}
       ${counts}
@@ -6872,19 +6881,40 @@ const here = parseRoute();
     exploreSuggestQuiet = false;
     return exploreHome();
   }
+  function addedNote(feed) {
+    if (!feed || feed.origin !== "repost" || !feed.addedFrom) return "";
+    const from = feed.addedFrom;
+    const handle = String(from.handle || "").replace(/^@/, "");
+    const who = handle ? "@" + handle : String(from.name || "");
+    const when = from.at ? relTime(from.at) : "";
+    if (!who && !when) return "";
+    const bits = [];
+    if (who) bits.push("Reposted by " + who);
+    if (when) bits.push(when);
+    return `<span class="added-from">${esc(bits.join(" · "))}</span>`;
+  }
+
   function accountRow(f, opts) {
-    const remove = opts && opts.remove && f.configured
+    const site = !!(f && (f.configured || f.origin === "repost"));
+    const remove = opts && opts.remove && site
       ? `<button type="button" class="follow remove-pill" data-act="ask-remove" data-id="${esc(f.id)}">Remove</button>`
       : "";
+    const added = f && f.origin === "repost" && !isFollowed(f.id);
+    const pill = added ? `<span class="added-pill">Added</span>` : "";
     const follow = followButtonClean(f.id);
-    const actions = remove ? `<span class="row-actions">${follow}${remove}</span>` : follow;
-    return `<div class="acct-row"><a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span></span></a>${actions}</div>`;
+    const actions = (pill || remove) ? `<span class="row-actions">${pill}${follow}${remove}</span>` : follow;
+    return `<div class="acct-row"><a class="who-main" href="${esc(accountHash(f.platform, f.channelId || f.handle))}" data-card="${esc(f.id)}">${avatar(f.avatar, f.name)}<span class="who-copy"><span class="name">${esc(f.name)}${badge(f.verifiedType)}</span><span class="handle">@${esc(f.handle)}</span>${addedNote(f)}</span></a>${actions}</div>`;
   }
 
   function feedsView() {
-    const list = shownFeeds(feeds().slice()).sort((a, b) => Number(b.configured) - Number(a.configured) || (a.name || "").localeCompare(b.name || ""));
+    const all = shownFeeds(feeds().slice());
+    const byName = (a, b) => (a.name || "").localeCompare(b.name || "");
+    const added = all.filter((f) => f && f.origin === "repost").sort(byName);
+    const rest = all.filter((f) => f && f.origin !== "repost").sort((a, b) => Number(b.configured) - Number(a.configured) || byName(a, b));
     const box = `<form class="add-account"><label class="search"><span>${icon("search")}</span><input id="add-account" placeholder="Add account URL or @handle" aria-label="Add account"></label><button class="follow" type="submit">Add</button></form>`;
-    return pageHead("Feeds") + box + (list.length ? `<div>${list.map((f) => accountRow(f, { remove: true })).join("")}</div>` : emptyBlock("No accounts", "Paste a profile URL or @handle above."));
+    const addedBlock = added.length ? `<section class="feed-section"><h2>Added</h2>${added.map((f) => accountRow(f, { remove: true })).join("")}</section>` : "";
+    const restBlock = rest.length ? `<div>${rest.map((f) => accountRow(f, { remove: true })).join("")}</div>` : "";
+    return pageHead("Feeds") + box + (added.length || rest.length ? addedBlock + restBlock : emptyBlock("No accounts", "Paste a profile URL or @handle above."));
   }
 
   function listsView() {
@@ -8803,7 +8833,9 @@ if (STATE.histClear) {
       const sections = order.filter((name) => buckets[name] && buckets[name].length).map((name) => `<section class="yt-sec"><h2>${name}</h2><div class="yt-grid">${buckets[name].map((post) => ytCard(post, layout)).join("")}</div></section>`).join("");
       body = shelf + sections;
     }
-    return `<div class="subs ${layout}">${head}${strip}${chips}${save}<div class="subs-feed">${body}</div></div>`;
+    const addedAccounts = feeds().filter((feed) => feed && feed.origin === "repost");
+    const addedBox = addedAccounts.length ? `<section class="feed-section"><h2>Added</h2>${addedAccounts.map((feed) => accountRow(feed, { remove: true })).join("")}</section>` : "";
+    return `<div class="subs ${layout}">${head}${strip}${chips}${save}<div class="subs-feed">${addedBox}${body}</div></div>`;
   }
 
   function revealSubsChannel() {
@@ -11729,7 +11761,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function catalogSignature(doc) {
     return ((doc && doc.feeds) || []).map((feed) => {
       if (!feed || !feed.id) return "";
-      return feed.id + (feed.configured ? "*" : "");
+      return feed.id + (feed.configured ? "*" : "") + (feed.origin === "repost" ? "+" : "");
     }).sort().join("|");
   }
 

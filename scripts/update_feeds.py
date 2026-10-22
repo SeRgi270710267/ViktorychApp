@@ -19,6 +19,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -452,6 +453,22 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
 
     health = {key: dict(value) for key, value in (existing.get("sourceHealth") or {}).items() if isinstance(value, dict)}
     stamp = now_iso()
+    if not use_fixtures:
+        try:
+            from auto_add import apply_auto_adds
+
+            added = apply_auto_adds(config, existing.get("posts") or [])
+            if added:
+                config["_autoAdded"] = added
+                print("[auto-add] " + ", ".join(added))
+        except Exception as exc:
+            print(f"[auto-add] {exc}", file=sys.stderr)
+    try:
+        from auto_add import pace_seconds
+
+        pace = pace_seconds(config)
+    except Exception:
+        pace = 2.0
 
     feed_rows = list(config.get("feeds") or [])
     if not use_fixtures:
@@ -463,6 +480,8 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             print(f"[people] feeds: {exc}", file=sys.stderr)
     for feed in feed_rows:
         configured_ids.add(feed["id"])
+        if not use_fixtures and feed.get("origin") == "repost":
+            time.sleep(pace)
         payload = None
         source_url = ""
         adapter = feed.get("adapter")
@@ -547,7 +566,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
         posts = result.get("posts") or []
-        if adapter == "fxtwitter" and not use_fixtures and source_url:
+        if adapter == "fxtwitter" and not use_fixtures and source_url and feed.get("origin") != "repost":
             reply_url = source_url + ("&" if "?" in source_url else "?") + "with_replies=1"
             try:
                 extra = run_adapter("fxtwitter", read_source(reply_url), feed)
@@ -614,7 +633,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     print(f"[youtube] {feed['id']}: {filled} publish dates from the watch page")
             except Exception as exc:
                 print(f"[keep] {feed['id']}: watch dates: {exc}", file=sys.stderr)
-        if feed.get("platform") == "youtube" and not use_fixtures:
+        if feed.get("platform") == "youtube" and not use_fixtures and feed.get("origin") != "repost":
             from adapters.youtube_community import fetch_community
 
             try:
@@ -675,10 +694,17 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         profiles = merge_profiles(profiles, [apply_override(primary, feed)] + [p for p in incoming if p is not primary])
         print(f"[ok] {feed['id']}: {len(posts)} posts via {adapter}")
 
-    # discovered profiles stay, but only configured feeds are defaults to follow
-    for profile in profiles:
-        if profile.get("id") in configured_ids:
-            profile["configured"] = True
+    # A configured feed is a default follow unless it opted out. Auto-added
+    # repost sources stay in the catalog and out of Following.
+    try:
+        from auto_add import stamp_profiles
+
+        stamp_profiles(profiles, feed_rows)
+    except Exception as exc:
+        print(f"[auto-add] profiles: {exc}", file=sys.stderr)
+        for profile in profiles:
+            if profile.get("id") in configured_ids:
+                profile["configured"] = True
     health = prune_health(health, configured_ids)
     posts = dedupe_posts(collected, cap=int(config.get("cap") or 300))
     try:
@@ -736,7 +762,22 @@ def main() -> None:
     for post in doc.get("posts") or []:
         if post.pop("_fresh", False):
             fresh_comment_ids.add(str(post.get("statusId") or post.get("id") or ""))
+    added_ids = list(config.pop("_autoAdded", None) or [])
     config.pop("_channelIdsUpdated", None)
+    if added_ids and not args.fixtures:
+        try:
+            from auto_add import write_new_feeds
+
+            wanted = []
+            seen = set()
+            for feed in config.get("feeds") or []:
+                ident = feed.get("id")
+                if ident in added_ids and ident not in seen:
+                    wanted.append(feed)
+                    seen.add(ident)
+            write_new_feeds(Path(args.config), wanted)
+        except Exception as exc:
+            print(f"[auto-add] config: {exc}", file=sys.stderr)
     out = ROOT / config.get("output", "feeds.json")
     media_dir = ROOT / "media"
     removed = prune_media(media_dir, doc)

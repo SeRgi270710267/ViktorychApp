@@ -246,6 +246,14 @@ jobs:
           PY
           python3 scripts/update_feeds.py
 
+      - name: Upload feeds.config.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: feeds-config
+          path: feeds.config.json
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Save the VK session cache
         if: always()
         continue-on-error: true
@@ -335,6 +343,50 @@ jobs:
           path: archive/*.json
           if-no-files-found: error
           retention-days: 1
+
+  # Auto-added accounts are fetched in this run. The config change is committed
+  # afterwards so the next sync keeps them. A GITHUB_TOKEN push does not start
+  # another run. Only origin:repost rows are copied, and a removed account is
+  # left off the list.
+  save-auto-feeds:
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: feeds-config
+          path: incoming
+
+      - name: Commit auto-added feeds
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys
+          sys.path.insert(0, "scripts")
+          from auto_add import merge_into_file
+          added = merge_into_file(pathlib.Path("feeds.config.json"), pathlib.Path("incoming/feeds.config.json"))
+          pathlib.Path("auto-added.txt").write_text("\n".join(added), encoding="utf-8")
+          print("auto-added", ", ".join(added) or "none")
+          PY
+          if [ ! -s auto-added.txt ]; then
+            echo "no new auto-added feeds"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add feeds.config.json
+          git commit -F - <<EOF
+          Auto-add reposted accounts
+
+          $(cat auto-added.txt)
+          EOF
+          git push origin HEAD:main
 
   # Once a day: copy the shards to the Internet Archive when the keys exist,
   # then force-push one squashed commit to the orphan data branch. That branch
