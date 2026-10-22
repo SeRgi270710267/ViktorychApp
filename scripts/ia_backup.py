@@ -845,7 +845,7 @@ def migrate_copies(config: dict, state: dict, sleep=time.sleep) -> dict:
                 print(notes[-1], flush=True)
                 failures += 1
                 continue
-            copied[key] = {"item": new_item, "name": new_name, "digest": digest, "url": url, "slot": slot}
+            copied[key] = {"item": new_item, "name": new_name, "digest": digest, "url": url, "slot": slot, "size": len(body)}
             _rewrite_pointer(state, item, name, url, digest, slot)
             notes.append(f"[ia-backup] copied {key}")
             print(notes[-1], flush=True)

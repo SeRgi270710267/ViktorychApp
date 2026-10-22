@@ -3172,6 +3172,100 @@ def ia_backup_checks() -> None:
     check(second_refuse["failures"] == 1 and refused_state["noindexBlocked"].get("superintelapp-img-2026-10") == "readonly", "a second rejection records that noindex is read-only")
     check(len(refused_puts) == puts_after_lock and any("stays listed" in line for line in third_refuse["notes"]), "later runs do not upload another probe once noindex is known read-only")
 
+    import ia_retire
+    from pull_snapshot import shard_url
+
+    archive_src = (ROOT / "scripts" / "ia_archive.py").read_text(encoding="utf-8")
+    retire_wf = (ROOT / ".github" / "workflows" / "ia-retire.yml").read_text(encoding="utf-8")
+    snap = (ROOT / "scripts" / "pull_snapshot.py").read_text(encoding="utf-8")
+    check("feeds-archive" not in archive_src and "Viktorych" not in archive_src and "creator" not in archive_src and "opensource" not in archive_src and "internetarchive" not in archive_src and "run_backup" in archive_src, "shard uploads use the anonymous backup items")
+    check("internetarchive" not in sync and "Restore the saved manifest" in sync, "the daily shard upload restores the manifest before it writes")
+    check("workflow_dispatch" in retire_wf and "schedule:" not in retire_wf and "cron:" not in retire_wf and 'echo "$IA_' not in retire_wf and "echo $IA_" not in retire_wf and "IA_ACCESS_KEY" in retire_wf and "IA_SECRET_KEY" in retire_wf and "ia_retire.py copy" in retire_wf and "ia_retire.py delete" in retire_wf, "the retire workflow is manual, uses the keys, and does not print them")
+    check("feeds-archive" not in app and "ARCHIVE_IA" not in app and "installIaManifest(manifestDoc" in app, "the page resolves archive shards from the manifest")
+    check("feeds-archive" not in snap and "def shard_url(" in snap and '("ia",' not in snap, "snapshot reads archive shards from the manifest")
+    anon = "x" + ("ab" * 16)
+    check(shard_url({"shards": {"2026-10": "https://archive.org/download/" + anon + "/abc.json"}}, "archive/2026-10.json").endswith("/abc.json"), "a manifest shard url is accepted")
+    check(shard_url({"shards": {"2026-10": "https://archive.org/download/superintelapp-2026-10/2026-10.json"}}, "archive/2026-10.json") == "", "a named item url is not used")
+
+    sample = b"hello-archive"
+    sample_digest = hashlib.sha256(sample).hexdigest()
+    retire_host = "http://127.0.0.1"
+    copied_url = retire_host + "/download/" + anon + "/file.json"
+    retire_state = {
+        "v": 1,
+        "items": {"stub:2026-10": anon},
+        "copied": {"superintelapp-2026-10/old.json": {"url": copied_url, "digest": sample_digest, "size": len(sample), "slot": "stub:2026-10"}},
+        "shards": {},
+        "byHash": {},
+        "byUrl": {},
+        "posts": {},
+    }
+    retire_files = ["superintelapp-2026-10_meta.xml", "superintelapp-2026-10_files.xml"]
+    retire_meta = {"creator": "owner-account", "collection": "opensource", "uploader": "person@example.com", "title": "named"}
+    anon_meta = {"title": "files", "uploader": "person@example.com", "noindex": "true"}
+    retire_deleted = []
+
+    def retire_open(request, timeout=None):
+        method = request.get_method()
+        path = urllib.parse.urlparse(request.full_url).path
+        if method == "DELETE":
+            retire_deleted.append(path)
+            name = path.rsplit("/", 1)[-1]
+            if name in retire_files:
+                retire_files.remove(name)
+            return Resp(204, b"")
+        if method == "POST":
+            form = urllib.parse.parse_qs(request.data.decode("utf-8"))
+            patch = json.loads(form["-patch"][0])
+            target = path.rsplit("/", 1)[-1]
+            bucket = retire_meta if target == "superintelapp-2026-10" else anon_meta
+            for op in patch:
+                key = str(op.get("path") or "").strip("/")
+                if key in {"uploader", "noindex"}:
+                    return Resp(400, b'{"error":"read-only"}')
+                if op.get("op") == "remove":
+                    bucket.pop(key, None)
+                elif op.get("op") in {"add", "replace"}:
+                    bucket[key] = op.get("value")
+            return Resp(200, b'{"success":true}')
+        if path == "/metadata/superintelapp-2026-10":
+            return Resp(200, json.dumps({"metadata": dict(retire_meta), "files": [{"name": name} for name in retire_files]}).encode())
+        if path == "/metadata/" + anon:
+            return Resp(200, json.dumps({"metadata": dict(anon_meta), "files": []}).encode())
+        if path == "/download/" + anon + "/file.json":
+            return Resp(200, sample)
+        return Resp(404, b"")
+
+    retire_config = {
+        "access": "test-access",
+        "secret": "test-secret-value",
+        "endpoint": retire_host,
+        "download_base": retire_host + "/download",
+        "metadata_base": retire_host + "/metadata",
+        "old_items": ["superintelapp-2026-10"],
+        "pace": 0,
+        "state": retire_state,
+        "urlopen": retire_open,
+        "opener": type("Opener", (), {"open": staticmethod(retire_open)})(),
+    }
+    retire_verified = ia_retire.verify_copies(retire_config, retire_state, sleep=lambda delay: None)
+    check(retire_verified["failures"] == [] and retire_verified["checked"] == 1, "a copied file matches its hash and size")
+    bad_state = json.loads(json.dumps(retire_state))
+    bad_state["copied"]["superintelapp-2026-10/old.json"]["digest"] = "0" * 64
+    retire_failed = ia_retire.verify_copies(retire_config, bad_state, sleep=lambda delay: None)
+    check(retire_failed["failures"] and "test-secret-value" not in " ".join(retire_failed["notes"]), "a hash mismatch blocks the delete")
+    check(not ia_retire.manifest_covers({"files": [], "shards": {}}, retire_state), "deletion waits until the manifest lists the copy")
+    check(ia_retire.manifest_covers({"v": 1, "files": [{"a": copied_url}], "shards": {}}, retire_state), "the manifest gate accepts the copied url")
+    retire_purged = ia_retire.purge_files(retire_config, retire_state, sleep=lambda delay: None)
+    check("superintelapp-2026-10" in retire_purged["emptied"] and retire_purged["remaining"]["superintelapp-2026-10"] == [], "named items are emptied after the copies check out")
+    check(any(path.endswith("_meta.xml") for path in retire_deleted), "derived metadata files are deleted too")
+    retire_blanked = ia_retire.blank_metadata(retire_config, sleep=lambda delay: None)
+    retire_fields = retire_blanked["items"]["superintelapp-2026-10"]
+    check(retire_fields["creator"] == "removed" and retire_fields["collection"] == "removed" and retire_fields["uploader"] == "refused" and retire_fields["noindex"] == "refused", "creator and collection can be cleared and a read-only uploader is kept")
+    check(retire_blanked["uploader_left"] == 1 and retire_blanked["anonymous"] == 1, "anonymous items are counted and a refused uploader stays")
+    retire_notes = " ".join(retire_blanked["notes"] + retire_purged["notes"])
+    check("test-secret-value" not in retire_notes and "person@example.com" not in retire_notes and anon not in retire_notes, "retire notes do not print the keys, the uploader address, or an anonymous id")
+
     story_checks()
 
 

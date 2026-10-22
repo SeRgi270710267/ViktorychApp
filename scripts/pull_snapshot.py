@@ -32,11 +32,9 @@ from site_paths import pages_base, raw_data, user_agent  # noqa: E402
 
 SITE = pages_base()
 DATA_ARCHIVE = raw_data()
-IA_ARCHIVE = "https://archive.org/download/" + ("sergi-" + "rss-" + "feeds-archive") + "/"
 ARCHIVE_SOURCES = (
     ("pages", SITE),
     ("data", DATA_ARCHIVE),
-    ("ia", IA_ARCHIVE),
 )
 UA = user_agent()
 
@@ -116,6 +114,35 @@ def pull_archive(root: Path, fetch) -> str:
     return "updated"
 
 
+def shard_url(manifest: dict, rel: str) -> str:
+    """Download URL for one archive file, from the anonymous manifest map."""
+    name = str(rel or "").rsplit("/", 1)[-1]
+    shards = manifest.get("shards") if isinstance(manifest, dict) else None
+    if not isinstance(shards, dict):
+        return ""
+    if name == "index.json":
+        url = str(shards.get("index.json") or "")
+    elif name.endswith(".json"):
+        url = str(shards.get(name[:-5]) or "")
+    else:
+        url = ""
+    if not re.match(r"https://archive\.org/download/x[0-9a-f]{32}/", url):
+        return ""
+    return url
+
+
+def manifest_archive_fetch(manifest: dict, get):
+    """fetch(relative) for pull_archive, using shard URLs instead of one named item."""
+
+    def fetch(rel: str):
+        url = shard_url(manifest, rel)
+        if not url:
+            return None
+        return get(url)
+
+    return fetch
+
+
 def pull_ia_sidecars(root: Path) -> None:
     """Copy the media manifest when a source has one. A miss leaves the files alone.
 
@@ -125,7 +152,7 @@ def pull_ia_sidecars(root: Path) -> None:
     """
     dest = root / "archive"
     dest.mkdir(parents=True, exist_ok=True)
-    sources = (("data", DATA_ARCHIVE), ("pages", SITE), ("ia", IA_ARCHIVE))
+    sources = (("data", DATA_ARCHIVE), ("pages", SITE))
     for name in ("ia-manifest.json", "ia-state.json"):
         body = None
         for _label, base in sources:
@@ -173,6 +200,14 @@ def main() -> None:
             pull_ia_sidecars(ROOT)
         except (OSError, urllib.error.URLError, TimeoutError):
             print("[snapshot] media manifest unavailable", file=sys.stderr)
+        try:
+            manifest_path = ROOT / "archive" / "ia-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else None
+            if isinstance(manifest, dict):
+                result = pull_archive(ROOT, manifest_archive_fetch(manifest, _get))
+                print(f"[snapshot] archive ia {result}")
+        except (OSError, UnicodeError, json.JSONDecodeError, urllib.error.URLError, TimeoutError):
+            print("[snapshot] archive ia kept")
 
 
 def merge_seed_articles(published: dict, seed: dict) -> int:
