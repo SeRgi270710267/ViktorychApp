@@ -191,6 +191,11 @@
 
   // FLAC is the loop's primary playlist. fallback is AAC for browsers that
   // cannot play audio/mp4; codecs="flac". A missing fallback keeps the primary.
+  // loop/current.json "primary" chooses the first playlist. Only "tg" is Telegram.
+  function loopPrimaryName(value) {
+    return String(value || "").trim().toLowerCase() === "tg" ? "tg" : "r2";
+  }
+
   function loopPlayChoice(status, allow, flacOk) {
     const parsed = loopFromDoc(status, allow);
     const raw = status && typeof status.fallback === "string" ? status.fallback : "";
@@ -203,7 +208,8 @@
       fallback: fallback,
       version: parsed.version,
       duration: parsed.duration,
-      epoch: parsed.epoch
+      epoch: parsed.epoch,
+      source: loopPrimaryName(status && status.primary)
     };
   }
 
@@ -290,29 +296,57 @@
     return base + "/tg/loop/" + match[1] + (match[2] ? "/aac" : "") + "/index.m3u8";
   }
 
-  // R2 stays primary. After one failed retry (failures >= 2) of a network
-  // error or an HTTP 4xx/5xx, the same version continues from position.
-  // A different nextVersion returns to R2. An empty API never switches.
+  // primary "r2" (the default) or "tg" is the first playlist. After one failed
+  // retry, the same version continues from the other source. A new version
+  // starts on primary again. An empty API cannot select Telegram.
   function loopMirrorPlan(input) {
     const src = input && typeof input === "object" ? input : {};
     const version = String(src.version || "");
     const nextVersion = src.nextVersion == null ? "" : String(src.nextVersion);
     const seek = Number.isFinite(src.position) && src.position > 0 ? src.position : 0;
     const r2 = String(src.r2Url || "");
-    if (nextVersion && nextVersion !== version) {
-      return { via: "r2", url: r2, switched: false, seek: seek };
-    }
+    const primary = loopPrimaryName(src.primary);
     const telegram = loopTelegramUrl(r2, src.api);
-    if (src.via === "telegram" && telegram) {
-      return { via: "telegram", url: telegram, switched: false, seek: seek };
+    const via = src.via === "telegram" || src.via === "tg" ? "tg" : "r2";
+    function pick(which, switched) {
+      if (which === "tg" && telegram) {
+        return { via: "telegram", url: telegram, switched: !!switched, seek: seek, primary: primary };
+      }
+      return { via: "r2", url: r2, switched: which === "r2" && !!switched, seek: seek, primary: primary };
     }
+    if (nextVersion && nextVersion !== version) return pick(primary, false);
     const failures = Number(src.failures) || 0;
     const status = Number(src.status) || 0;
     const failed = !!src.network || (status >= 400 && status <= 599);
-    if (failures >= 2 && failed && telegram && version) {
-      return { via: "telegram", url: telegram, switched: true, seek: seek };
+    if (failures >= 2 && failed && version) {
+      if (via === "tg") return pick("r2", true);
+      if (telegram) return pick("tg", true);
+      return pick("r2", false);
     }
-    return { via: "r2", url: r2, switched: false, seek: seek };
+    if (via === "tg" && telegram) return pick("tg", false);
+    return pick("r2", false);
+  }
+
+  // Where attach should start. A saved fallback sticks until the version,
+  // the rendition, or primary changes. primary "tg" starts on Telegram.
+  function loopAttachPlan(input) {
+    const src = input && typeof input === "object" ? input : {};
+    const primary = loopPrimaryName(src.primary);
+    const savedPrimary = src.savedPrimary ? loopPrimaryName(src.savedPrimary) : "";
+    const version = String(src.version || "");
+    const savedVersion = String(src.savedVersion || "");
+    const playUrl = String(src.playUrl || "");
+    const savedPlayUrl = String(src.savedPlayUrl || "");
+    const savedVia = src.savedVia === "tg" || src.savedVia === "telegram" ? "tg" : (src.savedVia === "r2" ? "r2" : "");
+    const same = !!(savedVia && savedVersion === version && savedPlayUrl === playUrl && savedPrimary === primary);
+    let via = same ? savedVia : primary;
+    const telegram = loopTelegramUrl(playUrl, src.api);
+    if (via === "tg" && !telegram) via = "r2";
+    return {
+      via: via === "tg" ? "telegram" : "r2",
+      url: via === "tg" ? telegram : playUrl,
+      primary: primary
+    };
   }
 
   const logic = {
@@ -336,7 +370,9 @@
     playlistJumped: playlistJumped,
     recoverPlan: recoverPlan,
     loopTelegramUrl: loopTelegramUrl,
-    loopMirrorPlan: loopMirrorPlan
+    loopMirrorPlan: loopMirrorPlan,
+    loopPrimaryName: loopPrimaryName,
+    loopAttachPlan: loopAttachPlan
   };
 
   if (typeof document === "undefined") {
@@ -402,6 +438,8 @@
     generation: 0,
     ignoreErrorUntil: 0,
     loadedMirror: "",
+    loopVia: "",
+    loadedPrimary: "",
     loopMirrorVersion: "",
     loopMirrorPlayUrl: "",
     recoveredFor: 0,
@@ -561,7 +599,7 @@
     }
     if (source.loopUrl || type === "loop") {
       const parsed = loopPlayChoice(status || {}, allow, loopFlacOk());
-      return { kind: "loop", live: parsed.live, url: parsed.url, fallback: parsed.fallback, listeners: parsed.listeners, scheduled: false, allow: allow, channelId: "", forced: !!row.fetched || !!demoFor(space), reconnecting: false, version: parsed.version, duration: parsed.duration, epoch: parsed.epoch };
+      return { kind: "loop", live: parsed.live, url: parsed.url, fallback: parsed.fallback, listeners: parsed.listeners, scheduled: false, allow: allow, channelId: "", forced: !!row.fetched || !!demoFor(space), reconnecting: false, version: parsed.version, duration: parsed.duration, epoch: parsed.epoch, loopSource: parsed.source || "r2" };
     }
     if (source.statusUrl) {
       const parsed = audioFromStatus(status || {}, allow);
@@ -605,6 +643,7 @@
       playUrl: play.url || "",
       fallbackUrl: play.fallback || "",
       version: play.version || "",
+      loopSource: play.loopSource === "tg" ? "tg" : "r2",
       duration: play.duration || 0,
       epoch: Number.isFinite(play.epoch) ? play.epoch : 0,
       allow: play.allow || [],
@@ -902,36 +941,56 @@
     return request.pathname.indexOf("/tg/loop/") === 0;
   }
 
-  function mirrorSource(item) {
-    if (!loopItem(item) || !player.loadedMirror) return "";
-    if ((player.loopMirrorVersion || "") !== (item.version || "")) return "";
-    if ((player.loopMirrorPlayUrl || "") !== item.playUrl) return "";
-    return player.loadedMirror;
+  function loopManifestPrimary(item) {
+    return loopPrimaryName(item && item.loopSource);
+  }
+
+  function loopPrimaryChanged(item) {
+    return !!(item && item.kind === "loop" && player.loadedPrimary && loopManifestPrimary(item) !== loopPrimaryName(player.loadedPrimary));
+  }
+
+  function loopChoice(item) {
+    const plan = loopAttachPlan({
+      primary: item.loopSource,
+      savedPrimary: player.loadedPrimary,
+      version: item.version || "",
+      savedVersion: player.loopMirrorVersion || "",
+      playUrl: item.playUrl,
+      savedPlayUrl: player.loopMirrorPlayUrl || "",
+      savedVia: player.loopVia,
+      api: accountsApi()
+    });
+    return { via: plan.via === "telegram" ? "tg" : "r2", url: plan.url, primary: plan.primary };
   }
 
   function clearLoopMirror() {
     player.loadedMirror = "";
+    player.loopVia = "";
     player.loopMirrorVersion = "";
     player.loopMirrorPlayUrl = "";
   }
 
   function applyLoopMirror(item, plan) {
-    player.loadedMirror = plan.url;
+    const via = plan.via === "telegram" ? "tg" : "r2";
+    player.loopVia = via;
+    player.loadedMirror = via === "tg" ? plan.url : "";
     player.loopMirrorVersion = item.version || "";
     player.loopMirrorPlayUrl = item.playUrl;
+    player.loadedPrimary = loopManifestPrimary(item);
     player.loadedUrl = item.playUrl;
     player.loadedVersion = item.version || "";
     player.ignoreErrorUntil = Date.now() + 1500;
   }
 
   function engageLoopMirror(item, position, httpStatus) {
-    if (!loopItem(item) || player.flacBlocked || player.loadedMirror) return false;
+    if (!loopItem(item) || player.flacBlocked) return false;
     const status = Number(httpStatus) || 0;
     const plan = loopMirrorPlan({
       r2Url: item.playUrl,
       api: accountsApi(),
       version: item.version || "",
-      via: "r2",
+      primary: loopManifestPrimary(item),
+      via: player.loopVia === "tg" ? "telegram" : "r2",
       failures: 2,
       network: !status,
       status: status,
@@ -1006,9 +1065,17 @@
     audio.preload = "auto";
     const playlist = isPlaylistItem(item);
     const loop = loopItem(item);
-    const mirror = loop ? mirrorSource(item) : "";
-    if (loop && !mirror) clearLoopMirror();
+    const previousVia = player.loopVia;
+    const choice = loop ? loopChoice(item) : null;
+    if (choice) {
+      player.loopVia = choice.via;
+      player.loadedPrimary = choice.primary;
+      player.loopMirrorVersion = item.version || "";
+      player.loopMirrorPlayUrl = item.playUrl;
+      player.loadedMirror = choice.via === "tg" ? choice.url : "";
+    }
     const held = audio.currentTime > 0 ? audio.currentTime : 0;
+    const mirror = choice && choice.via === "tg" ? choice.url : "";
     const Hls = root.Hls;
     if (playlist && Hls && Hls.isSupported()) {
       const generation = player.generation;
@@ -1030,7 +1097,7 @@
         }
       };
       const hls = new Hls(loop ? Object.assign({
-        startPosition: mirror ? (held || loopSeek(item)) : loopSeek(item),
+        startPosition: previousVia === (choice && choice.via) && held ? held : loopSeek(item),
         maxBufferHole: 0.5,
         manifestLoadPolicy: loopLoadPolicy(),
         playlistLoadPolicy: loopLoadPolicy(),
@@ -1061,10 +1128,6 @@
           if (current && current.fallbackUrl && current.fallbackUrl !== current.playUrl) player.flacBlocked = true;
         }
         if (!data.fatal) {
-          if (loop && missing && player.loadedMirror) {
-            scheduleRecover("network", httpStatus);
-            return;
-          }
           if (loop && missing) return;
           if ((details === "bufferStalledError" || details === "bufferSeekOverHole" || details === "bufferNudgeOnStall") && Date.now() - player.progressAt > 7000) {
             scheduleRecover("stall", httpStatus);
@@ -1591,7 +1654,7 @@
     if (!item.live || !item.playUrl) return;
     const audio = ensureAudio();
     if (loopItem(item)) {
-      if (player.loadedUrl !== item.playUrl || (item.version || "") !== player.loadedVersion) attach(item, false);
+      if (player.loadedUrl !== item.playUrl || (item.version || "") !== player.loadedVersion || loopPrimaryChanged(item)) attach(item, false);
       else seekLoopClock(audio, item);
     } else if (player.loadedUrl !== item.playUrl) attach(item, false);
     kickPlay(audio);
@@ -1928,7 +1991,7 @@
     }
     const audio = ensureAudio();
     if (loopItem(item)) {
-      if (player.loadedUrl !== item.playUrl || (item.version || "") !== player.loadedVersion) attach(item, false);
+      if (player.loadedUrl !== item.playUrl || (item.version || "") !== player.loadedVersion || loopPrimaryChanged(item)) attach(item, false);
       else if ((audio.paused || audio.ended) && !player.recoverTimer) {
         seekLoopClock(audio, item);
         kickPlay(audio);
@@ -2004,7 +2067,7 @@
       const item = spaceModel(player.spaceId);
       if (item && item.kind !== "youtube" && item.playUrl && !player.pausedByUser && item.live) {
         const versionChanged = item.kind === "loop" && (item.version || "") !== player.loadedVersion;
-        if (item.playUrl !== player.loadedUrl || versionChanged) {
+        if (item.playUrl !== player.loadedUrl || versionChanged || loopPrimaryChanged(item)) {
           attach(item, false);
           if (player.audio && (player.audio.paused || player.audio.ended)) kickPlay(player.audio);
         }
