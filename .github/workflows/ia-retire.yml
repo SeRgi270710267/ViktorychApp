@@ -77,6 +77,10 @@ jobs:
             git push origin HEAD:data
           fi
 
+      - name: Return to this commit
+        if: always()
+        run: git checkout --force "$GITHUB_SHA"
+
       - name: Delete named items after the copies check out
         env:
           IA_ACCESS_KEY: ${{ secrets.IA_ACCESS_KEY }}

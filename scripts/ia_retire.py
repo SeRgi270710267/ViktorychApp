@@ -163,8 +163,9 @@ def purge_files(config: dict, state: dict, sleep=time.sleep) -> dict:
             emptied.append(item)
             remaining[item] = []
             continue
+        drop_headers = {"x-archive-cascade-delete": "1", "x-archive-keep-old-version": "0"}
         for name in names:
-            if ia_backup._delete_object(endpoint, item, name, access, secret, opener):
+            if ia_backup._delete_object(endpoint, item, name, access, secret, opener, drop_headers):
                 deleted += 1
                 notes.append(f"[ia-retire] removed {item}/{name}")
             else:
@@ -175,7 +176,7 @@ def purge_files(config: dict, state: dict, sleep=time.sleep) -> dict:
         left = [str((row or {}).get("name") or "") for row in (after.get("files") or []) if (row or {}).get("name")]
         if left:
             for name in left:
-                if ia_backup._delete_object(endpoint, item, name, access, secret, opener):
+                if ia_backup._delete_object(endpoint, item, name, access, secret, opener, drop_headers):
                     deleted += 1
                     notes.append(f"[ia-retire] removed {item}/{name}")
                 if pace:
@@ -333,8 +334,17 @@ def main(argv: list[str] | None = None) -> int:
             f"anonymous items {blanked['anonymous']}, "
             f"uploader still set on {blanked['uploader_left']}"
         )
-        leftovers = sum(len(names) for names in purged["remaining"].values())
-        return 1 if leftovers else 0
+        kept_system = []
+        still_there = []
+        for names in purged["remaining"].values():
+            for name in names:
+                if name.endswith(("_meta.xml", "_files.xml")):
+                    kept_system.append(name)
+                else:
+                    still_there.append(name)
+        if kept_system:
+            print(f"[ia-retire] system catalog files kept {len(kept_system)}")
+        return 1 if still_there else 0
     except Exception as err:
         print("[ia-retire] failed", file=sys.stderr)
         print(ia_backup.scrub(str(err), [access, secret]), file=sys.stderr)
