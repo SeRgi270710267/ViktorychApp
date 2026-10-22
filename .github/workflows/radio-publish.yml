@@ -1,0 +1,37 @@
+# Encode the ViktorychMusic loop from the WAV masters and publish it to R2.
+# Push to main starts it. It does not take the Pages concurrency lock.
+
+name: Publish radio loop
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - scripts/radio_loop.py
+      - .github/workflows/radio-publish.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radio-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Encode and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Publish the FLAC loop
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python3 scripts/radio_loop.py --fetch --publish
