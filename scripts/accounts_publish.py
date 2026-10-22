@@ -78,7 +78,11 @@ def workers_api() -> str:
 
 def fetch_health(api: str) -> dict | None:
     try:
-        with urllib.request.urlopen(api.rstrip("/") + "/v1/health", timeout=20) as res:
+        req = urllib.request.Request(
+            api.rstrip("/") + "/v1/health",
+            headers={"User-Agent": "viktorych-accounts-publish"},
+        )
+        with urllib.request.urlopen(req, timeout=20) as res:
             if res.status != 200:
                 return None
             body = json.loads(res.read().decode("utf-8"))
