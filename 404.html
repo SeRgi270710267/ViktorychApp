@@ -13,7 +13,9 @@
     var parts = path.split("/").filter(function (part) { return part; });
     var root = "/";
     var host = String(location.hostname || "").toLowerCase();
-    if (host.slice(-"github.io".length) === "github.io" && parts[0]) root = "/" + parts[0] + "/";
+    var suffix = ".github.io";
+    var owner = host.length > suffix.length ? host.slice(0, -suffix.length) : "";
+    if (owner && owner.indexOf(".") === -1 && parts[0]) root = "/" + parts[0] + "/";
     var rest = path;
     if (root !== "/" && rest.indexOf(root) === 0) rest = rest.slice(root.length);
     rest = rest.replace(/^\/+|\/+$/g, "");
