@@ -947,6 +947,7 @@ def main() -> None:
     music = next(item for item in json.loads((ROOT / "feeds.config.json").read_text(encoding="utf-8"))["spaces"] if item["id"] == "superintelmusic")
     check(music["source"].get("type") == "loop" and music["source"].get("loopUrl") == "https://pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev/loop/current.json" and "statusUrl" not in music["source"] and "fallback" not in music["source"] and music["source"]["allow"] == ["pub-bf9b5e3ebb2b421aa49e7af484f3c22d.r2.dev", "r2.dev"] and "url" not in music["source"], "ViktorychMusic plays the static loop and does not read the box status")
     check("function loopFromDoc(" in spaces_js and "LOOP_RECHECK_MS = 3 * 60 * 1000" in spaces_js and "LOOP_DRIFT_S = 5" in spaces_js and "startPosition:" in spaces_js and "cache: \"no-store\"" in spaces_js, "the loop player joins the shared clock and refreshes the bed every three minutes")
+    check("function loopRecovery(" in spaces_js and "function refreshLoopSource(" in spaces_js and "function loopManifestDoc(" in spaces_js and "function loopNeedsRefresh(" in spaces_js and "function isLoopPointer(" in worker and "function isLoopVersionMedia(" in worker and "function forgetLoopCaches(" in worker and "loop/current.json" in worker, "a deleted loop version refetches current.json and status.json cannot mark the loop offline")
     banned = re.compile("supa" + "base|sb_" + "publishable|nadjniz" + "sdaskttxahclp", re.I)
     banned_hits = []
     for path in ROOT.rglob("*"):
