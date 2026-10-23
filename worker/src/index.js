@@ -142,7 +142,9 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE TABLE IF NOT EXISTS rate_limits (bucket TEXT PRIMARY KEY, hits INTEGER NOT NULL, reset_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS telegram_files (object_key TEXT NOT NULL, kind TEXT NOT NULL, part_index INTEGER NOT NULL, bucket TEXT NOT NULL DEFAULT '', file_id TEXT NOT NULL, message_id INTEGER NOT NULL DEFAULT 0, size INTEGER NOT NULL, sha256 TEXT NOT NULL, mime TEXT NOT NULL DEFAULT 'application/octet-stream', duration REAL NOT NULL DEFAULT 0, serve INTEGER NOT NULL DEFAULT 0, verified INTEGER NOT NULL DEFAULT 0, encrypted INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (object_key, kind, part_index))"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_reposts (public_id TEXT NOT NULL, post_key TEXT NOT NULL, kind TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '', snapshot TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (public_id, post_key))"),
-      env.DB.prepare("CREATE INDEX IF NOT EXISTS account_reposts_recent ON account_reposts(public_id, created_at DESC)")
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS account_reposts_recent ON account_reposts(public_id, created_at DESC)"),
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS account_follows (follower_id TEXT NOT NULL, target_id TEXT NOT NULL, snapshot TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, PRIMARY KEY (follower_id, target_id))"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS account_follows_target ON account_follows(target_id, created_at DESC)")
     ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
       schemaReady = null;
       throw err;
@@ -599,7 +601,11 @@ async function handleProfileGet(request, env, handle) {
   if (!row) return json(404, { error: "not_found" });
   const viewer = await sessionAccount(env, request);
   const own = !!(viewer && viewer.public_id === row.public_id);
-  return json(200, { account: await presentAccount(env, request, row, own), reposts: await listReposts(env, row.public_id) });
+  const account = await presentAccount(env, request, row, own);
+  account.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", row.public_id);
+  account.followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", "app:" + row.public_id);
+  account.viewerFollows = !!(viewer && viewer.public_id !== row.public_id && await followExists(env, viewer.public_id, "app:" + row.public_id));
+  return json(200, { account, reposts: await listReposts(env, row.public_id) });
 }
 
 async function handleRepostPut(request, env) {
@@ -2674,6 +2680,206 @@ async function handleAddedAccountDelete(request, env, rawHandle) {
   return json(200, { removed: true, added: doc.added.map(publicXAccount), dispatched });
 }
 
+function cleanFollowId(raw) {
+  const id = String(raw || "").trim();
+  if (id.indexOf("app:") === 0) return /^app:\d{12}$/.test(id) ? id : "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:@+-]{0,79}$/.test(id)) return "";
+  if (id.indexOf("..") >= 0) return "";
+  return id;
+}
+
+function cleanFollowSnapshot(id, src) {
+  if (!src || typeof src !== "object" || /^app:\d{12}$/.test(id)) return "";
+  const name = String(src.name || src.displayName || "").replace(/[\u0000-\u001F\u007F]/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const handle = String(src.handle || "").replace(/^@/, "").replace(/[\u0000-\u001F\u007F<>]/g, "").trim().slice(0, 40);
+  const platform = String(src.platform || "").toLowerCase().replace(/[^a-z]/g, "").slice(0, 16);
+  const bio = String(src.bio || "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, 280);
+  let avatar = String(src.avatar || "").trim();
+  if (!/^https:\/\//i.test(avatar) || avatar.length > 400 || /[\s<>]/.test(avatar)) avatar = "";
+  const out = {};
+  if (name) out.name = name;
+  if (handle) out.handle = handle;
+  if (platform) out.platform = platform;
+  if (bio) out.bio = bio;
+  if (avatar) out.avatar = avatar;
+  const text = JSON.stringify(out);
+  return text === "{}" ? "" : text;
+}
+
+async function followCount(env, sql, arg) {
+  const row = await env.DB.prepare(sql).bind(arg).first();
+  return Number(row && row.n) || 0;
+}
+
+async function followExists(env, followerId, targetId) {
+  const row = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(followerId, targetId).first();
+  return !!row;
+}
+
+function followAccountCard(account) {
+  return {
+    id: "app:" + account.publicId,
+    kind: "account",
+    handle: account.handle || "",
+    name: account.displayName || "",
+    avatar: account.avatar || "",
+    avatarFace: account.avatarFace || "",
+    bio: account.bio || "",
+    owner: account.owner === true
+  };
+}
+
+function followFeedCard(targetId, snapshot) {
+  let snap = {};
+  try { snap = snapshot ? JSON.parse(snapshot) : {}; }
+  catch (err) { snap = {}; }
+  if (!snap || typeof snap !== "object") snap = {};
+  return {
+    id: targetId,
+    kind: "feed",
+    handle: typeof snap.handle === "string" ? snap.handle : "",
+    name: typeof snap.name === "string" ? snap.name : "",
+    avatar: typeof snap.avatar === "string" ? snap.avatar : "",
+    bio: typeof snap.bio === "string" ? snap.bio : "",
+    platform: typeof snap.platform === "string" ? snap.platform : ""
+  };
+}
+
+async function followCards(env, request, publicIds) {
+  const out = [];
+  for (let i = 0; i < publicIds.length; i++) {
+    const row = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(publicIds[i]).first();
+    if (!row) continue;
+    out.push(followAccountCard(await presentAccount(env, request, row, false)));
+  }
+  return out;
+}
+
+async function followWriteResult(env, viewerId, targetId, on) {
+  const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", viewerId);
+  const followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", targetId);
+  return json(200, { ok: true, id: targetId, viewerFollows: on, followingCount, followersCount });
+}
+
+async function requireFollowSession(request, env) {
+  const row = await sessionAccount(env, request);
+  if (!row) return { error: json(401, { error: "unauthorized" }) };
+  return { row };
+}
+
+async function resolveFollowTarget(env, id) {
+  if (id.indexOf("app:") !== 0) return { id, account: null };
+  const account = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(id.slice(4)).first();
+  if (!account) return { error: json(404, { error: "not_found" }) };
+  return { id, account };
+}
+
+async function handleFollowPut(request, env) {
+  const gate = await requireFollowSession(request, env);
+  if (gate.error) return gate.error;
+  const paced = await rateHit(env, "follow:" + gate.row.public_id, 80, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  const body = await readJson(request, 8000);
+  if (body.error) return json(400, { error: body.error });
+  const id = cleanFollowId(body.id);
+  if (!id) return json(400, { error: "bad_follow" });
+  if (id === "app:" + gate.row.public_id) return json(400, { error: "bad_follow" });
+  const target = await resolveFollowTarget(env, id);
+  if (target.error) return target.error;
+  const snapshot = cleanFollowSnapshot(id, body.profile);
+  await env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(follower_id, target_id) DO UPDATE SET snapshot = CASE WHEN excluded.snapshot != '' THEN excluded.snapshot ELSE account_follows.snapshot END").bind(gate.row.public_id, id, snapshot, Date.now()).run();
+  return followWriteResult(env, gate.row.public_id, id, true);
+}
+
+async function handleFollowDelete(request, env) {
+  const gate = await requireFollowSession(request, env);
+  if (gate.error) return gate.error;
+  const paced = await rateHit(env, "follow:" + gate.row.public_id, 80, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  const body = await readJson(request, 2000);
+  if (body.error) return json(400, { error: body.error });
+  const id = cleanFollowId(body.id);
+  if (!id) return json(400, { error: "bad_follow" });
+  await env.DB.prepare("DELETE FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(gate.row.public_id, id).run();
+  return followWriteResult(env, gate.row.public_id, id, false);
+}
+
+async function handleFollowImport(request, env) {
+  const gate = await requireFollowSession(request, env);
+  if (gate.error) return gate.error;
+  const paced = await rateHit(env, "follow-import:" + gate.row.public_id, 8, 60 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  const body = await readJson(request, 40000);
+  if (body.error) return json(400, { error: body.error });
+  const incoming = Array.isArray(body.ids) ? body.ids : null;
+  if (!incoming) return json(400, { error: "bad_follow" });
+  const ids = [];
+  for (let i = 0; i < incoming.length && ids.length < 400; i++) {
+    const id = cleanFollowId(incoming[i]);
+    if (!id || id.indexOf("app:") === 0 || id === "app:" + gate.row.public_id) continue;
+    if (ids.indexOf(id) < 0) ids.push(id);
+  }
+  const now = Date.now();
+  for (let i = 0; i < ids.length; i += 40) {
+    const part = ids.slice(i, i + 40);
+    await env.DB.batch(part.map((id) => env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?) ON CONFLICT(follower_id, target_id) DO NOTHING").bind(gate.row.public_id, id, now)));
+  }
+  const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", gate.row.public_id);
+  return json(200, { ok: true, followingCount });
+}
+
+async function handleFollowGet(request, env, url) {
+  const gate = await requireFollowSession(request, env);
+  if (gate.error) return gate.error;
+  const paced = await rateHit(env, "follow-read:" + gate.row.public_id, 120, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  const tabRaw = String(url.searchParams.get("tab") || "");
+  const tab = tabRaw === "followers" || tabRaw === "following" ? tabRaw : "";
+  let subject = String(url.searchParams.get("id") || "").trim();
+  if (!subject) subject = "app:" + gate.row.public_id;
+  else subject = cleanFollowId(subject);
+  if (!subject) return json(400, { error: "bad_follow" });
+  let account = null;
+  if (subject.indexOf("app:") === 0) {
+    account = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(subject.slice(4)).first();
+    if (!account) return json(404, { error: "not_found" });
+  }
+  const body = {
+    id: subject,
+    kind: account ? "account" : "feed",
+    followersCount: await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", subject),
+    viewerFollows: subject !== "app:" + gate.row.public_id && await followExists(env, gate.row.public_id, subject)
+  };
+  if (account) body.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", account.public_id);
+  if (!tab && subject === "app:" + gate.row.public_id) {
+    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC LIMIT 500").bind(gate.row.public_id).all();
+    body.ids = ((listed && listed.results) || []).map((row) => row.target_id);
+    return json(200, body);
+  }
+  if (!tab) return json(200, body);
+  if (tab === "followers") {
+    const listed = await env.DB.prepare("SELECT follower_id FROM account_follows WHERE target_id = ? ORDER BY created_at DESC LIMIT 200").bind(subject).all();
+    body.accounts = await followCards(env, request, ((listed && listed.results) || []).map((row) => row.follower_id));
+    return json(200, body);
+  }
+  if (!account) {
+    body.accounts = [];
+    return json(200, body);
+  }
+  const listed = await env.DB.prepare("SELECT target_id, snapshot FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC LIMIT 200").bind(account.public_id).all();
+  const rows = (listed && listed.results) || [];
+  const accounts = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    if (String(row.target_id || "").indexOf("app:") === 0) {
+      const cards = await followCards(env, request, [row.target_id.slice(4)]);
+      if (cards[0]) accounts.push(cards[0]);
+    } else accounts.push(followFeedCard(row.target_id, row.snapshot));
+  }
+  body.accounts = accounts;
+  return json(200, body);
+}
+
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -2715,6 +2921,10 @@ async function route(request, env) {
   if (path === "/v1/sync" && request.method === "PUT") return handleSyncPut(request, env);
   if (path === "/v1/reposts" && request.method === "PUT") return handleRepostPut(request, env);
   if (path === "/v1/reposts" && (request.method === "POST" || request.method === "DELETE")) return handleRepostDelete(request, env);
+  if (path === "/v1/follows" && request.method === "GET") return handleFollowGet(request, env, url);
+  if (path === "/v1/follows" && request.method === "PUT") return handleFollowPut(request, env);
+  if (path === "/v1/follows" && request.method === "DELETE") return handleFollowDelete(request, env);
+  if (path === "/v1/follows/import" && request.method === "POST") return handleFollowImport(request, env);
   if (path === "/v1/handle" && request.method === "GET") return handleHandle(env, url);
   const profile = path.match(/^\/v1\/profile\/([^/]+)$/);
   if (profile && request.method === "GET") {

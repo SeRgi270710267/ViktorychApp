@@ -236,10 +236,28 @@ def accounts_wall_checks() -> None:
                 os.environ[key] = value
 
 
+def follow_list_checks() -> None:
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    accounts = (ROOT / "accounts.js").read_text(encoding="utf-8")
+    worker = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
+    check('name: "connections"' in app, "follow lists have a route")
+    check("/v1/follows" in accounts and "account_follows" in worker, "follows are stored for the signed-in account")
+    for code in ("en", "es", "ru"):
+        pack = (ROOT / "i18n" / f"{code}.js").read_text(encoding="utf-8")
+        for key in (
+            "No followers yet",
+            "Not following anyone yet",
+            "Sign in to see this list.",
+            "Couldn’t load this list.",
+        ):
+            check(f'"{key}"' in pack, code + " translates " + key)
+
+
 def main() -> None:
     from account_identity import selftest as identity_selftest
 
     accounts_wall_checks()
+    follow_list_checks()
     identity_selftest()
     elon = parse_x((FIX / "x_api_v2_elon.json").read_text(encoding="utf-8"), {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"})
     posts = elon["posts"]
