@@ -99,12 +99,13 @@
     return t(chosen, data);
   }
 
-  function formatCount(n) {
+  function formatCount(n, compactFrom) {
     n = Number(n);
     if (!isFinite(n)) return "";
     var abs = Math.abs(n);
     var loc = locale();
-    if (abs < 10000) {
+    var floor = Number(compactFrom) > 0 ? Number(compactFrom) : 10000;
+    if (abs < floor) {
       try { return new Intl.NumberFormat(loc, { maximumFractionDigits: 0 }).format(Math.trunc(n)); }
       catch (err) { return String(Math.trunc(n)); }
     }

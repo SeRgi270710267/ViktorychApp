@@ -4,6 +4,9 @@ import { Miniflare } from "miniflare";
 
 const OWNER = "S\u0435\u0420g\u0418";
 const dispatches = [];
+const liveHits = { page: 0, room: 0 };
+let roomMode = "origin";
+let ownerToken = "";
 
 let mf;
 
@@ -25,6 +28,36 @@ function workerOptions() {
     },
     async outboundService(request) {
       const url = new URL(request.url);
+      if (url.hostname === "webcast.tiktok.com") {
+        liveHits.room += 1;
+        if (roomMode === "block") return new Response("no", { status: 429, headers: { "retry-after": "30" } });
+        const quality = roomMode === "hd" ? "hd" : "origin";
+        const hls = "https://pull-hls-f16-tt04.tiktokcdn.com/" + quality + "/index.m3u8";
+        const body = {
+          data: {
+            status: roomMode === "ended" ? 4 : 2,
+            user_count: quality === "origin" ? 4 : 9,
+            total_user: 900,
+            like_count: 80,
+            title: "now",
+            stream_url: {
+              live_core_sdk_data: {
+                pull_data: {
+                  stream_data: JSON.stringify({
+                    data: { [quality]: { main: { hls, flv: hls.replace(".m3u8", ".flv") } } }
+                  })
+                }
+              }
+            }
+          }
+        };
+        return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      if ((url.hostname === "www.tiktok.com" || url.hostname === "tiktok.com") && url.pathname.indexOf("/live") >= 0) {
+        liveHits.page += 1;
+        const html = '<script id="SIGI_STATE">{"LiveRoom":{"liveRoomUserInfo":{"user":{"roomId":"7699647509498710804"}}}}</script>';
+        return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
+      }
       if (url.hostname === "www.tiktok.com" || url.hostname === "tiktok.com") {
         if (url.pathname.indexOf("@blocked_name") >= 0) {
           return new Response("<html>captcha-verify</html>", { status: 200, headers: { "content-type": "text/html" } });
@@ -34,6 +67,12 @@ function workerOptions() {
         return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
       }
       if (/(^|\.)tiktokcdn\.com$/i.test(url.hostname)) {
+        if (url.pathname.endsWith("/relative.m3u8")) {
+          return new Response('#EXTM3U\n#EXT-X-MAP:URI="init.mp4"\nseg-1.m4s\n', {
+            status: 200,
+            headers: { "content-type": "application/vnd.apple.mpegurl" }
+          });
+        }
         if (url.pathname.endsWith(".m3u8")) {
           return new Response("#EXTM3U\n#EXTINF:2,\nhttps://v16.tiktokcdn.com/seg.ts\n", {
             status: 200,
@@ -108,6 +147,7 @@ test("owner adds and removes a TikTok account in private storage", async () => {
   });
   assert.equal(owner.status, 201);
   assert.equal(owner.body.account.owner, true);
+  ownerToken = owner.body.token;
 
   const bad = await call("/v1/owner/tiktok/accounts", {
     method: "POST",
@@ -231,4 +271,62 @@ test("owner adds and removes a TikTok account in private storage", async () => {
   assert.match(streamed.headers.get("cache-control"), /private, no-store/);
   const names = (await bindings.DATA.list()).objects.map((object) => object.key);
   assert.equal(names.some((key) => key.indexOf("seg") >= 0 || key.indexOf("m3u8") >= 0), false);
+
+  const relative = await call("/v1/owner/media?url=" + encodeURIComponent("https://pull-hls-f16-tt04.tiktokcdn.com/stage/relative.m3u8"), {
+    ip: "203.0.113.87",
+    token: owner.body.token
+  });
+  assert.equal(relative.status, 200);
+  assert.match(relative.text, /init\.mp4/);
+  assert.match(relative.text, /seg-1\.m4s/);
+  assert.match(relative.text, /pull-hls-f16-tt04\.tiktokcdn\.com/);
+  assert.match(relative.text, /\/v1\/owner\/media\?url=/);
+});
+
+test("live stats use user_count and keep the origin url", async () => {
+  const anon = await call("/v1/owner/tiktok/health", { ip: "203.0.113.91" });
+  assert.equal(anon.status, 401);
+  liveHits.page = 0;
+  liveHits.room = 0;
+  roomMode = "hd";
+  const lower = await call("/v1/owner/live/canddeserrano_?stats=1", { ip: "203.0.113.92", token: ownerToken });
+  assert.equal(lower.status, 200);
+  assert.equal(lower.body.live, false);
+  assert.equal(lower.body.viewers, 0);
+  assert.equal(lower.text.indexOf("m3u8"), -1);
+  assert.equal(liveHits.room, 0);
+  const opened = await call("/v1/owner/live/canddeserrano_", { ip: "203.0.113.93", token: ownerToken });
+  assert.equal(opened.status, 200);
+  assert.equal(opened.body.quality, "hd");
+  assert.equal(opened.body.viewers, 9);
+  assert.match(opened.body.hls, /\/hd\/index\.m3u8/);
+  assert.equal(opened.body.qualityNote, "best available");
+  assert.equal(liveHits.page, 1);
+  assert.equal(liveHits.room, 1);
+  roomMode = "origin";
+  const raised = await call("/v1/owner/live/canddeserrano_", { ip: "203.0.113.94", token: ownerToken });
+  assert.equal(raised.body.quality, "origin");
+  assert.equal(raised.body.viewers, 4);
+  assert.match(raised.body.hls, /\/origin\/index\.m3u8/);
+  assert.equal(raised.body.qualityNote, "");
+  assert.equal(liveHits.room, 2);
+  roomMode = "hd";
+  const kept = await call("/v1/owner/live/canddeserrano_", { ip: "203.0.113.95", token: ownerToken });
+  assert.equal(kept.body.quality, "origin");
+  assert.match(kept.body.hls, /\/origin\/index\.m3u8/);
+  assert.equal(liveHits.room, 2);
+  const stats = await call("/v1/owner/live/canddeserrano_?stats=1&room=7699647509498710804", { ip: "203.0.113.96", token: ownerToken });
+  assert.equal(stats.status, 200);
+  assert.equal(stats.body.viewers, 9);
+  assert.equal(stats.text.indexOf("m3u8"), -1);
+  assert.equal(stats.text.indexOf("hls"), -1);
+  assert.equal("flv" in stats.body, false);
+  roomMode = "block";
+  const blocked = await call("/v1/owner/live/other_name?stats=1&room=7699647509498710999", { ip: "203.0.113.97", token: ownerToken });
+  assert.equal(blocked.body.blocked, true);
+  assert.equal(blocked.text.indexOf("m3u8"), -1);
+  const health = await call("/v1/owner/tiktok/health", { ip: "203.0.113.98", token: ownerToken });
+  assert.equal(health.status, 200);
+  assert.equal(health.body.blocked429 >= 1, true);
+  assert.equal(health.body.backoffs.some((row) => row.handle === "other_name"), true);
 });

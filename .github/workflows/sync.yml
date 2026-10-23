@@ -632,7 +632,7 @@ jobs:
               -d "$body"
           }
           dispatch telegram-backup.yml '{"ref":"main","inputs":{"loop_only":"false"}}'
-          dispatch media-extract.yml '{"ref":"main","inputs":{"cap":"30"}}'
+          dispatch media-extract.yml '{"ref":"main","inputs":{"cap":"80"}}'
 
   # Restarts the sync if GitHub drops the cron. Sleeping here does not hold
   # the pages concurrency group, and GITHUB_TOKEN may dispatch this workflow.

@@ -18,7 +18,7 @@ on:
       cap:
         description: Max new files this run
         required: false
-        default: "30"
+        default: "80"
   pull_request:
   push:
     branches:
@@ -117,8 +117,8 @@ jobs:
           TG_WORKER_URL: ${{ vars.TG_WORKER_URL }}
           TG_MAX_MB: ${{ vars.TG_MAX_MB }}
           TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
-          MEDIA_EXTRACT_CAP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cap || '30' }}
+          MEDIA_EXTRACT_CAP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cap || '80' }}
           MEDIA_EXTRACT_PER: "2"
-          MEDIA_EXTRACT_PACE: "8"
+          MEDIA_EXTRACT_PACE: "3"
           PYTHONUNBUFFERED: "1"
         run: python3 scripts/media_extract.py

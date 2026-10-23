@@ -1208,8 +1208,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function stamp(post) { return post.sortDate || post.date || ""; }
   function byStamp(a, b) { return stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0; }
 
-  function formatCount(n) {
-    if (window.SI18n) return window.SI18n.formatCount(n);
+  function formatCount(n, compactFrom) {
+    if (window.SI18n) return window.SI18n.formatCount(n, compactFrom);
     n = Number(n);
     if (!isFinite(n)) return "";
     return String(Math.trunc(n));

@@ -9,13 +9,15 @@ No cookies, no impersonation package, no captcha bypass.
 from __future__ import annotations
 
 import json
+import random
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from adapters.common import post_shell, trusted_time
@@ -25,6 +27,8 @@ HANDLE_RE = re.compile(r"^[A-Za-z0-9._]{2,24}$")
 ROOT = Path(__file__).resolve().parents[1]
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 BLOCKED = "TikTok blocked the runner"
+BACKOFF_MINUTES = (5, 15, 60, 180, 360)
+FRESH_SECONDS = 4 * 60
 
 
 def audience_of(config_text: str) -> str:
@@ -296,46 +300,151 @@ def node_json(cmd: str, payload: bytes) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def http_get(url: str) -> tuple[int, bytes]:
+def http_get(url: str) -> tuple[int, bytes, str]:
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html,application/json"})
     try:
         with urllib.request.urlopen(req, timeout=15) as res:
-            return res.status, res.read()
+            retry = res.headers.get("Retry-After") or ""
+            return res.status, res.read(), retry
     except urllib.error.HTTPError as err:
-        return err.code, b""
+        retry = err.headers.get("Retry-After") if err.headers else ""
+        body = b""
+        try:
+            body = err.read() or b""
+        except Exception:
+            body = b""
+        return err.code, body, retry or ""
     except (urllib.error.URLError, TimeoutError, OSError):
-        return 0, b""
+        return 0, b"", ""
+
+
+def backoff_seconds(step: int, retry_after: int) -> tuple[int, int]:
+    index = max(0, min(int(step or 0), len(BACKOFF_MINUTES) - 1))
+    base = BACKOFF_MINUTES[index] * 60
+    retry = int(retry_after or 0)
+    if retry < 0:
+        retry = 0
+    seconds = min(6 * 60 * 60, max(base, retry))
+    return seconds, min(len(BACKOFF_MINUTES) - 1, index + 1)
+
+
+def retry_after_seconds(raw: str) -> int:
+    text = str(raw or "").strip()
+    if not text:
+        return 0
+    try:
+        return max(0, int(float(text)))
+    except ValueError:
+        pass
+    try:
+        when = datetime.strptime(text, "%a, %d %b %Y %H:%M:%S GMT").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return 0
+    return max(0, int((when - datetime.now(timezone.utc)).total_seconds()))
+
+
+def parse_stamp(raw: str) -> datetime | None:
+    text = str(raw or "")
+    try:
+        return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def checked_recent(previous: dict | None, seconds: int = FRESH_SECONDS, now: datetime | None = None) -> bool:
+    when = parse_stamp((previous or {}).get("checkedAt") or "")
+    if when is None:
+        return False
+    moment = now or datetime.now(timezone.utc)
+    return (moment - when).total_seconds() < seconds
+
+
+def backoff_active(previous: dict | None, now: datetime | None = None) -> bool:
+    when = parse_stamp((previous or {}).get("backoffUntil") or "")
+    if when is None:
+        return False
+    moment = now or datetime.now(timezone.utc)
+    return when > moment
+
+
+def challenge_kind(status: int, body: bytes) -> str:
+    if status in (403, 429, 503):
+        return str(status)
+    if b"captcha-verify" in body and not str(node_json("room", body).get("roomId") or ""):
+        return "captcha"
+    return ""
+
+
+def apply_backoff(row: dict, previous: dict | None, retry_after: int, kind: str) -> dict:
+    previous = previous if isinstance(previous, dict) else {}
+    seconds, step = backoff_seconds(int(previous.get("backoffStep") or 0), retry_after)
+    until = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+    row["backoffUntil"] = until.strftime("%Y-%m-%dT%H:%M:%SZ")
+    row["backoffStep"] = step
+    row["blockStatus"] = kind
+    return row
+
+
+def record_block(health: dict, handle: str, kind: str) -> None:
+    recent = [row for row in (health.get("recent") or []) if isinstance(row, dict)]
+    recent.append({"at": now_iso(), "handle": handle, "status": kind})
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
+    kept = []
+    for row in recent:
+        when = parse_stamp(row.get("at") or "")
+        if when is not None and when >= cutoff:
+            kept.append(row)
+    health["recent"] = kept[-80:]
 
 
 def refresh_one(handle: str, previous: dict | None) -> dict:
-    status, body = http_get("https://www.tiktok.com/@" + handle + "/live")
-    if status in (403, 429, 503) or status == 0:
-        return blank_live(handle, previous, BLOCKED, blocked=True)
-    room = str(node_json("room", body).get("roomId") or "")
+    previous = previous if isinstance(previous, dict) else {}
+    if backoff_active(previous) or checked_recent(previous):
+        return dict(previous)
+    room = str(previous.get("roomId") or "")
+    if not checked_recent(previous, 5 * 60):
+        room = ""
     if not room:
-        status, body = http_get("https://www.tiktok.com/@" + handle)
-        if status in (403, 429, 503) or status == 0:
+        status, body, retry = http_get("https://www.tiktok.com/@" + handle + "/live")
+        kind = challenge_kind(status, body)
+        if kind:
+            return apply_backoff(blank_live(handle, previous, BLOCKED, blocked=True), previous, retry_after_seconds(retry), kind)
+        if status == 0:
             return blank_live(handle, previous, BLOCKED, blocked=True)
         room = str(node_json("room", body).get("roomId") or "")
+        if not room:
+            status, body, retry = http_get("https://www.tiktok.com/@" + handle)
+            kind = challenge_kind(status, body)
+            if kind:
+                return apply_backoff(blank_live(handle, previous, BLOCKED, blocked=True), previous, retry_after_seconds(retry), kind)
+            if status == 0:
+                return blank_live(handle, previous, BLOCKED, blocked=True)
+            room = str(node_json("room", body).get("roomId") or "")
     if not room:
         return blank_live(handle, previous, "TikTok did not include a room id")
-    status, info = http_get("https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=" + urllib.parse.quote(room))
-    if status in (403, 429, 503) or status == 0:
+    status, info, retry = http_get("https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=" + urllib.parse.quote(room))
+    kind = challenge_kind(status, info)
+    if kind or status == 0:
         row = blank_live(handle, previous, BLOCKED, blocked=True)
         row["roomId"] = room
+        if kind:
+            return apply_backoff(row, previous, retry_after_seconds(retry), kind)
         return row
     picked = node_json("pick", info)
     live = bool(picked.get("live"))
-    previous = previous if isinstance(previous, dict) else {}
     return {
         "handle": handle,
         "live": live,
         "viewers": int(picked.get("viewers") or 0) if live else 0,
         "title": str(picked.get("title") or "") if live else "",
         "roomId": room,
+        "quality": str(picked.get("quality") or "") if live else "",
+        "qualityNote": str(picked.get("qualityNote") or "") if live else "",
         "lastLiveAt": now_iso() if live else str(previous.get("lastLiveAt") or ""),
         "checkedAt": now_iso(),
         "detail": "",
+        "backoffUntil": "",
+        "backoffStep": 0,
     }
 
 
@@ -678,10 +787,26 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
     else:
         feeds = list(previous.get("feeds") or [])
         posts = list(previous.get("posts") or [])
+    health = previous.get("tiktokHealth") if isinstance(previous.get("tiktokHealth"), dict) else {"recent": []}
+    if not isinstance(health.get("recent"), list):
+        health["recent"] = []
     live = {}
+    fetched = False
     for handle in handles:
-        live[handle] = refresh_one(handle, prev_live.get(handle) if isinstance(prev_live.get(handle), dict) else {})
-        flag = "live" if live[handle].get("live") else "offline"
+        prev = prev_live.get(handle) if isinstance(prev_live.get(handle), dict) else {}
+        if backoff_active(prev) or checked_recent(prev):
+            live[handle] = dict(prev) if prev else blank_live(handle, {}, "")
+            print("[tiktok] " + handle + " skipped")
+            continue
+        if fetched:
+            time.sleep(random.uniform(1.5, 4.0))
+        row = refresh_one(handle, prev)
+        kind = str(row.pop("blockStatus", "") or "")
+        if kind:
+            record_block(health, handle, kind)
+        fetched = True
+        live[handle] = row
+        flag = "live" if row.get("live") else "offline"
         print("[tiktok] " + handle + " " + flag)
     return {
         "updated": now_iso(),
@@ -689,6 +814,7 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
         "feeds": feeds,
         "posts": posts,
         "live": live,
+        "tiktokHealth": health,
         "health": {"ok": True, "detail": ""},
     }
 

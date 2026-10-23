@@ -1,6 +1,6 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a13-__SW_VERSION__";
+const VERSION = "viktorych-a14-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -240,6 +240,15 @@ function isOwnerPlay(url) {
   return /\/v1\/owner\/play$/.test(url.pathname) && url.searchParams.has("id");
 }
 
+function isTikTokCdn(url) {
+  const host = String(url.hostname || "").toLowerCase();
+  return /(^|\.)tiktokcdn(?:-us|-eu)?\.com$/.test(host) || /(^|\.)bytefcdn(?:-oversea)?\.com$/.test(host) || /(^|\.)tiktokv\.com$/.test(host);
+}
+
+function isOwnedTelegram(url) {
+  return /\/tg\//.test(url.pathname) && !/\/tg\/loop\//.test(url.pathname);
+}
+
 function isAccountMedia(url) {
   return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname);
 }
@@ -461,13 +470,14 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
   if (isGameHost(url)) return;
+  if (isTikTokCdn(url)) return;
   if (isArchiveStore(url)) return;
-  if (isOwnerPlay(url) || isAccountMedia(url)) {
+  if (isOwnerPlay(url) || isAccountMedia(url) || isOwnedTelegram(url)) {
     event.respondWith((async () => {
       const headers = new Headers();
       if (playToken) headers.set("Authorization", "Bearer " + playToken);
       const range = request.headers.get("Range");
-      if (range && isOwnerPlay(url)) headers.set("Range", range);
+      if (range) headers.set("Range", range);
       return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });
     })());
     return;
