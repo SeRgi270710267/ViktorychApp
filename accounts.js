@@ -1054,6 +1054,9 @@
   }
   var tiktokHealth = null;
   var tiktokHealthAt = 0;
+  var backupChannels = null;
+  var backupChannelNote = "";
+  var backupChannelsAt = 0;
   function loadTikTokHealth() {
     var session = readSession();
     if (!session || !session.token || !session.account || !session.account.owner) return;
@@ -1080,6 +1083,60 @@
     }
     return '<div class="set-block"><h2>' + esc(tr("TikTok health")) + "</h2>" + lines + "</div>";
   }
+  function addBackupChannel() {
+    var session = readSession();
+    var input = document.querySelector('input[name="backup-channel"]');
+    var channel = input ? String(input.value || "").trim() : "";
+    if (!session || !session.token || !channel) return;
+    api("/v1/owner/tiktok/channels", { method: "POST", token: session.token, body: { channel: channel } }).then(function (body) {
+      if (!body || body.status !== 200) {
+        backupChannelNote = tr("That channel id was not saved.");
+      } else {
+        backupChannels = body;
+        backupChannelNote = "";
+        if (input) input.value = "";
+      }
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {
+      backupChannelNote = tr("That channel id was not saved.");
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    });
+  }
+  function removeBackupChannel(index) {
+    var session = readSession();
+    if (!session || !session.token || index == null || index === "") return;
+    api("/v1/owner/tiktok/channels", { method: "POST", token: session.token, body: { remove: Number(index) } }).then(function (body) {
+      if (body && body.status === 200) backupChannels = body;
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
+  function loadBackupChannels() {
+    var session = readSession();
+    if (!session || !session.token || !session.account || !session.account.owner) return;
+    if (Date.now() - backupChannelsAt < 20000) return;
+    backupChannelsAt = Date.now();
+    api("/v1/owner/tiktok/channels", { token: session.token }).then(function (body) {
+      if (!body || body.status !== 200) return;
+      backupChannels = body;
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
+  function channelsHtml() {
+    var body = backupChannels;
+    var extra = body && body.extra ? body.extra : 0;
+    var masks = body && body.masks || [];
+    var list = masks.map(function (mask, index) {
+      return '<button class="outline" type="button" data-acct="remove-channel" data-index="' + index + '">' + esc(tr("Remove {channel}", { channel: mask })) + "</button>";
+    }).join("");
+    return '<div class="set-block"><h2>' + esc(tr("Backup channels")) + "</h2>" +
+      '<p class="set-sub">' + esc(tr("The same bot posts there. Lives are spread across these channels.")) + "</p>" +
+      '<p class="phandle">' + esc(tr("{count} extra channels", { count: String(extra) })) + "</p>" +
+      list +
+      '<input name="backup-channel" autocomplete="off" spellcheck="false" placeholder="-100…" aria-label="' + esc(tr("Add a backup channel")) + '">' +
+      '<button class="outline" type="button" data-acct="add-channel">' + esc(tr("Add a backup channel")) + "</button>" +
+      (backupChannelNote ? '<p class="phandle">' + esc(backupChannelNote) + "</p>" : "") +
+      "</div>";
+  }
   function settingsHtml() {
     var session = readSession();
     if (!session || !session.account) return "";
@@ -1091,7 +1148,8 @@
     var health = "";
     if (account.owner) {
       loadTikTokHealth();
-      health = healthHtml();
+      loadBackupChannels();
+      health = healthHtml() + channelsHtml();
     }
     return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
   }
@@ -1145,6 +1203,8 @@
     else if (act === "hide-avatar") hideAvatar(acct.dataset.mode || "");
     else if (act === "crop-apply") applyCrop();
     else if (act === "logout") logout(false);
+    else if (act === "add-channel") addBackupChannel();
+    else if (act === "remove-channel") removeBackupChannel(acct.dataset.index);
     else if (act === "logout-all") logout(true);
     else if (act === "legal") { legalTitle = acct.dataset.title || tr("About"); view = "legal"; paint(); }
   }

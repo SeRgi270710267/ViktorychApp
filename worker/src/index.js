@@ -1535,6 +1535,11 @@ function tiktokPlaybackKey(raw) {
   return /^tiktok\/[A-Za-z0-9._]{2,24}\/\d{8,22}\/(?:video|poster|photo\/\d{1,3})$/.test(text);
 }
 
+function tiktokLiveKey(raw) {
+  const text = String(raw || "").replace(/\/(?:index\.m3u8|init|\d+)$/, "");
+  return /^tiktok\/[A-Za-z0-9._]{2,24}\/[1-9][0-9]{5,24}\/live\/[1-9][0-9]{0,3}$/.test(text);
+}
+
 function publicLoopCache() {
   return {
     "cache-control": "public, max-age=31536000, immutable",
@@ -1773,6 +1778,9 @@ async function handleTelegram(request, env, path) {
   if (!key || telegramSecretKey(key)) return json(404, { error: "not_found" });
   if (!publicLoop && !verify) {
     if (await hiddenAvatar(env, viewer, decoded) || await hiddenAvatar(env, viewer, key)) return json(404, { error: "not_found" });
+    if ((tiktokLiveKey(decoded) || tiktokLiveKey(key)) && (!viewer || viewer.owner !== 1)) {
+      return json(403, { error: "forbidden" });
+    }
     if ((tiktokPlaybackKey(decoded) || tiktokPlaybackKey(key)) && !tiktokPublic(env) && (!viewer || viewer.owner !== 1)) {
       return json(403, { error: "forbidden" });
     }
@@ -2052,6 +2060,108 @@ async function handleTikTokAccountDelete(request, env, rawHandle) {
   return json(200, { removed: true, added: doc.added.map(publicTikTokAccount) });
 }
 
+const RECORDINGS_KEY = "owner/tiktok-recordings.json";
+const LIVE_JOB_PREFIX = "owner/live-jobs/";
+const BACKUP_CHANNELS_KEY = "owner/tiktok-backup-channels.json";
+const CHANNEL_ID = /^-100\d{4,16}$/;
+const LIVE_PLAY_KEY = /^tiktok\/[A-Za-z0-9._]{2,24}\/[1-9][0-9]{5,24}\/live$/;
+
+async function readJsonKey(env, key) {
+  if (!env.DATA) return null;
+  try {
+    const object = await env.DATA.get(key);
+    if (!object) return null;
+    const parsed = JSON.parse(await object.text());
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function scrubRecording(row) {
+  if (!row || typeof row !== "object") return null;
+  const state = ["recording", "queued", "saved", "blocked"].indexOf(row.state) >= 0 ? row.state : "";
+  if (!state) return null;
+  const key = state === "saved" && LIVE_PLAY_KEY.test(String(row.key || "")) ? String(row.key) : "";
+  return {
+    state,
+    quality: String(row.quality || ""),
+    qualityNote: String(row.qualityNote || ""),
+    title: String(row.title || "").slice(0, 180),
+    cover: String(row.cover || "").slice(0, 400),
+    startedAt: String(row.startedAt || ""),
+    endedAt: String(row.endedAt || ""),
+    duration: Number(row.duration) || 0,
+    roomId: String(row.roomId || ""),
+    parts: Number(row.parts) || 0,
+    key,
+    blocked: state === "blocked"
+  };
+}
+
+async function handleRecordings(request, env) {
+  const gate = await requireOwner(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const index = await readJsonKey(env, RECORDINGS_KEY) || {};
+  const listed = index.items && typeof index.items === "object" ? index.items : {};
+  const items = {};
+  let active = 0;
+  const names = Object.keys(listed);
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
+    if (!TIKTOK_HANDLE.test(name)) continue;
+    const job = await readJsonKey(env, LIVE_JOB_PREFIX + name + ".json");
+    const row = scrubRecording((job && job.public) || listed[name]);
+    if (!row) continue;
+    items[name] = row;
+    if (row.state === "recording") active += 1;
+  }
+  const cap = Math.max(1, Math.min(12, Number(index.cap) || 12));
+  return json(200, { cap, active, items });
+}
+
+function maskChannel(id) {
+  return "••••" + String(id || "").slice(-2);
+}
+
+async function readBackupChannels(env) {
+  const doc = await readJsonKey(env, BACKUP_CHANNELS_KEY);
+  const rows = doc && Array.isArray(doc.channels) ? doc.channels : [];
+  const out = [];
+  rows.forEach((item) => {
+    const text = String(item || "").trim();
+    if (CHANNEL_ID.test(text) && out.indexOf(text) < 0) out.push(text);
+  });
+  return out;
+}
+
+async function handleBackupChannels(request, env) {
+  const gate = await requireOwner(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const rows = await readBackupChannels(env);
+  if (request.method === "GET") return json(200, { extra: rows.length, masks: rows.map(maskChannel) });
+  const hit = await rateHit(env, "tiktok-channels:" + gate.row.public_id, 20, 60 * 60 * 1000);
+  if (!hit.ok) return limited(hit);
+  const body = await readJson(request, 400);
+  if (body.error) return json(400, { error: body.error });
+  if (body.remove != null && body.remove !== "") {
+    const index = Number(body.remove);
+    if (!Number.isInteger(index) || index < 0 || index >= rows.length) return json(400, { error: "bad_channel" });
+    rows.splice(index, 1);
+  } else {
+    const channel = String(body.channel || "").trim();
+    if (!CHANNEL_ID.test(channel)) return json(400, { error: "bad_channel" });
+    if (rows.indexOf(channel) < 0) {
+      if (rows.length >= 8) return json(400, { error: "bad_channel" });
+      rows.push(channel);
+    }
+  }
+  await env.DATA.put(BACKUP_CHANNELS_KEY, JSON.stringify({ channels: rows }));
+  return json(200, { extra: rows.length, masks: rows.map(maskChannel) });
+}
+
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -2072,6 +2182,8 @@ async function route(request, env) {
   const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
   if (ownerAccount && request.method === "DELETE") return handleTikTokAccountDelete(request, env, ownerAccount[1]);
   if (path === "/v1/owner/tiktok/health" && request.method === "GET") return handleTikTokHealth(request, env);
+  if (path === "/v1/owner/tiktok/recordings" && request.method === "GET") return handleRecordings(request, env);
+  if (path === "/v1/owner/tiktok/channels" && (request.method === "GET" || request.method === "POST")) return handleBackupChannels(request, env);
   if (path === "/v1/owner/tiktok" && request.method === "GET") return handleOwnerTiktok(request, env);
   if (path === "/v1/owner/play" && request.method === "GET") return handleOwnerPlay(request, env, url);
   if (path === "/v1/owner/media" && request.method === "GET") return handleOwnerMedia(request, env, url);

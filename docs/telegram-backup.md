@@ -59,6 +59,20 @@ Account data stays out unless that key is set: D1 rows, sessions, history, setti
 
 `scripts/telegram_restore.py --key <r2-key> --out restored` reads the manifest from R2, or from `--manifest`. It downloads each part, checks the sha256, joins archive parts, writes an HLS directory, and decrypts an account copy when `TG_BACKUP_KEY` is set. Parts over 19 MB need the local server already listening on `127.0.0.1:8081`.
 
+## Extra channels for live recordings
+
+The main channel above is slot 0. A live capture uses it automatically. One channel keeps up with about 6 high-bitrate lives (about 3 segments a minute, and Telegram allows about 20 messages a minute). Twelve captures need two channels if every live is that heavy. Extra lives wait in the order the accounts were added.
+
+To add a channel:
+
+1. Create another private Telegram channel.
+2. Add the same bot as an administrator with permission to post.
+3. Copy the channel id (`-100…`). Do not put it in the repository or in an Actions log.
+4. Sign in as the owner, open Settings, and use **Add a backup channel**. The app stores the id in the private object `owner/tiktok-backup-channels.json`. Settings then shows a count and a masked ending, not the id.
+5. The next live poll spreads new recordings across the main channel and these extra ones. Each channel has its own uploader. Capacity grows by about 6 high-bitrate lives per channel.
+
+Removing a row in Settings drops that extra channel. Segments already stored stay on Telegram. A channel id that Telegram rejects stays buffered in R2; it is not deleted and it is not re-encoded.
+
 ## Playback
 
 TikTok media loads from /tg first, in the feed, on the post page, and in Shorts. The order is `/tg/<key>/index.m3u8`, then `/tg/<key>`, then the R2 URL when one exists, then the original TikTok URL, then the cover and Open on TikTok. Other synced media (X, Instagram, Threads, VK, Telegram, and YouTube thumbnails) uses that same order. YouTube watch pages stay embeds. Songs, covers, and `radio/` still try the R2 URL first and use `/tg` only after that request fails. They stay primary on R2. The radio loop starts on the `primary` field of `loop/current.json` (`"primary": "tg"` on the live pointer; a missing field still means `r2`) and uses the other source after that one fails. Images that come from Telegram are fetched with the session and shown as a blob. `/tg/loop/<version>/index.m3u8` does not require a session, because the same audio is already public on `r2.dev`. Every other `/tg` route requires a signed-in session, the same sign-up gate as the rest of the app. A Shorts post, a TikTok post while the audience is owner-only, or any post marked owner-only is still owner-only: a signed-in viewer who is not the owner receives 403. A hidden avatar stays hidden.

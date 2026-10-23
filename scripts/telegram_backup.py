@@ -28,7 +28,7 @@ are the site's original, remuxed to mp4 with yt-dlp and never re-encoded.
 Photo posts and carousels come from gallery-dl at full size. A video over
 19 MB is split with ffmpeg -c copy. Those copies are deleted from R2 after
 the sha256 check when an R2 object exists. A TikTok 403 or captcha skips
-that item. TikTok LIVE is not recorded.
+that item. TikTok LIVE is recorded by scripts/tiktok_record.py, not here.
 """
 
 from __future__ import annotations

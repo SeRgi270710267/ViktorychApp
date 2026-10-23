@@ -330,3 +330,56 @@ test("live stats use user_count and keep the origin url", async () => {
   assert.equal(health.body.blocked429 >= 1, true);
   assert.equal(health.body.backoffs.some((row) => row.handle === "other_name"), true);
 });
+
+test("recordings stay owner-only and hide backup channel ids", async () => {
+  const anon = await call("/v1/owner/tiktok/recordings", { ip: "203.0.113.110" });
+  assert.equal(anon.status, 401);
+  const bindings = await mf.getBindings();
+  const handle = "canddeserrano_";
+  const key = "tiktok/" + handle + "/7699647509498710804/live";
+  await bindings.DATA.put("owner/tiktok-recordings.json", JSON.stringify({
+    cap: 12,
+    active: 1,
+    items: { [handle]: { state: "saved", quality: "origin", qualityNote: "", title: "now", key, parts: 1, roomId: "7699647509498710804" } }
+  }));
+  await bindings.DATA.put("owner/live-jobs/" + handle + ".json", JSON.stringify({
+    public: { state: "saved", quality: "hd", qualityNote: "best available", title: "now", key, parts: 2, roomId: "7699647509498710804" }
+  }));
+  const listed = await call("/v1/owner/tiktok/recordings", { ip: "203.0.113.111", token: ownerToken });
+  assert.equal(listed.status, 200);
+  assert.equal(listed.body.cap, 12);
+  assert.equal(listed.body.active, 0);
+  assert.equal(listed.body.items[handle].quality, "hd");
+  assert.equal(listed.body.items[handle].qualityNote, "best available");
+  assert.equal(listed.body.items[handle].key, key);
+  assert.equal(listed.text.indexOf("-100"), -1);
+  assert.equal(listed.text.indexOf("m3u8"), -1);
+  const stranger = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.112",
+    body: { displayName: "Bea", handle: "bea_live" }
+  });
+  assert.equal(stranger.status, 201);
+  const denied = await call("/v1/owner/tiktok/recordings", { ip: "203.0.113.113", token: stranger.body.token });
+  assert.equal(denied.status, 403);
+  const bad = await call("/v1/owner/tiktok/channels", {
+    method: "POST",
+    ip: "203.0.113.114",
+    token: ownerToken,
+    body: { channel: "4242" }
+  });
+  assert.equal(bad.status, 400);
+  const added = await call("/v1/owner/tiktok/channels", {
+    method: "POST",
+    ip: "203.0.113.115",
+    token: ownerToken,
+    body: { channel: "-1004242" }
+  });
+  assert.equal(added.status, 200);
+  assert.equal(added.body.extra, 1);
+  assert.equal(added.text.indexOf("-100"), -1);
+  assert.equal(added.text.indexOf("4242"), -1);
+  assert.equal(String(added.body.masks[0]).endsWith("42"), true);
+  const stored = JSON.parse(await (await bindings.DATA.get("owner/tiktok-backup-channels.json")).text());
+  assert.deepEqual(stored.channels, ["-1004242"]);
+});
