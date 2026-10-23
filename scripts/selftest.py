@@ -73,9 +73,173 @@ def telegram_checks() -> None:
     check(proc.returncode == 0, "the telegram backup self-test passes")
 
 
+def accounts_wall_checks() -> None:
+    import accounts_publish
+
+    workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    discord = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
+    check("\n  wait-accounts:\n" in workflow, "Pages waits for the Accounts worker before it builds")
+    check(
+        "needs: [gate, wait-accounts]" in workflow and "needs: [gate, build, wait-accounts]" in workflow,
+        "the build and the Pages deploy both wait for Accounts",
+    )
+    check(
+        "workflows/accounts.yml/runs?head_sha=" in workflow and "refusing to publish Pages" in workflow,
+        "a failed Accounts deploy stops Pages",
+    )
+    check(
+        workflow.index("\n  wait-accounts:\n") < workflow.index("python3 scripts/accounts_publish.py"),
+        "the Accounts wait is ordered before the login wall publish",
+    )
+    check(
+        accounts_publish.DEFAULT_HEALTH_ATTEMPTS >= 24 and accounts_publish.DEFAULT_HEALTH_INTERVAL >= 15,
+        "health is retried for longer than a worker deploy",
+    )
+    check(
+        "refusing to publish Pages without the login wall" in discord,
+        "a discord refresh does not publish over a locked shell",
+    )
+
+    def shell(root: Path) -> None:
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "accounts.config.js").write_text(
+            'window.VIKTORYCH_ACCOUNTS = {\n  api: "",\n  gate: false,\n  turnstileSiteKey: "",\n  tiktokAudience: "owner"\n};\n',
+            encoding="utf-8",
+        )
+        (root / "sw.js").write_text("const ACCOUNTS_WALL = false;\n", encoding="utf-8")
+
+    def open_shell(root: Path) -> bool:
+        text = (root / "accounts.config.js").read_text(encoding="utf-8")
+        worker = (root / "sw.js").read_text(encoding="utf-8")
+        return "gate: false" in text and "gate: true" not in text and worker == "const ACCOUNTS_WALL = false;\n"
+
+    keys = [
+        "ACCOUNTS_API",
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "TURNSTILE_SITEKEY",
+        "ACCOUNTS_HEALTH_ATTEMPTS",
+        "ACCOUNTS_HEALTH_INTERVAL",
+    ]
+    saved_env = {key: os.environ.get(key) for key in keys}
+
+    def setenv(values: dict) -> None:
+        for key in keys:
+            os.environ.pop(key, None)
+        for key, value in values.items():
+            os.environ[key] = value
+
+    previous = os.getcwd()
+    original_health = accounts_publish.fetch_health
+    original_upload = accounts_publish.upload
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            site = Path(tmp) / "site"
+            source = Path(tmp) / "source"
+            source.mkdir()
+            (source / "feeds.json").write_text('{"feeds":[]}\n', encoding="utf-8")
+            api = "https://viktorych-accounts.example.workers.dev"
+
+            shell(site)
+            setenv({})
+            check(accounts_publish.publish(site, source) == 0 and open_shell(site), "an unconfigured site can still publish without the wall")
+
+            shell(site)
+            setenv({"ACCOUNTS_API": api})
+            check(accounts_publish.publish(site, source) == 1 and open_shell(site), "ACCOUNTS_API set refuses an unlocked shell when credentials are missing")
+
+            shell(site)
+            setenv({"CLOUDFLARE_API_TOKEN": "not-a-real-token"})
+            check(accounts_publish.publish(site, source) == 1 and open_shell(site), "a Cloudflare token refuses an unlocked shell")
+
+            shell(site)
+            setenv({
+                "ACCOUNTS_API": api,
+                "CLOUDFLARE_API_TOKEN": "not-a-real-token",
+                "CLOUDFLARE_ACCOUNT_ID": "not-a-real-account",
+                "ACCOUNTS_HEALTH_ATTEMPTS": "2",
+                "ACCOUNTS_HEALTH_INTERVAL": "0",
+            })
+            calls = {"n": 0}
+
+            def down(_api):
+                calls["n"] += 1
+                return None
+
+            accounts_publish.fetch_health = down
+            try:
+                code = accounts_publish.publish(site, source)
+            finally:
+                accounts_publish.fetch_health = original_health
+            check(code == 1 and calls["n"] == 2 and open_shell(site), "health is retried and a dead API fails the deploy")
+
+            shell(site)
+            uploaded = []
+
+            def up(_api):
+                return {"ready": True, "data": True}
+
+            def fake_upload(key, _payload):
+                uploaded.append(key)
+
+            accounts_publish.fetch_health = up
+            accounts_publish.upload = fake_upload
+            try:
+                code = accounts_publish.publish(site, source)
+            finally:
+                accounts_publish.fetch_health = original_health
+                accounts_publish.upload = original_upload
+            seen = accounts_publish.read_gate(site)
+            text = (site / "accounts.config.js").read_text(encoding="utf-8")
+            worker = (site / "sw.js").read_text(encoding="utf-8")
+            check(
+                code == 0
+                and seen["gate"] is True
+                and seen["api"] == api
+                and "gate: true" in text
+                and worker == "const ACCOUNTS_WALL = true;\n"
+                and uploaded == ["feeds.json"]
+                and Path("accounts-wall/on").is_file(),
+                "a ready API locks the shell with the workers API and the service worker wall",
+            )
+
+            legacy = Path(tmp) / "legacy"
+            legacy.mkdir()
+            (legacy / "accounts.config.js").write_text(
+                'window.VIKTORYCH_ACCOUNTS = {"api": "' + api + '", "gate": true, "turnstileSiteKey": "", "tiktokAudience": "owner"};\n',
+                encoding="utf-8",
+            )
+            old = accounts_publish.read_gate(legacy)
+            check(old["gate"] is True and old["api"] == api, "an older locked accounts.config.js still counts as the wall")
+
+            shell(site)
+            def boom(_key, _payload):
+                raise OSError("upload failed")
+
+            accounts_publish.fetch_health = up
+            accounts_publish.upload = boom
+            try:
+                code = accounts_publish.publish(site, source)
+            finally:
+                accounts_publish.fetch_health = original_health
+                accounts_publish.upload = original_upload
+            check(code == 1 and open_shell(site), "a failed upload does not publish an unlocked shell")
+    finally:
+        os.chdir(previous)
+        accounts_publish.fetch_health = original_health
+        accounts_publish.upload = original_upload
+        for key, value in saved_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def main() -> None:
     from account_identity import selftest as identity_selftest
 
+    accounts_wall_checks()
     identity_selftest()
     elon = parse_x((FIX / "x_api_v2_elon.json").read_text(encoding="utf-8"), {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"})
     posts = elon["posts"]
@@ -1217,6 +1381,7 @@ def main() -> None:
     stale = sync_health.problems(quiet, "2026-10-21T12:00:00Z")
     check(len(stale) == 1 and stale[0].startswith("vk:vk has returned nothing since 2026-10-21T06:00:00Z"), "six hours of nothing is a sync problem")
     check(sync_health.problems(None, "2026-10-21T12:00:00Z", "failure", "skipped") == ["The sync failed."], "a failed sync opens a problem without a report")
+    check(sync_health.problems(None, "2026-10-21T12:00:00Z", "skipped", "skipped", "failure") == ["The Accounts deploy failed, so Pages was not updated."], "a failed Accounts deploy keeps the previous Pages and is reported")
     check(sync_health.problems({"feeds": []}, "2026-10-21T12:00:00Z", "success", "failure") == ["The Pages deploy failed."], "a failed Pages deploy is a sync problem")
     same_body = sync_health.body_for(stale, "https://example.test/1")
     check(sync_health.plan([], [])["action"] == "none", "a healthy sync with no issue does nothing")
@@ -1241,7 +1406,7 @@ def main() -> None:
     check(discord_alert.attention({"feeds": [{"id": "discord", "ok": "2026-10-21T00:00:00Z", "detail": "Discord rejected the bot token. Discord sync stopped for this run and will not retry."}]})[0] == "unknown", "a rejected bot token is not the user account issue")
     check("issues: write" in (ROOT / ".github" / "workflows" / "discord-live.yml").read_text(encoding="utf-8"), "the live workflow can update the account issue")
     workflow_text = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
-    check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy]" in workflow_text, "the sync uploads a report and keeps one problem issue")
+    check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy, wait-accounts]" in workflow_text, "the sync uploads a report and keeps one problem issue")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "saveData" in app and "are not Never" in app and "threshold: [0, 0.6, 1]" in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app and "function scheduleIdleReload(" in app and 'box.id = "autoplay-debug"' in app and "function xRefresh(" in app and "onReady" in app and "reload-armed" in app, "one in-view video previews muted, a miss is explained, and an update reloads when idle")
     check('cache: "reload"' in worker and "skipWaiting" in worker and "clients.claim" in worker and "function isShell(" in worker and "reload-when-idle" in worker and "client.navigate" in worker and "includeUncontrolled" in worker and "prev.version" in worker and "translate.js" in worker and "translate.css" in worker, "a new service worker activates, reloads an open page, and loads translate.js from the network")
     check("function posterList(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.6" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 60 percent visible")

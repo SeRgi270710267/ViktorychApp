@@ -4,6 +4,9 @@
 The committed site stays public. This runs against the Pages artifact.
 It does nothing until the account Worker answers /v1/health with
 ready and data. A failed check leaves the artifact unchanged.
+
+Once ACCOUNTS_API or a Cloudflare credential is set, that failure exits
+non-zero. The Pages deploy is skipped and the previous site stays up.
 """
 
 from __future__ import annotations
@@ -28,6 +31,10 @@ DATA_KEY = re.compile(
 )
 SKIP_KEYS = {"archive/ia-state.json", "archive/ia-manifest.json"}
 SKIP_DIRS = {".git", "node_modules", "worker", "_site", "scripts", ".github", ".wrangler"}
+# A worker deploy plus secret updates can take several minutes. 24 tries
+# at 15s is long enough to outlast that and still fail the deploy afterwards.
+DEFAULT_HEALTH_ATTEMPTS = 24
+DEFAULT_HEALTH_INTERVAL = 15.0
 DROP_FILES = (
     "feeds.json",
     "stories.json",
@@ -91,14 +98,49 @@ def fetch_health(api: str) -> dict | None:
     return body if isinstance(body, dict) else None
 
 
+def health_attempts() -> int:
+    raw = (os.environ.get("ACCOUNTS_HEALTH_ATTEMPTS") or "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    return DEFAULT_HEALTH_ATTEMPTS
+
+
+def health_interval() -> float:
+    raw = (os.environ.get("ACCOUNTS_HEALTH_INTERVAL") or "").strip()
+    if not raw:
+        return DEFAULT_HEALTH_INTERVAL
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_HEALTH_INTERVAL
+    return value if value >= 0 else DEFAULT_HEALTH_INTERVAL
+
+
 def wait_ready(api: str) -> dict | None:
-    for attempt in range(8):
+    attempts = health_attempts()
+    pause = health_interval()
+    for attempt in range(attempts):
         health = fetch_health(api)
         if health and health.get("ready") and health.get("data"):
             return health
-        if attempt < 7:
-            time.sleep(15)
+        if attempt + 1 < attempts and pause:
+            time.sleep(pause)
     return None
+
+
+def configured() -> bool:
+    """True when this site already has an accounts API, so an open shell is a regression."""
+    if (os.environ.get("ACCOUNTS_API") or "").strip():
+        return True
+    return bool(_token() or _account())
+
+
+def unlocked(reason: str) -> int:
+    if configured():
+        print(f"{reason} Refusing to publish without the login wall.")
+        return 1
+    print(f"{reason} publishing the public site.")
+    return 0
 
 
 def collect(root: Path) -> dict[str, Path]:
@@ -125,24 +167,27 @@ def upload(key: str, payload: bytes) -> None:
     _request(url, payload, "PUT")
 
 
+def _js_string(text: str, name: str) -> str:
+    found = re.search(rf'["\']?{name}["\']?\s*:\s*"([^"]*)"', text)
+    return found.group(1) if found else ""
+
+
 def read_gate(site: Path) -> dict:
     path = site / "accounts.config.js"
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    api = ""
-    turnstile = ""
-    found = re.search(r'api:\s*"([^"]*)"', text)
-    if found:
-        api = found.group(1)
-    sitekey = re.search(r'turnstileSiteKey:\s*"([^"]*)"', text)
-    if sitekey:
-        turnstile = sitekey.group(1)
-    return {"api": api, "gate": "gate: true" in text, "turnstileSiteKey": turnstile}
+    # Both shapes count: `gate: true` and the older `"gate": true`.
+    gate = re.search(r'["\']?gate["\']?\s*:\s*true\b', text) is not None
+    return {
+        "api": _js_string(text, "api"),
+        "gate": gate,
+        "turnstileSiteKey": _js_string(text, "turnstileSiteKey"),
+    }
 
 
 def read_audience(site: Path) -> str:
     path = site / "accounts.config.js"
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
-    found = re.search(r'tiktokAudience:\s*"([^"]*)"', text)
+    found = re.search(r'["\']?tiktokAudience["\']?\s*:\s*"([^"]*)"', text)
     if found and found.group(1) in ("owner", "all"):
         return found.group(1)
     return "owner"
@@ -150,13 +195,16 @@ def read_audience(site: Path) -> str:
 
 def lock_shell(site: Path, api: str, turnstile: str) -> None:
     config = site / "accounts.config.js"
+    audience = read_audience(site)
+    # JS object, not JSON. `gate: true` is what a publisher already in
+    # progress looks for when it keeps the wall across a refresh.
     config.write_text(
-        "window.VIKTORYCH_ACCOUNTS = "
-        + json.dumps(
-            {"api": api, "gate": True, "turnstileSiteKey": turnstile, "tiktokAudience": read_audience(site)},
-            ensure_ascii=True,
-        )
-        + ";\n",
+        "window.VIKTORYCH_ACCOUNTS = {\n"
+        f"  api: {json.dumps(api, ensure_ascii=True)},\n"
+        "  gate: true,\n"
+        f"  turnstileSiteKey: {json.dumps(turnstile, ensure_ascii=True)},\n"
+        f"  tiktokAudience: {json.dumps(audience, ensure_ascii=True)},\n"
+        "};\n",
         encoding="utf-8",
     )
     worker = site / "sw.js"
@@ -211,23 +259,18 @@ def mark_wall() -> None:
 
 def publish(site: Path, source: Path) -> int:
     if not _token() or not _account():
-        print("Cloudflare credentials are not set; publishing the public site.")
-        return 0
+        return unlocked("Cloudflare credentials are not set;")
     try:
         api = workers_api()
     except (urllib.error.URLError, TimeoutError, OSError):
-        print("accounts API URL is unknown; publishing the public site.")
-        return 0
+        return unlocked("accounts API URL is unknown;")
     if not api:
-        print("accounts API URL is unknown; publishing the public site.")
-        return 0
+        return unlocked("accounts API URL is unknown;")
     if not wait_ready(api):
-        print("accounts API is not ready; publishing the public site.")
-        return 0
+        return unlocked("accounts API is not ready;")
     files = collect(source)
     if "feeds.json" not in files:
-        print("feeds.json is missing; publishing the public site.")
-        return 0
+        return unlocked("feeds.json is missing;")
     try:
         for key in sorted(files):
             upload(key, files[key].read_bytes())
@@ -235,8 +278,7 @@ def publish(site: Path, source: Path) -> int:
         if owner.is_file():
             upload("owner/tiktok.json", owner.read_bytes())
     except (urllib.error.URLError, TimeoutError, OSError):
-        print("data upload failed; publishing the public site.")
-        return 0
+        return unlocked("data upload failed;")
     turnstile = (os.environ.get("TURNSTILE_SITEKEY") or "").strip()
     lock_shell(site, api, turnstile)
     strip(site)
