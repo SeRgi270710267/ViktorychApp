@@ -4,18 +4,29 @@
 const ROOM_ID = /^[1-9][0-9]{5,24}$/;
 const QUALITY = ["origin", "origion", "uhd", "full_hd1", "hd", "hd1", "sd", "sd2", "ld", "sd1"];
 
-function parseRoomId(html) {
+function scriptJson(html, id) {
   const text = String(html || "");
-  const match = text.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/);
-  if (!match) return "";
-  let data = null;
-  try { data = JSON.parse(match[1]); }
-  catch (err) { return ""; }
-  const scope = data && data.__DEFAULT_SCOPE__;
-  const detail = scope && scope["webapp.user-detail"];
-  const user = detail && detail.userInfo && detail.userInfo.user;
-  const room = user && user.roomId != null ? String(user.roomId) : "";
+  const match = text.match(new RegExp("<script id=\"" + id + "\"[^>]*>([\\s\\S]*?)<\\/script>"));
+  if (!match) return null;
+  try { return JSON.parse(match[1]); }
+  catch (err) { return null; }
+}
+
+function roomFromUser(user) {
+  if (!user || typeof user !== "object") return "";
+  const room = user.roomId != null ? String(user.roomId) : "";
   return ROOM_ID.test(room) ? room : "";
+}
+
+function parseRoomId(html) {
+  const universal = scriptJson(html, "__UNIVERSAL_DATA_FOR_REHYDRATION__");
+  const scope = universal && universal.__DEFAULT_SCOPE__;
+  const detail = scope && scope["webapp.user-detail"];
+  const fromUniversal = roomFromUser(detail && detail.userInfo && detail.userInfo.user);
+  if (fromUniversal) return fromUniversal;
+  const sigi = scriptJson(html, "SIGI_STATE");
+  const live = sigi && sigi.LiveRoom && sigi.LiveRoom.liveRoomUserInfo;
+  return roomFromUser(live && live.user);
 }
 
 function qualityRank(name) {
@@ -43,20 +54,24 @@ function pickStreams(info) {
   for (let i = 0; i < keys.length; i++) {
     const main = rows[keys[i]] && rows[keys[i]].main;
     if (!main) continue;
-    if (!hls && main.hls) {
-      hls = String(main.hls);
-      quality = keys[i];
-    }
-    if (!flv && main.flv) flv = String(main.flv);
-    if (hls && flv) break;
+    const nextHls = main.hls ? String(main.hls) : "";
+    const nextFlv = main.flv ? String(main.flv) : "";
+    if (!nextHls && !nextFlv) continue;
+    hls = nextHls;
+    flv = nextFlv;
+    quality = keys[i];
+    break;
   }
-  if (!hls && room.stream_url && room.stream_url.hls_pull_url) {
+  if (!hls && !flv && room.stream_url && room.stream_url.hls_pull_url) {
     hls = String(room.stream_url.hls_pull_url);
     quality = quality || "origin";
   }
-  if (!flv && room.stream_url && room.stream_url.flv_pull_url && typeof room.stream_url.flv_pull_url === "object") {
+  if (!hls && !flv && room.stream_url && room.stream_url.flv_pull_url && typeof room.stream_url.flv_pull_url === "object") {
     const names = Object.keys(room.stream_url.flv_pull_url).sort((a, b) => qualityRank(a) - qualityRank(b));
-    if (names.length) flv = String(room.stream_url.flv_pull_url[names[0]] || "");
+    if (names.length) {
+      flv = String(room.stream_url.flv_pull_url[names[0]] || "");
+      quality = quality || names[0] || "origin";
+    }
   }
   return {
     live: live,
