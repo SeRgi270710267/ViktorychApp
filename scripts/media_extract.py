@@ -732,6 +732,61 @@ def store_catalog(cf, manifest, state, directory, links, limit, stored, pause, t
     return stored
 
 
+def communities_waiting() -> bool:
+    folder = ROOT / "data" / "communities"
+    if not folder.is_dir():
+        return False
+    return any(path.name != "index.json" for path in folder.glob("*.json"))
+
+
+def store_community_originals(directory, cf, manifest, state, links, limit, stored) -> int:
+    from reddit_sync import backup_originals
+
+    def publish(path, info):
+        nonlocal stored
+        if stored >= limit:
+            return "stop"
+        key = str((info or {}).get("key") or "")
+        role = "video" if (info or {}).get("role") == "video" else "photo"
+        result = publish_file(path, key, role, {}, cf, manifest, state, directory)
+        if result == "ok":
+            stored += 1
+            links.append({
+                "key": key,
+                "platform": "reddit",
+                "handle": (info or {}).get("community") or "",
+                "id": (info or {}).get("id") or "",
+                "stats": {},
+            })
+            log("[media-extract] linked %s" % key)
+        return result
+
+    backup_originals(directory, publish)
+    return stored
+
+
+def backup_communities_standalone() -> int:
+    """Back up mirrored community media when this run has no added accounts."""
+    if not communities_waiting():
+        return 0
+    directory = Path(tempfile.mkdtemp(prefix="media-reddit-"))
+    try:
+        opened = open_destination(directory)
+        if opened is None:
+            return 0
+        cf, manifest = opened
+        state = tb.new_entry_state()
+        store_community_originals(directory, cf, manifest, state, [], cap_of(), 0)
+        log(tb.upload_summary(state))
+        return 0
+    except Exception as err:
+        log("[media-extract] community backup failed")
+        log(tb.scrub(str(err), tb.current_secrets()))
+        return 1
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
+
+
 def extract() -> int:
     config_path = ROOT / "feeds.config.json"
     try:
@@ -752,7 +807,7 @@ def extract() -> int:
     accounts = accounts_from(config if isinstance(config, dict) else {}, list(TRACKED), accounts_doc, x_doc)
     if not accounts:
         log("[media-extract] no added accounts")
-        return 0
+        return backup_communities_standalone()
     ytdlp = tb.tool_cmd("yt_dlp", "yt-dlp")
     gallery = tb.tool_cmd("gallery_dl", "gallery-dl")
     if not ytdlp or not gallery:
@@ -783,6 +838,7 @@ def extract() -> int:
         visited = 0
         tally = fresh_tally()
         stored = store_catalog(cf, manifest, state, directory, links, limit, 0, pause, tally)
+        stored = store_community_originals(directory, cf, manifest, state, links, limit, stored)
         for offset, account in enumerate(rotate(accounts, start)):
             if stored >= limit:
                 break
@@ -1008,6 +1064,7 @@ def selftest() -> int:
         check(sample.read_bytes()[99:100] == b"\x89" and text_file(sample).startswith("SQLite"), "a sqlite archive survives a binary byte")
     finally:
         sample.unlink(missing_ok=True)
+    check("store_community_originals" in Path(__file__).read_text(encoding="utf-8") and "backup_originals" in Path(__file__).read_text(encoding="utf-8"), "community originals go through the media pipeline")
     print("media extract selftest ok")
     return 0
 

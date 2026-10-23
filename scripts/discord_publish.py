@@ -48,6 +48,8 @@ SITE_FILES = (
     "i18n.js",
     "stories.js",
     "stories.css",
+    "communities.js",
+    "communities.css",
     "404.html",
     "favicon.svg",
     "favicon.ico",

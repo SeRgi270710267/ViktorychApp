@@ -1,6 +1,6 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a18-__SW_VERSION__";
+const VERSION = "viktorych-a19-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -71,6 +71,8 @@ const SHELL_FILES = [
   "./drive.css",
   "./games.js",
   "./games.css",
+  "./communities.js",
+  "./communities.css",
   "./shared/drive-crypto.js",
   "./shared/drive-photos.js",
   "./shared/handle-skeleton.js",
@@ -146,6 +148,7 @@ function isData(url) {
   if (/\/archive\/[^/]+\.json$/.test(url.pathname)) return true;
   // data/music.json is the ViktorychMusic catalog
   if (url.origin === self.location.origin && /\/data\/music\.json$/.test(url.pathname)) return true;
+  if (url.origin === self.location.origin && /\/data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$/.test(url.pathname)) return true;
   if (url.origin === self.location.origin && /\/discord\/(?:index|state|messages\/\d{1,22}|pins\/\d{1,22})\.json$/.test(url.pathname)) return true;
   return url.origin === self.location.origin && /\/(?:feeds|people|suggestions|stories)\.json$/.test(url.pathname);
 }

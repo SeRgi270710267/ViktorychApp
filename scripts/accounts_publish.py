@@ -28,6 +28,7 @@ DATA_KEY = re.compile(
     r"|^(?:live|archive|comments|fallback)/[A-Za-z0-9._-]{1,120}\.json$"
     r"|^discord/(?:index|state)\.json$"
     r"|^discord/(?:messages|pins)/\d{1,22}\.json$"
+    r"|^data/communities/(?:index|[a-z0-9_]{2,21})\.json$"
 )
 SKIP_KEYS = {"archive/ia-state.json", "archive/ia-manifest.json"}
 SKIP_DIRS = {".git", "node_modules", "worker", "_site", "scripts", ".github", ".wrangler"}
@@ -227,6 +228,14 @@ def strip(site: Path) -> None:
         path = site / name
         if path.is_file():
             path.unlink()
+    communities = site / "data" / "communities"
+    if communities.is_dir():
+        for path in sorted(communities.rglob("*"), reverse=True):
+            if path.is_file() or path.is_symlink():
+                path.unlink()
+            elif path.is_dir():
+                path.rmdir()
+        communities.rmdir()
     music_dir = site / "data"
     if music_dir.is_dir() and not any(music_dir.iterdir()):
         music_dir.rmdir()

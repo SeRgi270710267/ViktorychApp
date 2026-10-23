@@ -1,0 +1,77 @@
+# Mirror public subreddits through Reddit's official Data API.
+# Every 20 minutes, and when Sync feeds dispatches this workflow.
+# App-only client_credentials. Read-only. Nothing is posted to Reddit.
+# If REDDIT_CLIENT_ID or REDDIT_CLIENT_SECRET is unset, the job exits quietly.
+
+name: Reddit communities
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/reddit.yml"
+      - "scripts/reddit_sync.py"
+      - "data/communities/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && 'test' || 'mirror' }}
+  cancel-in-progress: false
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Self-test
+        run: python3 scripts/reddit_sync.py --selftest
+
+  mirror:
+    needs: selftest
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Mirror communities
+        env:
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python3 scripts/reddit_sync.py
+
+      - name: Commit the mirror
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/communities
+          if git diff --cached --quiet; then
+            echo "communities unchanged"
+            exit 0
+          fi
+          git commit -m "Update communities"
+          git push origin HEAD:main

@@ -885,5 +885,21 @@ SI18n.addPack("en", {
   "The same bot posts there. Lives are spread across these channels.": "The same bot posts there. Lives are spread across these channels.",
   "{count} extra channels": "{count} extra channels",
   "That channel id was not saved.": "That channel id was not saved.",
-  "Remove {channel}": "Remove {channel}"
+  "Remove {channel}": "Remove {channel}",
+  "Communities": "Communities",
+  "Reddit": "Reddit",
+  "ViktorychApp": "ViktorychApp",
+  "Only on ViktorychApp": "Only on ViktorychApp",
+  "Add community": "Add community",
+  "No communities yet.": "No communities yet.",
+  "Nothing is sent to Reddit.": "Nothing is sent to Reddit.",
+  "That community wasn’t found.": "That community wasn’t found.",
+  "Sign in to post here.": "Sign in to post here.",
+  "Couldn't post.": "Couldn't post.",
+  "New posts show up after the next sync.": "New posts show up after the next sync.",
+  "ViktorychApp members": "ViktorychApp members",
+  "Reddit subscribers": "Reddit subscribers",
+  "Join": "Join",
+  "Joined": "Joined",
+  "Removed": "Removed"
 });
