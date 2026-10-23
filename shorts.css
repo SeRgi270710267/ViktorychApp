@@ -44,6 +44,15 @@ html.shorts-on .app { min-height: 100dvh; align-items: stretch; }
   height: 100%;
   object-fit: cover;
   background: #000;
+  transform-origin: center center;
+}
+.shorts-stage.shorts-zoomed,
+.shorts-stage.shorts-zoomed .shorts-hit {
+  touch-action: none;
+}
+.shorts-feed.shorts-zoomed {
+  overflow: hidden;
+  touch-action: none;
 }
 .shorts-hit {
   position: absolute;
