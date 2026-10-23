@@ -481,8 +481,8 @@ self.addEventListener("fetch", (event) => {
       const incoming = request.headers.get("Authorization") || "";
       if (playToken) headers.set("Authorization", "Bearer " + playToken);
       else if (/^Bearer\s+\S+/i.test(incoming)) headers.set("Authorization", incoming);
-      const origin = request.headers.get("Origin");
-      if (origin) headers.set("Origin", origin);
+      const origin = request.headers.get("origin");
+      if (origin) headers.set("origin", origin);
       const range = request.headers.get("Range");
       if (range) headers.set("Range", range);
       return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });
