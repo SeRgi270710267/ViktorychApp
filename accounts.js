@@ -654,7 +654,7 @@
   function onHistoryReady() {
     if (historyBooted) return;
     historyBooted = true;
-    if (readSession()) mergeSync();
+    if (readSession()) mergeSync().then(function () { return syncFollows(); }, function () { return syncFollows(); });
   }
   function onLocalChange() {
     if (!readSession() || !config().api || pushing) return;
@@ -985,6 +985,7 @@
         body.account.repostsLoaded = true;
       }
       remember(body.account);
+      noteProfile(body.account);
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () { profileLoads[key] = false; });
   }
@@ -1000,17 +1001,229 @@
     profiles[key].reposts = Array.isArray(rows) ? rows : [];
     profiles[key].repostsLoaded = true;
   }
+  var graphCounts = {};
+  var followEpoch = 0;
+  var listCache = {};
+  var countLoads = {};
+  var syncingFollows = false;
+  var syncAgain = false;
+  function myAccountId() {
+    var session = readSession();
+    return session && session.account && session.account.publicId ? "app:" + session.account.publicId : "";
+  }
+  function formatNum(n) {
+    var value = Math.max(0, Math.trunc(Number(n) || 0));
+    if (window.SI18n && window.SI18n.formatCount) return window.SI18n.formatCount(value);
+    return String(value);
+  }
+  function readSettings() {
+    try { return JSON.parse(readStored("settings-v1") || "{}") || {}; }
+    catch (err) { return {}; }
+  }
+  function localFeedFollows() {
+    return (readSettings().follows || []).filter(function (id) { return id && String(id).indexOf("app:") !== 0; });
+  }
+  function localAppFollows() {
+    return (readSettings().accountFollows || []).filter(function (id) { return /^app:\d{12}$/.test(String(id || "")); });
+  }
+  function accountStat(account, field) {
+    var id = "app:" + (account && account.publicId || "");
+    var known = graphCounts[id];
+    if (field === "following" && myAccountId() === id && (!known || known.following == null)) {
+      return localFeedFollows().length + localAppFollows().length;
+    }
+    if (known && known[field] != null) return known[field];
+    if (field === "following" && account && account.followingCount != null) return account.followingCount;
+    if (field === "followers" && account && account.followersCount != null) return account.followersCount;
+    return 0;
+  }
+  function noteProfile(account) {
+    if (!account || !account.publicId) return;
+    var id = "app:" + account.publicId;
+    graphCounts[id] = graphCounts[id] || {};
+    if (account.followingCount != null && !graphCounts[id].fresh) graphCounts[id].following = account.followingCount;
+    if (account.followersCount != null && !graphCounts[id].fresh) graphCounts[id].followers = account.followersCount;
+  }
+  function countLink(account, tab, n, label) {
+    var href = "#/@" + encodeURIComponent(account.handle || "") + "/" + tab;
+    return '<a href="' + esc(href) + '"><b>' + esc(formatNum(n)) + "</b> <span>" + esc(label) + "</span></a>";
+  }
+  function accountCountsHtml(account) {
+    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + "</div>";
+  }
+  function followersOf(id) {
+    var known = graphCounts[id];
+    return known && known.followers != null ? known.followers : 0;
+  }
+  function ensureCounts(id) {
+    var session = readSession();
+    if (!id || !session || !config().api) return;
+    if (countLoads[id] || (graphCounts[id] && graphCounts[id].fresh)) return;
+    var epoch = followEpoch;
+    countLoads[id] = true;
+    api("/v1/follows?id=" + encodeURIComponent(id), { token: session.token }).then(function (res) {
+      countLoads[id] = false;
+      if (!res || res.status !== 200 || epoch !== followEpoch) return;
+      graphCounts[id] = graphCounts[id] || {};
+      if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
+      if (res.followingCount != null) graphCounts[id].following = res.followingCount;
+      graphCounts[id].fresh = true;
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () { countLoads[id] = false; });
+  }
+  function listPack(id, tab) {
+    return listCache[id + "|" + tab] || { loading: false, accounts: null, error: false };
+  }
+  function ensureList(id, tab) {
+    var session = readSession();
+    var key = id + "|" + tab;
+    if (!id || !session || !config().api) return;
+    var pack = listCache[key];
+    if (pack && (pack.loading || (pack.accounts && !pack.dirty))) return;
+    var epoch = followEpoch;
+    listCache[key] = { loading: true, accounts: pack && pack.accounts, error: false, dirty: false };
+    api("/v1/follows?id=" + encodeURIComponent(id) + "&tab=" + encodeURIComponent(tab), { token: session.token }).then(function (res) {
+      if (epoch !== followEpoch) {
+        if (listCache[key]) {
+          listCache[key].loading = false;
+          listCache[key].dirty = true;
+        }
+        return;
+      }
+      if (!res || res.status !== 200) listCache[key] = { loading: false, accounts: [], error: true };
+      else {
+        listCache[key] = { loading: false, accounts: Array.isArray(res.accounts) ? res.accounts : [], error: false };
+        graphCounts[id] = graphCounts[id] || {};
+        if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
+        if (res.followingCount != null) graphCounts[id].following = res.followingCount;
+        graphCounts[id].fresh = true;
+      }
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {
+      listCache[key] = { loading: false, accounts: [], error: true };
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    });
+  }
+  function dirtyLists() {
+    Object.keys(listCache).forEach(function (key) {
+      if (listCache[key]) listCache[key].dirty = true;
+    });
+  }
+  function changeFollow(id, follow, profile) {
+    var session = readSession();
+    if (!session || !config().api || !id) return Promise.resolve(true);
+    if (id === myAccountId()) return Promise.resolve(false);
+    followEpoch += 1;
+    var epoch = followEpoch;
+    var me = myAccountId();
+    var hadTarget = !!(graphCounts[id] && graphCounts[id].followers != null);
+    var prevTarget = hadTarget ? graphCounts[id].followers : 0;
+    var hadMine = !!(me && graphCounts[me] && graphCounts[me].following != null);
+    var prevMine = hadMine ? graphCounts[me].following : 0;
+    graphCounts[id] = graphCounts[id] || {};
+    graphCounts[id].followers = Math.max(0, prevTarget + (follow ? 1 : -1));
+    if (hadMine) graphCounts[me].following = Math.max(0, prevMine + (follow ? 1 : -1));
+    dirtyLists();
+    var body = { id: id };
+    if (profile && typeof profile === "object") body.profile = profile;
+    return api("/v1/follows", { method: follow ? "PUT" : "DELETE", token: session.token, body: body }).then(function (res) {
+      if (epoch !== followEpoch) return res && res.status === 200;
+      if (!res || res.status !== 200) {
+        if (hadTarget) graphCounts[id].followers = prevTarget;
+        else {
+          delete graphCounts[id].followers;
+          graphCounts[id].fresh = false;
+        }
+        if (hadMine) graphCounts[me].following = prevMine;
+        return false;
+      }
+      graphCounts[id] = graphCounts[id] || {};
+      if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
+      graphCounts[id].fresh = true;
+      if (me && res.followingCount != null) {
+        graphCounts[me] = graphCounts[me] || {};
+        graphCounts[me].following = res.followingCount;
+        graphCounts[me].fresh = true;
+      }
+      dirtyLists();
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      return true;
+    }).catch(function () {
+      if (epoch !== followEpoch) return false;
+      if (hadTarget) graphCounts[id].followers = prevTarget;
+      else delete graphCounts[id].followers;
+      if (hadMine) graphCounts[me].following = prevMine;
+      return false;
+    });
+  }
+  function syncFollows() {
+    var session = readSession();
+    if (!session || !config().api || !session.account) return Promise.resolve();
+    if (syncingFollows) {
+      syncAgain = true;
+      return Promise.resolve();
+    }
+    syncingFollows = true;
+    var epoch = followEpoch;
+    var key = "follows-imported-" + session.account.publicId;
+    var imported = readStored(key) === "1";
+    var local = localFeedFollows();
+    var start = imported || !local.length
+      ? Promise.resolve({ status: 200 })
+      : api("/v1/follows/import", { method: "POST", token: session.token, body: { ids: local.slice(0, 400) } });
+    return start.then(function (res) {
+      if (!imported && local.length && res && res.status === 200) writeStored(key, "1");
+      return api("/v1/follows", { token: session.token });
+    }).then(function (res) {
+      syncingFollows = false;
+      if (epoch !== followEpoch) syncAgain = true;
+      else if (res && res.status === 200) {
+        var me = "app:" + session.account.publicId;
+        graphCounts[me] = graphCounts[me] || {};
+        if (res.followingCount != null) graphCounts[me].following = res.followingCount;
+        if (res.followersCount != null) graphCounts[me].followers = res.followersCount;
+        graphCounts[me].fresh = true;
+        if (window.ViktorychAccounts.onServerFollows) window.ViktorychAccounts.onServerFollows(Array.isArray(res.ids) ? res.ids : []);
+        if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      }
+      if (syncAgain) {
+        syncAgain = false;
+        return syncFollows();
+      }
+    }).catch(function () {
+      syncingFollows = false;
+      if (syncAgain) {
+        syncAgain = false;
+        return syncFollows();
+      }
+    });
+  }
+  function subjectForHandle(handle, platform) {
+    var key = skel(handle);
+    var session = readSession();
+    var account = profiles[key];
+    if (!account && session && session.account && skel(session.account.handle) === key) account = session.account;
+    if (account && account.publicId) {
+      return { id: "app:" + account.publicId, kind: "account", name: account.displayName || account.handle, handle: account.handle, platform: "x" };
+    }
+    if ((platform || "x") === "x" && readSession() && config().api && !profileMiss[key]) {
+      loadProfile(handle);
+      return { pending: true };
+    }
+    return null;
+  }
   function accountPage(account) {
     var session = readSession();
     var mine = session && session.account && session.account.publicId === account.publicId;
     var photo = publicAvatar(account.avatar, account.avatarFace, "pava");
     var banner = publicBanner(account.banner, account.bannerFace);
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
+    var followBtn = !mine && account.publicId && window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton("app:" + account.publicId, true) || "") : "";
     var pack = { html: "", count: 0 };
     if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account) || pack;
     var count = String(pack.count || 0);
     var body = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>");
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div><div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + '<div class="counts"><div><b>0</b> <span>' + esc(tr("Following count")) + "</span></div><div><b>0</b> <span>" + esc(tr("Followers")) + "</span></div></div></div>" + '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '"><a class="tab on" role="tab" aria-selected="true"><span>' + esc(tr("Posts")) + "</span></a></div>" + body;
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div><div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + accountCountsHtml(account) + "</div>" + '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '"><a class="tab on" role="tab" aria-selected="true"><span>' + esc(tr("Posts")) + "</span></a></div>" + body;
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -1326,6 +1539,9 @@
   }
   if (window.SI18n && window.SI18n.onChange) window.SI18n.onChange(function () { if (blocking() || view) paint(); });
   if (blocking()) enter();
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") syncFollows();
+  });
 
   window.ViktorychAccounts = {
     blocking: blocking,
@@ -1344,6 +1560,15 @@
     profilePending: profilePending,
     profileReady: profileReady,
     storedAccount: storedAccount,
+    followButton: null,
+    onServerFollows: null,
+    changeFollow: changeFollow,
+    syncFollows: syncFollows,
+    ensureCounts: ensureCounts,
+    ensureList: ensureList,
+    listPack: listPack,
+    followersOf: followersOf,
+    subjectForHandle: subjectForHandle,
     account: function () {
       var session = readSession();
       return session && session.account ? session.account : null;

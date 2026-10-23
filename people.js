@@ -341,19 +341,29 @@
 
   function countHtml(person) {
     const format = hooks().formatCount || ((n) => String(n));
+    const hrefFor = hooks().connectHref || (() => "");
+    const extraOf = hooks().extraFollowers || (() => 0);
+    const ensure = hooks().ensureCounts || (() => {});
+    const link = (html, tab) => {
+      const href = hrefFor(person, tab);
+      return href ? `<a href="${esc(href)}">${html}</a>` : html;
+    };
     const followerRows = [];
     let following = null;
     (person.accounts || []).forEach((account) => {
-      if (account.followers != null) followerRows.push({ platform: account.platform, value: account.followers });
+      const id = account.feedId || ((account.platform || "x") + ":" + (account.handle || ""));
+      if (id) ensure(id);
+      const extra = Number(extraOf(id)) || 0;
+      if (account.followers != null || extra) followerRows.push({ platform: account.platform, value: (Number(account.followers) || 0) + extra });
       if (account.following != null && following == null) following = account.following;
     });
     const bits = followerRows.map((row) => {
       const label = followerRows.length > 1
         ? (row.platform === "youtube" ? tr("YouTube subscribers") : tr("{platform} followers", { platform: NET[row.platform] || row.platform || "" }))
         : (row.platform === "youtube" ? tr("Subscribers") : tr("Followers"));
-      return `<div><b>${esc(format(row.value))}</b> <span>${esc(label)}</span></div>`;
+      return link(`<b>${esc(format(row.value))}</b> <span>${esc(label)}</span>`, "followers");
     });
-    if (following != null) bits.push(`<div><b>${esc(format(following))}</b> <span>${tr("Following count")}</span></div>`);
+    if (following != null) bits.push(link(`<b>${esc(format(following))}</b> <span>${tr("Following count")}</span>`, "following"));
     return bits.length ? `<div class="counts">${bits.join("")}</div>` : "";
   }
 

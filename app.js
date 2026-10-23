@@ -844,7 +844,39 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     STATE.settings.seenFeeds = STATE.settings.seenDefaults.slice();
   }
 
-  function isFollowed(id) { return STATE.settings.follows.includes(id); }
+  function isFollowed(id) {
+    if (String(id || "").indexOf("app:") === 0) return (STATE.settings.accountFollows || []).indexOf(id) >= 0;
+    return STATE.settings.follows.includes(id);
+  }
+  function setFollowed(id, on) {
+    if (!id) return;
+    if (String(id).indexOf("app:") === 0) {
+      const list = STATE.settings.accountFollows || (STATE.settings.accountFollows = []);
+      const at = list.indexOf(id);
+      if (on && at < 0) list.push(id);
+      if (!on && at >= 0) list.splice(at, 1);
+      return;
+    }
+    const at = STATE.settings.follows.indexOf(id);
+    if (on && at < 0) STATE.settings.follows.push(id);
+    if (!on && at >= 0) {
+      STATE.settings.follows.splice(at, 1);
+      rememberUnfollow(id);
+    }
+  }
+  function followSnapshot(id) {
+    if (!id || String(id).indexOf("app:") === 0) return null;
+    const feed = feedById(id);
+    if (!feed) return null;
+    const avatar = /^https:\/\//.test(String(feed.avatar || "")) ? feed.avatar : "";
+    return {
+      name: feed.name || "",
+      handle: feed.handle || "",
+      platform: feed.platform || "",
+      avatar: avatar,
+      bio: String(feed.bio || "").slice(0, 280)
+    };
+  }
   function feedById(id) { return feeds().find((f) => f.id === id); }
 
   function cleanGroups(list) {
@@ -1937,11 +1969,20 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function audienceCounts(profile, word) {
     if (!profile) return "";
+    const id = liveFollowId(profile);
+    if (id && window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id);
+    const extra = id && window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0;
     const label = word || (profile.platform === "youtube" || profile.platform === "telegram" ? tr("Subscribers") : profile.platform === "discord" ? tr("Members") : tr("Followers"));
+    const followHref = profile.handle ? profileHash(profile.platform, profile.handle) + "/following" : "";
+    const followerHref = profile.handle ? profileHash(profile.platform, profile.handle) + "/followers" : "";
+    const link = (html, href) => href ? `<a href="${esc(href)}">${html}</a>` : html;
     const bits = [];
-    if (profile.following != null) bits.push(`<div><b>${esc(formatCount(profile.following))}</b> <span>${tr("Following count")}</span></div>`);
-    if (profile.followers != null) bits.push(`<div><b>${esc(formatCount(profile.followers))}</b> <span>${label}</span></div>`);
-    if (profile.platform === "discord" && profile.online != null) bits.push(`<div><b>${esc(formatCount(profile.online))}</b> <span>${tr("Online")}</span></div>`);
+    if (profile.following != null) bits.push(link(`<b>${esc(formatCount(profile.following))}</b> <span>${tr("Following count")}</span>`, followHref));
+    if (profile.followers != null || extra) {
+      const n = (profile.followers == null ? 0 : Number(profile.followers)) + extra;
+      bits.push(link(`<b>${esc(formatCount(n))}</b> <span>${label}</span>`, followerHref));
+    }
+    if (profile.platform === "discord" && profile.online != null) bits.push(`<span><b>${esc(formatCount(profile.online))}</b> <span>${tr("Online")}</span></span>`);
     return bits.length ? `<div class="counts">${bits.join("")}</div>` : "";
   }
 
@@ -3303,6 +3344,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function followButtonClean(id, large) {
+    if (String(id || "").indexOf("app:") === 0) {
+      const me = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+      if (me && id === "app:" + me.publicId) return "";
+      const attr = ` data-id="${esc(id)}"`;
+      if (isFollowed(id)) return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span></button>`;
+      return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>${tr("Follow")}</button>`;
+    }
     const ids = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(id) : [id];
     const primary = ids[0] || id;
     const attr = ` data-id="${esc(primary)}" data-ids="${esc(ids.join(","))}"`;
@@ -5605,9 +5653,13 @@ const here = parseRoute();
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     if (parts[0] === "u" && parts[1] && parts[2]) {
       const platform = parts[1] === "twitter" ? "x" : parts[1];
+      if (parts[3] === "followers" || parts[3] === "following") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
       return { name: "user", platform: platform, handle: parts[2], query };
     }
-    if (parts[0] === "p" && parts[1]) return { name: "person", id: parts[1], query };
+    if (parts[0] === "p" && parts[1]) {
+      if (parts[2] === "followers" || parts[2] === "following") return { name: "connections", personId: parts[1], tab: parts[2], platform: "", handle: "", query };
+      return { name: "person", id: parts[1], query };
+    }
     if (parts[0] === "messages") {
       const channel = parts[1] === "discord" && parts[2] ? parts[2] : "";
       return { name: "messages", channel: channel, query };
@@ -5651,6 +5703,7 @@ const here = parseRoute();
       return { name: "home", tab: "foryou", query };
     }
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
+    if (rest[0] === "followers" || rest[0] === "following") return { name: "connections", platform, handle, tab: rest[0], query };
     return { name: "profile", platform, handle, query };
   }
 
@@ -7024,6 +7077,91 @@ const here = parseRoute();
     ${window.Spaces && window.Spaces.profileCard ? window.Spaces.profileCard(profile.platform, profile.handle) : ""}
     ${tabs.length ? `<div class="tabs ptabs" role="tablist" aria-label="${tr("Profile")}">${tabHtml}</div>` : ""}
     ${body}${more}`;
+  }
+
+  function connectTarget(item) {
+    if (!item) return "#/feeds";
+    if (item.kind === "account" && item.handle) return profileHash("x", item.handle);
+    const platform = item.platform || String(item.id || "").split(":")[0] || "x";
+    const handle = item.handle || (String(item.id || "").indexOf(":") >= 0 ? String(item.id).split(":").slice(1).join(":") : "");
+    if (handle) return profileHash(platform, handle);
+    return "#/feeds";
+  }
+
+  function hydrateFollow(item) {
+    const row = Object.assign({}, item || {});
+    if (row.kind === "account") return row;
+    const feed = feedById(row.id) || null;
+    if (!feed) return row;
+    if (!row.name) row.name = feed.name || "";
+    if (!row.handle) row.handle = feed.handle || "";
+    if (!row.avatar) row.avatar = feed.avatar || "";
+    if (!row.bio) row.bio = feed.bio || "";
+    if (!row.platform) row.platform = feed.platform || "";
+    if (!row.verifiedType) row.verifiedType = feed.verifiedType || "";
+    return row;
+  }
+
+  function connectRow(item) {
+    const row = hydrateFollow(item);
+    const me = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+    const self = !!(me && row.id === "app:" + me.publicId);
+    const bio = row.bio ? `<span class="connect-bio">${esc(row.bio)}</span>` : "";
+    const button = self ? "" : followButtonClean(row.id);
+    const handle = row.handle ? "@" + esc(row.handle) : "";
+    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${avatar(row.avatar, row.name || row.handle, "", row.avatarFace)}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span><span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
+  }
+
+  function connectionsHash(route, tab) {
+    if (route.personId) return "#/p/" + encodeURIComponent(route.personId) + "/" + tab;
+    return profileHash(route.platform || "x", route.handle) + "/" + tab;
+  }
+
+  function connectionsSubject(route) {
+    if (route.personId) {
+      const person = window.FeedsPeople && window.FeedsPeople.byId ? window.FeedsPeople.byId(route.personId) : null;
+      const ids = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(route.personId) : [];
+      return { id: ids[0] || "", name: (person && person.name) || route.personId, handle: "" };
+    }
+    if ((route.platform || "x") === "x" && window.ViktorychAccounts && window.ViktorychAccounts.subjectForHandle) {
+      const subject = window.ViktorychAccounts.subjectForHandle(route.handle, route.platform);
+      if (subject) return subject;
+    }
+    const feed = findFeed(route.platform, route.handle) || {
+      id: (route.platform || "x") + ":" + (route.handle || ""),
+      platform: route.platform,
+      handle: route.handle,
+      name: route.handle
+    };
+    return { id: feed.id, name: feed.name || feed.handle, handle: feed.handle || "" };
+  }
+
+  function connectionsView(route) {
+    const tab = route.tab === "followers" ? "followers" : "following";
+    const subject = connectionsSubject(route);
+    const name = subject.name || subject.handle || route.handle || "";
+    const sub = subject.handle ? "@" + subject.handle : "";
+    const head = `<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
+    const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a></div>`;
+    if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
+    const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
+    if (!signed) return head + tabs + emptyBlock(tr("Followers"), tr("Sign in to see this list."));
+    if (!subject.id || !window.ViktorychAccounts.ensureList) {
+      const title = tab === "followers" ? tr("No followers yet") : tr("Not following anyone yet");
+      const copy = tab === "followers" ? tr("When someone follows this account, they’ll show up here.") : tr("When this account follows someone, they’ll show up here.");
+      return head + tabs + emptyBlock(title, copy);
+    }
+    window.ViktorychAccounts.ensureList(subject.id, tab);
+    const pack = window.ViktorychAccounts.listPack(subject.id, tab);
+    if (pack.loading && !pack.accounts) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
+    if (pack.error) return head + tabs + emptyBlock(tr("Followers"), tr("Couldn’t load this list."));
+    const rows = (pack.accounts || []).map(connectRow).join("");
+    if (!rows) {
+      const title = tab === "followers" ? tr("No followers yet") : tr("Not following anyone yet");
+      const copy = tab === "followers" ? tr("When someone follows this account, they’ll show up here.") : tr("When this account follows someone, they’ll show up here.");
+      return head + tabs + emptyBlock(title, copy);
+    }
+    return head + tabs + rows;
   }
 
   function profileView(route) {
@@ -9039,6 +9177,7 @@ const here = parseRoute();
         sources: tr("Sources"),
         profile: tr("Profile"),
         person: tr("Profile"),
+        connections: route.tab === "followers" ? tr("Followers") : tr("Following count"),
         spaces: tr("Space"),
         shorts: tr("Shorts"),
         games: route.game === "regone" ? "ReGone" : tr("Games"),
@@ -10696,6 +10835,7 @@ if (STATE.histClear) {
     if (route.name === "home") return homeView(route);
     if (route.name === "person") return (window.FeedsPeople && window.FeedsPeople.page(route)) || pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This person isn’t in people.json."));
     if (route.name === "spaces") return (window.Spaces && window.Spaces.page && window.Spaces.page(route)) || pageHead(tr("Space"), "", true) + emptyBlock(tr("This Space has ended"), tr("This Space isn’t available."));
+    if (route.name === "connections") return connectionsView(route);
     if (route.name === "profile") return profileView(route);
     if (route.name === "user") return userView(route);
     if (route.name === "status") return statusView(route);
@@ -11324,14 +11464,24 @@ if (STATE.histClear) {
       const ids = String(el.dataset.ids || el.dataset.id || "").split(",").map((part) => part.trim()).filter(Boolean);
       if (!ids.length) return;
       const on = ids.some((item) => isFollowed(item));
-      ids.forEach((item) => {
-        const i = STATE.settings.follows.indexOf(item);
-        if (on) {
-          if (i >= 0) STATE.settings.follows.splice(i, 1);
-          rememberUnfollow(item);
-        } else if (i < 0) STATE.settings.follows.push(item);
-      });
+      ids.forEach((item) => setFollowed(item, !on));
       saveSettings();
+      const accounts = window.ViktorychAccounts;
+      if (accounts && accounts.changeFollow) {
+        const wanted = !on;
+        Promise.all(ids.map((item) => accounts.changeFollow(item, wanted, followSnapshot(item)))).then((results) => {
+          let reverted = false;
+          results.forEach((ok, index) => {
+            if (ok === false) {
+              setFollowed(ids[index], on);
+              reverted = true;
+            }
+          });
+          if (reverted) saveSettings();
+          if (accounts.syncFollows) accounts.syncFollows();
+          render();
+        });
+      }
       render();
       return;
     }
@@ -14394,7 +14544,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
       followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
       sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
-      statusHash: statusHash, watchHash: watchHash, render: render
+      statusHash: statusHash, watchHash: watchHash, render: render,
+      connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
+      extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
+      ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
     });
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsPeople.start();
   }
@@ -14455,6 +14608,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
   if (window.ViktorychAccounts) {
     window.ViktorychAccounts.requestRender = function () { render(); };
+    window.ViktorychAccounts.followButton = followButtonClean;
+    window.ViktorychAccounts.onServerFollows = function (ids) {
+      const list = Array.isArray(ids) ? ids : [];
+      const feeds = [];
+      const apps = [];
+      list.forEach((id) => {
+        if (String(id).indexOf("app:") === 0) apps.push(id);
+        else feeds.push(id);
+      });
+      const prevFeeds = STATE.settings.follows || [];
+      const prevApps = STATE.settings.accountFollows || [];
+      prevFeeds.forEach((id) => {
+        if (feeds.indexOf(id) < 0) rememberUnfollow(id);
+      });
+      const sameFeeds = prevFeeds.length === feeds.length && prevFeeds.every((id) => feeds.indexOf(id) >= 0);
+      const sameApps = prevApps.length === apps.length && prevApps.every((id) => apps.indexOf(id) >= 0);
+      if (sameFeeds && sameApps) return;
+      STATE.settings.follows = feeds.slice();
+      STATE.settings.accountFollows = apps.slice();
+      saveSettings();
+    };
     window.ViktorychAccounts.readHistory = readHistory;
     window.ViktorychAccounts.writeHistory = writeHistory;
     window.ViktorychAccounts.profilePostsHtml = profilePostsHtml;
