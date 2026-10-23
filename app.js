@@ -760,8 +760,8 @@
 
   function noteTabLabel(tab) {
     if (!tab) return "";
-    if (tab.kind === "verified" && tab.name === "Verified") return tr("Note tab verified");
-    if (tab.kind === "mentions" && tab.name === "Mentions") return tr("Mentions");
+    if (tab.kind === "verified" && (tab.name === "verified" || tab.name === "Verified")) return tr("Note tab verified");
+    if (tab.kind === "mentions" && (tab.name === "mentions" || tab.name === "Mentions")) return tr("Mentions");
     return tab.name;
   }
 
@@ -769,8 +769,8 @@
     const have = cleanFeedTabs(STATE.settings && STATE.settings.noteTabs);
     if (have.length) return have;
     const tabs = [
-      { id: "verified", name: "Verified", kind: "verified", emoji: "", color: "", showHome: false, showNotes: true, members: [], readAt: 0, sort: "recent" },
-      { id: "mentions", name: "Mentions", kind: "mentions", emoji: "", color: "", showHome: false, showNotes: true, members: [], readAt: 0, sort: "recent" }
+      { id: "verified", name: "verified", kind: "verified", emoji: "", color: "", showHome: false, showNotes: true, members: [], readAt: 0, sort: "recent" },
+      { id: "mentions", name: "mentions", kind: "mentions", emoji: "", color: "", showHome: false, showNotes: true, members: [], readAt: 0, sort: "recent" }
     ];
     feedTabs().forEach((tab) => {
       if (!tab || tab.showNotes === false || tab.kind === "verified" || tab.kind === "mentions") return;
@@ -9086,7 +9086,7 @@ const here = parseRoute();
     }
     if (!noteTabById(menu.id)) return "";
     const tab = noteTabById(menu.id);
-    return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${esc(tab.name)}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("pencil")}</span><span class="bell-choice-label">${tr("Edit tab")}</span></button><button class="bell-choice" type="button" data-act="feed-tab-ask-delete" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">${tr("Delete tab")}</span></button></div></div>`;
+    return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${esc(noteTabLabel(tab))}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("pencil")}</span><span class="bell-choice-label">${tr("Edit tab")}</span></button><button class="bell-choice" type="button" data-act="feed-tab-ask-delete" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">${tr("Delete tab")}</span></button></div></div>`;
   }
 
   function settleNoteTab(route) {
@@ -9157,7 +9157,7 @@ const here = parseRoute();
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
     let body = "";
     if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
-    else if (!notes.length) body = emptyBlock(tr("Nothing in {name} yet", { name: current ? current.name : tr("the current tab") }), tr("New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All."));
+    else if (!notes.length) body = emptyBlock(tr("Nothing in {name} yet", { name: current ? noteTabLabel(current) : tr("the current tab") }), tr("New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All."));
     else body = `<div class="notes">${notes.map(noteRow).join("")}</div>`;
     return head + body;
   }
@@ -9167,7 +9167,7 @@ const here = parseRoute();
     const preset = presetFeed ? profileKeys(presetFeed) : [];
     STATE.draft = existing ? {
       id: existing.id,
-      name: existing.name,
+      name: editingNoteTabs() ? noteTabLabel(existing) : existing.name,
       emoji: existing.emoji || "",
       color: existing.color || "",
       showHome: existing.showHome !== false,
@@ -9223,7 +9223,7 @@ const here = parseRoute();
   function saveFeedTabDraft() {
     syncFeedTabDraft();
     const draft = STATE.draft || {};
-    const name = String(draft.name || "").replace(/\s+/g, " ").trim();
+    let name = String(draft.name || "").replace(/\s+/g, " ").trim();
     if (!name) return;
     const tabs = scopeTabList();
     let tab = draft.id ? tabs.find((item) => item.id === draft.id) : null;
@@ -9235,6 +9235,8 @@ const here = parseRoute();
       tab = { id: newFeedTabId(), readAt: 0, members: [], sort: "recent" };
       tabs.push(tab);
     }
+    if (tab.kind === "verified" && name === tr("Note tab verified")) name = "verified";
+    if (tab.kind === "mentions" && name === tr("Mentions")) name = "mentions";
     tab.name = name.slice(0, 40);
     tab.emoji = cleanEmoji(draft.emoji);
     tab.color = tabColor(draft.color);
@@ -9554,8 +9556,8 @@ if (STATE.histClear) {
         <button class="outline" data-act="close-modal" style="margin-left:8px">${tr("Cancel")}</button></div></div></div>`;
     }
     if (STATE.confirm && STATE.confirm.kind === "feed-tab") {
-      const tab = feedTabById(STATE.confirm.id);
-      const name = tab ? tab.name : tr("this tab");
+      const tab = editingNoteTabs() ? noteTabs().find((item) => item.id === STATE.confirm.id) || null : feedTabById(STATE.confirm.id);
+      const name = tab ? (editingNoteTabs() ? noteTabLabel(tab) : tab.name) : tr("this tab");
       return `<div class="modal-back"><div class="modal" role="dialog" aria-label="${tr("Delete tab")}" style="max-width:320px;margin-top:20vh;padding:8px 0 16px">
         <div class="modal-body"><h2>${tr("Delete {name}?", { name: esc(name) })}</h2><p class="phandle">${tr("This can’t be undone. Accounts stay followed.")}</p>
         <button class="primary" data-act="confirm-delete" style="background:#f4212e">${tr("Delete")}</button>
