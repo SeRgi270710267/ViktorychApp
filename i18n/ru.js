@@ -871,5 +871,14 @@ SI18n.addPack("ru", {
   "Live ended": "Эфир закончился",
   "TikTok health": "Состояние TikTok",
   "No recent blocks.": "Недавних блокировок нет.",
-  "Backing off until {time}": "Пауза до {time}"
+  "Backing off until {time}": "Пауза до {time}",
+  "Recording ({n} of {cap})": "Запись ({n} из {cap})",
+  "Queued": "В очереди",
+  "Best available": "Лучшее из доступного",
+  "Backup channels": "Каналы копии",
+  "Add a backup channel": "Добавить канал копии",
+  "The same bot posts there. Lives are spread across these channels.": "Тот же бот публикует туда. Эфиры распределяются по этим каналам.",
+  "{count} extra channels": "{count} доп. каналов",
+  "That channel id was not saved.": "Этот id канала не сохранился.",
+  "Remove {channel}": "Удалить {channel}"
 });

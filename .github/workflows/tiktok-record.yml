@@ -1,0 +1,55 @@
+name: TikTok record
+
+on:
+  workflow_dispatch:
+    inputs:
+      handle:
+        description: Public handle
+        required: true
+        type: string
+      part:
+        description: Part number
+        required: false
+        default: "1"
+        type: string
+      room:
+        description: Room id
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  actions: write
+
+# One live, one job. A second dispatch for the same handle waits.
+concurrency:
+  group: tiktok-record-${{ inputs.handle }}
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Record the origin variant
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: python3 scripts/tiktok_record.py --record --handle "${{ inputs.handle }}" --part "${{ inputs.part }}" --room "${{ inputs.room }}"

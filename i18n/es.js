@@ -871,5 +871,14 @@ SI18n.addPack("es", {
   "Live ended": "El directo terminó",
   "TikTok health": "Estado de TikTok",
   "No recent blocks.": "Sin bloqueos recientes.",
-  "Backing off until {time}": "En pausa hasta {time}"
+  "Backing off until {time}": "En pausa hasta {time}",
+  "Recording ({n} of {cap})": "Grabando ({n} de {cap})",
+  "Queued": "En cola",
+  "Best available": "La mejor disponible",
+  "Backup channels": "Canales de copia",
+  "Add a backup channel": "Añadir un canal de copia",
+  "The same bot posts there. Lives are spread across these channels.": "El mismo bot publica ahí. Los directos se reparten entre estos canales.",
+  "{count} extra channels": "{count} canales extra",
+  "That channel id was not saved.": "Ese id de canal no se guardó.",
+  "Remove {channel}": "Quitar {channel}"
 });

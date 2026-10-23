@@ -34,6 +34,7 @@
   var liveFatal = null;
   var onLiveLevel = null;
   var climbTimer = 0;
+  var recordings = { cap: 12, active: 0, items: {} };
   var mpeg = null;
   var zoom = { scale: 1, x: 0, y: 0 };
   var zoomTap = 0;
@@ -177,7 +178,8 @@
         lastLiveAt: status.lastLiveAt || "",
         detail: status.detail || "",
         avatar: (extra && extra.avatar) || status.avatar || "",
-        name: (extra && extra.name) || ""
+        name: (extra && extra.name) || "",
+        record: recordOf(handle)
       });
     }
     if (addedAccounts.length) {
@@ -298,25 +300,69 @@
     return "";
   }
 
+  function recordOf(handle) {
+    var items = recordings && recordings.items;
+    if (!items) return null;
+    return items[foldHandle(handle)] || null;
+  }
+
+  function recordLabel(row) {
+    var rec = row && row.record;
+    if (!rec || !rec.state || rec.state === "blocked") return "";
+    if (rec.state === "recording") return tr("Recording ({n} of {cap})", { n: recordings.active || 1, cap: recordings.cap || 12 });
+    if (rec.state === "queued") return tr("Queued");
+    if (rec.state === "saved") return tr("Saved");
+    return "";
+  }
+
+  function refreshRecordings() {
+    var base = apiBase();
+    if (!base || !hooks.token() || !ownerHere()) return Promise.resolve(null);
+    return fetch(base + "/v1/owner/tiktok/recordings", { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+      if (!res.ok) return null;
+      return res.json();
+    }).then(function (body) {
+      if (!body || !body.items) return body;
+      recordings = { cap: body.cap || 12, active: body.active || 0, items: body.items };
+      schedulePaint();
+      return body;
+    }).catch(function () { return null; });
+  }
+
   function liveSlide(row) {
     var handle = String((row && row.handle) || "gabii_g5");
     var profile = "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live";
     var appProfile = "#/tiktok/" + encodeURIComponent(handle);
     var on = !!(row && row.live);
+    var rec = row && row.record || {};
+    var saved = !on && rec.state === "saved" && rec.key;
     var avatar = avatarFor(handle, row);
     var cover = avatar ? '<img class="shorts-poster" alt="" src="' + hooks.esc(avatar) + '" referrerpolicy="no-referrer">' : "";
+    var savedNote = "";
+    if (saved) {
+      var bits = [];
+      var label = qualityLabel(rec.quality);
+      if (label) bits.push(label);
+      if (rec.qualityNote) bits.push(tr("Best available"));
+      if (bits.length) savedNote = '<p class="shorts-caption">' + hooks.esc(bits.join(" · ")) + "</p>";
+    }
     var body = on
       ? cover + '<button class="shorts-hit" type="button" data-shorts="watch" aria-label="' + hooks.esc(tr("LIVE")) + '"></button>'
-      : cover + '<div class="shorts-offline"><h2>' + hooks.esc(tr("Not live right now")) + "</h2>" +
-        (row && row.lastLiveAt ? "<p>" + hooks.esc(tr("Last live {time}", { time: hooks.fullTime(row.lastLiveAt) })) + "</p>" : "") +
-        '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a></div>";
+      : (saved
+        ? cover + '<button class="shorts-hit" type="button" data-shorts="saved" aria-label="' + hooks.esc(tr("Saved")) + '"></button>'
+        : cover + '<div class="shorts-offline"><h2>' + hooks.esc(tr("Not live right now")) + "</h2>" +
+          (row && row.lastLiveAt ? "<p>" + hooks.esc(tr("Last live {time}", { time: hooks.fullTime(row.lastLiveAt) })) + "</p>" : "") +
+          '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a></div>");
     var viewers = on && row.viewers ? '<span class="shorts-viewers">' + hooks.esc(tr("{count} watching", { count: hooks.formatCount(row.viewers || 0, 1000) })) + "</span>" : "";
     var badge = on ? '<span class="shorts-live-tag">' + hooks.esc(tr("LIVE")) + "</span>" : "";
+    var recText = recordLabel(row);
+    var recBadge = recText ? '<span class="shorts-rec-tag">' + hooks.esc(recText) + "</span>" : "";
     return '<article class="shorts-slide" data-kind="live" data-handle="' + hooks.esc(handle) + '">' +
       '<div class="shorts-stage">' + body +
-      '<div class="shorts-meta">' + badge + viewers +
+      '<div class="shorts-meta">' + badge + recBadge + viewers +
       '<div><a class="shorts-author" href="' + hooks.esc(appProfile) + '">@' + hooks.esc(handle) + "</a></div>" +
       (row && row.title ? '<p class="shorts-caption">' + hooks.esc(row.title) + "</p>" : "") +
+      savedNote +
       (on ? '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a>" : "") +
       "</div>" +
       (avatar ? '<a class="shorts-ava" style="position:absolute;right:12px;bottom:96px;z-index:2" href="' + hooks.esc(appProfile) + '">' + hooks.avatar(avatar, handle) + "</a>" : "") +
@@ -721,7 +767,8 @@
     if (!feed || !onLiveRoute()) return;
     var rows = liveRows();
     var key = rows.map(function (row) {
-      return [row.handle, row.live ? 1 : 0, row.viewers || 0, row.lastLiveAt || "", row.title || ""].join("\n");
+      var rec = row.record || {};
+      return [row.handle, row.live ? 1 : 0, row.viewers || 0, row.lastLiveAt || "", row.title || "", rec.state || "", rec.key || "", rec.quality || "", rec.parts || 0].join("\n");
     }).join("\n");
     if (key === livePaintKey && feed.querySelector(".shorts-slide")) return;
     livePaintKey = key;
@@ -980,6 +1027,81 @@
     }
     if (!steps.length) return Promise.reject(new Error("none"));
     return next();
+  }
+
+  function openSaved(handle) {
+    handle = String(handle || "");
+    var rec = recordOf(handle);
+    if (!handle || !rec || rec.state !== "saved" || !rec.key) return;
+    closeLive();
+    var token = liveToken;
+    var parts = Math.max(1, Number(rec.parts) || 1);
+    var part = 1;
+    var profile = "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live";
+    var avatar = avatarFor(handle, liveStatus(handle) || {});
+    var root = document.createElement("div");
+    root.id = "shorts-live-player";
+    root.className = "shorts-live-player";
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-modal", "true");
+    root.setAttribute("data-handle", handle);
+    root.setAttribute("data-mode", "saved");
+    root.innerHTML = '<div class="shorts-live-stage">' +
+      '<video playsinline webkit-playsinline autoplay muted></video>' +
+      '<div class="shorts-live-cover">' +
+      (avatar ? '<img alt="" src="' + hooks.esc(avatar) + '" referrerpolicy="no-referrer">' : "") +
+      '<p class="shorts-live-note"></p>' +
+      '<a hidden target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a>" +
+      "</div></div>" +
+      '<div class="shorts-live-hud"><button type="button" data-shorts="close-live" aria-label="' + hooks.esc(tr("Close")) + '">×</button>' +
+      '<span class="shorts-live-tag">' + hooks.esc(tr("Saved")) + "</span>" +
+      '<span class="shorts-live-q"></span>' +
+      '<button type="button" data-shorts="mute" aria-label="' + hooks.esc(sound ? tr("Mute") : tr("Unmute")) + '">' + hooks.icon(sound ? "vol" : "volOff") + "</button></div>" +
+      '<div class="shorts-live-foot"><b>@' + hooks.esc(handle) + "</b></div>";
+    document.body.appendChild(root);
+    document.documentElement.classList.add("shorts-live-open");
+    bindZoom(root);
+    var video = root.querySelector("video");
+    video.addEventListener("playing", function () {
+      if (token !== liveToken) return;
+      var cover = root.querySelector(".shorts-live-cover");
+      if (cover) cover.hidden = true;
+    });
+    video.addEventListener("ended", function () {
+      if (token !== liveToken) return;
+      if (part < parts) playPart(part + 1);
+    });
+    root.addEventListener("click", function (event) {
+      var button = event.target.closest ? event.target.closest("[data-shorts]") : null;
+      if (!button) return;
+      var kind = button.getAttribute("data-shorts");
+      if (kind === "close-live") {
+        event.preventDefault();
+        closeLive();
+      } else if (kind === "mute") {
+        event.preventDefault();
+        sound = !sound;
+        syncMute(button);
+      }
+    });
+    var quality = root.querySelector(".shorts-live-q");
+    if (quality) {
+      var bits = [];
+      var label = qualityLabel(rec.quality);
+      if (label) bits.push(label);
+      if (rec.qualityNote) bits.push(tr("Best available"));
+      quality.textContent = bits.join(" · ");
+    }
+    function playPart(next) {
+      part = next;
+      var key = String(rec.key || "").replace(/\/\d+$/, "") + "/" + part;
+      playHls(video, tgUrl(key) + "/index.m3u8", true, true, false, true).catch(function (err) {
+        if (token !== liveToken) return;
+        console.error("live playback", err && err.message ? err.message : err);
+        showLiveMessage(handle, tr("Couldn't play this live"), false);
+      });
+    }
+    playPart(1);
   }
 
   function closeLive() {
@@ -1271,6 +1393,11 @@
       openLive((slideEl && slideEl.getAttribute("data-handle")) || "");
       return;
     }
+    if (kind === "saved") {
+      event.preventDefault();
+      openSaved((slideEl && slideEl.getAttribute("data-handle")) || "");
+      return;
+    }
     if (kind === "mute") {
       sound = !sound;
       if (video) video.muted = !sound;
@@ -1546,10 +1673,12 @@
       Promise.all([pull(), loadAccounts()]).then(function () {
         accountsLoaded = true;
         paintLive();
+        refreshRecordings();
         liveRows().forEach(function (row) { if (row && row.handle) refreshLive(row.handle); });
       });
       poll = setInterval(function () {
         if (document.visibilityState !== "visible") return;
+        refreshRecordings();
         liveRows().forEach(function (row) {
           if (row && row.live && row.handle) refreshStats(row.handle, row.roomId);
         });

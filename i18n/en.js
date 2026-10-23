@@ -871,5 +871,14 @@ SI18n.addPack("en", {
   "Live ended": "Live ended",
   "TikTok health": "TikTok health",
   "No recent blocks.": "No recent blocks.",
-  "Backing off until {time}": "Backing off until {time}"
+  "Backing off until {time}": "Backing off until {time}",
+  "Recording ({n} of {cap})": "Recording ({n} of {cap})",
+  "Queued": "Queued",
+  "Best available": "Best available",
+  "Backup channels": "Backup channels",
+  "Add a backup channel": "Add a backup channel",
+  "The same bot posts there. Lives are spread across these channels.": "The same bot posts there. Lives are spread across these channels.",
+  "{count} extra channels": "{count} extra channels",
+  "That channel id was not saved.": "That channel id was not saved.",
+  "Remove {channel}": "Remove {channel}"
 });

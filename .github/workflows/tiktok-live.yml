@@ -4,15 +4,51 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/tiktok_record.py"
+      - "scripts/tiktok_sync.py"
+      - "shared/tiktok-live.js"
+      - ".github/workflows/tiktok-live.yml"
+      - ".github/workflows/tiktok-record.yml"
+      - ".github/workflows/tiktok-live-upload.yml"
 
 permissions:
   contents: read
+  actions: write
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('tiktok-live-pr-{0}', github.event.pull_request.number) || 'tiktok-live-poll' }}
+  cancel-in-progress: false
 
 jobs:
-  live:
+  selftest:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Self-test
+        run: python3 scripts/tiktok_record.py --selftest
+
+  live:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
 
       - name: Refresh live status
         env:
@@ -33,3 +69,12 @@ jobs:
             exit 0
           fi
           python3 scripts/tiktok_sync.py --live-only
+
+      - name: Plan recordings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TIKTOK_RECORD_CAP: "12"
+        run: python3 scripts/tiktok_record.py --plan --dispatch
