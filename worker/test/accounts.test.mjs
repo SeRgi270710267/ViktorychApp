@@ -252,6 +252,43 @@ test("the owner session receives owner-only posts", async () => {
   assert.equal(full.body.posts.some((post) => post.platform === "tiktok"), true);
 });
 
+test("discord pages require a session and answer 304", async () => {
+  const doc = { messages: [{ id: "9", platform: "tiktok", text: "keep-discord" }], older: false };
+  await bindings.DATA.put("discord/messages/42.json", JSON.stringify(doc));
+  await bindings.DATA.put("discord/messages/42/p/1.json", JSON.stringify({ messages: [{ id: "1", text: "older" }], older: false }));
+  const closed = await call("/v1/data/discord/messages/42.json", { ip: "203.0.113.140" });
+  assert.equal(closed.status, 401);
+  const user = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.141",
+    body: { displayName: "Discord Reader", handle: "dreader" }
+  });
+  assert.equal(user.status, 201);
+  const res = await mf.dispatchFetch("https://accounts.test/v1/data/discord/messages/42.json", {
+    headers: {
+      "CF-Connecting-IP": "203.0.113.142",
+      Authorization: "Bearer " + user.body.token
+    }
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200);
+  assert.equal(text.includes("keep-discord"), true);
+  assert.match(res.headers.get("etag") || "", /"/);
+  assert.match(res.headers.get("cache-control") || "", /stale-while-revalidate/);
+  const again = await mf.dispatchFetch("https://accounts.test/v1/data/discord/messages/42.json", {
+    headers: {
+      "CF-Connecting-IP": "203.0.113.143",
+      Authorization: "Bearer " + user.body.token,
+      "If-None-Match": res.headers.get("etag")
+    }
+  });
+  assert.equal(again.status, 304);
+  assert.equal(await again.text(), "");
+  const page = await call("/v1/data/discord/messages/42/p/1.json", { ip: "203.0.113.144", token: user.body.token });
+  assert.equal(page.status, 200);
+  assert.equal(page.body.messages[0].id, "1");
+});
+
 test("a worker without a pepper is not ready", async () => {
   const bare = new Miniflare(workerOptions({ ACCOUNT_PEPPER: "" }));
   try {

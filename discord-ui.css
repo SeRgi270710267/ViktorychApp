@@ -719,3 +719,25 @@ body:has(.dmsgs) .fab { display: none; }
     padding-top: env(safe-area-inset-top);
   }
 }
+.dmsgs-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.dmsgs-skel span {
+  display: block;
+  height: 46px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  animation: dmsgs-skel 1.1s ease-in-out infinite;
+}
+.dmsgs-skel span:nth-child(2) { width: 86%; animation-delay: .1s; }
+.dmsgs-skel span:nth-child(3) { width: 72%; animation-delay: .2s; }
+.dmsgs-skel span:nth-child(4) { width: 58%; animation-delay: .3s; }
+@keyframes dmsgs-skel {
+  50% { opacity: .45; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dmsgs-skel span { animation: none; }
+}

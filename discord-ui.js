@@ -19,6 +19,9 @@
   const SEEN_KEY = "viktorychapp-discord-seen-v1";
   const PREFS_KEY = "viktorychapp-discord-prefs-v1";
   const SCROLL_KEY = "viktorychapp-discord-scroll-v1";
+  const INDEX_KEY = "viktorychapp-discord-index-v1";
+  const DOC_DB = "viktorych-discord";
+  const DOC_STORE = "docs";
 
   function readStore(store, name) {
     try {
@@ -152,7 +155,12 @@
     listHold: null,
     winHold: null,
     scrollLock: false,
-    holding: false
+    holding: false,
+    olderNext: {},
+    olderLoading: {},
+    olderGot: {},
+    net: {},
+    warmed: false
   };
 
   function copyChannel(ch, serverId) {
@@ -317,7 +325,7 @@
     let text = String(raw || "").replace(/\u0000/g, "").slice(0, 4000);
     text = text.replace(/<(a?):([A-Za-z0-9_]{2,32}):(\d{1,22})>/g, function (_m, anim, name, id) {
       const ext = anim === "a" ? "gif" : "png";
-      return hold('<img class="dmsg-emoji" alt=":' + esc(name) + ':" src="https://cdn.discordapp.com/emojis/' + id + "." + ext + '" referrerpolicy="no-referrer">');
+      return hold('<img class="dmsg-emoji" alt=":' + esc(name) + ':" src="https://cdn.discordapp.com/emojis/' + id + "." + ext + '" loading="lazy" decoding="async" referrerpolicy="no-referrer">');
     });
     text = text.replace(/```([\s\S]*?)```/g, function (_m, code) {
       return hold('<pre class="dmsg-code">' + esc(code) + "</pre>");
@@ -377,7 +385,7 @@
       if (inCode) return part;
       return part.replace(/:([A-Za-z0-9_]{2,32}):/g, function (whole, name) {
         if (!map[name]) return whole;
-        return '<img class="dmsg-emoji" alt=":' + esc(name) + ':" src="' + esc(map[name]) + '" referrerpolicy="no-referrer">';
+        return '<img class="dmsg-emoji" alt=":' + esc(name) + ':" src="' + esc(map[name]) + '" loading="lazy" decoding="async" referrerpolicy="no-referrer">';
       });
     }).join("");
   }
@@ -602,7 +610,7 @@
     const mode = faceMode(row.avatar);
     if (mode === "none") return '<span class="ava-none"></span>';
     if (mode === "default" || !row.avatar) return silhouetteHtml("dmsg-ava ava");
-    return '<img class="dmsg-ava" src="' + esc(row.avatar) + '" alt="" referrerpolicy="no-referrer">';
+    return '<img class="dmsg-ava" src="' + esc(row.avatar) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">';
   }
 
   function mediaHtml(row) {
@@ -611,10 +619,10 @@
       if (!url) return "";
       const dims = (item.w ? ' width="' + item.w + '"' : "") + (item.h ? ' height="' + item.h + '"' : "");
       if (item.type === "video") {
-        return '<video class="dmsg-video" controls preload="metadata" src="' + esc(url) + '"' + dims + "></video>";
+        return '<video class="dmsg-video" controls preload="none" src="' + esc(url) + '"' + dims + "></video>";
       }
       const alt = esc(item.alt || "");
-      return '<a class="dmsg-shot" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><img src="' + esc(url) + '" alt="' + alt + '"' + dims + ' referrerpolicy="no-referrer"></a>';
+      return '<a class="dmsg-shot" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer"><img src="' + esc(url) + '" alt="' + alt + '"' + dims + ' loading="lazy" decoding="async" referrerpolicy="no-referrer"></a>';
     }).join("");
   }
 
@@ -632,14 +640,14 @@
         (site ? '<div class="dmsg-embed-site">' + site + "</div>" : "") +
         (titleHtml ? '<div class="dmsg-embed-title">' + titleHtml + "</div>" : "") +
         (desc ? '<div class="dmsg-embed-desc">' + desc + "</div>" : "") +
-        (image ? '<img src="' + esc(image) + '" alt="" referrerpolicy="no-referrer">' : "") +
+        (image ? '<img src="' + esc(image) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">' : "") +
         "</div>";
     }).join("");
   }
 
   function reactionHtml(row) {
     const pills = (row.reactions || []).slice(0, 20).map(function (rx) {
-      const face = rx.url ? '<img src="' + esc(rx.url) + '" alt="' + esc(rx.e) + '">' : esc(rx.e);
+      const face = rx.url ? '<img src="' + esc(rx.url) + '" alt="' + esc(rx.e) + '" loading="lazy" decoding="async">' : esc(rx.e);
       return '<span class="dmsg-rx">' + face + "<span>" + esc(String(rx.n)) + "</span></span>";
     }).join("");
     return pills ? '<div class="dmsg-rxs">' + pills + "</div>" : "";
@@ -649,8 +657,11 @@
     const rows = messagesFor(channelId).slice().reverse();
     if (!rows.length) {
       const waiting = state.loading[channelId] && !state.fixture;
-      const title = waiting ? tr("Loading messages") : (state.paused ? tr("Discord paused") : tr("No messages yet"));
-      const body = waiting ? tr("Reading the saved transcript.") : (state.paused ? tr("Saved messages stay here. New reads wait until the account can see the server again.") : tr("The next sync reads the latest 50. This view keeps a rolling window of 300."));
+      if (waiting) {
+        return '<div class="dmsgs-skel" aria-busy="true" aria-label="' + esc(tr("Loading messages")) + '"><span></span><span></span><span></span><span></span></div>';
+      }
+      const title = state.paused ? tr("Discord paused") : tr("No messages yet");
+      const body = state.paused ? tr("Saved messages stay here. New reads wait until the account can see the server again.") : tr("The next sync reads the latest 50. This view keeps a rolling window of 300.");
       return '<div class="dmsgs-placeholder"><h2>' + title + "</h2><p>" + esc(body) + "</p></div>";
     }
     const byId = new Map();
@@ -1014,7 +1025,7 @@
     const time = !state.paused && latest ? formatShort(msgTime(latest.row)) : "";
     const badge = !muted && count ? '<span class="dmsgs-badge" aria-label="' + count + ' unread">' + (count > 99 ? "99+" : String(count)) + "</span>" : "";
     const icon = server.icon
-      ? '<img src="' + esc(server.icon) + '" alt="" referrerpolicy="no-referrer">'
+      ? '<img src="' + esc(server.icon) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">'
       : "<span>" + esc(initials(server.name)) + "</span>";
     return '<section class="dmsgs-srv' + (open ? " open" : "") + (muted ? " muted" : "") + (pinned ? " pinned" : "") + '" data-server="' + esc(server.id) + '" data-name="' + esc(server.name) + '">' +
       '<div class="dmsgs-srv-row">' +
@@ -1130,6 +1141,8 @@
         if (prev.pinsForbidden) ch.pinsForbidden = true;
         if (prev.inaccessible) ch.inaccessible = true;
       });
+    } else if (!state.fixture) {
+      warmCache();
     }
     ensureLoad();
     const id = route && snowflake(route.channel);
@@ -1168,21 +1181,26 @@
       markSeen(state.open);
       updateDots();
     }
+    if (log.scrollTop < 120 && state.open && !state.fixture) loadOlder(state.open);
   }
 
-  function repaintLog() {
+  function repaintLog(mode) {
     const log = document.querySelector(".dmsgs-log");
     if (!log || !state.open) return;
     const list = listEl();
     const listTop = list ? list.scrollTop : 0;
-    const near = nearBottom(log) || state.stick;
+    const near = mode === "keep" ? false : (nearBottom(log) || state.stick);
+    const prevHeight = log.scrollHeight;
+    const prevTop = log.scrollTop;
     const rows = messagesFor(state.open).slice().reverse();
     const have = Array.prototype.map.call(log.querySelectorAll(".dmsg[data-mid]"), function (el) { return el.getAttribute("data-mid"); });
     const want = rows.map(function (row) { return row.id; });
     const same = have.join(",") === want.join(",");
     if (!same) log.innerHTML = logInner(state.open);
     state.scrollLock = true;
-    if (near) {
+    if (mode === "keep") {
+      log.scrollTop = prevTop + (log.scrollHeight - prevHeight);
+    } else if (near) {
       log.scrollTop = log.scrollHeight;
       markSeen(state.open);
     }
@@ -1630,32 +1648,255 @@
     });
   }
 
+  function docPathOk(path) {
+    return /^discord\/(?:index|state|messages\/\d{1,22}(?:\/p\/\d{1,4})?|pins\/\d{1,22})\.json$/.test(String(path || ""));
+  }
+
+  function accountsBase() {
+    try {
+      const host = typeof window !== "undefined" ? window : null;
+      const api = host && host.VIKTORYCH_ACCOUNTS && host.VIKTORYCH_ACCOUNTS.api;
+      return String(api || "").replace(/\/$/, "");
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function accountsToken() {
+    try {
+      const host = typeof window !== "undefined" ? window : null;
+      const accounts = host && host.ViktorychAccounts;
+      return accounts && accounts.token ? String(accounts.token() || "") : "";
+    } catch (err) {
+      return "";
+    }
+  }
+
+  function docDb() {
+    return new Promise(function (resolve) {
+      if (typeof indexedDB === "undefined") { resolve(null); return; }
+      let request;
+      try { request = indexedDB.open(DOC_DB, 1); }
+      catch (err) { resolve(null); return; }
+      request.onupgradeneeded = function () {
+        const db = request.result;
+        if (db && !db.objectStoreNames.contains(DOC_STORE)) db.createObjectStore(DOC_STORE);
+      };
+      request.onsuccess = function () { resolve(request.result || null); };
+      request.onerror = function () { resolve(null); };
+    });
+  }
+
+  function cacheGet(path) {
+    return docDb().then(function (db) {
+      if (!db) return null;
+      return new Promise(function (resolve) {
+        try {
+          const request = db.transaction(DOC_STORE, "readonly").objectStore(DOC_STORE).get(path);
+          request.onsuccess = function () { resolve(request.result || null); };
+          request.onerror = function () { resolve(null); };
+        } catch (err) { resolve(null); }
+      });
+    });
+  }
+
+  function cachePut(path, row) {
+    return docDb().then(function (db) {
+      if (!db) return;
+      return new Promise(function (resolve) {
+        try {
+          const tx = db.transaction(DOC_STORE, "readwrite");
+          tx.objectStore(DOC_STORE).put(row, path);
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function () { resolve(); };
+        } catch (err) { resolve(); }
+      });
+    });
+  }
+
+  function fetchDoc(path, etag) {
+    const headers = { Accept: "application/json" };
+    if (etag) headers["If-None-Match"] = etag;
+    const same = function () {
+      return fetch(path, { cache: "no-cache", headers: headers });
+    };
+    const api = accountsBase();
+    const token = accountsToken();
+    if (!api || !token) return same();
+    return fetch(api + "/v1/data/" + path, {
+      cache: "no-store",
+      headers: Object.assign({ Authorization: "Bearer " + token }, headers)
+    }).then(function (res) {
+      if (res && (res.status === 200 || res.status === 304)) return res;
+      return same();
+    }, function () { return same(); });
+  }
+
+  function loadDoc(path, onBody) {
+    if (!docPathOk(path) || typeof fetch !== "function") return Promise.resolve(null);
+    return cacheGet(path).then(function (cached) {
+      const stale = cached && cached.body && typeof cached.body === "object" ? cached.body : null;
+      if (stale) onBody(stale, false);
+      return fetchDoc(path, cached && cached.etag).then(function (res) {
+        if (!res || res.status === 304) {
+          onBody(stale, true);
+          return stale;
+        }
+        if (!res.ok) {
+          onBody(stale, true);
+          return stale;
+        }
+        return res.json().then(function (doc) {
+          if (!doc || typeof doc !== "object") {
+            onBody(stale, true);
+            return stale;
+          }
+          const tag = res.headers && res.headers.get ? (res.headers.get("ETag") || "") : "";
+          cachePut(path, { body: doc, etag: tag, saved: Date.now() });
+          onBody(doc, true);
+          return doc;
+        });
+      });
+    }).catch(function () {
+      onBody(null, true);
+      return null;
+    });
+  }
+
+  function rememberIndex(index) {
+    if (!index || typeof index !== "object") return;
+    try { localStorage.setItem(INDEX_KEY, JSON.stringify(index)); }
+    catch (err) { /* private mode can refuse */ }
+  }
+
+  function warmCache() {
+    if (state.warmed || state.fixture || state.holdServers) return;
+    state.warmed = true;
+    let index = null;
+    try { index = JSON.parse(readLocal(INDEX_KEY) || "null"); }
+    catch (err) { index = null; }
+    if (!index || !Array.isArray(index.servers) || !index.servers.length) return;
+    applyConfig(index.servers);
+    applyIndex(index);
+  }
+
+  function mergeHot(id, doc) {
+    const incoming = Array.isArray(doc.messages) ? doc.messages : [];
+    const prev = state.files[id] || { messages: [], authors: {} };
+    const authors = Object.assign({}, prev.authors || {}, doc.authors || {});
+    const bucket = new Map();
+    if (doc.older) {
+      let oldest = "";
+      incoming.forEach(function (row) {
+        const mid = snowflake(row && row.id);
+        if (!mid) return;
+        if (!oldest || cmpId(mid, oldest) < 0) oldest = mid;
+      });
+      (prev.messages || []).forEach(function (row) {
+        const mid = snowflake(row && row.id);
+        if (mid && oldest && cmpId(mid, oldest) < 0) bucket.set(mid, row);
+      });
+    }
+    incoming.forEach(function (row) {
+      const mid = snowflake(row && row.id);
+      if (mid) bucket.set(mid, row);
+    });
+    const messages = Array.from(bucket.values());
+    messages.sort(function (a, b) { return cmpId(b.id, a.id); });
+    state.files[id] = { messages: messages.slice(0, WINDOW), authors: authors, older: !!doc.older };
+    state.olderNext[id] = doc.older ? (state.olderNext[id] || 1) : 0;
+  }
+
+  function mergeOlder(id, doc) {
+    const prev = state.files[id] || { messages: [], authors: {} };
+    const authors = Object.assign({}, prev.authors || {}, doc.authors || {});
+    const bucket = new Map();
+    (prev.messages || []).forEach(function (row) {
+      const mid = snowflake(row && row.id);
+      if (mid) bucket.set(mid, row);
+    });
+    (doc.messages || []).forEach(function (row) {
+      const mid = snowflake(row && row.id);
+      if (mid) bucket.set(mid, row);
+    });
+    const messages = Array.from(bucket.values());
+    messages.sort(function (a, b) { return cmpId(b.id, a.id); });
+    state.files[id] = { messages: messages.slice(0, WINDOW), authors: authors, older: true };
+  }
+
+  function paintChannel(id) {
+    if (state.open !== id || typeof document === "undefined") return;
+    rememberList();
+    repaintLog();
+    bindLog();
+    restoreList();
+  }
+
+  function applyOlder(id, pageNo, doc) {
+    const log = typeof document !== "undefined" ? document.querySelector(".dmsgs-log") : null;
+    const before = log ? log.scrollHeight : 0;
+    const prevTop = log ? log.scrollTop : 0;
+    mergeOlder(id, doc);
+    state.olderGot[id] = state.olderGot[id] || {};
+    state.olderGot[id][pageNo] = true;
+    state.olderNext[id] = doc.older ? pageNo + 1 : 0;
+    if (state.open !== id || !log) return;
+    repaintLog("keep");
+    const next = document.querySelector(".dmsgs-log");
+    if (!next) return;
+    state.scrollLock = true;
+    next.scrollTop = prevTop + (next.scrollHeight - before);
+    state.scrollLock = false;
+  }
+
+  function loadOlder(id) {
+    const pageNo = state.olderNext[id] || 0;
+    if (!pageNo || state.olderLoading[id] || state.fixture || typeof fetch !== "function") return;
+    const path = "discord/messages/" + id + "/p/" + pageNo + ".json";
+    if (!docPathOk(path)) return;
+    state.olderLoading[id] = true;
+    loadDoc(path, function (doc, fresh) {
+      if (!fresh) {
+        if (doc && Array.isArray(doc.messages) && doc.messages.length) applyOlder(id, pageNo, doc);
+        return;
+      }
+      state.olderLoading[id] = false;
+      if (!doc || !Array.isArray(doc.messages) || !doc.messages.length) {
+        if (!state.olderGot[id] || !state.olderGot[id][pageNo]) state.olderNext[id] = 0;
+        return;
+      }
+      applyOlder(id, pageNo, doc);
+    });
+  }
+
+  function takePins(id, doc) {
+    const ch = channelById(id);
+    const forbidden = !!(doc && doc.forbidden);
+    const pins = [];
+    ((doc && doc.pins) || []).forEach(function (row) {
+      const mid = snowflake(row && row.id);
+      if (!mid) return;
+      pins.push({
+        id: mid,
+        author: String((row && row.author) || tr("Someone")).slice(0, 80),
+        text: String((row && row.text) || "").slice(0, 180),
+        date: String((row && row.date) || "").slice(0, 40)
+      });
+    });
+    pins.sort(function (a, b) { return cmpId(b.id, a.id); });
+    state.pinFiles[id] = { forbidden: forbidden, pins: pins };
+    if (ch) ch.pinsForbidden = forbidden;
+  }
+
   function ensurePins(id) {
     const ch = channelById(id);
     if (!ch || ch.mode !== "messages" || state.fixture || state.pinFiles[id] || state.pinLoading[id]) return;
     if (typeof fetch !== "function") return;
     state.pinLoading[id] = true;
-    fetch("discord/pins/" + id + ".json", { cache: "no-cache" }).then(function (res) {
-      return res && res.ok ? res.json() : { pins: [] };
-    }).then(function (doc) {
-      const forbidden = !!(doc && doc.forbidden);
-      const pins = [];
-      ((doc && doc.pins) || []).forEach(function (row) {
-        const mid = snowflake(row && row.id);
-        if (!mid) return;
-        pins.push({
-          id: mid,
-          author: String((row && row.author) || tr("Someone")).slice(0, 80),
-          text: String((row && row.text) || "").slice(0, 180),
-          date: String((row && row.date) || "").slice(0, 40)
-        });
-      });
-      pins.sort(function (a, b) { return cmpId(b.id, a.id); });
-      state.pinFiles[id] = { forbidden: forbidden, pins: pins };
-      if (ch) ch.pinsForbidden = forbidden;
-    }).catch(function () {
-      state.pinFiles[id] = { forbidden: false, pins: [] };
-    }).then(function () {
+    loadDoc("discord/pins/" + id + ".json", function (doc, fresh) {
+      if (!doc && !fresh) return;
+      takePins(id, doc || { pins: [] });
+      if (!fresh) return;
       state.pinLoading[id] = false;
       if (state.open === id || state.pinsOpen === id) {
         rememberList();
@@ -1667,22 +1908,17 @@
 
   function ensureChannel(id) {
     const ch = channelById(id);
-    if (!ch || ch.mode !== "messages" || state.files[id] || state.loading[id]) return;
+    if (!ch || ch.mode !== "messages" || state.fixture || state.net[id]) return;
     if (typeof fetch !== "function") return;
-    state.loading[id] = true;
-    fetch(ch.file || ("discord/messages/" + id + ".json"), { cache: "no-cache" }).then(function (res) {
-      return res && res.ok ? res.json() : null;
-    }).then(function (doc) {
-      state.files[id] = doc && typeof doc === "object" ? doc : { messages: [], authors: {} };
-    }).catch(function () {
-      state.files[id] = { messages: [], authors: {} };
-    }).then(function () {
-      state.loading[id] = false;
-      if (state.open !== id) return;
-      rememberList();
-      repaintLog();
-      bindLog();
-      restoreList();
+    const path = ch.file && docPathOk(ch.file) ? ch.file : ("discord/messages/" + id + ".json");
+    if (!docPathOk(path)) return;
+    state.net[id] = true;
+    if (!state.files[id]) state.loading[id] = true;
+    loadDoc(path, function (doc, fresh) {
+      if (doc && Array.isArray(doc.messages)) mergeHot(id, doc);
+      else if (fresh && !state.files[id]) state.files[id] = { messages: [], authors: {} };
+      if (doc || fresh) state.loading[id] = false;
+      if (state.open === id && (doc || fresh)) paintChannel(id);
     });
   }
 
@@ -1695,13 +1931,13 @@
     catch (err) { return; }
     pending.then(function (res) { return res && res.ok ? res.json() : null; }).then(function (doc) {
       if (doc && Array.isArray(doc.discord)) applyConfig(doc.discord);
-      let index;
-      try { index = fetch("discord/index.json", { cache: "no-cache" }); }
-      catch (err) { index = Promise.resolve(null); }
-      return index.then(function (res) { return res && res.ok ? res.json() : null; }).catch(function () { return null; });
-    }).then(function (index) {
-      if (index) applyIndex(index);
-      if (onMessages()) refreshInbox();
+      return loadDoc("discord/index.json", function (index, fresh) {
+        if (index) {
+          applyIndex(index);
+          rememberIndex(index);
+        }
+        if ((index || fresh) && onMessages()) refreshInbox();
+      });
     }).catch(function () {});
   }
 

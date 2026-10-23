@@ -9,8 +9,10 @@ account cannot see is recorded as inaccessible and does not stop the process.
 A 401, a captcha, a verification challenge, or a 403 on the guild read stops
 the process and opens one GitHub issue. A later guild read closes that issue.
 New messages go to the server's ntfy topic as
-JSON the Messages page already accepts. About every 10 minutes the newest
-history per channel is written under discord/ and deployed with the site.
+JSON the Messages page already accepts. About every 10 minutes each channel
+is written as a newest page of 50 plus older pages, uploaded to R2, and
+deployed with the site. The Worker cron starts this job when none is running.
+The GitHub schedule is only the backup.
 
 The token is never printed. A missing DISCORD_USER_TOKEN exits 0 after
 writing ``waiting for token``.
@@ -25,6 +27,7 @@ import signal
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -277,27 +280,40 @@ class Board:
             self.cursor[channel_id] = kept[0]
         return fresh
 
+    def _absorb(self, channel_id: str, data: dict) -> None:
+        people = self.authors.setdefault(channel_id, {})
+        authors = data.get("authors") if isinstance(data.get("authors"), dict) else {}
+        for key, value in authors.items():
+            if key and isinstance(value, dict):
+                people[str(key)] = value
+        bucket = self.messages.setdefault(channel_id, {})
+        for row in data.get("messages") or []:
+            if isinstance(row, dict) and snowflake(row.get("id")):
+                bucket[str(row["id"])] = row
+
     def load_dir(self, root: Path) -> None:
         folder = root / "discord" / "messages"
         if not folder.is_dir():
             return
-        for path in folder.glob("*.json"):
-            channel_id = snowflake(path.stem)
-            if not channel_id:
+        paths = list(folder.glob("*.json"))
+        paths.extend(folder.glob("*/p/*.json"))
+        seen = set()
+        for path in paths:
+            channel_id = snowflake(path.stem if path.parent.name != "p" else path.parent.parent.name)
+            if not channel_id or path in seen:
                 continue
+            seen.add(path)
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 continue
-            if not isinstance(data, dict):
-                continue
-            self.authors[channel_id] = data.get("authors") if isinstance(data.get("authors"), dict) else {}
-            for row in data.get("messages") or []:
-                if isinstance(row, dict) and snowflake(row.get("id")):
-                    self.messages.setdefault(channel_id, {})[row["id"]] = row
-            rows = self.rows(channel_id)
-            if rows:
-                self.cursor[channel_id] = rows[0]["id"]
+            if isinstance(data, dict):
+                self._absorb(channel_id, data)
+        for channel_id in list(self.messages):
+            kept = self.rows(channel_id)
+            self.messages[channel_id] = {row["id"]: row for row in kept}
+            if kept:
+                self.cursor[channel_id] = kept[0]["id"]
 
     def rows(self, channel_id: str) -> list:
         bucket = self.messages.get(channel_id) or {}
@@ -431,6 +447,57 @@ def _kept_pin_blocks(root: Path) -> dict:
     return flags
 
 
+def _authors_for(rows: list, authors: dict) -> dict:
+    used = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("author") or "")
+        if key and key in authors and key not in used:
+            used[key] = authors[key]
+    return used
+
+
+def _page_body(server: dict, channel: dict, rows: list, authors: dict, fetched: str, older: bool) -> dict:
+    payload = {
+        "platform": "discord",
+        "guildId": server["id"],
+        "channelId": channel["id"],
+        "name": channel["name"],
+        "fetchedAt": fetched,
+        "older": bool(older),
+        "authors": _authors_for(rows, authors),
+        "messages": rows,
+    }
+    if channel.get("category"):
+        payload["category"] = channel["category"]
+    return payload
+
+
+def _write_channel(root: Path, server: dict, channel: dict, board: Board, fetched: str, token: str) -> None:
+    cid = channel["id"]
+    rows = board.rows(cid)
+    authors = board.authors.get(cid) or {}
+    hot = rows[:PAGE]
+    rest = rows[PAGE:]
+    chunks = [rest[index:index + PAGE] for index in range(0, len(rest), PAGE)]
+    _write_json(
+        root / "discord" / "messages" / f"{cid}.json",
+        _page_body(server, channel, hot, authors, fetched, bool(chunks)),
+        token,
+    )
+    folder = root / "discord" / "messages" / cid / "p"
+    keep = set()
+    for number, chunk in enumerate(chunks, start=1):
+        name = f"{number}.json"
+        keep.add(name)
+        _write_json(folder / name, _page_body(server, channel, chunk, authors, fetched, number < len(chunks)), token)
+    if folder.is_dir():
+        for path in folder.glob("*.json"):
+            if path.name not in keep:
+                path.unlink()
+
+
 def write_tree(root: Path, server: dict, board: Board, icon: str, members, online: str, status: str, detail: str, token: str) -> None:
     fetched = iso_now()
     blocked = _kept_pin_blocks(root)
@@ -444,18 +511,7 @@ def write_tree(root: Path, server: dict, board: Board, icon: str, members, onlin
         if blocked.get(channel["id"]):
             entry["pinsForbidden"] = True
         channels.append(entry)
-        payload = {
-            "platform": "discord",
-            "guildId": server["id"],
-            "channelId": channel["id"],
-            "name": channel["name"],
-            "fetchedAt": fetched,
-            "authors": board.authors.get(channel["id"]) or {},
-            "messages": board.rows(channel["id"]),
-        }
-        if channel.get("category"):
-            payload["category"] = channel["category"]
-        _write_json(root / "discord" / "messages" / f"{channel['id']}.json", payload, token)
+        _write_channel(root, server, channel, board, fetched, token)
     index = {
         "fetchedAt": fetched,
         "status": status,
@@ -491,6 +547,144 @@ def header(client: Client, server: dict):
     return profile.get("avatar") or "", profile.get("followers"), profile.get("online")
 
 
+def _cf_env() -> tuple[str, str]:
+    token = (os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
+    account = (os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "").strip()
+    return token, account
+
+
+def r2_get(key: str) -> bytes | None:
+    token, account = _cf_env()
+    if not token or not account or not key or ".." in key:
+        return None
+    quoted = urllib.parse.quote(key, safe="/")
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/viktorych-data/objects/{quoted}"
+    request = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            if getattr(response, "status", 200) != 200:
+                return None
+            return response.read()
+    except urllib.error.HTTPError:
+        return None
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return None
+
+
+def r2_put(key: str, payload: bytes) -> bool:
+    token, account = _cf_env()
+    if not token or not account or not key or ".." in key:
+        return False
+    quoted = urllib.parse.quote(key, safe="/")
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/viktorych-data/objects/{quoted}"
+    request = urllib.request.Request(url, data=payload, method="PUT", headers={
+        "Authorization": "Bearer " + token,
+        "content-type": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(request, timeout=60):
+            return True
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False
+
+
+def r2_json(key: str):
+    blob = r2_get(key)
+    if not blob:
+        return None
+    try:
+        data = json.loads(blob.decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def restore_from(root: Path, token: str, fetch) -> None:
+    """Copy missing Discord files from fetch(key). Existing files stay."""
+    if fetch is None:
+        return
+    dest = root / "discord"
+    index_path = dest / "index.json"
+    index = None
+    if index_path.is_file():
+        try:
+            index = json.loads(index_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            index = None
+    if not isinstance(index, dict):
+        index = fetch("discord/index.json")
+        if isinstance(index, dict):
+            _write_json(index_path, index, token)
+    if not isinstance(index, dict):
+        return
+    state_path = dest / "state.json"
+    if not state_path.is_file():
+        state = fetch("discord/state.json")
+        if isinstance(state, dict):
+            _write_json(state_path, state, token)
+    for server in index.get("servers") or []:
+        if not isinstance(server, dict):
+            continue
+        for channel in server.get("channels") or []:
+            if not isinstance(channel, dict):
+                continue
+            cid = snowflake(channel.get("id"))
+            if not cid:
+                continue
+            hot_path = dest / "messages" / f"{cid}.json"
+            if not hot_path.is_file():
+                hot = fetch(f"discord/messages/{cid}.json")
+                if isinstance(hot, dict):
+                    _write_json(hot_path, hot, token)
+            if not hot_path.is_file():
+                continue
+            try:
+                hot = json.loads(hot_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(hot, dict) or not hot.get("older"):
+                continue
+            for number in range(1, (HISTORY // PAGE) + 1):
+                page_path = dest / "messages" / cid / "p" / f"{number}.json"
+                if page_path.is_file():
+                    try:
+                        current = json.loads(page_path.read_text(encoding="utf-8"))
+                    except (OSError, UnicodeError, json.JSONDecodeError):
+                        current = None
+                    if isinstance(current, dict) and not current.get("older"):
+                        break
+                    continue
+                fetched = fetch(f"discord/messages/{cid}/p/{number}.json")
+                if not isinstance(fetched, dict):
+                    break
+                _write_json(page_path, fetched, token)
+                if not fetched.get("older"):
+                    break
+
+
+def upload_discord(root: Path, token: str) -> None:
+    folder = root / "discord"
+    if not folder.is_dir():
+        return
+    secret = (token or "").strip().encode("utf-8")
+    sent = 0
+    for path in sorted(folder.rglob("*.json")):
+        rel = path.relative_to(root).as_posix()
+        if not rel.startswith("discord/") or ".." in rel:
+            continue
+        try:
+            payload = path.read_bytes()
+        except OSError:
+            continue
+        if secret and secret in payload:
+            print("[discord-live] skipped an R2 upload that contained the token")
+            continue
+        if r2_put(rel, payload):
+            sent += 1
+    if sent:
+        print(f"[discord-live] r2 {sent}")
+
+
 def published_here(path: str):
     if not path or ".." in path or path.startswith("/"):
         return None
@@ -510,6 +704,7 @@ def run(root: Path, server: dict, token: str) -> int:
     signal.signal(signal.SIGINT, _stop)
     try:
         _mirror_published(root, published_here, token)
+        restore_from(root, token, r2_json)
     except Exception as exc:
         print(public_error(exc))
     board = Board()
@@ -635,6 +830,10 @@ def refresh(client, server, board, names, topic, token, guarded) -> None:
 
 
 def deploy(root: Path, token: str) -> None:
+    try:
+        upload_discord(root, token)
+    except Exception as exc:
+        print(public_error(exc))
     try:
         from discord_publish import publish_site
 

@@ -50,8 +50,8 @@ function withCors(request, env, response) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
-  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh");
-  headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type");
+  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match");
+  headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag");
   headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
   return new Response(response.body, { status: response.status, headers });
@@ -733,7 +733,7 @@ async function handleSyncPut(request, env) {
   return json(200, { payload: body.payload, updatedAt: now });
 }
 
-const DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$/;
+const DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^discord\/messages\/\d{1,22}\/p\/\d{1,4}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$/;
 
 function dataKey(pathname) {
   const raw = String(pathname || "").replace(/^\/v1\/data\/?/, "");
@@ -780,6 +780,29 @@ function stripOwnerOnly(value, env) {
   return value;
 }
 
+function etagMatches(header, etag) {
+  const want = String(etag || "").trim();
+  if (!want || !header) return false;
+  return String(header).split(",").some((part) => {
+    const item = part.trim();
+    return item === want || item === "W/" + want || ("W/" + item) === want;
+  });
+}
+
+function discordData(request, object) {
+  const etag = object.httpEtag || (object.etag ? '"' + String(object.etag).replace(/^"|"$/g, "") + '"' : "");
+  const headers = {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "private, max-age=30, stale-while-revalidate=86400",
+    "x-content-type-options": "nosniff"
+  };
+  if (etag) headers.etag = etag;
+  if (etag && etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return Promise.resolve(new Response(null, { status: 304, headers }));
+  }
+  return object.text().then((text) => new Response(text, { status: 200, headers }));
+}
+
 async function handleData(request, env, pathname) {
   const key = dataKey(pathname);
   if (!key) return json(404, { error: "not_found" });
@@ -788,6 +811,7 @@ async function handleData(request, env, pathname) {
   if (!env.DATA) return json(503, { error: "not_configured" });
   const object = await env.DATA.get(key);
   if (!object) return json(404, { error: "not_found" });
+  if (key.indexOf("discord/") === 0) return discordData(request, object);
   const text = await object.text();
   if (row.owner === 1) {
     return new Response(text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
@@ -2127,6 +2151,37 @@ async function dispatchAddedAccounts(env) {
   return dispatchWorkflows(env, ["tiktok-added.yml", "media-extract.yml", "tiktok-live.yml"]);
 }
 
+const DISCORD_BUSY = { in_progress: 1, queued: 1, waiting: 1, pending: 1, requested: 1 };
+
+async function discordLiveBusy(env) {
+  const token = String(env.GITHUB_DISPATCH_TOKEN || "").trim();
+  if (!token) return true;
+  try {
+    const res = await fetch("https://api.github.com/repos/ViktorychGroup/ViktorychApp/actions/workflows/discord-live.yml/runs?per_page=5", {
+      headers: {
+        Authorization: "Bearer " + token,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "viktorych-accounts"
+      }
+    });
+    if (!res.ok) return true;
+    const data = await res.json();
+    const runs = data && Array.isArray(data.workflow_runs) ? data.workflow_runs : [];
+    for (let i = 0; i < runs.length; i++) {
+      if (DISCORD_BUSY[String(runs[i] && runs[i].status || "")]) return true;
+    }
+    return false;
+  } catch (err) {
+    return true;
+  }
+}
+
+async function maybeDispatchDiscord(env) {
+  if (await discordLiveBusy(env)) return false;
+  return dispatchWorkflows(env, ["discord-live.yml"]);
+}
+
 async function requireOwner(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return { error: json(401, { error: "unauthorized" }) };
@@ -2958,5 +3013,10 @@ export default {
     } catch (err) {
       return json(500, { error: "unavailable" });
     }
+  },
+  async scheduled(_event, env, ctx) {
+    const job = maybeDispatchDiscord(env);
+    if (ctx && ctx.waitUntil) ctx.waitUntil(job);
+    else await job;
   }
 };
