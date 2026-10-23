@@ -80,6 +80,7 @@ DATA_KEY = re.compile(
     r"|^(?:live|archive|comments|fallback)/[A-Za-z0-9._-]{1,120}\.json$"
     r"|^discord/(?:index|state)\.json$"
     r"|^discord/(?:messages|pins)/\d{1,22}\.json$"
+    r"|^data/communities/(?:index|[a-z0-9_]{2,21})\.json$"
 )
 ACCOUNT_PREFIXES = (
     "accounts/",

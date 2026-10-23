@@ -4,7 +4,7 @@
 (function () {
   var RETURN_KEY = "viktorychapp-return-v1";
   var PENDING_KEY = "viktorychapp-pending-v1";
-  var DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$/;
+  var DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$/;
   var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
   var profiles = {};
   var profileLoads = {};

@@ -903,5 +903,21 @@ SI18n.addPack("ru", {
   "The same bot posts there. Lives are spread across these channels.": "Тот же бот публикует туда. Эфиры распределяются по этим каналам.",
   "{count} extra channels": "{count} доп. каналов",
   "That channel id was not saved.": "Этот id канала не сохранился.",
-  "Remove {channel}": "Удалить {channel}"
+  "Remove {channel}": "Удалить {channel}",
+  "Communities": "Сообщества",
+  "Reddit": "Reddit",
+  "ViktorychApp": "ViktorychApp",
+  "Only on ViktorychApp": "Только в ViktorychApp",
+  "Add community": "Добавить сообщество",
+  "No communities yet.": "Сообществ пока нет.",
+  "Nothing is sent to Reddit.": "В Reddit ничего не отправляется.",
+  "That community wasn’t found.": "Такое сообщество не найдено.",
+  "Sign in to post here.": "Войдите, чтобы написать здесь.",
+  "Couldn't post.": "Не удалось опубликовать.",
+  "New posts show up after the next sync.": "Новые записи появятся после следующей синхронизации.",
+  "ViktorychApp members": "участники ViktorychApp",
+  "Reddit subscribers": "подписчики Reddit",
+  "Join": "Вступить",
+  "Joined": "Вы вступили",
+  "Removed": "Удалено"
 });

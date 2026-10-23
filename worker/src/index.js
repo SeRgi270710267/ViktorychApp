@@ -6,6 +6,7 @@ import { cleanRepostKey, cleanRepostWrite } from "../../shared/reposts.js";
 import { socialKeysForPost } from "../../shared/social-keys.js";
 import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "./telegram.js";
 import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
+import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -145,7 +146,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_reposts_recent ON account_reposts(public_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_follows (follower_id TEXT NOT NULL, target_id TEXT NOT NULL, snapshot TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, PRIMARY KEY (follower_id, target_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_follows_target ON account_follows(target_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -732,7 +733,7 @@ async function handleSyncPut(request, env) {
   return json(200, { payload: body.payload, updatedAt: now });
 }
 
-const DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$/;
+const DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$/;
 
 function dataKey(pathname) {
   const raw = String(pathname || "").replace(/^\/v1\/data\/?/, "");
@@ -2940,6 +2941,9 @@ async function route(request, env) {
   }
   if (path === "/v1/drive" || path.startsWith("/v1/drive/")) {
     return handleDrive(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
+  if (path === "/v1/communities" || path.startsWith("/v1/communities/") || path === "/v1/owner/communities" || path.startsWith("/v1/owner/communities/")) {
+    return handleCommunityRoute(request, env, path, url, { json, sessionAccount, rateHit, limited, readJson, requireOwnerHidden, dispatchWorkflows, presentAccount });
   }
   return json(404, { error: "not_found" });
 }

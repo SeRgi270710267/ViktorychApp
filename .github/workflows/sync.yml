@@ -388,13 +388,14 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html app.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css games.js games.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html app.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css games.js games.css communities.js communities.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
           mkdir -p _site/shared
           cp shared/handle-skeleton.js shared/reposts.js _site/shared/
           cp shared/drive-crypto.js shared/drive-photos.js _site/shared/
           mkdir -p _site/i18n
           cp i18n/*.js _site/i18n/
           if [ -f data/music.json ]; then mkdir -p _site/data; cp data/music.json _site/data/; fi
+          if [ -d data/communities ]; then mkdir -p _site/data/communities; cp data/communities/*.json _site/data/communities/; fi
           if [ -d live ]; then mkdir -p _site/live; cp live/*.json _site/live/; fi
           mkdir -p _site/icons _site/splash _site/screenshots
           cp icons/* _site/icons/
@@ -749,6 +750,7 @@ jobs:
           }
           dispatch telegram-backup.yml '{"ref":"main","inputs":{"loop_only":"false"}}'
           dispatch media-extract.yml '{"ref":"main","inputs":{"cap":"80"}}'
+          dispatch reddit.yml '{"ref":"main"}'
 
   # Restarts the sync if GitHub drops the cron. Sleeping here does not hold
   # the pages concurrency group, and GITHUB_TOKEN may dispatch this workflow.
