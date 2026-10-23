@@ -57,3 +57,12 @@ export function parseRange(header, size) {
   if (end >= total) end = total - 1;
   return { start, end };
 }
+
+// A synced social video that could not be split under 19 MB stays on R2
+// under this key. Photos, manifests, and keys are not included.
+export function keptVideoKey(key) {
+  const text = String(key || "");
+  if (/^tiktok\/(?:id\/\d{5,22}\/|[A-Za-z0-9._]{2,24}\/)\d{8,22}\/video$/.test(text)) return true;
+  if (/^social\/[a-z0-9_]+\/[A-Za-z0-9_-]{1,80}\/video\/\d{1,4}$/.test(text)) return true;
+  return false;
+}

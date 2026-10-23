@@ -37,6 +37,7 @@
   var recordings = { cap: 12, active: 0, items: {} };
   var mpeg = null;
   var liveZoom = null;
+  var prefetchCtrl = null;
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -504,7 +505,7 @@
         }
         throw new Error("hls");
       }
-      var player = new Hls({
+      var playerOpts = {
         enableWorker: true,
         capLevelToPlayerSize: false,
         startLevel: 99,
@@ -515,7 +516,12 @@
             if (headers.Authorization) xhr.setRequestHeader("Authorization", headers.Authorization);
           }
         }
-      });
+      };
+      if (!pin) {
+        playerOpts.maxBufferLength = 30;
+        playerOpts.maxMaxBufferLength = 30;
+      }
+      var player = new Hls(playerOpts);
       hls = player;
       player.loadSource(url);
       player.attachMedia(video);
@@ -590,6 +596,60 @@
     return accounts.syncPlaybackAuth().catch(function () {});
   }
 
+  function slowLink() {
+    var conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (!conn) return false;
+    if (conn.saveData) return true;
+    var kind = String(conn.effectiveType || "").toLowerCase();
+    return kind === "2g" || kind === "slow-2g";
+  }
+
+  function prefetchUrls(text, playlistUrl) {
+    var init = "";
+    var segs = [];
+    String(text || "").split(/\r?\n/).forEach(function (line) {
+      var row = line.trim();
+      if (!row) return;
+      if (row.indexOf("#EXT-X-MAP:") === 0) {
+        var found = row.match(/URI="([^"]+)"/);
+        if (found) init = found[1];
+        return;
+      }
+      if (row.charAt(0) !== "#") segs.push(row);
+    });
+    var urls = [];
+    function abs(ref) {
+      try { return new URL(ref, playlistUrl).href; }
+      catch (err) { return ""; }
+    }
+    if (init) {
+      var initUrl = abs(init);
+      if (initUrl) urls.push(initUrl);
+    }
+    for (var i = 0; i < segs.length && urls.length < (init ? 3 : 2); i++) {
+      var segUrl = abs(segs[i]);
+      if (segUrl) urls.push(segUrl);
+    }
+    return urls;
+  }
+
+  function prefetchParts(urls) {
+    if (prefetchCtrl) prefetchCtrl.abort();
+    var ctrl = new AbortController();
+    prefetchCtrl = ctrl;
+    var chain = Promise.resolve();
+    urls.forEach(function (url) {
+      chain = chain.then(function () {
+        if (ctrl.signal.aborted) return;
+        return fetch(url, { headers: authHeaders(), signal: ctrl.signal }).then(function (part) {
+          if (!part || !part.ok) { dropBody(part); return; }
+          return part.arrayBuffer();
+        }).catch(function () {});
+      });
+    });
+    return chain;
+  }
+
   function playTelegramVideo(video, key, preload, retried) {
     var fileUrl = tgUrl(key);
     if (!fileUrl) return Promise.reject(playbackError("play"));
@@ -602,20 +662,28 @@
     }
     var autoplay = preload === "auto";
     var playlist = fileUrl + "/index.m3u8";
-    return fetch(playlist, { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+    return fetch(playlist, { headers: authHeaders() }).then(function (res) {
       var type = String(res.headers.get("content-type") || "").toLowerCase();
-      dropBody(res);
       if (res.status === 401 && !retried) {
+        dropBody(res);
         return refreshToken().then(function (token) {
           if (!token) return Promise.reject(playbackError("signedout"));
           return playTelegramVideo(video, key, preload, true);
         });
       }
-      if (res.status === 429 || res.status === 401) return Promise.reject(playbackError(res.status));
+      if (res.status === 429 || res.status === 401) {
+        dropBody(res);
+        return Promise.reject(playbackError(res.status));
+      }
       if (res.ok && (type.indexOf("mpegurl") >= 0 || type.indexOf("m3u8") >= 0)) {
-        if (!autoplay) return Promise.resolve();
+        if (!autoplay) {
+          if (slowLink()) { dropBody(res); return Promise.resolve(); }
+          return res.text().then(function (text) { return prefetchParts(prefetchUrls(text, playlist)); });
+        }
+        dropBody(res);
         return playHls(video, playlist, true, true, false);
       }
+      dropBody(res);
       if (!autoplay) return Promise.resolve();
       return fetch(fileUrl, {
         headers: Object.assign({ Range: "bytes=0-1" }, authHeaders()),

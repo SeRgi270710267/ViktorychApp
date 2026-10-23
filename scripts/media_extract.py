@@ -885,6 +885,7 @@ def extract() -> int:
         put_json(cf, bucket, LINKS_KEY, {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "items": list(by_key.values())})
         put_text(cf, bucket, CURSOR_KEY, str((start + visited) % max(len(accounts), 1)))
         log("[media-extract] stored %s files, visited %s added accounts" % (stored, visited))
+        log("[media-extract] kept_r2 %s" % (state.get("kept_r2") or 0))
         log_tally(tally)
         log(tb.upload_summary(state))
         tb.log_d1_newest(cf)
@@ -933,6 +934,9 @@ def selftest() -> int:
     picked = tiktok_download_selector(formats)
     check(picked.startswith("bytevc1-720+") and "h264" not in picked.split("/")[0], "TikTok takes the top original bytevc1, not the h264 fallback")
     check("--recode-video" not in video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), picked, 1), "TikTok is remuxed and not re-encoded")
+    passes = tb.hls_attempts(True)
+    check(passes == [(False, 6, False), (False, 4, False), (False, 2, False), (False, 1, False), (False, 1, True)] and all(not row[0] for row in passes), "a social video retries -c copy at 2s, 1s, then keyframe splits and never re-encodes")
+    check(tb.social_copy_key("tiktok/gabii_g5/7695476356548660503/video") and tb.social_copy_key("social/x/1/video/0") and not tb.social_copy_key("music/a.mp3"), "only synced social video is copy-only")
     private = accounts_from({}, ["gabii_g5"], {"added": [{"handle": "new_name", "permanentId": "123456"}], "removed": ["gabii_g5"]})
     private_urls = {row["url"] for row in private}
     check("https://www.tiktok.com/@new_name" in private_urls and "https://www.tiktok.com/@gabii_g5" not in private_urls, "a removed account stays out and a private added account is included")

@@ -4,7 +4,7 @@ import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
 import { cleanRepostKey, cleanRepostWrite } from "../../shared/reposts.js";
 import { socialKeysForPost } from "../../shared/social-keys.js";
-import { buildPlaylist, parseRange, safeTelegramPath } from "./telegram.js";
+import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "./telegram.js";
 import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 
 const encoder = new TextEncoder();
@@ -1688,60 +1688,99 @@ async function telegramRows(env, key) {
   return (listed && listed.results) || [];
 }
 
+const tgInflight = new Map();
+
+function shareInflight(key, run) {
+  const existing = tgInflight.get(key);
+  if (existing) return existing;
+  const job = Promise.resolve().then(run).catch(() => null).finally(() => {
+    if (tgInflight.get(key) === job) tgInflight.delete(key);
+  });
+  tgInflight.set(key, job);
+  return job;
+}
+
+async function readCachedPath(cache, cacheKey) {
+  const hit = await cache.match(cacheKey);
+  if (!hit) return "";
+  const fetched = Number(hit.headers.get("x-fetched-at") || 0);
+  if (!fetched || Date.now() - fetched >= TG_PATH_TTL_MS) return "";
+  try {
+    const body = await hit.json();
+    return safeTelegramPath(body && body.path);
+  } catch (err) {
+    return "";
+  }
+}
+
 async function telegramFilePath(env, fileId) {
   const cache = caches.default;
   const cacheKey = new Request("https://tg-cache.internal/path/" + encodeURIComponent(fileId));
-  const hit = await cache.match(cacheKey);
-  if (hit) {
-    const fetched = Number(hit.headers.get("x-fetched-at") || 0);
-    if (fetched && Date.now() - fetched < TG_PATH_TTL_MS) {
-      try {
-        const body = await hit.json();
-        const path = safeTelegramPath(body && body.path);
-        if (path) return path;
-      } catch (err) { /* refresh a bad cache entry */ }
-    }
-  }
-  const res = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/getFile?file_id=" + encodeURIComponent(fileId));
-  let data = null;
-  try { data = await res.json(); }
-  catch (err) { data = null; }
-  const path = safeTelegramPath(data && data.ok && data.result && data.result.file_path);
-  if (!path) return "";
-  const stored = new Response(JSON.stringify({ path: path }), {
-    headers: {
-      "content-type": "application/json",
-      "cache-control": "public, max-age=3000",
-      "x-fetched-at": String(Date.now())
-    }
+  const cached = await readCachedPath(cache, cacheKey);
+  if (cached) return cached;
+  const loaded = await shareInflight("path:" + fileId, async () => {
+    const again = await readCachedPath(cache, cacheKey);
+    if (again) return again;
+    const res = await fetch("https://api.telegram.org/bot" + env.TELEGRAM_BOT_TOKEN + "/getFile?file_id=" + encodeURIComponent(fileId));
+    let data = null;
+    try { data = await res.json(); }
+    catch (err) { data = null; }
+    const path = safeTelegramPath(data && data.ok && data.result && data.result.file_path);
+    if (!path) return "";
+    const stored = new Response(JSON.stringify({ path: path }), {
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "public, max-age=3000",
+        "x-fetched-at": String(Date.now())
+      }
+    });
+    try { await cache.put(cacheKey, stored); }
+    catch (err) { /* the path can still be used for this request */ }
+    return path;
   });
-  try { await cache.put(cacheKey, stored); }
-  catch (err) { /* the path can still be used for this request */ }
-  return path;
+  return loaded || "";
 }
 
 async function telegramBody(env, row) {
+  const id = String((row && (row.sha256 || row.file_id)) || "");
+  if (!id) return null;
   const cache = caches.default;
-  const cacheKey = new Request("https://tg-cache.internal/body/" + row.sha256);
+  const cacheKey = new Request("https://tg-cache.internal/body/" + id);
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
-  const path = await telegramFilePath(env, row.file_id);
-  if (!path) return null;
-  const upstream = await fetch("https://api.telegram.org/file/bot" + env.TELEGRAM_BOT_TOKEN + "/" + path);
-  if (!upstream.ok) return null;
-  const bytes = await upstream.arrayBuffer();
-  if (Number(row.size) > 0 && bytes.byteLength !== Number(row.size)) return null;
-  const stored = new Response(bytes, {
+  const packed = await shareInflight("body:" + id, async () => {
+    const again = await cache.match(cacheKey);
+    if (again) {
+      return { bytes: await again.arrayBuffer(), mime: again.headers.get("content-type") || row.mime || "application/octet-stream" };
+    }
+    const path = await telegramFilePath(env, row.file_id);
+    if (!path) return null;
+    const upstream = await fetch("https://api.telegram.org/file/bot" + env.TELEGRAM_BOT_TOKEN + "/" + path);
+    if (!upstream.ok) return null;
+    const bytes = await upstream.arrayBuffer();
+    if (Number(row.size) > 0 && bytes.byteLength !== Number(row.size)) return null;
+    const mime = row.mime || "application/octet-stream";
+    const stored = new Response(bytes.slice(0), {
+      headers: {
+        "content-type": mime,
+        "content-length": String(bytes.byteLength),
+        "cache-control": "public, max-age=31536000, immutable",
+        "x-content-type-options": "nosniff"
+      }
+    });
+    try { await cache.put(cacheKey, stored.clone()); }
+    catch (err) { /* this response is still returned */ }
+    return { bytes: bytes, mime: mime };
+  });
+  if (!packed || !packed.bytes) return null;
+  return new Response(packed.bytes.slice(0), {
     headers: {
-      "content-type": row.mime || "application/octet-stream",
-      "content-length": String(bytes.byteLength),
-      "cache-control": "public, max-age=31536000",
+      "content-type": packed.mime || "application/octet-stream",
+      "content-length": String(packed.bytes.byteLength),
+      "cache-control": "public, max-age=31536000, immutable",
       "x-content-type-options": "nosniff"
     }
   });
-  try { await cache.put(cacheKey, stored.clone()); }
-  catch (err) { /* this response is still returned */ }
-  return stored;
 }
 
 function mediaResponse(bytes, mime, status, extra) {
@@ -1762,7 +1801,7 @@ async function rangedTelegram(request, env, row, immutable) {
   const bytes = await full.arrayBuffer();
   const mime = serveMime(row) || full.headers.get("content-type") || "application/octet-stream";
   const span = parseRange(request.headers.get("Range"), bytes.byteLength);
-  const extra = immutable ? publicLoopCache() : null;
+  const extra = immutable ? publicLoopCache() : { "cache-control": "private, max-age=31536000, immutable" };
   if (span === false) {
     return new Response(null, {
       status: 416,
@@ -1876,8 +1915,49 @@ async function handleTelegram(request, env, path) {
     }
     if (viewer && mode === "file" && row && row.file_id) await slideSession(env, request);
   }
-  if (!row || !row.file_id) return json(404, { error: "not_found" });
+  if (!row || !row.file_id) {
+    if (mode === "file") {
+      const original = await serveKeptOriginal(request, env, key);
+      if (original) return original;
+    }
+    return json(404, { error: "not_found" });
+  }
   return rangedTelegram(request, env, row, loopGroupKey(key));
+}
+
+async function serveKeptOriginal(request, env, key) {
+  if (!keptVideoKey(key) || !env.DATA) return null;
+  const head = await env.DATA.head(key);
+  if (!head) return null;
+  const size = Number(head.size || 0);
+  const mime = (head.httpMetadata && head.httpMetadata.contentType) || "video/mp4";
+  const headers = {
+    "content-type": mime,
+    "accept-ranges": "bytes",
+    "cache-control": "private, max-age=31536000, immutable",
+    "x-content-type-options": "nosniff"
+  };
+  if (request.method === "HEAD") {
+    if (size) headers["content-length"] = String(size);
+    return new Response(null, { status: 200, headers });
+  }
+  const rangeHeader = request.headers.get("Range");
+  const range = rangeHeader ? archiveRange(rangeHeader, size) : null;
+  if (rangeHeader && !range) {
+    return new Response(null, { status: 416, headers: { "content-range": "bytes */" + size, "cache-control": "no-store" } });
+  }
+  const object = range
+    ? await env.DATA.get(key, { range: { offset: range.offset, length: range.length } })
+    : await env.DATA.get(key);
+  if (!object) return null;
+  if (range) {
+    headers["content-range"] = "bytes " + range.offset + "-" + range.end + "/" + size;
+    headers["content-length"] = String(range.length);
+    return new Response(object.body, { status: 206, headers });
+  }
+  if (size) headers["content-length"] = String(size);
+  else if (object.size) headers["content-length"] = String(object.size);
+  return new Response(object.body, { status: 200, headers });
 }
 
 const TIKTOK_ACCOUNTS_KEY = "owner/tiktok-accounts.json";
