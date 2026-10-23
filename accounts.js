@@ -1165,9 +1165,11 @@
     }
     syncingFollows = true;
     var epoch = followEpoch;
-    var key = "follows-imported-" + session.account.publicId;
+    var key = "follows-imported-v2-" + session.account.publicId;
     var imported = readStored(key) === "1";
-    var local = localFeedFollows();
+    var local = localFeedFollows().concat(localAppFollows()).filter(function (id, index, all) {
+      return id && all.indexOf(id) === index;
+    });
     var start = imported || !local.length
       ? Promise.resolve({ status: 200 })
       : api("/v1/follows/import", { method: "POST", token: session.token, body: { ids: local.slice(0, 400) } });

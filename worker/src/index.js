@@ -2816,8 +2816,12 @@ async function handleFollowImport(request, env) {
   const ids = [];
   for (let i = 0; i < incoming.length && ids.length < 400; i++) {
     const id = cleanFollowId(incoming[i]);
-    if (!id || id.indexOf("app:") === 0 || id === "app:" + gate.row.public_id) continue;
-    if (ids.indexOf(id) < 0) ids.push(id);
+    if (!id || id === "app:" + gate.row.public_id || ids.indexOf(id) >= 0) continue;
+    if (id.indexOf("app:") === 0) {
+      const account = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(id.slice(4)).first();
+      if (!account) continue;
+    }
+    ids.push(id);
   }
   const now = Date.now();
   for (let i = 0; i < ids.length; i += 40) {

@@ -864,6 +864,28 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       rememberUnfollow(id);
     }
   }
+  function applyFollow(ids, on) {
+    const list = (ids || []).map((item) => String(item || "").trim()).filter(Boolean);
+    if (!list.length) return;
+    list.forEach((item) => setFollowed(item, on));
+    saveSettings();
+    const accounts = window.ViktorychAccounts;
+    if (accounts && accounts.changeFollow) {
+      Promise.all(list.map((item) => accounts.changeFollow(item, on, followSnapshot(item)))).then((results) => {
+        let reverted = false;
+        results.forEach((ok, index) => {
+          if (ok === false) {
+            setFollowed(list[index], !on);
+            reverted = true;
+          }
+        });
+        if (reverted) saveSettings();
+        if (accounts.syncFollows) accounts.syncFollows();
+        render();
+      });
+    }
+    render();
+  }
   function followSnapshot(id) {
     if (!id || String(id).indexOf("app:") === 0) return null;
     const feed = feedById(id);
@@ -1117,6 +1139,34 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
   }
 
+  function saveOwnerTikTok(raw) {
+    if (ownerAdding) return;
+    const api = accountsApi();
+    const token = accountToken();
+    if (!api || !token) return;
+    ownerAdding = true;
+    fetch(api + "/v1/owner/tiktok/accounts", {
+      method: "POST",
+      headers: { "content-type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ handle: raw })
+    }).then((res) => res.json().then((body) => ({ ok: res.ok, status: res.status, body })).catch(() => ({ ok: res.ok, status: res.status, body: null }))).then((result) => {
+      ownerAdding = false;
+      if (!result.ok || !result.body || !result.body.account || !result.body.account.handle) {
+        toast(result.status === 400 ? tr("That doesn’t look like a TikTok account.") : tr("Couldn’t save this account."));
+        return;
+      }
+      const form = document.querySelector("form.add-account");
+      if (form) form.reset();
+      const lines = [];
+      if (result.body.preview === false) lines.push(tr("Couldn’t preview this profile. It will still be saved."));
+      lines.push(tr("New videos show up after the next sync."));
+      toast(lines.join(" "));
+    }).catch(() => {
+      ownerAdding = false;
+      toast(tr("Couldn’t save this account."));
+    });
+  }
+
   function deleteOwnerAccount(handle) {
     const api = accountsApi();
     const token = accountToken();
@@ -1216,7 +1266,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function parseAccountInput(raw) {
     const text = String(raw || "").trim();
     if (!text || text.length > 300) return null;
-    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram):(\S+)$/i);
+    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram|tiktok):(\S+)$/i);
     if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
     if (/^https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}(?:\/[A-Za-z0-9_/%?&=.+~-]*)?$/i.test(text)) return { platform: "x", account: text };
     if (/^@?[A-Za-z0-9_]{1,15}$/.test(text)) return { platform: "x", account: text.replace(/^@/, "") };
@@ -1226,37 +1276,31 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (/vk\.com\/[A-Za-z0-9_.]+/i.test(text)) return { platform: "vk", account: text };
     if (/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:s\/)?[A-Za-z][A-Za-z0-9_]{4,31}(?:\/\d+)?\/?$/i.test(text)) return { platform: "telegram", account: text };
     if (/^@?[A-Za-z][A-Za-z0-9_]{16,32}$/.test(text)) return { platform: "telegram", account: text.replace(/^@/, "") };
+    if (/^(?:https?:\/\/)?(?:www\.|m\.)?tiktok\.com\/@[A-Za-z0-9._]{2,24}(?:[/?#].*)?$/i.test(text)) return { platform: "tiktok", account: text };
     if (/^https:\/\/\S+$/i.test(text)) return { platform: "rss", account: text };
     return null;
   }
 
-  function followIssueUrl(kind, account, platform) {
-    const template = kind === "unfollow" ? "unfollow-request.yml" : "follow-request.yml";
-    const title = (kind === "unfollow" ? "Unfollow request: " : "Follow request: ") + platform + " " + account;
-    const params = new URLSearchParams({ template: template, title: title, account: account, platform: platform });
-    return "https://github.com/" + GITHUB_REPO + "/issues/new?" + params.toString();
-  }
-
-  function configuredFeed(id) {
-    const direct = feedById(id);
-    if (direct && direct.configured) return direct;
-    const parts = String(id || "").split(":");
-    const known = catalogAccount(parts[0], parts.slice(1).join(":"));
-    return known && known.configured ? known : null;
-  }
-
-  function groupsIssueUrl() {
-    const payload = JSON.stringify(cleanGroups(STATE.settings.groups));
-    const params = new URLSearchParams({ template: "groups.yml", title: tr("Subscription groups"), groups: payload });
-    return "https://github.com/" + GITHUB_REPO + "/issues/new?" + params.toString();
-  }
-
-  function followIssueUrlForId(kind, id) {
-    const feed = feedById(id) || configuredFeed(id);
-    const platform = (feed && feed.platform) || String(id || "").split(":")[0] || "x";
-    const handle = (feed && (feed.handle || feed.channelId)) || String(id || "").split(":").slice(1).join(":");
-    const account = (feed && feed.url) || (platform + ":" + handle);
-    return followIssueUrl(kind, account, platform);
+  function feedIdFromPaste(parsed) {
+    if (!parsed) return "";
+    let text = String(parsed.account || "").trim();
+    const prefixed = text.match(/^[a-z]+:(\S+)$/i);
+    if (prefixed) text = prefixed[1];
+    let handle = text.replace(/^@/, "");
+    const patterns = {
+      x: /(?:x\.com|twitter\.com)\/([A-Za-z0-9_]{1,15})/i,
+      tiktok: /tiktok\.com\/@([A-Za-z0-9._]{2,24})/i,
+      telegram: /(?:t\.me|telegram\.me)\/(?:s\/)?([A-Za-z][A-Za-z0-9_]{4,31})/i,
+      instagram: /instagram\.com\/([A-Za-z0-9._]+)/i,
+      threads: /threads\.(?:com|net)\/@([A-Za-z0-9._]+)/i,
+      youtube: /(?:youtube\.com\/(?:@|channel\/|c\/|user\/)?|youtu\.be\/)([A-Za-z0-9._-]+)/i,
+      vk: /vk\.com\/([A-Za-z0-9_.]+)/i
+    };
+    const pattern = patterns[parsed.platform];
+    const fromUrl = pattern ? text.match(pattern) : null;
+    if (fromUrl) handle = fromUrl[1];
+    const feed = catalogAccount(parsed.platform, handle.replace(/^@/, ""));
+    return feed && feed.id ? feed.id : "";
   }
 
   function sitePermalink(hash) {
@@ -3337,12 +3381,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     );
   }
 
-  function siteSource(id) {
-    const feed = feedById(id);
-    if (feed && (feed.configured || feed.origin === "repost")) return true;
-    return !!configuredFeed(id);
-  }
-
   function followButtonClean(id, large) {
     if (String(id || "").indexOf("app:") === 0) {
       const me = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
@@ -3356,9 +3394,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const attr = ` data-id="${esc(primary)}" data-ids="${esc(ids.join(","))}"`;
     if (ids.some((item) => isFollowed(item))) {
       return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span></button>`;
-    }
-    if (!ids.some((item) => siteSource(item))) {
-      return `<a class="follow${large ? " lg" : ""}" data-act="follow-request" data-id="${esc(primary)}" target="_blank" rel="noopener noreferrer" href="${esc(followIssueUrlForId("follow", primary))}">${tr("Follow")}</a>`;
     }
     return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>${tr("Follow")}</button>`;
   }
@@ -9340,11 +9375,17 @@ const here = parseRoute();
     const pending = STATE.removeFeed;
     if (!pending) return "";
     const handle = String(pending.handle || "").replace(/^@/, "");
-    const title = handle ? tr("Remove @{handle}?", { handle: handle }) : tr("Remove this account?");
-    const body = handle
-      ? tr("@{handle} will be removed from the whole site, not just hidden from your feeds.", { handle: handle })
-      : tr("This account will be removed from the whole site, not just hidden from your feeds.");
-    return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">${tr("Remove")}</button><button type="button" class="remove-cancel" data-act="close-remove">${tr("Cancel")}</button></div></div>`;
+    const site = !!pending.ownerAdded;
+    const title = site
+      ? (handle ? tr("Remove @{handle}?", { handle: handle }) : tr("Remove this account?"))
+      : (handle ? tr("Unfollow @{handle}?", { handle: handle }) : tr("Unfollow this account?"));
+    const body = site
+      ? (handle
+        ? tr("@{handle} will be removed from the whole site, not just hidden from your feeds.", { handle: handle })
+        : tr("This account will be removed from the whole site, not just hidden from your feeds."))
+      : tr("This removes the account from your Following.");
+    const go = site ? tr("Remove") : tr("Unfollow");
+    return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">${esc(go)}</button><button type="button" class="remove-cancel" data-act="close-remove">${tr("Cancel")}</button></div></div>`;
   }
 
   function modal() {
@@ -9450,7 +9491,7 @@ if (STATE.histClear) {
           <input id="group-q" class="member-search" data-field="gq" placeholder="${tr("Search channels")}" value="${esc(d.gq || "")}">
           ${rows || emptyBlock(tr("No channels"), tr("Follow accounts that post videos, then pick them here."))}
           ${d.id ? `<button class="danger" type="button" data-act="group-delete" data-group="${esc(d.id)}">${tr("Delete group")}</button>` : ""}
-          <button class="outline" type="button" data-act="group-publish">${tr("Save groups to the site")}</button>
+          <button class="outline" type="button" data-act="group-publish">${tr("Save groups on your account")}</button>
         </div>
       </div></div>`;
     }
@@ -10334,7 +10375,7 @@ if (STATE.histClear) {
     if (route.channel) list = list.filter((post) => onChannel(post, route.channel));
     channels.forEach(ensureYtSubs);
     list.forEach(ensureYtMeta);
-    const save = STATE.settings.groupsOwn ? `<button class="group-save" type="button" data-act="group-publish">${tr("Save groups to the site")}</button>` : "";
+    const save = STATE.settings.groupsOwn ? `<button class="group-save" type="button" data-act="group-publish">${tr("Save groups on your account")}</button>` : "";
     let body = "";
     if (!STATE.settings.follows.length) body = emptyBlock(tr("No videos yet"), tr("Follow accounts to see their videos here."));
     else if (active && !(active.members || []).length) body = emptyBlock(tr("No channels in this group"), tr("Edit the group and pick channels."));
@@ -11314,9 +11355,8 @@ if (STATE.histClear) {
         render();
         return;
       }
-      const url = pending && pending.id ? followIssueUrlForId("unfollow", pending.id) : "";
-      if (url) window.open(url, "_blank", "noopener,noreferrer");
-      render();
+      if (pending && pending.id) applyFollow([pending.id], false);
+      else render();
       return;
     }
     if (act === "compose-post") { STATE.modal = null; STATE.composeSeed = ""; render(); toast(tr("Posts come from your feeds")); return; }
@@ -11453,36 +11493,11 @@ if (STATE.histClear) {
       else { STATE.originalShown[el.dataset.key] = true; render(); }
       return;
     }
-    if (act === "follow-request") {
-      const id = el.dataset.id;
-      if (id && STATE.settings.follows.indexOf(id) < 0) STATE.settings.follows.push(id);
-      saveSettings();
-      toast(tr("Follow request opened. Submit it on GitHub and the next sync will add this account."));
-      return;
-    }
     if (act === "follow") {
       const ids = String(el.dataset.ids || el.dataset.id || "").split(",").map((part) => part.trim()).filter(Boolean);
       if (!ids.length) return;
       const on = ids.some((item) => isFollowed(item));
-      ids.forEach((item) => setFollowed(item, !on));
-      saveSettings();
-      const accounts = window.ViktorychAccounts;
-      if (accounts && accounts.changeFollow) {
-        const wanted = !on;
-        Promise.all(ids.map((item) => accounts.changeFollow(item, wanted, followSnapshot(item)))).then((results) => {
-          let reverted = false;
-          results.forEach((ok, index) => {
-            if (ok === false) {
-              setFollowed(ids[index], on);
-              reverted = true;
-            }
-          });
-          if (reverted) saveSettings();
-          if (accounts.syncFollows) accounts.syncFollows();
-          render();
-        });
-      }
-      render();
+      applyFollow(ids, !on);
       return;
     }
     if (act === "subs-layout") {
@@ -12092,8 +12107,8 @@ if (STATE.histClear) {
       return;
     }
     if (act === "group-publish") {
-      window.open(groupsIssueUrl(), "_blank", "noopener,noreferrer");
-      toast(tr("Submit the issue on GitHub. Groups stay on this device until that list is published."));
+      saveSettings();
+      toast(accountToken() ? tr("Groups saved on your account.") : tr("Sign in to save groups on your account."));
       return;
     }
     if (act === "export") {
@@ -12446,12 +12461,19 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
         toast(tr("Use a profile URL, @handle, or an https feed"));
         return;
       }
-      if (signedOwner() && parsed.platform === "x" && accountsApi() && accountToken()) {
-        saveOwnerX(input && input.value);
+      if (signedOwner() && accountsApi() && accountToken()) {
+        if (parsed.platform === "x") saveOwnerX(input && input.value);
+        else if (parsed.platform === "tiktok") saveOwnerTikTok(input && input.value);
+        else toast(tr("Adding {platform} accounts in the app isn’t available yet.", { platform: parsed.platform }));
         return;
       }
-      window.open(followIssueUrl("follow", parsed.account, parsed.platform), "_blank", "noopener,noreferrer");
-      toast(tr("Follow request opened. Submit it on GitHub and the next sync will add this account."));
+      const existing = feedIdFromPaste(parsed);
+      if (existing) {
+        applyFollow([existing], true);
+        addForm.reset();
+        return;
+      }
+      toast(tr("Only the site owner can add a new account."));
       return;
     }
     const form = event.target.closest("[data-act='search-form']");
