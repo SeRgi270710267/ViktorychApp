@@ -325,3 +325,76 @@ test("tiktok media on /tg stays behind the sign-up gate and the owner audience",
     await open.dispose();
   }
 });
+
+test("an owner playback counts once and a cached segment is free", async () => {
+  const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT, TG_USER_LIMIT: "2" }));
+  try {
+    const ownerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.40", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Owner", handle: "owner_budget" })
+    });
+    const owner = await ownerSignup.json();
+    assert.equal(ownerSignup.status, 201);
+    const readerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.41", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Reader", handle: "reader_budget" })
+    });
+    const reader = await readerSignup.json();
+    assert.equal(readerSignup.status, 201);
+    const db = await mf.getBindings();
+    await db.DB.prepare("UPDATE accounts SET owner = 1 WHERE handle = ?").bind("owner_budget").run();
+    const insert = "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, ?, ?, 'viktorych-data', ?, 8, 4, ?, 'video/iso.segment', ?, 1, 1, 0, 1)";
+    const parts = [
+      ["clips/budget.mp4", "init", -1, "BINIT", "sha-init", 0],
+      ["clips/budget.mp4", "segment", 0, "B0", "sha-0", 2],
+      ["clips/budget.mp4", "segment", 1, "B1", "sha-1", 2],
+      ["clips/budget.mp4", "segment", 2, "B2", "sha-2", 2]
+    ];
+    for (const row of parts) {
+      await db.DB.prepare(insert).bind(row[0], row[1], row[2], row[3], row[4], row[5]).run();
+    }
+    await db.DB.prepare(
+      "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, 'viktorych-data', ?, 8, 4, ?, 'image/jpeg', 0, 1, 1, 0, 1)"
+    ).bind("photos/one.jpg", "ONE", "sha-one").run();
+    await db.DB.prepare(
+      "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'single', 0, 'viktorych-data', ?, 8, 4, ?, 'image/jpeg', 0, 1, 1, 0, 1)"
+    ).bind("photos/two.jpg", "TWO", "sha-two").run();
+    await db.DB.prepare(insert).bind("clips/reader.mp4", "segment", 0, "R0", "sha-reader", 2).run();
+
+    const playlist = await call(mf, "/tg/clips/budget.mp4/index.m3u8", { ip: "203.0.113.42", token: owner.token });
+    assert.equal(playlist.status, 200);
+    for (const part of ["0", "1", "2"]) {
+      const segment = await call(mf, "/tg/clips/budget.mp4/" + part, { ip: "203.0.113.42", token: owner.token });
+      assert.equal(segment.status, 200);
+    }
+    const first = await call(mf, "/tg/photos/one.jpg", { ip: "203.0.113.42", token: owner.token });
+    assert.equal(first.status, 200);
+    const blocked = await call(mf, "/tg/photos/two.jpg", { ip: "203.0.113.42", token: owner.token });
+    assert.equal(blocked.status, 429);
+    assert.equal(blocked.body.error, "rate_limited");
+
+    const cold = await call(mf, "/tg/clips/reader.mp4/0", { ip: "203.0.113.43", token: reader.token });
+    assert.equal(cold.status, 200);
+    const warm = await call(mf, "/tg/clips/reader.mp4/0", { ip: "203.0.113.43", token: reader.token });
+    assert.equal(warm.status, 200);
+    const photo = await call(mf, "/tg/photos/one.jpg", { ip: "203.0.113.43", token: reader.token });
+    assert.equal(photo.status, 200);
+    const over = await call(mf, "/tg/photos/two.jpg", { ip: "203.0.113.43", token: reader.token });
+    assert.equal(over.status, 429);
+
+    const refreshed = await call(mf, "/v1/session/refresh", { method: "POST", ip: "203.0.113.44", token: owner.token });
+    assert.equal(refreshed.status, 200);
+    assert.equal(typeof refreshed.body.token, "string");
+    assert.notEqual(refreshed.body.token, owner.token);
+    const oldSession = await call(mf, "/v1/session", { ip: "203.0.113.45", token: owner.token });
+    assert.equal(oldSession.status, 200);
+    const newSession = await call(mf, "/v1/session", { ip: "203.0.113.46", token: refreshed.body.token });
+    assert.equal(newSession.status, 200);
+    const anon = await call(mf, "/v1/session/refresh", { method: "POST", ip: "203.0.113.47" });
+    assert.equal(anon.status, 401);
+  } finally {
+    await mf.dispose();
+  }
+});
