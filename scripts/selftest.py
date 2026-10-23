@@ -236,10 +236,44 @@ def accounts_wall_checks() -> None:
                 os.environ[key] = value
 
 
+def follow_list_checks() -> None:
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    accounts = (ROOT / "accounts.js").read_text(encoding="utf-8")
+    worker = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
+    check('name: "connections"' in app, "follow lists have a route")
+    check("/v1/follows" in accounts and "account_follows" in worker, "follows are stored for the signed-in account")
+    for code in ("en", "es", "ru"):
+        pack = (ROOT / "i18n" / f"{code}.js").read_text(encoding="utf-8")
+        for key in (
+            "No followers yet",
+            "Not following anyone yet",
+            "Sign in to see this list.",
+            "Couldn’t load this list.",
+            "Adding {platform} accounts in the app isn’t available yet.",
+            "Only the site owner can add a new account.",
+            "Save groups on your account",
+            "Groups saved on your account.",
+            "Sign in to save groups on your account.",
+            "Unfollow @{handle}?",
+            "This removes the account from your Following.",
+        ):
+            check(f'"{key}"' in pack, code + " translates " + key)
+    check("issues/new" not in app and "issues/new" not in accounts, "user flows do not build a GitHub new-issue URL")
+    check('data-act="note-tabs-same"' in app and "Same tabs as Feed" in app and "function visibleNoteTabs(" in app and "function seedNoteTabs(" in app and 'kind: "verified"' in app and 'kind: "mentions"' in app and "editingNoteTabs() ? noteTabs()" in app and "noteTabsSame" in accounts and "noteTabs:" in accounts, "notification tabs can stay separate from the feed and sync with the account")
+    for code in ("en", "es", "ru"):
+        pack = (ROOT / "i18n" / f"{code}.js").read_text(encoding="utf-8")
+        for key in ("Same tabs as Feed", "Mentions", "Note tab verified", "Drag the handle to reorder."):
+            check(f'"{key}"' in pack, code + " translates " + key)
+    for name in ("people.js", "shorts.js", "accounts.js"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        check("issues/new" not in text, name + " does not open a GitHub issue")
+
+
 def main() -> None:
     from account_identity import selftest as identity_selftest
 
     accounts_wall_checks()
+    follow_list_checks()
     identity_selftest()
     elon = parse_x((FIX / "x_api_v2_elon.json").read_text(encoding="utf-8"), {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"})
     posts = elon["posts"]
@@ -1103,12 +1137,12 @@ def main() -> None:
     check('data-act="face-pref"' in app and "showPictures" in app and "showBanners" in app and "Profile pictures" in app and ".ava-none { display: none; }" in css and "hide-avatar" in accounts_js and "avatarEmpty" in accounts_js and "bannerEmpty" in accounts_js and "data-acct=\"face\"" in accounts_js, "a picture or banner can be the photo, the default, or nothing at all")
     check('meta[name="theme-color"]' in app and 'meta[name="color-scheme"]' in app and "apple-mobile-web-app-status-bar-style" in app and "black-translucent" in page and ".wco { display: none; background: var(--bg); }" in css, "the status bar matches the theme")
     check('media="(prefers-color-scheme: light)" content="#FFFFFF"' in page and 'media="(prefers-color-scheme: dark)" content="#000000"' in page and 'name="theme-color" content="#000000"' in page and "#15202B" in page and "querySelectorAll('meta[name=\"theme-color\"]')" in app and '"#FFFFFF"' in app and '"#15202B"' in app and '"#000000"' in app and 'setAttribute("content", "black-translucent")' in app and 'setAttribute("content", "black-translucent")' in page and 'mode === "default" ? "default"' not in app and 'mode === "default" ? "default"' not in page and "calc(env(safe-area-inset-top, 0px) + 1px)" in css and "--bg: #000000" in css and "--bg: #15202B" in css and "--bg: #FFFFFF" in css, "theme-color matches Lights out, Dim, and Default, including before paint")
-    check("follow-request.yml" in app and "unfollow-request.yml" in app and 'class="add-account"' in app and "form.add-account" in app and "function parseAccountInput(" in app and 'data-act="follow-request"' in app, "follow and unfollow open a prefilled issue")
+    check('class="add-account"' in app and "form.add-account" in app and "function parseAccountInput(" in app and "function saveOwnerX(" in app and "function saveOwnerTikTok(" in app and 'data-act="follow"' in app and 'data-act="follow-request"' not in app and "issues/new" not in app, "follow, unfollow, and add-by-paste stay in the app")
     check("/v1/owner/accounts" in app and 'tr("added accounts")' in app and 'tr("Fetching posts…")' in app and "saveOwnerX" in app, "the owner adds an X account from Feeds and shows it while posts are fetching")
     danger = css[css.index(".follow.remove-pill"):css.index(".follow.remove-pill") + 420]
     follow_pill = css[css.index("\n.follow {"):css.index("\n.follow {") + 240]
     remove_sheet = css[css.index(".modal.remove-sheet"):css.index(".modal.remove-sheet") + 420]
-    check('data-act="ask-remove"' in app and 'class="follow remove-pill"' in app and "Remove @" in app and "whole site" in app and 'data-act="confirm-remove"' in app and "followIssueUrlForId(\"unfollow\"" in app and "#f4212e" in danger and "rgba(244, 33, 46, 0.1)" in danger and "border: 1px solid #f4212e" in danger and "height: 32px" in danger and "font-size: 14px" in danger and "border-radius: 9999px" in follow_pill and ".row-actions" in css and ".remove-sheet" in css and "border-radius: 16px 16px 0 0" in remove_sheet, "removing a feed confirms in an X dialog, then opens the site-wide unfollow")
+    check('data-act="ask-remove"' in app and 'class="follow remove-pill"' in app and "Remove @" in app and "whole site" in app and 'data-act="confirm-remove"' in app and "applyFollow([pending.id], false)" in app and "issues/new" not in app and "#f4212e" in danger and "rgba(244, 33, 46, 0.1)" in danger and "border: 1px solid #f4212e" in danger and "height: 32px" in danger and "font-size: 14px" in danger and "border-radius: 9999px" in follow_pill and ".row-actions" in css and ".remove-sheet" in css and "border-radius: 16px 16px 0 0" in remove_sheet, "removing a catalog feed confirms in an X dialog and unfollows on the account")
     translate_now = app[app.index("async function translateNow("):app.index("function formatDur(")]
     check("Translate post" in app and "Show original" in app and "function foreignScript(" in app and "function translateTarget(" in app and "LanguageDetector" in app and "function translateNow(" in app and "STATE.translated" in app and "FeedsTranslate" in app and "translate.google.com" not in app and "window.open" not in translate_now and "translated" not in app[app.index("function saveSettings("):app.index("function saveSettings(") + 800], "a foreign post translates in place, the app does not open Google Translate, and the result is not saved")
     translate_js = (ROOT / "translate.js").read_text(encoding="utf-8")
@@ -1176,7 +1210,7 @@ def main() -> None:
     chips_css = css[css.index(".yt-chips"):css.index(".yt-chips") + 500]
     check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
     check("var(--fill)" in css[css.index(".yt-chip.on"):css.index(".yt-chip.on") + 160], "the selected subscription chip uses the inverted fill")
-    check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups to the site" in app, "subscription groups filter from the chip bar and can be published")
+    check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups on your account" in app and "Groups saved on your account." in app, "subscription groups filter from the chip bar and save on the account")
     subs_markup = app[app.index('return `<div class="subs'):app.index('return `<div class="subs') + 220]
     hidden_chips = css[css.index(".topbar.is-hidden ~ .yt-chips"):css.index(".topbar.is-hidden ~ .yt-chips") + 160]
     check("${head}${strip}${chips}${save}<div class=\"subs-feed\">" in subs_markup and "display: flow-root" in css[css.index(".subs-feed"):css.index(".subs-feed") + 80] and "z-index: 0" in css[css.index(".subs.grid .yt-grid"):css.index(".subs.grid .yt-grid") + 240], "the groups row sits under the channel strip and outside the video grid")
@@ -1407,9 +1441,9 @@ def main() -> None:
     check("issues: write" in (ROOT / ".github" / "workflows" / "discord-live.yml").read_text(encoding="utf-8"), "the live workflow can update the account issue")
     workflow_text = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy, wait-accounts]" in workflow_text, "the sync uploads a report and keeps one problem issue")
-    check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "saveData" in app and "are not Never" in app and "threshold: [0, 0.6, 1]" in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app and "function scheduleIdleReload(" in app and 'box.id = "autoplay-debug"' in app and "function xRefresh(" in app and "onReady" in app and "reload-armed" in app, "one in-view video previews muted, a miss is explained, and an update reloads when idle")
+    check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "prefers-reduced-data" in app and "saveData" in app and "is not Never" in app and 'threshold: [0, 0.5, 1]' in app and 'rootMargin: "0px"' in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app and "function scheduleIdleReload(" in app and 'box.id = "autoplay-debug"' in app and "function xRefresh(" in app and "onReady" in app and "reload-armed" in app, "one in-view video previews muted, a miss is explained, and an update reloads when idle")
     check('cache: "reload"' in worker and "skipWaiting" in worker and "clients.claim" in worker and "function isShell(" in worker and "reload-when-idle" in worker and "client.navigate" in worker and "includeUncontrolled" in worker and "prev.version" in worker and "translate.js" in worker and "translate.css" in worker, "a new service worker activates, reloads an open page, and loads translate.js from the network")
-    check("function posterList(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.6" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 60 percent visible")
+    check("function posterList(" in app and "function posterOrder(" in app and "function feedFrame(" in app and "100cqw" in app and "function clipLoops(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.5" in app and "el._hold" in app and "lockHlsTop(" in app and "capLevelToPlayerSize: false" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 50 percent visible")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
     follow_fn = app[app.index("function followedFeeds()"):app.index("function followedFeeds()") + 500]
@@ -4092,6 +4126,7 @@ def story_checks() -> None:
     check("isTikTokCdn(url)" in worker and "if (isTikTokCdn(url)) return;" in worker, "the service worker does not intercept TikTok CDN media")
     check('VERSION = "viktorych-a19-__SW_VERSION__"' in worker, "the service worker cache stamp is a19")
     check('tr("Too many plays. Try again in a minute.")' in shorts_js and 'tr("Signed out")' in shorts_js and 'tr("Couldn\'t play this video")' in shorts_js and "playbackNote(err)" in shorts_js and 'level + "-pending"' in shorts_js and "if (!autoplay) return Promise.resolve();" in shorts_js, "a For You miss names 429, a missing backup, or a signed-out session and only the next short is probed")
+    check("maxBufferLength = 30" in shorts_js and "maxBufferLength: 30" in app and "function slowLink(" in shorts_js and "conn.saveData" in shorts_js and 'kind === "2g"' in shorts_js and "function prefetchUrls(" in shorts_js and "prefetchParts(" in shorts_js and 'armSlide(slides[i], "metadata")' in shorts_js, "For You and feed videos buffer about 30 seconds and only the next short is prefetched, except on Save-Data or 2g")
     check('source.kind === "tg"' in app and "URL.createObjectURL(blob)" not in app[app.index('source.kind === "tg"'):app.index('source.kind === "tg"') + 700], "a Telegram file streams from its Range URL")
     check("syncPlaybackAuth" in (ROOT / "accounts.js").read_text(encoding="utf-8") and "/v1/session/refresh" in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8") and "ownerPart" in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8") and "segmentCached" in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8"), "the owner playback counts once and a session can refresh without a prompt")
     check("stats=1" in shorts_js and "15000" in shorts_js and "60 * 1000" in shorts_js and 'tr("Live ended")' in shorts_js and 'tr("Couldn\'t play this live")' in shorts_js and "/v1/owner/play" not in shorts_js and "playHls(video, info.hls, false" in shorts_js and "withCredentials = false" in shorts_js and "capLevelToPlayerSize: false" in shorts_js and "currentLevel = top" in shorts_js and "/v1/owner/tiktok/recordings" in shorts_js and 'tr("Recording ({n} of {cap})",' in shorts_js and 'tr("Saved")' in shorts_js and 'tr("Queued")' in shorts_js, "Shorts plays a live directly from the top variant, a saved video only from Telegram, and a finished live from its recording")

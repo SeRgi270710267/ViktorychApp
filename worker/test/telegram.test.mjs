@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Miniflare } from "miniflare";
-import { buildPlaylist, parseRange, safeTelegramPath } from "../src/telegram.js";
+import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "../src/telegram.js";
 
 const BOT = "123456:probe-token";
 
@@ -69,6 +69,12 @@ test("playlist, range, and telegram paths", () => {
   assert.equal(safeTelegramPath("../secret"), "");
   assert.equal(safeTelegramPath("https://evil.example/x"), "");
   assert.equal(safeTelegramPath("/etc/passwd"), "");
+  assert.equal(keptVideoKey("social/x/abc/video/0"), true);
+  assert.equal(keptVideoKey("tiktok/gabii_g5/7695476356548660503/video"), true);
+  assert.equal(keptVideoKey("tiktok/id/123456789/7695476356548660503/video"), true);
+  assert.equal(keptVideoKey("feeds.json"), false);
+  assert.equal(keptVideoKey("music/abc/index.m3u8"), false);
+  assert.equal(keptVideoKey("social/x/abc/photo/0"), false);
 });
 
 test("telegram media requires a session and a worker secret", async () => {
@@ -393,6 +399,81 @@ test("an owner playback counts once and a cached segment is free", async () => {
     const newSession = await call(mf, "/v1/session", { ip: "203.0.113.46", token: refreshed.body.token });
     assert.equal(newSession.status, 200);
     const anon = await call(mf, "/v1/session/refresh", { method: "POST", ip: "203.0.113.47" });
+    assert.equal(anon.status, 401);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("segments stay in the cache, one in-flight download is shared, and a kept original streams from R2", async () => {
+  let gets = 0;
+  let files = 0;
+  const options = workerOptions({ TELEGRAM_BOT_TOKEN: BOT });
+  options.outboundService = (request) => {
+    const url = new URL(request.url);
+    if (url.pathname.endsWith("/getFile")) {
+      gets += 1;
+      const id = url.searchParams.get("file_id") || "";
+      return Response.json({ ok: true, result: { file_path: "documents/" + id } });
+    }
+    if (url.pathname.includes("/file/bot")) {
+      files += 1;
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(new Response(new Uint8Array([9, 8, 7, 6]), { headers: { "content-type": "video/mp4" } }));
+        }, 80);
+      });
+    }
+    return new Response("missing", { status: 404 });
+  };
+  const mf = new Miniflare(options);
+  try {
+    const signup = await mf.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "CF-Connecting-IP": "203.0.113.50", "content-type": "application/json" },
+      body: JSON.stringify({ displayName: "Cache", handle: "cache_tg" })
+    });
+    const session = await signup.json();
+    assert.equal(signup.status, 201);
+    const db = await mf.getBindings();
+    await db.DB.prepare(
+      "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'segment', 0, 'viktorych-data', 'CACHE0', 11, 4, 'sha-cache', 'video/iso.segment', 2, 1, 1, 0, 1)"
+    ).bind("clips/cache.mp4").run();
+    const key = "social/x/abc/video/0";
+    await db.DATA.put(key, new Uint8Array([1, 2, 3, 4, 5]), { httpMetadata: { contentType: "video/mp4" } });
+
+    const pair = await Promise.all([
+      call(mf, "/tg/clips/cache.mp4/0", { ip: "203.0.113.51", token: session.token }),
+      call(mf, "/tg/clips/cache.mp4/0", { ip: "203.0.113.51", token: session.token })
+    ]);
+    assert.equal(pair[0].status, 200);
+    assert.equal(pair[1].status, 200);
+    assert.deepEqual(Array.from(pair[0].bytes), [9, 8, 7, 6]);
+    assert.equal(gets, 1);
+    assert.equal(files, 1);
+    assert.match(pair[0].headers.get("cache-control") || "", /private/);
+    assert.match(pair[0].headers.get("cache-control") || "", /immutable/);
+    assert.match(pair[0].headers.get("cache-control") || "", /max-age=31536000/);
+    assert.equal(pair[0].headers.get("cdn-cache-control"), null);
+
+    const warm = await call(mf, "/tg/clips/cache.mp4/0", { ip: "203.0.113.51", token: session.token });
+    assert.equal(warm.status, 200);
+    assert.equal(gets, 1);
+    assert.equal(files, 1);
+
+    const playlist = await call(mf, "/tg/" + key + "/index.m3u8", { ip: "203.0.113.52", token: session.token });
+    assert.equal(playlist.status, 404);
+    const full = await call(mf, "/tg/" + key, { ip: "203.0.113.52", token: session.token });
+    assert.equal(full.status, 200);
+    assert.deepEqual(Array.from(full.bytes), [1, 2, 3, 4, 5]);
+    assert.match(full.headers.get("content-type") || "", /video\/mp4/);
+    assert.match(full.headers.get("cache-control") || "", /immutable/);
+    const ranged = await call(mf, "/tg/" + key, { ip: "203.0.113.52", token: session.token, range: "bytes=1-3" });
+    assert.equal(ranged.status, 206);
+    assert.deepEqual(Array.from(ranged.bytes), [2, 3, 4]);
+    const hidden = await call(mf, "/tg/feeds.json", { ip: "203.0.113.52", token: session.token });
+    assert.equal(hidden.status, 404);
+    const anon = await call(mf, "/tg/" + key, { ip: "203.0.113.53" });
     assert.equal(anon.status, 401);
   } finally {
     await mf.dispose();

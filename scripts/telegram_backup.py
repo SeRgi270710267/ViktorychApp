@@ -15,6 +15,10 @@ A file of at most 19 MiB (and at most TG_MAX_MB, default 19) is one public
 Bot API document. Video and long audio, other than radio, are remuxed to HLS
 with ffmpeg. Each segment stays under 19 MiB and is about 4 to 6 seconds.
 The Worker plays that playlist. Codecs are copied when ffmpeg can do it.
+A synced social video is never re-encoded. If a -c copy segment is still
+over 19 MiB, the job retries at 2 seconds, then 1 second, then one segment
+per keyframe. If that still cannot fit, the R2 original stays forever and
+/tg/<key> streams it.
 
 Music, covers, radio, and every loop version are copied as they already are
 and are never deleted from R2. The song AES key is not uploaded. Account
@@ -27,7 +31,8 @@ are uploaded too. Videos from TikTok, Instagram, X, YouTube, VK, and Facebook
 are the site's original, remuxed to mp4 with yt-dlp and never re-encoded.
 Photo posts and carousels come from gallery-dl at full size. A video over
 19 MB is split with ffmpeg -c copy. Those copies are deleted from R2 after
-the sha256 check when an R2 object exists. A TikTok 403 or captcha skips
+the sha256 check when an R2 object exists. A copy that still cannot fit
+under 19 MB is kept on R2 and is not deleted. A TikTok 403 or captcha skips
 that item. TikTok LIVE is recorded by scripts/tiktok_record.py, not here.
 """
 
@@ -1382,6 +1387,81 @@ def put_bytes(token: str, account: str, bucket: str, key: str, payload: bytes, c
     cf_json("PUT", url, token, payload, content_type)
 
 
+def put_object_file(token: str, account: str, bucket: str, key: str, path: Path, content_type: str) -> None:
+    """Store one original on R2. curl streams the file so a long video is not held in memory."""
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/{urllib.parse.quote(bucket)}/objects/{quote_key(key)}"
+    if shutil.which("curl") is None:
+        if path.stat().st_size > 80 * 1024 * 1024:
+            raise RuntimeError("curl is required to store a large original")
+        put_bytes(token, account, bucket, key, path.read_bytes(), content_type or "application/octet-stream")
+        return
+    proc = subprocess.run(
+        [
+            "curl", "-sS", "--max-time", "3600",
+            "-X", "PUT",
+            "-H", "Authorization: Bearer " + token,
+            "-H", "Content-Type: " + (content_type or "application/octet-stream"),
+            "--data-binary", "@" + str(path),
+            "-w", "\n%{http_code}",
+            url,
+        ],
+        capture_output=True,
+    )
+    text = proc.stdout.decode("utf-8", "replace")
+    err = scrub(proc.stderr.decode("utf-8", "replace"), current_secrets())
+    if "\n" not in text:
+        raise RuntimeError(err or "r2 upload failed")
+    _body, _, status_text = text.rpartition("\n")
+    try:
+        status = int(status_text.strip())
+    except ValueError:
+        status = 0
+    if proc.returncode != 0 or status < 200 or status >= 300:
+        raise RuntimeError(err or "r2 upload failed")
+
+
+def already_kept(prior: dict | None) -> bool:
+    return bool(prior and prior.get("kept") and not prior.get("deleted"))
+
+
+def remember_kept(src: Path, obj: dict, manifest: dict, cf: dict, state: dict, directory: Path, sha: str) -> bool:
+    """Keep the full-quality original on R2. A later run must not delete it."""
+    entry = ensure_entry(manifest, obj, "r2", sha, False, False)
+    entry["kept"] = False
+    entry["deleted"] = False
+    entry["serve"] = False
+    stored = False
+    if str(obj.get("bucket") or "") == "cdn":
+        bucket = str(obj.get("r2_bucket") or "")
+        key = str(obj.get("r2_key") or "")
+        if not bucket or not key:
+            bucket = str(cf.get("manifest_bucket") or "")
+            key = str(obj.get("key") or "")
+            if bucket and key and src.is_file():
+                try:
+                    put_object_file(cf["token"], cf["account"], bucket, key, src, obj.get("content_type") or "video/mp4")
+                except Exception as err:
+                    log("[telegram-backup] kept_r2 upload failed %s" % obj.get("key"))
+                    log(scrub(str(err), current_secrets()))
+                    bucket = ""
+        if bucket and key:
+            entry["r2_bucket"] = bucket
+            entry["r2_key"] = key
+            stored = True
+    else:
+        entry["r2_bucket"] = obj.get("bucket") or ""
+        entry["r2_key"] = obj.get("key") or ""
+        stored = bool(entry["r2_bucket"] and entry["r2_key"])
+    if not stored:
+        save_manifest(cf, manifest, directory)
+        return False
+    entry["kept"] = True
+    save_manifest(cf, manifest, directory)
+    state["kept_r2"] = int(state.get("kept_r2") or 0) + 1
+    log("[telegram-backup] kept_r2 %s/%s count %s" % (entry.get("r2_bucket"), entry.get("r2_key"), state["kept_r2"]))
+    return True
+
+
 def d1_id(token: str, account: str) -> str:
     url = f"https://api.cloudflare.com/client/v4/accounts/{account}/d1/database?name=viktorych-accounts"
     body = cf_json("GET", url, token)
@@ -1589,29 +1669,54 @@ def log_probe(key: str, probe: dict) -> None:
     ))
 
 
-def hls_command(src: Path, dest: Path, seconds: int, transcode: bool, video: bool) -> list:
+def social_copy_key(key: str) -> bool:
+    """Synced social video is stream-copied. It is never re-encoded."""
+    text = str(key or "")
+    if re.fullmatch(r"tiktok/(?:id/\d{5,22}/|[A-Za-z0-9._]{2,24}/)\d{8,22}/video", text):
+        return True
+    if re.fullmatch(r"social/[a-z0-9_]+/[A-Za-z0-9_-]{1,80}/video/\d{1,4}", text):
+        return True
+    return False
+
+
+def hls_attempts(copy_only: bool) -> list:
+    """(transcode, seconds, keyframes) in the order build_hls tries them.
+
+    keyframes asks ffmpeg -c copy for one segment per GOP. Social video never
+    sets transcode.
+    """
+    if copy_only:
+        return [(False, 6, False), (False, 4, False), (False, 2, False), (False, 1, False), (False, 1, True)]
+    return [
+        (False, 5, False), (False, 4, False), (False, 2, False), (False, 1, False), (False, 1, True),
+        (True, 5, False), (True, 4, False), (True, 2, False), (True, 1, False),
+    ]
+
+
+def hls_command(src: Path, dest: Path, seconds: int, transcode: bool, video: bool, keyframes: bool = False) -> list:
     cmd = ["ffmpeg", "-y", "-i", str(src)]
+    target = "0.001" if keyframes and not transcode else str(seconds)
     if not video:
         cmd += ["-vn", "-c:a", "aac" if transcode else "copy"]
-        cmd += ["-f", "hls", "-hls_time", str(seconds), "-hls_playlist_type", "vod", "-hls_segment_filename", str(dest / "seg%05d.ts"), str(dest / "index.m3u8")]
+        cmd += ["-f", "hls", "-hls_time", target, "-hls_playlist_type", "vod", "-hls_segment_filename", str(dest / "seg%05d.ts"), str(dest / "index.m3u8")]
     else:
         if transcode:
             cmd += ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18", "-g", "48", "-keyint_min", "48", "-sc_threshold", "0", "-c:a", "aac", "-b:a", "160k"]
         else:
             cmd += ["-c", "copy"]
         cmd += [
-            "-f", "hls", "-hls_time", str(seconds), "-hls_playlist_type", "vod",
+            "-f", "hls", "-hls_time", target, "-hls_playlist_type", "vod",
             "-hls_segment_type", "fmp4", "-hls_fmp4_init_filename", "init.mp4",
             "-hls_segment_filename", str(dest / "seg%05d.m4s"), str(dest / "index.m3u8"),
         ]
     return cmd
 
 
-def ffmpeg_hls(src: Path, dest: Path, seconds: int, transcode: bool, video: bool) -> None:
+def ffmpeg_hls(src: Path, dest: Path, seconds: int, transcode: bool, video: bool, keyframes: bool = False) -> None:
     if dest.exists():
         shutil.rmtree(dest, ignore_errors=True)
     dest.mkdir(parents=True)
-    proc = subprocess.run(hls_command(src, dest, seconds, transcode, video), capture_output=True)
+    proc = subprocess.run(hls_command(src, dest, seconds, transcode, video, keyframes), capture_output=True)
     if proc.returncode != 0 or not (dest / "index.m3u8").is_file():
         raise RuntimeError("ffmpeg failed")
 
@@ -1619,26 +1724,26 @@ def ffmpeg_hls(src: Path, dest: Path, seconds: int, transcode: bool, video: bool
 def build_hls(src: Path, dest: Path, copy_only: bool = False) -> tuple:
     """Return init name, segment rows, and whether a transcode was required.
 
-    copy_only never re-encodes. A segment that cannot fit is left for the caller to skip.
+    copy_only never re-encodes. It retries a shorter hls_time, then one
+    segment per keyframe, and leaves a segment that still cannot fit for the
+    caller to keep on R2.
     """
     video = has_video_stream(src)
     last = "ffmpeg failed"
-    passes = (False,) if copy_only else (False, True)
-    for transcode in passes:
-        for seconds in (5, 4, 2, 1):
-            try:
-                ffmpeg_hls(src, dest, seconds, transcode, video)
-                text = (dest / "index.m3u8").read_text(encoding="utf-8", errors="replace")
-                init, items = parse_hls(text)
-                names = []
-                if init:
-                    names.append(Path(init).name)
-                names.extend(Path(name).name for name, _duration in items)
-                if items and segments_under(dest, names, SMALL_BYTES):
-                    return init, items, transcode
-                last = "a segment was still at least 19 MiB"
-            except RuntimeError as err:
-                last = str(err)
+    for transcode, seconds, keyframes in hls_attempts(copy_only):
+        try:
+            ffmpeg_hls(src, dest, seconds, transcode, video, keyframes)
+            text = (dest / "index.m3u8").read_text(encoding="utf-8", errors="replace")
+            init, items = parse_hls(text)
+            names = []
+            if init:
+                names.append(Path(init).name)
+            names.extend(Path(name).name for name, _duration in items)
+            if items and segments_under(dest, names, SMALL_BYTES):
+                return init, items, transcode
+            last = "a segment was still at least 19 MiB"
+        except RuntimeError as err:
+            last = str(err)
     raise RuntimeError(last)
 
 
@@ -2181,6 +2286,7 @@ def store_loaded(src: Path, obj: dict, kind: str, manifest: dict, cf: dict, stat
         except RuntimeError:
             shutil.rmtree(hls_dir, ignore_errors=True)
             if copy_only:
+                remember_kept(src, obj, manifest, cf, state, directory, sha)
                 log("[telegram-backup] skipped_hls %s/%s (not re-encoded)" % (obj["bucket"], obj["key"]))
                 return "oversize"
             log("[telegram-backup] skipped_hls %s/%s" % (obj["bucket"], obj["key"]))
@@ -2213,6 +2319,8 @@ def store_loaded(src: Path, obj: dict, kind: str, manifest: dict, cf: dict, stat
 
 def process_cdn(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -> str:
     prior = find_entry(manifest, obj["bucket"], obj["key"])
+    if already_kept(prior):
+        return "skip"
     if prior and prior.get("verified") and (prior.get("parts") or []):
         if obj.get("r2_bucket") and obj.get("r2_key") and not prior.get("deleted") and may_delete(prior.get("kind") or "", True, int(prior.get("size") or 0)):
             delete_object(cf["token"], cf["account"], obj["r2_bucket"], obj["r2_key"])
@@ -2303,6 +2411,8 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
     if not kind.startswith(("small", "hls", "archive", "account", "loop", "mirror")):
         return "skip"
     prior = find_entry(manifest, obj["bucket"], obj["key"])
+    if already_kept(prior):
+        return "skip"
     if prior and prior.get("etag") and prior.get("etag") == obj.get("etag") and prior.get("sha256"):
         if kind == "loop":
             part = loop_part(obj["key"], cf.get("loop_version") or "")
@@ -2389,10 +2499,16 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
             part_path.unlink(missing_ok=True)
     else:
         hls_dir = directory / "hls"
+        copy_only = social_copy_key(obj["key"])
         try:
-            init, items, transcoded = build_hls(src, hls_dir)
+            init, items, transcoded = build_hls(src, hls_dir, copy_only=copy_only)
         except RuntimeError:
             shutil.rmtree(hls_dir, ignore_errors=True)
+            if copy_only:
+                remember_kept(src, obj, manifest, cf, state, directory, sha)
+                src.unlink(missing_ok=True)
+                log("[telegram-backup] skipped_hls %s/%s (not re-encoded)" % (obj["bucket"], obj["key"]))
+                return "oversize"
             log("[telegram-backup] skipped_hls %s/%s" % (obj["bucket"], obj["key"]))
             return "skip"
         if transcoded:
@@ -2529,6 +2645,7 @@ def backup(loop_only: bool = False) -> int:
             state.get("tiktok_bytes") or 0,
         ))
         log(upload_summary(state))
+        log("[telegram-backup] kept_r2 %s" % (state.get("kept_r2") or 0))
         log_d1_newest(cf)
         if loop_only:
             log("[telegram-backup] loop mirror stored %s segments, largest %s bytes" % (state.get("loop_segments") or 0, state.get("loop_max") or 0))
@@ -2610,10 +2727,23 @@ def selftest() -> int:
     check(retry_after(429, {"ok": False, "error_code": 429, "parameters": {"retry_after": 9}}) == 9, "retry_after is honored")
     check(retry_after(200, {"ok": True}) is None, "a normal response is not a rate limit")
     check(gap_seconds(10, 11) == 2, "messages stay at least 3 seconds apart")
-    check(may_delete("small", True, 100) and may_delete("hls", True, 10**9) and not may_delete("archive", True, 100) and not may_delete("small", False, 100) and not may_delete("loop", True, 100) and not may_delete("mirror", True, 100), "only a verified loadable file can leave R2, and music, covers, and the radio loop never do")
+    check(may_delete("small", True, 100) and may_delete("hls", True, 10**9) and not may_delete("archive", True, 100) and not may_delete("small", False, 100) and not may_delete("loop", True, 100) and not may_delete("mirror", True, 100) and not may_delete("r2", True, 10**9), "only a verified loadable file can leave R2, and music, covers, the radio loop, and a kept original never do")
     os.environ["TG_DELETE_FROM_R2"] = "false"
     check(not may_delete("small", True, 100), "TG_DELETE_FROM_R2=false keeps R2")
     os.environ["TG_DELETE_FROM_R2"] = ""
+    passes = hls_attempts(True)
+    check(passes == [(False, 6, False), (False, 4, False), (False, 2, False), (False, 1, False), (False, 1, True)] and all(not row[0] for row in passes), "copy-only HLS retries 2s, 1s, then keyframe splits and never re-encodes")
+    check(social_copy_key("tiktok/gabii_g5/7695476356548660503/video") and social_copy_key("tiktok/id/123456789/7695476356548660503/video") and social_copy_key("social/youtube/xtrFOsncOeo/video/0") and not social_copy_key("cold/big.mp4"), "only a synced social video stays copy-only")
+    with tempfile.TemporaryDirectory() as kept_dir:
+        kept_root = Path(kept_dir)
+        original = kept_root / "original.mp4"
+        original.write_bytes(b"full-quality")
+        kept_manifest = empty_manifest()
+        kept_state = {}
+        kept_obj = {"bucket": "viktorych-data", "key": "social/x/abc/video/0", "size": original.stat().st_size, "etag": "e", "content_type": "video/mp4"}
+        kept_ok = remember_kept(original, kept_obj, kept_manifest, {}, kept_state, kept_root, "ab")
+        kept_entry = find_entry(kept_manifest, "viktorych-data", "social/x/abc/video/0")
+        check(kept_ok and already_kept(kept_entry) and kept_entry["kind"] == "r2" and kept_entry["deleted"] is False and kept_entry["serve"] is False and kept_state["kept_r2"] == 1, "an unsplittable copy stays on R2 and is not deleted")
 
     manifest = empty_manifest()
     entry = ensure_entry(manifest, {"bucket": "b", "key": "cold/a.jpg", "size": 4, "etag": "e", "content_type": "image/jpeg"}, "small", "ab", True, False)
@@ -2654,6 +2784,8 @@ def selftest() -> int:
             check(all(4 <= duration <= 6 or duration <= 6 for _name, duration in segs), "sample segments are a few seconds")
             copied = hls_command(src, folder / "copy-cmd", 5, False, True)
             check(copied[copied.index("-c") + 1] == "copy" and "libx264" not in copied, "HLS copy uses -c copy and does not re-encode")
+            split = hls_command(src, folder / "key-cmd", 1, False, True, True)
+            check(split[split.index("-c") + 1] == "copy" and split[split.index("-hls_time") + 1] == "0.001" and "libx264" not in split, "keyframe splits stay -c copy")
             init_only, segs_only, transcoded = build_hls(src, folder / "copy", copy_only=True)
             names_only = [Path(init_only).name] + [Path(name).name for name, _duration in segs_only]
             check(transcoded is False and bool(segs_only) and segments_under(folder / "copy", names_only, SMALL_BYTES), "copy-only HLS keeps the original codecs")

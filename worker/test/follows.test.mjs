@@ -1,0 +1,220 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { Miniflare } from "miniflare";
+
+let mf;
+
+function workerOptions() {
+  return {
+    modules: true,
+    scriptPath: new URL("../src/index.js", import.meta.url).pathname,
+    modulesRoot: new URL("../..", import.meta.url).pathname,
+    modulesRules: [{ type: "ESModule", include: ["**/*.js"], fallthrough: true }],
+    compatibilityDate: "2026-01-15",
+    d1Databases: ["DB"],
+    r2Buckets: ["DATA"],
+    bindings: {
+      ACCOUNT_PEPPER: "pepper-test",
+      OWNER_CLAIM_CODE: "claim-test",
+      ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080",
+      PBKDF2_ITERATIONS: "1000"
+    }
+  };
+}
+
+async function call(path, opts) {
+  opts = opts || {};
+  const headers = new Headers(opts.headers || {});
+  headers.set("CF-Connecting-IP", opts.ip || "203.0.113.10");
+  if (opts.token) headers.set("Authorization", "Bearer " + opts.token);
+  if (opts.body) headers.set("content-type", "application/json");
+  const res = await mf.dispatchFetch("https://accounts.test" + path, {
+    method: opts.method || "GET",
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  const text = await res.text();
+  let body = null;
+  try { body = text ? JSON.parse(text) : null; }
+  catch (err) { body = { raw: text }; }
+  return { status: res.status, body, text };
+}
+
+async function signup(ip, handle, name) {
+  const created = await call("/v1/signup", {
+    method: "POST",
+    ip,
+    body: { displayName: name, handle }
+  });
+  assert.equal(created.status, 201, created.text);
+  return created.body;
+}
+
+test.before(async () => {
+  mf = new Miniflare(workerOptions());
+});
+
+test.after(async () => {
+  if (mf) await mf.dispose();
+});
+
+test("follows persist for the signed-in account and stay private", async () => {
+  const closed = await call("/v1/follows", { ip: "203.0.113.210" });
+  assert.equal(closed.status, 401);
+
+  const ada = await signup("203.0.113.211", "ada_fl", "Ada Follow");
+  const bea = await signup("203.0.113.212", "bea_fl", "Bea Follow");
+  const bio = await call("/v1/profile", {
+    method: "PATCH",
+    ip: "203.0.113.213",
+    token: ada.token,
+    body: { bio: "Ada builds engines" }
+  });
+  assert.equal(bio.status, 200);
+
+  const self = await call("/v1/follows", {
+    method: "PUT",
+    ip: "203.0.113.214",
+    token: ada.token,
+    body: { id: "app:" + ada.account.publicId }
+  });
+  assert.equal(self.status, 400);
+
+  const bad = await call("/v1/follows", {
+    method: "PUT",
+    ip: "203.0.113.215",
+    token: ada.token,
+    body: { id: "../secret" }
+  });
+  assert.equal(bad.status, 400);
+
+  const followed = await call("/v1/follows", {
+    method: "PUT",
+    ip: "203.0.113.216",
+    token: ada.token,
+    body: { id: "app:" + bea.account.publicId }
+  });
+  assert.equal(followed.status, 200);
+  assert.equal(followed.body.viewerFollows, true);
+  assert.equal(followed.body.followingCount, 1);
+  assert.equal(followed.body.followersCount, 1);
+
+  const outside = await call("/v1/follows", {
+    method: "PUT",
+    ip: "203.0.113.217",
+    token: ada.token,
+    body: {
+      id: "x:redacted_handle",
+      profile: {
+        name: "Elon Musk",
+        handle: "redacted_handle",
+        platform: "x",
+        bio: "Mars",
+        avatar: "https://cdn.example/elon.jpg",
+        email: "secret@example.com"
+      }
+    }
+  });
+  assert.equal(outside.status, 200);
+  assert.equal(outside.body.followingCount, 2);
+  assert.equal(outside.body.followersCount, 1);
+
+  const adaProfile = await call("/v1/profile/ada_fl", { ip: "203.0.113.218", token: bea.token });
+  assert.equal(adaProfile.status, 200);
+  assert.equal(adaProfile.body.account.followingCount, 2);
+  assert.equal(adaProfile.body.account.followersCount, 0);
+  const beaProfile = await call("/v1/profile/bea_fl", { ip: "203.0.113.219", token: ada.token });
+  assert.equal(beaProfile.body.account.followersCount, 1);
+  assert.equal(beaProfile.body.account.viewerFollows, true);
+
+  const otherDevice = await call("/v1/login", {
+    method: "POST",
+    ip: "203.0.113.220",
+    body: { accountNumber: ada.accountNumber }
+  });
+  assert.equal(otherDevice.status, 200);
+  const mine = await call("/v1/follows", { ip: "203.0.113.221", token: otherDevice.body.token });
+  assert.equal(mine.status, 200);
+  assert.equal(mine.body.followingCount, 2);
+  assert.deepEqual(mine.body.ids.sort(), ["app:" + bea.account.publicId, "x:redacted_handle"].sort());
+
+  const following = await call("/v1/follows?id=" + encodeURIComponent("app:" + ada.account.publicId) + "&tab=following", {
+    ip: "203.0.113.222",
+    token: bea.token
+  });
+  assert.equal(following.status, 200);
+  assert.equal(following.body.accounts.length, 2);
+  const beaRow = following.body.accounts.find((row) => row.id === "app:" + bea.account.publicId);
+  const elon = following.body.accounts.find((row) => row.id === "x:redacted_handle");
+  assert.equal(beaRow.kind, "account");
+  assert.equal(beaRow.handle, "bea_fl");
+  assert.equal(beaRow.name, "Bea Follow");
+  assert.equal(elon.kind, "feed");
+  assert.equal(elon.handle, "redacted_handle");
+  assert.equal(elon.bio, "Mars");
+  assert.equal(elon.name, "Elon Musk");
+  const dumped = JSON.stringify(following.body);
+  assert.equal(dumped.includes("secret@example.com"), false);
+  assert.equal(dumped.includes("accountNumber"), false);
+  assert.equal(dumped.includes("number_hash"), false);
+  assert.equal(dumped.includes("number_lookup"), false);
+  assert.equal(dumped.includes("\"salt\""), false);
+  assert.equal(dumped.includes("email"), false);
+
+  const followers = await call("/v1/follows?id=" + encodeURIComponent("x:redacted_handle") + "&tab=followers", {
+    ip: "203.0.113.223",
+    token: bea.token
+  });
+  assert.equal(followers.body.followersCount, 1);
+  assert.equal(followers.body.accounts[0].handle, "ada_fl");
+  assert.equal(followers.body.accounts[0].bio, "Ada builds engines");
+  assert.equal(JSON.stringify(followers.body).includes(ada.accountNumber), false);
+
+  const guest = await call("/v1/follows?id=x:redacted_handle&tab=followers", { ip: "203.0.113.224" });
+  assert.equal(guest.status, 401);
+
+  const gone = await call("/v1/follows", {
+    method: "DELETE",
+    ip: "203.0.113.225",
+    token: otherDevice.body.token,
+    body: { id: "app:" + bea.account.publicId }
+  });
+  assert.equal(gone.status, 200);
+  assert.equal(gone.body.followingCount, 1);
+  assert.equal(gone.body.followersCount, 0);
+  const after = await call("/v1/profile/bea_fl", { ip: "203.0.113.226", token: ada.token });
+  assert.equal(after.body.account.followersCount, 0);
+  assert.equal(after.body.account.viewerFollows, false);
+
+  const imported = await call("/v1/follows/import", {
+    method: "POST",
+    ip: "203.0.113.227",
+    token: bea.token,
+    body: { ids: ["x:redacted_handle", "x:redacted_handle", "not an id", "youtube:news"] }
+  });
+  assert.equal(imported.status, 200);
+  assert.equal(imported.body.followingCount, 2);
+  const again = await call("/v1/follows/import", {
+    method: "POST",
+    ip: "203.0.113.228",
+    token: bea.token,
+    body: { ids: ["x:redacted_handle", "youtube:news"] }
+  });
+  assert.equal(again.body.followingCount, 2);
+  const elonFollowers = await call("/v1/follows?id=x:redacted_handle", { ip: "203.0.113.229", token: ada.token });
+  assert.equal(elonFollowers.body.followersCount, 2);
+  assert.equal(elonFollowers.body.viewerFollows, true);
+
+  const withApp = await call("/v1/follows/import", {
+    method: "POST",
+    ip: "203.0.113.230",
+    token: bea.token,
+    body: { ids: ["app:" + ada.account.publicId, "app:" + bea.account.publicId, "app:000000000000", "x:redacted_handle"] }
+  });
+  assert.equal(withApp.status, 200, withApp.text);
+  assert.equal(withApp.body.followingCount, 3);
+  const beaList = await call("/v1/follows", { ip: "203.0.113.231", token: bea.token });
+  assert.equal(beaList.body.ids.includes("app:" + ada.account.publicId), true);
+  assert.equal(beaList.body.ids.includes("app:" + bea.account.publicId), false);
+  assert.equal(beaList.body.ids.includes("app:000000000000"), false);
+});
