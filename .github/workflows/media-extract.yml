@@ -32,8 +32,10 @@ permissions:
   contents: read
 
 # A pull request only runs the self-test. It must not replace a queued upload.
-# cancel-in-progress is false so the running upload finishes; a newer waiting
-# run takes the single queue slot.
+# cancel-in-progress is false so the running upload finishes. GitHub cancels
+# an older pending run in this group when a newer one is queued, so a dispatch
+# during an upload leaves exactly one run waiting. The script stops at 150
+# minutes and flushes the archive, catalog, links, and cursor before the job limit.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && 'test' || 'upload' }}
   cancel-in-progress: false
@@ -56,7 +58,7 @@ jobs:
     needs: selftest
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    timeout-minutes: 170
     steps:
       - name: Skip when a required secret is missing
         id: secrets
@@ -118,6 +120,7 @@ jobs:
           TG_MAX_MB: ${{ vars.TG_MAX_MB }}
           TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
           MEDIA_EXTRACT_CAP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cap || '80' }}
+          MEDIA_EXTRACT_BUDGET: "9000"
           MEDIA_EXTRACT_PER: "2"
           MEDIA_EXTRACT_PACE: "3"
           PYTHONUNBUFFERED: "1"

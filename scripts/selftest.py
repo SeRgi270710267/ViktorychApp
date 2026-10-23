@@ -3930,6 +3930,8 @@ def story_checks() -> None:
     check('echo "$WORKER_DISPATCH_TOKEN"' not in dispatch_wf and "echo $WORKER_DISPATCH_TOKEN" not in dispatch_wf and "echo ${{ secrets" not in dispatch_wf and "printf '%s' \"$WORKER_DISPATCH_TOKEN\"" in dispatch_wf, "the dispatch secret workflow does not print the token")
     live_check = (ROOT / "worker" / "dispatch-live-check.mjs").read_text(encoding="utf-8")
     check("node dispatch-live-check.mjs" in dispatch_wf and "/tiktok-live.yml/dispatches" in live_check and "media-extract.yml" not in live_check and "tiktok-added.yml" not in live_check, "the worker dispatch check starts only tiktok-live.yml")
+    worker_src = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
+    check('[triggers]' in wrangler and 'crons = ["*/3 * * * *", "*/30 * * * *"]' in wrangler and "async scheduled(" in worker_src and "owner/cron-heartbeats.json" in worker_src and "LIVE_FRESH_MS = 4 * 60 * 1000" in worker_src, "the accounts Worker checks lives every 3 minutes and new posts every 30")
     check("console.log(process.env" not in live_check and "workers.dev" not in live_check and "status: 500" in live_check, "the dispatch check does not print the token or call the owner account")
     en = (ROOT / "i18n" / "en.js").read_text(encoding="utf-8")
     es = (ROOT / "i18n" / "es.js").read_text(encoding="utf-8")

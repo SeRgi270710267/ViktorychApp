@@ -2,6 +2,8 @@ name: TikTok live
 
 on:
   schedule:
+    # Fallback. The accounts Worker cron checks every 3 minutes and dispatches
+    # this workflow when an added account is newly live and not already recording.
     - cron: "*/5 * * * *"
   workflow_dispatch:
   pull_request:

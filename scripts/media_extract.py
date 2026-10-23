@@ -546,6 +546,30 @@ def store_catalog(cf, manifest, state, directory, links, limit, stored, pause, t
     return stored
 
 
+def budget_seconds() -> int:
+    raw = os.environ.get("MEDIA_EXTRACT_BUDGET", "9000")
+    try:
+        value = int(str(raw).strip() or "9000")
+    except ValueError:
+        value = 9000
+    return max(60, min(value, 9000))
+
+
+def persist_progress(cf, bucket, archive, photos, catalog, links, start, visited, accounts) -> None:
+    put_text(cf, bucket, ARCHIVE_KEY, text_file(archive))
+    put_file(cf, bucket, GALLERY_KEY, photos)
+    put_json(cf, bucket, CATALOG_KEY, catalog)
+    by_key = {}
+    for row in links:
+        if row.get("key"):
+            by_key[row["key"]] = row
+    put_json(cf, bucket, LINKS_KEY, {
+        "updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "items": list(by_key.values()),
+    })
+    put_text(cf, bucket, CURSOR_KEY, str((start + visited) % max(len(accounts), 1)))
+
+
 def extract() -> int:
     config_path = ROOT / "feeds.config.json"
     try:
@@ -591,9 +615,14 @@ def extract() -> int:
         pause = pace_seconds()
         visited = 0
         tally = fresh_tally()
+        started = time.monotonic()
+        budget = budget_seconds()
         stored = store_catalog(cf, manifest, state, directory, links, limit, 0, pause, tally)
         for offset, account in enumerate(rotate(accounts, start)):
             if stored >= limit:
+                break
+            if time.monotonic() - started >= budget:
+                log("[media-extract] time budget")
                 break
             visited += 1
             if offset:
@@ -680,12 +709,7 @@ def extract() -> int:
             put_text(cf, bucket, ARCHIVE_KEY, text_file(archive))
             put_file(cf, bucket, GALLERY_KEY, photos)
             put_json(cf, bucket, CATALOG_KEY, catalog)
-        by_key = {}
-        for row in links:
-            if row.get("key"):
-                by_key[row["key"]] = row
-        put_json(cf, bucket, LINKS_KEY, {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "items": list(by_key.values())})
-        put_text(cf, bucket, CURSOR_KEY, str((start + visited) % max(len(accounts), 1)))
+        persist_progress(cf, bucket, archive, photos, catalog, links, start, visited, accounts)
         log("[media-extract] stored %s files, visited %s added accounts" % (stored, visited))
         log_tally(tally)
         log(tb.upload_summary(state))
@@ -694,6 +718,11 @@ def extract() -> int:
     except Exception as err:
         if "tally" in locals():
             log_tally(tally)
+        if all(name in locals() for name in ("cf", "bucket", "archive", "photos", "catalog", "links", "start", "visited", "accounts")):
+            try:
+                persist_progress(cf, bucket, archive, photos, catalog, links, start, visited, accounts)
+            except Exception:
+                log("[media-extract] progress flush failed")
         log("[media-extract] extract failed")
         log(tb.scrub(str(err), tb.current_secrets()))
         return 1
@@ -754,7 +783,8 @@ def selftest() -> int:
     check(tb.runner_blocked("HTTP Error 403: Forbidden") and tb.runner_blocked("captcha") and not tb.runner_blocked("private account"), "a 403 or captcha is a skip")
     workflow = (ROOT / ".github" / "workflows" / "media-extract.yml").read_text(encoding="utf-8")
     check('cron: "17 */3 * * *"' in workflow and 'cron: "*/30 * * * *"' in workflow and "workflow_dispatch" in workflow and "yt-dlp==2026.10.21" in workflow and "gallery-dl==1.32.17" in workflow, "the workflow is scheduled every 3 hours and pins the tools")
-    check("cancel-in-progress: false" in workflow, "an upload that is already running is not cancelled")
+    check("cancel-in-progress: false" in workflow and "timeout-minutes: 170" in workflow and 'MEDIA_EXTRACT_BUDGET: "9000"' in workflow, "one upload runs, one waits, and the job ends before the Actions cap")
+    check("def budget_seconds" in Path(__file__).read_text(encoding="utf-8") and "time budget" in Path(__file__).read_text(encoding="utf-8") and "def persist_progress" in Path(__file__).read_text(encoding="utf-8"), "a run stops at 150 minutes and flushes the archive, catalog, links, and cursor")
     check(photos_allowed("blocked") is True, "a blocked video does not skip photos")
     queued = catalog_queue([
         {"platform": "x", "posted": "2026-10-22T16:00:00Z", "key": "old"},

@@ -19,6 +19,11 @@ PBKDF2_ITERATIONS = "8000"
 # "all" shows them to everyone. Keep this in step with accounts.config.js.
 TIKTOK_AUDIENCE = "owner"
 
+# Live checks every 3 minutes. New posts of added accounts every 30 minutes.
+# The GitHub schedules stay as a fallback when a dispatch is missed.
+[triggers]
+crons = ["*/3 * * * *", "*/30 * * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "viktorych-accounts"

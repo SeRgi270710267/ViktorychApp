@@ -918,7 +918,9 @@ async function rememberLive(env, handle, info) {
       checkedAt: when,
       detail: info.detail || "",
       backoffUntil: "",
-      backoffStep: 0
+      backoffStep: 0,
+      dispatchedRoom: prev.dispatchedRoom || "",
+      dispatchedAt: prev.dispatchedAt || ""
     };
     await env.DATA.put("owner/tiktok.json", JSON.stringify(doc));
   } catch (err) { /* the player still gets this response */ }
@@ -2013,26 +2015,35 @@ function tiktokRowMatches(row, handle) {
   return previous.some((item) => sameTikTokHandle(item, handle));
 }
 
-async function dispatchAddedAccounts(env) {
+async function dispatchWorkflow(env, file, inputs) {
   const token = String(env.GITHUB_DISPATCH_TOKEN || "").trim();
   if (!token) return false;
+  const body = { ref: "main" };
+  if (inputs) body.inputs = inputs;
+  try {
+    const res = await fetch("https://api.github.com/repos/ViktorychGroup/ViktorychApp/actions/workflows/" + file + "/dispatches", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "viktorych-accounts",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
+    return res.status === 204 || res.ok;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function dispatchAddedAccounts(env) {
   const files = ["tiktok-added.yml", "media-extract.yml", "tiktok-live.yml"];
   let ok = false;
   for (let i = 0; i < files.length; i++) {
-    try {
-      const res = await fetch("https://api.github.com/repos/ViktorychGroup/ViktorychApp/actions/workflows/" + files[i] + "/dispatches", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + token,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          "User-Agent": "viktorych-accounts",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ ref: "main" })
-      });
-      if (res.status === 204 || res.ok) ok = true;
-    } catch (err) { /* the next scheduled run still picks the account up */ }
+    const inputs = files[i] === "media-extract.yml" ? { cap: "80" } : null;
+    if (await dispatchWorkflow(env, files[i], inputs)) ok = true;
   }
   return ok;
 }
@@ -2239,7 +2250,9 @@ async function route(request, env) {
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   await ensureSchema(env);
   if (path === "/v1/health" && request.method === "GET") {
-    return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });
+    let cron = { live: 0, media: 0, lastLive: "", lastMedia: "" };
+    try { cron = await cronView(env); } catch (err) { /* health still answers */ }
+    return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN, cron });
   }
   if ((path === "/tg" || path.startsWith("/tg/")) && (request.method === "GET" || request.method === "HEAD")) {
     return handleTelegram(request, env, path);
@@ -2286,6 +2299,215 @@ async function route(request, env) {
   return json(404, { error: "not_found" });
 }
 
+const CRON_KEY = "owner/cron-heartbeats.json";
+const LIVE_FRESH_MS = 4 * 60 * 1000;
+const LIVE_PER_TICK = 6;
+
+function cronKind(cron) {
+  return String(cron || "").indexOf("*/30") === 0 ? "media" : "live";
+}
+
+async function touchCron(env, kind) {
+  const doc = (await readJsonKey(env, CRON_KEY)) || {};
+  const list = Array.isArray(doc[kind]) ? doc[kind].filter((item) => typeof item === "string") : [];
+  list.push(stamp());
+  doc[kind] = list.slice(-12);
+  if (env.DATA) await env.DATA.put(CRON_KEY, JSON.stringify(doc));
+  return doc;
+}
+
+async function cronView(env) {
+  const doc = (await readJsonKey(env, CRON_KEY)) || {};
+  const live = Array.isArray(doc.live) ? doc.live : [];
+  const media = Array.isArray(doc.media) ? doc.media : [];
+  return {
+    live: live.length,
+    media: media.length,
+    lastLive: live.length ? String(live[live.length - 1]) : "",
+    lastMedia: media.length ? String(media[media.length - 1]) : ""
+  };
+}
+
+function liveFresh(prev) {
+  const checked = Date.parse(prev && prev.checkedAt || "");
+  return Number.isFinite(checked) && Date.now() - checked < LIVE_FRESH_MS;
+}
+
+async function jobRecording(env, handle) {
+  const job = await readJsonKey(env, LIVE_JOB_PREFIX + handle + ".json");
+  return !!(job && job.active && job.active.state === "recording");
+}
+
+async function storeLive(env, handle, prev, fields) {
+  if (!env.DATA) return;
+  const doc = await readOwnerDoc(env);
+  const base = doc && typeof doc === "object" ? doc : {};
+  if (!base.live || typeof base.live !== "object") base.live = {};
+  const prior = base.live[handle] && typeof base.live[handle] === "object" ? base.live[handle] : (prev || {});
+  base.live[handle] = {
+    handle,
+    live: !!fields.live,
+    viewers: fields.live ? (fields.viewers || 0) : 0,
+    title: fields.live ? (fields.title || "") : "",
+    roomId: fields.roomId || prior.roomId || "",
+    quality: fields.live ? (fields.quality || "") : "",
+    qualityNote: fields.live ? (fields.qualityNote || "") : "",
+    lastLiveAt: fields.live ? (fields.lastLiveAt || stamp()) : (fields.lastLiveAt || prior.lastLiveAt || ""),
+    checkedAt: stamp(),
+    detail: fields.detail || "",
+    backoffUntil: "",
+    backoffStep: 0,
+    dispatchedRoom: fields.dispatchedRoom != null ? fields.dispatchedRoom : (prior.dispatchedRoom || ""),
+    dispatchedAt: fields.dispatchedAt != null ? fields.dispatchedAt : (prior.dispatchedAt || "")
+  };
+  await env.DATA.put("owner/tiktok.json", JSON.stringify(base));
+}
+
+async function probeAddedLive(env, handle, prev) {
+  const roomKey = "https://live-roomid.internal/" + handle.toLowerCase();
+  let roomId = "";
+  const roomCached = await cacheRead(roomKey, 5 * 60 * 1000);
+  if (roomCached && /^[1-9][0-9]{5,24}$/.test(String(roomCached.roomId || ""))) roomId = String(roomCached.roomId);
+  if (!roomId && /^[1-9][0-9]{5,24}$/.test(String(prev.roomId || ""))) {
+    const checked = Date.parse(prev.checkedAt || "");
+    if (Number.isFinite(checked) && Date.now() - checked < 5 * 60 * 1000) roomId = String(prev.roomId);
+  }
+  if (!roomId) {
+    const livePage = await fetchPublic("https://www.tiktok.com/@" + handle + "/live");
+    const pageKind = challengeKind(livePage.status, livePage.text);
+    if (pageKind) {
+      await noteBlock(env, handle, pageKind, livePage.retryAfter, prev);
+      return { dispatch: false };
+    }
+    roomId = parseRoomId(livePage.text);
+    if (!roomId) {
+      const profile = await fetchPublic("https://www.tiktok.com/@" + handle);
+      const profileKind = challengeKind(profile.status, profile.text);
+      if (profileKind) {
+        await noteBlock(env, handle, profileKind, profile.retryAfter, prev);
+        return { dispatch: false };
+      }
+      roomId = parseRoomId(profile.text);
+    }
+    if (roomId) await cacheWrite(roomKey, { roomId }, 300);
+  }
+  if (!roomId) {
+    await storeLive(env, handle, prev, { live: false, roomId: "", detail: "TikTok did not include a room id", lastLiveAt: prev.lastLiveAt || "" });
+    return { dispatch: false };
+  }
+  const saved = await cacheRead("https://live-stream.internal/" + roomId, 10000);
+  if (saved && isTopQuality(saved.quality) && saved.hls) {
+    await storeLive(env, handle, prev, {
+      live: !!saved.live,
+      viewers: saved.viewers || 0,
+      title: saved.title || "",
+      roomId,
+      quality: saved.quality || ""
+    });
+    const recording = await jobRecording(env, handle);
+    return { dispatch: !!saved.live && !recording && String(prev.dispatchedRoom || "") !== roomId, roomId };
+  }
+  let room = null;
+  try {
+    room = await fetchRoom(roomId);
+  } catch (err) {
+    await storeLive(env, handle, prev, {
+      live: !!prev.live,
+      roomId,
+      viewers: prev.viewers || 0,
+      title: prev.title || "",
+      quality: prev.quality || "",
+      qualityNote: prev.qualityNote || "",
+      lastLiveAt: prev.lastLiveAt || ""
+    });
+    return { dispatch: false };
+  }
+  const roomKind = challengeKind(room.status, room.text);
+  if (roomKind) {
+    await noteBlock(env, handle, roomKind, room.retryAfter, prev);
+    return { dispatch: false };
+  }
+  let parsed = {};
+  try { parsed = JSON.parse(room.text || "{}"); } catch (err) { parsed = {}; }
+  const picked = pickStreams(parsed);
+  if (isTopQuality(picked.quality) && picked.hls) {
+    await cacheWrite("https://live-stream.internal/" + roomId, {
+      live: !!picked.live,
+      viewers: picked.viewers || 0,
+      title: picked.title || "",
+      quality: picked.quality || "",
+      qualityNote: "",
+      hls: picked.hls || "",
+      flv: picked.flv || ""
+    }, 10);
+  }
+  await storeLive(env, handle, prev, {
+    live: !!picked.live,
+    viewers: picked.viewers || 0,
+    title: picked.title || "",
+    roomId,
+    quality: picked.quality || "",
+    qualityNote: picked.qualityNote || "",
+    lastLiveAt: picked.live ? stamp() : (prev.lastLiveAt || "")
+  });
+  const recording = await jobRecording(env, handle);
+  return { dispatch: !!picked.live && !recording && String(prev.dispatchedRoom || "") !== roomId, roomId };
+}
+
+async function runLiveCron(env) {
+  const beat = await touchCron(env, "live");
+  if (!env.DATA) return;
+  if (!String(env.GITHUB_DISPATCH_TOKEN || "").trim()) return;
+  const accounts = await readTikTokAccounts(env);
+  const handles = accounts.added.map((row) => row.handle).filter((handle) => TIKTOK_HANDLE.test(handle));
+  handles.sort();
+  if (!handles.length) return;
+  const doc = (await readOwnerDoc(env)) || {};
+  const live = doc.live && typeof doc.live === "object" ? doc.live : {};
+  let index = Math.abs(Number(beat.cursor) || 0) % handles.length;
+  const due = [];
+  let seen = 0;
+  while (seen < handles.length && due.length < LIVE_PER_TICK) {
+    const handle = handles[index];
+    index = (index + 1) % handles.length;
+    seen += 1;
+    const prev = live[handle] && typeof live[handle] === "object" ? live[handle] : {};
+    if (backoffActive(prev) || liveFresh(prev)) continue;
+    due.push({ handle, prev });
+  }
+  beat.cursor = index;
+  await env.DATA.put(CRON_KEY, JSON.stringify(beat));
+  const pending = [];
+  for (let i = 0; i < due.length; i++) {
+    try {
+      const result = await probeAddedLive(env, due[i].handle, due[i].prev);
+      if (result && result.dispatch && result.roomId) pending.push({ handle: due[i].handle, roomId: result.roomId });
+    } catch (err) { /* the next tick retries this handle */ }
+  }
+  if (!pending.length) return;
+  if (!await dispatchWorkflow(env, "tiktok-live.yml")) return;
+  for (let i = 0; i < pending.length; i++) {
+    const row = pending[i];
+    const current = (await readOwnerDoc(env)) || {};
+    if (!current.live || !current.live[row.handle]) continue;
+    current.live[row.handle].dispatchedRoom = row.roomId;
+    current.live[row.handle].dispatchedAt = stamp();
+    await env.DATA.put("owner/tiktok.json", JSON.stringify(current));
+  }
+}
+
+async function runMediaCron(env) {
+  await touchCron(env, "media");
+  if (!String(env.GITHUB_DISPATCH_TOKEN || "").trim()) return;
+  await dispatchWorkflow(env, "tiktok-added.yml");
+  await dispatchWorkflow(env, "media-extract.yml", { cap: "80" });
+}
+
+async function runCron(event, env) {
+  if (cronKind(event && event.cron) === "media") await runMediaCron(env);
+  else await runLiveCron(env);
+}
+
 export default {
   async fetch(request, env) {
     try {
@@ -2296,5 +2518,10 @@ export default {
     } catch (err) {
       return json(500, { error: "unavailable" });
     }
+  },
+  async scheduled(event, env, ctx) {
+    const run = runCron(event, env);
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(run);
+    await run;
   }
 };
