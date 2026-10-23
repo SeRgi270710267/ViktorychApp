@@ -853,6 +853,8 @@ SI18n.addPack("ru", {
   "Playing ReGone on {app}": "Играю в ReGone в {app}",
   "That game isn’t here.": "Этой игры здесь нет.",
   "added accounts": "добавленные аккаунты",
+  "Fetching posts…": "Загрузка постов…",
+  "That account wasn’t found.": "Такой аккаунт не найден.",
   "Original quality": "Исходное качество",
   "No added accounts yet.": "Пока нет добавленных аккаунтов.",
   "That doesn’t look like a TikTok account.": "Это не похоже на аккаунт TikTok.",

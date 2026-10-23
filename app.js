@@ -914,11 +914,200 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!handle) return "#/";
     return "#/u/" + encodeURIComponent(platform || "x") + "/" + encodeURIComponent(handle);
   }
+  let ownerAdded = [];
+  let ownerAddedAt = 0;
+  let ownerFetchTimer = 0;
+  let ownerAdding = false;
+  const ownerRemoved = new Set();
+
+  function ownerHidden(feed) {
+    if (!feed || !ownerRemoved.size) return false;
+    const handle = String(feed.handle || "").replace(/^@/, "").toLowerCase();
+    if (handle && ownerRemoved.has(handle)) return true;
+    if (feed.permanentId && ownerRemoved.has("id:" + feed.permanentId)) return true;
+    return (feed.previousHandles || []).some((name) => ownerRemoved.has(String(name || "").replace(/^@/, "").toLowerCase()));
+  }
+
+  function inPublicCatalog(feed) {
+    const rows = (STATE.catalog && STATE.catalog.feeds) || [];
+    return rows.some((row) => row && (
+      (feed.id && row.id === feed.id) ||
+      (feed.permanentId && String(row.permanentId || "") === String(feed.permanentId)) ||
+      (feed.handle && String(row.handle || "").toLowerCase() === String(feed.handle || "").toLowerCase())
+    ));
+  }
+
+  function keepAfterRemove(feed) {
+    return !feed || !ownerHidden(feed) || inPublicCatalog(feed);
+  }
+
+  function hideOwnerAccount(handle, permanentId) {
+    const name = String(handle || "").replace(/^@/, "").toLowerCase();
+    if (name) ownerRemoved.add(name);
+    if (permanentId) ownerRemoved.add("id:" + permanentId);
+  }
+
+  function signedOwner() {
+    const account = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+    return !!(account && (account.owner === true || account.owner === 1));
+  }
+
+  function ownerFeedFromAccount(row) {
+    if (!row || !row.handle) return null;
+    const handle = String(row.handle).replace(/^@/, "");
+    if (!/^[A-Za-z0-9_]{1,15}$/.test(handle)) return null;
+    const id = /^x:[A-Za-z0-9_]{1,15}$/.test(String(row.id || "")) ? String(row.id) : "x:" + handle;
+    const feed = {
+      id: id,
+      platform: "x",
+      handle: handle,
+      name: row.name || handle,
+      avatar: row.avatar || "",
+      banner: row.banner || "",
+      bio: row.bio || "",
+      url: row.url || ("https://x.com/" + handle),
+      permanentId: row.permanentId || "",
+      previousHandles: Array.isArray(row.previousHandles) ? row.previousHandles : [],
+      verifiedType: row.verifiedType || "",
+      location: row.location || "",
+      website: row.website || "",
+      joined: row.joined || "",
+      configured: false,
+      ownerAdded: true
+    };
+    if (row.followers != null) feed.followers = row.followers;
+    if (row.following != null) feed.following = row.following;
+    if (row.postsCount != null) feed.postsCount = row.postsCount;
+    return feed;
+  }
+
+  function fillOwnerProfile(have, pending) {
+    const copy = Object.assign({}, have, { ownerAdded: true });
+    ["name", "avatar", "banner", "bio", "verifiedType", "website", "location", "joined", "url", "permanentId"].forEach((key) => {
+      if (!copy[key] && pending[key]) copy[key] = pending[key];
+    });
+    if (copy.followers == null && pending.followers != null) copy.followers = pending.followers;
+    if (copy.following == null && pending.following != null) copy.following = pending.following;
+    if (copy.postsCount == null && pending.postsCount != null) copy.postsCount = pending.postsCount;
+    const previous = (copy.previousHandles || []).slice();
+    (pending.previousHandles || []).forEach((item) => {
+      if (item && !previous.some((name) => String(name).toLowerCase() === String(item).toLowerCase())) previous.push(item);
+    });
+    if (previous.length) copy.previousHandles = previous;
+    return copy;
+  }
+
+  function ownerStillFetching(feed) {
+    if (!feed || !feed.ownerAdded) return false;
+    return !postsFor(feed).length;
+  }
+
+  function ownerFeedRows() {
+    const out = [];
+    const seen = new Set();
+    ownerAdded.forEach((row) => {
+      const handle = String((row && row.handle) || "").replace(/^@/, "");
+      const key = handle.toLowerCase();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      const feed = catalogAccount("x", handle) || (row.permanentId ? catalogAccount("x", row.permanentId) : null);
+      if (feed) out.push(feed);
+    });
+    return out;
+  }
+
+  function watchOwnerPosts() {
+    if (ownerFetchTimer) return;
+    const pending = () => ownerFeedRows().some((feed) => ownerStillFetching(feed));
+    if (!pending()) return;
+    let left = 45;
+    ownerFetchTimer = setInterval(() => {
+      left -= 1;
+      refreshFeeds(true).finally(() => {
+        if (!pending() || left <= 0) {
+          clearInterval(ownerFetchTimer);
+          ownerFetchTimer = 0;
+        }
+        render();
+      });
+    }, 20000);
+  }
+
+  function loadOwnerAccounts() {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!signedOwner() || !api || !token) return;
+    if (Date.now() - ownerAddedAt < 15000) return;
+    ownerAddedAt = Date.now();
+    fetch(api + "/v1/owner/accounts", {
+      headers: { Authorization: "Bearer " + token },
+      cache: "no-store"
+    }).then((res) => {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    }).then((body) => {
+      ownerAdded = (body && body.added) || [];
+      watchOwnerPosts();
+      render();
+    }).catch(() => {});
+  }
+
+  function saveOwnerX(raw) {
+    if (ownerAdding) return;
+    const api = accountsApi();
+    const token = accountToken();
+    if (!api || !token) return;
+    ownerAdding = true;
+    fetch(api + "/v1/owner/accounts", {
+      method: "POST",
+      headers: { "content-type": "application/json", Authorization: "Bearer " + token },
+      body: JSON.stringify({ handle: raw, platform: "x" })
+    }).then((res) => res.json().then((body) => ({ ok: res.ok, status: res.status, body })).catch(() => ({ ok: res.ok, status: res.status, body: null }))).then((result) => {
+      ownerAdding = false;
+      if (!result.ok || !result.body || !result.body.account || !result.body.account.handle) {
+        toast(result.status === 404 ? tr("That account wasn’t found.") : result.status === 400 ? tr("Use a profile URL, @handle, or an https feed") : tr("Couldn’t save this account."));
+        return;
+      }
+      const account = result.body.account;
+      ownerRemoved.delete(String(account.handle || "").replace(/^@/, "").toLowerCase());
+      if (account.permanentId) ownerRemoved.delete("id:" + account.permanentId);
+      (account.previousHandles || []).forEach((name) => ownerRemoved.delete(String(name || "").replace(/^@/, "").toLowerCase()));
+      ownerAdded = ownerAdded.filter((row) => !row || String(row.handle || "").toLowerCase() !== String(account.handle).toLowerCase());
+      ownerAdded.unshift(account);
+      ownerAddedAt = Date.now();
+      const form = document.querySelector("form.add-account");
+      if (form) form.reset();
+      watchOwnerPosts();
+      goHash(profileHash("x", account.handle));
+    }).catch(() => {
+      ownerAdding = false;
+      toast(tr("Couldn’t save this account."));
+    });
+  }
+
+  function deleteOwnerAccount(handle) {
+    const api = accountsApi();
+    const token = accountToken();
+    if (!api || !token || !handle) return;
+    fetch(api + "/v1/owner/accounts/" + encodeURIComponent(handle), {
+      method: "DELETE",
+      headers: { Authorization: "Bearer " + token }
+    }).then((res) => {
+      if (!res.ok) throw new Error(String(res.status));
+      return res.json();
+    }).then((body) => {
+      ownerAdded = (body && body.added) || [];
+      ownerAddedAt = Date.now();
+      render();
+    }).catch(() => {
+      toast(tr("Try again"));
+    });
+  }
+
   function catalogRows() {
     const rows = feeds().slice();
     const extra = STATE.catalog && STATE.catalog.feeds;
-    if (!Array.isArray(extra)) return rows;
-    extra.forEach((row) => {
+    if (Array.isArray(extra)) extra.forEach((row) => {
       if (!row || !row.id) return;
       const have = rows.find((item) => item && item.id === row.id);
       if (!have) {
@@ -938,7 +1127,23 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       }
       if (previous.length) have.previousHandles = previous;
     });
-    return rows;
+    ownerAdded.forEach((row) => {
+      const pending = ownerFeedFromAccount(row);
+      if (!pending) return;
+      const have = rows.find((item) => item && (
+        item.id === pending.id ||
+        (pending.permanentId && String(item.permanentId || "") === String(pending.permanentId)) ||
+        ((item.platform || "x") === "x" && String(item.handle || "").toLowerCase() === pending.handle.toLowerCase()) ||
+        (item.previousHandles || []).some((name) => String(name || "").replace(/^@/, "").toLowerCase() === pending.handle.toLowerCase())
+      ));
+      if (!have) {
+        rows.push(pending);
+        return;
+      }
+      const copy = fillOwnerProfile(have, pending);
+      rows[rows.indexOf(have)] = copy;
+    });
+    return rows.filter(keepAfterRemove);
   }
   function catalogAccount(platform, handle) {
     const key = String(handle || "").replace(/^@/, "");
@@ -981,7 +1186,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!text || text.length > 300) return null;
     const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram):(\S+)$/i);
     if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
-    if (/^https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}\/?$/i.test(text)) return { platform: "x", account: text };
+    if (/^https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}(?:\/[A-Za-z0-9_/%?&=.+~-]*)?$/i.test(text)) return { platform: "x", account: text };
     if (/^@?[A-Za-z0-9_]{1,15}$/.test(text)) return { platform: "x", account: text.replace(/^@/, "") };
     if (/threads\.(?:com|net)\/@/i.test(text)) return { platform: "threads", account: text };
     if (/instagram\.com\/[A-Za-z0-9._]+/i.test(text)) return { platform: "instagram", account: text };
@@ -6828,6 +7033,10 @@ const here = parseRoute();
       const merged = window.FeedsPeople.page(route);
       if (merged) return merged;
     }
+    if (signedOwner() && (route.platform || "x") === "x") {
+      loadOwnerAccounts();
+      watchOwnerPosts();
+    }
     const known = catalogAccount(route.platform, route.handle);
     if (known && known.handle && String(known.handle).toLowerCase() !== String(route.handle || "").toLowerCase()) {
       const tab = route.query.get("tab") || "";
@@ -6904,7 +7113,7 @@ const here = parseRoute();
     <div class="tabs ptabs" role="tablist" aria-label="${tr("Profile")}">${tabs}</div>
     ${list.length ? list.map((p) => {
       return card(p, carriedBy(p, feed) ? "" : "author");
-    }).join("") : emptyBlock(
+    }).join("") : (tab === "posts" && ownerStillFetching(feed)) ? emptyBlock(tr("Fetching posts…"), tr("Posts from this account will show up here.")) : emptyBlock(
       tab === "replies" ? tr("No replies yet") : tab === "media" ? tr("No media yet") : tab === "videos" ? tr("No videos yet") : tab === "community" ? tr("No community posts yet") : tr("No posts yet"),
       tab === "replies" ? tr("Replies by this account will show up here.") : tab === "community" ? tr("Community posts from this channel will show up here.") : tr("Posts from this account will show up here.")
     )}` + archiveSentinel();
@@ -7509,8 +7718,8 @@ const here = parseRoute();
 
   function accountRow(f, opts) {
     const site = !!(f && (f.configured || f.origin === "repost"));
-    const remove = opts && opts.remove && site
-      ? `<button type="button" class="follow remove-pill" data-act="ask-remove" data-id="${esc(f.id)}">${tr("Remove")}</button>`
+    const remove = opts && opts.remove && (site || opts.owner)
+      ? `<button type="button" class="follow remove-pill" data-act="ask-remove" data-id="${esc(f.id)}" data-handle="${esc(f.handle || "")}"${opts.owner ? ' data-owner="1"' : ""}>${tr("Remove")}</button>`
       : "";
     const added = f && f.origin === "repost" && !isFollowed(f.id);
     const pill = added ? `<span class="added-pill">${tr("Added")}</span>` : "";
@@ -7520,14 +7729,19 @@ const here = parseRoute();
   }
 
   function feedsView() {
+    if (signedOwner()) loadOwnerAccounts();
+    const ownerFeeds = signedOwner() ? ownerFeedRows() : [];
+    const ownerIds = new Set(ownerFeeds.map((feed) => feed.id));
+    const ownerHandles = new Set(ownerFeeds.map((feed) => String(feed.handle || "").toLowerCase()));
     const all = shownFeeds(feeds().slice());
     const byName = (a, b) => (a.name || "").localeCompare(b.name || "");
-    const added = all.filter((f) => f && f.origin === "repost").sort(byName);
-    const rest = all.filter((f) => f && f.origin !== "repost").sort((a, b) => Number(b.configured) - Number(a.configured) || byName(a, b));
+    const added = all.filter((f) => f && f.origin === "repost" && !ownerIds.has(f.id) && keepAfterRemove(f)).sort(byName);
+    const rest = all.filter((f) => f && f.origin !== "repost" && !ownerIds.has(f.id) && !ownerHandles.has(String(f.handle || "").toLowerCase()) && keepAfterRemove(f)).sort((a, b) => Number(b.configured) - Number(a.configured) || byName(a, b));
     const box = `<form class="add-account"><label class="search"><span>${icon("search")}</span><input id="add-account" placeholder="${tr("Add account URL or @handle")}" aria-label="${tr("Add account")}"></label><button class="follow" type="submit">${tr("Add")}</button></form>`;
+    const ownerBlock = ownerFeeds.length ? `<section class="feed-section"><h2>${tr("added accounts")}</h2>${ownerFeeds.map((f) => accountRow(f, { remove: true, owner: true })).join("")}</section>` : "";
     const addedBlock = added.length ? `<section class="feed-section"><h2>${tr("Added accounts")}</h2>${added.map((f) => accountRow(f, { remove: true })).join("")}</section>` : "";
     const restBlock = rest.length ? `<div>${rest.map((f) => accountRow(f, { remove: true })).join("")}</div>` : "";
-    return pageHead(tr("Feeds")) + box + (added.length || rest.length ? addedBlock + restBlock : emptyBlock(tr("No accounts"), tr("Paste a profile URL or @handle above.")));
+    return pageHead(tr("Feeds")) + box + (ownerFeeds.length || added.length || rest.length ? ownerBlock + addedBlock + restBlock : emptyBlock(tr("No accounts"), tr("Paste a profile URL or @handle above.")));
   }
 
   function listsView() {
@@ -10935,15 +11149,26 @@ if (STATE.histClear) {
     if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; render(); return; }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
-      const feed = feedById(id);
-      STATE.removeFeed = { id: id, handle: (feed && feed.handle) || "" };
+      const feed = feedById(id) || catalogAccount("x", el.dataset.handle || "");
+      STATE.removeFeed = { id: id, handle: (feed && feed.handle) || el.dataset.handle || "", permanentId: (feed && feed.permanentId) || "", ownerAdded: el.dataset.owner === "1" };
       render();
       return;
     }
     if (act === "confirm-remove") {
       const pending = STATE.removeFeed;
-      const url = pending && pending.id ? followIssueUrlForId("unfollow", pending.id) : "";
       STATE.removeFeed = null;
+      if (pending && pending.ownerAdded && signedOwner()) {
+        hideOwnerAccount(pending.handle, pending.permanentId);
+        deleteOwnerAccount(pending.handle);
+        const route = parseRoute();
+        if (route.name === "profile" && String(route.handle || "").toLowerCase() === String(pending.handle || "").toLowerCase()) {
+          goHash("#/feeds");
+          return;
+        }
+        render();
+        return;
+      }
+      const url = pending && pending.id ? followIssueUrlForId("unfollow", pending.id) : "";
       if (url) window.open(url, "_blank", "noopener,noreferrer");
       render();
       return;
@@ -12063,6 +12288,10 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       const parsed = parseAccountInput(input && input.value);
       if (!parsed) {
         toast(tr("Use a profile URL, @handle, or an https feed"));
+        return;
+      }
+      if (signedOwner() && parsed.platform === "x" && accountsApi() && accountToken()) {
+        saveOwnerX(input && input.value);
         return;
       }
       window.open(followIssueUrl("follow", parsed.account, parsed.platform), "_blank", "noopener,noreferrer");
