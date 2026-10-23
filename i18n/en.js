@@ -865,5 +865,11 @@ SI18n.addPack("en", {
   "UHD": "UHD",
   "HD": "HD",
   "SD": "SD",
-  "LD": "LD"
+  "LD": "LD",
+  "Couldn't play this live": "Couldn't play this live",
+  "Backing up…": "Backing up…",
+  "Live ended": "Live ended",
+  "TikTok health": "TikTok health",
+  "No recent blocks.": "No recent blocks.",
+  "Backing off until {time}": "Backing off until {time}"
 });

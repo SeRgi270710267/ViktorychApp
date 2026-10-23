@@ -28,6 +28,12 @@
   var paintTimer = 0;
   var liveInflight = {};
   var liveToken = 0;
+  var statsTimer = 0;
+  var statsHandle = "";
+  var statsRoom = "";
+  var liveFatal = null;
+  var onLiveLevel = null;
+  var climbTimer = 0;
   var mpeg = null;
   var zoom = { scale: 1, x: 0, y: 0 };
   var zoomTap = 0;
@@ -167,6 +173,7 @@
         live: !!status.live,
         viewers: status.viewers || 0,
         title: status.title || "",
+        roomId: status.roomId || "",
         lastLiveAt: status.lastLiveAt || "",
         detail: status.detail || "",
         avatar: (extra && extra.avatar) || status.avatar || "",
@@ -249,21 +256,6 @@
       "</div>";
   }
 
-  function playId(post) {
-    var id = String((post && post.statusId) || "");
-    if (/^\d{8,22}$/.test(id)) return id;
-    var match = String((post && post.id) || "").match(/(\d{8,22})/);
-    return match ? match[1] : "";
-  }
-
-  function playSrc(post) {
-    var id = playId(post);
-    var handle = String((post && post.handle) || "");
-    if (!id || !/^[A-Za-z0-9._]{2,24}$/.test(handle) || !apiBase() || !hooks.token()) return "";
-    if (post.platform && post.platform !== "tiktok") return "";
-    return apiBase() + "/v1/owner/play?id=" + encodeURIComponent(id) + "&handle=" + encodeURIComponent(handle);
-  }
-
   function postById(id) {
     var list = forYou();
     for (var i = 0; i < list.length; i++) {
@@ -318,7 +310,7 @@
       : cover + '<div class="shorts-offline"><h2>' + hooks.esc(tr("Not live right now")) + "</h2>" +
         (row && row.lastLiveAt ? "<p>" + hooks.esc(tr("Last live {time}", { time: hooks.fullTime(row.lastLiveAt) })) + "</p>" : "") +
         '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a></div>";
-    var viewers = on && row.viewers ? '<span class="shorts-viewers">' + hooks.esc(tr("{count} watching", { count: hooks.formatCount(row.viewers || 0) })) + "</span>" : "";
+    var viewers = on && row.viewers ? '<span class="shorts-viewers">' + hooks.esc(tr("{count} watching", { count: hooks.formatCount(row.viewers || 0, 1000) })) + "</span>" : "";
     var badge = on ? '<span class="shorts-live-tag">' + hooks.esc(tr("LIVE")) + "</span>" : "";
     return '<article class="shorts-slide" data-kind="live" data-handle="' + hooks.esc(handle) + '">' +
       '<div class="shorts-stage">' + body +
@@ -393,28 +385,91 @@
     });
   }
 
-  function playHls(video, url, authed, autoplay, forceMuted) {
+  function sameApi(url) {
+    var base = apiBase();
+    if (!base) return false;
+    try { return new URL(url, location.href).origin === new URL(base).origin; }
+    catch (err) { return false; }
+  }
+
+  function topLevel(player) {
+    var levels = player.levels || [];
+    var top = 0;
+    var best = -1;
+    for (var i = 0; i < levels.length; i++) {
+      var score = (Number(levels[i].bitrate) || 0) * 100000 + (Number(levels[i].height) || 0);
+      if (score >= best) {
+        best = score;
+        top = i;
+      }
+    }
+    return levels.length ? top : -1;
+  }
+
+  function showLiveLevel(player, level, pinned) {
+    if (!onLiveLevel) return;
+    var row = (player.levels || [])[level] || {};
+    onLiveLevel(level === pinned, Number(row.height) || 0);
+  }
+
+  function climbLive(player, pinned) {
+    clearTimeout(climbTimer);
+    climbTimer = setTimeout(function () {
+      if (hls !== player) return;
+      var current = player.currentLevel;
+      if (current >= 0 && current < pinned) {
+        player.currentLevel = current + 1;
+        showLiveLevel(player, player.currentLevel, pinned);
+        if (player.currentLevel < pinned) climbLive(player, pinned);
+      }
+    }, 20000);
+  }
+
+  function watchStalls(player, Hls, pinned) {
+    var stalls = 0;
+    player.on(Hls.Events.ERROR, function (event, data) {
+      if (!data || data.fatal) return;
+      var stall = data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR;
+      if (!stall) return;
+      stalls += 1;
+      if (stalls < 3) return;
+      stalls = 0;
+      var current = player.currentLevel;
+      if (current > 0) {
+        player.currentLevel = current - 1;
+        showLiveLevel(player, player.currentLevel, pinned);
+        climbLive(player, pinned);
+      }
+    });
+    player.on(Hls.Events.FRAG_BUFFERED, function () { stalls = 0; });
+  }
+
+  function playHls(video, url, authed, autoplay, forceMuted, pin) {
     var start = autoplay !== false;
     var muted = forceMuted ? true : !sound;
     return loadHls().then(function (Hls) {
       destroyHls();
-      if (!authed && video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = url;
-        video.muted = muted;
-        return start ? video.play() : Promise.resolve();
-      }
       if (!Hls || !Hls.isSupported()) {
         if (authed) throw new Error("hls");
-        video.src = url;
-        video.muted = muted;
-        return start ? video.play() : Promise.resolve();
+        if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.crossOrigin = "anonymous";
+          video.src = url;
+          video.muted = muted;
+          return start ? video.play() : Promise.resolve();
+        }
+        throw new Error("hls");
       }
       var player = new Hls({
         enableWorker: true,
-        xhrSetup: authed ? function (xhr) {
-          var headers = authHeaders();
-          if (headers.Authorization) xhr.setRequestHeader("Authorization", headers.Authorization);
-        } : undefined
+        capLevelToPlayerSize: false,
+        startLevel: 99,
+        xhrSetup: function (xhr, target) {
+          xhr.withCredentials = false;
+          if (authed && sameApi(target)) {
+            var headers = authHeaders();
+            if (headers.Authorization) xhr.setRequestHeader("Authorization", headers.Authorization);
+          }
+        }
       });
       hls = player;
       player.loadSource(url);
@@ -422,9 +477,21 @@
       video.muted = muted;
       return new Promise(function (resolve, reject) {
         player.on(Hls.Events.ERROR, function (event, data) {
-          if (data && data.fatal) reject(new Error("hls"));
+          if (!data || !data.fatal) return;
+          console.error("live playback", data.type, data.details, data);
+          reject(new Error(String(data.type || "hls") + " " + String(data.details || "")));
         });
         player.on(Hls.Events.MANIFEST_PARSED, function () {
+          var top = topLevel(player);
+          player.capLevelToPlayerSize = false;
+          if (top >= 0) {
+            player.startLevel = top;
+            player.currentLevel = top;
+          }
+          if (pin && top >= 0) {
+            showLiveLevel(player, top, top);
+            watchStalls(player, Hls, top);
+          }
           if (!start) { resolve(); return; }
           video.play().then(resolve).catch(reject);
         });
@@ -442,19 +509,40 @@
     return window.ViktorychSocial || {};
   }
 
-  function playTelegramFile(video, key, preload) {
-    var base = tgUrl(key);
-    if (!base || !hooks.token()) return Promise.reject(new Error("tg"));
+  function dropBody(res) {
+    if (!res || !res.body || !res.body.cancel) return;
+    var dropped = res.body.cancel();
+    if (dropped && dropped.catch) dropped.catch(function () {});
+  }
+
+  function playTelegramVideo(video, key, preload) {
+    var fileUrl = tgUrl(key);
+    if (!fileUrl || !hooks.token()) return Promise.reject(new Error("tg"));
     var autoplay = preload === "auto";
-    return playHls(video, base + "/index.m3u8", true, autoplay).catch(function () {
-      return fetch(base, { headers: authHeaders() }).then(function (res) {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.blob();
-      }).then(function (blob) {
+    var playlist = fileUrl + "/index.m3u8";
+    return fetch(playlist, { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+      var type = String(res.headers.get("content-type") || "").toLowerCase();
+      dropBody(res);
+      if (res.ok && (type.indexOf("mpegurl") >= 0 || type.indexOf("m3u8") >= 0)) {
+        return playHls(video, playlist, true, autoplay, false);
+      }
+      return fetch(fileUrl, {
+        headers: Object.assign({ Range: "bytes=0-1" }, authHeaders()),
+        cache: "no-store"
+      }).then(function (file) {
+        dropBody(file);
+        if (file.status === 404) {
+          var missing = new Error("backing");
+          missing.code = "backing";
+          throw missing;
+        }
+        if (file.status !== 200 && file.status !== 206) throw new Error(String(file.status));
         destroyHls();
-        video.preload = preload || "metadata";
-        video.src = URL.createObjectURL(blob);
+        video.crossOrigin = "anonymous";
+        video.loop = true;
         video.muted = !sound;
+        video.preload = autoplay ? "auto" : (preload || "metadata");
+        if (video.getAttribute("src") !== fileUrl) video.src = fileUrl;
         return autoplay ? video.play() : Promise.resolve();
       });
     });
@@ -484,7 +572,7 @@
     });
   }
 
-  function playFlv(video, url) {
+  function playFlv(video, url, authed) {
     return loadMpeg().then(function (mpegts) {
       destroyHls();
       destroyMpeg();
@@ -494,10 +582,12 @@
         isLive: true,
         url: url,
         hasAudio: true,
-        hasVideo: true
+        hasVideo: true,
+        cors: true,
+        withCredentials: false
       }, {
         enableWorker: false,
-        headers: authHeaders(),
+        headers: authed ? authHeaders() : {},
         liveBufferLatencyChasing: true
       });
       mpeg = player;
@@ -506,11 +596,14 @@
       player.load();
       return new Promise(function (resolve, reject) {
         var done = false;
-        function fail() {
-          if (!done) { done = true; reject(new Error("flv")); return; }
-          var root = liveRoot();
-          var current = root && root.getAttribute("data-handle");
-          if (current) showLiveMessage(current, tr("TikTok blocked this live."));
+        function fail(err) {
+          console.error("live playback", err || "flv");
+          if (done) {
+            if (liveFatal) liveFatal(err || new Error("flv"));
+            return;
+          }
+          done = true;
+          reject(err || new Error("flv"));
         }
         if (mpegts.Events && mpegts.Events.ERROR) player.on(mpegts.Events.ERROR, fail);
         var started = video.play();
@@ -520,7 +613,7 @@
     });
   }
 
-  function rememberLive(handle, info) {
+  function rememberLive(handle, info, quiet) {
     if (!cached) cached = { live: {} };
     if (!cached.live) cached.live = {};
     var slot = handle;
@@ -532,17 +625,43 @@
         prev = row;
       }
     });
-    cached.live[slot] = {
+    var next = {
       handle: (info && info.handle) || handle,
       live: !!(info && info.live),
       viewers: info && info.viewers || 0,
-      title: info && info.title || "",
-      roomId: info && info.roomId || prev.roomId || "",
+      title: info && info.title || prev.title || "",
+      roomId: (info && info.roomId) || prev.roomId || "",
       lastLiveAt: (info && info.lastLiveAt) || prev.lastLiveAt || "",
-      checkedAt: (info && info.checkedAt) || "",
+      checkedAt: (info && info.checkedAt) || prev.checkedAt || "",
       detail: (info && info.detail) || ""
     };
+    cached.live[slot] = next;
+    if (quiet && next.live) {
+      patchViewers(next.handle, next);
+      return;
+    }
     schedulePaint();
+  }
+
+  function patchViewers(handle, row) {
+    var feed = document.getElementById("shorts-feed");
+    if (!feed || !onLiveRoute()) return;
+    var want = foldHandle(handle);
+    var slides = feed.querySelectorAll(".shorts-slide");
+    for (var i = 0; i < slides.length; i++) {
+      if (slides[i].getAttribute("data-kind") !== "live") continue;
+      if (foldHandle(slides[i].getAttribute("data-handle")) !== want) continue;
+      var slot = slides[i].querySelector(".shorts-viewers");
+      var text = row.live && row.viewers ? tr("{count} watching", { count: hooks.formatCount(row.viewers, 1000) }) : "";
+      if (!slot && text) {
+        schedulePaint();
+        return;
+      }
+      if (slot) slot.textContent = text;
+    }
+    livePaintKey = liveRows().map(function (item) {
+      return [item.handle, item.live ? 1 : 0, item.viewers || 0, item.lastLiveAt || "", item.title || ""].join("\n");
+    }).join("\n");
   }
 
   function refreshLive(handle) {
@@ -562,6 +681,29 @@
       return info;
     });
     liveInflight[key] = job;
+    return job;
+  }
+
+  function refreshStats(handle, roomId) {
+    var key = foldHandle(handle);
+    if (!key) return Promise.resolve(null);
+    var inflightKey = "stats:" + key;
+    if (liveInflight[inflightKey]) return liveInflight[inflightKey];
+    var base = apiBase();
+    if (!base || !hooks.token()) return Promise.resolve(null);
+    var url = base + "/v1/owner/live/" + encodeURIComponent(handle) + "?stats=1";
+    if (roomId && /^[1-9][0-9]{5,24}$/.test(String(roomId))) url += "&room=" + encodeURIComponent(roomId);
+    var job = fetch(url, { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+      if (res.status === 429 || !res.ok) return null;
+      return res.json();
+    }).then(function (info) {
+      if (info && !info.blocked) rememberLive(handle, Object.assign({ roomId: roomId || "" }, info), true);
+      return info;
+    }).catch(function () { return null; }).then(function (info) {
+      delete liveInflight[inflightKey];
+      return info;
+    });
+    liveInflight[inflightKey] = job;
     return job;
   }
 
@@ -729,7 +871,7 @@
     if (video) video.muted = !sound;
   }
 
-  function showLiveMessage(handle, text) {
+  function showLiveMessage(handle, text, retry) {
     var root = liveRoot();
     if (!root || root.getAttribute("data-handle") !== handle) return;
     var cover = root.querySelector(".shorts-live-cover");
@@ -737,6 +879,11 @@
     if (note) note.textContent = text || "";
     var link = root.querySelector(".shorts-live-cover a");
     if (link) link.hidden = false;
+    if (retry) ensureRetry(root);
+    else {
+      var old = root.querySelector("[data-shorts='retry-live']");
+      if (old) old.remove();
+    }
     if (cover) cover.hidden = false;
     var video = root.querySelector("video");
     if (video) {
@@ -744,8 +891,104 @@
     }
   }
 
+  function ensureRetry(root) {
+    var cover = root.querySelector(".shorts-live-cover");
+    if (!cover || cover.querySelector("[data-shorts='retry-live']")) return;
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "shorts-live-retry";
+    button.setAttribute("data-shorts", "retry-live");
+    button.textContent = tr("Try again");
+    var link = cover.querySelector("a");
+    if (link) cover.insertBefore(button, link);
+    else cover.appendChild(button);
+  }
+
+  function stopStats() {
+    clearInterval(statsTimer);
+    statsTimer = 0;
+    statsHandle = "";
+    statsRoom = "";
+  }
+
+  function pauseStats() {
+    clearInterval(statsTimer);
+    statsTimer = 0;
+  }
+
+  function statsTick() {
+    var root = liveRoot();
+    if (!root || !statsHandle || document.visibilityState === "hidden") return;
+    var handle = statsHandle;
+    refreshStats(handle, statsRoom).then(function (info) {
+      applyPlayerStats(handle, info);
+    });
+  }
+
+  function startStats(handle, roomId) {
+    pauseStats();
+    statsHandle = handle;
+    statsRoom = roomId || "";
+    statsTimer = setInterval(statsTick, 15000);
+  }
+
+  function applyPlayerStats(handle, info) {
+    var root = liveRoot();
+    if (!root || root.getAttribute("data-handle") !== handle || !info || info.blocked) return;
+    if (info.live === false) {
+      endLive(handle);
+      return;
+    }
+    var viewers = root.querySelector(".shorts-live-viewers");
+    if (viewers) viewers.textContent = info.viewers ? tr("{count} watching", { count: hooks.formatCount(info.viewers, 1000) }) : "";
+  }
+
+  function endLive(handle) {
+    var root = liveRoot();
+    if (!root || root.getAttribute("data-handle") !== handle) return;
+    stopStats();
+    destroyHls();
+    destroyMpeg();
+    var badge = root.querySelector(".shorts-live-tag");
+    if (badge) badge.hidden = true;
+    var video = root.querySelector("video");
+    if (video) {
+      try { video.pause(); } catch (err) { /* already paused */ }
+      video.removeAttribute("src");
+      try { video.load(); } catch (err) { /* the cover stays */ }
+    }
+    showLiveMessage(handle, tr("Live ended"));
+  }
+
+  function attemptLive(video, info) {
+    var steps = [];
+    if (info.hls) {
+      steps.push(function () { return playHls(video, info.hls, false, true, true, true); });
+      steps.push(function () { return playHls(video, proxyUrl(info.hls), true, true, true, true); });
+    }
+    if (info.flv) {
+      steps.push(function () { return playFlv(video, info.flv, false); });
+      steps.push(function () { return playFlv(video, proxyUrl(info.flv), true); });
+    }
+    var index = 0;
+    function next(err) {
+      if (err) console.error("live playback", err && err.message ? err.message : err);
+      if (index >= steps.length) return Promise.reject(err || new Error("none"));
+      var step = steps[index];
+      index += 1;
+      return step().catch(next);
+    }
+    if (!steps.length) return Promise.reject(new Error("none"));
+    return next();
+  }
+
   function closeLive() {
     liveToken += 1;
+    liveFatal = null;
+    onLiveLevel = null;
+    clearTimeout(climbTimer);
+    climbTimer = 0;
+    stopStats();
     resetZoom();
     destroyHls();
     destroyMpeg();
@@ -808,25 +1051,34 @@
         event.preventDefault();
         sound = !sound;
         syncMute(button);
+      } else if (kind === "retry-live") {
+        event.preventDefault();
+        var againHandle = root.getAttribute("data-handle") || handle;
+        closeLive();
+        openLive(againHandle);
       }
     });
-    function fail() {
+    function giveUp(err) {
       if (token !== liveToken) return;
-      showLiveMessage(handle, tr("TikTok blocked this live."));
+      if (err) console.error("live playback", err && err.message ? err.message : err);
+      destroyHls();
+      destroyMpeg();
+      showLiveMessage(handle, tr("Couldn't play this live"), true);
     }
+    liveFatal = function (err) { giveUp(err); };
     refreshLive(handle).then(function (info) {
       if (token !== liveToken) return;
       if (!info) {
-        showLiveMessage(handle, tr("Try again"));
+        showLiveMessage(handle, tr("Couldn't play this live"), true);
         return;
       }
       var viewers = root.querySelector(".shorts-live-viewers");
-      if (viewers && info.viewers) viewers.textContent = tr("{count} watching", { count: hooks.formatCount(info.viewers) });
+      if (viewers && info.viewers) viewers.textContent = tr("{count} watching", { count: hooks.formatCount(info.viewers, 1000) });
       var quality = root.querySelector(".shorts-live-q");
       if (quality) quality.textContent = qualityLabel(info.quality);
       var badge = root.querySelector(".shorts-live-tag");
       if (badge) badge.hidden = !info.live;
-      if (info.blocked || (info.live && !info.hls && !info.flv)) {
+      if (info.blocked) {
         showLiveMessage(handle, tr("TikTok blocked this live."));
         return;
       }
@@ -834,8 +1086,18 @@
         showLiveMessage(handle, tr("Not live right now"));
         return;
       }
-      var play = info.hls ? playHls(video, proxyUrl(info.hls), true, true, true) : playFlv(video, proxyUrl(info.flv));
-      return play.then(function () {
+      startStats(handle, info.roomId || "");
+      onLiveLevel = function (atTop, height) {
+        if (token !== liveToken) return;
+        var slot = root.querySelector(".shorts-live-q");
+        if (!slot) return;
+        slot.textContent = atTop || !height ? qualityLabel(info.quality) : (height + "p");
+      };
+      if (!info.hls && !info.flv) {
+        showLiveMessage(handle, tr("Couldn't play this live"), true);
+        return;
+      }
+      return attemptLive(video, info).then(function () {
         if (token !== liveToken) return;
         if (sound) {
           video.muted = false;
@@ -844,13 +1106,11 @@
         }
         if (hls && window.Hls) {
           hls.on(window.Hls.Events.ERROR, function (event, data) {
-            if (data && data.fatal) fail();
+            if (!data || !data.fatal) return;
+            giveUp(new Error(String(data.type || "hls") + " " + String(data.details || "")));
           });
         }
-        if (mpeg && window.mpegts && window.mpegts.Events) {
-          mpeg.on(window.mpegts.Events.ERROR, fail);
-        }
-      }).catch(fail);
+      }).catch(giveUp);
     });
   }
 
@@ -867,52 +1127,69 @@
     return best;
   }
 
+  function backingNote(slideEl, text) {
+    if (!slideEl) return;
+    var note = slideEl.querySelector(".shorts-note");
+    if (!text) {
+      if (note) note.textContent = "";
+      return;
+    }
+    if (!note) {
+      note = document.createElement("p");
+      note.className = "shorts-note";
+      var meta = slideEl.querySelector(".shorts-meta");
+      if (meta) meta.appendChild(note);
+    }
+    note.textContent = text;
+  }
+
   function armStored(video, post, preload) {
     if (video.dataset.tgArm === "1") return;
     var media = videoOf(post);
-    var key = post.platform === "tiktok"
-      ? (socialApi().fileKey ? socialApi().fileKey(post, media) : "")
-      : (socialApi().fileKey ? socialApi().fileKey(post, media) : "");
-    var original = post.platform === "tiktok" ? playSrc(post) : ((media && media.url) || "");
-    var r2 = media && media.url && /r2\.dev|workers\.dev/.test(media.url) ? media.url : "";
+    var key = socialApi().fileKey ? socialApi().fileKey(post, media) : "";
+    var slideEl = video.closest(".shorts-slide");
+    if (post.platform === "tiktok") {
+      if (!key || !hooks.token()) {
+        backingNote(slideEl, tr("Backing up…"));
+        return;
+      }
+      video.dataset.tgArm = "1";
+      playTelegramVideo(video, key, preload).then(function () {
+        var badge = slideEl && slideEl.querySelector(".shorts-quality");
+        if (badge) badge.hidden = false;
+      }).catch(function (err) {
+        video.dataset.tgArm = "";
+        destroyHls();
+        if (video.getAttribute("src")) {
+          video.removeAttribute("src");
+          try { video.load(); } catch (loadErr) { /* the poster stays */ }
+        }
+        console.error("shorts playback", err && err.message ? err.message : err);
+        var poster = slideEl && slideEl.querySelector(".shorts-poster");
+        if (poster) poster.style.display = "block";
+        backingNote(slideEl, err && err.code === "backing" ? tr("Backing up…") : "");
+      });
+      return;
+    }
+    var direct = (media && media.url) || "";
+    var r2 = direct && /r2\.dev|workers\.dev/.test(direct) ? direct : "";
     if (!key || !hooks.token()) {
-      if (!original && !r2) return;
+      if (!direct) return;
       video.preload = preload;
-      if (video.getAttribute("src") !== (r2 || original)) video.src = r2 || original;
+      if (video.getAttribute("src") !== direct) video.src = direct;
       return;
     }
     video.dataset.tgArm = "1";
-    playTelegramFile(video, key, preload).then(function () {
-      var slideEl = video.closest(".shorts-slide");
+    playTelegramVideo(video, key, preload).then(function () {
       var badge = slideEl && slideEl.querySelector(".shorts-quality");
       if (badge) badge.hidden = false;
     }).catch(function () {
-      if (r2) {
+      if (r2 || direct) {
         destroyHls();
-        video.src = r2;
+        video.src = r2 || direct;
         return preload === "auto" ? video.play() : Promise.resolve();
       }
-      throw new Error("r2");
-    }).catch(function () {
-      var direct = post.platform === "tiktok" ? "" : ((media && media.url) || "");
-      if (direct && direct !== r2) {
-        destroyHls();
-        video.src = direct;
-        return preload === "auto" ? video.play() : Promise.resolve();
-      }
-      if (post.platform === "tiktok" && original) {
-        destroyHls();
-        video.preload = preload;
-        video.src = original;
-        return preload === "auto" ? video.play() : Promise.resolve();
-      }
-      throw new Error("origin");
-    }).catch(function () {
       video.dataset.tgArm = "";
-      if (video.getAttribute("src")) {
-        video.removeAttribute("src");
-        try { video.load(); } catch (err) { /* the poster stays */ }
-      }
     });
   }
 
@@ -1034,6 +1311,19 @@
     lastTap = now;
     tapTimer = setTimeout(function () {
       lastTap = 0;
+      if (video.muted || !sound) {
+        sound = true;
+        video.muted = false;
+        var mute = slideEl.querySelector('[data-shorts="mute"]');
+        if (mute) {
+          mute.setAttribute("aria-label", tr("Mute"));
+          mute.innerHTML = hooks.icon("vol");
+        }
+        var unmuted = video.play();
+        if (unmuted && unmuted.catch) unmuted.catch(function () {});
+        button.setAttribute("aria-label", tr("Pause"));
+        return;
+      }
       if (video.paused) {
         var started = video.play();
         if (started && started.catch) started.catch(function () {});
@@ -1062,28 +1352,15 @@
 
   function onError(event) {
     var video = event.target;
-    if (!video || video.tagName !== "VIDEO" || !video.getAttribute("src")) return;
+    if (!video || video.tagName !== "VIDEO") return;
     var slideEl = video.closest(".shorts-slide");
-    if (!slideEl) return;
-    if (slideEl.getAttribute("data-kind") === "live") return;
+    if (!slideEl || slideEl.getAttribute("data-kind") === "live") return;
+    var post = postById(slideEl.getAttribute("data-id") || "");
+    var err = video.error;
+    console.error("shorts playback", err && err.code, err && err.message);
     var poster = slideEl.querySelector(".shorts-poster");
     if (poster) poster.style.display = "block";
-    var post = postById(slideEl.getAttribute("data-id") || "");
-    var src = post ? playSrc(post) : "";
-    if (!src || !hooks.token()) return;
-    fetch(src + "&meta=1", { headers: authHeaders(), cache: "no-store" }).then(function (res) {
-      return res.json();
-    }).then(function (body) {
-      if (!body || body.ok || !body.detail) return;
-      var note = slideEl.querySelector(".shorts-note");
-      if (!note) {
-        note = document.createElement("p");
-        note.className = "shorts-note";
-        var meta = slideEl.querySelector(".shorts-meta");
-        if (meta) meta.appendChild(note);
-      }
-      note.textContent = body.detail;
-    }).catch(function () {});
+    if (post && post.platform === "tiktok") backingNote(slideEl, "");
   }
 
   function renderAdded() {
@@ -1273,8 +1550,10 @@
       });
       poll = setInterval(function () {
         if (document.visibilityState !== "visible") return;
-        liveRows().forEach(function (row) { if (row && row.handle) refreshLive(row.handle); });
-      }, 3 * 60 * 1000);
+        liveRows().forEach(function (row) {
+          if (row && row.live && row.handle) refreshStats(row.handle, row.roomId);
+        });
+      }, 60 * 1000);
     }
   }
 
@@ -1292,6 +1571,16 @@
       for (var i = 0; i < videos.length; i++) videos[i].pause();
     }
   }
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      pauseStats();
+      return;
+    }
+    if (!statsHandle || !liveRoot()) return;
+    statsTick();
+    if (!statsTimer) statsTimer = setInterval(statsTick, 15000);
+  });
 
   window.ViktorychShorts = {
     bind: function (next) { if (next) Object.keys(hooks).forEach(function (key) { if (next[key]) hooks[key] = next[key]; }); },

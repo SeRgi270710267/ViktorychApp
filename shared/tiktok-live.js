@@ -34,10 +34,28 @@ function qualityRank(name) {
   return index < 0 ? QUALITY.length : index;
 }
 
-function pickStreams(info) {
+function isTopQuality(name) {
+  const key = String(name || "").toLowerCase();
+  return key === "origin" || key === "origion";
+}
+
+function roomStats(info) {
   const room = info && info.data && typeof info.data === "object" ? info.data : (info || {});
   const live = Number(room.status) === 2;
-  const viewers = Number(room.user_count || (room.liveRoomStats && room.liveRoomStats.userCount) || 0) || 0;
+  const raw = Number(room.user_count);
+  const viewers = Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : 0;
+  return {
+    live: live,
+    viewers: live ? viewers : 0,
+    title: live ? String(room.title || "") : ""
+  };
+}
+
+function pickStreams(info) {
+  const room = info && info.data && typeof info.data === "object" ? info.data : (info || {});
+  const counted = roomStats(info);
+  const live = counted.live;
+  const viewers = counted.viewers;
   const title = String(room.title || "");
   const pull = room.stream_url && room.stream_url.live_core_sdk_data && room.stream_url.live_core_sdk_data.pull_data;
   let parsed = {};
@@ -73,14 +91,16 @@ function pickStreams(info) {
       quality = quality || names[0] || "origin";
     }
   }
+  const chosen = live ? quality : "";
   return {
     live: live,
     viewers: live ? viewers : 0,
     title: title,
     hls: live ? hls : "",
     flv: live ? flv : "",
-    quality: live ? quality : ""
+    quality: chosen,
+    qualityNote: chosen && !isTopQuality(chosen) ? "best available" : ""
   };
 }
 
-export { parseRoomId, pickStreams, QUALITY };
+export { parseRoomId, pickStreams, roomStats, isTopQuality, QUALITY };

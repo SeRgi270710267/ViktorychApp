@@ -9,9 +9,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from datetime import datetime, timedelta, timezone
+
 from tiktok_sync import (  # noqa: E402
     apply_fetch_identity,
     audience_of,
+    backoff_seconds,
+    checked_recent,
     choose_format,
     entry_to_post,
     place,
@@ -111,6 +115,17 @@ def main() -> int:
     assert handles[0] == "new_name"
     assert "config_one" in handles
     assert "gabii_g5" not in handles
+    assert backoff_seconds(0, 0) == (300, 1)
+    assert backoff_seconds(1, 0) == (900, 2)
+    assert backoff_seconds(2, 0) == (3600, 3)
+    assert backoff_seconds(4, 0) == (6 * 60 * 60, 4)
+    assert backoff_seconds(0, 7200) == (7200, 1)
+    assert backoff_seconds(0, 999999) == (6 * 60 * 60, 1)
+    moment = datetime(2026, 10, 23, 0, 0, tzinfo=timezone.utc)
+    fresh = {"checkedAt": (moment - timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    stale = {"checkedAt": (moment - timedelta(seconds=300)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+    assert checked_recent(fresh, 240, moment) is True
+    assert checked_recent(stale, 240, moment) is False
     print("tiktok normalize ok")
     return 0
 

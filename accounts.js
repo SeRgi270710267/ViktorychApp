@@ -1052,6 +1052,34 @@
     var photo = publicAvatar(account.avatar, account.avatarFace, "");
     return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(account.displayName || "") + '</b><div class="phandle">@' + esc(account.handle || "") + "</div></div></a>";
   }
+  var tiktokHealth = null;
+  var tiktokHealthAt = 0;
+  function loadTikTokHealth() {
+    var session = readSession();
+    if (!session || !session.token || !session.account || !session.account.owner) return;
+    if (Date.now() - tiktokHealthAt < 20000) return;
+    tiktokHealthAt = Date.now();
+    api("/v1/owner/tiktok/health", { token: session.token }).then(function (body) {
+      if (!body || body.status !== 200) return;
+      tiktokHealth = body;
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
+  function healthHtml() {
+    var body = tiktokHealth;
+    var blocked = body ? (body.blocked403 || 0) + (body.blocked429 || 0) + (body.captcha || 0) : 0;
+    var rows = body && body.backoffs || [];
+    var lines = '<p class="phandle">' + esc(tr("No recent blocks.")) + "</p>";
+    if (body && (blocked || rows.length)) {
+      lines = '<p class="phandle">' + esc("403 " + (body.blocked403 || 0) + " · 429 " + (body.blocked429 || 0) + " · captcha " + (body.captcha || 0)) + "</p>";
+      lines += rows.map(function (row) {
+        var when = "";
+        try { when = row.until ? new Date(row.until).toLocaleString() : ""; } catch (err) { when = row.until || ""; }
+        return '<p class="phandle">@' + esc(row.handle || "") + " " + esc(tr("Backing off until {time}", { time: when })) + "</p>";
+      }).join("");
+    }
+    return '<div class="set-block"><h2>' + esc(tr("TikTok health")) + "</h2>" + lines + "</div>";
+  }
   function settingsHtml() {
     var session = readSession();
     if (!session || !session.account) return "";
@@ -1060,7 +1088,12 @@
     function hideBtn(mode, label) {
       return '<button class="outline' + (hidden === mode ? " on" : "") + '" type="button" data-acct="hide-avatar" data-mode="' + mode + '">' + esc(label) + "</button>";
     }
-    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>";
+    var health = "";
+    if (account.owner) {
+      loadTikTokHealth();
+      health = healthHtml();
+    }
+    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
   }
   function onClick(event) {
     var acct = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;

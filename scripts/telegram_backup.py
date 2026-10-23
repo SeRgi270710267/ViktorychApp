@@ -905,6 +905,8 @@ def ytdlp_download_args(page: str, dest: Path, selector: str) -> list:
         "--no-progress",
         "--retries", "1",
         "--fragment-retries", "1",
+        "--concurrent-fragments", "1",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "--socket-timeout", "30",
         "--match-filters", "!is_live",
         "-f", selector,
@@ -2179,8 +2181,8 @@ def store_loaded(src: Path, obj: dict, kind: str, manifest: dict, cf: dict, stat
             shutil.rmtree(hls_dir, ignore_errors=True)
             if copy_only:
                 log("[telegram-backup] skipped_hls %s/%s (not re-encoded)" % (obj["bucket"], obj["key"]))
-            else:
-                log("[telegram-backup] skipped_hls %s/%s" % (obj["bucket"], obj["key"]))
+                return "oversize"
+            log("[telegram-backup] skipped_hls %s/%s" % (obj["bucket"], obj["key"]))
             return "skip"
         if transcoded:
             log("[telegram-backup] transcoded %s/%s so every segment stays under 19 MiB" % (obj["bucket"], obj["key"]))

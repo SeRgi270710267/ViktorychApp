@@ -48,7 +48,7 @@ def cap_of() -> int:
         value = int(os.environ.get("MEDIA_EXTRACT_CAP") or "8")
     except ValueError:
         value = 8
-    return max(1, min(value, 30))
+    return max(1, min(value, 80))
 
 
 def per_account() -> int:
@@ -59,9 +59,34 @@ def per_account() -> int:
     return max(1, min(value, 8))
 
 
+def fresh_tally() -> dict:
+    return {"done": 0, "skipped": 0, "failed": 0, "blocked": 0, "oversize": 0}
+
+
+def count_result(tally: dict, result: str) -> None:
+    if result == "ok":
+        tally["done"] += 1
+    elif result == "oversize":
+        tally["oversize"] += 1
+    elif result == "blocked":
+        tally["blocked"] += 1
+    elif result in {"fail", "failed", "error"}:
+        tally["failed"] += 1
+    elif result == "stop":
+        return
+    else:
+        tally["skipped"] += 1
+
+
+def log_tally(tally: dict) -> None:
+    log("[media-extract] backfill done=%s skipped=%s failed=%s blocked=%s oversize=%s" % (
+        tally["done"], tally["skipped"], tally["failed"], tally["blocked"], tally["oversize"]
+    ))
+
+
 def pace_seconds() -> float:
     try:
-        value = float(os.environ.get("MEDIA_EXTRACT_PACE") or "8")
+        value = float(os.environ.get("MEDIA_EXTRACT_PACE") or "3")
     except ValueError:
         value = 8.0
     return min(max(value, 3.0), 60.0)
@@ -142,6 +167,8 @@ def video_args(page: str, dest: Path, archive: Path, selector: str, limit: int) 
         "--no-progress",
         "--retries", "1",
         "--fragment-retries", "1",
+        "--concurrent-fragments", "1",
+        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "--socket-timeout", "30",
         "--sleep-requests", "2",
         "--sleep-interval", "5",
@@ -474,7 +501,7 @@ def catalog_queue(items: list) -> list:
     return rows
 
 
-def store_catalog(cf, manifest, state, directory, links, limit, stored, pause) -> int:
+def store_catalog(cf, manifest, state, directory, links, limit, stored, pause, tally=None) -> int:
     """Upload public originals for posts the sync already stored. Blocked items are retried later."""
     present = set()
     for row in (manifest.get("files") or []):
@@ -493,12 +520,16 @@ def store_catalog(cf, manifest, state, directory, links, limit, stored, pause) -
             return stored
         prior = tb.find_entry(manifest, item.get("bucket") or "cdn", item.get("key") or "")
         if prior and prior.get("verified") and (prior.get("parts") or []):
+            if tally is not None:
+                tally["skipped"] += 1
             continue
         if attempted and pause:
             time.sleep(pause)
         attempted = True
         before = int(state.get("files") or 0)
         result = tb.process_cdn(item, manifest, cf, state, directory)
+        if tally is not None:
+            count_result(tally, result)
         if result == "stop":
             log("[media-extract] reached the run cap")
             return limit
@@ -559,7 +590,8 @@ def extract() -> int:
         each = per_account()
         pause = pace_seconds()
         visited = 0
-        stored = store_catalog(cf, manifest, state, directory, links, limit, 0, pause)
+        tally = fresh_tally()
+        stored = store_catalog(cf, manifest, state, directory, links, limit, 0, pause, tally)
         for offset, account in enumerate(rotate(accounts, start)):
             if stored >= limit:
                 break
@@ -581,6 +613,7 @@ def extract() -> int:
             videos_blocked = status == "blocked"
             if videos_blocked:
                 log("[media-extract] skipped_blocked %s/%s" % (account["platform"], account["handle"]))
+                tally["blocked"] += 1
             present = set()
             for row in (manifest.get("files") or []):
                 if isinstance(row, dict) and row.get("key"):
@@ -596,9 +629,11 @@ def extract() -> int:
                     candidates = tb.social_key_candidates(item["post"], "video", 0)
                     if any(key in present for key in candidates):
                         log("[media-extract] already stored %s/%s" % (account["platform"], account["handle"]))
+                        tally["skipped"] += 1
                         continue
                     item["key"] = candidates[0] if candidates else item["key"]
                     result = publish_file(item["video"], item["key"], "video", item["stats"], cf, manifest, state, directory)
+                    count_result(tally, result)
                     if result == "stop":
                         log("[media-extract] reached the run cap")
                         stored = limit
@@ -619,6 +654,7 @@ def extract() -> int:
                 _code, out, err = run_tool(gallery + photo_args(account["url"], photo_dir, photos, min(each, limit - stored)), 300)
                 if tb.runner_blocked(out + "\n" + err):
                     log("[media-extract] skipped_blocked %s/%s" % (account["platform"], account["handle"]))
+                    tally["blocked"] += 1
                 else:
                     for item in photo_groups(photo_dir, account):
                         if stored >= limit:
@@ -626,9 +662,11 @@ def extract() -> int:
                         photo_keys = tb.social_key_candidates(item["post"], "photo", int(item.get("index") or 0))
                         if any(key in present for key in photo_keys):
                             log("[media-extract] already stored %s/%s" % (account["platform"], account["handle"]))
+                            tally["skipped"] += 1
                             continue
                         item["key"] = photo_keys[0] if photo_keys else item["key"]
                         result = publish_file(item["path"], item["key"], "photo", item["stats"], cf, manifest, state, directory)
+                        count_result(tally, result)
                         if result == "stop":
                             stored = limit
                             break
@@ -649,10 +687,13 @@ def extract() -> int:
         put_json(cf, bucket, LINKS_KEY, {"updated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "items": list(by_key.values())})
         put_text(cf, bucket, CURSOR_KEY, str((start + visited) % max(len(accounts), 1)))
         log("[media-extract] stored %s files, visited %s added accounts" % (stored, visited))
+        log_tally(tally)
         log(tb.upload_summary(state))
         tb.log_d1_newest(cf)
         return 0
     except Exception as err:
+        if "tally" in locals():
+            log_tally(tally)
         log("[media-extract] extract failed")
         log(tb.scrub(str(err), tb.current_secrets()))
         return 1
@@ -703,6 +744,13 @@ def selftest() -> int:
     check(catalog["by_user_id"]["99"]["sec_uid"] == "MS4wLjABAAAA12345678" and catalog["by_sec_uid"]["MS4wLjABAAAA12345678"]["user_id"] == "99", "the TikTok catalog is keyed by user_id and sec_uid")
     check(ident_of("instagram", {"id": "123", "webpage_url": "https://www.instagram.com/reel/DeZgzTEggQe/"}) == "DeZgzTEggQe", "an Instagram shortcode is the object id")
     check(cap_of() >= 1 and per_account() >= 1 and pace_seconds() >= 3, "the run has a cap and a pause")
+    os.environ["MEDIA_EXTRACT_CAP"] = "500"
+    try:
+        check(cap_of() == 80, "one extract run stores at most 80 new files")
+    finally:
+        os.environ.pop("MEDIA_EXTRACT_CAP", None)
+    check("--concurrent-fragments" in video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1), "a TikTok download uses one connection")
+    check(video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1)[video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1).index("--concurrent-fragments") + 1] == "1", "TikTok does not split a file across connections")
     check(tb.runner_blocked("HTTP Error 403: Forbidden") and tb.runner_blocked("captcha") and not tb.runner_blocked("private account"), "a 403 or captcha is a skip")
     workflow = (ROOT / ".github" / "workflows" / "media-extract.yml").read_text(encoding="utf-8")
     check('cron: "17 */3 * * *"' in workflow and 'cron: "*/30 * * * *"' in workflow and "workflow_dispatch" in workflow and "yt-dlp==2026.10.21" in workflow and "gallery-dl==1.32.17" in workflow, "the workflow is scheduled every 3 hours and pins the tools")

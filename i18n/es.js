@@ -865,5 +865,11 @@ SI18n.addPack("es", {
   "UHD": "UHD",
   "HD": "HD",
   "SD": "SD",
-  "LD": "LD"
+  "LD": "LD",
+  "Couldn't play this live": "No se pudo reproducir este directo.",
+  "Backing up…": "Guardando la copia…",
+  "Live ended": "El directo terminó",
+  "TikTok health": "Estado de TikTok",
+  "No recent blocks.": "Sin bloqueos recientes.",
+  "Backing off until {time}": "En pausa hasta {time}"
 });

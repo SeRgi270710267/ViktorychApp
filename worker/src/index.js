@@ -1,5 +1,5 @@
 import { OWNER_HANDLE, inspectHandle } from "../../shared/handle-skeleton.js";
-import { parseRoomId, pickStreams } from "../../shared/tiktok-live.js";
+import { parseRoomId, pickStreams, roomStats, isTopQuality } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
 import { cleanRepostKey, cleanRepostWrite } from "../../shared/reposts.js";
@@ -816,7 +816,64 @@ async function fetchPublic(url) {
     },
     redirect: "follow"
   });
-  return { status: res.status, text: await res.text() };
+  return { status: res.status, text: await res.text(), retryAfter: retryAfterSeconds(res) };
+}
+
+const BACKOFF_MINUTES = [5, 15, 60, 180, 360];
+
+function retryAfterSeconds(response) {
+  const raw = String((response && response.headers && response.headers.get("retry-after")) || "").trim();
+  if (!raw) return 0;
+  const seconds = Number(raw);
+  if (Number.isFinite(seconds) && seconds > 0) return seconds;
+  const when = Date.parse(raw);
+  if (Number.isFinite(when)) return Math.max(0, Math.round((when - Date.now()) / 1000));
+  return 0;
+}
+
+function backoffSeconds(step, retryAfter) {
+  const index = Math.max(0, Math.min(BACKOFF_MINUTES.length - 1, Number(step) || 0));
+  const base = BACKOFF_MINUTES[index] * 60;
+  const retry = Number(retryAfter) > 0 ? Number(retryAfter) : 0;
+  return {
+    seconds: Math.min(6 * 60 * 60, Math.max(base, retry)),
+    nextStep: Math.min(BACKOFF_MINUTES.length - 1, index + 1)
+  };
+}
+
+function backoffActive(row) {
+  const until = Date.parse(row && row.backoffUntil || "");
+  return Number.isFinite(until) && until > Date.now();
+}
+
+function challengeKind(status, text) {
+  if (status === 403 || status === 429 || status === 503) return String(status);
+  if (String(text || "").indexOf("captcha-verify") >= 0 && !parseRoomId(text)) return "captcha";
+  return "";
+}
+
+async function cacheRead(url, ttlMs) {
+  try {
+    const hit = await caches.default.match(new Request(url));
+    if (!hit) return null;
+    const at = Number(hit.headers.get("x-fetched-at") || 0);
+    if (!at || Date.now() - at >= ttlMs) return null;
+    return await hit.json();
+  } catch (err) {
+    return null;
+  }
+}
+
+async function cacheWrite(url, body, ttlSeconds) {
+  try {
+    await caches.default.put(new Request(url), new Response(JSON.stringify(body), {
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "public, max-age=" + String(ttlSeconds || 10),
+        "x-fetched-at": String(Date.now())
+      }
+    }));
+  } catch (err) { /* the owner still gets this response */ }
 }
 
 function stamp() {
@@ -837,12 +894,154 @@ async function rememberLive(env, handle, info) {
       viewers: info.live ? (info.viewers || 0) : 0,
       title: info.live ? (info.title || "") : "",
       roomId: info.roomId || prev.roomId || "",
+      quality: info.live ? (info.quality || "") : "",
+      qualityNote: info.live ? (info.qualityNote || "") : "",
       lastLiveAt: info.live ? when : (info.lastLiveAt || prev.lastLiveAt || ""),
       checkedAt: when,
-      detail: info.detail || ""
+      detail: info.detail || "",
+      backoffUntil: "",
+      backoffStep: 0
     };
     await env.DATA.put("owner/tiktok.json", JSON.stringify(doc));
   } catch (err) { /* the player still gets this response */ }
+}
+
+function serveMime(row) {
+  const mime = String((row && row.mime) || "");
+  const key = String((row && row.object_key) || "");
+  if (mime && mime !== "application/octet-stream") return mime;
+  if (/\/video$/.test(key) || /\.mp4$/i.test(key)) return "video/mp4";
+  return mime || "application/octet-stream";
+}
+
+function blockedPayload(handle, prev, streams) {
+  const body = {
+    handle,
+    live: !!(prev && prev.live),
+    viewers: prev && prev.live ? (prev.viewers || 0) : 0,
+    title: prev && prev.live ? (prev.title || "") : "",
+    blocked: true
+  };
+  if (!streams) return body;
+  body.roomId = (prev && prev.roomId) || "";
+  body.quality = (prev && prev.quality) || "";
+  body.qualityNote = (prev && prev.qualityNote) || "";
+  body.lastLiveAt = (prev && prev.lastLiveAt) || "";
+  body.detail = "TikTok blocked the runner";
+  body.hls = "";
+  body.flv = "";
+  return body;
+}
+
+async function noteBlock(env, handle, kind, retryAfter, prev) {
+  if (!env.DATA) return;
+  try {
+    let doc = await readOwnerDoc(env);
+    if (!doc || typeof doc !== "object") doc = {};
+    if (!doc.live || typeof doc.live !== "object") doc.live = {};
+    const current = doc.live[handle] && typeof doc.live[handle] === "object" ? doc.live[handle] : (prev || {});
+    const paced = backoffSeconds(current.backoffStep, retryAfter);
+    const until = new Date(Date.now() + paced.seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
+    doc.live[handle] = Object.assign({}, current, {
+      handle,
+      backoffUntil: until,
+      backoffStep: paced.nextStep,
+      checkedAt: stamp(),
+      detail: "TikTok blocked the runner"
+    });
+    if (!doc.tiktokHealth || typeof doc.tiktokHealth !== "object") doc.tiktokHealth = {};
+    const recent = Array.isArray(doc.tiktokHealth.recent) ? doc.tiktokHealth.recent : [];
+    recent.push({ at: stamp(), handle, status: kind });
+    const cutoff = Date.now() - 6 * 60 * 60 * 1000;
+    doc.tiktokHealth.recent = recent.filter((row) => row && Date.parse(row.at) >= cutoff).slice(-80);
+    await env.DATA.put("owner/tiktok.json", JSON.stringify(doc));
+  } catch (err) { /* the player still gets the blocked response */ }
+}
+
+function tiktokHealthView(doc) {
+  const health = doc && doc.tiktokHealth && typeof doc.tiktokHealth === "object" ? doc.tiktokHealth : {};
+  const recent = Array.isArray(health.recent) ? health.recent : [];
+  const hour = Date.now() - 60 * 60 * 1000;
+  const counts = { "403": 0, "429": 0, "503": 0, captcha: 0 };
+  recent.forEach((row) => {
+    if (!row || Date.parse(row.at) < hour) return;
+    if (Object.prototype.hasOwnProperty.call(counts, row.status)) counts[row.status] += 1;
+  });
+  const backoffs = [];
+  const live = doc && doc.live && typeof doc.live === "object" ? doc.live : {};
+  Object.keys(live).forEach((name) => {
+    const row = live[name];
+    if (!backoffActive(row)) return;
+    backoffs.push({ handle: (row && row.handle) || name, until: row.backoffUntil });
+  });
+  return {
+    blocked403: counts["403"],
+    blocked429: counts["429"],
+    blocked503: counts["503"],
+    captcha: counts.captcha,
+    backoffs
+  };
+}
+
+async function handleTikTokHealth(request, env) {
+  const row = await sessionAccount(env, request);
+  if (!row) return json(401, { error: "unauthorized" });
+  if (row.owner !== 1) return json(403, { error: "forbidden" });
+  const doc = await readOwnerDoc(env);
+  return json(200, tiktokHealthView(doc || {}));
+}
+
+async function fetchRoom(roomId) {
+  const upstream = await fetch("https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=" + encodeURIComponent(roomId), {
+    headers: { "user-agent": PLAY_UA, accept: "application/json", "accept-language": "en-US,en;q=0.9" }
+  });
+  const text = await upstream.text();
+  return { status: upstream.status, text, retryAfter: retryAfterSeconds(upstream) };
+}
+
+async function handleLiveStats(request, env, handle, gate, prev) {
+  const url = new URL(request.url);
+  let roomId = String(url.searchParams.get("room") || "");
+  if (!/^[1-9][0-9]{5,24}$/.test(roomId)) roomId = String((prev && prev.roomId) || "");
+  if (!/^[1-9][0-9]{5,24}$/.test(roomId)) return json(200, { handle, live: false, viewers: 0, title: "" });
+  const cached = await cacheRead("https://live-stats.internal/" + roomId, 10000);
+  if (cached) return json(200, { handle, live: !!cached.live, viewers: cached.viewers || 0, title: cached.title || "" });
+  const paced = await rateHit(env, "live:" + gate.row.public_id, 240, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  let upstream = null;
+  try {
+    upstream = await fetchRoom(roomId);
+  } catch (err) {
+    return json(200, { handle, live: !!(prev && prev.live), viewers: (prev && prev.viewers) || 0, title: (prev && prev.title) || "" });
+  }
+  const kind = challengeKind(upstream.status, upstream.text);
+  if (kind) {
+    await noteBlock(env, handle, kind, upstream.retryAfter, prev);
+    return json(200, blockedPayload(handle, prev, false));
+  }
+  let parsed = {};
+  try { parsed = JSON.parse(upstream.text || "{}"); } catch (err) { parsed = {}; }
+  const stats = roomStats(parsed);
+  const body = { live: !!stats.live, viewers: stats.viewers || 0, title: stats.title || "" };
+  await cacheWrite("https://live-stats.internal/" + roomId, body, 10);
+  return json(200, { handle, live: body.live, viewers: body.viewers, title: body.title });
+}
+
+function liveInfo(handle, prev, roomId, picked) {
+  return {
+    handle,
+    blocked: false,
+    live: !!picked.live,
+    viewers: picked.viewers || 0,
+    title: picked.title || "",
+    roomId,
+    quality: picked.quality || "",
+    qualityNote: picked.qualityNote || "",
+    hls: picked.hls || "",
+    flv: picked.flv || "",
+    lastLiveAt: picked.live ? stamp() : ((prev && prev.lastLiveAt) || ""),
+    detail: ""
+  };
 }
 
 async function handleOwnerLive(request, env, rawHandle) {
@@ -851,47 +1050,92 @@ async function handleOwnerLive(request, env, rawHandle) {
   let handle = rawHandle;
   try { handle = decodeURIComponent(rawHandle); } catch (err) { /* keep the raw segment */ }
   if (!TIKTOK_HANDLE.test(handle)) return json(400, { error: "bad_handle" });
-  const paced = await rateHit(env, "live:" + gate.row.public_id, 240, 10 * 60 * 1000);
-  if (!paced.ok) return limited(paced);
   const stored = await readOwnerDoc(env);
   const prev = stored && stored.live && stored.live[handle] ? stored.live[handle] : {};
-  const livePage = await fetchPublic("https://www.tiktok.com/@" + handle + "/live");
-  if (livePage.status === 403 || livePage.status === 429 || livePage.status === 503) {
-    return json(200, { handle, live: !!prev.live, blocked: true, detail: "TikTok blocked the runner", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "" });
+  const statsOnly = new URL(request.url).searchParams.get("stats") === "1";
+  if (backoffActive(prev)) return json(200, blockedPayload(handle, prev, !statsOnly));
+  if (statsOnly) return handleLiveStats(request, env, handle, gate, prev);
+  const roomKey = "https://live-roomid.internal/" + handle.toLowerCase();
+  let roomId = "";
+  const roomCached = await cacheRead(roomKey, 5 * 60 * 1000);
+  if (roomCached && /^[1-9][0-9]{5,24}$/.test(String(roomCached.roomId || ""))) roomId = String(roomCached.roomId);
+  if (!roomId && /^[1-9][0-9]{5,24}$/.test(String(prev.roomId || ""))) {
+    const checked = Date.parse(prev.checkedAt || "");
+    if (Number.isFinite(checked) && Date.now() - checked < 5 * 60 * 1000) roomId = String(prev.roomId);
   }
-  let roomId = parseRoomId(livePage.text);
+  if (roomId) {
+    const saved = await cacheRead("https://live-stream.internal/" + roomId, 10000);
+    if (saved && isTopQuality(saved.quality) && saved.hls) return json(200, liveInfo(handle, prev, roomId, saved));
+  }
+  const paced = await rateHit(env, "live:" + gate.row.public_id, 240, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
   if (!roomId) {
-    const profile = await fetchPublic("https://www.tiktok.com/@" + handle);
-    if (profile.status === 403 || profile.status === 429 || profile.status === 503) {
-      return json(200, { handle, live: !!prev.live, blocked: true, detail: "TikTok blocked the runner", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "" });
+    const livePage = await fetchPublic("https://www.tiktok.com/@" + handle + "/live");
+    const pageKind = challengeKind(livePage.status, livePage.text);
+    if (pageKind) {
+      await noteBlock(env, handle, pageKind, livePage.retryAfter, prev);
+      return json(200, blockedPayload(handle, prev, true));
     }
-    roomId = parseRoomId(profile.text);
+    roomId = parseRoomId(livePage.text);
+    if (!roomId) {
+      const profile = await fetchPublic("https://www.tiktok.com/@" + handle);
+      const profileKind = challengeKind(profile.status, profile.text);
+      if (profileKind) {
+        await noteBlock(env, handle, profileKind, profile.retryAfter, prev);
+        return json(200, blockedPayload(handle, prev, true));
+      }
+      roomId = parseRoomId(profile.text);
+    }
+    if (roomId) await cacheWrite(roomKey, { roomId }, 300);
   }
   if (!roomId) {
-    const info = { live: false, roomId: "", viewers: 0, title: "", detail: "TikTok did not include a room id", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "" };
+    const info = { live: false, roomId: "", viewers: 0, title: "", detail: "TikTok did not include a room id", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "", quality: "", qualityNote: "" };
     await rememberLive(env, handle, info);
     return json(200, Object.assign({ handle, blocked: false }, info));
   }
-  const room = await fetchPublic("https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=" + encodeURIComponent(roomId));
-  if (room.status === 403 || room.status === 429 || room.status === 503) {
-    return json(200, { handle, live: !!prev.live, blocked: true, roomId, detail: "TikTok blocked the runner", lastLiveAt: prev.lastLiveAt || "", hls: "", flv: "" });
+  const saved = await cacheRead("https://live-stream.internal/" + roomId, 10000);
+  if (saved && isTopQuality(saved.quality) && saved.hls) return json(200, liveInfo(handle, prev, roomId, saved));
+  let room = null;
+  try {
+    room = await fetchRoom(roomId);
+  } catch (err) {
+    return json(200, {
+      handle,
+      live: !!prev.live,
+      viewers: prev.live ? (prev.viewers || 0) : 0,
+      title: prev.live ? (prev.title || "") : "",
+      roomId,
+      quality: prev.quality || "",
+      qualityNote: prev.qualityNote || "",
+      hls: "",
+      flv: "",
+      blocked: false,
+      lastLiveAt: prev.lastLiveAt || "",
+      detail: ""
+    });
+  }
+  const roomKind = challengeKind(room.status, room.text);
+  if (roomKind) {
+    await noteBlock(env, handle, roomKind, room.retryAfter, prev);
+    return json(200, blockedPayload(handle, prev, true));
   }
   let parsed = {};
-  try { parsed = JSON.parse(room.text); } catch (err) { parsed = {}; }
+  try { parsed = JSON.parse(room.text || "{}"); } catch (err) { parsed = {}; }
   const picked = pickStreams(parsed);
-  const info = {
-    live: !!picked.live,
-    viewers: picked.viewers || 0,
-    title: picked.title || "",
-    roomId,
-    quality: picked.quality || "",
-    hls: picked.hls || "",
-    flv: picked.flv || "",
-    lastLiveAt: picked.live ? stamp() : (prev.lastLiveAt || ""),
-    detail: ""
-  };
+  if (isTopQuality(picked.quality) && picked.hls) {
+    await cacheWrite("https://live-stream.internal/" + roomId, {
+      live: !!picked.live,
+      viewers: picked.viewers || 0,
+      title: picked.title || "",
+      quality: picked.quality || "",
+      qualityNote: "",
+      hls: picked.hls || "",
+      flv: picked.flv || ""
+    }, 10);
+  }
+  const info = liveInfo(handle, prev, roomId, picked);
   await rememberLive(env, handle, info);
-  return json(200, Object.assign({ handle, blocked: false }, info));
+  return json(200, info);
 }
 
 const PLAY_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -1460,7 +1704,7 @@ async function rangedTelegram(request, env, row, immutable) {
   const full = await telegramBody(env, row);
   if (!full) return json(502, { error: "unavailable" });
   const bytes = await full.arrayBuffer();
-  const mime = row.mime || full.headers.get("content-type") || "application/octet-stream";
+  const mime = serveMime(row) || full.headers.get("content-type") || "application/octet-stream";
   const span = parseRange(request.headers.get("Range"), bytes.byteLength);
   const extra = immutable ? publicLoopCache() : null;
   if (span === false) {
@@ -1827,6 +2071,7 @@ async function route(request, env) {
   if (path === "/v1/owner/tiktok/accounts" && (request.method === "GET" || request.method === "POST")) return handleTikTokAccounts(request, env);
   const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
   if (ownerAccount && request.method === "DELETE") return handleTikTokAccountDelete(request, env, ownerAccount[1]);
+  if (path === "/v1/owner/tiktok/health" && request.method === "GET") return handleTikTokHealth(request, env);
   if (path === "/v1/owner/tiktok" && request.method === "GET") return handleOwnerTiktok(request, env);
   if (path === "/v1/owner/play" && request.method === "GET") return handleOwnerPlay(request, env, url);
   if (path === "/v1/owner/media" && request.method === "GET") return handleOwnerMedia(request, env, url);

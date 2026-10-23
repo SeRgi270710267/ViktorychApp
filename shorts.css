@@ -337,10 +337,21 @@ html.shorts-live-open body { overflow: hidden; }
   font-size: 16px;
   line-height: 22px;
 }
-.shorts-live-cover a {
+.shorts-live-cover a,
+.shorts-live-retry {
   color: #fff;
   font-weight: 700;
   text-decoration: none;
+}
+.shorts-live-retry {
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+  color: #000;
+  font: inherit;
+  font-weight: 700;
+  padding: 8px 14px;
+  pointer-events: auto;
 }
 .shorts-live-hud,
 .shorts-live-foot { position: absolute; left: 0; right: 0; z-index: 2; pointer-events: none; }

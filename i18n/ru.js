@@ -865,5 +865,11 @@ SI18n.addPack("ru", {
   "UHD": "UHD",
   "HD": "HD",
   "SD": "SD",
-  "LD": "LD"
+  "LD": "LD",
+  "Couldn't play this live": "Не удалось воспроизвести этот эфир.",
+  "Backing up…": "Сохраняем копию…",
+  "Live ended": "Эфир закончился",
+  "TikTok health": "Состояние TikTok",
+  "No recent blocks.": "Недавних блокировок нет.",
+  "Backing off until {time}": "Пауза до {time}"
 });
