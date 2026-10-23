@@ -2438,6 +2438,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return Promise.resolve(files);
   }
 
+  function hlsAhead(extra) {
+    const opts = { maxBufferLength: 30, maxMaxBufferLength: 30 };
+    if (extra) Object.keys(extra).forEach((name) => { opts[name] = extra[name]; });
+    return opts;
+  }
+
   function loadHls() {
     if (window.Hls) return Promise.resolve(window.Hls);
     if (STATE.hlsP) return STATE.hlsP;
@@ -2723,7 +2729,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ready.then((Hls) => {
         if (el._gen !== gen || el._src !== token) return;
         if (!Hls || !Hls.isSupported) { fail(); return; }
-        const hlsOpts = {};
+        const hlsOpts = hlsAhead();
         if (telegram) {
           hlsOpts.xhrSetup = (xhr, url) => {
             try {
@@ -13470,7 +13476,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (kind === "hls" && !video.canPlayType("application/vnd.apple.mpegurl")) {
           loadHls().then((Hls) => {
             if (!STATE.viewer || !STATE.viewer.video || !Hls || !Hls.isSupported) return;
-            const hls = new Hls();
+            const hls = new Hls(hlsAhead());
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, go);
@@ -13507,7 +13513,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (file.telegram && file.kind === "hls") {
           loadTelegramHls().then((Hls) => {
             if (!STATE.viewer || !STATE.viewer.video || !Hls || !Hls.isSupported) { fail(); return; }
-            const hls = new Hls({
+            const hls = new Hls(hlsAhead({
               xhrSetup: (xhr, url) => {
                 try {
                   if (new URL(url, location.href).host !== workerHost()) return;
@@ -13515,7 +13521,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
                   if (auth) xhr.setRequestHeader("Authorization", "Bearer " + auth);
                 } catch (err) { /* leave a non-worker request alone */ }
               }
-            });
+            }));
             hls.on(Hls.Events.ERROR, (_event, data) => { if (data && data.fatal) fail(); });
             hls.on(Hls.Events.MANIFEST_PARSED, () => { seek(); video.play().catch(() => {}); });
             hls.loadSource(file.url);
