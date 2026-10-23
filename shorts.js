@@ -36,8 +36,7 @@
   var climbTimer = 0;
   var recordings = { cap: 12, active: 0, items: {} };
   var mpeg = null;
-  var zoom = { scale: 1, x: 0, y: 0 };
-  var zoomTap = 0;
+  var liveZoom = null;
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -830,53 +829,73 @@
     return document.getElementById("shorts-live-player");
   }
 
-  function applyZoom() {
-    var root = liveRoot();
-    var video = root && root.querySelector("video");
-    var stage = root && root.querySelector(".shorts-live-stage");
-    if (!video || !stage) return;
-    if (zoom.scale <= 1) {
-      zoom.scale = 1;
-      zoom.x = 0;
-      zoom.y = 0;
-    }
-    var maxX = Math.max(0, (stage.clientWidth * (zoom.scale - 1)) / 2);
-    var maxY = Math.max(0, (stage.clientHeight * (zoom.scale - 1)) / 2);
-    if (zoom.x > maxX) zoom.x = maxX;
-    if (zoom.x < -maxX) zoom.x = -maxX;
-    if (zoom.y > maxY) zoom.y = maxY;
-    if (zoom.y < -maxY) zoom.y = -maxY;
-    video.style.transform = zoom.scale === 1 ? "" : "translate3d(" + zoom.x + "px," + zoom.y + "px,0) scale(" + zoom.scale + ")";
-  }
-
-  function setZoom(scale) {
-    zoom.scale = Math.max(1, Math.min(5, scale));
-    if (zoom.scale === 1) { zoom.x = 0; zoom.y = 0; }
-    applyZoom();
-  }
-
-  function resetZoom() {
-    zoom.scale = 1;
-    zoom.x = 0;
-    zoom.y = 0;
-    zoomTap = 0;
-    applyZoom();
-  }
-
-  function bindZoom(root) {
-    var stage = root.querySelector(".shorts-live-stage");
-    if (!stage) return;
+  function bindVideoZoom(stage) {
+    if (!stage) return null;
+    var zoom = { scale: 1, x: 0, y: 0 };
+    var zoomTap = 0;
+    var gesture = "";
     var pts = {};
     var pinch = null;
     var drag = null;
     function list() {
       return Object.keys(pts).map(function (id) { return pts[id]; });
     }
+    function mediaNodes() {
+      return stage.querySelectorAll("video, .shorts-poster");
+    }
+    function lockFeed() {
+      var feed = stage.closest && stage.closest(".shorts-feed");
+      if (!feed) return;
+      feed.classList.toggle("shorts-zoomed", !!feed.querySelector(".shorts-stage.shorts-zoomed"));
+    }
+    function apply() {
+      if (zoom.scale <= 1) {
+        zoom.scale = 1;
+        zoom.x = 0;
+        zoom.y = 0;
+      }
+      var maxX = Math.max(0, (stage.clientWidth * (zoom.scale - 1)) / 2);
+      var maxY = Math.max(0, (stage.clientHeight * (zoom.scale - 1)) / 2);
+      if (zoom.x > maxX) zoom.x = maxX;
+      if (zoom.x < -maxX) zoom.x = -maxX;
+      if (zoom.y > maxY) zoom.y = maxY;
+      if (zoom.y < -maxY) zoom.y = -maxY;
+      var transform = zoom.scale === 1 ? "" : "translate3d(" + zoom.x + "px," + zoom.y + "px,0) scale(" + zoom.scale + ")";
+      var nodes = mediaNodes();
+      for (var i = 0; i < nodes.length; i++) nodes[i].style.transform = transform;
+      stage.classList.toggle("shorts-zoomed", zoom.scale > 1);
+      lockFeed();
+    }
+    function setScale(scale) {
+      zoom.scale = Math.max(1, Math.min(5, scale));
+      if (zoom.scale === 1) { zoom.x = 0; zoom.y = 0; }
+      apply();
+    }
+    function toggleAt(clientX, clientY) {
+      if (zoom.scale > 1.05) {
+        zoom.scale = 1;
+        zoom.x = 0;
+        zoom.y = 0;
+        apply();
+        return;
+      }
+      var rect = stage.getBoundingClientRect();
+      var lx = clientX - rect.left - rect.width / 2;
+      var ly = clientY - rect.top - rect.height / 2;
+      zoom.scale = 2.5;
+      zoom.x = lx * (1 - 2.5);
+      zoom.y = ly * (1 - 2.5);
+      apply();
+    }
     function onDown(event) {
-      if (event.target.closest && event.target.closest("button, a")) return;
+      gesture = "";
+      var control = event.target.closest && event.target.closest("button, a");
+      if (control && control.getAttribute("data-shorts") !== "stage") return;
       pts[event.pointerId] = { x: event.clientX, y: event.clientY };
-      try { stage.setPointerCapture(event.pointerId); } catch (err) { /* the pointer still moves */ }
       var points = list();
+      if (points.length >= 2 || zoom.scale > 1) {
+        try { stage.setPointerCapture(event.pointerId); } catch (err) { /* the pointer still moves */ }
+      }
       if (points.length >= 2) {
         drag = null;
         pinch = {
@@ -904,7 +923,7 @@
         zoom.scale = Math.max(1, Math.min(5, pinch.scale * dist / pinch.dist));
         zoom.x = pinch.x + (mx - pinch.mx);
         zoom.y = pinch.y + (my - pinch.my);
-        applyZoom();
+        apply();
         return;
       }
       if (drag && zoom.scale > 1) {
@@ -913,24 +932,28 @@
         if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 4) drag.moved = true;
         zoom.x = drag.ox + (event.clientX - drag.x);
         zoom.y = drag.oy + (event.clientY - drag.y);
-        applyZoom();
+        apply();
       }
     }
     function onUp(event) {
       var wasPinch = !!pinch && list().length >= 2;
       var moved = !!(drag && drag.moved);
+      var control = event.target.closest && event.target.closest("button, a");
+      var onControl = control && control.getAttribute("data-shorts") !== "stage";
       delete pts[event.pointerId];
       if (list().length < 2) pinch = null;
       if (!list().length) drag = null;
-      if (wasPinch || moved || (event.target.closest && event.target.closest("button, a"))) {
+      if (wasPinch || moved || onControl) {
         zoomTap = 0;
+        gesture = wasPinch ? "pinch" : (moved ? "drag" : "");
         return;
       }
       if (list().length) return;
       var now = Date.now();
       if (now - zoomTap < 300) {
         zoomTap = 0;
-        setZoom(zoom.scale > 1.05 ? 1 : 2);
+        gesture = "double";
+        toggleAt(event.clientX, event.clientY);
       } else zoomTap = now;
     }
     stage.addEventListener("pointerdown", onDown);
@@ -941,21 +964,37 @@
       event.stopPropagation();
       if (event.touches.length > 1 || zoom.scale > 1) event.preventDefault();
     }, { passive: false });
-    root.addEventListener("wheel", function (event) {
+    stage.addEventListener("wheel", function (event) {
       if (!event.ctrlKey) return;
       event.preventDefault();
       event.stopPropagation();
-      setZoom(zoom.scale * Math.exp(-event.deltaY * 0.002));
+      setScale(zoom.scale * Math.exp(-event.deltaY * 0.002));
     }, { passive: false });
     var gestureBase = 1;
-    root.addEventListener("gesturestart", function (event) {
+    stage.addEventListener("gesturestart", function (event) {
       event.preventDefault();
       gestureBase = zoom.scale;
     }, { passive: false });
-    root.addEventListener("gesturechange", function (event) {
+    stage.addEventListener("gesturechange", function (event) {
       event.preventDefault();
-      setZoom(gestureBase * (event.scale || 1));
+      setScale(gestureBase * (event.scale || 1));
     }, { passive: false });
+    return {
+      reset: function () {
+        zoom.scale = 1;
+        zoom.x = 0;
+        zoom.y = 0;
+        zoomTap = 0;
+        gesture = "";
+        apply();
+      },
+      scale: function () { return zoom.scale; },
+      takeGesture: function () {
+        var kind = gesture;
+        gesture = "";
+        return kind;
+      }
+    };
   }
 
   function syncMute(button) {
@@ -1110,7 +1149,7 @@
       '<div class="shorts-live-foot"><b>@' + hooks.esc(handle) + "</b></div>";
     document.body.appendChild(root);
     document.documentElement.classList.add("shorts-live-open");
-    bindZoom(root);
+    liveZoom = bindVideoZoom(root.querySelector(".shorts-live-stage"));
     var video = root.querySelector("video");
     video.addEventListener("playing", function () {
       if (token !== liveToken) return;
@@ -1161,7 +1200,8 @@
     clearTimeout(climbTimer);
     climbTimer = 0;
     stopStats();
-    resetZoom();
+    if (liveZoom) liveZoom.reset();
+    liveZoom = null;
     destroyHls();
     destroyMpeg();
     var root = liveRoot();
@@ -1205,7 +1245,7 @@
       '<span class="shorts-live-viewers"></span></div>';
     document.body.appendChild(root);
     document.documentElement.classList.add("shorts-live-open");
-    bindZoom(root);
+    liveZoom = bindVideoZoom(root.querySelector(".shorts-live-stage"));
     var video = root.querySelector("video");
     video.addEventListener("playing", function () {
       if (token !== liveToken) return;
@@ -1425,6 +1465,7 @@
       if (slides[n] === current && slides[n + 1] && slides[n + 1].getAttribute("data-kind") !== "live") next = slides[n + 1];
     }
     for (var i = 0; i < slides.length; i++) {
+      if (slides[i] !== current && slides[i]._zoom) slides[i]._zoom.reset();
       var video = slides[i].querySelector("video");
       if (!video || slides[i].getAttribute("data-kind") === "live") continue;
       video.muted = !sound;
@@ -1493,10 +1534,13 @@
       return;
     }
     if (kind !== "stage" || !video) return;
-    var now = Date.now();
-    if (now - lastTap < 280) {
-      clearTimeout(tapTimer);
+    var zoomCtrl = slideEl._zoom;
+    var gesture = zoomCtrl ? zoomCtrl.takeGesture() : "";
+    clearTimeout(tapTimer);
+    if (gesture === "drag" || gesture === "pinch") return;
+    if (gesture === "double") {
       lastTap = 0;
+      if (zoomCtrl.scale() <= 1) return;
       var postId = slideEl.getAttribute("data-id");
       if (postId) {
         var settings = hooks.settings() || {};
@@ -1508,6 +1552,8 @@
       if (stage) popHeart(stage);
       return;
     }
+    if (zoomCtrl && zoomCtrl.scale() > 1) return;
+    var now = Date.now();
     lastTap = now;
     tapTimer = setTimeout(function () {
       lastTap = 0;
@@ -1532,7 +1578,7 @@
         video.pause();
         button.setAttribute("aria-label", tr("Play"));
       }
-    }, 280);
+    }, 320);
   }
 
   function onKey(event) {
@@ -1547,6 +1593,8 @@
     var feed = document.getElementById("shorts-feed");
     if (!feed) return;
     event.preventDefault();
+    var current = activeVideo();
+    if (current && current._zoom && current._zoom.scale() > 1) current._zoom.reset();
     feed.scrollBy({ top: (event.key === "ArrowDown" ? 1 : -1) * feed.clientHeight, behavior: "smooth" });
   }
 
@@ -1722,6 +1770,22 @@
     }
     var feed = document.getElementById("shorts-feed");
     if (!feed) return;
+    var zoomSlides = feed.querySelectorAll('.shorts-slide[data-kind="video"]');
+    for (var z = 0; z < zoomSlides.length; z++) {
+      if (zoomSlides[z]._zoom) continue;
+      var zoomStage = zoomSlides[z].querySelector(".shorts-stage");
+      if (zoomStage) zoomSlides[z]._zoom = bindVideoZoom(zoomStage);
+    }
+    if (!feed.dataset.zoomBound) {
+      feed.dataset.zoomBound = "1";
+      feed.addEventListener("touchmove", function (event) {
+        if (event.touches.length > 1 || feed.classList.contains("shorts-zoomed")) event.preventDefault();
+      }, { passive: false });
+      feed.addEventListener("wheel", function (event) {
+        if (!feed.classList.contains("shorts-zoomed") || event.ctrlKey) return;
+        event.preventDefault();
+      }, { passive: false });
+    }
     feed.addEventListener("click", onClick);
     feed.addEventListener("error", onError, true);
     feed.addEventListener("playing", function (event) {
