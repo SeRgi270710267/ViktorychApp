@@ -1,7 +1,7 @@
-# Mirror public subreddits through Reddit's official Data API.
-# Every 20 minutes, and when Sync feeds dispatches this workflow.
-# App-only client_credentials. Read-only. Nothing is posted to Reddit.
-# If REDDIT_CLIENT_ID or REDDIT_CLIENT_SECRET is unset, the job exits quietly.
+# Mirror public subreddits. Every 20 minutes, and when Sync feeds dispatches this.
+# Official API first. Public RSS and the configured fallbacks still run when
+# REDDIT_CLIENT_ID or REDDIT_CLIENT_SECRET is unset.
+# Read-only. Nothing is posted to Reddit.
 
 name: Reddit communities
 
