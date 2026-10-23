@@ -396,6 +396,104 @@ def find_entry(manifest: dict, bucket: str, key: str) -> dict | None:
     return None
 
 
+def file_identity(row: dict) -> tuple:
+    return (str(row.get("bucket") or ""), str(row.get("key") or ""))
+
+
+def merge_part(left: dict, right: dict) -> dict:
+    """Keep the copy that Telegram already accepted."""
+    if right.get("file_id") and not left.get("file_id"):
+        return dict(right)
+    if left.get("file_id"):
+        return dict(left)
+    return dict(right or left)
+
+
+def merge_entry(left: dict, right: dict) -> dict:
+    """Union two manifest rows for the same object. Parts already sent are kept."""
+    if not left:
+        return dict(right)
+    if not right:
+        return dict(left)
+    parts: dict[tuple, dict] = {}
+    for part in list(left.get("parts") or []) + list(right.get("parts") or []):
+        if not isinstance(part, dict):
+            continue
+        ident = (str(part.get("role") or ""), int(part.get("index") or 0))
+        parts[ident] = merge_part(parts.get(ident) or {}, part)
+    merged = dict(left)
+    for key, value in right.items():
+        if key == "parts":
+            continue
+        if merged.get(key) in (None, "", False, 0) and value not in (None, "", False, 0):
+            merged[key] = value
+    if right.get("verified"):
+        merged["verified"] = True
+    merged["parts"] = [parts[ident] for ident in sorted(parts)]
+    return merged
+
+
+def merge_manifest(local: dict, remote: dict) -> dict:
+    """Keep every file from both copies so a parallel run cannot drop a saved upload."""
+    files: dict[tuple, dict] = {}
+    order = []
+    for row in list((remote or {}).get("files") or []) + list((local or {}).get("files") or []):
+        if not isinstance(row, dict) or not row.get("key"):
+            continue
+        ident = file_identity(row)
+        if ident not in files:
+            order.append(ident)
+            files[ident] = dict(row)
+        else:
+            files[ident] = merge_entry(files[ident], row)
+    out = dict(local or {})
+    out["v"] = 1
+    out["files"] = [files[ident] for ident in order]
+    return out
+
+
+def manifest_covers(local: dict, remote: dict) -> bool:
+    have: dict[tuple, set] = {}
+    for row in (remote or {}).get("files") or []:
+        if not isinstance(row, dict):
+            continue
+        ident = file_identity(row)
+        known = have.setdefault(ident, set())
+        for part in row.get("parts") or []:
+            if isinstance(part, dict) and part.get("file_id"):
+                known.add((str(part.get("role") or ""), int(part.get("index") or 0), str(part.get("file_id"))))
+    for row in (local or {}).get("files") or []:
+        if not isinstance(row, dict):
+            continue
+        known = have.get(file_identity(row)) or set()
+        for part in row.get("parts") or []:
+            if isinstance(part, dict) and part.get("file_id"):
+                ident = (str(part.get("role") or ""), int(part.get("index") or 0), str(part.get("file_id")))
+                if ident not in known:
+                    return False
+    return True
+
+
+def part_from_saved(row: dict, role: str, index: int, sha: str) -> dict | None:
+    """A D1 row is the upload. A different sha256 is a new file and is sent."""
+    if not isinstance(row, dict) or not row.get("file_id"):
+        return None
+    saved = str(row.get("sha256") or "")
+    if sha and saved and saved != sha:
+        return None
+    return {
+        "role": role,
+        "index": int(index),
+        "sha256": saved or sha,
+        "size": int(row.get("size") or 0),
+        "message_id": int(row.get("message_id") or 0),
+        "file_id": str(row.get("file_id")),
+        "duration": float(row.get("duration") or 0),
+        "mime": str(row.get("mime") or "application/octet-stream"),
+        "name": "",
+    }
+
+
 def part_done(entry: dict | None, role: str, index: int) -> dict | None:
     if not entry:
         return None
@@ -1294,9 +1392,19 @@ def d1_id(token: str, account: str) -> str:
 
 
 def d1_exec(token: str, account: str, database: str, sql: str, params: list) -> None:
+    d1_rows(token, account, database, sql, params)
+
+
+def d1_rows(token: str, account: str, database: str, sql: str, params: list) -> list:
     url = f"https://api.cloudflare.com/client/v4/accounts/{account}/d1/database/{database}/query"
     payload = json.dumps({"sql": sql, "params": params}).encode("utf-8")
-    cf_json("POST", url, token, payload, "application/json")
+    body = cf_json("POST", url, token, payload, "application/json")
+    result = body.get("result") or []
+    if isinstance(result, list) and result and isinstance(result[0], dict):
+        rows = result[0].get("results") or []
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    return []
 
 
 D1_CREATE = (
@@ -1713,6 +1821,22 @@ def upload_path(api_base: str, token: str, channel: str, path: Path, caption: st
         if cf.get("database"):
             remember_d1(cf["token"], cf["account"], cf["database"], entry, existing, bool(entry.get("verified")), stored_key)
         return
+    if cf.get("database"):
+        saved = None
+        try:
+            rows = d1_rows(
+                cf["token"], cf["account"], cf["database"],
+                "SELECT file_id, message_id, size, sha256, mime, duration FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? LIMIT 1",
+                [stored_key, d1_kind(role), int(index)],
+            )
+            saved = part_from_saved(rows[0], role, index, sha) if rows else None
+        except Exception as err:
+            log("[telegram-backup] d1 lookup unavailable")
+            log(scrub(str(err), current_secrets()))
+        if saved:
+            upsert_part(entry, saved)
+            log("[telegram-backup] already saved %s" % stored_key)
+            return
     sent = send_document(api_base, token, channel, path, caption, state)
     if int(sent.get("file_size") or 0) != path.stat().st_size:
         raise RuntimeError("telegram reported a different size")
@@ -1762,11 +1886,43 @@ def budget_ok(state: dict, size: int) -> bool:
     return int(state.get("files") or 0) < cap and int(state.get("bytes") or 0) + size <= MAX_NEW_BYTES
 
 
+def fetch_manifest(token: str, account: str, bucket: str, directory: Path) -> dict | None:
+    """None means the read failed. An empty file list is a real manifest."""
+    if not token or not account or not bucket:
+        return None
+    dest = directory / "merge-manifest.json"
+    try:
+        download_object(token, account, bucket, MANIFEST_KEY, dest)
+        data = json.loads(dest.read_text(encoding="utf-8"))
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, RuntimeError):
+        return None
+    if isinstance(data, dict) and isinstance(data.get("files"), list):
+        return data
+    return None
+
+
 def save_manifest(cf: dict, manifest: dict, directory: Path) -> None:
-    payload = (json.dumps(manifest, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
-    path = directory / "telegram-manifest.json"
-    path.write_bytes(payload)
-    put_bytes(cf["token"], cf["account"], cf["manifest_bucket"], MANIFEST_KEY, payload, "application/json")
+    bucket = str(cf.get("manifest_bucket") or "")
+    token = str(cf.get("token") or "")
+    account = str(cf.get("account") or "")
+    for attempt in range(4):
+        remote = fetch_manifest(token, account, bucket, directory) if bucket else {"v": 1, "files": []}
+        if bucket and remote is None and attempt < 3:
+            continue
+        if remote is not None:
+            merged = merge_manifest(manifest, remote)
+            manifest["v"] = merged["v"]
+            manifest["files"] = merged["files"]
+        payload = (json.dumps(manifest, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
+        path = directory / "telegram-manifest.json"
+        path.write_bytes(payload)
+        if not bucket:
+            return
+        put_bytes(token, account, bucket, MANIFEST_KEY, payload, "application/json")
+        seen = fetch_manifest(token, account, bucket, directory)
+        if seen is not None and manifest_covers(manifest, seen):
+            return
+    log("[telegram-backup] manifest merge incomplete")
 
 
 def load_remote_manifest(token: str, account: str, buckets: list, directory: Path) -> tuple:
@@ -2526,6 +2682,15 @@ def selftest() -> int:
     check(cdn_fallback_ok("thumb", "https://i.ytimg.com/vi/x/hqdefault.jpg") is True, "a thumbnail still uses its CDN file")
     summary = upload_summary({"files": 2, "bytes": 9, "kinds": {"small": 2}, "kind_bytes": {"small": 9}, "newest": 1761157560})
     check(summary.startswith("[telegram-backup] uploaded 2 files, 9 bytes") and "newest " in summary, "the summary names the newest sendDocument time")
+    kept = merge_manifest(
+        {"v": 1, "files": [{"bucket": "cdn", "key": "social/x/new/photo/0", "parts": [{"role": "file", "index": 0, "file_id": "B"}], "verified": False}]},
+        {"v": 1, "files": [{"bucket": "cdn", "key": "social/x/old/photo/0", "parts": [{"role": "file", "index": 0, "file_id": "A"}], "verified": True}]},
+    )
+    keys = [row["key"] for row in kept["files"]]
+    check(keys == ["social/x/old/photo/0", "social/x/new/photo/0"] and manifest_covers(kept, kept), "a parallel save keeps both uploaded files")
+    same = part_from_saved({"file_id": "B", "message_id": 3, "size": 4, "sha256": "ab", "mime": "image/jpeg"}, "file", 0, "ab")
+    changed = part_from_saved({"file_id": "B", "sha256": "zz"}, "file", 0, "ab")
+    check(same and same["file_id"] == "B" and changed is None, "a saved D1 row is not sent again")
     check('echo "$TELEGRAM' not in workflow and "echo ${{ secrets" not in workflow, "the workflow does not print secrets")
     check('path.startsWith("/tg/")' in worker and "TELEGRAM_BOT_TOKEN" in worker and "not_configured" in worker, "the Worker serves /tg and returns 503 without its secret")
     check("function telegramSecretKey(" in worker and "function ownerOnlyMedia(" in worker and "function hiddenAvatar(" in worker, "the Worker keeps keys, hidden avatars, and owner-only Shorts off anonymous playback")
