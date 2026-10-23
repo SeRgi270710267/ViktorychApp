@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,173 @@ def expand(url: str, config: dict, feed: dict | None = None) -> str:
         .replace("{handle}", feed.get("handle") or "")
         .replace("{channelId}", feed.get("channelId") or "")
     )
+
+
+X_HANDLE = re.compile(r"^[A-Za-z0-9_]{1,15}$")
+NITTER_RSS = [
+    "https://nitter.meowing.monster/{handle}/rss",
+    "https://nitter.kareem.one/{handle}/rss",
+    "https://nitter.jaydenha.uk/{handle}/rss",
+]
+ADDED_X_KEY = "owner/added-accounts.json"
+
+
+def empty_added_x() -> dict:
+    return {"added": [], "removed": [], "removedIds": []}
+
+
+def parse_added_x(text: str) -> dict:
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return empty_added_x()
+    if not isinstance(data, dict):
+        return empty_added_x()
+    added = [row for row in (data.get("added") or []) if isinstance(row, dict)]
+    removed = []
+    for item in data.get("removed") or []:
+        name = str(item or "").strip().lstrip("@")
+        if name and name.casefold() not in {have.casefold() for have in removed}:
+            removed.append(name)
+    removed_ids = []
+    for item in data.get("removedIds") or []:
+        text_id = str(item or "").strip()
+        if text_id.isdigit() and text_id not in removed_ids:
+            removed_ids.append(text_id)
+    return {"added": added, "removed": removed, "removedIds": removed_ids}
+
+
+def added_x_path() -> Path:
+    return ROOT / "owner" / "added-accounts.json"
+
+
+def load_added_x(path: Path | None = None) -> dict:
+    """Owner X accounts from R2 when the Actions token is set, else a local file."""
+    from tiktok_sync import r2_get
+
+    blob = r2_get(ADDED_X_KEY)
+    if blob is not None:
+        return parse_added_x(blob.decode("utf-8", "replace"))
+    path = path or added_x_path()
+    if path.is_file():
+        return parse_added_x(path.read_text(encoding="utf-8"))
+    return empty_added_x()
+
+
+def save_added_x(doc: dict, path: Path | None = None) -> None:
+    """Write the private object. This does not touch feeds.config.json."""
+    from tiktok_sync import r2_put
+
+    path = path or added_x_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = (json.dumps({
+        "added": doc.get("added") or [],
+        "removed": doc.get("removed") or [],
+        "removedIds": doc.get("removedIds") or [],
+    }, ensure_ascii=False) + "\n").encode("utf-8")
+    path.write_bytes(payload)
+    r2_put(ADDED_X_KEY, payload)
+
+
+def added_x_feeds(config: dict, doc: dict | None) -> list:
+    """Runtime X rows. A removed account stays out. Nothing is written to the config."""
+    from account_identity import clean_id, norm_handle
+
+    doc = doc if isinstance(doc, dict) else empty_added_x()
+    removed = {norm_handle(item).casefold() for item in (doc.get("removed") or []) if norm_handle(item)}
+    removed_ids = {clean_id(item) for item in (doc.get("removedIds") or []) if clean_id(item)}
+    seen_ids = set()
+    seen_handles = set()
+    for feed in (config or {}).get("feeds") or []:
+        if not isinstance(feed, dict) or (feed.get("platform") or "") != "x":
+            continue
+        pid = clean_id(feed.get("permanentId"))
+        if pid:
+            seen_ids.add(pid)
+        for item in [feed.get("handle")] + list(feed.get("previousHandles") or []):
+            name = norm_handle(item).casefold()
+            if name:
+                seen_handles.add(name)
+    rows = []
+    for source in doc.get("added") or []:
+        if not isinstance(source, dict):
+            continue
+        handle = norm_handle(source.get("handle"))
+        if not X_HANDLE.fullmatch(handle):
+            continue
+        pid = clean_id(source.get("permanentId"))
+        names = [handle] + [norm_handle(item) for item in (source.get("previousHandles") or [])]
+        if any(name.casefold() in removed for name in names if name) or (pid and pid in removed_ids):
+            continue
+        if (pid and pid in seen_ids) or handle.casefold() in seen_handles:
+            continue
+        feed_id = str(source.get("id") or "")
+        if not re.fullmatch(r"x:[A-Za-z0-9_]{1,15}", feed_id):
+            feed_id = "x:" + handle
+        previous = []
+        for item in source.get("previousHandles") or []:
+            name = norm_handle(item)
+            if name and name.casefold() != handle.casefold() and name.casefold() not in {have.casefold() for have in previous}:
+                previous.append(name)
+        row = {
+            "id": feed_id,
+            "platform": "x",
+            "handle": handle,
+            "adapter": "fxtwitter",
+            "source_urls": ["{fxtwitterBase}/2/profile/{handle}/statuses"],
+            "fallbacks": [{"adapter": "nitter_rss", "source_urls": list(NITTER_RSS)}],
+            "limit": 6,
+            "profile": {"name": source.get("name") or handle, "url": "https://x.com/" + handle},
+            "_privateAdded": True,
+        }
+        if pid:
+            row["permanentId"] = pid
+        if previous:
+            row["previousHandles"] = previous
+        rows.append(row)
+        seen_handles.add(handle.casefold())
+        if pid:
+            seen_ids.add(pid)
+    return rows
+
+
+def remember_private_x(doc: dict, feed: dict) -> bool:
+    """Keep a renamed handle on the private row. The public config is left alone."""
+    if not feed.get("_privateAdded"):
+        return False
+    from account_identity import clean_id, handles_equal, norm_handle
+
+    changed = False
+    for row in doc.get("added") or []:
+        if not isinstance(row, dict):
+            continue
+        same_id = clean_id(row.get("permanentId")) and clean_id(row.get("permanentId")) == clean_id(feed.get("permanentId"))
+        same_feed = bool(row.get("id")) and row.get("id") == feed.get("id")
+        same_handle = handles_equal(row.get("handle"), feed.get("handle")) or any(
+            handles_equal(item, feed.get("handle")) for item in (row.get("previousHandles") or [])
+        )
+        if not (same_id or same_feed or same_handle):
+            continue
+        new_handle = norm_handle(feed.get("handle"))
+        old_handle = norm_handle(row.get("handle"))
+        if new_handle and X_HANDLE.fullmatch(new_handle) and old_handle and not handles_equal(old_handle, new_handle):
+            previous = [norm_handle(item) for item in (row.get("previousHandles") or []) if norm_handle(item)]
+            if not any(handles_equal(old_handle, item) for item in previous):
+                previous.append(old_handle)
+            row["previousHandles"] = previous
+            row["handle"] = new_handle
+            row["url"] = "https://x.com/" + new_handle
+            changed = True
+        pid = clean_id(feed.get("permanentId"))
+        if pid and clean_id(row.get("permanentId")) != pid:
+            row["permanentId"] = pid
+            changed = True
+        feed_id = str(feed.get("id") or "")
+        if re.fullmatch(r"x:[A-Za-z0-9_]{1,15}", feed_id) and row.get("id") != feed_id:
+            row["id"] = feed_id
+            changed = True
+        return changed
+    return False
 
 
 def read_source(url: str) -> str:
@@ -483,13 +651,30 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
     except Exception:
         pass
     feed_rows = list(config.get("feeds") or [])
+    private_x = empty_added_x()
+    private_changed = False
     if not use_fixtures:
+        try:
+            private_x = load_added_x()
+            feed_rows.extend(added_x_feeds(config, private_x))
+        except Exception as exc:
+            print(f"[added] {exc}", file=sys.stderr)
         try:
             from people import extra_feeds
 
             feed_rows.extend(extra_feeds(config))
         except Exception as exc:
             print(f"[people] feeds: {exc}", file=sys.stderr)
+
+    def note_private(feed: dict) -> None:
+        nonlocal private_changed
+        if not feed.get("_privateAdded"):
+            return
+        try:
+            if remember_private_x(private_x, feed):
+                private_changed = True
+        except Exception as exc:
+            print(f"[added] {feed.get('id')}: {exc}", file=sys.stderr)
     for feed in feed_rows:
         configured_ids.add(feed["id"])
         if not use_fixtures and feed.get("origin") == "repost":
@@ -582,6 +767,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                     resolve_failed(config, feed, profiles)
                 except Exception:
                     print(f"[keep] {feed.get('id')}: id lookup failed", file=sys.stderr)
+            note_private(feed)
             collected.extend(old_by_feed.get(feed["id"], []))
             continue
         if not use_fixtures:
@@ -744,7 +930,14 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
 
             primary = blank_profile(feed.get("platform") or "", feed.get("handle") or "", feed.get("handle") or "")
         profiles = merge_profiles(profiles, [apply_override(primary, feed)] + [p for p in incoming if p is not primary])
+        note_private(feed)
         print(f"[ok] {feed['id']}: {len(posts)} posts via {adapter}")
+
+    if private_changed and not use_fixtures:
+        try:
+            save_added_x(private_x)
+        except Exception as exc:
+            print(f"[added] {exc}", file=sys.stderr)
 
     # A configured feed is a default follow unless it opted out. Auto-added
     # repost sources stay in the catalog and out of Following.

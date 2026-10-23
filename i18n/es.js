@@ -853,6 +853,8 @@ SI18n.addPack("es", {
   "Playing ReGone on {app}": "Jugando a ReGone en {app}",
   "That game isn’t here.": "Ese juego no está aquí.",
   "added accounts": "cuentas añadidas",
+  "Fetching posts…": "Obteniendo publicaciones…",
+  "That account wasn’t found.": "Esa cuenta no se encontró.",
   "Original quality": "Calidad original",
   "No added accounts yet.": "Aún no hay cuentas añadidas.",
   "That doesn’t look like a TikTok account.": "Eso no parece una cuenta de TikTok.",

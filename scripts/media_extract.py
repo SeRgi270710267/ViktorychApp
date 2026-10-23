@@ -18,6 +18,8 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -112,12 +114,41 @@ def account_url(platform: str, handle: str, channel_id: str = "") -> str:
     return ""
 
 
-def accounts_from(config: dict, tiktok_handles: list, accounts_doc: dict | None = None) -> list:
-    """Private added TikTok rows, config rows, then the fallback handles."""
-    from account_identity import tiktok_accounts
+def accounts_from(config: dict, tiktok_handles: list, accounts_doc: dict | None = None, x_doc: dict | None = None) -> list:
+    """Private added TikTok and X rows, config rows, then the fallback handles."""
+    from account_identity import clean_id, norm_handle, tiktok_accounts
 
     rows = []
     seen = set()
+    x_doc = x_doc if isinstance(x_doc, dict) else {}
+    blocked = {norm_handle(item).casefold() for item in (x_doc.get("removed") or []) if norm_handle(item)}
+    blocked_ids = {clean_id(item) for item in (x_doc.get("removedIds") or []) if clean_id(item)}
+    for source in x_doc.get("added") or []:
+        if not isinstance(source, dict):
+            continue
+        handle = norm_handle(source.get("handle")).lstrip("@")
+        if not HANDLE_RE.fullmatch(handle) or not re.fullmatch(r"[A-Za-z0-9_]{1,15}", handle):
+            continue
+        pid = clean_id(source.get("permanentId"))
+        names = [handle] + [norm_handle(item) for item in (source.get("previousHandles") or [])]
+        if any(name.casefold() in blocked for name in names if name) or (pid and pid in blocked_ids):
+            continue
+        key = ("x", handle.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        for item in names:
+            if item:
+                seen.add(("x", item.lower()))
+        url = account_url("x", handle)
+        if not tb.page_host_ok(url):
+            continue
+        row = {"platform": "x", "handle": handle, "url": url}
+        if pid:
+            row["permanentId"] = pid
+        if source.get("previousHandles"):
+            row["previousHandles"] = list(source.get("previousHandles") or [])
+        rows.append(row)
     for source in tiktok_accounts(config, tiktok_handles, accounts_doc):
         key = ("tiktok", source["handle"].lower())
         if key in seen:
@@ -331,7 +362,124 @@ def open_destination(directory: Path):
 def selector_for(platform: str) -> str:
     if platform == "tiktok":
         return tb.TIKTOK_FALLBACK
+    if platform == "x":
+        return "bv*[ext=mp4]+ba[ext=m4a]/bv*[ext=mp4]+ba/b[ext=mp4]/" + tb.YTDLP_FORMAT
     return tb.YTDLP_FORMAT
+
+
+def x_video_selector(formats) -> str:
+    """Highest-bitrate progressive MP4, then bv*+ba/b. Remux only."""
+    videos = []
+    audios = []
+    for fmt in formats or []:
+        if not isinstance(fmt, dict):
+            continue
+        fid = str(fmt.get("format_id") or "")
+        if not tb.FORMAT_ID_RE.fullmatch(fid):
+            continue
+        protocol = str(fmt.get("protocol") or "").lower()
+        if "m3u8" in protocol or "hls" in protocol:
+            continue
+        ext = str(fmt.get("ext") or "").lower()
+        url = str(fmt.get("url") or "").split("?")[0].lower()
+        if ext != "mp4" and not url.endswith(".mp4") and ext != "m4a":
+            continue
+        vcodec = str(fmt.get("vcodec") or "none")
+        acodec = str(fmt.get("acodec") or "none")
+        if ext == "mp4" and vcodec not in {"", "none"} and acodec in {"", "none"}:
+            videos.append(fmt)
+        elif ext == "mp4" and vcodec not in {"", "none"} and acodec not in {"", "none"}:
+            videos.append(fmt)
+        elif vcodec in {"", "none"} and acodec not in {"", "none"}:
+            audios.append(fmt)
+    if not videos:
+        return selector_for("x")
+    videos.sort(key=lambda fmt: (tb.format_bitrate(fmt), int(fmt.get("height") or 0)), reverse=True)
+    best = videos[0]
+    vid = str(best.get("format_id") or "")
+    if str(best.get("acodec") or "none") not in {"", "none"}:
+        return vid + "/" + tb.YTDLP_FORMAT
+    audios.sort(key=tb.format_bitrate, reverse=True)
+    audio = str(audios[0].get("format_id") or "") if audios else ""
+    if audio:
+        return vid + "+" + audio + "/" + tb.YTDLP_FORMAT
+    return vid + "+ba/" + tb.YTDLP_FORMAT
+
+
+def twimg_orig(url: str) -> str:
+    """Largest Twitter photo. A resized name= is replaced with name=orig."""
+    parts = urllib.parse.urlsplit(str(url or ""))
+    host = (parts.netloc or "").lower()
+    if host != "pbs.twimg.com" and not host.endswith(".twimg.com"):
+        return ""
+    if "pbs.twimg.com" not in host and not host.endswith("twimg.com"):
+        return ""
+    query = [(key, value) for key, value in urllib.parse.parse_qsl(parts.query, keep_blank_values=True) if key.lower() != "name"]
+    query.append(("name", "orig"))
+    scheme = parts.scheme or "https"
+    return urllib.parse.urlunsplit((scheme, parts.netloc, parts.path, urllib.parse.urlencode(query), ""))
+
+
+def download_public_file(url: str, dest: Path) -> int:
+    from x_guard import assert_not_x_api, open_url
+
+    assert_not_x_api(url)
+    request = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
+    })
+    try:
+        with open_url(request, timeout=30) as response:
+            status = getattr(response, "status", 200)
+            if status != 200:
+                return status
+            dest.write_bytes(response.read())
+            return 200
+    except urllib.error.HTTPError as err:
+        return int(err.code or 0)
+
+
+def promote_orig_photos(work: Path) -> None:
+    """Keep the larger name=orig file. A 403 or a block leaves the photo skipped."""
+    images = [
+        path for path in work.rglob("*")
+        if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+    ]
+    for path in images:
+        meta = {}
+        for candidate in (path.with_name(path.name + ".json"), path.with_suffix(".json")):
+            if not candidate.is_file():
+                continue
+            try:
+                loaded = json.loads(candidate.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                loaded = {}
+            if isinstance(loaded, dict):
+                meta = loaded
+            break
+        raw = ""
+        if isinstance(meta, dict):
+            raw = str(meta.get("url") or meta.get("file_url") or "")
+            urls = meta.get("urls")
+            if not raw and isinstance(urls, dict):
+                raw = str(urls.get("orig") or urls.get("original") or "")
+        orig = twimg_orig(raw)
+        if not orig:
+            continue
+        if "name=orig" in raw.lower() and path.stat().st_size > 0:
+            continue
+        dest = path.with_name(path.stem + "-orig" + path.suffix)
+        try:
+            status = download_public_file(orig, dest)
+        except Exception:
+            dest.unlink(missing_ok=True)
+            continue
+        if status in {403, 429, 503} or status != 200 or not dest.is_file() or dest.stat().st_size <= path.stat().st_size:
+            if status in {403, 429, 503}:
+                log("[media-extract] skipped_blocked photo")
+            dest.unlink(missing_ok=True)
+            continue
+        dest.replace(path)
 
 
 def tiktok_download_selector(formats) -> str:
@@ -387,6 +535,44 @@ def download_tiktok(ytdlp: list, account: dict, work: Path, archive: Path, limit
         selector = tiktok_download_selector(entry.get("formats") or [])
         args = video_args(page, work, archive, selector, 1)
         args.insert(1, "--no-playlist")
+        _code, out, err = run_tool(ytdlp + args, 600)
+        text = out + "\n" + err
+        if tb.runner_blocked(text):
+            return "blocked", text
+    return "ok", ""
+
+
+def download_x(ytdlp: list, account: dict, work: Path, archive: Path, limit: int) -> tuple:
+    """One public video at a time, using the highest-bitrate MP4. Remux only."""
+    _code, out, err = list_tiktok_entries(ytdlp, account["url"], limit)
+    text = out + "\n" + err
+    if tb.runner_blocked(text):
+        return "blocked", text
+    info = {}
+    try:
+        parsed = json.loads(out) if out.strip() else {}
+    except json.JSONDecodeError:
+        parsed = {}
+    if isinstance(parsed, dict):
+        info = parsed
+    entries = info.get("entries") if isinstance(info.get("entries"), list) else None
+    if not entries and info.get("id"):
+        entries = [info]
+    if not entries:
+        _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for("x"), limit), 600)
+        text = out + "\n" + err
+        return ("blocked" if tb.runner_blocked(text) else "ok"), text
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        page = str(entry.get("webpage_url") or entry.get("url") or "")
+        if "x.com" not in page and "twitter.com" not in page:
+            continue
+        selector = x_video_selector(entry.get("formats") or [])
+        args = video_args(page, work, archive, selector, 1)
+        args.insert(1, "--no-playlist")
+        if "--recode-video" in args:
+            return "blocked", "recode"
         _code, out, err = run_tool(ytdlp + args, 600)
         text = out + "\n" + err
         if tb.runner_blocked(text):
@@ -553,12 +739,17 @@ def extract() -> int:
     except json.JSONDecodeError:
         config = {}
     from tiktok_sync import load_added_accounts
+    from update_feeds import load_added_x
 
     try:
         accounts_doc = load_added_accounts()
     except Exception:
         accounts_doc = {"added": [], "removed": []}
-    accounts = accounts_from(config if isinstance(config, dict) else {}, list(TRACKED), accounts_doc)
+    try:
+        x_doc = load_added_x()
+    except Exception:
+        x_doc = {"added": [], "removed": [], "removedIds": []}
+    accounts = accounts_from(config if isinstance(config, dict) else {}, list(TRACKED), accounts_doc, x_doc)
     if not accounts:
         log("[media-extract] no added accounts")
         return 0
@@ -606,6 +797,8 @@ def extract() -> int:
             log("[media-extract] added account %s %s" % (account["platform"], account["handle"]))
             if account["platform"] == "tiktok":
                 status, text = download_tiktok(ytdlp, account, work, archive, room)
+            elif account["platform"] == "x":
+                status, text = download_x(ytdlp, account, work, archive, room)
             else:
                 _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for(account["platform"]), room), 600)
                 text = out + "\n" + err
@@ -651,11 +844,16 @@ def extract() -> int:
             photo_dir = work / "photos"
             photo_dir.mkdir(parents=True)
             if photos_allowed(status) and account["platform"] != "youtube" and stored < limit:
-                _code, out, err = run_tool(gallery + photo_args(account["url"], photo_dir, photos, min(each, limit - stored)), 300)
+                photo_cmd = gallery + photo_args(account["url"], photo_dir, photos, min(each, limit - stored))
+                if account["platform"] == "x":
+                    photo_cmd = gallery + ["-o", "twitter.size=orig"] + photo_args(account["url"], photo_dir, photos, min(each, limit - stored))
+                _code, out, err = run_tool(photo_cmd, 300)
                 if tb.runner_blocked(out + "\n" + err):
                     log("[media-extract] skipped_blocked %s/%s" % (account["platform"], account["handle"]))
                     tally["blocked"] += 1
                 else:
+                    if account["platform"] == "x":
+                        promote_orig_photos(photo_dir)
                     for item in photo_groups(photo_dir, account):
                         if stored >= limit:
                             break
@@ -768,7 +966,41 @@ def selftest() -> int:
     check("archive.txt" in doc and "user_id" in doc and "sec_uid" in doc and "17 */3 * * *" in doc, "the docs describe the archive, the catalog, and the schedule")
     check("added account" in doc and "tracked account" not in doc and "name: Extract added accounts" in workflow, "added accounts is the name for profiles in feeds.config.json")
     source = Path(__file__).read_text(encoding="utf-8")
-    check(("photos" + ".read_text(") not in source and "gallery-archive.sqlite" in source and "load_added_accounts" in source, "the gallery-dl archive is a sqlite file, and TikTok reads the owner list")
+    check(("photos" + ".read_text(") not in source and "gallery-archive.sqlite" in source and "load_added_accounts" in source and "load_added_x" in source, "the gallery-dl archive is a sqlite file, and TikTok and X read the owner list")
+    x_rows = accounts_from(
+        {"feeds": [{"platform": "x", "handle": "redacted_handle", "permanentId": "44196397"}]},
+        [],
+        None,
+        {"added": [
+            {"handle": "NASA", "permanentId": "11348282"},
+            {"handle": "redacted_handle", "permanentId": "44196397"},
+            {"handle": "gone", "permanentId": "77"},
+        ], "removed": ["oldname"], "removedIds": ["77"]},
+    )
+    x_urls = [row["url"] for row in x_rows if row["platform"] == "x"]
+    check(x_urls.count("https://x.com/NASA") == 1 and x_urls.count("https://x.com/redacted_handle") == 1 and "https://x.com/gone" not in x_urls, "a private X account is extracted once and a removed id stays out")
+    x_formats = [
+        {"format_id": "hls-high", "ext": "mp4", "protocol": "m3u8_native", "vcodec": "avc1", "acodec": "none", "tbr": 8000},
+        {"format_id": "low", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "tbr": 500, "height": 360},
+        {"format_id": "high", "ext": "mp4", "vcodec": "avc1", "acodec": "none", "tbr": 2500, "height": 720},
+        {"format_id": "audio", "ext": "m4a", "vcodec": "none", "acodec": "mp4a.40.2", "tbr": 128},
+    ]
+    x_picked = x_video_selector(x_formats)
+    check(x_picked.startswith("high+audio/") and "hls-high" not in x_picked.split("/")[0] and "--recode-video" not in video_args("https://x.com/NASA/status/1", Path("out"), Path("archive.txt"), x_picked, 1), "X takes the highest-bitrate MP4 and remuxes it")
+    check(twimg_orig("https://pbs.twimg.com/media/abc.jpg?name=small") == "https://pbs.twimg.com/media/abc.jpg?name=orig", "an X photo asks for name=orig")
+    check(twimg_orig("https://pbs.twimg.com/media/abc.jpg").endswith("name=orig") and twimg_orig("https://example.com/a.jpg") == "", "only a Twitter photo is rewritten to the original")
+    from update_feeds import added_x_feeds, remember_private_x
+    config = {"feeds": [{"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle", "permanentId": "44196397"}]}
+    private_doc = {"added": [
+        {"id": "x:NASA", "handle": "NASA", "permanentId": "11348282", "name": "NASA"},
+        {"id": "x:redacted_handle", "handle": "redacted_handle", "permanentId": "44196397"},
+        {"id": "x:old", "handle": "renamed", "permanentId": "77"},
+    ], "removed": [], "removedIds": ["77"]}
+    built = added_x_feeds(config, private_doc)
+    check(len(built) == 1 and built[0]["handle"] == "NASA" and built[0]["adapter"] == "fxtwitter" and built[0]["source_urls"] == ["{fxtwitterBase}/2/profile/{handle}/statuses"] and built[0]["fallbacks"][0]["adapter"] == "nitter_rss" and "nitter.meowing.monster" in built[0]["fallbacks"][0]["source_urls"][0], "added X accounts use fxtwitter and the nitter fallbacks")
+    check(config["feeds"][0]["handle"] == "redacted_handle" and "_privateAdded" not in config["feeds"][0], "private X rows are not written into the public config")
+    renamed = {"_privateAdded": True, "id": "x:NASA", "platform": "x", "handle": "NASANew", "permanentId": "11348282", "previousHandles": ["NASA"]}
+    check(remember_private_x(private_doc, renamed) and private_doc["added"][0]["handle"] == "NASANew" and private_doc["added"][0]["previousHandles"] == ["NASA"] and private_doc["added"][0]["id"] == "x:NASA", "a handle change stays on the private row and keeps the feed id")
     sample = Path("gallery-sample.sqlite")
     try:
         blob = b"SQLite format 3\x00" + bytes(range(83)) + b"\x89"

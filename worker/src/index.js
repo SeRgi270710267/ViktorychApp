@@ -49,7 +49,7 @@ function withCors(request, env, response) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
-  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range");
+  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh");
   headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type");
   headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
@@ -2013,10 +2013,9 @@ function tiktokRowMatches(row, handle) {
   return previous.some((item) => sameTikTokHandle(item, handle));
 }
 
-async function dispatchAddedAccounts(env) {
+async function dispatchWorkflows(env, files) {
   const token = String(env.GITHUB_DISPATCH_TOKEN || "").trim();
   if (!token) return false;
-  const files = ["tiktok-added.yml", "media-extract.yml", "tiktok-live.yml"];
   let ok = false;
   for (let i = 0; i < files.length; i++) {
     try {
@@ -2035,6 +2034,10 @@ async function dispatchAddedAccounts(env) {
     } catch (err) { /* the next scheduled run still picks the account up */ }
   }
   return ok;
+}
+
+async function dispatchAddedAccounts(env) {
+  return dispatchWorkflows(env, ["tiktok-added.yml", "media-extract.yml", "tiktok-live.yml"]);
 }
 
 async function requireOwner(request, env) {
@@ -2233,6 +2236,364 @@ async function handleBackupChannels(request, env) {
   return json(200, { extra: rows.length, masks: rows.map(maskChannel) });
 }
 
+const ADDED_ACCOUNTS_KEY = "owner/added-accounts.json";
+const ADDED_ACCOUNT_CAP = 50;
+const X_HANDLE = /^[A-Za-z0-9_]{1,15}$/;
+const X_RESERVED = {
+  home: 1, explore: 1, search: 1, settings: 1, i: 1, intent: 1, share: 1, compose: 1,
+  messages: 1, notifications: 1, login: 1, signup: 1, tos: 1, privacy: 1, hashtag: 1,
+  status: 1, jobs: 1, download: 1, about: 1, help: 1, terms: 1
+};
+
+function emptyAddedAccounts() {
+  return { added: [], removed: [], removedIds: [] };
+}
+
+function sameXHandle(left, right) {
+  const a = String(left || "").replace(/^@+/, "").toLowerCase();
+  const b = String(right || "").replace(/^@+/, "").toLowerCase();
+  return !!a && a === b;
+}
+
+function xHandleOk(value) {
+  const text = String(value || "");
+  return X_HANDLE.test(text) && !X_RESERVED[text.toLowerCase()];
+}
+
+function normalizeXInput(raw) {
+  let text = String(raw || "").trim();
+  if (!text || text.length > 300) return "";
+  let handle = "";
+  const screen = text.match(/[?&]screen_name=([A-Za-z0-9_]{1,15})(?:&|$)/i);
+  if (screen) handle = screen[1];
+  if (!handle) {
+    const fromUrl = text.match(/^(?:https?:\/\/)?(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/([A-Za-z0-9_]{1,15})(?:[\/?#]|$)/i);
+    if (fromUrl) handle = fromUrl[1];
+  }
+  if (!handle && !/^https?:\/\//i.test(text)) {
+    const bare = text.replace(/^@+/, "").match(/^([A-Za-z0-9_]{1,15})$/);
+    if (bare) handle = bare[1];
+  }
+  return xHandleOk(handle) ? handle : "";
+}
+
+function httpsUrl(value, max) {
+  let text = String(value || "").trim();
+  if (text.indexOf("http://") === 0) text = "https://" + text.slice(7);
+  if (!/^https:\/\//i.test(text) || text.length > (max || 400) || /[\s<>]/.test(text)) return "";
+  return text;
+}
+
+function xAvatar(url) {
+  const text = httpsUrl(url, 400);
+  if (!text) return "";
+  return text.replace("_normal.", "_400x400.").replace("_bigger.", "_400x400.").replace("_mini.", "_400x400.");
+}
+
+function xBanner(url) {
+  const text = httpsUrl(url, 400);
+  if (!text) return "";
+  if (text.indexOf("profile_banners/") >= 0 && !/\/\d+x\d+$/.test(text)) return text + "/1500x500";
+  return text;
+}
+
+function xCount(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return null;
+  return Math.round(num);
+}
+
+function xText(value, max) {
+  const text = String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim();
+  if (!text) return "";
+  return Array.from(text).slice(0, max).join("");
+}
+
+function xBadge(kind) {
+  const text = String(kind || "");
+  if (!text || text === "none") return "";
+  if (text === "individual") return "blue";
+  if (text === "blue" || text === "business" || text === "government") return text;
+  return "";
+}
+
+function xVerified(user) {
+  const verification = user && user.verification;
+  if (typeof verification === "string") return xBadge(verification);
+  if (verification && typeof verification === "object") {
+    const kind = xBadge(verification.type || verification.verified_type);
+    if (kind) return kind;
+    if (verification.verified || verification.is_verified) return "blue";
+  }
+  if (user && user.verified) return "blue";
+  return "";
+}
+
+function xJoined(value) {
+  const text = String(value || "").trim();
+  if (!text || text.length > 80) return "";
+  const when = Date.parse(text);
+  if (!Number.isFinite(when)) return "";
+  return new Date(when).toISOString().slice(0, 10);
+}
+
+function xWebsite(user) {
+  const website = user && user.website;
+  if (typeof website === "string") return httpsUrl(website, 300);
+  if (website && typeof website === "object") return httpsUrl(website.url, 300);
+  return "";
+}
+
+function profileFromXUser(user, fallback) {
+  const handle = xHandleOk(user && user.screen_name) ? String(user.screen_name) : fallback;
+  const id = String((user && user.id) || "");
+  if (!xHandleOk(handle) || !/^\d{2,25}$/.test(id)) return null;
+  const followers = xCount(user.followers);
+  const following = xCount(user.following);
+  const posts = xCount(user.tweets != null ? user.tweets : user.posts);
+  const row = {
+    id: "x:" + handle,
+    handle,
+    permanentId: id,
+    name: xText(user.name, 80),
+    avatar: xAvatar(user.avatar_url),
+    banner: xBanner(user.banner_url),
+    bio: xText(user.description, 280),
+    location: xText(user.location, 80),
+    website: xWebsite(user),
+    joined: xJoined(user.joined),
+    url: httpsUrl(user.url, 300) || ("https://x.com/" + handle),
+    verifiedType: xVerified(user),
+    addedAt: stamp(),
+    previousHandles: []
+  };
+  if (followers != null) row.followers = followers;
+  if (following != null) row.following = following;
+  if (posts != null) row.postsCount = posts;
+  return row;
+}
+
+function publicXAccount(row) {
+  const out = {
+    id: row.id || ("x:" + row.handle),
+    handle: row.handle,
+    name: row.name || "",
+    avatar: row.avatar || "",
+    banner: row.banner || "",
+    bio: row.bio || "",
+    url: row.url || ("https://x.com/" + row.handle),
+    permanentId: row.permanentId || "",
+    addedAt: row.addedAt || "",
+    verifiedType: row.verifiedType || ""
+  };
+  if (row.location) out.location = row.location;
+  if (row.website) out.website = row.website;
+  if (row.joined) out.joined = row.joined;
+  if (row.followers != null) out.followers = row.followers;
+  if (row.following != null) out.following = row.following;
+  if (row.postsCount != null) out.postsCount = row.postsCount;
+  if (Array.isArray(row.previousHandles) && row.previousHandles.length) out.previousHandles = row.previousHandles.slice(0, 8);
+  return out;
+}
+
+async function readAddedAccounts(env) {
+  if (!env.DATA) return emptyAddedAccounts();
+  const object = await env.DATA.get(ADDED_ACCOUNTS_KEY);
+  if (!object) return emptyAddedAccounts();
+  try {
+    const parsed = JSON.parse(await object.text());
+    if (!parsed || typeof parsed !== "object") return emptyAddedAccounts();
+    const added = [];
+    const rows = Array.isArray(parsed.added) ? parsed.added : [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || typeof row !== "object") continue;
+      const handle = normalizeXInput(row.handle);
+      if (!handle) continue;
+      added.push(Object.assign({}, row, { handle }));
+    }
+    const removed = [];
+    const gone = Array.isArray(parsed.removed) ? parsed.removed : [];
+    for (let i = 0; i < gone.length; i++) {
+      const handle = normalizeXInput(gone[i]);
+      if (!handle) continue;
+      if (!removed.some((item) => sameXHandle(item, handle))) removed.push(handle);
+    }
+    const removedIds = [];
+    const ids = Array.isArray(parsed.removedIds) ? parsed.removedIds : [];
+    for (let i = 0; i < ids.length; i++) {
+      const id = String(ids[i] || "");
+      if (!/^\d{2,25}$/.test(id) || removedIds.indexOf(id) >= 0) continue;
+      removedIds.push(id);
+    }
+    return { added, removed, removedIds };
+  } catch (err) {
+    return emptyAddedAccounts();
+  }
+}
+
+async function writeAddedAccounts(env, doc) {
+  const body = JSON.stringify({
+    added: (doc.added || []).slice(0, ADDED_ACCOUNT_CAP),
+    removed: (doc.removed || []).slice(-200),
+    removedIds: (doc.removedIds || []).slice(-200)
+  });
+  await env.DATA.put(ADDED_ACCOUNTS_KEY, body, {
+    httpMetadata: { contentType: "application/json; charset=utf-8" }
+  });
+}
+
+function xRowMatches(row, handle, permanentId) {
+  if (handle && (sameXHandle(row.handle, handle) || (Array.isArray(row.previousHandles) && row.previousHandles.some((item) => sameXHandle(item, handle))))) return true;
+  return !!(permanentId && String(row.permanentId || "") === permanentId);
+}
+
+async function lookupXProfile(handle) {
+  let res;
+  try {
+    res = await fetch("https://api.fxtwitter.com/" + encodeURIComponent(handle), {
+      headers: {
+        "user-agent": PLAY_UA,
+        accept: "application/json",
+        "accept-language": "en-US,en;q=0.9"
+      },
+      redirect: "manual"
+    });
+  } catch (err) {
+    return { error: "unavailable" };
+  }
+  if (res.status >= 300 && res.status < 400) return { error: "unavailable" };
+  if (res.status === 404) return { error: "not_found" };
+  if (res.status === 403 || res.status === 429 || res.status === 503) return { error: "unavailable" };
+  if (!res.ok) return { error: "unavailable" };
+  let data = null;
+  try { data = await res.json(); }
+  catch (err) { return { error: "unavailable" }; }
+  const user = data && data.user;
+  if (!user || typeof user !== "object") return { error: "not_found" };
+  if (user.protected === true) return { error: "not_found" };
+  const profile = profileFromXUser(user, handle);
+  if (!profile) return { error: "not_found" };
+  return { profile };
+}
+
+async function requireOwnerHidden(request, env) {
+  const row = await sessionAccount(env, request);
+  if (!row) return { error: json(404, { error: "not_found" }) };
+  if (row.owner !== 1) return { error: json(403, { error: "forbidden" }) };
+  return { row };
+}
+
+function addedPlatform(request, url, body) {
+  const query = url && url.searchParams ? String(url.searchParams.get("platform") || "") : "";
+  const posted = body && body.platform != null ? String(body.platform || "") : "";
+  const asked = (posted || query || "x").toLowerCase();
+  return asked === "x" ? "x" : "";
+}
+
+async function handleAddedAccounts(request, env, url) {
+  const gate = await requireOwnerHidden(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const bucket = "x-accounts:" + gate.row.public_id;
+  if (request.method === "GET") {
+    if (!addedPlatform(request, url, null)) return json(400, { error: "unsupported" });
+    const hit = await rateHit(env, bucket + ":list", 60, 10 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const doc = await readAddedAccounts(env);
+    return json(200, { added: doc.added.map(publicXAccount) });
+  }
+  if (request.method === "POST") {
+    const hit = await rateHit(env, bucket + ":add", 20, 60 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const body = await readJson(request, 2000);
+    if (body.error) return json(400, { error: body.error });
+    if (!addedPlatform(request, url, body)) return json(400, { error: "unsupported" });
+    const typed = normalizeXInput(body.handle || body.url || "");
+    if (!typed) return json(400, { error: "bad_handle" });
+    const doc = await readAddedAccounts(env);
+    const looked = await lookupXProfile(typed);
+    if (looked.error) return json(looked.error === "not_found" ? 404 : 503, { error: looked.error });
+    const profile = looked.profile;
+    const handle = profile.handle;
+    const permanentId = profile.permanentId;
+    doc.removed = doc.removed.filter((item) => !sameXHandle(item, handle) && !sameXHandle(item, typed));
+    doc.removedIds = (doc.removedIds || []).filter((item) => item !== permanentId);
+    let row = doc.added.find((item) => xRowMatches(item, handle, permanentId) || xRowMatches(item, typed, ""));
+    if (!row && doc.added.length >= ADDED_ACCOUNT_CAP) return json(400, { error: "full" });
+    if (!row) {
+      row = profile;
+      doc.added.push(row);
+    } else {
+      const old = row.handle;
+      const keptId = row.id && /^x:[A-Za-z0-9_]{1,15}$/.test(row.id) ? row.id : profile.id;
+      row.id = keptId;
+      row.permanentId = permanentId;
+      row.name = profile.name || row.name || "";
+      row.avatar = profile.avatar || row.avatar || "";
+      row.banner = profile.banner || row.banner || "";
+      row.bio = profile.bio || row.bio || "";
+      row.url = profile.url || row.url || ("https://x.com/" + handle);
+      row.verifiedType = profile.verifiedType || row.verifiedType || "";
+      if (profile.location) row.location = profile.location;
+      if (profile.website) row.website = profile.website;
+      if (profile.joined) row.joined = profile.joined;
+      if (profile.followers != null) row.followers = profile.followers;
+      if (profile.following != null) row.following = profile.following;
+      if (profile.postsCount != null) row.postsCount = profile.postsCount;
+      if (handle && !sameXHandle(old, handle)) {
+        row.handle = handle;
+        row.previousHandles = Array.isArray(row.previousHandles) ? row.previousHandles : [];
+        if (old && !row.previousHandles.some((item) => sameXHandle(item, old))) row.previousHandles.push(old);
+      } else {
+        row.handle = handle;
+      }
+    }
+    await writeAddedAccounts(env, doc);
+    let dispatched = false;
+    try { dispatched = await dispatchWorkflows(env, ["sync.yml", "media-extract.yml"]); }
+    catch (err) { dispatched = false; }
+    return json(200, { account: publicXAccount(row), dispatched });
+  }
+  return json(405, { error: "method" });
+}
+
+async function handleAddedAccountDelete(request, env, rawHandle) {
+  const gate = await requireOwnerHidden(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const hit = await rateHit(env, "x-accounts:" + gate.row.public_id + ":remove", 30, 60 * 60 * 1000);
+  if (!hit.ok) return limited(hit);
+  let handle = rawHandle;
+  try { handle = decodeURIComponent(rawHandle); }
+  catch (err) { /* keep the raw segment */ }
+  handle = normalizeXInput(handle);
+  if (!handle) return json(400, { error: "bad_handle" });
+  const doc = await readAddedAccounts(env);
+  const row = doc.added.find((item) => xRowMatches(item, handle, ""));
+  const gone = [];
+  if (row) {
+    gone.push(row.handle);
+    (row.previousHandles || []).forEach((item) => gone.push(item));
+    if (row.permanentId && /^\d{2,25}$/.test(String(row.permanentId)) && doc.removedIds.indexOf(String(row.permanentId)) < 0) {
+      doc.removedIds.push(String(row.permanentId));
+    }
+  } else {
+    gone.push(handle);
+  }
+  doc.added = doc.added.filter((item) => !xRowMatches(item, handle, row ? row.permanentId : ""));
+  gone.forEach((item) => {
+    const text = normalizeXInput(item);
+    if (!text) return;
+    if (!doc.removed.some((have) => sameXHandle(have, text))) doc.removed.push(text);
+  });
+  await writeAddedAccounts(env, doc);
+  let dispatched = false;
+  try { dispatched = await dispatchWorkflows(env, ["sync.yml"]); }
+  catch (err) { dispatched = false; }
+  return json(200, { removed: true, added: doc.added.map(publicXAccount), dispatched });
+}
+
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -2249,6 +2610,9 @@ async function route(request, env) {
   const accountMedia = path.match(/^\/v1\/media\/(avatars|banners)\/(\d{12})\/([a-f0-9]{64}\.(?:webp|jpg|png))$/);
   if (accountMedia && request.method === "GET") return handleAccountMedia(request, env, accountMedia[1], accountMedia[2], accountMedia[3]);
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path);
+  if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
+  const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
+  if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
   if (path === "/v1/owner/tiktok/accounts" && (request.method === "GET" || request.method === "POST")) return handleTikTokAccounts(request, env);
   const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
   if (ownerAccount && request.method === "DELETE") return handleTikTokAccountDelete(request, env, ownerAccount[1]);
