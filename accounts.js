@@ -1351,6 +1351,41 @@
     token: function () {
       var session = readSession();
       return session && session.token ? session.token : "";
+    },
+    syncPlaybackAuth: function () {
+      tellSW(!!readSession());
+      return new Promise(function (resolve) {
+        if (!navigator.serviceWorker) { resolve(false); return; }
+        var timer = setTimeout(function () { resolve(false); }, 400);
+        navigator.serviceWorker.ready.then(function (reg) {
+          if (!reg.active) { clearTimeout(timer); resolve(false); return; }
+          var channel = new MessageChannel();
+          var session = readSession();
+          channel.port1.onmessage = function () { clearTimeout(timer); resolve(true); };
+          try {
+            reg.active.postMessage({
+              type: "auth",
+              on: !!session,
+              token: session && session.token ? session.token : ""
+            }, [channel.port2]);
+          } catch (err) {
+            clearTimeout(timer);
+            resolve(false);
+          }
+        }).catch(function () { clearTimeout(timer); resolve(false); });
+      });
+    },
+    refreshToken: function () {
+      var session = readSession();
+      if (!session || !session.token || !config().api) return Promise.resolve("");
+      return api("/v1/session/refresh", { method: "POST", token: session.token }).then(function (body) {
+        if (!body || body.status !== 200 || !body.token) return "";
+        session.token = body.token;
+        if (body.account) session.account = body.account;
+        writeSession(session);
+        tellSW(true);
+        return body.token;
+      }).catch(function () { return ""; });
     }
   };
 })();

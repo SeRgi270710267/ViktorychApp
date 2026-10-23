@@ -1,6 +1,6 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a15-__SW_VERSION__";
+const VERSION = "viktorych-a16-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -423,6 +423,9 @@ self.addEventListener("message", (event) => {
   if (data.type === "auth") {
     accountsAuthed = !!data.on;
     playToken = data.on && typeof data.token === "string" ? data.token : "";
+    if (event.ports && event.ports[0]) {
+      try { event.ports[0].postMessage({ ok: !!playToken }); } catch (err) { /* the page already continued */ }
+    }
     if (!data.on) {
       event.waitUntil((async () => {
         await caches.delete(DATA);
@@ -475,7 +478,11 @@ self.addEventListener("fetch", (event) => {
   if (isOwnerPlay(url) || isAccountMedia(url) || isOwnedTelegram(url)) {
     event.respondWith((async () => {
       const headers = new Headers();
+      const incoming = request.headers.get("Authorization") || "";
       if (playToken) headers.set("Authorization", "Bearer " + playToken);
+      else if (/^Bearer\s+\S+/i.test(incoming)) headers.set("Authorization", incoming);
+      const origin = request.headers.get("Origin");
+      if (origin) headers.set("Origin", origin);
       const range = request.headers.get("Range");
       if (range) headers.set("Range", range);
       return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });

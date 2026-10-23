@@ -561,35 +561,85 @@
     if (dropped && dropped.catch) dropped.catch(function () {});
   }
 
-  function playTelegramVideo(video, key, preload) {
+  function playbackError(status) {
+    var err = new Error(String(status || "tg"));
+    if (status === 404) err.code = "backing";
+    else if (status === 429) err.code = "limited";
+    else if (status === 401 || status === "signedout") err.code = "signedout";
+    else err.code = "play";
+    return err;
+  }
+
+  function playbackNote(err) {
+    if (err && err.code === "backing") return tr("Backing up…");
+    if (err && err.code === "limited") return tr("Too many plays. Try again in a minute.");
+    if (err && err.code === "signedout") return tr("Signed out");
+    return tr("Couldn't play this video");
+  }
+
+  function refreshToken() {
+    var accounts = window.ViktorychAccounts;
+    if (!accounts || !accounts.refreshToken) return Promise.resolve(hooks.token() || "");
+    return accounts.refreshToken().then(function (token) {
+      return token || hooks.token() || "";
+    }).catch(function () { return hooks.token() || ""; });
+  }
+
+  function whenPlaybackAuth() {
+    var accounts = window.ViktorychAccounts;
+    if (!accounts || !accounts.syncPlaybackAuth) return Promise.resolve();
+    return accounts.syncPlaybackAuth().catch(function () {});
+  }
+
+  function playTelegramVideo(video, key, preload, retried) {
     var fileUrl = tgUrl(key);
-    if (!fileUrl || !hooks.token()) return Promise.reject(new Error("tg"));
+    if (!fileUrl) return Promise.reject(playbackError("play"));
+    if (!hooks.token()) {
+      if (retried) return Promise.reject(playbackError("signedout"));
+      return refreshToken().then(function (token) {
+        if (!token) return Promise.reject(playbackError("signedout"));
+        return playTelegramVideo(video, key, preload, true);
+      });
+    }
     var autoplay = preload === "auto";
     var playlist = fileUrl + "/index.m3u8";
     return fetch(playlist, { headers: authHeaders(), cache: "no-store" }).then(function (res) {
       var type = String(res.headers.get("content-type") || "").toLowerCase();
       dropBody(res);
-      if (res.ok && (type.indexOf("mpegurl") >= 0 || type.indexOf("m3u8") >= 0)) {
-        return playHls(video, playlist, true, autoplay, false);
+      if (res.status === 401 && !retried) {
+        return refreshToken().then(function (token) {
+          if (!token) return Promise.reject(playbackError("signedout"));
+          return playTelegramVideo(video, key, preload, true);
+        });
       }
+      if (res.status === 429 || res.status === 401) return Promise.reject(playbackError(res.status));
+      if (res.ok && (type.indexOf("mpegurl") >= 0 || type.indexOf("m3u8") >= 0)) {
+        if (!autoplay) return Promise.resolve();
+        return playHls(video, playlist, true, true, false);
+      }
+      if (!autoplay) return Promise.resolve();
       return fetch(fileUrl, {
         headers: Object.assign({ Range: "bytes=0-1" }, authHeaders()),
         cache: "no-store"
       }).then(function (file) {
         dropBody(file);
-        if (file.status === 404) {
-          var missing = new Error("backing");
-          missing.code = "backing";
-          throw missing;
+        if (file.status === 401 && !retried) {
+          return refreshToken().then(function (token) {
+            if (!token) return Promise.reject(playbackError("signedout"));
+            return playTelegramVideo(video, key, preload, true);
+          });
         }
-        if (file.status !== 200 && file.status !== 206) throw new Error(String(file.status));
-        destroyHls();
-        video.crossOrigin = "anonymous";
-        video.loop = true;
-        video.muted = !sound;
-        video.preload = autoplay ? "auto" : (preload || "metadata");
-        if (video.getAttribute("src") !== fileUrl) video.src = fileUrl;
-        return autoplay ? video.play() : Promise.resolve();
+        if (file.status === 404 || file.status === 429 || file.status === 401) return Promise.reject(playbackError(file.status));
+        if (file.status !== 200 && file.status !== 206) return Promise.reject(playbackError(file.status));
+        return whenPlaybackAuth().then(function () {
+          destroyHls();
+          video.crossOrigin = "anonymous";
+          video.loop = true;
+          video.muted = !sound;
+          video.preload = "auto";
+          if (video.getAttribute("src") !== fileUrl) video.src = fileUrl;
+          return video.play();
+        });
       });
     });
   }
@@ -1266,21 +1316,41 @@
   }
 
   function armStored(video, post, preload) {
-    if (video.dataset.tgArm === "1") return;
+    var level = preload === "auto" ? "auto" : "meta";
+    var armed = video.dataset.tgArm || "";
+    if (armed === "auto" || armed === "auto-pending") return;
+    if ((armed === "meta" || armed === "meta-pending") && level !== "auto") return;
     var media = videoOf(post);
     var key = socialApi().fileKey ? socialApi().fileKey(post, media) : "";
     var slideEl = video.closest(".shorts-slide");
     if (post.platform === "tiktok") {
-      if (!key || !hooks.token()) {
+      if (!key) {
         backingNote(slideEl, tr("Backing up…"));
         return;
       }
-      video.dataset.tgArm = "1";
+      if (!hooks.token()) {
+        backingNote(slideEl, tr("Signed out"));
+        if (video.dataset.tgRefresh === "1") return;
+        video.dataset.tgRefresh = "1";
+        refreshToken().then(function (token) {
+          video.dataset.tgRefresh = "";
+          if (token) armStored(video, post, preload);
+        });
+        return;
+      }
+      video.dataset.tgArm = level + "-pending";
       playTelegramVideo(video, key, preload).then(function () {
+        if (level === "auto" || video.dataset.tgArm !== "auto") video.dataset.tgArm = level;
+        video.dataset.tgFail = "";
         var badge = slideEl && slideEl.querySelector(".shorts-quality");
-        if (badge) badge.hidden = false;
+        if (badge && level === "auto") badge.hidden = false;
       }).catch(function (err) {
-        video.dataset.tgArm = "";
+        if (err && (err.name === "AbortError" || /interrupted by a call to pause/i.test(String(err.message || "")))) {
+          if (video.dataset.tgArm === level + "-pending") video.dataset.tgArm = "";
+          return;
+        }
+        if (video.dataset.tgArm === level + "-pending") video.dataset.tgArm = "";
+        video.dataset.tgFail = err && err.code ? err.code : "play";
         destroyHls();
         if (video.getAttribute("src")) {
           video.removeAttribute("src");
@@ -1289,7 +1359,7 @@
         console.error("shorts playback", err && err.message ? err.message : err);
         var poster = slideEl && slideEl.querySelector(".shorts-poster");
         if (poster) poster.style.display = "block";
-        backingNote(slideEl, err && err.code === "backing" ? tr("Backing up…") : "");
+        backingNote(slideEl, playbackNote(err));
       });
       return;
     }
@@ -1301,8 +1371,9 @@
       if (video.getAttribute("src") !== direct) video.src = direct;
       return;
     }
-    video.dataset.tgArm = "1";
+    video.dataset.tgArm = level + "-pending";
     playTelegramVideo(video, key, preload).then(function () {
+      if (level === "auto" || video.dataset.tgArm !== "auto") video.dataset.tgArm = level;
       var badge = slideEl && slideEl.querySelector(".shorts-quality");
       if (badge) badge.hidden = false;
     }).catch(function () {
@@ -1335,6 +1406,8 @@
     if (!video || slideEl.getAttribute("data-kind") === "live") return;
     video.pause();
     video.dataset.tgArm = "";
+    video.dataset.tgFail = "";
+    video.dataset.tgRefresh = "";
     if (hls && hls.media === video) destroyHls();
     if (video.getAttribute("src")) {
       video.removeAttribute("src");
@@ -1487,7 +1560,10 @@
     console.error("shorts playback", err && err.code, err && err.message);
     var poster = slideEl.querySelector(".shorts-poster");
     if (poster) poster.style.display = "block";
-    if (post && post.platform === "tiktok") backingNote(slideEl, "");
+    if (post && post.platform === "tiktok") {
+      var note = slideEl.querySelector(".shorts-note");
+      if (!note || !note.textContent) backingNote(slideEl, playbackNote({ code: video.dataset.tgFail || "play" }));
+    }
   }
 
   function renderAdded() {

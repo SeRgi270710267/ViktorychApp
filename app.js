@@ -2500,12 +2500,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (source.kind === "tg") {
       const auth = accountToken();
       if (!auth) { fail(); return; }
-      fetch(source.url, { headers: { Authorization: "Bearer " + auth } }).then((res) => {
-        if (!res.ok) throw new Error(String(res.status));
-        return res.blob();
-      }).then((blob) => {
+      const ready = window.ViktorychAccounts && window.ViktorychAccounts.syncPlaybackAuth
+        ? window.ViktorychAccounts.syncPlaybackAuth()
+        : Promise.resolve();
+      ready.then(() => {
         if (el._gen !== gen || el._src !== token) return;
-        video.src = URL.createObjectURL(blob);
+        video.src = source.url;
         start();
       }).catch(() => fail());
       return;
@@ -13297,12 +13297,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (file.telegram || file.kind === "tg") {
           const auth = accountToken();
           if (!auth) { fail(); return; }
-          fetch(file.url, { headers: { Authorization: "Bearer " + auth } }).then((res) => {
-            if (!res.ok) throw new Error(String(res.status));
-            return res.blob();
-          }).then((blob) => {
+          const ready = window.ViktorychAccounts && window.ViktorychAccounts.syncPlaybackAuth
+            ? window.ViktorychAccounts.syncPlaybackAuth()
+            : Promise.resolve();
+          ready.then(() => {
             if (!STATE.viewer || !STATE.viewer.video) return;
-            video.src = URL.createObjectURL(blob);
+            video.src = file.url;
             video.addEventListener("error", fail, { once: true });
             seek();
             video.play().catch(() => {});

@@ -527,10 +527,28 @@ async function handleLogin(request, env) {
   return json(200, { token, account: await presentAccount(env, request, row, true) });
 }
 
+async function slideSession(env, request) {
+  const token = bearer(request);
+  if (!token || token.length > 200 || !env.DB) return;
+  const hash = await sha256Hex(token);
+  const now = Date.now();
+  await env.DB.prepare("UPDATE sessions SET expires_at = ? WHERE token_hash = ? AND expires_at > ?").bind(now + SESSION_MS, hash, now).run();
+}
+
 async function handleSession(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
   return json(200, { account: await presentAccount(env, request, row, true) });
+}
+
+async function handleSessionRefresh(request, env) {
+  const row = await sessionAccount(env, request);
+  if (!row) return json(401, { error: "unauthorized" });
+  const paced = await rateHit(env, "session-refresh:" + row.public_id, 30, TG_WINDOW_MS);
+  if (!paced.ok) return limited(paced);
+  await slideSession(env, request);
+  const token = await mintSession(env, row.public_id);
+  return json(200, { token, account: await presentAccount(env, request, row, true) });
 }
 
 async function handleLogout(request, env, all) {
@@ -1524,6 +1542,39 @@ const TG_VERIFY_LIMIT = 4000;
 const TG_ANON_LIMIT = 60;
 const TG_LOOP_LIMIT = 800;
 const TG_WINDOW_MS = 60 * 60 * 1000;
+
+function tgUserLimit(env) {
+  const n = Number(env && env.TG_USER_LIMIT);
+  if (!Number.isFinite(n) || n < 1 || n > 100000) return TG_USER_LIMIT;
+  return Math.floor(n);
+}
+
+async function chargePlayback(env, request, verify) {
+  if (verify) return rateHit(env, "tg-verify", TG_VERIFY_LIMIT, TG_WINDOW_MS);
+  return rateHit(env, "tg:" + clientIp(request), tgUserLimit(env), TG_WINDOW_MS);
+}
+
+async function chargeFileOnce(env, request, verify, key) {
+  if (verify || !key) return chargePlayback(env, request, verify);
+  const now = Date.now();
+  const bucket = "tg-file:" + clientIp(request) + ":" + key;
+  const seen = await env.DB.prepare("SELECT hits, reset_at FROM rate_limits WHERE bucket = ?").bind(bucket).first();
+  if (seen && Number(seen.reset_at) > now && Number(seen.hits) >= 1) return { ok: true, retry: 0 };
+  const budget = await chargePlayback(env, request, false);
+  if (!budget.ok) return budget;
+  await env.DB.prepare("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?) ON CONFLICT(bucket) DO UPDATE SET hits = 1, reset_at = excluded.reset_at").bind(bucket, now + TG_WINDOW_MS).run();
+  return budget;
+}
+
+async function segmentCached(row) {
+  if (!row || !row.sha256) return false;
+  try {
+    const hit = await caches.default.match(new Request("https://tg-cache.internal/body/" + row.sha256));
+    return !!hit;
+  } catch (err) {
+    return false;
+  }
+}
 const LOOP_PUBLIC = /^loop\/[A-Za-z0-9._-]{1,80}(?:\/aac)?(?:\/(?:index\.m3u8|init|\d+))?$/;
 
 function loopGroupKey(key) {
@@ -1747,8 +1798,6 @@ async function handleTelegram(request, env, path) {
       return json(401, { error: "unauthorized" });
     }
     if (!env.TELEGRAM_BOT_TOKEN) return json(503, { error: "not_configured" });
-    const budget = await rateHit(env, verify ? "tg-verify" : "tg:" + clientIp(request), verify ? TG_VERIFY_LIMIT : TG_USER_LIMIT, TG_WINDOW_MS);
-    if (!budget.ok) return limited(budget);
   }
   if (telegramSecretKey(decoded)) return json(404, { error: "not_found" });
   let key = decoded;
@@ -1792,7 +1841,18 @@ async function handleTelegram(request, env, path) {
   if (mode === "playlist") {
     const rows = await telegramRows(env, key);
     const text = buildPlaylist(rows, key, new URL(request.url).origin);
-    if (!text) return json(404, { error: "not_found" });
+    if (!text) {
+      if (!publicLoop && !(viewer && viewer.owner === 1)) {
+        const missed = await chargePlayback(env, request, verify);
+        if (!missed.ok) return limited(missed);
+      }
+      return json(404, { error: "not_found" });
+    }
+    if (!publicLoop) {
+      const budget = await chargePlayback(env, request, verify);
+      if (!budget.ok) return limited(budget);
+      if (viewer) await slideSession(env, request);
+    }
     const immutable = loopGroupKey(key);
     const headers = {
       "content-type": "application/vnd.apple.mpegurl",
@@ -1805,6 +1865,17 @@ async function handleTelegram(request, env, path) {
   const kind = mode === "init" ? "init" : mode === "segment" ? "segment" : "single";
   const partIndex = mode === "segment" ? index : mode === "init" ? -1 : 0;
   const row = await env.DB.prepare("SELECT object_key, kind, part_index, file_id, size, sha256, mime, duration, serve, encrypted FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? AND serve = 1 AND encrypted = 0").bind(key, kind, partIndex).first();
+  if (!publicLoop) {
+    const ownerPart = !!(viewer && viewer.owner === 1 && (mode === "segment" || mode === "init"));
+    const cached = !ownerPart && (mode === "segment" || mode === "init") && await segmentCached(row);
+    if (!ownerPart && !cached) {
+      const budget = mode === "file"
+        ? await chargeFileOnce(env, request, verify, key)
+        : await chargePlayback(env, request, verify);
+      if (!budget.ok) return limited(budget);
+    }
+    if (viewer && mode === "file" && row && row.file_id) await slideSession(env, request);
+  }
   if (!row || !row.file_id) return json(404, { error: "not_found" });
   return rangedTelegram(request, env, row, loopGroupKey(key));
 }
@@ -2194,6 +2265,7 @@ async function route(request, env) {
   if (path === "/v1/logout" && request.method === "POST") return handleLogout(request, env, false);
   if (path === "/v1/logout-all" && request.method === "POST") return handleLogout(request, env, true);
   if (path === "/v1/session" && request.method === "GET") return handleSession(request, env);
+  if (path === "/v1/session/refresh" && request.method === "POST") return handleSessionRefresh(request, env);
   if (path === "/v1/profile" && request.method === "PATCH") return handleProfilePatch(request, env);
   if (path === "/v1/sync" && request.method === "GET") return handleSyncGet(request, env);
   if (path === "/v1/sync" && request.method === "PUT") return handleSyncPut(request, env);
