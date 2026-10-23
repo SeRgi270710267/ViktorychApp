@@ -81,14 +81,17 @@ def _when(value: str):
     return moment
 
 
-def problems(report, now: str, build_result: str = "success", deploy_result: str = "success") -> list[str]:
+def problems(report, now: str, build_result: str = "success", deploy_result: str = "success", accounts_result: str = "success") -> list[str]:
     lines = []
     build_result = (build_result or "").lower()
     deploy_result = (deploy_result or "").lower()
+    accounts_result = (accounts_result or "").lower()
     if build_result in ("failure", "cancelled"):
         lines.append("The sync failed.")
     if deploy_result in ("failure", "cancelled"):
         lines.append("The Pages deploy failed.")
+    if accounts_result in ("failure", "cancelled"):
+        lines.append("The Accounts deploy failed, so Pages was not updated.")
     if report is None:
         if build_result == "success":
             lines.append("The sync report is missing.")
@@ -171,6 +174,7 @@ def apply(decision: dict, lines: list[str], run_url: str, repo: str) -> None:
 def main() -> int:
     build_result = os.environ.get("BUILD_RESULT") or "success"
     deploy_result = os.environ.get("DEPLOY_RESULT") or "success"
+    accounts_result = os.environ.get("ACCOUNTS_RESULT") or "success"
     run_url = os.environ.get("RUN_URL") or ""
     repo = os.environ.get("REPO") or ""
     now = os.environ.get("NOW") or datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -180,7 +184,7 @@ def main() -> int:
             report = json.loads(REPORT.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             report = None
-    lines = problems(report, now, build_result, deploy_result)
+    lines = problems(report, now, build_result, deploy_result, accounts_result)
     print("\n".join(lines) or "healthy")
     if not repo:
         return 0

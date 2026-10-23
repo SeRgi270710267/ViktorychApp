@@ -230,6 +230,9 @@ def assemble(root: Path, token: str) -> Path:
         sys.path.insert(0, str(root / "scripts"))
         import accounts_publish
         accounts_publish.repair(dest, prior)
+        kept = accounts_publish.read_gate(dest)
+        if not kept.get("gate") or not kept.get("api"):
+            raise SystemExit("refusing to publish Pages without the login wall")
     _token_clean(dest, token)
     return dest
 
