@@ -204,4 +204,17 @@ test("follows persist for the signed-in account and stay private", async () => {
   const elonFollowers = await call("/v1/follows?id=x:redacted_handle", { ip: "203.0.113.229", token: ada.token });
   assert.equal(elonFollowers.body.followersCount, 2);
   assert.equal(elonFollowers.body.viewerFollows, true);
+
+  const withApp = await call("/v1/follows/import", {
+    method: "POST",
+    ip: "203.0.113.230",
+    token: bea.token,
+    body: { ids: ["app:" + ada.account.publicId, "app:" + bea.account.publicId, "app:000000000000", "x:redacted_handle"] }
+  });
+  assert.equal(withApp.status, 200, withApp.text);
+  assert.equal(withApp.body.followingCount, 3);
+  const beaList = await call("/v1/follows", { ip: "203.0.113.231", token: bea.token });
+  assert.equal(beaList.body.ids.includes("app:" + ada.account.publicId), true);
+  assert.equal(beaList.body.ids.includes("app:" + bea.account.publicId), false);
+  assert.equal(beaList.body.ids.includes("app:000000000000"), false);
 });

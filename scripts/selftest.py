@@ -249,8 +249,19 @@ def follow_list_checks() -> None:
             "Not following anyone yet",
             "Sign in to see this list.",
             "Couldn’t load this list.",
+            "Adding {platform} accounts in the app isn’t available yet.",
+            "Only the site owner can add a new account.",
+            "Save groups on your account",
+            "Groups saved on your account.",
+            "Sign in to save groups on your account.",
+            "Unfollow @{handle}?",
+            "This removes the account from your Following.",
         ):
             check(f'"{key}"' in pack, code + " translates " + key)
+    check("issues/new" not in app and "issues/new" not in accounts, "user flows do not build a GitHub new-issue URL")
+    for name in ("people.js", "shorts.js", "accounts.js"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        check("issues/new" not in text, name + " does not open a GitHub issue")
 
 
 def main() -> None:
@@ -1121,12 +1132,12 @@ def main() -> None:
     check('data-act="face-pref"' in app and "showPictures" in app and "showBanners" in app and "Profile pictures" in app and ".ava-none { display: none; }" in css and "hide-avatar" in accounts_js and "avatarEmpty" in accounts_js and "bannerEmpty" in accounts_js and "data-acct=\"face\"" in accounts_js, "a picture or banner can be the photo, the default, or nothing at all")
     check('meta[name="theme-color"]' in app and 'meta[name="color-scheme"]' in app and "apple-mobile-web-app-status-bar-style" in app and "black-translucent" in page and ".wco { display: none; background: var(--bg); }" in css, "the status bar matches the theme")
     check('media="(prefers-color-scheme: light)" content="#FFFFFF"' in page and 'media="(prefers-color-scheme: dark)" content="#000000"' in page and 'name="theme-color" content="#000000"' in page and "#15202B" in page and "querySelectorAll('meta[name=\"theme-color\"]')" in app and '"#FFFFFF"' in app and '"#15202B"' in app and '"#000000"' in app and 'setAttribute("content", "black-translucent")' in app and 'setAttribute("content", "black-translucent")' in page and 'mode === "default" ? "default"' not in app and 'mode === "default" ? "default"' not in page and "calc(env(safe-area-inset-top, 0px) + 1px)" in css and "--bg: #000000" in css and "--bg: #15202B" in css and "--bg: #FFFFFF" in css, "theme-color matches Lights out, Dim, and Default, including before paint")
-    check("follow-request.yml" in app and "unfollow-request.yml" in app and 'class="add-account"' in app and "form.add-account" in app and "function parseAccountInput(" in app and 'data-act="follow-request"' in app, "follow and unfollow open a prefilled issue")
+    check('class="add-account"' in app and "form.add-account" in app and "function parseAccountInput(" in app and "function saveOwnerX(" in app and "function saveOwnerTikTok(" in app and 'data-act="follow"' in app and 'data-act="follow-request"' not in app and "issues/new" not in app, "follow, unfollow, and add-by-paste stay in the app")
     check("/v1/owner/accounts" in app and 'tr("added accounts")' in app and 'tr("Fetching posts…")' in app and "saveOwnerX" in app, "the owner adds an X account from Feeds and shows it while posts are fetching")
     danger = css[css.index(".follow.remove-pill"):css.index(".follow.remove-pill") + 420]
     follow_pill = css[css.index("\n.follow {"):css.index("\n.follow {") + 240]
     remove_sheet = css[css.index(".modal.remove-sheet"):css.index(".modal.remove-sheet") + 420]
-    check('data-act="ask-remove"' in app and 'class="follow remove-pill"' in app and "Remove @" in app and "whole site" in app and 'data-act="confirm-remove"' in app and "followIssueUrlForId(\"unfollow\"" in app and "#f4212e" in danger and "rgba(244, 33, 46, 0.1)" in danger and "border: 1px solid #f4212e" in danger and "height: 32px" in danger and "font-size: 14px" in danger and "border-radius: 9999px" in follow_pill and ".row-actions" in css and ".remove-sheet" in css and "border-radius: 16px 16px 0 0" in remove_sheet, "removing a feed confirms in an X dialog, then opens the site-wide unfollow")
+    check('data-act="ask-remove"' in app and 'class="follow remove-pill"' in app and "Remove @" in app and "whole site" in app and 'data-act="confirm-remove"' in app and "applyFollow([pending.id], false)" in app and "issues/new" not in app and "#f4212e" in danger and "rgba(244, 33, 46, 0.1)" in danger and "border: 1px solid #f4212e" in danger and "height: 32px" in danger and "font-size: 14px" in danger and "border-radius: 9999px" in follow_pill and ".row-actions" in css and ".remove-sheet" in css and "border-radius: 16px 16px 0 0" in remove_sheet, "removing a catalog feed confirms in an X dialog and unfollows on the account")
     translate_now = app[app.index("async function translateNow("):app.index("function formatDur(")]
     check("Translate post" in app and "Show original" in app and "function foreignScript(" in app and "function translateTarget(" in app and "LanguageDetector" in app and "function translateNow(" in app and "STATE.translated" in app and "FeedsTranslate" in app and "translate.google.com" not in app and "window.open" not in translate_now and "translated" not in app[app.index("function saveSettings("):app.index("function saveSettings(") + 800], "a foreign post translates in place, the app does not open Google Translate, and the result is not saved")
     translate_js = (ROOT / "translate.js").read_text(encoding="utf-8")
@@ -1194,7 +1205,7 @@ def main() -> None:
     chips_css = css[css.index(".yt-chips"):css.index(".yt-chips") + 500]
     check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
     check("var(--fill)" in css[css.index(".yt-chip.on"):css.index(".yt-chip.on") + 160], "the selected subscription chip uses the inverted fill")
-    check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups to the site" in app, "subscription groups filter from the chip bar and can be published")
+    check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups on your account" in app and "Groups saved on your account." in app, "subscription groups filter from the chip bar and save on the account")
     subs_markup = app[app.index('return `<div class="subs'):app.index('return `<div class="subs') + 220]
     hidden_chips = css[css.index(".topbar.is-hidden ~ .yt-chips"):css.index(".topbar.is-hidden ~ .yt-chips") + 160]
     check("${head}${strip}${chips}${save}<div class=\"subs-feed\">" in subs_markup and "display: flow-root" in css[css.index(".subs-feed"):css.index(".subs-feed") + 80] and "z-index: 0" in css[css.index(".subs.grid .yt-grid"):css.index(".subs.grid .yt-grid") + 240], "the groups row sits under the channel strip and outside the video grid")
