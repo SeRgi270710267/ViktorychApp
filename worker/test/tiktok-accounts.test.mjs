@@ -33,6 +33,18 @@ function workerOptions() {
           '<script>"uniqueId":"sample_name","nickname":"Sample","avatarLarger":"https:\\/\\/cdn.example\\/a.jpg"</script></html>';
         return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
       }
+      if (/(^|\.)tiktokcdn\.com$/i.test(url.hostname)) {
+        if (url.pathname.endsWith(".m3u8")) {
+          return new Response("#EXTM3U\n#EXTINF:2,\nhttps://v16.tiktokcdn.com/seg.ts\n", {
+            status: 200,
+            headers: { "content-type": "application/vnd.apple.mpegurl" }
+          });
+        }
+        const bytes = new Uint8Array(8100000);
+        bytes[0] = 7;
+        bytes[bytes.length - 1] = 9;
+        return new Response(bytes, { status: 200, headers: { "content-type": "video/mp2t" } });
+      }
       if (url.hostname === "api.github.com") {
         dispatches.push(url.pathname);
         const auth = request.headers.get("authorization") || "";
@@ -59,7 +71,7 @@ async function call(path, opts) {
   let body = null;
   try { body = text ? JSON.parse(text) : null; }
   catch (err) { body = { raw: text }; }
-  return { status: res.status, body, text };
+  return { status: res.status, body, text, headers: res.headers };
 }
 
 test.before(async () => {
@@ -120,6 +132,7 @@ test("owner adds and removes a TikTok account in private storage", async () => {
   assert.equal(added.body.removed, undefined);
   assert.ok(dispatches.some((path) => path.indexOf("tiktok-added.yml") >= 0));
   assert.ok(dispatches.some((path) => path.indexOf("media-extract.yml") >= 0));
+  assert.ok(dispatches.some((path) => path.indexOf("tiktok-live.yml") >= 0));
 
   const listed = await call("/v1/owner/tiktok/accounts", { ip: "203.0.113.77", token: owner.body.token });
   assert.equal(listed.status, 200);
@@ -168,4 +181,54 @@ test("owner adds and removes a TikTok account in private storage", async () => {
   const restored = JSON.parse(await (await bindings.DATA.get("owner/tiktok-accounts.json")).text());
   assert.equal(restored.removed.indexOf("sample_name"), -1);
   assert.equal(restored.added.some((row) => row.handle === "sample_name"), true);
+
+  const share = await call("/v1/owner/tiktok/accounts", {
+    method: "POST",
+    ip: "203.0.113.82",
+    token: owner.body.token,
+    body: { handle: "https://www.tiktok.com/@noranaslundddd?_r=1&_t=ZN-9AmQevSXE18" }
+  });
+  assert.equal(share.status, 200);
+  assert.equal(share.body.account.handle, "noranaslundddd");
+  assert.equal(share.body.account.name, "");
+  assert.equal(share.body.preview, false);
+
+  await bindings.DATA.put("owner/tiktok-accounts.json", JSON.stringify({
+    added: [{ handle: "https://www.tiktok.com/@noranaslundddd?_r=1&_t=ZN-9AmQevSXE18", name: "N", avatar: "", addedAt: "2026-10-22T00:00:00Z" }],
+    removed: ["https://www.tiktok.com/@gabii_g5"]
+  }));
+  const repaired = await call("/v1/owner/tiktok/accounts", { ip: "203.0.113.83", token: owner.body.token });
+  assert.equal(repaired.status, 200);
+  assert.equal(repaired.body.added.length, 1);
+  assert.equal(repaired.body.added[0].handle, "noranaslundddd");
+  assert.equal(repaired.body.added[0].name, "N");
+  const repairedDoc = JSON.parse(await (await bindings.DATA.get("owner/tiktok-accounts.json")).text());
+  assert.equal(repairedDoc.added[0].handle, "noranaslundddd");
+  assert.equal(repairedDoc.removed[0], "gabii_g5");
+
+  const mediaDenied = await call("/v1/owner/media?url=" + encodeURIComponent("https://v16.tiktokcdn.com/live.m3u8"), {
+    ip: "203.0.113.84",
+    token: stranger.body.token
+  });
+  assert.equal(mediaDenied.status, 403);
+  const playlist = await call("/v1/owner/media?url=" + encodeURIComponent("https://v16.tiktokcdn.com/live.m3u8"), {
+    ip: "203.0.113.85",
+    token: owner.body.token
+  });
+  assert.equal(playlist.status, 200);
+  assert.match(playlist.text, /#EXTM3U/);
+  assert.match(playlist.text, /\/v1\/owner\/media\?url=/);
+  assert.match(playlist.headers.get("cache-control"), /private/);
+  assert.match(playlist.headers.get("cache-control"), /no-store/);
+  const streamed = await call("/v1/owner/media?url=" + encodeURIComponent("https://v16.tiktokcdn.com/seg.ts"), {
+    ip: "203.0.113.86",
+    token: owner.body.token
+  });
+  assert.equal(streamed.status, 200);
+  assert.equal(streamed.text.length, 8100000);
+  assert.equal(streamed.text.charCodeAt(0), 7);
+  assert.equal(streamed.text.charCodeAt(streamed.text.length - 1), 9);
+  assert.match(streamed.headers.get("cache-control"), /private, no-store/);
+  const names = (await bindings.DATA.list()).objects.map((object) => object.key);
+  assert.equal(names.some((key) => key.indexOf("seg") >= 0 || key.indexOf("m3u8") >= 0), false);
 });

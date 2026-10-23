@@ -858,5 +858,12 @@ SI18n.addPack("en", {
   "That doesn’t look like a TikTok account.": "That doesn’t look like a TikTok account.",
   "Couldn’t preview this profile. It will still be saved.": "Couldn’t preview this profile. It will still be saved.",
   "Couldn’t save this account.": "Couldn’t save this account.",
-  "New videos show up after the next sync.": "New videos show up after the next sync."
+  "New videos show up after the next sync.": "New videos show up after the next sync.",
+  "TikTok blocked this live.": "TikTok blocked this live.",
+  "Origin": "Origin",
+  "Full HD": "Full HD",
+  "UHD": "UHD",
+  "HD": "HD",
+  "SD": "SD",
+  "LD": "LD"
 });

@@ -809,7 +809,11 @@ async function handleOwnerTiktok(request, env) {
 
 async function fetchPublic(url) {
   const res = await fetch(url, {
-    headers: { "user-agent": "Mozilla/5.0", "accept": "text/html,application/json" },
+    headers: {
+      "user-agent": PLAY_UA,
+      accept: "text/html,application/json",
+      "accept-language": "en-US,en;q=0.9"
+    },
     redirect: "follow"
   });
   return { status: res.status, text: await res.text() };
@@ -847,6 +851,8 @@ async function handleOwnerLive(request, env, rawHandle) {
   let handle = rawHandle;
   try { handle = decodeURIComponent(rawHandle); } catch (err) { /* keep the raw segment */ }
   if (!TIKTOK_HANDLE.test(handle)) return json(400, { error: "bad_handle" });
+  const paced = await rateHit(env, "live:" + gate.row.public_id, 240, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
   const stored = await readOwnerDoc(env);
   const prev = stored && stored.live && stored.live[handle] ? stored.live[handle] : {};
   const livePage = await fetchPublic("https://www.tiktok.com/@" + handle + "/live");
@@ -1078,6 +1084,27 @@ function rewritePlaylist(text, base, request) {
   }).join("\n");
 }
 
+function dropBody(upstream) {
+  if (!upstream || !upstream.body || !upstream.body.cancel) return;
+  const dropped = upstream.body.cancel();
+  if (dropped && dropped.catch) dropped.catch(function () {});
+}
+
+function streamMedia(upstream) {
+  const headers = new Headers();
+  headers.set("content-type", upstream.headers.get("content-type") || "application/octet-stream");
+  const length = upstream.headers.get("content-length");
+  if (length) headers.set("content-length", length);
+  const range = upstream.headers.get("content-range");
+  if (range) headers.set("content-range", range);
+  const ranges = upstream.headers.get("accept-ranges");
+  if (ranges) headers.set("accept-ranges", ranges);
+  headers.set("cache-control", "private, no-store");
+  headers.set("cdn-cache-control", "no-store");
+  headers.set("x-content-type-options", "nosniff");
+  return new Response(upstream.body, { status: upstream.status, headers });
+}
+
 async function handleOwnerMedia(request, env, url) {
   const gate = await requireTiktok(request, env);
   if (gate.error) return gate.error;
@@ -1087,31 +1114,61 @@ async function handleOwnerMedia(request, env, url) {
   if (!parsed || parsed.protocol !== "https:" || parsed.username || parsed.password || !mediaHostOk(parsed.hostname)) {
     return json(400, { error: "bad_url" });
   }
-  const upstream = await fetch(parsed.toString(), {
-    headers: { "user-agent": "Mozilla/5.0", "accept": "*/*" },
-    redirect: "follow"
-  });
+  const paced = await rateHit(env, "live-media:" + gate.row.public_id, 1200, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  const headers = new Headers();
+  headers.set("user-agent", PLAY_UA);
+  headers.set("accept", "*/*");
+  headers.set("referer", "https://www.tiktok.com/");
+  headers.set("origin", "https://www.tiktok.com");
+  const range = request.headers.get("range") || "";
+  if (/^bytes=\d*-\d*$/.test(range)) headers.set("range", range);
+  let upstream = null;
+  try {
+    upstream = await fetch(parsed.toString(), {
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(12000),
+      cf: { cacheTtl: 0, cacheEverything: false }
+    });
+  } catch (err) {
+    return json(502, { error: "upstream" });
+  }
   let finalHost = "";
   try { finalHost = new URL(upstream.url).hostname; } catch (err) { finalHost = ""; }
-  if (!mediaHostOk(finalHost)) return json(400, { error: "bad_url" });
-  const length = Number(upstream.headers.get("content-length") || 0);
-  if (length > 8000000) return json(413, { error: "too_large" });
-  const bytes = await upstream.arrayBuffer();
-  if (bytes.byteLength > 8000000) return json(413, { error: "too_large" });
-  const type = upstream.headers.get("content-type") || "application/octet-stream";
-  const asText = parsed.pathname.endsWith(".m3u8") || /mpegurl|m3u8/i.test(type);
-  if (asText) {
-    const text = new TextDecoder().decode(bytes);
-    if (text.indexOf("#EXTM3U") >= 0) {
-      return new Response(rewritePlaylist(text, upstream.url || parsed.toString(), request), {
-        status: upstream.status,
-        headers: { "content-type": "application/vnd.apple.mpegurl", "cache-control": "no-store" }
-      });
-    }
+  if (!mediaHostOk(finalHost)) {
+    dropBody(upstream);
+    return json(400, { error: "bad_url" });
   }
-  return new Response(bytes, {
+  const type = upstream.headers.get("content-type") || "";
+  const playlist = parsed.pathname.endsWith(".m3u8") || /mpegurl|m3u8/i.test(type);
+  if (!playlist) return streamMedia(upstream);
+  const length = Number(upstream.headers.get("content-length") || 0);
+  if (length > 2000000) {
+    dropBody(upstream);
+    return json(413, { error: "too_large" });
+  }
+  const text = await upstream.text();
+  if (text.length > 2000000) return json(413, { error: "too_large" });
+  if (text.indexOf("#EXTM3U") >= 0) {
+    return new Response(rewritePlaylist(text, upstream.url || parsed.toString(), request), {
+      status: upstream.status,
+      headers: {
+        "content-type": "application/vnd.apple.mpegurl",
+        "cache-control": "private, no-store",
+        "cdn-cache-control": "no-store",
+        "x-content-type-options": "nosniff"
+      }
+    });
+  }
+  return new Response(text, {
     status: upstream.status,
-    headers: { "content-type": type, "cache-control": "no-store" }
+    headers: {
+      "content-type": type || "application/octet-stream",
+      "cache-control": "private, no-store",
+      "cdn-cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    }
   });
 }
 
@@ -1520,15 +1577,9 @@ function sameTikTokHandle(left, right) {
 function normalizeTikTokInput(raw) {
   let text = String(raw || "").trim();
   if (!text || text.length > 300) return "";
-  if (/^https?:\/\//i.test(text)) {
-    let url;
-    try { url = new URL(text); }
-    catch (err) { return ""; }
-    const host = url.hostname.replace(/^www\./i, "").toLowerCase();
-    if (host !== "tiktok.com" && host !== "m.tiktok.com") return "";
-    const match = url.pathname.match(/\/@([A-Za-z0-9._]{2,24})/);
-    return match ? match[1] : "";
-  }
+  const fromUrl = text.match(/^(?:https?:\/\/)?(?:www\.|m\.)?tiktok\.com\/@([A-Za-z0-9._]{2,24})(?:[/?#]|$)/i);
+  if (fromUrl) return fromUrl[1];
+  if (/^https?:\/\//i.test(text)) return "";
   text = text.replace(/^@+/, "");
   const bare = text.match(/^([A-Za-z0-9._]{2,24})$/);
   return bare ? bare[1] : "";
@@ -1550,9 +1601,26 @@ async function readTikTokAccounts(env) {
   try {
     const parsed = JSON.parse(await object.text());
     if (!parsed || typeof parsed !== "object") return emptyTikTokAccounts();
-    const added = Array.isArray(parsed.added) ? parsed.added.filter((row) => row && typeof row === "object" && normalizeTikTokInput(row.handle)) : [];
-    const removed = Array.isArray(parsed.removed) ? parsed.removed.map((item) => normalizeTikTokInput(item)).filter(Boolean) : [];
-    return { added, removed };
+    const added = [];
+    let dirty = false;
+    const rows = Array.isArray(parsed.added) ? parsed.added : [];
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row || typeof row !== "object") { dirty = true; continue; }
+      const handle = normalizeTikTokInput(row.handle);
+      if (!handle) { dirty = true; continue; }
+      if (row.handle !== handle) dirty = true;
+      added.push(Object.assign({}, row, { handle }));
+    }
+    const removed = [];
+    const gone = Array.isArray(parsed.removed) ? parsed.removed : [];
+    for (let i = 0; i < gone.length; i++) {
+      const handle = normalizeTikTokInput(gone[i]);
+      if (!handle) { dirty = true; continue; }
+      if (gone[i] !== handle) dirty = true;
+      if (!removed.some((item) => sameTikTokHandle(item, handle))) removed.push(handle);
+    }
+    return { added, removed, dirty };
   } catch (err) {
     return emptyTikTokAccounts();
   }
@@ -1597,6 +1665,7 @@ function previewFromHtml(html, handle) {
   if (avatar.indexOf("http://") === 0) avatar = "https://" + avatar.slice(7);
   if (avatar && !/^https:\/\//.test(avatar)) avatar = "";
   if (Array.from(name).length > 80) name = Array.from(name).slice(0, 80).join("");
+  if (unique && !sameTikTokHandle(unique, handle)) return { name: "", avatar: "", handle };
   return { name, avatar, handle: unique && TIKTOK_HANDLE.test(unique) ? unique : handle };
 }
 
@@ -1624,7 +1693,7 @@ function tiktokRowMatches(row, handle) {
 async function dispatchAddedAccounts(env) {
   const token = String(env.GITHUB_DISPATCH_TOKEN || "").trim();
   if (!token) return false;
-  const files = ["tiktok-added.yml", "media-extract.yml"];
+  const files = ["tiktok-added.yml", "media-extract.yml", "tiktok-live.yml"];
   let ok = false;
   for (let i = 0; i < files.length; i++) {
     try {
@@ -1661,6 +1730,7 @@ async function handleTikTokAccounts(request, env) {
     const hit = await rateHit(env, bucket + ":list", 60, 10 * 60 * 1000);
     if (!hit.ok) return limited(hit);
     const doc = await readTikTokAccounts(env);
+    if (doc.dirty) await writeTikTokAccounts(env, doc);
     return json(200, { added: doc.added.map(publicTikTokAccount) });
   }
   if (request.method === "POST") {
@@ -1674,7 +1744,7 @@ async function handleTikTokAccounts(request, env) {
     const existing = doc.added.find((item) => tiktokRowMatches(item, typed));
     if (!existing && doc.added.length >= TIKTOK_ACCOUNT_CAP) return json(400, { error: "full" });
     const preview = await previewTikTokProfile(typed);
-    const handle = preview.handle && TIKTOK_HANDLE.test(preview.handle) ? preview.handle : typed;
+    const handle = preview.handle && sameTikTokHandle(preview.handle, typed) && TIKTOK_HANDLE.test(preview.handle) ? preview.handle : typed;
     doc.removed = doc.removed.filter((item) => !sameTikTokHandle(item, handle) && !sameTikTokHandle(item, typed));
     let row = doc.added.find((item) => tiktokRowMatches(item, handle) || tiktokRowMatches(item, typed));
     if (!row) {

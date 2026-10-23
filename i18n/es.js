@@ -858,5 +858,12 @@ SI18n.addPack("es", {
   "That doesn’t look like a TikTok account.": "Eso no parece una cuenta de TikTok.",
   "Couldn’t preview this profile. It will still be saved.": "No se pudo previsualizar el perfil. Se guardará igual.",
   "Couldn’t save this account.": "No se pudo guardar esta cuenta.",
-  "New videos show up after the next sync.": "Los vídeos nuevos aparecen tras la próxima sincronización."
+  "New videos show up after the next sync.": "Los vídeos nuevos aparecen tras la próxima sincronización.",
+  "TikTok blocked this live.": "TikTok bloqueó este directo.",
+  "Origin": "Origen",
+  "Full HD": "Full HD",
+  "UHD": "UHD",
+  "HD": "HD",
+  "SD": "SD",
+  "LD": "LD"
 });

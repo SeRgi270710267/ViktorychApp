@@ -858,5 +858,12 @@ SI18n.addPack("ru", {
   "That doesn’t look like a TikTok account.": "Это не похоже на аккаунт TikTok.",
   "Couldn’t preview this profile. It will still be saved.": "Профиль не удалось посмотреть. Аккаунт всё равно сохранится.",
   "Couldn’t save this account.": "Не удалось сохранить этот аккаунт.",
-  "New videos show up after the next sync.": "Новые видео появятся после следующей синхронизации."
+  "New videos show up after the next sync.": "Новые видео появятся после следующей синхронизации.",
+  "TikTok blocked this live.": "TikTok заблокировал этот эфир.",
+  "Origin": "Оригинал",
+  "Full HD": "Full HD",
+  "UHD": "UHD",
+  "HD": "HD",
+  "SD": "SD",
+  "LD": "LD"
 });
