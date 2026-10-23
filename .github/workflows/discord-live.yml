@@ -3,7 +3,9 @@ name: Discord live
 on:
   workflow_dispatch:
   schedule:
-    # A new run queues while one is in progress and starts when it exits.
+    # Backup only. The Worker cron dispatches this workflow every 15 minutes
+    # when nothing is queued or running. A new run still waits for the one
+    # already in progress instead of starting a second Discord reader.
     - cron: "*/5 * * * *"
   push:
     branches:

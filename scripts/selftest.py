@@ -2949,6 +2949,47 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
     old_site = "rss-" + "feeds"
     check("github.repository" in live_workflow and "SuperintelApp" not in live_workflow and old_site not in live_workflow and old_site not in live_script, "the live job follows the repository and no old feed URL")
     check("/pins" not in live_script, "the live poller does not read pins")
+    check("viktorych-discord" in messages_ui and "dmsgs-skel" in messages_ui and "If-None-Match" in messages_ui and "/v1/data/" in messages_ui and 'loading="lazy"' in messages_ui and 'preload="none"' in messages_ui and "dmsgs-skel" in messages_css, "messages paint from IndexedDB, then a small page, with a skeleton and lazy media")
+    worker_src = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
+    wrangler = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
+    discord_fn = worker_src.split("async function maybeDispatchDiscord", 1)[1].split("async function ", 1)[0]
+    check('crons = ["*/15 * * * *"]' in wrangler and "discord-live.yml" in worker_src and "in_progress" in worker_src and "If-None-Match" in worker_src and "stale-while-revalidate=86400" in worker_src and "console" not in discord_fn, "the worker cron dispatches Discord only when idle and serves ETag pages")
+    check("messages/" in live_script and "/p/" in live_script and "def r2_put" in live_script and "def restore_from" in live_script and "upload_discord" in live_script, "live history is paged and stored in R2")
+    saved_token = os.environ.pop("CLOUDFLARE_API_TOKEN", None)
+    try:
+        check(discord_live.r2_put("discord/index.json", b"{}") is False, "R2 upload does nothing without the Cloudflare token")
+    finally:
+        if saved_token is not None:
+            os.environ["CLOUDFLARE_API_TOKEN"] = saved_token
+    page_board = discord_live.Board()
+    page_server = {"id": "1", "name": "Hall", "channels": [{"id": "42", "name": "general"}]}
+    for index in range(120):
+        mid = str(1_000_000_000_000_000_000 + index)
+        page_board.add("42", {"id": mid, "author": "9", "text": "m" + str(index), "date": "2024-01-01T00:00:00.000Z"}, "9", {"name": "Ada"})
+    with tempfile.TemporaryDirectory() as tmp:
+        page_root = Path(tmp)
+        discord_live.write_tree(page_root, page_server, page_board, "", None, "", "ok", "", "super-secret-discord-token")
+        hot = json.loads((page_root / "discord" / "messages" / "42.json").read_text(encoding="utf-8"))
+        older = json.loads((page_root / "discord" / "messages" / "42" / "p" / "1.json").read_text(encoding="utf-8"))
+        tail = json.loads((page_root / "discord" / "messages" / "42" / "p" / "2.json").read_text(encoding="utf-8"))
+        dumped = (page_root / "discord" / "messages" / "42.json").read_text(encoding="utf-8")
+        check(len(hot["messages"]) == 50 and hot["older"] is True and len(older["messages"]) == 50 and older["older"] is True and len(tail["messages"]) == 20 and tail["older"] is False, "a channel publishes the newest 50 and older pages of 50")
+        check(int(hot["messages"][0]["id"]) > int(older["messages"][0]["id"]) > int(tail["messages"][0]["id"]) and "super-secret-discord-token" not in dumped, "pages stay newest-first and never contain the token")
+        again = discord_live.Board()
+        again.load_dir(page_root)
+        check(len(again.rows("42")) == 120 and again.cursor["42"] == hot["messages"][0]["id"], "a restart reads the hot page and the older pages")
+        empty = Path(tmp) / "restored"
+        store = {
+            "discord/index.json": json.loads((page_root / "discord" / "index.json").read_text(encoding="utf-8")),
+            "discord/state.json": json.loads((page_root / "discord" / "state.json").read_text(encoding="utf-8")),
+            "discord/messages/42.json": hot,
+            "discord/messages/42/p/1.json": older,
+            "discord/messages/42/p/2.json": tail,
+        }
+        discord_live.restore_from(empty, "", store.get)
+        restored = discord_live.Board()
+        restored.load_dir(empty)
+        check(len(restored.rows("42")) == 120, "a missing Pages copy is restored from R2 pages")
 
 
 def ia_backup_checks() -> None:

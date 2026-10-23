@@ -29,3 +29,8 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "DATA"
 bucket_name = "viktorych-data"
+
+# Free cron. It only dispatches discord-live.yml when no run is queued.
+# The GitHub schedule stays as the backup.
+[triggers]
+crons = ["*/15 * * * *"]

@@ -149,7 +149,7 @@ function isData(url) {
   // data/music.json is the ViktorychMusic catalog
   if (url.origin === self.location.origin && /\/data\/music\.json$/.test(url.pathname)) return true;
   if (url.origin === self.location.origin && /\/data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$/.test(url.pathname)) return true;
-  if (url.origin === self.location.origin && /\/discord\/(?:index|state|messages\/\d{1,22}|pins\/\d{1,22})\.json$/.test(url.pathname)) return true;
+  if (url.origin === self.location.origin && /\/discord\/(?:index|state|messages\/\d{1,22}(?:\/p\/\d{1,4})?|pins\/\d{1,22})\.json$/.test(url.pathname)) return true;
   return url.origin === self.location.origin && /\/(?:feeds|people|suggestions|stories)\.json$/.test(url.pathname);
 }
 
