@@ -259,6 +259,11 @@ def follow_list_checks() -> None:
         ):
             check(f'"{key}"' in pack, code + " translates " + key)
     check("issues/new" not in app and "issues/new" not in accounts, "user flows do not build a GitHub new-issue URL")
+    check('data-act="note-tabs-same"' in app and "Same tabs as Feed" in app and "function visibleNoteTabs(" in app and "function seedNoteTabs(" in app and 'kind: "verified"' in app and 'kind: "mentions"' in app and "editingNoteTabs() ? noteTabs()" in app and "noteTabsSame" in accounts and "noteTabs:" in accounts, "notification tabs can stay separate from the feed and sync with the account")
+    for code in ("en", "es", "ru"):
+        pack = (ROOT / "i18n" / f"{code}.js").read_text(encoding="utf-8")
+        for key in ("Same tabs as Feed", "Mentions", "Note tab verified", "Drag the handle to reorder."):
+            check(f'"{key}"' in pack, code + " translates " + key)
     for name in ("people.js", "shorts.js", "accounts.js"):
         text = (ROOT / name).read_text(encoding="utf-8")
         check("issues/new" not in text, name + " does not open a GitHub issue")
