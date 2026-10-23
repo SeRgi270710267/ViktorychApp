@@ -1903,8 +1903,22 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return { urls: out, avatar: avatar };
   }
 
-  function posterImg(post, media, cls) {
+  function posterOrder(post, media) {
     const pack = posterList(post, media);
+    const stored = [];
+    const source = [];
+    pack.urls.forEach((url) => {
+      if (!url || url === pack.avatar) return;
+      if (r2ObjectKey(url)) stored.push(url);
+      else source.push(url);
+    });
+    const urls = stored.concat(source);
+    if (pack.avatar) urls.push(pack.avatar);
+    return { urls: urls, avatar: pack.avatar };
+  }
+
+  function posterImg(post, media, cls) {
+    const pack = posterOrder(post, media);
     if (!pack.urls.length) return "";
     const first = pack.urls[0];
     const face = first === pack.avatar ? " face" : "";
@@ -1915,6 +1929,26 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const tg = lead ? tgLead(tgKey, stills.slice(1), first) : "";
     const src = lead ? "" : ` src="${esc(first)}"`;
     return `<img class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
+  }
+
+  function feedFrame(post, media) {
+    if (media && media.round) return "";
+    let ratio = 16 / 9;
+    if (!youtubeId(post, media)) {
+      const w = Number(media && media.width) || 0;
+      const h = Number(media && media.height) || 0;
+      if (w > 0 && h > 0) ratio = w / h;
+    }
+    if (ratio < 0.75) ratio = 0.75;
+    if (ratio > 2) ratio = 2;
+    const rw = Math.round(ratio * 1000);
+    return "min(510px, calc(100cqw * 1000 / " + rw + "))";
+  }
+
+  function clipLoops(media, seconds) {
+    if (media && media.type === "animated_gif") return true;
+    const dur = Number(seconds != null ? seconds : (media && media.duration)) || 0;
+    return dur > 0 && dur <= 15;
   }
 
   function advancePoster(img) {
@@ -1945,12 +1979,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const href = originalOf(post, media);
     const mode = preview === "feed" || preview === "subs" ? preview : "";
     const chrome = mode === "feed" && !gif
-      ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden></span>`
+      ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden>${esc(dur || "")}</span>`
       : "";
     const round = media && media.round ? " round" : "";
     const progress = !gif && post ? videoProgress(post) : 0;
-    const bar = progress > 0.02 ? `<span class="vprog" style="width:${Math.round(progress * 100)}%"></span>` : "";
-    return `<div class="tile vplay${round}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}">
+    const bar = mode === "feed" && !gif
+      ? `<span class="vprog" style="width:${Math.max(0, Math.round(progress * 100))}%"></span>`
+      : (progress > 0.02 ? `<span class="vprog" style="width:${Math.round(progress * 100)}%"></span>` : "");
+    const frameHeight = mode === "feed" && arguments[4] !== false ? feedFrame(post, media) : "";
+    const frame = frameHeight ? ` style="height:${frameHeight}"` : "";
+    return `<div class="tile vplay${round}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}"${frame}>
       ${posterImg(post, media, "vposter")}
       ${bar}
       ${dur ? `<span class="vdur">${esc(dur)}</span>` : ""}
@@ -2056,7 +2094,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const cls = n === 1 ? "m1" : n === 2 ? "m2" : n === 3 ? "m3" : "m4";
     const tiles = list.map((m, index) => {
       if (m.type === "video" || m.type === "animated_gif" || youtubeId(post, m)) {
-        return playerTile(post || { media: [m] }, m, index, "feed");
+        return playerTile(post || { media: [m] }, m, index, "feed", n === 1);
       }
       const alt = m.alt ? `<span class="alt-badge">ALT</span>` : "";
       const refresh = m.fallback ? ` data-refresh="${esc(m.fallback)}"` : "";
@@ -2524,9 +2562,17 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function hlsAhead(extra) {
-    const opts = { maxBufferLength: 30, maxMaxBufferLength: 30 };
+    const opts = { maxBufferLength: 30, maxMaxBufferLength: 30, capLevelToPlayerSize: false, startLevel: 99 };
     if (extra) Object.keys(extra).forEach((name) => { opts[name] = extra[name]; });
     return opts;
+  }
+
+  function lockHlsTop(hls) {
+    if (!hls) return;
+    const top = (hls.levels || []).length - 1;
+    if (top < 0) return;
+    hls.capLevelToPlayerSize = false;
+    hls.currentLevel = top;
   }
 
   function loadHls() {
@@ -2681,20 +2727,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     video.setAttribute("referrerpolicy", "no-referrer");
     video.referrerPolicy = "no-referrer";
     video.controls = !opts.preview && !opts.loop;
-    if (opts.muted || opts.preview) {
-      video.muted = true;
-      video.defaultMuted = true;
-      video.setAttribute("muted", "");
-    }
-    if (opts.loop || (media && media.type === "animated_gif")) {
-      video.loop = true;
+    if (opts.loop || (media && media.type === "animated_gif")) video.loop = true;
+    if (opts.muted || (media && media.type === "animated_gif")) {
       video.muted = true;
       video.defaultMuted = true;
       video.setAttribute("muted", "");
     }
     const poster = el.querySelector(".vposter") || el.querySelector("img");
     if (poster && poster.getAttribute("src") && !poster.classList.contains("face")) video.poster = poster.getAttribute("src");
-    video.preload = opts.preview && visibleRatio(el) < 0.6 ? "metadata" : "auto";
+    video.preload = opts.preview ? "metadata" : "auto";
     const token = el._src;
     const fail = () => {
       if (el._gen !== gen || el._src !== token) return;
@@ -2705,6 +2746,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     video.addEventListener("playing", () => {
       if (el._gen !== gen) return;
       if (video.currentTime > 0 || video.videoWidth > 0) markShown(el);
+    });
+    video.addEventListener("loadedmetadata", () => {
+      if (el._gen !== gen || !opts.preview) return;
+      if (clipLoops(media, video.duration)) video.loop = true;
     });
     video.addEventListener("loadeddata", () => {
       if (el._gen !== gen) return;
@@ -2730,6 +2775,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const label = clock(Math.max(0, Math.ceil(video.duration - video.currentTime)));
       const left = el.querySelector(".vleft");
       if (left && opts.preview) { left.hidden = false; left.textContent = label; }
+      const bar = el.querySelector(".vprog");
+      if (bar && opts.preview) bar.style.width = Math.min(100, (video.currentTime / video.duration) * 100) + "%";
       const badge = el.querySelector(".yt-time");
       if (badge && el.dataset.preview === "subs") badge.textContent = label;
       if (!opts.loop && !(media && media.type === "animated_gif") && video.currentTime >= 3) {
@@ -2755,11 +2802,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       } catch (err) { /* media session is optional */ }
     });
     const start = () => {
-      if (opts.muted || opts.preview || opts.loop || (media && media.type === "animated_gif")) {
-        video.muted = true;
-        video.defaultMuted = true;
-        video.setAttribute("muted", "");
-      }
+      const silent = !!(opts.muted || (media && media.type === "animated_gif"));
+      video.muted = silent;
+      video.defaultMuted = silent;
+      if (silent) video.setAttribute("muted", "");
+      else video.removeAttribute("muted");
       video.playsInline = true;
       video.setAttribute("playsinline", "");
       video.setAttribute("webkit-playsinline", "");
@@ -2833,6 +2880,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (el._gen !== gen || el._src !== token) return;
           clearTimeout(wait);
+          lockHlsTop(hls);
           start();
         });
         hls.loadSource(source.url);
@@ -2925,9 +2973,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (previewing) {
       opts.preview = true;
       const early = playMedia(el, playPost(el) || {}) || {};
-      const gif = !!(opts.loop || early.type === "animated_gif");
-      opts.loop = gif;
+      const gif = early.type === "animated_gif";
+      opts.loop = !!(opts.loop || gif || clipLoops(early));
       opts.muted = gif || el.dataset.preview === "subs" || !STATE.sound;
+      if (!(Number(opts.resume) > 0.25) && Number(el._hold) > 0.25) opts.resume = Number(el._hold);
     }
     if (el.classList.contains("is-playing")) {
       const video = el.querySelector("video");
@@ -3061,9 +3110,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const chosen = mode === "wifi" || mode === "never" ? mode : "all";
     if (chosen === "never") return "setting-never";
     if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return "reduced-motion";
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-data: reduce)").matches) return "reduced-data";
     const conn = connectionInfo();
-    // An unknown navigator.connection and saveData are not Never.
+    // An unknown connection type is not Never.
     // Wi-Fi only pauses when the browser actually reports a cellular type.
+    if (conn.saveData || conn.effectiveType === "slow-2g" || conn.effectiveType === "2g") return "reduced-data";
     if (chosen === "wifi" && conn.type === "cellular") return "cellular";
     return "";
   }
@@ -3104,7 +3155,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function previewEligible(el) {
     const metrics = visibleMetrics(el);
-    return metrics.ratio >= 0.6 || metrics.cover >= 0.6;
+    return metrics.ratio >= 0.5 || metrics.cover >= 0.5;
   }
 
   function autoplayDebugOn() {
@@ -3197,6 +3248,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (el.dataset.preview !== "feed" || el.querySelector(".gif-badge")) return;
     const btn = el.querySelector(".vmute");
     if (btn) { btn.hidden = false; paintMute(btn); }
+    const left = el.querySelector(".vleft");
+    if (left) left.hidden = false;
   }
 
   function applyPreviewSound(el) {
@@ -3211,17 +3264,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function pausePreview(el) {
     if (!el) return;
+    const video = el.querySelector("video");
+    if (video && isFinite(video.currentTime) && video.currentTime > 0.25) el._hold = video.currentTime;
     el._gen = (el._gen || 0) + 1;
     if (el.dataset) delete el.dataset.want;
-    const video = el.querySelector("video");
     if (video) {
       try { video.pause(); } catch (err) { /* already paused */ }
       video.preload = "none";
     }
-    el.querySelectorAll("iframe").forEach((frame) => {
-      try { frame.src = "about:blank"; } catch (err) { /* the embed is going away */ }
-      frame.remove();
-    });
+    clearPlayer(el);
     el.classList.remove("is-shown", "is-playing");
     const mute = el.querySelector(".vmute");
     const left = el.querySelector(".vleft");
@@ -3260,14 +3311,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return true;
   }
 
-  function prefetchPreview(el) {
-    if (!el || el._prefetch || el.classList.contains("is-failed") || el.classList.contains("player")) return;
-    el._prefetch = 1;
-    const post = playPost(el) || {};
-    const media = playMedia(el, post) || {};
-    sourcesFor(post, media, 0).then((list) => { el._sources = list || []; }).catch(() => {});
-  }
-
   function choosePreview() {
     const blocked = autoplayBlockReason();
     if (blocked) { notePlay(null, blocked); return null; }
@@ -3282,7 +3325,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     nodes.forEach((el) => {
       if (el.classList.contains("is-failed") || el.classList.contains("player")) return;
       const metrics = visibleMetrics(el);
-      if (metrics.ratio < 0.6 && metrics.cover < 0.6) return;
+      if (metrics.ratio < 0.5 && metrics.cover < 0.5) return;
       const score = Math.max(metrics.ratio, metrics.cover);
       if (score > bestScore) { best = el; bestScore = score; }
     });
@@ -3328,7 +3371,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const post = playPost(next) || {};
     const media = playMedia(next, post) || {};
     const gif = !!(media && media.type === "animated_gif");
-    startPlayback(next, { preview: true, loop: gif, muted: gif || next.dataset.preview === "subs" || !STATE.sound });
+    const held = Number(next._hold) > 0.25 ? Number(next._hold) : 0;
+    startPlayback(next, { preview: true, loop: gif || clipLoops(media), muted: gif || next.dataset.preview === "subs" || !STATE.sound, resume: held });
     paintAutoplayDebug();
   }
 
@@ -3337,12 +3381,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     STATE.autoEl = null;
     if (!("IntersectionObserver" in window)) { schedulePreview(); return; }
     bindPreviewScroll();
-    STATE.videoObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) prefetchPreview(entry.target);
-      });
+    STATE.videoObserver = new IntersectionObserver(() => {
       schedulePreview();
-    }, { root: previewScrollRoot(), rootMargin: "200px 0px", threshold: [0, 0.6, 1] });
+    }, { root: previewScrollRoot(), rootMargin: "0px", threshold: [0, 0.5, 1] });
     document.querySelectorAll(".vplay[data-preview]").forEach((el) => STATE.videoObserver.observe(el));
     schedulePreview();
   }
@@ -3352,7 +3393,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!post) return;
     const media = playMedia(tile, post) || {};
     const video = tile.querySelector("video");
-    const time = video && isFinite(video.currentTime) ? video.currentTime : 0;
+    const time = video && isFinite(video.currentTime) && video.currentTime > 0 ? video.currentTime : (Number(tile._hold) || 0);
     const src = video ? (video.currentSrc || video.src || "") : "";
     const yt = youtubeId(post, media);
     noteVideo(post, { position: time, touch: true });
@@ -13639,6 +13680,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!video) return;
       video.playsInline = true;
       video.muted = false;
+      video.loop = clipLoops(media);
       video.preload = "auto";
       const seek = () => {
         if (view.time > 0.3) { try { video.currentTime = view.time; } catch (err) { /* not seekable yet */ } }
@@ -13651,7 +13693,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             const hls = new Hls(hlsAhead());
             hls.loadSource(url);
             hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, go);
+            hls.on(Hls.Events.MANIFEST_PARSED, () => { lockHlsTop(hls); go(); });
           });
           return;
         }
@@ -13695,7 +13737,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
               }
             }));
             hls.on(Hls.Events.ERROR, (_event, data) => { if (data && data.fatal) fail(); });
-            hls.on(Hls.Events.MANIFEST_PARSED, () => { seek(); video.play().catch(() => {}); });
+            hls.on(Hls.Events.MANIFEST_PARSED, () => { lockHlsTop(hls); seek(); video.play().catch(() => {}); });
             hls.loadSource(file.url);
             hls.attachMedia(video);
           }).catch(fail);
