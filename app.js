@@ -668,6 +668,8 @@
         text: String(item.text || "").slice(0, 280),
         avatar: httpsUrl(item.avatar),
         image: httpsUrl(item.image),
+        verified: item.verified === true,
+        mention: item.mention === true,
         hash: hash.charAt(0) === "#" && hash.length < 300 ? hash : "#/",
         feedId: String(item.feedId || "").slice(0, 120),
         platform: String(item.platform || "").slice(0, 24),
@@ -711,6 +713,7 @@
         color: tabColor(item.color),
         showHome: item.showHome !== false,
         showNotes: item.showNotes !== false,
+        kind: item.kind === "verified" || item.kind === "mentions" ? item.kind : "",
         members: members,
         readAt: Number(item.readAt) || 0,
         sort: item.sort === "popular" ? "popular" : "recent"
@@ -723,6 +726,76 @@
     const text = String(value || "");
     if (!text || text === "all") return "all";
     return (tabs || []).some((tab) => tab.id === text) ? text : "all";
+  }
+
+  function noteTabsSame() {
+    return !STATE.settings || STATE.settings.noteTabsSame !== false;
+  }
+
+  function noteTabs() {
+    if (!STATE.settings) return [];
+    if (!Array.isArray(STATE.settings.noteTabs)) STATE.settings.noteTabs = [];
+    return STATE.settings.noteTabs;
+  }
+
+  function editingNoteTabs() {
+    return STATE.tabScope === "notes";
+  }
+
+  function scopeTabList() {
+    return editingNoteTabs() ? noteTabs() : feedTabs();
+  }
+
+  function visibleNoteTabs() {
+    const list = noteTabsSame() ? feedTabs() : noteTabs();
+    return list.filter((tab) => tab.showNotes !== false);
+  }
+
+  function noteTabById(id) {
+    const wanted = String(id || "");
+    const list = noteTabsSame() ? feedTabs() : noteTabs();
+    return list.find((tab) => tab.id === wanted) || null;
+  }
+
+  function noteTabLabel(tab) {
+    if (!tab) return "";
+    if (tab.kind === "verified" && tab.name === "Verified") return tr("Note tab verified");
+    if (tab.kind === "mentions" && tab.name === "Mentions") return tr("Mentions");
+    return tab.name;
+  }
+
+  function seedNoteTabs() {
+    const have = cleanFeedTabs(STATE.settings && STATE.settings.noteTabs);
+    if (have.length) return have;
+    const tabs = [
+      { id: "verified", name: "Verified", kind: "verified", emoji: "", color: "", showHome: false, showNotes: true, members: [], readAt: 0, sort: "recent" },
+      { id: "mentions", name: "Mentions", kind: "mentions", emoji: "", color: "", showHome: false, showNotes: true, members: [], readAt: 0, sort: "recent" }
+    ];
+    feedTabs().forEach((tab) => {
+      if (!tab || tab.showNotes === false || tab.kind === "verified" || tab.kind === "mentions") return;
+      const id = ("n" + tab.id).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+      if (!id || tabs.some((item) => item.id === id)) return;
+      tabs.push({
+        id: id,
+        name: tab.name,
+        kind: "",
+        emoji: tab.emoji || "",
+        color: tab.color || "",
+        showHome: false,
+        showNotes: true,
+        members: (tab.members || []).slice(),
+        readAt: Number(tab.readAt) || 0,
+        sort: tab.sort === "popular" ? "popular" : "recent"
+      });
+    });
+    return cleanFeedTabs(tabs);
+  }
+
+  function setTabScope(el) {
+    if (el && el.dataset.scope === "notes") STATE.tabScope = "notes";
+    else if (el && el.dataset.scope === "feed") STATE.tabScope = "";
+    else if (!noteTabsSame() && parseRoute().name === "notifications") STATE.tabScope = "notes";
+    else STATE.tabScope = "";
   }
 
   function feedTabs() {
@@ -779,7 +852,11 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.bellRead = Number(parsed.bellRead) || 0;
 parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       parsed.feedTabs = cleanFeedTabs(parsed.feedTabs);
-      parsed.lastNoteTab = cleanLastNoteTab(parsed.lastNoteTab, parsed.feedTabs);
+      parsed.noteTabs = cleanFeedTabs(parsed.noteTabs);
+      if (parsed.noteTabsSame === false) parsed.noteTabsSame = false;
+      else if (parsed.noteTabsSame === true) parsed.noteTabsSame = true;
+      else delete parsed.noteTabsSame;
+      parsed.lastNoteTab = cleanLastNoteTab(parsed.lastNoteTab, parsed.noteTabsSame === false ? parsed.noteTabs : parsed.feedTabs);
       if (!parsed.initialized) {
         parsed.follows = configured.slice();
         parsed.seenFeeds = configured.slice();
@@ -8949,9 +9026,31 @@ const here = parseRoute();
     });
   }
 
+  function viewerHandle() {
+    const account = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+    return account && account.handle ? String(account.handle).replace(/^@/, "") : "";
+  }
+
+  function noteIsVerified(note) {
+    if (!note) return false;
+    if (note.verified === true) return true;
+    const feed = feedById(note.feedId) || catalogAccount(note.platform, note.handle);
+    return !!(feed && feed.verifiedType && feed.verifiedType !== "none");
+  }
+
+  function noteIsMention(note) {
+    if (!note) return false;
+    if (note.mention === true) return true;
+    const me = viewerHandle().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!me) return false;
+    return new RegExp("(^|[^A-Za-z0-9_])@" + me + "(?![A-Za-z0-9_])", "i").test(String(note.text || ""));
+  }
+
   function notesForTab(tab) {
     const notes = (STATE.settings && STATE.settings.bellNotes) || [];
     if (!tab) return notes;
+    if (tab.kind === "verified") return notes.filter(noteIsVerified);
+    if (tab.kind === "mentions") return notes.filter(noteIsMention);
     return notes.filter((note) => noteInTab(note, tab));
   }
 
@@ -8982,13 +9081,13 @@ const here = parseRoute();
     if (menu.id === "all") {
       return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${tr("All")}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-new"><span class="bell-choice-ico">${icon("plus")}</span><span class="bell-choice-label">${tr("New tab")}</span></button><button class="bell-choice" type="button" data-act="manage-tabs"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">${tr("Manage tabs")}</span></button></div></div>`;
     }
-    if (!feedTabById(menu.id)) return "";
-    const tab = feedTabById(menu.id);
+    if (!noteTabById(menu.id)) return "";
+    const tab = noteTabById(menu.id);
     return `<div class="bell-sheet" data-act="close-tab-context"><div class="menu bell-menu tab-context" data-act="stop" role="menu" aria-label="${esc(tab.name)}" data-x="${Number(menu.left) || 0}" data-y="${Number(menu.top) || 0}"><div class="bell-grab" aria-hidden="true"></div><button class="bell-choice" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("pencil")}</span><span class="bell-choice-label">${tr("Edit tab")}</span></button><button class="bell-choice" type="button" data-act="feed-tab-ask-delete" data-id="${esc(tab.id)}"><span class="bell-choice-ico">${menuIcon("gear")}</span><span class="bell-choice-label">${tr("Delete tab")}</span></button></div></div>`;
   }
 
   function settleNoteTab(route) {
-    const visible = feedTabs().filter((tab) => tab.showNotes !== false);
+    const visible = visibleNoteTabs();
     const asked = route && route.tab ? String(route.tab) : "";
     let active = "all";
     if (asked && asked !== "all" && visible.some((tab) => tab.id === asked)) active = asked;
@@ -9020,7 +9119,7 @@ const here = parseRoute();
       }
       return;
     }
-    const tab = feedTabById(active);
+    const tab = noteTabById(active);
     if (!tab) return;
     const newest = notesForTab(tab).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
     if (newest && (Number(tab.readAt) || 0) < newest) {
@@ -9046,10 +9145,10 @@ const here = parseRoute();
   function notificationsView(route) {
     const active = settleNoteTab(route || parseRoute());
     markNoteTabRead(active);
-    const tabs = feedTabs().filter((tab) => tab.showNotes !== false);
-    const current = active === "all" ? null : feedTabById(active);
+    const tabs = visibleNoteTabs();
+    const current = active === "all" ? null : noteTabById(active);
     const notes = current ? notesForTab(current) : ((STATE.settings && STATE.settings.bellNotes) || []);
-    const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, tab.name, active === tab.id)).join("");
+    const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
     const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
@@ -9061,7 +9160,7 @@ const here = parseRoute();
   }
 
   function openFeedTabEditor(id, presetFeed) {
-    const existing = id ? feedTabById(id) : null;
+    const existing = id ? (editingNoteTabs() ? noteTabs().find((tab) => tab.id === id) || null : feedTabById(id)) : null;
     const preset = presetFeed ? profileKeys(presetFeed) : [];
     STATE.draft = existing ? {
       id: existing.id,
@@ -9077,7 +9176,7 @@ const here = parseRoute();
       name: "",
       emoji: "",
       color: "",
-      showHome: true,
+      showHome: !editingNoteTabs(),
       showNotes: true,
       members: preset,
       q: ""
@@ -9105,7 +9204,7 @@ const here = parseRoute();
   }
 
   function applyFeedTabOrder(ids) {
-    const tabs = feedTabs();
+    const tabs = scopeTabList();
     const map = {};
     tabs.forEach((tab) => { map[tab.id] = tab; });
     const next = [];
@@ -9113,7 +9212,8 @@ const here = parseRoute();
       if (map[id]) { next.push(map[id]); delete map[id]; }
     });
     tabs.forEach((tab) => { if (map[tab.id]) next.push(tab); });
-    STATE.settings.feedTabs = next;
+    if (editingNoteTabs()) STATE.settings.noteTabs = next;
+    else STATE.settings.feedTabs = next;
     saveSettings();
   }
 
@@ -9122,7 +9222,7 @@ const here = parseRoute();
     const draft = STATE.draft || {};
     const name = String(draft.name || "").replace(/\s+/g, " ").trim();
     if (!name) return;
-    const tabs = feedTabs();
+    const tabs = scopeTabList();
     let tab = draft.id ? tabs.find((item) => item.id === draft.id) : null;
     if (!tab) {
       if (tabs.length >= 500) {
@@ -9142,7 +9242,8 @@ const here = parseRoute();
       const text = String(member || "").trim();
       if (text && text.length <= 120 && tab.members.indexOf(text) < 0 && tab.members.length < 500) tab.members.push(text);
     });
-    STATE.settings.feedTabs = cleanFeedTabs(tabs);
+    if (editingNoteTabs()) STATE.settings.noteTabs = cleanFeedTabs(tabs);
+    else STATE.settings.feedTabs = cleanFeedTabs(tabs);
     STATE.modal = null;
     const route = parseRoute();
     if (tab.showNotes !== false && (route.name === "notifications" || !draft.id)) {
@@ -9156,7 +9257,7 @@ const here = parseRoute();
   }
 
   function openNoteTabMenu(id, x, y) {
-    if (!id || (id !== "all" && !feedTabById(id))) return;
+    if (!id || (id !== "all" && !noteTabById(id))) return;
     STATE.tabContext = { id: id, left: x, top: y };
     STATE.tabAssign = null;
     STATE.menu = null;
@@ -9201,8 +9302,11 @@ const here = parseRoute();
     });
     const switches = (key, label) => `<button class="tab-switch${draft[key] !== false ? " on" : ""}" type="button" role="switch" aria-checked="${draft[key] !== false ? "true" : "false"}" data-act="feed-tab-draft-flag" data-key="${key}"><span>${label}</span><i></i></button>`;
     const swatches = `<button class="swatch swatch-none${draft.color ? "" : " on"}" type="button" data-act="feed-tab-color" data-color="" aria-label="${tr("No colour")}">${tr("None")}</button>` + COLORS.map((color) => `<button class="swatch${draft.color === color ? " on" : ""}" type="button" style="background:${color}" data-act="feed-tab-color" data-color="${color}" aria-label="${tr("Tab colour")}"></button>`).join("");
-    const order = feedTabs().length > 1 ? `<h3>${tr("Order")}</h3><p class="phandle">${tr("Drag the handle to reorder. The same order is used on Home.")}</p>${feedTabs().map((tab) => `<div class="tab-order-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="${tr("Drag to reorder")}"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="tab-order-name">${esc(tab.name)}</span></div>`).join("")}` : "";
-    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? tr("Edit tab") : tr("New tab")}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${draft.id ? tr("Edit tab") : tr("New tab")}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>${tr("Save")}</button></div><div class="modal-body"><label class="field"><span>${tr("Name")}</span><input id="feed-tab-name" data-field="name" maxlength="40" value="${esc(draft.name || "")}"></label><label class="field"><span>${tr("Emoji")}</span><input id="feed-tab-emoji" data-field="emoji" maxlength="8" placeholder="${tr("Optional")}" value="${esc(draft.emoji || "")}"></label><div class="field"><span>${tr("Colour")}</span><div class="swatches">${swatches}</div></div>${switches("showHome", tr("Show on Home"))}${switches("showNotes", tr("Show in Notifications"))}<h3>${tr("Accounts")}</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="${tr("Search accounts")}" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">${tr("Search to add accounts. Profiles with no tab stay in All.")}</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">${tr("Delete tab")}</button>` : ""}</div></div></div>`;
+    const orderTabs = scopeTabList();
+    const orderHint = editingNoteTabs() ? tr("Drag the handle to reorder.") : tr("Drag the handle to reorder. The same order is used on Home.");
+    const order = orderTabs.length > 1 ? `<h3>${tr("Order")}</h3><p class="phandle">${orderHint}</p>${orderTabs.map((tab) => `<div class="tab-order-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="${tr("Drag to reorder")}"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="tab-order-name">${esc(editingNoteTabs() ? noteTabLabel(tab) : tab.name)}</span></div>`).join("")}` : "";
+    const homeSwitch = editingNoteTabs() ? "" : switches("showHome", tr("Show on Home"));
+    return `<div class="modal-back" data-act="close-modal"><div class="modal feed-tab-sheet" role="dialog" aria-label="${draft.id ? tr("Edit tab") : tr("New tab")}" data-act="stop"><div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${draft.id ? tr("Edit tab") : tr("New tab")}</h2><button class="save" type="button" data-act="feed-tab-save"${String(draft.name || "").trim() ? "" : " disabled"}>${tr("Save")}</button></div><div class="modal-body"><label class="field"><span>${tr("Name")}</span><input id="feed-tab-name" data-field="name" maxlength="40" value="${esc(draft.name || "")}"></label><label class="field"><span>${tr("Emoji")}</span><input id="feed-tab-emoji" data-field="emoji" maxlength="8" placeholder="${tr("Optional")}" value="${esc(draft.emoji || "")}"></label><div class="field"><span>${tr("Colour")}</span><div class="swatches">${swatches}</div></div>${homeSwitch}${switches("showNotes", tr("Show in Notifications"))}<h3>${tr("Accounts")}</h3><input id="feed-tab-q" class="member-search" data-field="q" placeholder="${tr("Search accounts")}" value="${esc(draft.q || "")}">${memberRows.map((feed) => row(feed, true)).join("")}${extra.map((feed) => row(feed, true)).join("")}${found.map((feed) => row(feed, false)).join("")}${!memberRows.length && !extra.length && !q ? `<p class="phandle">${tr("Search to add accounts. Profiles with no tab stay in All.")}</p>` : ""}${order}${draft.id ? `<button class="danger" type="button" data-act="ask-delete">${tr("Delete tab")}</button>` : ""}</div></div></div>`;
   }
 
   function isStandalone() {
@@ -9354,8 +9458,14 @@ const here = parseRoute();
       </div>`;
     }
     if (section === "notifications") {
+      const shared = noteTabsSame();
+      const sameSwitch = `<button class="tab-switch${shared ? " on" : ""}" type="button" role="switch" aria-checked="${shared ? "true" : "false"}" data-act="note-tabs-same"><span>${esc(tr("Same tabs as Feed"))}</span><i></i></button>`;
+      const rows = shared ? "" : noteTabs().map((tab) => `<div class="tab-edit-row"><span>${esc(noteTabLabel(tab))}</span><button class="outline" type="button" data-act="feed-tab-edit" data-scope="notes" data-id="${esc(tab.id)}">${esc(tr("Edit"))}</button></div>`).join("") + `<button class="outline" type="button" data-act="feed-tab-new" data-scope="notes">${esc(tr("New tab"))}</button>`;
       return settingsHead(tr("Notifications"), "#/settings") + `<div class="set-block">
         <button class="primary" type="button" data-act="notify">${esc(notifyOn ? tr("Notifications on") : tr("Notify me about new posts"))}</button>
+        ${sameSwitch}
+        <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
+        ${rows}
       </div>`;
     }
     if (section === "privacy") {
@@ -9537,6 +9647,17 @@ if (STATE.histClear) {
       </div></div>`;
     }
     if (STATE.modal === "feed-tab") return feedTabEditor();
+    if (STATE.modal === "tabs" && editingNoteTabs()) {
+      const rows = noteTabs().map((tab) => `<div class="acct-row tab-manage-row"><span class="tab-grip" data-drag-tab="${esc(tab.id)}" data-act="stop" aria-label="${tr("Drag to reorder")}"></span>${tab.emoji ? `<span>${esc(tab.emoji)}</span>` : tab.color ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}<span class="who-copy"><span class="name">${esc(noteTabLabel(tab))}</span><span class="handle">${tab.showNotes === false ? tr("Hidden in Notifications") : tr("Show in Notifications")}</span></span><button class="outline" type="button" data-act="feed-tab-edit" data-scope="notes" data-id="${esc(tab.id)}">${tr("Edit")}</button></div>`).join("");
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-label="${tr("Manage tabs")}" data-act="stop">
+        <div class="modal-head"><button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Manage tabs")}</h2></div>
+        <div class="modal-body">
+          <div class="acct-row tab-manage-row locked"><span class="who-copy"><span class="name">${tr("All")}</span><span class="handle">${tr("Always in Notifications")}</span></span></div>
+          <button class="outline" type="button" data-act="feed-tab-new" data-scope="notes" aria-label="${tr("New tab")}">${tr("New tab")}</button>
+          ${rows || `<p class="phandle">${tr("Create a tab to group accounts in Notifications.")}</p>`}
+        </div>
+      </div></div>`;
+    }
     if (STATE.modal === "tabs") {
       const pinned = STATE.settings.lists.filter((list) => list.pinned);
       const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${trn("members", (list.members || []).length)}</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="${esc(tr("Move {name} left", { name: list.name }))}"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="${esc(tr("Move {name} right", { name: list.name }))}"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">${tr("Unpin")}</button></div>`).join("");
@@ -11374,7 +11495,7 @@ if (STATE.histClear) {
       render();
       return;
     }
-    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; render(); return; }
+    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; render(); return; }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
       const feed = feedById(id) || catalogAccount("x", el.dataset.handle || "");
@@ -11467,7 +11588,16 @@ if (STATE.histClear) {
     }
     if (act === "manage-tabs") {
       STATE.tabMenu = null;
+      STATE.tabScope = (!noteTabsSame() && parseRoute().name === "notifications") ? "notes" : "";
       STATE.modal = "tabs";
+      render();
+      return;
+    }
+    if (act === "note-tabs-same") {
+      const shared = noteTabsSame();
+      STATE.settings.noteTabsSame = !shared;
+      if (shared) STATE.settings.noteTabs = seedNoteTabs();
+      saveSettings();
       render();
       return;
     }
@@ -11762,10 +11892,12 @@ if (STATE.histClear) {
       return;
     }
     if (act === "feed-tab-new") {
+      setTabScope(el);
       openFeedTabEditor("", el.dataset.id || "");
       return;
     }
     if (act === "feed-tab-edit") {
+      setTabScope(el);
       openFeedTabEditor(el.dataset.id || "");
       return;
     }
@@ -11824,6 +11956,7 @@ if (STATE.histClear) {
       return;
     }
     if (act === "feed-tab-ask-delete") {
+      setTabScope(el);
       STATE.tabContext = null;
       STATE.tabMenu = null;
       STATE.confirm = { kind: "feed-tab", id: el.dataset.id || "" };
@@ -11991,7 +12124,8 @@ if (STATE.histClear) {
     if (act === "confirm-delete") {
       if (STATE.confirm && STATE.confirm.kind === "feed-tab") {
         const id = STATE.confirm.id;
-        STATE.settings.feedTabs = feedTabs().filter((tab) => tab.id !== id);
+        if (editingNoteTabs() || (!noteTabsSame() && noteTabs().some((tab) => tab.id === id) && !feedTabById(id))) STATE.settings.noteTabs = noteTabs().filter((tab) => tab.id !== id);
+        else STATE.settings.feedTabs = feedTabs().filter((tab) => tab.id !== id);
         if (STATE.settings.lastNoteTab === id) STATE.settings.lastNoteTab = "all";
         STATE.confirm = null;
         STATE.modal = null;
@@ -12153,7 +12287,7 @@ if (STATE.histClear) {
       return;
     }
     if (act === "export") {
-const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? window.SI18n.getLang() : "en", follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", showPictures: faceSetting("showPictures"), showBanners: faceSetting("showBanners"), notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
+const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? window.SI18n.getLang() : "en", follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", showPictures: faceSetting("showPictures"), showBanners: faceSetting("showBanners"), notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), noteTabs: cleanFeedTabs(STATE.settings.noteTabs), noteTabsSame: STATE.settings.noteTabsSame === false ? false : (STATE.settings.noteTabsSame === true ? true : undefined), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "viktorychapp-settings.json";
@@ -12575,7 +12709,9 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
         if (data.bellRead) STATE.settings.bellRead = Number(data.bellRead) || 0;
 if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.historyPause);
         if (Array.isArray(data.feedTabs)) STATE.settings.feedTabs = cleanFeedTabs(data.feedTabs);
-        if (typeof data.lastNoteTab === "string") STATE.settings.lastNoteTab = cleanLastNoteTab(data.lastNoteTab, STATE.settings.feedTabs || []);
+        if (Array.isArray(data.noteTabs)) STATE.settings.noteTabs = cleanFeedTabs(data.noteTabs);
+        if (data.noteTabsSame === true || data.noteTabsSame === false) STATE.settings.noteTabsSame = data.noteTabsSame;
+        if (typeof data.lastNoteTab === "string") STATE.settings.lastNoteTab = cleanLastNoteTab(data.lastNoteTab, STATE.settings.noteTabsSame === false ? (STATE.settings.noteTabs || []) : (STATE.settings.feedTabs || []));
         if (data.notify === true && typeof Notification !== "undefined" && Notification.permission === "granted") STATE.settings.notify = true;
         STATE.settings.initialized = true;
         saveSettings();
@@ -14017,6 +14153,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       avatar: httpsUrl(post.avatar),
       image: postImageUrl(post),
       hash: statusHash(post),
+      verified: !!(post.verifiedType && post.verifiedType !== "none"),
+      mention: noteIsMention({ text: String(post.text || post.title || "") }),
       feedId: String(post.feedId || ((row && row.ids && row.ids[0]) || "")),
       platform: post.platform || "x",
       ids: (row && row.ids) || [],

@@ -463,6 +463,8 @@
       reposts: settings.reposts || {},
       savedPosts: settings.savedPosts || {},
       feedTabs: settings.feedTabs || [],
+      noteTabs: settings.noteTabs || [],
+      lastNoteTab: settings.lastNoteTab || "all",
       mutedWords: settings.mutedWords || [],
       mutedAccounts: settings.mutedAccounts || [],
       repostOff: settings.repostOff || [],
@@ -483,6 +485,7 @@
       historyCut: settings.historyCut || { video: 0, article: 0 },
       lang: readLang()
     };
+    if (settings.noteTabsSame === true || settings.noteTabsSame === false) snap.noteTabsSame = settings.noteTabsSame !== false;
     var live = window.ViktorychAccounts && window.ViktorychAccounts.readHistory && window.ViktorychAccounts.readHistory();
     if (live) {
       snap.history = live.history || [];
@@ -579,6 +582,9 @@
       reposts: unionObjects(local.reposts, remote.reposts),
       savedPosts: unionObjects(local.savedPosts, remote.savedPosts),
       feedTabs: unionById(local.feedTabs, remote.feedTabs),
+      noteTabs: unionById(local.noteTabs, remote.noteTabs),
+      noteTabsSame: local.noteTabsSame === true || local.noteTabsSame === false ? local.noteTabsSame !== false : remote.noteTabsSame !== false,
+      lastNoteTab: local.lastNoteTab || remote.lastNoteTab || "all",
       mutedWords: uniq([].concat(local.mutedWords || [], remote.mutedWords || [])),
       mutedAccounts: uniq([].concat(local.mutedAccounts || [], remote.mutedAccounts || [])),
       repostOff: uniq([].concat(local.repostOff || [], remote.repostOff || [])),
