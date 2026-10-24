@@ -421,11 +421,13 @@ async function cacheBookmark(urls) {
   await trimMedia(cache);
 }
 
+idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
 self.addEventListener("message", (event) => {
   const data = event.data || {};
   if (data.type === "auth") {
     accountsAuthed = !!data.on;
     playToken = data.on && typeof data.token === "string" ? data.token : "";
+    event.waitUntil(idb().then((db) => idbSet(db, "auth-state", { on: accountsAuthed, token: playToken })).catch(() => {}));
     if (event.ports && event.ports[0]) {
       try { event.ports[0].postMessage({ ok: !!playToken }); } catch (err) { /* the page already continued */ }
     }
@@ -478,12 +480,15 @@ self.addEventListener("fetch", (event) => {
   if (isGameHost(url)) return;
   if (isTikTokCdn(url)) return;
   if (isArchiveStore(url)) return;
+  const bearer = (request.headers.get("Authorization") || "").match(/^Bearer\s+(\S+)$/i);
+  if (bearer && (/\/v1\//.test(url.pathname) || /\/tg\//.test(url.pathname))) { accountsAuthed = true; playToken = bearer[1]; }
   if (isOwnerPlay(url) || isAccountMedia(url) || isOwnedTelegram(url)) {
     event.respondWith((async () => {
       const headers = new Headers();
       const incoming = request.headers.get("Authorization") || "";
       const match = incoming.match(/^Bearer\s+(\S+)$/i);
-      if (match) { playToken = match[1]; headers.set("Authorization", "Bearer " + playToken); }
+      if (!match && !playToken) { try { const saved = await idbGet(await idb(), "auth-state"); if (saved && saved.token) { accountsAuthed = !!saved.on; playToken = String(saved.token); } } catch (err) { /* ignore */ } }
+      if (match) { accountsAuthed = true; playToken = match[1]; headers.set("Authorization", "Bearer " + playToken); }
       else if (playToken) headers.set("Authorization", "Bearer " + playToken);
       else if (/^Bearer\s+\S+/i.test(incoming)) headers.set("Authorization", incoming);
       const origin = request.headers.get("origin");

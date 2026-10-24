@@ -108,10 +108,10 @@ function mediaIndex(post, media) {
   return found >= 0 ? found : 0;
 }
 
-function socialFileKey(post, media) {
+function socialFileKey(post, media, idx) {
   const platform = String((post && post.platform) || "").toLowerCase();
   const type = String((media && media.type) || "").toLowerCase();
-  const index = mediaIndex(post, media);
+  const index = typeof idx === "number" && idx >= 0 ? idx : mediaIndex(post, media);
   if (platform === "youtube") {
     if (type === "photo" || type === "image") return socialObjectKey(post, "photo", index);
     return "";
@@ -125,10 +125,10 @@ function socialFileKey(post, media) {
   return "";
 }
 
-function socialStillKey(post, media) {
+function socialStillKey(post, media, idx) {
   const platform = String((post && post.platform) || "").toLowerCase();
   const type = String((media && media.type) || "").toLowerCase();
-  const index = mediaIndex(post, media);
+  const index = typeof idx === "number" && idx >= 0 ? idx : mediaIndex(post, media);
   if (platform === "youtube") return socialObjectKey(post, type === "photo" || type === "image" ? "photo" : "thumb", index);
   if (platform === "tiktok") {
     if (type === "photo" || type === "image") return socialObjectKey(post, "photo", index);

@@ -1486,6 +1486,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function rememberOpened(post) {
+    if (post && post.stub) return;
     const slim = slimPost(post);
     if (!slim || !slim.id) return;
     slim.kind = post.kind || "post";
@@ -1533,7 +1534,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function findPost(platform, handle, id) {
     const shared = STATE.shared[String(id)];
     if (shared) return shared;
-    const h = (handle || "").toLowerCase();
+    const h = handle && handle !== "_" ? handle.toLowerCase() : "";
     const all = posts();
     const direct = all.find((p) => (p.platform === platform) && String(p.statusId || p.id) === String(id) && (!h || (p.handle || "").toLowerCase() === h))
       || all.find((p) => String(p.id) === String(id) || String(p.statusId) === String(id));
@@ -2003,9 +2004,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const stored = r2ObjectKey(first);
     const stills = stillCandidates(post, media);
     const tgKey = stills[0] || stored;
-    const lead = tgKey && accountToken() && !mirrorKey(stored || "");
-    const tg = lead ? tgLead(tgKey, stills.slice(1), first) : "";
-    const src = lead && stored ? "" : ` src="${esc(first)}"`;
+    const lead = tgKey && accountToken() && (stored ? !mirrorKey(stored) : (!first || oePast(first) || (post && post.platform === "tiktok")));
+    const tg = tgKey ? (lead ? tgLead(tgKey, stills.slice(1), first) : ` data-tg="${esc(tgKey)}"${stills.slice(1).length ? ` data-tg-alts="${esc(stills.slice(1).join(","))}"` : ""}`) : "";
+    const src = lead ? "" : ` src="${esc(first)}"`;
     return `<img class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
   }
 
@@ -2181,7 +2182,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const stored = r2ObjectKey(src);
       const stills = stillCandidates(post, m);
       const tgKey = stills[0] || stored;
-      const lead = tgKey && accountToken() && !mirrorKey(stored || "");
+      const lead = tgKey && accountToken() && (stored ? !mirrorKey(stored) : (!src || oePast(src) || (post && post.platform === "tiktok")));
       const sourceUrl = m.fallback && !r2ObjectKey(m.fallback) ? m.fallback : "";
       const altAttr = stills.slice(1).length ? ` data-tg-alts="${esc(stills.slice(1).join(","))}"` : "";
       const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"${altAttr}${lead ? ' data-tg-first="1" data-fallback-src="' + esc(src) + '"' : ""}` : "";
@@ -2529,8 +2530,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function pushTelegram(out, key) {
     const telegram = tgMediaUrl(key);
     if (!telegram) return;
-    pushSource(out, { kind: "hls", url: telegram + "/index.m3u8", telegram: true });
+    if (/\.m3u8$/i.test(String(key || ""))) { pushSource(out, { kind: "hls", url: telegram, telegram: true }); return; }
     pushSource(out, { kind: "tg", url: telegram, telegram: true });
+    pushSource(out, { kind: "hls", url: telegram + "/index.m3u8", telegram: true });
+
+
   }
 
   window.ViktorychSocial = { key: socialObjectKey, fileKey: socialFileKey, stillKey: socialStillKey };
@@ -2729,16 +2733,26 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
   }
 
+  function hasDecodedFrames(video) {
+    if (!video || !(video.videoWidth > 0 && video.videoHeight > 0)) return false;
+    if (typeof video.getVideoPlaybackQuality === "function") {
+      const q = video.getVideoPlaybackQuality();
+      if (q && typeof q.totalVideoFrames === "number") return q.totalVideoFrames > 0 && q.totalVideoFrames > (q.corruptedVideoFrames || 0);
+    }
+    if (typeof video.webkitDecodedFrameCount === "number") return video.webkitDecodedFrameCount > 0;
+    return video.currentTime > 0.05;
+  }
+
   function armStall(el, video, gen, fail, wait) {
     if (el._stall) clearTimeout(el._stall);
     const started = video.currentTime;
     el._stall = setTimeout(() => {
       if (el._gen !== gen) return;
-      if (video.currentTime > started + 0.2 && video.videoWidth > 0) return;
+      if (video.currentTime > started + 0.2 && (el._framed || hasDecodedFrames(video))) return;
       fail();
-    }, wait || 5000);
+    }, wait || 3500);
     const clear = () => {
-      if (video.currentTime > 0.2 && video.videoWidth > 0 && el._stall) { clearTimeout(el._stall); el._stall = 0; }
+      if (video.currentTime > 0.2 && (el._framed || hasDecodedFrames(video)) && el._stall) { clearTimeout(el._stall); el._stall = 0; }
     };
     video.addEventListener("timeupdate", clear);
     video.addEventListener("playing", clear);
@@ -2824,10 +2838,17 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       el._src += 1;
       advance();
     };
+    el._framed = false;
+    if (typeof video.requestVideoFrameCallback === "function") {
+      video.requestVideoFrameCallback(() => {
+        if (el._gen !== gen || el._src !== token) return;
+        if (video.videoWidth > 0 && video.videoHeight > 0) { el._framed = true; markShown(el); }
+      });
+    }
     video.addEventListener("error", fail);
     video.addEventListener("playing", () => {
       if (el._gen !== gen) return;
-      if (video.videoWidth > 0 && (video.currentTime > 0 || video.readyState >= 2)) markShown(el);
+      if ((el._framed || hasDecodedFrames(video)) && video.currentTime > 0.02) markShown(el);
     });
     video.addEventListener("loadedmetadata", () => {
       if (el._gen !== gen || !opts.preview) return;
@@ -2835,7 +2856,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
     video.addEventListener("loadeddata", () => {
       if (el._gen !== gen) return;
-      if (video.videoWidth > 0) markShown(el);
+      if (el._framed || hasDecodedFrames(video)) markShown(el);
       const img = el.querySelector(".vposter.face, .yt-thumb img.face");
       if (!img || !video.videoWidth) return;
       try {
@@ -2854,8 +2875,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
     video.addEventListener("timeupdate", () => {
       if (el._gen !== gen) return;
-      if (video.videoWidth > 0 && video.currentTime > 0) markShown(el);
-      else if (video.currentTime > 0.8 && video.videoWidth === 0) { fail(); return; }
+      if ((el._framed || hasDecodedFrames(video)) && video.currentTime > 0.02) markShown(el);
+      else if (video.currentTime > 0.5 && !el._framed && !hasDecodedFrames(video)) { fail(); return; }
       if (!isFinite(video.duration) || video.duration <= 0) return;
       const label = clock(Math.max(0, Math.ceil(video.duration - video.currentTime)));
       const left = el.querySelector(".vleft");
@@ -2950,7 +2971,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ready.then((Hls) => {
         if (el._gen !== gen || el._src !== token) return;
         if (!Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
-        const hlsOpts = hlsAhead();
+        const hlsOpts = hlsAhead(telegram ? { manifestLoadingMaxRetry: 0, levelLoadingMaxRetry: 0, fragLoadingMaxRetry: 0 } : null);
         if (telegram) {
           hlsOpts.xhrSetup = (xhr, url) => {
             try {
@@ -2964,7 +2985,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         el._hls = hls;
         const wait = setTimeout(() => fail(), 5000);
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data && (data.fatal || /Codec|Incompatible/i.test(String(data.details || "")))) { clearTimeout(wait); fail(); }
+          if (data && (data.fatal || /Codec|Incompatible|manifestLoad|fragLoad/i.test(String(data.details || "")) || (data.response && Number(data.response.code) >= 400))) { clearTimeout(wait); fail(); }
         });
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (el._gen !== gen || el._src !== token) return;
@@ -3391,7 +3412,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     el.dataset.want = "1";
     const pending = video.play();
     if (pending && pending.then) {
-      pending.then(() => { if (!video.paused) { if (video.videoWidth > 0) markShown(el); notePlay(el, "play-started"); } }).catch((err) => {
+      pending.then(() => { if (!video.paused) { if (el._framed || hasDecodedFrames(video)) markShown(el); notePlay(el, "play-started"); } }).catch((err) => {
         const name = err && err.name ? err.name : "play-error";
         notePlay(el, name === "NotAllowedError" ? "play-blocked:" + name : "play-rejected:" + name);
         if (name === "NotAllowedError") return;
@@ -4222,7 +4243,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return String(conv || "");
   }
 
-  function fxFromStatus(status) {
+  function fxFromStatus(status, depth) {
     if (!status || typeof status !== "object") return null;
     const wrapped = status.tweet && typeof status.tweet === "object" ? status.tweet : status;
     if (fxUnavailable(wrapped)) return null;
@@ -4243,7 +4264,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       handle: handle,
       avatar: upgradeAvatar(author.avatar_url || ""),
       verifiedType: fxVerified(author),
-      text: String(wrapped.text || wrapped.full_text || "").trim(),
+      text: String(wrapped.text || wrapped.full_text || "").replace(/\s*https?:\/\/t\.co\/[A-Za-z0-9]+/g, "").trim(),
       date: isoDate(wrapped.created_at || wrapped.created_timestamp || wrapped.date || ""),
       url: wrapped.url || (handle ? "https://x.com/" + handle + "/status/" + statusId : ""),
       media: fxMedia(wrapped.media),
@@ -4258,6 +4279,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (conv) post.conversationId = conv;
     const parentStatus = (wrapped.replying_to && (wrapped.replying_to.status || wrapped.replying_to.status_id)) || wrapped.replying_to_status || wrapped.in_reply_to_status_id;
     if (replying && parentStatus) post.replyingTo = Object.assign({}, replying, { id: String(parentStatus) });
+    if (!depth && wrapped.quote && typeof wrapped.quote === "object") { const quoted = fxFromStatus(wrapped.quote, 1); if (quoted) { post.quoted = quoted; if (post.kind === "post") post.kind = "quote"; } }
     return post;
   }
 
@@ -4458,7 +4480,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function fxStatusPost(id) {
     const key = String(id || "");
     if (!key) return Promise.resolve(null);
-    return once("fxstatus:" + key, () => cacheGet("fx:status:" + key, COMMENT_TTL).then((hit) => {
+    return once("fxstatus:" + key, () => cacheGet("fx:status:" + key, COMMENT_TTL).then((hit) => { if (hit && needsXHydrate(hit)) hit = null;
       if (hit) return hit;
       return fetchJson(FX + "/2/status/" + encodeURIComponent(key)).then((data) => {
         const status = fxStatusObject(data);
@@ -5362,6 +5384,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }).catch(() => null);
   }
 
+  function needsXHydrate(post) {
+    if (!post || post.tombstone || (post.platform || "x") !== "x") return false;
+    if (post.stub) return true;
+    if ((post.media && post.media.length) || post.quoted || post.article) return false;
+    return /https?:\/\/t\.co\/[A-Za-z0-9]+/.test(String(post.text || ""));
+  }
+
   function applyHydrated(key, value, stub) {
     if (!value) return;
     if (value.tombstone) {
@@ -5373,7 +5402,17 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       HYDRATED[key] = Object.assign({}, stub, { tombstone: true, text: "", media: [], stub: false });
       return;
     }
-    HYDRATED[key] = Object.assign({}, value, {
+    const merged = Object.assign({}, stub, value, {
+      id: stub.id || value.id,
+      statusId: stub.statusId || value.statusId || value.id,
+      stub: false,
+      feedId: stub.feedId || value.feedId || "",
+      platform: stub.platform || value.platform,
+      repostedBy: stub.repostedBy || value.repostedBy,
+      sortDate: stub.sortDate || value.sortDate
+    });
+    HYDRATED[key] = merged;
+    if (stub && typeof stub === "object") Object.assign(stub, merged, {
       stub: false,
       feedId: stub.feedId || value.feedId || "",
       platform: stub.platform || value.platform
@@ -5382,8 +5421,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function hydrateKey(key) {
     if (!key || HYDRATED[key] || HYDRATE_FLIGHT[key] || HYDRATE_MISS[key]) return;
-    const stub = ARCHIVE.posts.find((item) => postIdentity(item) === key);
-    if (!stub || !stub.stub) return;
+    const stub = ARCHIVE.posts.find((item) => postIdentity(item) === key)
+      || posts().find((item) => postIdentity(item) === key && (item.stub || needsXHydrate(item)))
+      || Object.values(STATE.shared || {}).find((item) => item && postIdentity(item) === key && (item.stub || needsXHydrate(item)));
+    if (!stub || (!stub.stub && !needsXHydrate(stub))) return;
+
     if (stub.platform === "instagram" || stub.platform === "threads" || stub.platform === "rss" || stub.platform === "discord") {
       const saved = archivedFromManifest(stub);
       if (saved) {
@@ -5395,8 +5437,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     HYDRATE_FLIGHT[key] = true;
     archiveCacheGet(key).then((cached) => {
-      if (cached) return cached;
-      const pending = stub.platform === "x" ? hydrateX(stub.id) : stub.platform === "youtube" ? hydrateYt(stub) : Promise.resolve(null);
+      if (cached && !needsXHydrate(cached)) return cached;
+      const sid = String(stub.statusId || stub.id || "").replace(/^repost:[^:]+:/, "");
+      const pending = (stub.platform || "x") === "x" ? hydrateX(sid) : stub.platform === "youtube" ? hydrateYt(stub) : Promise.resolve(null);
       return pending.then((value) => {
         if (!value) return null;
         return archiveCacheSet(key, value).then(() => value);
@@ -5750,7 +5793,7 @@ const here = parseRoute();
     const nestedDiscord = post.platform === "discord" && Array.isArray(post.replies) && post.replies.length;
     const threadLink = mode !== "status" && mode !== "reply" && (threadChildren(post).length || nestedDiscord)
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
-    const hydrate = post.stub ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
+    const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
       ${context}
       ${repost}
@@ -6508,7 +6551,7 @@ const here = parseRoute();
       const rt = title.match(/^RT by @([A-Za-z0-9_]{1,30})\s*:/i);
       const holder = document.createElement("div");
       holder.innerHTML = desc;
-      const text = (holder.textContent || "").replace(/\s+/g, " ").trim();
+      const text = (holder.textContent || "").replace(/\s*https?:\/\/t\.co\/[A-Za-z0-9]+/g, "").replace(/\s+/g, " ").trim();
       const media = [];
       holder.querySelectorAll("img").forEach((img) => {
         const src = img.getAttribute("src") || "";
@@ -6744,7 +6787,7 @@ const here = parseRoute();
   }
 
   function loadXLive(row, handle) {
-    return Promise.all([fxHeader(handle), nitterPosts(handle)]).then((pair) => {
+    return Promise.all([fxHeader(handle), LIVE.fxDown ? nitterPosts(handle) : Promise.resolve(null)]).then((pair) => {
       const header = pair[0];
       const nitter = pair[1];
       const postsJob = nitter && nitter.length
@@ -7459,6 +7502,7 @@ const here = parseRoute();
     if (post && post.tombstone) {
       return `<div class="topbar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${tr("Back")}">${icon("back")}</button><h1 class="grow">${tr("Post noun")}</h1></div></div>` + tombstoneCard(post);
     }
+    if (post && (post.stub || needsXHydrate(post))) hydrateKey(postIdentity(post));
     if (post) {
       creditCarried(post);
       rememberOpened(post);
@@ -10852,7 +10896,8 @@ if (STATE.histClear) {
     STATE.chain[key] = { loading: true, post: null, missing: false };
     const live = /^\d{8,}$/.test(key) ? fxStatusPost(key) : Promise.resolve(null);
     live.then((post) => {
-      if (post) {
+      if (post && (post.stub || needsXHydrate(post))) hydrateKey(postIdentity(post));
+    if (post) {
         STATE.chain[key] = { loading: false, post: post, missing: false };
         return;
       }
@@ -10974,7 +11019,8 @@ if (STATE.histClear) {
         STATE.sharedState[key] = "ok";
         return;
       }
-      if (post) {
+      if (post && (post.stub || needsXHydrate(post))) hydrateKey(postIdentity(post));
+    if (post) {
         STATE.shared[key] = post;
         STATE.sharedState[key] = "ok";
         return;
@@ -11048,6 +11094,7 @@ if (STATE.histClear) {
     if (route.name === "drive" && window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
     if (route.name === "games") return (window.ViktorychGames && window.ViktorychGames.page(route)) || pageHead(tr("Games")) + emptyBlock(tr("Games"), tr("Reload the page."));
     if (route.name === "communities") return (window.ViktorychCommunities && window.ViktorychCommunities.page(route)) || pageHead(tr("Communities")) + emptyBlock(tr("Communities"), tr("Reload the page."));
+    if (route.name === "status" && route.id && STATE.shared && STATE.shared[String(route.id)]) return statusView(route);
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
@@ -12892,21 +12939,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     // Shorts and the feed player choose their own video sources. A poster image can still fall through.
     if (img.tagName === "VIDEO" && (img.closest(".shorts-slide") || img.closest(".vplay"))) return;
     if (img.tagName === "IMG" && img.dataset.fallback !== "avatar" && img.dataset.tgTried !== "1") {
-      const key = img.dataset.tg || r2ObjectKey(img.getAttribute("src") || "");
-      const url = tgMediaUrl(key);
+      const keys = [img.dataset.tg || r2ObjectKey(img.getAttribute("src") || "")].concat(String(img.dataset.tgAlts || "").split(",")).map((k) => k.trim()).filter((k, idx, arr) => k && arr.indexOf(k) === idx);
       const auth = accountToken();
-      if (url && auth) {
+      if (keys.length && auth && tgMediaUrl(keys[0])) {
         img.dataset.tgTried = "1";
-        fetch(url, { headers: { Authorization: "Bearer " + auth } }).then((res) => {
-          if (!res.ok) throw new Error(String(res.status));
-          return res.blob();
-        }).then((blob) => {
-          if (img.isConnected) { const u = URL.createObjectURL(blob); img.src = u; const v = img.classList.contains("vposter") && !img.classList.contains("face") && img.parentElement && img.parentElement.querySelector("video"); if (v) v.poster = u; }
-        }).catch(() => {
-          if (img.isConnected) finishTelegramImage(img);
-        });
+        const tryKey = (idx) => {
+          if (idx >= keys.length) { if (img.isConnected) finishTelegramImage(img); return; }
+          const u = tgMediaUrl(keys[idx]);
+          if (!u) { tryKey(idx + 1); return; }
+          fetch(u, { headers: { Authorization: "Bearer " + auth } }).then((res) => {
+            if (!res.ok) throw new Error(String(res.status));
+            return res.blob();
+          }).then((blob) => {
+            if (img.isConnected) { const b = URL.createObjectURL(blob); img.src = b; const v = img.classList.contains("vposter") && !img.classList.contains("face") && img.parentElement && img.parentElement.querySelector("video"); if (v) v.poster = b; }
+          }).catch(() => tryKey(idx + 1));
+        };
+        tryKey(0);
         return;
       }
+
     }
     finishTelegramImage(img);
   }, true);
@@ -13162,7 +13213,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function slimPost(post) {
     if (!post) return null;
-    const media = (post.media || []).slice(0, 4).map((item) => ({ type: item.type, url: item.url || "", poster: item.poster || "", alt: item.alt || "" }));
+    const media = (post.media || []).slice(0, 4).map((item) => {
+      const m = { type: item.type, url: item.url || "", poster: item.poster || "", alt: item.alt || "" };
+      if (item.width) m.width = item.width;
+      if (item.height) m.height = item.height;
+      if (item.duration) m.duration = item.duration;
+      if (Array.isArray(item.variants) && item.variants.length) m.variants = item.variants;
+      if (item.hls) m.hls = item.hls;
+      return m;
+    });
     const row = {
       id: post.id,
       statusId: post.statusId || post.id,
@@ -13181,6 +13240,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     };
     const article = slimArticle(post.article);
     if (article) row.article = article;
+    if (post.quoted) row.quoted = slimPost(post.quoted);
     if (post.link && post.link.url) row.link = { url: post.link.url, title: post.link.title || "", description: post.link.description || "", image: post.link.image || "", site: post.link.site || "" };
     return row;
   }
@@ -13524,9 +13584,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function liveX(feed) {
     const handle = feed.handle;
     if (!handle || LIVE.fxDown) return nitterPosts(handle || "").then((rows) => rows || []);
-    return nitterPosts(handle).then((rows) => {
-      if (rows && rows.length) return rows;
-      return fxTimeline(handle, "home", "").then((pack) => (pack && pack.posts) || []);
+    return fxTimeline(handle, "home", "").then((pack) => {
+      const rows = (pack && pack.posts) || [];
+      if (rows.length) return rows;
+      return nitterPosts(handle).then((fallback) => fallback || []);
     }).then((rows) => {
       (rows || []).forEach((post) => {
         post.feedId = feed.id;
@@ -13879,7 +13940,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const stills = stillCandidates(post || {}, media);
         const posterKey = stills[0] || "";
         const href = originalOf(post || {}, media);
-        const lead = posterKey && accountToken();
+        const lead = posterKey && accountToken() && (!poster || r2ObjectKey(poster) || oePast(poster) || (post && post.platform === "tiktok"));
         const img = poster || posterKey
           ? `<img alt="" referrerpolicy="no-referrer"${lead ? tgLead(posterKey, stills.slice(1), poster) : ` src="${esc(poster)}"`}>`
           : "";
@@ -13942,9 +14003,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const stored = r2ObjectKey(direct);
     const stills = stillCandidates(post, item);
     const tgKey = stills[0] || socialStillKey(post, item) || stored;
-    const lead = tgKey && accountToken() && !mirrorKey(stored || "");
+    const first = direct;
+    const lead = tgKey && accountToken() && (stored ? !mirrorKey(stored) : (!first || oePast(first) || (post && post.platform === "tiktok")));
     box.hidden = false;
-    box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button><img id="viewer-img" alt="${esc(item.alt || "")}"${lead ? "" : ` src="${esc(direct)}"`}${lead ? tgLead(tgKey, stills.slice(1), direct) : ""} referrerpolicy="no-referrer" decoding="async" draggable="false"><div class="viewer-count">${photos.length > 1 ? (view.index + 1) + " / " + photos.length : ""}</div>`;
+    box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button><img id="viewer-img" alt="${esc(item.alt || "")}"${lead ? "" : ` src="${esc(direct)}"`}${tgKey ? (lead ? tgLead(tgKey, stills.slice(1), direct) : ` data-tg="${esc(tgKey)}"${stills.slice(1).length ? ` data-tg-alts="${esc(stills.slice(1).join(","))}"` : ""}`) : ""} referrerpolicy="no-referrer" decoding="async" draggable="false"><div class="viewer-count">${photos.length > 1 ? (view.index + 1) + " / " + photos.length : ""}</div>`;
     const img = document.getElementById("viewer-img");
     if (img) img.style.transform = "translate3d(0,0,0) scale(1)";
     primeTelegramImages(box);
@@ -14691,6 +14753,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       render();
     }
     flushBookmarkQueue();
+    const initRoute = parseRoute();
+    if (initRoute.name === "status" && initRoute.id && !findPost(initRoute.platform, initRoute.handle, initRoute.id)) {
+      const initKey = String(initRoute.id);
+      if (!STATE.sharedState[initKey]) {
+        STATE.sharedState[initKey] = "loading";
+        loadSharedStatus(initRoute);
+      }
+    }
     const params = new URLSearchParams(location.search);
     try {
       if (params.get("error") === "1") throw new Error("forced");
