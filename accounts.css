@@ -543,6 +543,58 @@ html[data-theme="default"] .acct-field { border-color: #cfd9de; }
   line-height: 20px;
 }
 .acct-loc a { color: #1d9bf0; }
+
+.acct-pref-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 0;
+  margin: 12px 16px 0;
+  border-top: 1px solid var(--border);
+}
+.acct-pref-text { flex: 1; min-width: 0; }
+.acct-pref-text b { display: block; font-size: 15px; color: var(--text); }
+.acct-pref-text p { margin: 4px 0 0; font-size: 13px; color: var(--sub); line-height: 17px; }
+.private-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: var(--blue-dim);
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.private-badge svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+}
+.private-connections {
+  text-align: center;
+  padding: 48px 24px;
+}
+.private-lock-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+.private-lock-icon svg {
+  width: 32px;
+  height: 32px;
+  fill: currentColor;
+}
+
 @media (max-width: 700px) {
   .x-land { flex-direction: column; align-items: stretch; justify-content: flex-start; padding-top: 28px; }
   .x-land-logo { justify-content: flex-start; padding: 0 32px; }

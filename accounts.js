@@ -232,6 +232,10 @@
   function cameraIcon() {
     return '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M9.4 6.4 8.1 8H5.5A1.5 1.5 0 0 0 4 9.5v8A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 18.5 8h-2.6l-1.3-1.6H9.4zm2.6 10.1a3.25 3.25 0 1 1 0-6.5 3.25 3.25 0 0 1 0 6.5z"/></svg>';
   }
+  function lockIcon(size) {
+    var s = size || 16;
+    return '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" aria-hidden="true"><path fill="currentColor" d="M17 9V7A5 5 0 0 0 7 7v2H5v12h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7zm8 12H7v-8h10v8z"/></svg>';
+  }
   function siteHref(value) {
     var text = String(value || "").trim();
     if (!text || /^(javascript|data|file):/i.test(text)) return "";
@@ -335,7 +339,8 @@
       '<input class="acct-hidden" name="banner" type="file" accept="image/jpeg,image/png,image/webp" tabindex="-1">';
   }
   function editBody() {
-    return editMedia() + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + '<p class="acct-error">' + esc(errorText) + "</p>";
+    var privRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Keep followers and following private")) + '</b><p>' + esc(tr("Only you can see your followers and following lists.")) + '</p></div><button class="tab-switch' + (form.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.privateFollows ? "true" : "false") + '" data-acct="toggle-form-private"><i></i></button></div>';
+    return editMedia() + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + privRow + '<p class="acct-error">' + esc(errorText) + "</p>";
   }
   function editModal(body) {
     return '<div class="acct-back"><div class="acct-modal acct-edit" role="dialog" aria-modal="true" aria-label="' + esc(tr("Edit profile")) + '"><div class="acct-head acct-edit-head"><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button><h1>' + esc(tr("Edit profile")) + '</h1><button class="acct-save" type="button" data-acct="save-profile">' + esc(tr("Save")) + '</button></div><div class="acct-body acct-edit-body">' + body + "</div></div></div>";
@@ -391,6 +396,7 @@
       form.banner = account.banner || "";
       form.avatarEmpty = account.avatarEmpty === "none" ? "none" : "default";
       form.bannerEmpty = account.bannerEmpty === "none" ? "none" : "default";
+      form.privateFollows = !!account.privateFollows;
       form.avatarTouched = false;
       form.bannerTouched = false;
       form.mediaMenu = "";
@@ -619,6 +625,10 @@
     if (window.ViktorychAccounts && window.ViktorychAccounts.writeHistory) window.ViktorychAccounts.writeHistory(payload);
     if (payload && (payload.lang === "en" || payload.lang === "ru" || payload.lang === "es")) {
       try { localStorage.setItem("superintelapp-lang", payload.lang); } catch (err) { /* the page language stays */ }
+      try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) {}
+      if (window.SI18n && typeof window.SI18n.setLang === "function" && window.SI18n.getLang() !== payload.lang) {
+        window.SI18n.setLang(payload.lang);
+      }
     }
   }
   function rememberSync(updatedAt) {
@@ -942,7 +952,8 @@
       displayName: String(form.displayName || "").trim(),
       bio: String(form.bio || ""),
       location: String(form.location || "").trim(),
-      website: String(form.website || "").trim()
+      website: String(form.website || "").trim(),
+      privateFollows: !!form.privateFollows
     };
     body.avatarEmpty = form.avatarEmpty === "none" ? "none" : "default";
     body.bannerEmpty = form.bannerEmpty === "none" ? "none" : "default";
@@ -957,6 +968,7 @@
         session.account = res.account;
         writeSession(session);
         remember(res.account);
+        dirtyLists();
         view = "";
         paint();
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -1055,7 +1067,8 @@
     return '<a href="' + esc(href) + '"><b>' + esc(formatNum(n)) + "</b> <span>" + esc(label) + "</span></a>";
   }
   function accountCountsHtml(account) {
-    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + "</div>";
+    var priv = account && account.privateFollows ? '<span class="private-badge" title="' + esc(tr("Followers and following are private")) + '" aria-label="' + esc(tr("Followers and following are private")) + '">' + lockIcon(12) + ' <span>' + esc(tr("Private")) + '</span></span>' : "";
+    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + priv + "</div>";
   }
   function followersOf(id) {
     var known = graphCounts[id];
@@ -1078,7 +1091,7 @@
     }).catch(function () { countLoads[id] = false; });
   }
   function listPack(id, tab) {
-    return listCache[id + "|" + tab] || { loading: false, accounts: null, error: false };
+    return listCache[id + "|" + tab] || { loading: false, accounts: null, error: false, isPrivate: false };
   }
   function ensureList(id, tab) {
     var session = readSession();
@@ -1096,9 +1109,10 @@
         }
         return;
       }
-      if (!res || res.status !== 200) listCache[key] = { loading: false, accounts: [], error: true };
+      if (!res || res.status !== 200) listCache[key] = { loading: false, accounts: [], error: true, isPrivate: false };
       else {
-        listCache[key] = { loading: false, accounts: Array.isArray(res.accounts) ? res.accounts : [], error: false };
+        var isPriv = !!res.isPrivate;
+        listCache[key] = { loading: false, accounts: Array.isArray(res.accounts) ? res.accounts : [], error: false, isPrivate: isPriv };
         graphCounts[id] = graphCounts[id] || {};
         if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
         if (res.followingCount != null) graphCounts[id].following = res.followingCount;
@@ -1372,7 +1386,7 @@
       loadBackupChannels();
       health = healthHtml() + channelsHtml();
     }
-    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
+    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
   }
   function onClick(event) {
     var acct = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;
@@ -1421,6 +1435,8 @@
     }
     else if (act === "banner-clear") { form.banner = ""; form.bannerTouched = true; form.bannerEmpty = "default"; form.mediaMenu = ""; paint(); }
     else if (act === "avatar-clear") { form.avatar = ""; form.avatarTouched = true; form.avatarEmpty = "default"; form.mediaMenu = ""; paint(); }
+    else if (act === "toggle-form-private") { form.privateFollows = !form.privateFollows; paint(); }
+    else if (act === "toggle-private-follows") { var s = readSession(); if (s && s.account) setPrivateFollows(!s.account.privateFollows); }
     else if (act === "hide-avatar") hideAvatar(acct.dataset.mode || "");
     else if (act === "crop-apply") applyCrop();
     else if (act === "logout") logout(false);
@@ -1430,6 +1446,19 @@
     else if (act === "legal") { legalTitle = acct.dataset.title || tr("About"); view = "legal"; paint(); }
   }
   var cropDrag = null;
+  function setPrivateFollows(val) {
+    var session = readSession();
+    if (!session) return;
+    var next = !!val;
+    api("/v1/profile", { method: "PATCH", token: session.token, body: { privateFollows: next } }).then(function (res) {
+      if (!res || res.status !== 200 || !res.account) return;
+      session.account = res.account;
+      writeSession(session);
+      remember(res.account);
+      dirtyLists();
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
   function hideAvatar(mode) {
     var session = readSession();
     if (!session) return;
@@ -1577,6 +1606,7 @@
     listPack: listPack,
     followersOf: followersOf,
     subjectForHandle: subjectForHandle,
+    setPrivateFollows: setPrivateFollows,
     account: function () {
       var session = readSession();
       return session && session.account ? session.account : null;

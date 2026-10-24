@@ -2977,19 +2977,28 @@ async function handleFollowGet(request, env, url) {
     account = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(subject.slice(4)).first();
     if (!account) return json(404, { error: "not_found" });
   }
+  const isOwner = !!(account && gate.row.public_id === account.public_id);
+  const isPrivate = !!(account && account.private_follows === 1);
   const body = {
     id: subject,
     kind: account ? "account" : "feed",
     followersCount: await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", subject),
     viewerFollows: subject !== "app:" + gate.row.public_id && await followExists(env, gate.row.public_id, subject)
   };
-  if (account) body.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", account.public_id);
+  if (account) {
+    body.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", account.public_id);
+    body.isPrivate = isPrivate;
+  }
   if (!tab && subject === "app:" + gate.row.public_id) {
     const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC LIMIT 500").bind(gate.row.public_id).all();
     body.ids = ((listed && listed.results) || []).map((row) => row.target_id);
     return json(200, body);
   }
   if (!tab) return json(200, body);
+  if (!isOwner && isPrivate) {
+    body.accounts = [];
+    return json(200, body);
+  }
   if (tab === "followers") {
     const listed = await env.DB.prepare("SELECT follower_id FROM account_follows WHERE target_id = ? ORDER BY created_at DESC LIMIT 200").bind(subject).all();
     body.accounts = await followCards(env, request, ((listed && listed.results) || []).map((row) => row.follower_id));

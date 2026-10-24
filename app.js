@@ -92,6 +92,7 @@
     heartOn: "M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z",
     views: "M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10h2L6 21H4zm9.248 0v-7h2v7h-2z",
     share: "M12 2.59l5.7 5.7-1.41 1.42L13 6.41V16h-2V6.41l-3.3 3.3-1.41-1.42L12 2.59zM21 15l-.02 3.51c0 1.38-1.12 2.49-2.5 2.49H5.5C4.11 21 3 19.88 3 18.5V15h2v3.5c0 .28.22.5.5.5h12.98c.28 0 .5-.22.5-.5L19 15h2z",
+    lock: "M17 9V7A5 5 0 0 0 7 7v2H5v12h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7zm8 12H7v-8h10v8z",
     check: "M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.222 1.261.27 1.894.139.634-.13 1.22-.435 1.689-.882.445-.47.749-1.055.878-1.688.132-.633.084-1.29-.139-1.896.586-.274 1.084-.705 1.438-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z",
     back: "M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z",
     close: "M10.59 12 4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z",
@@ -191,6 +192,7 @@
   if (window.SIntelMusic && window.SIntelMusic.install) window.SIntelMusic.install(PATH);
   const LINE = {
     clock: `<circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l2.8 1.7"/>`,
+    lock: `<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>`,
     rocket: `<path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>`,
     posts: `<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>`,
     repost: `<path d="m17 2 4 4-4 4"/><path d="M3 11V10a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>`,
@@ -2385,6 +2387,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           try { sessionStorage.setItem("viktorychapp-is-ru", data.isRu ? "1" : "0"); } catch (err) {}
           if (navigator.serviceWorker && navigator.serviceWorker.controller) {
             navigator.serviceWorker.controller.postMessage({ type: "ru_mode", on: data.isRu });
+          }
+          if (data.isRu) {
+            var userPicked = localStorage.getItem("viktorychapp-lang-user-picked") === "1";
+            var hasSession = !!accountToken() || !!localStorage.getItem("viktorychapp-accounts-session-v1");
+            if (!userPicked && !hasSession && window.SI18n && window.SI18n.getLang() !== "ru") {
+              window.SI18n.setLang("ru");
+            }
           }
         }
       })
@@ -7508,6 +7517,14 @@ const here = parseRoute();
     const pack = window.ViktorychAccounts.listPack(subject.id, tab);
     if (pack.loading && !pack.accounts) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
     if (pack.error) return head + tabs + emptyBlock(tr("Followers"), tr("Couldn’t load this list."));
+    if (pack.isPrivate) {
+      const handleName = subject.handle || name;
+      return head + tabs + `<div class="empty private-connections">
+        <div class="empty-icon private-lock-icon">${icon("lock")}</div>
+        <h2>${esc(tr("These lists are private"))}</h2>
+        <p>${esc(tr("Only @{handle} can see who they follow and who follows them.", { handle: handleName }))}</p>
+      </div>`;
+    }
     const rows = (pack.accounts || []).map(connectRow).join("");
     if (!rows) {
       const title = tab === "followers" ? tr("No followers yet") : tr("Not following anyone yet");
@@ -9673,7 +9690,12 @@ const here = parseRoute();
       </div>`;
     }
     if (section === "privacy") {
+      const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+      const privSection = acct ? `<h2>${esc(tr("Private followers and following"))}</h2>
+        <p class="phandle">${esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you."))}</p>
+        <button class="tab-switch${acct.privateFollows ? " on" : ""}" type="button" role="switch" aria-checked="${acct.privateFollows ? "true" : "false"}" data-act="toggle-private-follows"><span>${esc(tr("Keep lists private"))}</span><i></i></button>` : "";
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
+        ${privSection}
         <h2>${esc(tr("Mute and block"))}</h2>
         <p class="phandle">${esc(tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
         <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
@@ -11666,6 +11688,7 @@ if (STATE.histClear) {
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
     if (act === "ui-lang") {
+      try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) {}
       if (window.SI18n) window.SI18n.setLang(el.dataset.lang || "en");
       return;
     }
@@ -11811,6 +11834,13 @@ if (STATE.histClear) {
       STATE.tabScope = (!noteTabsSame() && parseRoute().name === "notifications") ? "notes" : "";
       STATE.modal = "tabs";
       render();
+      return;
+    }
+    if (act === "toggle-private-follows") {
+      const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
+      if (acct && window.ViktorychAccounts.setPrivateFollows) {
+        window.ViktorychAccounts.setPrivateFollows(!acct.privateFollows);
+      }
       return;
     }
     if (act === "note-tabs-same") {
