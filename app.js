@@ -2005,7 +2005,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const tgKey = stills[0] || stored;
     const lead = tgKey && accountToken() && !mirrorKey(stored || "");
     const tg = lead ? tgLead(tgKey, stills.slice(1), first) : "";
-    const src = lead ? "" : ` src="${esc(first)}"`;
+    const src = lead && stored ? "" : ` src="${esc(first)}"`;
     return `<img class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
   }
 
@@ -2215,6 +2215,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const narrow = (window.innerWidth || 390) < 700;
     const itags = narrow ? ["18", "22"] : ["22", "18"];
     return healthyIv().then((bases) => {
+      const tgOut = [];
+      if (accountToken()) pushTelegram(tgOut, "social/youtube/" + id + "/video/0");
       const out = [];
       let chain = Promise.resolve();
       bases.slice(0, 3).forEach((base) => {
@@ -2237,7 +2239,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           });
         });
       });
-      return chain.then(() => out);
+      return chain.then(() => tgOut.concat(out));
     }).then((out) => {
       const pipedBases = PIPED_SEEDS.filter((base) => !LIVE.dead[base]).slice(0, 2);
       let chain = Promise.resolve();
@@ -2732,11 +2734,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const started = video.currentTime;
     el._stall = setTimeout(() => {
       if (el._gen !== gen) return;
-      if (video.currentTime > started + 0.2) return;
+      if (video.currentTime > started + 0.2 && video.videoWidth > 0) return;
       fail();
     }, wait || 5000);
     const clear = () => {
-      if (video.currentTime > 0.2 && el._stall) { clearTimeout(el._stall); el._stall = 0; }
+      if (video.currentTime > 0.2 && video.videoWidth > 0 && el._stall) { clearTimeout(el._stall); el._stall = 0; }
     };
     video.addEventListener("timeupdate", clear);
     video.addEventListener("playing", clear);
@@ -2812,8 +2814,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       video.setAttribute("muted", "");
     }
     const poster = el.querySelector(".vposter") || el.querySelector("img");
-    if (poster && poster.getAttribute("src") && !poster.classList.contains("face")) video.poster = poster.getAttribute("src");
-    video.preload = opts.preview ? "metadata" : "auto";
+    const posterSrc = poster ? (poster.getAttribute("src") || poster.dataset.fallbackSrc || "") : "";
+    if (poster && posterSrc && !poster.classList.contains("face")) video.poster = posterSrc;
+    if (source.kind === "tg" || source.telegram || (source.url && source.url.indexOf("/v1/owner/play") >= 0)) video.crossOrigin = "anonymous";
+    video.preload = "auto";
     const token = el._src;
     const fail = () => {
       if (el._gen !== gen || el._src !== token) return;
@@ -2823,7 +2827,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     video.addEventListener("error", fail);
     video.addEventListener("playing", () => {
       if (el._gen !== gen) return;
-      if (video.currentTime > 0 || video.videoWidth > 0) markShown(el);
+      if (video.videoWidth > 0 && (video.currentTime > 0 || video.readyState >= 2)) markShown(el);
     });
     video.addEventListener("loadedmetadata", () => {
       if (el._gen !== gen || !opts.preview) return;
@@ -2831,6 +2835,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
     video.addEventListener("loadeddata", () => {
       if (el._gen !== gen) return;
+      if (video.videoWidth > 0) markShown(el);
       const img = el.querySelector(".vposter.face, .yt-thumb img.face");
       if (!img || !video.videoWidth) return;
       try {
@@ -2849,6 +2854,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
     video.addEventListener("timeupdate", () => {
       if (el._gen !== gen) return;
+      if (video.videoWidth > 0 && video.currentTime > 0) markShown(el);
+      else if (video.currentTime > 0.8 && video.videoWidth === 0) { fail(); return; }
       if (!isFinite(video.duration) || video.duration <= 0) return;
       const label = clock(Math.max(0, Math.ceil(video.duration - video.currentTime)));
       const left = el.querySelector(".vleft");
@@ -2933,12 +2940,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     if (source.kind === "hls") {
       const telegram = !!source.telegram;
+      if (telegram && !accountToken()) { fail(); return; }
       const native = !telegram && video.canPlayType("application/vnd.apple.mpegurl");
       if (native) { video.src = source.url; start(); return; }
-      const ready = telegram ? loadTelegramHls() : loadHls();
+      const authReady = telegram && window.ViktorychAccounts && window.ViktorychAccounts.syncPlaybackAuth
+        ? window.ViktorychAccounts.syncPlaybackAuth().catch(() => {})
+        : Promise.resolve();
+      const ready = authReady.then(() => (telegram ? loadTelegramHls() : loadHls()));
       ready.then((Hls) => {
         if (el._gen !== gen || el._src !== token) return;
-        if (!Hls || !Hls.isSupported) { fail(); return; }
+        if (!Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
         const hlsOpts = hlsAhead();
         if (telegram) {
           hlsOpts.xhrSetup = (xhr, url) => {
@@ -2953,7 +2964,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         el._hls = hls;
         const wait = setTimeout(() => fail(), 5000);
         hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data && data.fatal) { clearTimeout(wait); fail(); }
+          if (data && (data.fatal || /Codec|Incompatible/i.test(String(data.details || "")))) { clearTimeout(wait); fail(); }
         });
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (el._gen !== gen || el._src !== token) return;
@@ -3034,8 +3045,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       el.dataset.want = "1";
       const gen = (el._gen || 0) + 1;
       el._gen = gen;
-      const kind = /\.m3u8(\?|$)/i.test(saved.src) ? "hls" : "mp4";
-      playSource(el, { kind: kind, url: saved.src }, post, media, { muted: saved.muted, resume: saved.time }, gen, () => {
+      const tg = saved.src.indexOf("/tg/") >= 0;
+      const kind = /\.m3u8(\?|$)/i.test(saved.src) ? "hls" : (tg ? "tg" : "mp4");
+      playSource(el, { kind: kind, url: saved.src, telegram: tg }, post, media, { muted: saved.muted, resume: saved.time }, gen, () => {
         delete el.dataset.want;
         startPlayback(el, { muted: saved.muted });
       });
@@ -3093,7 +3105,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       }).catch(() => {});
       setTimeout(() => {
         if (el._gen !== gen || el.classList.contains("is-shown")) return;
-        const file = fileOf(el._sources);
+        const file = !el.querySelector("iframe") ? fileOf(el._sources) : null;
         if (file) useFile(file);
       }, 1200);
       return;
@@ -3362,7 +3374,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function resumePreview(el) {
     const video = el.querySelector("video");
-    if (!video || video.error || !(video.currentSrc || video.src)) return false;
+    if (!video || video.error || !(video.currentSrc || video.src) || (video.readyState >= 2 && !video.videoWidth)) return false;
     const gif = !!el.querySelector(".gif-badge");
     const subs = el.dataset.preview === "subs";
     video.muted = gif || subs || !STATE.sound;
@@ -3379,7 +3391,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     el.dataset.want = "1";
     const pending = video.play();
     if (pending && pending.then) {
-      pending.then(() => { if (!video.paused) { markShown(el); notePlay(el, "play-started"); } }).catch((err) => {
+      pending.then(() => { if (!video.paused) { if (video.videoWidth > 0) markShown(el); notePlay(el, "play-started"); } }).catch((err) => {
         const name = err && err.name ? err.name : "play-error";
         notePlay(el, name === "NotAllowedError" ? "play-blocked:" + name : "play-rejected:" + name);
         if (name === "NotAllowedError") return;
@@ -4064,6 +4076,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (/(?:^|\.)tiktokcdn(?:-us|-eu)?\.com$/i.test(host)) return true;
       if (/(?:^|\.)(?:tiktokv|muscdn|bytefcdn|bytefcdn-oversea)\.com$/i.test(host)) return true;
       if (/webapp[\w.-]*\.tiktok\.com$/i.test(host)) return true;
+      if (/(?:^|\.)(?:cdninstagram\.com|fbcdn\.net)$/i.test(host) && /\/o1\/v\/t2\/|\/v\/t(?:2|16|50|66)\b/i.test(new URL(raw).pathname || "")) return true;
+      if (/(?:^|\.)video\.twimg\.com$/i.test(host)) return true;
     } catch (err) { /* not a URL */ }
     return false;
   }
@@ -5261,7 +5275,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const extra = list.filter((post) => !seen[post.id]);
     const old = document.getElementById("archive-more");
     if (old) old.remove();
-    if (extra.length) center.insertAdjacentHTML("beforeend", extra.map((post) => card(post)).join(""));
+    if (extra.length) { center.insertAdjacentHTML("beforeend", extra.map((post) => card(post)).join("")); bindPlayers(); primeTelegramImages(center); }
     const marker = archiveSentinel();
     if (marker) center.insertAdjacentHTML("beforeend", marker);
     watchHydration();
@@ -12811,7 +12825,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const give = () => {
         img.dataset.tgTried = "1";
         const fallback = img.dataset.fallbackSrc || "";
-        if (fallback) { img.src = fallback; return; }
+        if (fallback) { img.src = fallback; const v = img.classList.contains("vposter") && !img.classList.contains("face") && img.parentElement && img.parentElement.querySelector("video"); if (v) v.poster = fallback; return; }
         let urls = [];
         try { urls = JSON.parse(img.dataset.falls || "[]"); } catch (err) { urls = []; }
         if (urls[0]) img.src = urls[0];
@@ -12823,7 +12837,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           if (!res.ok) throw new Error(String(res.status));
           return res.blob();
         }).then((blob) => {
-          if (img.isConnected) img.src = URL.createObjectURL(blob);
+          if (img.isConnected) { const u = URL.createObjectURL(blob); img.src = u; const v = img.classList.contains("vposter") && !img.classList.contains("face") && img.parentElement && img.parentElement.querySelector("video"); if (v) v.poster = u; }
         }).catch(() => {
           if (!img.isConnected) return;
           if (index + 1 < keys.length) loadKey(index + 1);
@@ -12887,7 +12901,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           if (!res.ok) throw new Error(String(res.status));
           return res.blob();
         }).then((blob) => {
-          if (img.isConnected) img.src = URL.createObjectURL(blob);
+          if (img.isConnected) { const u = URL.createObjectURL(blob); img.src = u; const v = img.classList.contains("vposter") && !img.classList.contains("face") && img.parentElement && img.parentElement.querySelector("video"); if (v) v.poster = u; }
         }).catch(() => {
           if (img.isConnected) finishTelegramImage(img);
         });
@@ -13843,7 +13857,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const go = () => { seek(); video.play().catch(() => {}); };
         if (kind === "hls" && !video.canPlayType("application/vnd.apple.mpegurl")) {
           loadHls().then((Hls) => {
-            if (!STATE.viewer || !STATE.viewer.video || !Hls || !Hls.isSupported) return;
+            if (!STATE.viewer || !STATE.viewer.video || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) return;
             const hls = new Hls(hlsAhead());
             hls.loadSource(url);
             hls.attachMedia(video);
@@ -13855,7 +13869,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (video.readyState >= 1) go();
         else video.addEventListener("loadedmetadata", go, { once: true });
       };
-      if (view.src && playableFile(view.src)) {
+      if (view.src && playableFile(view.src) && view.src.indexOf("/tg/") < 0) {
         startFile(view.src, /\.m3u8(\?|$)/i.test(view.src) ? "hls" : "mp4");
         return;
       }
@@ -13880,7 +13894,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const fail = () => playAt(list, index + 1);
         if (file.telegram && file.kind === "hls") {
           loadTelegramHls().then((Hls) => {
-            if (!STATE.viewer || !STATE.viewer.video || !Hls || !Hls.isSupported) { fail(); return; }
+            if (!STATE.viewer || !STATE.viewer.video || !accountToken() || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
+            video.crossOrigin = "anonymous";
             const hls = new Hls(hlsAhead({
               xhrSetup: (xhr, url) => {
                 try {
@@ -13905,6 +13920,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             : Promise.resolve();
           ready.then(() => {
             if (!STATE.viewer || !STATE.viewer.video) return;
+            video.crossOrigin = "anonymous";
             video.src = file.url;
             video.addEventListener("error", fail, { once: true });
             seek();

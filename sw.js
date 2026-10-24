@@ -482,7 +482,9 @@ self.addEventListener("fetch", (event) => {
     event.respondWith((async () => {
       const headers = new Headers();
       const incoming = request.headers.get("Authorization") || "";
-      if (playToken) headers.set("Authorization", "Bearer " + playToken);
+      const match = incoming.match(/^Bearer\s+(\S+)$/i);
+      if (match) { playToken = match[1]; headers.set("Authorization", "Bearer " + playToken); }
+      else if (playToken) headers.set("Authorization", "Bearer " + playToken);
       else if (/^Bearer\s+\S+/i.test(incoming)) headers.set("Authorization", incoming);
       const origin = request.headers.get("origin");
       if (origin) headers.set("origin", origin);
