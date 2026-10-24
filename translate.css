@@ -96,3 +96,26 @@ html[data-theme="default"] { --tr-sheen: rgba(15, 20, 25, 0.14); }
   outline: none;
 }
 .tr-select:focus { border-bottom-color: var(--blue); }
+.tr-setting-row { margin: 8px 0 16px; }
+.tr-field { margin: 16px 0; }
+.tr-field h3 { margin: 12px 0 4px; font-size: 15px; font-weight: 700; color: var(--text); }
+.tr-label { display: block; font-weight: 700; font-size: 15px; margin-bottom: 4px; color: var(--text); }
+.tr-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+.tr-chip {
+  font-size: 13px;
+  line-height: 18px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--line);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.tr-chip:hover { border-color: var(--blue); }
+.tr-chip.on {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+.tr-add-select { margin-top: 4px; max-width: 220px; font-size: 15px; }
