@@ -928,5 +928,9 @@ SI18n.addPack("es", {
   "Your Communities": "Tus comunidades",
   "Members": "Miembros",
   "Comments": "Comentarios",
-  "Post into r/{name}": "Publicar en r/{name}"
+  "Post into r/{name}": "Publicar en r/{name}",
+  "Playback speed": "Velocidad de reproducción",
+  "Normal": "Normal",
+  "Loop": "Bucle",
+  "Replay": "Reproducir de nuevo"
 });

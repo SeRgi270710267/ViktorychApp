@@ -928,5 +928,9 @@ SI18n.addPack("en", {
   "Your Communities": "Your Communities",
   "Members": "Members",
   "Comments": "Comments",
-  "Post into r/{name}": "Post into r/{name}"
+  "Post into r/{name}": "Post into r/{name}",
+  "Playback speed": "Playback speed",
+  "Normal": "Normal",
+  "Loop": "Loop",
+  "Replay": "Replay"
 });
