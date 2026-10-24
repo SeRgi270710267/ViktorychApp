@@ -388,6 +388,7 @@
 
   function finishMediaError(img) {
     if (!img || !img.isConnected) return;
+    if (tryRuProxyFallback(img)) return;
     if (img.dataset.fallback === "avatar") {
       const span = document.createElement("span");
       span.className = String(img.className || "").replace("ava", "ava initials");
@@ -1626,7 +1627,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (face === "none") return `<span class="ava-none"></span>`;
     if (face === "default") return silhouette(extra);
     const letter = initials(name);
-    return `<img class="ava${extra}" src="${esc(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
+    const safeSrc = ruSafeImageUrl(src);
+    return `<img class="ava${extra}" src="${esc(safeSrc)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-fallback="avatar" data-initials="${letter}">`;
   }
 
   function badge(type) {
@@ -2004,7 +2006,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function posterImg(post, media, cls) {
     const pack = posterOrder(post, media);
     if (!pack.urls.length) return "";
-    const first = pack.urls[0];
+    const first = ruSafeImageUrl(pack.urls[0]);
     const face = first === pack.avatar ? " face" : "";
     const stored = r2ObjectKey(first);
     const stills = stillCandidates(post, media);
@@ -2044,7 +2046,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     img.dataset.pi = String(next);
     img.classList.toggle("face", urls[next] === (img.dataset.avatar || ""));
     img.referrerPolicy = "no-referrer";
-    img.src = urls[next];
+    img.src = ruSafeImageUrl(urls[next]);
     return true;
   }
 
@@ -2183,18 +2185,19 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const alt = m.alt ? `<span class="alt-badge">ALT</span>` : "";
       const refresh = m.fallback ? ` data-refresh="${esc(m.fallback)}"` : "";
       const first = eager && index === 0;
-      const src = m.url || m.poster || "";
-      const stored = r2ObjectKey(src);
+      const rawSrc = m.url || m.poster || "";
+      const src = ruSafeImageUrl(rawSrc);
+      const stored = r2ObjectKey(rawSrc);
       const stills = stillCandidates(post, m);
       const tgKey = stills[0] || stored;
-      const lead = tgKey && accountToken() && (stored ? !mirrorKey(stored) : (!src || oePast(src) || (post && post.platform === "tiktok")));
+      const lead = tgKey && accountToken() && (stored ? !mirrorKey(stored) : (!rawSrc || oePast(rawSrc) || (post && post.platform === "tiktok")));
       const sourceUrl = m.fallback && !r2ObjectKey(m.fallback) ? m.fallback : "";
       const altAttr = stills.slice(1).length ? ` data-tg-alts="${esc(stills.slice(1).join(","))}"` : "";
-      const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"${altAttr}${lead ? ' data-tg-first="1" data-fallback-src="' + esc(src) + '"' : ""}` : "";
+      const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"${altAttr}${lead ? ' data-tg-first="1" data-fallback-src="' + esc(rawSrc) + '"' : ""}` : "";
       const sourceAttr = sourceUrl ? ` data-source="${esc(sourceUrl)}"` : "";
       const loading = first ? "eager" : "lazy";
       const priority = first ? ` fetchpriority="high"` : "";
-      const srcAttr = lead ? "" : ` src="${esc(src)}"${imageSrcset(src)}`;
+      const srcAttr = lead ? "" : ` src="${esc(src)}"${src === rawSrc ? imageSrcset(src) : ""}`;
       return `<div class="tile" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
     }).join("");
     return `<div class="media ${cls}">${tiles}</div>` + files;
@@ -2328,6 +2331,64 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       });
     });
     return chain;
+  }
+
+  const BLOCKED_IN_RU = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com)\b/i;
+
+  function isRuVisitor() {
+    return typeof window !== "undefined" && !!window.__VIKTORYCH_IS_RU;
+  }
+
+  function ruSafeImageUrl(url) {
+    if (!isRuVisitor()) return url;
+    const raw = String(url || "");
+    if (!raw || !/^https:\/\//i.test(raw)) return url;
+    const api = accountsApi();
+    if (!api) return url;
+    try {
+      const parsed = new URL(raw);
+      if (BLOCKED_IN_RU.test(parsed.hostname)) {
+        return api + "/v1/media?url=" + encodeURIComponent(raw);
+      }
+    } catch (err) {}
+    return url;
+  }
+
+  function tryRuProxyFallback(img) {
+    if (!isRuVisitor()) return false;
+    if (!img || !img.isConnected || img.dataset.ruTried === "1") return false;
+    img.dataset.ruTried = "1";
+    const src = img.dataset.source || img.dataset.fallbackSrc || img.getAttribute("src") || "";
+    const api = accountsApi();
+    if (!api || !src || !/^https:\/\//i.test(src)) return false;
+    try {
+      const parsed = new URL(src);
+      if (BLOCKED_IN_RU.test(parsed.hostname)) {
+        img.src = api + "/v1/media?url=" + encodeURIComponent(src);
+        return true;
+      }
+    } catch (err) {}
+    return false;
+  }
+
+  function syncRuVisitorGeo() {
+    if (typeof navigator !== "undefined" && navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: "ru_mode", on: isRuVisitor() });
+    }
+    const api = accountsApi();
+    if (!api) return;
+    fetch(api + "/v1/geo", { cache: "no-store", signal: AbortSignal.timeout(3500) })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data && typeof data.isRu === "boolean") {
+          window.__VIKTORYCH_IS_RU = data.isRu;
+          try { sessionStorage.setItem("viktorychapp-is-ru", data.isRu ? "1" : "0"); } catch (err) {}
+          if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ type: "ru_mode", on: data.isRu });
+          }
+        }
+      })
+      .catch(() => {});
   }
 
   function accountsApi() {
@@ -14627,7 +14688,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       mutedAccounts: STATE.settings.mutedAccounts || [],
       repostOff: STATE.settings.repostOff || [],
       notifyAll: !!STATE.settings.notify,
-      uiLang: window.SI18n ? window.SI18n.getLang() : "en"
+      uiLang: window.SI18n ? window.SI18n.getLang() : "en",
+      ruMode: isRuVisitor()
     });
   }
 
@@ -14862,6 +14924,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   async function boot() {
+    syncRuVisitorGeo();
     if (window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking()) {
       registerSW();
       STATE.settings = loadSettings();

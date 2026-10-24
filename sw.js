@@ -4,6 +4,7 @@ const VERSION = "viktorych-a19-__SW_VERSION__";
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
+let isRuVisitor = false;
 importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
@@ -361,7 +362,18 @@ async function cacheFirstMedia(request) {
     cache.delete(request);
   }
   try {
-    const res = await fetch(request);
+    let res;
+    if (isRuVisitor) {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 2000);
+      try {
+        res = await fetch(request, { signal: ctrl.signal });
+      } finally {
+        clearTimeout(tid);
+      }
+    } else {
+      res = await fetch(request);
+    }
     if (res && (res.ok || res.type === "opaque")) {
       await cache.put(request, res.clone());
       const length = Number(res.headers.get("content-length")) || (res.type === "opaque" ? 200 * 1024 : 80 * 1024);
@@ -370,7 +382,7 @@ async function cacheFirstMedia(request) {
     }
     return res;
   } catch (err) {
-    return cached || Response.error();
+    return cached || (isRuVisitor ? new Response("", { status: 504 }) : Response.error());
   }
 }
 
@@ -426,6 +438,10 @@ async function cacheBookmark(urls) {
 idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "ru_mode") {
+    isRuVisitor = !!data.on;
+    return;
+  }
   if (data.type === "auth") {
     accountsAuthed = !!data.on;
     playToken = data.on && typeof data.token === "string" ? data.token : "";
