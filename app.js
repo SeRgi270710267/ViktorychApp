@@ -2685,9 +2685,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function clearPlayer(el) {
+    if (el._ytPlayer && el._ytPlayer.destroy) {
+      try { el._ytPlayer.destroy(); } catch (err) {}
+      el._ytPlayer = null;
+    }
     if (el._stall) { clearTimeout(el._stall); el._stall = 0; }
     if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
-    el.querySelectorAll("video, iframe").forEach((node) => node.remove());
+    el.querySelectorAll("video, iframe, .html5-video-player").forEach((node) => node.remove());
   }
 
   function showVideoCard(el, post, media) {
@@ -2825,7 +2829,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     video.setAttribute("webkit-playsinline", "");
     video.setAttribute("referrerpolicy", "no-referrer");
     video.referrerPolicy = "no-referrer";
-    video.controls = !opts.preview && !opts.loop;
+    const isFullVideo = !opts.preview && !opts.loop && !(media && media.type === "animated_gif") && typeof window.YtPlayer === "function";
+    video.controls = !opts.preview && !opts.loop && !isFullVideo;
     if (opts.loop || (media && media.type === "animated_gif")) video.loop = true;
     if (opts.muted || (media && media.type === "animated_gif")) {
       video.muted = true;
@@ -2902,7 +2907,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         noteVideo(post, { position: video.currentTime, duration: dur, progress: dur > 0 ? video.currentTime / dur : 0, touch: false });
       }
     });
-    el.appendChild(video);
+    if (isFullVideo) {
+      el._ytPlayer = new window.YtPlayer(el, { video: video, post: post, media: media });
+    } else {
+      el.appendChild(video);
+    }
     el.classList.add("is-playing");
     video.addEventListener("play", () => {
       if (!navigator.mediaSession || video.muted) return;
@@ -13927,8 +13936,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const post = findAnyPost(view.id);
       const media = view.media || ((post && post.media) || []).find((item) => item && (item.type === "video" || item.type === "animated_gif")) || {};
       box.hidden = false;
-      box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button><video id="viewer-video" playsinline controls></video>`;
-      const video = document.getElementById("viewer-video");
+      if (box._ytPlayer && box._ytPlayer.destroy) {
+        try { box._ytPlayer.destroy(); } catch (err) {}
+        box._ytPlayer = null;
+      }
+      box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>`;
+      let video;
+      if (typeof window.YtPlayer === "function") {
+        box._ytPlayer = new window.YtPlayer(box, { post: post, media: media });
+        video = box._ytPlayer.video;
+        video.id = "viewer-video";
+      } else {
+        video = document.createElement("video");
+        video.id = "viewer-video";
+        video.controls = true;
+        box.appendChild(video);
+      }
       if (!video) return;
       video.playsInline = true;
       video.muted = false;
@@ -14054,6 +14077,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function closeViewer() {
     const box = document.getElementById("viewer");
+    if (box && box._ytPlayer) {
+      try { box._ytPlayer.destroy(); } catch (err) {}
+      box._ytPlayer = null;
+    }
     if (box) box.querySelectorAll("video").forEach((video) => {
       try { video.pause(); video.removeAttribute("src"); video.load(); } catch (err) { /* the viewer is closing */ }
     });

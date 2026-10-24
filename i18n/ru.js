@@ -928,5 +928,9 @@ SI18n.addPack("ru", {
   "Your Communities": "Ваши сообщества",
   "Members": "Участники",
   "Comments": "Комментарии",
-  "Post into r/{name}": "Опубликовать в r/{name}"
+  "Post into r/{name}": "Опубликовать в r/{name}",
+  "Playback speed": "Скорость воспроизведения",
+  "Normal": "Обычная",
+  "Loop": "Повтор",
+  "Replay": "Смотреть снова"
 });
