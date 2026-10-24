@@ -16,7 +16,7 @@ const BANNER_BYTES = 150 * 1024;
 const AVATAR_TEXT = 90000;
 const BANNER_TEXT = 220000;
 const MEDIA_KEY = /^media\/(avatars|banners)\/(\d{12})\/([a-f0-9]{64})\.(webp|jpg|png)$/;
-const ACCOUNT_COLS = "public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, hide_avatar, avatar_empty, banner_empty";
+const ACCOUNT_COLS = "public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, hide_avatar, avatar_empty, banner_empty, private_follows";
 let schemaReady = null;
 let mediaReady = null;
 
@@ -142,7 +142,7 @@ async function slowHash(number, saltBytes, rounds) {
 function ensureSchema(env) {
   if (!schemaReady) {
     schemaReady = env.DB.batch([
-      env.DB.prepare("CREATE TABLE IF NOT EXISTS accounts (public_id TEXT PRIMARY KEY, handle TEXT NOT NULL, skeleton TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT '', banner TEXT NOT NULL DEFAULT '', bio TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', hide_avatar TEXT NOT NULL DEFAULT '', avatar_empty TEXT NOT NULL DEFAULT 'default', banner_empty TEXT NOT NULL DEFAULT 'default', owner INTEGER NOT NULL DEFAULT 0, number_lookup TEXT NOT NULL UNIQUE, number_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at INTEGER NOT NULL)"),
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS accounts (public_id TEXT PRIMARY KEY, handle TEXT NOT NULL, skeleton TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, avatar TEXT NOT NULL DEFAULT '', banner TEXT NOT NULL DEFAULT '', bio TEXT NOT NULL DEFAULT '', location TEXT NOT NULL DEFAULT '', website TEXT NOT NULL DEFAULT '', hide_avatar TEXT NOT NULL DEFAULT '', avatar_empty TEXT NOT NULL DEFAULT 'default', banner_empty TEXT NOT NULL DEFAULT 'default', private_follows INTEGER NOT NULL DEFAULT 0, owner INTEGER NOT NULL DEFAULT 0, number_lookup TEXT NOT NULL UNIQUE, number_hash TEXT NOT NULL, salt TEXT NOT NULL, created_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS accounts_one_owner ON accounts(owner) WHERE owner = 1"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL)"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS sessions_account ON sessions(public_id)"),
@@ -167,7 +167,8 @@ async function addProfileColumns(env) {
     "ALTER TABLE accounts ADD COLUMN website TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE accounts ADD COLUMN hide_avatar TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE accounts ADD COLUMN avatar_empty TEXT NOT NULL DEFAULT 'default'",
-    "ALTER TABLE accounts ADD COLUMN banner_empty TEXT NOT NULL DEFAULT 'default'"
+    "ALTER TABLE accounts ADD COLUMN banner_empty TEXT NOT NULL DEFAULT 'default'",
+    "ALTER TABLE accounts ADD COLUMN private_follows INTEGER NOT NULL DEFAULT 0"
   ];
   for (let i = 0; i < statements.length; i++) {
     try {
@@ -376,6 +377,7 @@ function publicAccount(row, request, own) {
     location: row.location || "",
     website: row.website || "",
     owner: row.owner === 1,
+    privateFollows: row.private_follows === 1,
     createdAt: row.created_at
   };
 }
@@ -406,7 +408,7 @@ async function sessionAccount(env, request) {
   if (!token || token.length > 200) return null;
   const hash = await sha256Hex(token);
   const now = Date.now();
-  const row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
+  const row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty, a.private_follows FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
   return row || null;
 }
 
@@ -685,10 +687,11 @@ async function handleProfilePatch(request, env) {
   const hideAvatar = body.hideAvatar == null ? cleanHide(row.hide_avatar) : cleanHide(body.hideAvatar, row.hide_avatar);
   const avatarEmpty = body.avatarEmpty == null ? cleanGap(row.avatar_empty) : cleanGap(body.avatarEmpty, row.avatar_empty);
   const bannerEmpty = body.bannerEmpty == null ? cleanGap(row.banner_empty) : cleanGap(body.bannerEmpty, row.banner_empty);
+  const privateFollows = body.privateFollows == null ? (row.private_follows === 1 ? 1 : 0) : (body.privateFollows ? 1 : 0);
   if (skeleton) {
-    await env.DB.prepare("UPDATE accounts SET handle = ?, skeleton = ?, display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ? WHERE public_id = ?").bind(handle, skeleton, displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, row.public_id).run();
+    await env.DB.prepare("UPDATE accounts SET handle = ?, skeleton = ?, display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ? WHERE public_id = ?").bind(handle, skeleton, displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, row.public_id).run();
   } else {
-    await env.DB.prepare("UPDATE accounts SET display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ? WHERE public_id = ?").bind(displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, row.public_id).run();
+    await env.DB.prepare("UPDATE accounts SET display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ? WHERE public_id = ?").bind(displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, row.public_id).run();
   }
   const next = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(row.public_id).first();
   return json(200, { account: await presentAccount(env, request, next, true) });
