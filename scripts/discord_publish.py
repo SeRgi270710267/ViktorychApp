@@ -50,6 +50,8 @@ SITE_FILES = (
     "stories.css",
     "communities.js",
     "communities.css",
+    "yt-player.js",
+    "yt-player.css",
     "404.html",
     "robots.txt",
     "favicon.svg",
