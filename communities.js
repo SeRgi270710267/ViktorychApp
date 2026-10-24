@@ -1,6 +1,16 @@
 /* Communities: a mirrored subreddit and the posts signed-in people write here. */
 (function () {
-  var state = { index: null, docs: {}, internal: {}, tab: "top", filter: "all", loading: {} };
+  var state = {
+    index: null,
+    docs: {},
+    internal: {},
+    tab: "top",
+    filter: "all",
+    hubTab: "explore",
+    search: "",
+    showAdd: false,
+    loading: {}
+  };
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -54,6 +64,67 @@
     return !!(account && account.owner);
   }
 
+  function count(n) {
+    var value = Number(n) || 0;
+    if (value >= 1000000) return (value / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
+    if (value >= 1000) return (value / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+    return String(value);
+  }
+
+  function cleanAuthor(author) {
+    var s = String(author || "").trim();
+    s = s.replace(/https?:\/\/(?:www\.)?reddit\.com.*$/i, "");
+    s = s.replace(/^\/?u\//i, "");
+    s = s.trim();
+    return s || "reddit";
+  }
+
+  function cleanRedditText(raw) {
+    if (!raw) return "";
+    var s = String(raw);
+    s = s.replace(/&#32;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'");
+    s = s.replace(/(?:Posted on X\s*)?(?:&#32;|\s)*submitted by(?:&#32;|\s)*(?:\/?u\/[\w-]+)?(?:&#32;|\s)*\[link\](?:&#32;|\s)*\[comments\]/gi, "");
+    s = s.replace(/\[link\]\s*\[comments\]/gi, "");
+    s = s.replace(/^https?:\/\/\S+\s*/i, "");
+    return s.trim();
+  }
+
+  function timeAgo(ms) {
+    if (!ms) return "";
+    try {
+      if (window.SI18n && window.SI18n.relTime) {
+        var iso = new Date(ms).toISOString();
+        var rel = window.SI18n.relTime(iso);
+        if (rel) return rel;
+      }
+    } catch (e) {}
+    var diff = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+    if (diff < 60) return tr("now");
+    if (diff < 3600) return Math.floor(diff / 60) + "m";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h";
+    if (diff < 2592000) return Math.floor(diff / 86400) + "d";
+    return new Date(ms).toLocaleDateString();
+  }
+
+  /* SVG Icons */
+  var svgSnoo = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 0a10 10 0 1 0 10 10A10 10 0 0 0 10 0zm6.81 10.45a2 2 0 0 1-1.32 1.88 5.76 5.76 0 0 1-.09.91c0 2.29-2.43 4.14-5.4 4.14s-5.4-1.85-5.4-4.14a5.76 5.76 0 0 1-.09-.91 2 2 0 1 1 2.37-2.92 7.7 7.7 0 0 1 3.51-1.07l.72-3.39 2.36.5a1.41 1.41 0 1 1 1.34 1.77 1.4 1.4 0 0 1-1.12-.56l-1.87-.4-.56 2.65a7.7 7.7 0 0 1 3.5 1.07 2 2 0 0 1 1.46.47zm-9.31.55a1.25 1.25 0 1 0 1.25 1.25 1.25 1.25 0 0 0-1.25-1.25zm5 0a1.25 1.25 0 1 0 1.25 1.25 1.25 1.25 0 0 0-1.25-1.25zm-4.7 3.25a.25.25 0 0 0-.2.4 3.75 3.75 0 0 0 4.8 0 .25.25 0 0 0-.2-.4 3.25 3.25 0 0 1-4.4 0z"/></svg>';
+  var svgUp = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 4.5l-7 7h4v8h6v-8h4l-7-7z"/></svg>';
+  var svgDown = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 19.5l7-7h-4v-8h-6v8h-4l7 7z"/></svg>';
+  var svgComment = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/></svg>';
+  var svgShare = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.59l5.7 5.7-1.41 1.42L13 6.41V16h-2V6.41l-3.3 3.3-1.41-1.42L12 2.59zM21 15l-.02 3.51c0 1.38-1.12 2.49-2.5 2.49H5.5C4.11 21 3 19.88 3 18.5V15h2v3.5c0 .28.22.5.5.5h12.98c.28 0 .5-.22.5-.5L19 15h2z"/></svg>';
+  var svgSearch = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10.25 3.75c-3.59 0-6.5 2.91-6.5 6.5s2.91 6.5 6.5 6.5c1.795 0 3.419-.726 4.596-1.904 1.178-1.177 1.904-2.801 1.904-4.596 0-3.59-2.91-6.5-6.5-6.5zm-8.5 6.5c0-4.694 3.806-8.5 8.5-8.5s8.5 3.806 8.5 8.5c0 1.986-.682 3.815-1.824 5.262l4.781 4.781-1.414 1.414-4.781-4.781c-1.447 1.142-3.276 1.824-5.262 1.824-4.694 0-8.5-3.806-8.5-8.5z"/></svg>';
+  var svgPlus = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7V4z"/></svg>';
+  var svgBack = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z"/></svg>';
+  var svgHeart = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg>';
+  var svgHeartOn = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg>';
+  var svgTrash = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 6V4.5C16 3.12 14.88 2 13.5 2h-3C9.12 2 8 3.12 8 4.5V6H3v2h1.06l.81 12.16C4.94 21.27 5.86 22 6.98 22h10.04c1.12 0 2.04-.73 2.11-1.84L19.94 8H21V6h-5zm-6-1.5c0-.28.22-.5.5-.5h3c.28 0 .5.22.5.5V6h-4V4.5zm7.88 15.36c-.02.37-.33.64-.7.64H6.98c-.37 0-.68-.27-.7-.64L5.07 8h13.86l-.81 11.86z"/></svg>';
+  var svgExternal = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6H5.5C4.12 6 3 7.12 3 8.5v10C3 19.88 4.12 21 5.5 21h10c1.38 0 2.5-1.12 2.5-2.5V14h-2v4.5c0 .28-.22.5-.5.5h-10a.5.5 0 0 1-.5-.5v-10c0-.28.22-.5.5-.5H10V6zm4 0V4h7v7h-2V7.41l-7.29 7.3-1.42-1.42L17.58 6H14z"/></svg>';
+
   function loadIndex() {
     if (state.index) return Promise.resolve(state.index);
     return fetch("data/communities/index.json", { cache: "no-store" }).then(function (res) {
@@ -96,16 +167,12 @@
     });
   }
 
-  function head(title, back) {
+  function head(title, back, actions) {
     return '<div class="topbar tall"><div class="page-head">' +
-      (back ? '<a class="icon-btn" href="' + esc(back) + '" aria-label="' + esc(tr("Back")) + '">←</a>' : "") +
-      '<div class="head-text grow"><h1>' + esc(title) + '</h1></div></div></div>';
-  }
-  function count(n) {
-    var value = Number(n) || 0;
-    if (value >= 1000000) return (value / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
-    if (value >= 1000) return (value / 1000).toFixed(1).replace(/\.0$/, "") + "K";
-    return String(value);
+      (back ? '<a class="icon-btn" href="' + esc(back) + '" aria-label="' + esc(tr("Back")) + '">' + svgBack + '</a>' : "") +
+      '<div class="head-text grow"><h1>' + esc(title) + '</h1></div>' +
+      (actions ? '<div class="page-head-actions">' + actions + '</div>' : "") +
+      '</div></div>';
   }
 
   function redditPosts(doc) {
@@ -148,7 +215,9 @@
     var reddit = [];
     (doc.posts || []).forEach(function (post) {
       (post.replies || []).forEach(function (reply) {
-        if (reply.parent === parentId && !hidden(reply.author, reply.text, "reddit")) reddit.push({ source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply });
+        if (reply.parent === parentId && !hidden(reply.author, reply.text, "reddit")) {
+          reddit.push({ source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply });
+        }
       });
     });
     var internal = internalPosts(name).filter(function (post) { return post.parentId === parentId; }).map(function (post) {
@@ -163,16 +232,23 @@
 
   function chips() {
     var chip = function (id, label) {
-      return '<button class="tab' + (state.filter === id ? " on" : "") + '" type="button" data-cm="filter" data-filter="' + id + '">' + esc(label) + "</button>";
+      return '<button class="cm-chip' + (state.filter === id ? " on" : "") + '" type="button" data-cm="filter" data-filter="' + id + '">' + esc(label) + "</button>";
     };
-    return '<div class="tabs" role="tablist">' + chip("all", tr("All")) + chip("reddit", tr("Reddit")) + chip("app", tr("ViktorychApp")) + "</div>";
+    return '<div class="cm-filter-bar" role="tablist">' + chip("all", tr("All")) + chip("reddit", tr("Reddit")) + chip("app", tr("ViktorychApp")) + "</div>";
   }
   function tabs() {
     var tab = function (id, label) {
-      return '<button class="tab' + (state.tab === id ? " on" : "") + '" type="button" data-cm="tab" data-tab="' + id + '">' + esc(label) + "</button>";
+      return '<button class="tab' + (state.tab === id ? " on" : "") + '" type="button" data-cm="tab" data-tab="' + id + '"><span>' + esc(label) + "</span></button>";
     };
     return '<div class="tabs" role="tablist">' + tab("top", tr("Top")) + tab("latest", tr("Latest")) + tab("media", tr("Media")) + "</div>";
   }
+  function hubTabs() {
+    var tab = function (id, label) {
+      return '<button class="tab' + (state.hubTab === id ? " on" : "") + '" type="button" data-cm="hub-tab" data-hub="' + id + '"><span>' + esc(label) + "</span></button>";
+    };
+    return '<div class="tabs" role="tablist">' + tab("explore", tr("Explore")) + tab("joined", tr("Joined")) + "</div>";
+  }
+
   function playUrl(name, post, media, index) {
     var api = String(cfg().api || "").replace(/\/$/, "");
     var role = media.type === "video" ? "video" : "photo";
@@ -182,72 +258,211 @@
     return media.url;
   }
   function mediaHtml(name, post, list) {
-    return (list || []).map(function (media, index) {
+    if (!list || !list.length) return "";
+    var rendered = list.map(function (media, index) {
       if (!media || !media.url) return "";
       var src = playUrl(name, post, media, index);
       var fallback = src !== media.url ? ' data-fallback="' + esc(media.url) + '"' : "";
-      if (media.type === "video") return '<video class="cm-video" controls playsinline src="' + esc(src) + '"' + fallback + "></video>";
-      return '<img class="cm-photo" alt="" src="' + esc(src) + '"' + fallback + ">";
+      if (media.type === "video") return '<video class="cm-reddit-video" controls playsinline src="' + esc(src) + '"' + fallback + "></video>";
+      return '<img class="cm-reddit-photo" alt="" loading="lazy" src="' + esc(src) + '"' + fallback + ">";
     }).join("");
+    return '<div class="cm-media-wrap">' + rendered + '</div>';
   }
-  function likeControl(name, id, base) {
-    var bag = state.internal[name] || {};
-    var extra = Number((bag.likes || {})[id]) || 0;
-    var liked = (bag.mine || []).indexOf(id) >= 0;
-    var total = (Number(base) || 0) + extra;
-    if (!signedIn()) return '<span>' + esc(count(total)) + " " + esc(tr("Like")) + "</span>";
-    return '<button type="button" data-cm="like" data-id="' + esc(id) + '">' + esc(tr("Like")) + " " + esc(count(total)) + (liked ? " ·" : "") + "</button>";
-  }
+
   function face(author) {
-    var letter = String(author.displayName || author.handle || "?").slice(0, 1);
-    if (author.avatar && /^https:\/\//.test(author.avatar)) return '<img class="cm-ava" alt="" src="' + esc(author.avatar) + '">';
-    return '<span class="cm-ava cm-letter">' + esc(letter) + "</span>";
+    var letter = String(author.displayName || author.handle || "?").slice(0, 1).toUpperCase();
+    if (author.avatar && /^https:\/\//.test(author.avatar)) return '<img class="cm-app-ava" alt="" src="' + esc(author.avatar) + '">';
+    return '<span class="cm-app-ava cm-app-letter">' + esc(letter) + "</span>";
   }
-  function redditCard(name, post) {
+
+  function joinBtn(name, joined) {
+    return '<button type="button" class="cm-btn-join' + (joined ? " joined" : "") + '" data-cm="join" data-sub="' + esc(name) + '" data-leave-text="' + esc(tr("Leave")) + '"><span>' +
+      esc(joined ? tr("Joined") : tr("Join")) + "</span></button>";
+  }
+
+  /* Reddit Post Card — Authentic Reddit Layout + X.com Theme */
+  function redditCard(name, post, isThread) {
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
-    return '<article class="post" data-post="' + esc(post.id) + '"><div class="post-row"><div class="post-main"><div class="byline"><span class="cm-mark">' + esc(tr("Reddit")) + '</span><span class="name">u/' + esc(post.author || "") + '</span>' +
-      (post.flair ? '<span class="cm-flair">' + esc(post.flair) + "</span>" : "") +
-      '</div><a class="cm-title" href="' + href + '">' + esc(post.title || "") + "</a>" +
-      (post.text ? '<p class="cm-text">' + esc(post.text) + "</p>" : "") +
-      mediaHtml(name, post, post.media) +
-      '<div class="cm-actions">' + likeControl(name, post.id, post.score) + '<a href="' + href + '">' + esc(count(post.comments)) + "</a></div></div></div></article>";
+    var bag = state.internal[name] || {};
+    var extra = Number((bag.likes || {})[post.id]) || 0;
+    var liked = (bag.mine || []).indexOf(post.id) >= 0;
+    var total = (Number(post.score) || 0) + extra;
+    var cleanTxt = cleanRedditText(post.text);
+    var authorClean = cleanAuthor(post.author);
+    var redditHref = post.url || ("https://www.reddit.com/r/" + encodeURIComponent(name) + "/comments/" + encodeURIComponent(String(post.id).replace(/^t3_/, "")));
+
+    return '<article class="cm-reddit-card' + (isThread ? " cm-thread-focus" : "") + '" data-post="' + esc(post.id) + '">' +
+      '<div class="cm-reddit-vote">' +
+        '<button class="cm-vote-arrow up' + (liked ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(post.id) + '" aria-label="' + esc(tr("Like")) + '">' + svgUp + '</button>' +
+        '<span class="cm-reddit-score' + (liked ? " on" : "") + '">' + esc(count(total)) + '</span>' +
+        '<button class="cm-vote-arrow down" type="button" data-cm="downvote" data-id="' + esc(post.id) + '" aria-label="Downvote">' + svgDown + '</button>' +
+      '</div>' +
+      '<div class="cm-reddit-main">' +
+        '<div class="cm-reddit-byline">' +
+          '<span class="cm-reddit-snoo">' + svgSnoo + '</span>' +
+          '<a class="cm-reddit-sub" href="#/communities/' + encodeURIComponent(name) + '">r/' + esc(name) + '</a>' +
+          '<span>•</span>' +
+          '<span class="cm-reddit-author">u/' + esc(authorClean) + '</span>' +
+          '<span>•</span>' +
+          '<span class="cm-reddit-time">' + esc(timeAgo((Number(post.created) || 0) * 1000)) + '</span>' +
+          (post.flair ? '<span class="cm-reddit-flair">' + esc(post.flair) + '</span>' : "") +
+        '</div>' +
+        '<a class="cm-reddit-title" href="' + href + '">' + esc(post.title || "") + '</a>' +
+        (cleanTxt ? '<div class="cm-reddit-text">' + esc(cleanTxt) + '</div>' : "") +
+        mediaHtml(name, post, post.media) +
+        '<div class="cm-reddit-actions">' +
+          '<div class="cm-mobile-vote">' +
+            '<button class="cm-vote-arrow up' + (liked ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(post.id) + '">' + svgUp + '</button>' +
+            '<span class="cm-reddit-score' + (liked ? " on" : "") + '">' + esc(count(total)) + '</span>' +
+            '<button class="cm-vote-arrow down" type="button" data-cm="downvote" data-id="' + esc(post.id) + '">' + svgDown + '</button>' +
+          '</div>' +
+          '<a class="cm-reddit-action-btn" href="' + href + '">' + svgComment + '<span>' + esc(count(post.comments)) + " " + esc(tr("Comments")) + '</span></a>' +
+          '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '<span>' + esc(tr("Share")) + '</span></button>' +
+          '<a class="cm-reddit-action-btn reddit-link" href="' + esc(redditHref) + '" target="_blank" rel="noopener noreferrer">' + svgSnoo + '<span>' + esc(tr("Open on Reddit")) + '</span> ' + svgExternal + '</a>' +
+        '</div>' +
+      '</div>' +
+    '</article>';
   }
+
+  /* ViktorychApp Native Post Card — X.com Post Layout */
   function appCard(name, post) {
     var author = post.author || {};
     var bag = state.internal[name] || {};
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
     var liked = (bag.mine || []).indexOf(post.id) >= 0;
-    return '<article class="post cm-app" data-post="' + esc(post.id) + '"><div class="post-row">' + face(author) + '<div class="post-main"><div class="byline"><span class="name">' + esc(author.displayName || author.handle || "") +
-      (author.owner ? " ✓" : "") + '</span><span class="handle">@' + esc(author.handle || "") + '</span><span class="cm-hint">' + esc(tr("Only on ViktorychApp")) + "</span></div>" +
-      '<a class="cm-text" href="' + href + '">' + esc(post.body || "") + "</a>" +
-      '<div class="cm-actions"><button type="button" data-cm="like" data-id="' + esc(post.id) + '">' + esc(tr("Like")) + " " + esc(count((bag.likes || {})[post.id] || 0)) + (liked ? " ·" : "") + "</button>" +
-      '<a href="' + href + '">' + esc(tr("Reply")) + "</a>" +
-      (post.mine || owner() ? '<button type="button" data-cm="delete" data-id="' + esc(post.id) + '" data-sub="' + esc(name) + '">' + esc(tr("Delete")) + "</button>" : "") +
-      "</div></div></div></article>";
+    var likeCount = Number((bag.likes || {})[post.id]) || 0;
+
+    return '<article class="cm-app-card" data-post="' + esc(post.id) + '">' +
+      face(author) +
+      '<div class="cm-app-main">' +
+        '<div class="cm-app-byline">' +
+          '<span class="cm-app-name">' + esc(author.displayName || author.handle || "") + (author.owner ? " ✓" : "") + '</span>' +
+          '<span class="cm-app-handle">@' + esc(author.handle || "") + '</span>' +
+          '<span class="cm-app-badge">' + esc(tr("Only on ViktorychApp")) + '</span>' +
+        '</div>' +
+        '<a class="cm-app-text" href="' + href + '">' + esc(post.body || "") + '</a>' +
+        '<div class="cm-app-actions">' +
+          '<a class="cm-app-act" href="' + href + '">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></a>' +
+          '<button class="cm-app-act like' + (liked ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(post.id) + '">' +
+            (liked ? svgHeartOn : svgHeart) + '<span>' + esc(count(likeCount)) + '</span>' +
+          '</button>' +
+          '<button class="cm-app-act" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '</button>' +
+          (post.mine || owner() ? '<button class="cm-app-act del" type="button" data-cm="delete" data-id="' + esc(post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '</button>' : "") +
+        '</div>' +
+      '</div>' +
+    '</article>';
   }
+
   function card(name, item) {
-    if (item.source === "reddit") return redditCard(name, item.post);
+    if (item.source === "reddit") return redditCard(name, item.post, false);
     return appCard(name, item.post);
   }
+
   function currentSub() {
     var parts = (location.hash || "").split("?")[0].replace(/^#\/?/, "").split("/");
     if (parts[0] !== "communities") return "";
     return nameOf(parts[1]);
   }
 
+  /* Communities Hub / Explore Page (X.com 1-to-1 Style) */
   function listPage() {
     var index = state.index;
     if (!index) {
       loadIndex().then(render);
       return head(tr("Communities")) + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
     }
-    var rows = (index.communities || []).map(function (row) {
-      return '<a class="cm-row" href="#/communities/' + encodeURIComponent(row.name) + '"><span class="name">r/' + esc(row.name) + '</span><span class="handle">' + esc(row.title || "") + "</span><span>" + esc(count(row.subscribers)) + "</span></a>";
+
+    var addToggle = owner() ? '<button class="cm-icon-btn" type="button" data-cm="toggle-add" aria-label="' + esc(tr("Add community")) + '">' + svgPlus + '</button>' : "";
+    var addBar = (owner() && state.showAdd)
+      ? '<form class="cm-add-bar" data-cm="add"><input name="name" placeholder="r/technology" aria-label="' + esc(tr("Add community")) + '"><button type="submit">' + esc(tr("Add")) + '</button></form>'
+      : "";
+
+    var q = String(state.search || "").toLowerCase().trim();
+    var list = (index.communities || []).filter(function (row) {
+      if (!q) return true;
+      var nameMatch = String(row.name || "").toLowerCase().indexOf(q) >= 0;
+      var titleMatch = String(row.title || "").toLowerCase().indexOf(q) >= 0;
+      var aboutMatch = String(row.about || "").toLowerCase().indexOf(q) >= 0;
+      return nameMatch || titleMatch || aboutMatch;
+    });
+
+    if (state.hubTab === "joined") {
+      list = list.filter(function (row) {
+        var bag = state.internal[row.name];
+        return bag && bag.joined;
+      });
+    }
+
+    var searchBar = '<div class="cm-search-wrap">' +
+      '<div class="cm-search-box">' +
+        '<span class="cm-search-svg">' + svgSearch + '</span>' +
+        '<input type="text" class="cm-search-input" placeholder="' + esc(tr("Search Communities")) + '" value="' + esc(state.search) + '" data-cm="search-input" aria-label="' + esc(tr("Search Communities")) + '">' +
+        (state.search ? '<button type="button" class="cm-search-clear" data-cm="clear-search">✕</button>' : "") +
+      '</div></div>';
+
+    var spotlightHtml = "";
+    if (state.hubTab === "explore" && !state.search && list.length > 0) {
+      var top = list[0];
+      var topJoined = state.internal[top.name] && state.internal[top.name].joined;
+      spotlightHtml = '<div class="cm-spotlight">' +
+        '<div class="cm-spotlight-banner">' +
+          (top.banner ? '<img src="' + esc(top.banner) + '" alt="" style="width:100%;height:100%;object-fit:cover;">' : "") +
+          '<span class="cm-spotlight-badge">' + esc(tr("Explore")) + '</span>' +
+        '</div>' +
+        '<div class="cm-spotlight-body">' +
+          '<div class="cm-spotlight-top">' +
+            (top.icon ? '<img class="cm-spotlight-avatar" src="' + esc(top.icon) + '" alt="">' : '<div class="cm-spotlight-avatar">' + svgSnoo + '</div>') +
+            joinBtn(top.name, topJoined) +
+          '</div>' +
+          '<a href="#/communities/' + encodeURIComponent(top.name) + '" style="text-decoration:none;color:inherit;">' +
+            '<h2 class="cm-spotlight-title">r/' + esc(top.name) + '</h2>' +
+            '<p class="cm-spotlight-desc">' + esc(top.about || (top.title || ("r/" + top.name))) + '</p>' +
+            '<div class="cm-facepile-wrap">' +
+              '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
+              '<span>' + esc(count(top.subscribers || 2800000)) + ' ' + esc(tr("Members")) + '</span>' +
+            '</div>' +
+          '</a>' +
+        '</div>' +
+      '</div>';
+    }
+
+    var cards = list.map(function (row) {
+      var isJoined = state.internal[row.name] && state.internal[row.name].joined;
+      var bannerStyle = row.banner ? ' style="background-image:url(\'' + esc(row.banner) + '\');background-size:cover;background-position:center;"' : "";
+      return '<div class="cm-card">' +
+        '<a class="cm-card-cover"' + bannerStyle + ' href="#/communities/' + encodeURIComponent(row.name) + '"></a>' +
+        '<div class="cm-card-body">' +
+          '<div class="cm-card-row">' +
+            (row.icon ? '<img class="cm-card-avatar" alt="" src="' + esc(row.icon) + '">' : '<div class="cm-card-avatar">' + svgSnoo + '</div>') +
+            joinBtn(row.name, isJoined) +
+          '</div>' +
+          '<a href="#/communities/' + encodeURIComponent(row.name) + '" style="text-decoration:none;color:inherit;">' +
+            '<h3 class="cm-card-title">r/' + esc(row.name) + '</h3>' +
+            '<p class="cm-card-desc">' + esc(row.about || row.title || ("r/" + row.name)) + '</p>' +
+            '<div class="cm-facepile-wrap">' +
+              '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
+              '<span>' + esc(count(row.subscribers || 100000)) + ' ' + esc(tr("Members")) + '</span>' +
+            '</div>' +
+          '</a>' +
+        '</div>' +
+      '</div>';
     }).join("");
-    var form = owner() ? '<form class="cm-add" data-cm="add"><input name="name" placeholder="r/teslamotors" aria-label="' + esc(tr("Add community")) + '"><button type="submit">' + esc(tr("Add")) + "</button></form>" : "";
-    return head(tr("Communities")) + form + (rows || '<div class="empty"><h2>' + esc(tr("No communities yet.")) + "</h2><p>" + esc(tr("Nothing is sent to Reddit.")) + "</p></div>");
+
+    var sectionTitle = state.hubTab === "joined" ? tr("Your Communities") : tr("Discover Communities");
+    var emptyHtml = state.hubTab === "joined"
+      ? '<div class="empty"><h2>' + esc(tr("No communities yet.")) + '</h2><p>' + esc(tr("Search Communities")) + '</p></div>'
+      : '<div class="empty"><h2>' + esc(tr("That community wasn’t found.")) + '</h2></div>';
+
+    return head(tr("Communities"), null, addToggle) +
+      addBar +
+      hubTabs() +
+      searchBar +
+      spotlightHtml +
+      '<div class="cm-section-head">' + esc(sectionTitle) + '</div>' +
+      (cards ? '<div class="cm-card-grid">' + cards + '</div>' : emptyHtml);
   }
 
+  /* Single Community Feed Page (X.com 1-to-1 Clone) */
   function communityPage(route) {
     var name = nameOf(route.sub);
     if (!name) return head(tr("Communities"), "#/communities") + '<div class="empty"><h2>' + esc(tr("That community wasn’t found.")) + "</h2></div>";
@@ -262,21 +477,73 @@
       }
       return head("r/" + name, "#/communities") + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
     }
+
     var bag = state.internal[name];
-    var members = bag ? '<span class="cm-members">' + esc(count(bag.members)) + " " + esc(tr("ViktorychApp members")) + "</span>" : "";
-    var join = signedIn() ? '<button type="button" data-cm="join" data-sub="' + esc(name) + '">' + esc(bag && bag.joined ? tr("Joined") : tr("Join")) + "</button>" : "";
-    var banner = doc.banner ? '<img class="cm-banner" alt="" src="' + esc(doc.banner) + '">' : "";
-    var about = '<details class="cm-about"><summary>' + esc(tr("About")) + "</summary><p>" + esc(doc.about || "") + "</p>" +
-      ((doc.rules || []).map(function (rule) { return "<p><b>" + esc(rule.title || "") + "</b> " + esc(rule.text || "") + "</p>"; }).join("")) + "</details>";
-    var remove = owner() ? '<button type="button" data-cm="remove" data-sub="' + esc(name) + '">' + esc(tr("Remove")) + "</button>" : "";
+    var joined = bag && bag.joined;
+    var bannerImg = doc.banner
+      ? '<img class="cm-hero-banner" alt="" src="' + esc(doc.banner) + '">'
+      : '<div class="cm-hero-banner"></div>';
+
+    var avatarImg = doc.icon
+      ? '<img class="cm-hero-avatar" alt="" src="' + esc(doc.icon) + '">'
+      : '<div class="cm-hero-avatar">' + svgSnoo + '</div>';
+
+    var shareBtn = '<button class="cm-icon-btn" type="button" data-cm="share" aria-label="' + esc(tr("Share")) + '">' + svgShare + '</button>';
+    var removeBtn = owner() ? '<button class="cm-icon-btn" type="button" data-cm="remove" data-sub="' + esc(name) + '" aria-label="' + esc(tr("Remove")) + '">' + svgTrash + '</button>' : "";
+
+    var rulesList = (doc.rules || []).map(function (rule, idx) {
+      return '<div class="cm-rule-item"><span class="cm-rule-num">' + (idx + 1) + '</span><div><div class="cm-rule-title">' + esc(rule.title || "") + '</div><div>' + esc(rule.text || "") + '</div></div></div>';
+    }).join("");
+
+    var rulesAccordion = rulesList
+      ? '<details class="cm-rules-box"><summary class="cm-rules-summary"><span>' + esc(tr("Community rules")) + '</span><span>▾</span></summary><div class="cm-rules-content">' + rulesList + '</div></details>'
+      : "";
+
+    var composer = signedIn()
+      ? '<form class="cm-composer" data-cm="inline-post" data-sub="' + esc(name) + '">' +
+          face(session().account || {}) +
+          '<div class="cm-composer-main">' +
+            '<textarea class="cm-composer-area" name="text" placeholder="' + esc(tr("Post into r/{name}", { name: name })) + '" aria-label="' + esc(tr("Post into r/{name}", { name: name })) + '"></textarea>' +
+            '<div class="cm-composer-bottom">' +
+              '<button type="submit" class="cm-composer-btn">' + esc(tr("Post")) + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</form>'
+      : '<div class="cm-footer-note"><p>' + esc(tr("Sign in to post here.")) + '</p></div>';
+
     var items = feedItems(name, doc);
     var empty = state.filter === "app" && !signedIn()
       ? '<div class="empty"><p>' + esc(tr("Sign in to post here.")) + "</p></div>"
       : (items.length ? "" : '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2></div>");
-    return head(doc.title || ("r/" + name), "#/communities") +
-      '<section class="cm-hero">' + banner + '<div class="cm-id"><h2>r/' + esc(name) + "</h2><span>" + esc(count(doc.subscribers)) + " " + esc(tr("Reddit subscribers")) + "</span>" + members + join + remove + "</div></section>" +
-      about + tabs() + chips() + empty + items.map(function (item) { return card(name, item); }).join("") +
-      '<p class="cm-note">' + esc(tr("Nothing is sent to Reddit.")) + "</p>";
+
+    return head("r/" + name, "#/communities", shareBtn) +
+      '<section class="cm-hero">' +
+        bannerImg +
+        '<div class="cm-hero-body">' +
+          '<div class="cm-hero-bar">' +
+            avatarImg +
+            '<div class="cm-hero-actions">' +
+              shareBtn +
+              removeBtn +
+              joinBtn(name, joined) +
+            '</div>' +
+          '</div>' +
+          '<h1 class="cm-hero-title">r/' + esc(name) + '</h1>' +
+          '<div class="cm-hero-meta">' +
+            '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
+            '<span><b>' + esc(count(doc.subscribers || 2800000)) + '</b> ' + esc(tr("Reddit subscribers")) + '</span>' +
+            (bag && bag.members ? '<span class="cm-sep">·</span><span><b>' + esc(count(bag.members)) + '</b> ' + esc(tr("ViktorychApp members")) + '</span>' : "") +
+          '</div>' +
+          (doc.about ? '<p class="cm-hero-about">' + esc(doc.about) + '</p>' : "") +
+          rulesAccordion +
+        '</div>' +
+      '</section>' +
+      tabs() +
+      chips() +
+      composer +
+      empty +
+      items.map(function (item) { return card(name, item); }).join("") +
+      '<p class="cm-footer-note">' + esc(tr("Nothing is sent to Reddit.")) + '</p>';
   }
 
   function findReddit(doc, id) {
@@ -289,6 +556,8 @@
     });
     return found;
   }
+
+  /* Single Thread / Post View (Reddit Comments Tree + X.com Theme) */
   function threadPage(route) {
     var name = nameOf(route.sub);
     var id = decodeURIComponent(route.post || "");
@@ -306,21 +575,58 @@
     var reddit = findReddit(doc, id);
     var focus = "";
     if (internal && signedIn()) focus = appCard(name, internal);
-    else if (reddit && reddit.kind === "post") focus = redditCard(name, reddit.post);
+    else if (reddit && reddit.kind === "post") focus = redditCard(name, reddit.post, true);
     else if (reddit && reddit.kind === "reply") {
-      focus = '<article class="post"><div class="post-main"><div class="byline"><span class="cm-mark">' + esc(tr("Reddit")) + '</span><span class="name">u/' + esc(reddit.reply.author || "") + "</span></div><p>" + esc(reddit.reply.text || "") + "</p></div></article>";
+      focus = '<article class="cm-reddit-comment">' +
+        '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + svgSnoo + '</span><span class="cm-comment-line"></span></div>' +
+        '<div class="cm-comment-body">' +
+          '<div class="cm-comment-byline"><span class="cm-comment-author">u/' + esc(cleanAuthor(reddit.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo((Number(reddit.reply.created) || 0) * 1000)) + '</span></div>' +
+          '<div class="cm-comment-text">' + esc(reddit.reply.text || "") + '</div>' +
+        '</div>' +
+      '</article>';
     }
+
     if (!focus) return head("r/" + name, "#/communities/" + name) + '<div class="empty"><h2>' + esc(tr("That community wasn’t found.")) + "</h2></div>";
+
     var kids = repliesFor(name, id, doc).map(function (item) {
       if (item.source === "reddit") {
-        return '<article class="post reply-card"><div class="post-main"><div class="byline"><span class="cm-mark">' + esc(tr("Reddit")) + '</span><span class="name">u/' + esc(item.reply.author || "") + '</span></div><p>' + esc(item.reply.text || "") + '</p><div class="cm-actions">' + likeControl(name, item.reply.id, item.reply.score) + "</div></div></article>";
+        var replyScore = Number(item.reply.score) || 0;
+        return '<article class="cm-reddit-comment reply-card">' +
+          '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + svgSnoo + '</span><span class="cm-comment-line"></span></div>' +
+          '<div class="cm-comment-body">' +
+            '<div class="cm-comment-byline"><span class="cm-comment-author">u/' + esc(cleanAuthor(item.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo(item.created)) + '</span></div>' +
+            '<div class="cm-comment-text">' + esc(item.reply.text || "") + '</div>' +
+            '<div class="cm-comment-actions">' +
+              '<span class="cm-mobile-vote">' +
+                '<button class="cm-vote-arrow up" type="button" data-cm="like" data-id="' + esc(item.reply.id) + '">' + svgUp + '</button>' +
+                '<span class="cm-reddit-score">' + esc(count(replyScore)) + '</span>' +
+              '</span>' +
+              '<button class="cm-reddit-action-btn" type="button" data-cm="focus-reply">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></button>' +
+            '</div>' +
+          '</div>' +
+        '</article>';
       }
       return appCard(name, item.post);
     }).join("");
+
     var box = signedIn()
-      ? '<form class="composer" data-cm="reply" data-sub="' + esc(name) + '" data-parent="' + esc(id) + '"><textarea aria-label="' + esc(tr("Post your reply")) + '" placeholder="' + esc(tr("Post your reply")) + '"></textarea><button type="submit">' + esc(tr("Reply")) + "</button></form>"
-      : '<p class="cm-note">' + esc(tr("Sign in to post here.")) + "</p>";
-    return head("r/" + name, "#/communities/" + name) + focus + chips() + kids + box;
+      ? '<form class="cm-composer" data-cm="reply" data-sub="' + esc(name) + '" data-parent="' + esc(id) + '">' +
+          face(session().account || {}) +
+          '<div class="cm-composer-main">' +
+            '<textarea class="cm-composer-area" name="text" aria-label="' + esc(tr("Post your reply")) + '" placeholder="' + esc(tr("Post your reply")) + '"></textarea>' +
+            '<div class="cm-composer-bottom">' +
+              '<button type="submit" class="cm-composer-btn">' + esc(tr("Reply")) + '</button>' +
+            '</div>' +
+          '</div>' +
+        '</form>'
+      : '<div class="cm-footer-note"><p>' + esc(tr("Sign in to post here.")) + '</p></div>';
+
+    return head("r/" + name, "#/communities/" + name) +
+      focus +
+      chips() +
+      '<div class="cm-thread-replies-head">' + esc(tr("Comments")) + '</div>' +
+      kids +
+      box;
   }
 
   function page(route) {
@@ -346,10 +652,19 @@
     return true;
   }
 
+  /* Global Click & Submit Event Handlers */
   document.addEventListener("click", function (event) {
     var el = event.target.closest("[data-cm]");
     if (!el) return;
     var act = el.dataset.cm;
+
+    if (act === "hub-tab") {
+      state.hubTab = el.dataset.hub || "explore";
+      render();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (act === "filter") {
       state.filter = el.dataset.filter || "all";
       render();
@@ -362,6 +677,43 @@
       render();
       event.preventDefault();
       event.stopPropagation();
+      return;
+    }
+    if (act === "toggle-add") {
+      state.showAdd = !state.showAdd;
+      render();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (act === "clear-search") {
+      state.search = "";
+      render();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (act === "share") {
+      event.preventDefault();
+      event.stopPropagation();
+      var url = el.dataset.href ? (location.origin + location.pathname + el.dataset.href) : location.href;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () { toast(tr("Copied to clipboard")); });
+      } else {
+        toast(tr("Copied to clipboard"));
+      }
+      return;
+    }
+    if (act === "downvote") {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (act === "focus-reply") {
+      event.preventDefault();
+      event.stopPropagation();
+      var area = document.querySelector(".cm-composer-area");
+      if (area) { area.focus(); area.scrollIntoView({ behavior: "smooth" }); }
       return;
     }
     if (act === "like") {
@@ -390,6 +742,7 @@
     if (act === "join") {
       event.preventDefault();
       event.stopPropagation();
+      if (!signedIn()) { toast(tr("Sign in to post here.")); return; }
       var subName = el.dataset.sub;
       var joined = state.internal[subName] && state.internal[subName].joined;
       call("/v1/communities/" + encodeURIComponent(subName) + "/join", { method: joined ? "DELETE" : "POST" }).then(function () {
@@ -405,11 +758,22 @@
     }
   }, true);
 
+  document.addEventListener("input", function (event) {
+    var el = event.target.closest("[data-cm='search-input']");
+    if (!el) return;
+    state.search = el.value;
+    var container = document.querySelector(".cm-card-grid");
+    var clearBtn = document.querySelector(".cm-search-clear");
+    if (clearBtn) clearBtn.hidden = !state.search;
+    render();
+  }, true);
+
   document.addEventListener("submit", function (event) {
     var form = event.target.closest("[data-cm]");
     if (!form) return;
     event.preventDefault();
     event.stopPropagation();
+
     if (form.dataset.cm === "add") {
       var input = form.querySelector("input");
       var name = nameOf(input && input.value);
@@ -417,19 +781,34 @@
       call("/v1/owner/communities", { method: "POST", body: { name: name } }).then(function (body) {
         if (!body || !body.community) { toast(tr("Couldn't post.")); return; }
         toast(tr("New posts show up after the next sync."));
+        state.showAdd = false;
+        render();
+      });
+      return;
+    }
+    if (form.dataset.cm === "inline-post") {
+      var area = form.querySelector("textarea");
+      var text = area ? area.value.trim() : "";
+      if (!text) return;
+      var sub = form.dataset.sub;
+      call("/v1/communities/" + encodeURIComponent(sub) + "/posts", { method: "POST", body: { text: text } }).then(function (body) {
+        if (!body || !body.post) { toast(tr("Couldn't post.")); return; }
+        area.value = "";
+        delete state.internal[sub];
+        loadInternal(sub).then(render);
       });
       return;
     }
     if (form.dataset.cm === "reply") {
-      var area = form.querySelector("textarea");
-      var text = area ? area.value.trim() : "";
-      if (!text) return;
+      var replyArea = form.querySelector("textarea");
+      var replyText = replyArea ? replyArea.value.trim() : "";
+      if (!replyText) return;
       call("/v1/communities/" + encodeURIComponent(form.dataset.sub) + "/posts", {
         method: "POST",
-        body: { text: text, parentId: form.dataset.parent }
+        body: { text: replyText, parentId: form.dataset.parent }
       }).then(function (body) {
         if (!body || !body.post) { toast(tr("Couldn't post.")); return; }
-        area.value = "";
+        replyArea.value = "";
         delete state.internal[form.dataset.sub];
         loadInternal(form.dataset.sub).then(render);
       });
