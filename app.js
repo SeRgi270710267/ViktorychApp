@@ -816,7 +816,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "en", bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all" });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all" });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -846,7 +846,9 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.forYouReposts = parsed.forYouReposts !== false;
       parsed.forYouReplies = parsed.forYouReplies !== false;
       parsed.tabViews = cleanTabViews(parsed.tabViews);
-      parsed.translateTo = window.FeedsTranslate ? window.FeedsTranslate.normalize(parsed.translateTo) : (parsed.translateTo || "en");
+      parsed.translateTo = window.FeedsTranslate && window.FeedsTranslate.normalizeTarget ? window.FeedsTranslate.normalizeTarget(parsed.translateTo) : (parsed.translateTo || "ui");
+      parsed.translateAuto = parsed.translateAuto !== false;
+      parsed.translateNever = Array.isArray(parsed.translateNever) ? parsed.translateNever.map(String) : [];
       parsed.bells = cleanBells(parsed.bells);
       parsed.bellNotes = cleanBellNotes(parsed.bellNotes);
       parsed.bellSeen = Array.isArray(parsed.bellSeen) ? parsed.bellSeen.map((id) => String(id)).slice(-500) : [];
@@ -1784,6 +1786,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function translateTarget() {
     const code = STATE.settings && STATE.settings.translateTo;
+    if (!code || code === "ui" || code === "auto") {
+      return window.SI18n ? window.SI18n.getLang() : "en";
+    }
     return String(code || "en").toLowerCase().slice(0, 2) || "en";
   }
 
@@ -11770,6 +11775,18 @@ if (STATE.histClear) {
       return;
     }
     if (act === "translate") { translateNow(el.dataset.key); return; }
+    if (act === "auto-translate-toggle") {
+      if (window.FeedsTranslate) window.FeedsTranslate.toggleAuto();
+      return;
+    }
+    if (act === "never-translate-toggle") {
+      if (window.FeedsTranslate) window.FeedsTranslate.toggleNever(el.dataset.lang);
+      return;
+    }
+    if (act === "never-translate-remove") {
+      if (window.FeedsTranslate) window.FeedsTranslate.removeNever(el.dataset.lang);
+      return;
+    }
     if (act === "show-original") {
       if (window.FeedsTranslate) window.FeedsTranslate.showOriginal(el.dataset.key);
       else { STATE.originalShown[el.dataset.key] = true; render(); }
@@ -12398,7 +12415,7 @@ if (STATE.histClear) {
       return;
     }
     if (act === "export") {
-const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? window.SI18n.getLang() : "en", follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", showPictures: faceSetting("showPictures"), showBanners: faceSetting("showBanners"), notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate ? window.FeedsTranslate.normalize(STATE.settings.translateTo) : (STATE.settings.translateTo || "en")), bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), noteTabs: cleanFeedTabs(STATE.settings.noteTabs), noteTabsSame: STATE.settings.noteTabsSame === false ? false : (STATE.settings.noteTabsSame === true ? true : undefined), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
+const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? window.SI18n.getLang() : "en", follows: STATE.settings.follows, seenFeeds: STATE.settings.seenFeeds || [], seenDefaults: STATE.settings.seenDefaults || STATE.settings.seenFeeds || [], lists: STATE.settings.lists, likes: STATE.settings.likes, bookmarks: STATE.settings.bookmarks, reposts: STATE.settings.reposts, savedPosts: STATE.settings.savedPosts || {}, appearance: STATE.settings.appearance || "lightsout", showPictures: faceSetting("showPictures"), showBanners: faceSetting("showBanners"), notify: !!STATE.settings.notify, autoplay: STATE.settings.autoplay || "all", mutedWords: STATE.settings.mutedWords || [], mutedAccounts: STATE.settings.mutedAccounts || [], repostOff: STATE.settings.repostOff || [], groups: STATE.settings.groups || [], groupsOwn: !!STATE.settings.groupsOwn, subsGroup: STATE.settings.subsGroup || "", followingSort: STATE.settings.followingSort === "popular" ? "popular" : "recent", forYouReposts: STATE.settings.forYouReposts !== false, forYouReplies: STATE.settings.forYouReplies !== false, tabViews: cleanTabViews(STATE.settings.tabViews), translateTo: (window.FeedsTranslate && window.FeedsTranslate.normalizeTarget ? window.FeedsTranslate.normalizeTarget(STATE.settings.translateTo) : (STATE.settings.translateTo || "ui")), translateAuto: STATE.settings.translateAuto !== false, translateNever: Array.isArray(STATE.settings.translateNever) ? STATE.settings.translateNever : [], bells: cleanBells(STATE.settings.bells), bellNotes: cleanBellNotes(STATE.settings.bellNotes), bellSeen: (STATE.settings.bellSeen || []).slice(-500), bellRead: Number(STATE.settings.bellRead) || 0, historyPause: cleanHistoryPause(STATE.settings.historyPause), feedTabs: cleanFeedTabs(STATE.settings.feedTabs), noteTabs: cleanFeedTabs(STATE.settings.noteTabs), noteTabsSame: STATE.settings.noteTabsSame === false ? false : (STATE.settings.noteTabsSame === true ? true : undefined), lastNoteTab: STATE.settings.lastNoteTab || "all" }, null, 2)], { type: "application/json" });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = "viktorychapp-settings.json";
@@ -12779,6 +12796,12 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       window.FeedsTranslate.setTarget(event.target.value);
       return;
     }
+    if (event.target.id === "never-translate-add" && window.FeedsTranslate) {
+      window.FeedsTranslate.addNever(event.target.value);
+      event.target.value = "";
+      return;
+      return;
+    }
     if (event.target.id !== "import-file" || !event.target.files[0]) return;
     const file = event.target.files[0];
     const reader = new FileReader();
@@ -12813,7 +12836,9 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
         if (data.forYouReposts === false || data.forYouReposts === true) STATE.settings.forYouReposts = data.forYouReposts;
         if (data.forYouReplies === false || data.forYouReplies === true) STATE.settings.forYouReplies = data.forYouReplies;
         if (data.tabViews && typeof data.tabViews === "object") STATE.settings.tabViews = cleanTabViews(data.tabViews);
-        if (data.translateTo && window.FeedsTranslate) STATE.settings.translateTo = window.FeedsTranslate.normalize(data.translateTo);
+        if (data.translateAuto !== undefined) STATE.settings.translateAuto = data.translateAuto !== false;
+        if (data.translateTo && window.FeedsTranslate) STATE.settings.translateTo = window.FeedsTranslate.normalizeTarget ? window.FeedsTranslate.normalizeTarget(data.translateTo) : window.FeedsTranslate.normalize(data.translateTo);
+        if (Array.isArray(data.translateNever)) STATE.settings.translateNever = data.translateNever.map(String);
         if (data.bells && typeof data.bells === "object") STATE.settings.bells = cleanBells(data.bells);
         if (Array.isArray(data.bellNotes)) STATE.settings.bellNotes = cleanBellNotes(data.bellNotes);
         if (Array.isArray(data.bellSeen)) STATE.settings.bellSeen = data.bellSeen.map((id) => String(id)).slice(-500);

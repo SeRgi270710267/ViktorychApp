@@ -47,7 +47,7 @@
   const STOP = {
     en: [" the ", " and ", " you ", " that ", " for ", " with ", " this ", " have ", " from "],
     es: [" que ", " los ", " las ", " del ", " por ", " con ", " una ", " para ", " como "],
-    fr: [" les ", " des ", " une ", " que ", " pour ", " dans ", " avec ", " pas ", " plus "],
+    fr: [" les ", " des ", " une ", " que ", " pour ", " dans ", " avec ", " pas ", " plus ", " est ", " sont ", " cette ", " tout ", " mais "],
     de: [" und ", " die ", " der ", " das ", " nicht ", " ein ", " mit ", " den ", " ist "],
     pt: [" que ", " não ", " uma ", " para ", " com ", " como ", " mais ", " dos ", " por "],
     it: [" che ", " non ", " per ", " una ", " con ", " come ", " del ", " della ", " sono "],
@@ -85,7 +85,37 @@
 
   function targetLang() {
     const settings = bound && bound.state && bound.state.settings;
-    return normalize(settings && settings.translateTo);
+    const pref = settings && settings.translateTo;
+    if (!pref || pref === "ui" || pref === "auto") {
+      const ui = (typeof window !== "undefined" && window.SI18n && window.SI18n.getLang) ? window.SI18n.getLang() : "en";
+      return normalize(ui);
+    }
+    return normalize(pref);
+  }
+
+  function normalizeTarget(code) {
+    if (!code || code === "ui" || code === "auto") return "ui";
+    return normalize(code);
+  }
+
+  function autoTranslateEnabled() {
+    const settings = bound && bound.state && bound.state.settings;
+    if (!settings) return true;
+    return settings.translateAuto !== false;
+  }
+
+  function neverTranslateList() {
+    const settings = bound && bound.state && bound.state.settings;
+    const list = settings && settings.translateNever;
+    if (Array.isArray(list)) return list.map((c) => String(c || "").toLowerCase().split("-")[0]);
+    return [];
+  }
+
+  function isNeverTranslate(code) {
+    if (!code) return false;
+    const clean = String(code).toLowerCase().split("-")[0];
+    if (clean === targetLang()) return true;
+    return neverTranslateList().indexOf(clean) >= 0;
   }
 
   let nameLocale = "";
@@ -128,7 +158,11 @@
 
   function readStore(name) {
     try {
-      let raw = sessionStorage.getItem(name);
+      let raw = null;
+      try { raw = sessionStorage.getItem(name); } catch (e) {}
+      if (!raw) {
+        try { raw = localStorage.getItem(name); } catch (e) {}
+      }
       if (!raw) {
         const legacy = sessionStorage.getItem(String(name).replace("viktorychapp-", "superintelapp-"));
         const previous = legacy || sessionStorage.getItem(String(name).replace("viktorychapp-", "rss-" + "feeds-"));
@@ -142,7 +176,11 @@
   }
 
   function writeStore(name, value) {
-    try { sessionStorage.setItem(name, JSON.stringify(value)); }
+    try {
+      const serialized = JSON.stringify(value);
+      try { sessionStorage.setItem(name, serialized); } catch (e) {}
+      try { localStorage.setItem(name, serialized); } catch (e) {}
+    }
     catch (err) { /* a full session store must not block the translation */ }
   }
 
@@ -158,9 +196,9 @@
     const entries = box.entries || {};
     entries[cacheId(key, text)] = row;
     const ids = Object.keys(entries);
-    if (ids.length > 60) {
+    if (ids.length > 250) {
       ids.sort((a, b) => (entries[a].at || 0) - (entries[b].at || 0));
-      ids.slice(0, ids.length - 60).forEach((id) => { delete entries[id]; });
+      ids.slice(0, ids.length - 250).forEach((id) => { delete entries[id]; });
     }
     writeStore(CACHE_KEY, { entries: entries });
   }
@@ -190,13 +228,19 @@
   function latinGuess(text) {
     const blob = " " + String(text || "").toLowerCase().replace(/[^\p{L}\s]+/gu, " ").replace(/\s+/g, " ") + " ";
     let best = "";
-    let bestScore = 1;
+    const raw = String(text || "").toLowerCase();
+    let bestScore = 0;
     Object.keys(STOP).forEach((code) => {
       let score = 0;
       STOP[code].forEach((word) => { if (blob.indexOf(word) >= 0) score += 1; });
       if (score > bestScore) { best = code; bestScore = score; }
     });
-    return best;
+    if (bestScore >= 1) return best;
+    if (/[éèêëàâçîïôùûœæ]/.test(raw) && !/[ñáíóú]/.test(raw)) return "fr";
+    if (/[ñáíóúü¿¡]/.test(raw) && !/[ãõç]/.test(raw)) return "es";
+    if (/[äöüß]/.test(raw)) return "de";
+    if (/[ãõç]/.test(raw)) return "pt";
+    return "";
   }
 
   function guess(text) {
@@ -398,6 +442,7 @@
 
   function paint() {
     pending.forEach((key) => markBusy(key, true));
+    scheduleAuto();
   }
 
   function applyResult(key, text, source, engine) {
@@ -467,7 +512,7 @@
 
   async function getJson(url, timeoutMs) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs || 8000) : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs || 4000) : null;
     try {
       const res = await fetch(url, {
         signal: ctrl ? ctrl.signal : undefined,
@@ -723,6 +768,8 @@
   async function translate(key) {
     const sample = sampleOf(key).trim();
     if (!sample || pending.has(key)) return;
+    failedKeys.delete(key);
+    autoQueued.delete(key);
     const target = targetLang();
     const cached = cacheGet(key, sample);
     if (cached && cached.text) {
@@ -795,6 +842,7 @@
         if (String(err && err.message) !== "sick") markSick("google-public");
       }
       box.translateFallback[key] = googleHref(sample, target);
+      failedKeys.add(key);
       delete box.translated[key];
       patch(key);
     } finally {
@@ -815,10 +863,104 @@
     patch(key);
   }
 
+  let autoObserver = null;
+  const autoQueue = [];
+  const autoQueued = new Set();
+  const failedKeys = new Set();
+  let autoRunning = 0;
+  const MAX_CONCURRENT = 2;
+
+  function initObserver() {
+    if (autoObserver || typeof IntersectionObserver === "undefined") return;
+    try {
+      autoObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const key = entry.target.getAttribute("data-tr");
+            if (key) enqueueAuto(key, true);
+          }
+        });
+      }, { rootMargin: "350px 0px" });
+    } catch (err) {
+      autoObserver = null;
+    }
+  }
+
+  function enqueueAuto(key, priority) {
+    if (!autoTranslateEnabled()) return;
+    if (pending.has(key) || autoQueued.has(key) || failedKeys.has(key)) return;
+    const box = state();
+    if (box.translated && box.translated[key]) return;
+    if (box.originalShown && box.originalShown[key]) return;
+    const sample = sampleOf(key);
+    if (!sample || sample.length < 8) return;
+    if (!offer(key, sample)) return;
+    const detected = cleanSource(guess(sample) || (box.lang && box.lang[key]));
+    if (detected && isNeverTranslate(detected)) return;
+
+    autoQueued.add(key);
+    if (priority) {
+      autoQueue.unshift(key);
+    } else {
+      autoQueue.push(key);
+    }
+    pumpAuto();
+  }
+
+  function pumpAuto() {
+    if (!autoTranslateEnabled()) {
+      autoQueue.length = 0;
+      autoQueued.clear();
+      return;
+    }
+    while (autoRunning < MAX_CONCURRENT && autoQueue.length > 0) {
+      const key = autoQueue.shift();
+      autoQueued.delete(key);
+      const box = state();
+      if (!key || (box.translated && box.translated[key]) || (box.originalShown && box.originalShown[key])) {
+        continue;
+      }
+      autoRunning++;
+      translate(key)
+        .catch(() => {
+          failedKeys.add(key);
+        })
+        .finally(() => {
+          autoRunning--;
+          pumpAuto();
+        });
+    }
+  }
+
+  function scheduleAuto() {
+    if (!autoTranslateEnabled()) return;
+    if (typeof document === "undefined") return;
+    initObserver();
+    const elements = document.querySelectorAll("[data-tr]");
+    elements.forEach((el) => {
+      const key = el.getAttribute("data-tr");
+      if (!key || pending.has(key) || autoQueued.has(key) || failedKeys.has(key)) return;
+      const box = state();
+      if (box.translated && box.translated[key]) return;
+      if (box.originalShown && box.originalShown[key]) return;
+      const sample = sampleOf(key) || (el.innerText || "").trim();
+      if (sample.length < 8) return;
+      if (!offer(key, sample)) return;
+      const detected = cleanSource(guess(sample) || (box.lang && box.lang[key]));
+      if (detected && isNeverTranslate(detected)) return;
+
+      if (autoObserver) {
+        autoObserver.observe(el);
+      } else {
+        enqueueAuto(key, false);
+      }
+    });
+  }
+
   function setTarget(code) {
     const box = state();
     if (!box.settings) return;
-    const next = normalize(code);
+    const next = (code === "ui" || code === "auto") ? "ui" : normalize(code);
     box.settings.translateTo = next;
     box.translated = {};
     box.originalShown = {};
@@ -826,13 +968,115 @@
     box.translateFallback = {};
     box.lang = {};
     if (bound && bound.save) bound.save();
+    failedKeys.clear();
+    autoQueue.length = 0;
+    autoQueued.clear();
     if (bound && bound.render) bound.render();
+    scheduleAuto();
+  }
+
+  function toggleAuto() {
+    const box = state();
+    if (!box.settings) return;
+    const current = box.settings.translateAuto !== false;
+    box.settings.translateAuto = !current;
+    if (!box.settings.translateAuto) {
+      autoQueue.length = 0;
+      autoQueued.clear();
+    }
+    if (bound && bound.save) bound.save();
+    if (bound && bound.render) bound.render();
+    if (box.settings.translateAuto) scheduleAuto();
+  }
+
+  function toggleNever(code) {
+    const box = state();
+    if (!box.settings) return;
+    const lang = normalize(code);
+    let list = Array.isArray(box.settings.translateNever) ? box.settings.translateNever.slice() : [];
+    const idx = list.indexOf(lang);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+    } else {
+      list.push(lang);
+    }
+    box.settings.translateNever = list;
+    if (bound && bound.save) bound.save();
+    if (bound && bound.render) bound.render();
+    if (idx >= 0 && box.settings.translateAuto !== false) scheduleAuto();
+  }
+
+  function addNever(code) {
+    const box = state();
+    if (!box.settings || !code) return;
+    const lang = normalize(code);
+    let list = Array.isArray(box.settings.translateNever) ? box.settings.translateNever.slice() : [];
+    if (list.indexOf(lang) < 0) {
+      list.push(lang);
+      box.settings.translateNever = list;
+      if (bound && bound.save) bound.save();
+      if (bound && bound.render) bound.render();
+    }
+  }
+
+  function removeNever(code) {
+    const box = state();
+    if (!box.settings || !code) return;
+    const lang = normalize(code);
+    let list = Array.isArray(box.settings.translateNever) ? box.settings.translateNever.slice() : [];
+    const idx = list.indexOf(lang);
+    if (idx >= 0) {
+      list.splice(idx, 1);
+      box.settings.translateNever = list;
+      if (bound && bound.save) bound.save();
+      if (bound && bound.render) bound.render();
+      if (box.settings.translateAuto !== false) scheduleAuto();
+    }
   }
 
   function settingsHtml() {
-    const current = targetLang();
-    const options = LANGS.map((row) => `<option value="${esc(row[0])}"${row[0] === current ? " selected" : ""}>${esc(languageName(row[0]))}</option>`).join("");
-    return `<h2>${tr("Translate posts to")}</h2><p class="phandle">${tr("Choose which language posts are translated into. Names and post text stay as written until you translate a post.")}</p><div class="tr-settings"><label class="vh" for="translate-to">${tr("Translate posts to")}</label><select id="translate-to" class="tr-select">${options}</select></div>`;
+    const box = state();
+    const settings = box.settings || {};
+    const autoOn = settings.translateAuto !== false;
+    const rawTarget = settings.translateTo || "ui";
+    const uiLang = (typeof window !== "undefined" && window.SI18n && window.SI18n.getLang) ? window.SI18n.getLang() : "en";
+    const neverList = Array.isArray(settings.translateNever) ? settings.translateNever : [];
+
+    const options = LANGS.map((row) => `<option value="${esc(row[0])}"${row[0] === rawTarget ? " selected" : ""}>${esc(languageName(row[0]))}</option>`).join("");
+
+    const quickCodes = ["en", "ru", "es", "fr", "de", "uk"];
+    const quickChips = quickCodes.map((code) => {
+      const on = neverList.indexOf(code) >= 0;
+      return `<button class="outline tr-chip${on ? " on" : ""}" type="button" data-act="never-translate-toggle" data-lang="${esc(code)}">${esc(languageName(code))}</button>`;
+    }).join("");
+
+    const customChips = neverList.filter((code) => quickCodes.indexOf(code) < 0).map((code) => {
+      return `<button class="outline tr-chip on" type="button" data-act="never-translate-remove" data-lang="${esc(code)}" title="${esc(tr("Remove {language}", { language: languageName(code) }))}">${esc(languageName(code))} &times;</button>`;
+    }).join("");
+
+    const addOptions = LANGS.filter((row) => neverList.indexOf(row[0]) < 0 && quickCodes.indexOf(row[0]) < 0).map((row) => `<option value="${esc(row[0])}">${esc(languageName(row[0]))}</option>`).join("");
+
+    return `<h2>${esc(tr("Translation"))}</h2>` +
+      `<div class="tr-setting-row">` +
+        `<button class="tab-switch${autoOn ? " on" : ""}" type="button" role="switch" aria-checked="${autoOn ? "true" : "false"}" data-act="auto-translate-toggle">` +
+          `<span>${esc(tr("Automatically translate posts"))}</span><i></i>` +
+        `</button>` +
+        `<p class="phandle">${esc(tr("Automatically translate posts in other languages into your chosen language."))}</p>` +
+      `</div>` +
+      `<div class="tr-field">` +
+        `<label class="tr-label" for="translate-to">${esc(tr("Translate posts to"))}</label>` +
+        `<select id="translate-to" class="tr-select">` +
+          `<option value="ui"${rawTarget === "ui" ? " selected" : ""}>${esc(tr("Match app language"))} (${esc(languageName(uiLang))})</option>` +
+          `${options}` +
+        `</select>` +
+        `<p class="phandle">${esc(tr("Choose which language posts are translated into."))}</p>` +
+      `</div>` +
+      `<div class="tr-field">` +
+        `<h3>${esc(tr("Do not translate"))}</h3>` +
+        `<p class="phandle">${esc(tr("Posts in these languages will not be automatically translated."))}</p>` +
+        `<div class="tr-chips">${quickChips}${customChips}</div>` +
+        `${addOptions ? `<label class="vh" for="never-translate-add">${esc(tr("Add language..."))}</label><select id="never-translate-add" class="tr-select tr-add-select"><option value="">${esc(tr("Add language..."))}</option>${addOptions}</select>` : ""}` +
+      `</div>`;
   }
 
   function rotateLive(list, prefix, cursor) {
@@ -848,6 +1092,12 @@
   root.FeedsTranslate = {
     bind: bind,
     normalize: normalize,
+    normalizeTarget: normalizeTarget,
+    toggleAuto: toggleAuto,
+    toggleNever: toggleNever,
+    addNever: addNever,
+    removeNever: removeNever,
+    scheduleAuto: scheduleAuto,
     offer: offer,
     textFor: textFor,
     prepare: prepare,
