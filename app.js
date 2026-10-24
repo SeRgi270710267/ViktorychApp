@@ -2555,10 +2555,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const out = [];
     const picked = pickMp4((media && media.variants) || []);
     const raw = [];
-    [picked, media && media.url, media && media.fallback, media && media.hls].forEach((url) => {
+    const variants = (media && media.variants) || [];
+    [picked, media && media.url, media && media.fallback].forEach((url) => {
       if (!url || !playableFile(url) || oePast(url)) return;
-      raw.push(url);
+      if (raw.indexOf(url) < 0) raw.push(url);
     });
+    variants.forEach((v) => {
+      const u = v && v.url;
+      if (u && playableFile(u) && !oePast(u) && raw.indexOf(u) < 0) raw.push(u);
+    });
+    [media && media.url, media && media.fallback].forEach((url) => {
+      const u = String(url || "");
+      if (/v\.redd\.it\/[A-Za-z0-9_-]+/i.test(u) && u.indexOf("HLSPlaylist.m3u8") < 0) {
+        const hls = u.replace(/\/+$/, "") + "/HLSPlaylist.m3u8";
+        if (raw.indexOf(hls) < 0) raw.push(hls);
+      }
+    });
+    if (media && media.hls && playableFile(media.hls) && !oePast(media.hls) && raw.indexOf(media.hls) < 0) {
+      raw.push(media.hls);
+    }
     let key = "";
     raw.concat([media && media.url, media && media.fallback, media && media.hls]).forEach((url) => {
       if (!key) key = r2ObjectKey(url);
@@ -2690,12 +2705,18 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function clearPlayer(el) {
+    if (el._stall) { clearTimeout(el._stall); el._stall = 0; }
+    if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
+    el.querySelectorAll("video, audio").forEach((m) => {
+      try { m.pause(); m.removeAttribute("src"); m.load(); } catch (e) {}
+    });
+    el.querySelectorAll("iframe").forEach((f) => {
+      try { f.src = "about:blank"; } catch (e) {}
+    });
     if (el._ytPlayer && el._ytPlayer.destroy) {
       try { el._ytPlayer.destroy(); } catch (err) {}
       el._ytPlayer = null;
     }
-    if (el._stall) { clearTimeout(el._stall); el._stall = 0; }
-    if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
     el.querySelectorAll("video, iframe, .html5-video-player").forEach((node) => node.remove());
   }
 
@@ -2749,7 +2770,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (q && typeof q.totalVideoFrames === "number") return q.totalVideoFrames > 0 && q.totalVideoFrames > (q.corruptedVideoFrames || 0);
     }
     if (typeof video.webkitDecodedFrameCount === "number") return video.webkitDecodedFrameCount > 0;
-    return video.currentTime > 0.02;
+    return false;
   }
 
   function armStall(el, video, gen, fail, wait) {
@@ -2757,11 +2778,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const started = video.currentTime;
     el._stall = setTimeout(() => {
       if (el._gen !== gen) return;
-      if (video.currentTime > started + 0.2 && video.videoWidth > 0) return;
+      if (video.currentTime > started + 0.2 && (el._framed || hasDecodedFrames(video))) return;
       fail();
     }, wait || 3500);
     const clear = () => {
-      if (video.currentTime > 0.2 && video.videoWidth > 0 && el._stall) { clearTimeout(el._stall); el._stall = 0; }
+      if (video.currentTime > 0.2 && (el._framed || hasDecodedFrames(video)) && el._stall) { clearTimeout(el._stall); el._stall = 0; }
     };
     video.addEventListener("timeupdate", clear);
     video.addEventListener("playing", clear);
@@ -2845,7 +2866,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const poster = el.querySelector(".vposter") || el.querySelector("img");
     const posterSrc = poster ? (poster.getAttribute("src") || poster.dataset.fallbackSrc || "") : "";
     if (poster && posterSrc && !poster.classList.contains("face")) video.poster = posterSrc;
-    if (source.kind === "tg" || source.telegram || (source.url && source.url.indexOf("/v1/owner/play") >= 0)) video.crossOrigin = "anonymous";
+    if (source.kind === "tg" || source.telegram || (source.url && source.url.indexOf("/v1/owner/play") >= 0)) {
+      video.crossOrigin = "anonymous";
+    } else {
+      try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
+    }
     video.preload = "auto";
     const token = el._src;
     const fail = () => {
@@ -2854,6 +2879,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       advance();
     };
     el._framed = false;
+    const checkFrame = () => {
+      if (el._gen !== gen || el._src !== token) return false;
+      if (video.videoWidth > 0 && (el._framed || hasDecodedFrames(video))) {
+        el._framed = true;
+        markShown(el);
+        return true;
+      }
+      return false;
+    };
     if (typeof video.requestVideoFrameCallback === "function") {
       const onFrame = () => {
         if (el._gen !== gen || el._src !== token) return;
@@ -2869,16 +2903,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     video.addEventListener("error", fail);
     video.addEventListener("playing", () => {
       if (el._gen !== gen) return;
-      if (video.videoWidth > 0 && (el._framed || hasDecodedFrames(video) || video.currentTime > 0)) markShown(el);
+      checkFrame();
     });
     video.addEventListener("loadedmetadata", () => {
       if (el._gen !== gen || !opts.preview) return;
       if (clipLoops(media, video.duration)) video.loop = true;
-      if (video.videoWidth > 0 && (video.readyState >= 2 || video.currentTime > 0)) markShown(el);
+      checkFrame();
     });
     video.addEventListener("loadeddata", () => {
       if (el._gen !== gen) return;
-      if (video.videoWidth > 0) markShown(el);
+      checkFrame();
       const img = el.querySelector(".vposter.face, .yt-thumb img.face");
       if (!img || !video.videoWidth) return;
       try {
@@ -2897,8 +2931,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
     video.addEventListener("timeupdate", () => {
       if (el._gen !== gen) return;
-      if (video.videoWidth > 0 && (video.currentTime > 0.01 || el._framed || hasDecodedFrames(video))) markShown(el);
-      else if (video.currentTime > 0.8 && video.videoWidth === 0) { fail(); return; }
+      if (checkFrame()) {
+        /* frame presented and marked shown */
+      } else if (video.currentTime > 0.8 && !el._framed && !hasDecodedFrames(video)) {
+        fail();
+        return;
+      }
       if (!isFinite(video.duration) || video.duration <= 0) return;
       const label = clock(Math.max(0, Math.ceil(video.duration - video.currentTime)));
       const left = el.querySelector(".vleft");
@@ -3534,6 +3572,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const src = video ? (video.currentSrc || video.src || "") : "";
     const yt = youtubeId(post, media);
     noteVideo(post, { position: time, touch: true });
+    if (STATE.autoEl) pausePreview(STATE.autoEl);
+    STATE.autoEl = null;
+    pausePreview(tile);
     if (yt || post.watch || (post.platform === "youtube" && post.kind !== "community")) {
       STATE.handoff = true;
       STATE.playing = {
@@ -3544,7 +3585,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         src: src && src.indexOf("youtube-nocookie") < 0 && src.indexOf("about:blank") < 0 ? src : "",
         iframe: false
       };
-      pausePreview(tile);
       goHash(watchHash(post));
       return;
     }
@@ -4125,6 +4165,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (/webapp[\w.-]*\.tiktok\.com$/i.test(host)) return true;
       if (/(?:^|\.)(?:cdninstagram\.com|fbcdn\.net)$/i.test(host) && /\/o1\/v\/t2\/|\/v\/t(?:2|16|50|66)\b/i.test(new URL(raw).pathname || "")) return true;
       if (/(?:^|\.)video\.twimg\.com$/i.test(host)) return true;
+      if (/(?:^|\.)v\.redd\.it$/i.test(host)) return true;
     } catch (err) { /* not a URL */ }
     return false;
   }
@@ -13993,17 +14034,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           loadHls().then((Hls) => {
             if (!STATE.viewer || !STATE.viewer.video || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) return;
             const hls = new Hls(hlsAhead());
+            box._hls = hls;
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => { lockHlsTop(hls); go(); });
           });
           return;
         }
+        try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
         video.src = url;
         if (video.readyState >= 1) go();
         else video.addEventListener("loadedmetadata", go, { once: true });
       };
       if (view.src && playableFile(view.src) && view.src.indexOf("/tg/") < 0) {
+        const onDirectError = () => {
+          sourcesFor(post || {}, media, 0).then((list) => playAt(list, 0)).catch(() => showCover());
+        };
+        video.addEventListener("error", onDirectError, { once: true });
         startFile(view.src, /\.m3u8(\?|$)/i.test(view.src) ? "hls" : "mp4");
         return;
       }
@@ -14062,6 +14109,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           }).catch(fail);
           return;
         }
+        try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
         video.addEventListener("error", fail, { once: true });
         startFile(file.url, file.kind === "hls" ? "hls" : "mp4");
       };
@@ -14088,6 +14136,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function openVideoViewer(post, media, src, time) {
     if (STATE.autoEl) pausePreview(STATE.autoEl);
     STATE.autoEl = null;
+    document.querySelectorAll(".vplay.is-playing").forEach((el) => pausePreview(el));
     const clean = src && src.indexOf("about:blank") < 0 ? src : "";
     STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null };
     paintViewer();
@@ -14104,12 +14153,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function closeViewer() {
     const box = document.getElementById("viewer");
-    if (box && box._ytPlayer) {
-      try { box._ytPlayer.destroy(); } catch (err) {}
-      box._ytPlayer = null;
+    if (box) {
+      if (box._hls && box._hls.destroy) {
+        try { box._hls.destroy(); } catch (err) {}
+        box._hls = null;
+      }
+      box.querySelectorAll("video, audio").forEach((video) => {
+        try { video.pause(); video.removeAttribute("src"); video.load(); } catch (err) { /* the viewer is closing */ }
+      });
+      box.querySelectorAll("iframe").forEach((f) => {
+        try { f.src = "about:blank"; } catch (err) {}
+      });
+      if (box._ytPlayer && box._ytPlayer.destroy) {
+        try { box._ytPlayer.destroy(); } catch (err) {}
+        box._ytPlayer = null;
+      }
+      box.innerHTML = "";
     }
-    if (box) box.querySelectorAll("video").forEach((video) => {
-      try { video.pause(); video.removeAttribute("src"); video.load(); } catch (err) { /* the viewer is closing */ }
+    document.querySelectorAll("#viewer video, #viewer audio").forEach((m) => {
+      try { m.pause(); m.removeAttribute("src"); m.load(); } catch (err) {}
     });
     STATE.viewer = null;
     paintViewer();
