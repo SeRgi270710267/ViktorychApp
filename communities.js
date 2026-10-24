@@ -124,6 +124,8 @@
   var svgHeartOn = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg>';
   var svgTrash = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 6V4.5C16 3.12 14.88 2 13.5 2h-3C9.12 2 8 3.12 8 4.5V6H3v2h1.06l.81 12.16C4.94 21.27 5.86 22 6.98 22h10.04c1.12 0 2.04-.73 2.11-1.84L19.94 8H21V6h-5zm-6-1.5c0-.28.22-.5.5-.5h3c.28 0 .5.22.5.5V6h-4V4.5zm7.88 15.36c-.02.37-.33.64-.7.64H6.98c-.37 0-.68-.27-.7-.64L5.07 8h13.86l-.81 11.86z"/></svg>';
   var svgExternal = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6H5.5C4.12 6 3 7.12 3 8.5v10C3 19.88 4.12 21 5.5 21h10c1.38 0 2.5-1.12 2.5-2.5V14h-2v4.5c0 .28-.22.5-.5.5h-10a.5.5 0 0 1-.5-.5v-10c0-.28.22-.5.5-.5H10V6zm4 0V4h7v7h-2V7.41l-7.29 7.3-1.42-1.42L17.58 6H14z"/></svg>';
+  var svgCommunities = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm6 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM4 18v-1.2C4 14.6 6.4 13 9 13s5 1.6 5 3.8V18H4zm10.5 0v-1.1c0-.7-.2-1.4-.6-2 .9-.4 2-.6 3.1-.6 2.4 0 5 1.4 5 3.5V18h-7.5z"/></svg>';
+  var svgSpark = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z"/></svg>';
 
   function loadIndex() {
     if (state.index) return Promise.resolve(state.index);
@@ -168,7 +170,25 @@
   }
 
   function head(title, back, actions) {
-    return '<div class="topbar tall"><div class="page-head">' +
+    var acct = session().account;
+    var userAva = '<span class="ava initials">Y</span>';
+    if (acct) {
+      if (acct.avatar && /^https:\/\//.test(acct.avatar)) {
+        userAva = '<img class="ava" src="' + esc(acct.avatar) + '" alt="">';
+      } else {
+        var letter = String(acct.displayName || acct.handle || "Y").slice(0, 1).toUpperCase();
+        userAva = '<span class="ava initials">' + esc(letter) + '</span>';
+      }
+    }
+    var mhead = '<div class="mhead">' +
+      '<button class="m-ava" type="button" data-act="drawer" aria-label="' + esc(tr("Menu")) + '">' + userAva + '</button>' +
+      '<a class="m-logo" href="#/communities" aria-label="' + esc(tr("Communities")) + '">' + svgCommunities + '</a>' +
+      '<a class="m-icon" href="#/settings" aria-label="' + esc(tr("Settings")) + '">' + svgSpark + '</a>' +
+    '</div>';
+
+    return '<div class="topbar tall">' +
+      mhead +
+      '<div class="page-head">' +
       (back ? '<a class="icon-btn" href="' + esc(back) + '" aria-label="' + esc(tr("Back")) + '">' + svgBack + '</a>' : "") +
       '<div class="head-text grow"><h1>' + esc(title) + '</h1></div>' +
       (actions ? '<div class="page-head-actions">' + actions + '</div>' : "") +
