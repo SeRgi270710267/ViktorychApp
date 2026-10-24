@@ -21,6 +21,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -216,25 +217,69 @@ def _lookup_x(post: dict):
     return None
 
 
-def fetch_x(post: dict, cap: int = 50):
+def fetch_x(post: dict, cap: int = 500):
     status_id = str(post.get("statusId") or post.get("id") or "")
     handle = post.get("handle") or "i"
     try:
-        raw = _get(f"https://api.fxtwitter.com/2/conversation/{status_id}")
-        payload = json.loads(raw)
-        author = _parent_handle(payload) or handle
-        rows = extract_fxtwitter_replies(payload, status_id)
-        looked = {"n": 0}
+        urls = [
+            f"https://api.fxtwitter.com/2/conversation/{status_id}",
+            f"https://api.fxtwitter.com/2/conversation/{status_id}?ranking_mode=recency",
+        ]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda u: _try(u, timeout=12), urls))
+
+        primary_payload = None
+        all_rows = {}
+        for raw in results:
+            if not raw:
+                continue
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not primary_payload and payload.get("status"):
+                primary_payload = payload
+            for r in extract_fxtwitter_replies(payload, status_id):
+                all_rows[str(r.get("id") or "")] = r
+
+        if not primary_payload and results and results[0]:
+            try:
+                primary_payload = json.loads(results[0])
+            except json.JSONDecodeError:
+                primary_payload = {}
+        author = _parent_handle(primary_payload or {}) or handle
+
+        sub_candidates = [
+            sid for sid, r in all_rows.items()
+            if int((r.get("stats") or {}).get("replies") or r.get("reply_count") or 0) > 0
+        ][:25]
+        if sub_candidates:
+            sub_urls = [f"https://api.fxtwitter.com/2/conversation/{sid}" for sid in sub_candidates]
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                sub_results = list(pool.map(lambda u: _try(u, timeout=8), sub_urls))
+            for sid, raw in zip(sub_candidates, sub_results):
+                if not raw:
+                    continue
+                try:
+                    sub_payload = json.loads(raw)
+                    sub_rows = extract_fxtwitter_replies(sub_payload, sid)
+                    for r in sub_rows:
+                        r["conversationId"] = status_id
+                        sid_key = str(r.get("id") or "")
+                        if sid_key and sid_key not in all_rows:
+                            all_rows[sid_key] = r
+                except Exception:
+                    pass
+
+        rows = list(all_rows.values())
 
         def lookup(reply):
-            if looked["n"] >= 15:
+            if (reply.get("text") or "").strip() and reply.get("handle"):
                 return None
-            looked["n"] += 1
-            time.sleep(0.2)
             return _lookup_x(reply)
 
         rows = rank_replies(fill_missing(rows, status_id, lookup), author, cap)
-        return rows, "fxtwitter", conversation_reply_count(payload)
+        return rows, "fxtwitter", conversation_reply_count(primary_payload or {})
     except (urllib.error.URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"[replies] fxtwitter {status_id}: {exc}", file=sys.stderr)
     for host in NITTER_HOSTS:
@@ -575,13 +620,15 @@ def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> No
         if not status_id or status_id in seen:
             continue
         seen.add(status_id)
-        if platform in ("x", "youtube"):
+        if platform == "youtube":
             continue
-        if not use_fixtures and not comments_kept(post):
+        if not use_fixtures and not comments_kept(post, allow_x=True):
             continue
         found = from_fixture(post) if use_fixtures else None
         if found is None and not use_fixtures:
-            if platform == "instagram":
+            if platform == "x":
+                found = fetch_x(post)
+            elif platform == "instagram":
                 found = fetch_instagram(post)
             elif platform == "threads":
                 found = fetch_threads(post)
@@ -612,3 +659,32 @@ def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> No
     if missed["threads"]:
         extra = "" if os.environ.get("THREADS_COOKIE") else " THREADS_COOKIE is not set."
         print(f"[replies] threads: {missed['threads']} posts had no public replies.{extra}", file=sys.stderr)
+
+
+def main(argv: list | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if not args:
+        feeds_path = ROOT / "feeds.json"
+        if feeds_path.is_file():
+            doc = json.loads(feeds_path.read_text(encoding="utf-8"))
+            refresh(doc.get("posts") or [], False)
+        return 0
+    for arg in args:
+        status_id = re.search(r"/status/(\d+)", arg)
+        sid = status_id.group(1) if status_id else arg.strip()
+        if sid.isdigit():
+            match_handle = re.search(r"x\.com/([^/]+)/status/", arg)
+            handle = match_handle.group(1) if match_handle else "cb_doge"
+            post = {"id": sid, "statusId": sid, "platform": "x", "handle": handle}
+            res = fetch_x(post, cap=500)
+            if res:
+                rows, source, count = res
+                write_comments(post, rows, source, cap=500)
+                print(f"[replies] Wrote {len(rows)} comments for {sid}")
+            else:
+                print(f"[replies] Failed to fetch comments for {sid}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

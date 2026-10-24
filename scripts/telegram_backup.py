@@ -256,6 +256,8 @@ def structural_role(key: str) -> str:
         return "radio"
     if lowered.startswith("music/") or lowered.startswith("covers/"):
         return "catalog"
+    if lowered.startswith("comments/"):
+        return "comments"
     if lowered.startswith("owner/") or DATA_KEY.match(lowered):
         return "live"
     if any(lowered.startswith(prefix) for prefix in GALLERY_PREFIXES):
@@ -362,6 +364,12 @@ def plan_kind(key: str, size: int, content_type: str, local: bool, loop_version:
         return "too-big" if size > public_bytes() else "keep-radio"
     if role in {"catalog", "gallery"}:
         if size <= 0 or not (is_media_key(key, content_type) or suffix(key) in {".m3u8", ".m4s", ".ts", ".mp4", ".m4a"}):
+            return "keep-other"
+        if size <= public_bytes():
+            return "mirror"
+        return "too-big"
+    if role == "comments":
+        if size <= 0:
             return "keep-other"
         if size <= public_bytes():
             return "mirror"
@@ -1362,6 +1370,11 @@ def list_objects(token: str, account: str, bucket: str) -> list:
 
 
 def download_object(token: str, account: str, bucket: str, key: str, dest: Path) -> str:
+    local_src = ROOT / key
+    if bucket == "local" or (local_src.is_file() and key.startswith("comments/")):
+        if local_src.is_file():
+            shutil.copy2(local_src, dest)
+            return hash_file(dest)
     url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/{urllib.parse.quote(bucket)}/objects/{quote_key(key)}"
     req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token, "User-Agent": UA})
     digest = hashlib.sha256()
@@ -2155,10 +2168,26 @@ def prepare_clients() -> dict | None:
 
 
 def collect_objects(cf: dict) -> list:
-    buckets = bucket_names(cf["token"], cf["account"])
+    buckets = bucket_names(cf["token"], cf["account"]) if cf.get("token") and cf.get("account") else []
     rows = []
     for bucket in buckets:
         rows.extend(list_objects(cf["token"], cf["account"], bucket))
+    comments_dir = ROOT / "comments"
+    if comments_dir.is_dir():
+        for path in comments_dir.glob("*.json"):
+            if path.name == "lookup.json" or not path.is_file():
+                continue
+            key = f"comments/{path.name}"
+            if not any(r.get("key") == key for r in rows):
+                rows.append({
+                    "bucket": cf.get("manifest_bucket") or (buckets[0] if buckets else "local"),
+                    "key": key,
+                    "size": path.stat().st_size,
+                    "content_type": "application/json",
+                    "etag": "",
+                    "uploaded": "",
+                    "local_path": str(path),
+                })
     return rows
 
 
@@ -2603,16 +2632,18 @@ def backup(loop_only: bool = False) -> int:
                 return loop_rank(str(obj.get("key") or ""), version)
             kind = plan_kind(obj["key"], int(obj["size"]), obj.get("content_type") or "", False, version, blocked)
             key = str(obj.get("key") or "")
-            if key.startswith("tiktok/"):
+            if key.startswith("comments/"):
                 first = 0
-            elif key.startswith("social/") and "/video/" in key:
+            elif key.startswith("tiktok/"):
                 first = 1
-            elif key.startswith("social/"):
+            elif key.startswith("social/") and "/video/" in key:
                 first = 2
-            elif kind in {"loop", "mirror"}:
+            elif key.startswith("social/"):
                 first = 3
-            else:
+            elif kind in {"loop", "mirror"}:
                 first = 4
+            else:
+                first = 5
             return (first, -int(obj.get("size") or 0), str(obj.get("uploaded") or ""), key)
 
         stopped = False
@@ -2700,6 +2731,8 @@ def selftest() -> int:
     check(plan_kind("stories.json", 1000, "application/json", True) == "keep-live", "the stories catalog stays on R2")
     check(plan_kind("owner/tiktok.json", 1000, "application/json", True) == "keep-live", "owner files stay on R2")
     check(plan_kind("secrets/token.txt", 20, "text/plain", True) == "keep-key", "a token file stays on R2")
+    check(structural_role("comments/2114074075845026215.json") == "comments", "comments get their own structural role")
+    check(plan_kind("comments/2114074075845026215.json", 1000, "application/json", False) == "mirror", "comments are mirrored to Telegram")
     check(plan_kind("loop/" + published + "/seg_0000.m4s", SMALL_BYTES + 1, "video/iso.segment", True, published) == "too-big", "a loop segment of 19 MiB or more stays on R2")
     flac = loop_part("loop/" + published + "/seg_0003.m4s", published)
     aac = loop_part("loop/" + published + "/aac/seg_0001.ts", published)
