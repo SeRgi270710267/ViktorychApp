@@ -225,6 +225,7 @@ def accounts_wall_checks() -> None:
                 accounts_publish.fetch_health = original_health
                 accounts_publish.upload = original_upload
             check(code == 1 and open_shell(site), "a failed upload does not publish an unlocked shell")
+            os.chdir(previous)
     finally:
         os.chdir(previous)
         accounts_publish.fetch_health = original_health
@@ -1068,6 +1069,15 @@ def main() -> None:
     missing = ROOT / "404.html"
     missing_text = missing.read_text(encoding="utf-8")
     check("location.replace" in missing_text and "ViktorychApp" in missing_text and "SuperintelApp" not in missing_text and "github.io" in missing_text and "parts[0]" in missing_text, "a missing page returns to this site's directory")
+    robots_text = (ROOT / "robots.txt").read_text(encoding="utf-8") if (ROOT / "robots.txt").is_file() else ""
+    noindex_tag = '<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">'
+    googlebot_tag = '<meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">'
+    worker_index = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
+    discord_pub = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
+    check("User-agent: *" in robots_text and "Disallow: /" in robots_text and "robots.txt" in workflow and '"robots.txt"' in discord_pub, "robots.txt disallows crawlers and is published with the site")
+    check(noindex_tag in (ROOT / "index.html").read_text(encoding="utf-8") and googlebot_tag in (ROOT / "index.html").read_text(encoding="utf-8") and noindex_tag in missing_text and googlebot_tag in missing_text, "the shell and 404 pages block search engine indexing")
+    check('"x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"' in worker_index and 'path === "/robots.txt"' in worker_index, "the Worker sends X-Robots-Tag and serves /robots.txt")
+    check("https://github.com/${GITHUB_REPO}" not in (ROOT / "app.js").read_text(encoding="utf-8"), "the sidebar fineprint does not link crawlers to the GitHub repository")
     from site_paths import pages_base, raw_data, cdn_data
     saved_repo = os.environ.pop("GITHUB_REPOSITORY", None)
     try:
@@ -1287,7 +1297,7 @@ def main() -> None:
         check('og:title" content="Ada (@ada) on Discord"' in discord_html and "#/discord/ada/status/discord%3A10%3A20" in discord_html, "an id with colons still gets a share page and opens that post")
         check(not (share_root / "s" / "stale.html").exists(), "rebuilding share pages removes pages from the previous deploy")
         check("Ada &lt;script&gt;" in post_html and "<script>alert" not in post_html and "A &lt;b&gt;post&lt;/b&gt;" in post_html, "share page text is escaped")
-        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and f'og:site_name" content="{SHARE_SITE}"' in post_html and 'name="theme-color" content="#000000"' in post_html and f'rel="canonical" href="{share_base}s/x-100.html"' in post_html and f'og:url" content="{share_base}s/x-100.html"' in post_html, "a post page has the Open Graph title, site name, theme color, and canonical URL on this site")
+        check('og:title" content="Ada &lt;script&gt; (@ada) on X"' in post_html and f'og:site_name" content="{SHARE_SITE}"' in post_html and 'name="theme-color" content="#000000"' in post_html and f'rel="canonical" href="{share_base}s/x-100.html"' in post_html and f'og:url" content="{share_base}s/x-100.html"' in post_html and noindex_tag in post_html and googlebot_tag in post_html, "a post page has the Open Graph title, site name, theme color, canonical URL, and noindex tags on this site")
         description = html_lib.unescape(post_html.split('og:description" content="', 1)[1].split('"', 1)[0])
         check("name=large" in post_html and 'og:image:width" content="2048"' in post_html and 'twitter:card" content="summary_large_image"' in post_html and description.endswith("…") and len(description) <= 200, "a wide image is preferred and the description stays near 200 characters")
         from share_pages import sized as size_share_image

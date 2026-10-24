@@ -5950,7 +5950,7 @@ const here = parseRoute();
       </form>
       ${window.Spaces && window.Spaces.sideCard ? window.Spaces.sideCard() : ""}
       ${people.length ? `<section class="card"><h2>${tr("Who to follow")}</h2>${rows}<a class="show-more-row" href="#/feeds">${tr("Show more")}</a></section>` : ""}
-      <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><a href="https://github.com/${GITHUB_REPO}">GitHub</a><span>${tr("Not affiliated with X")}</span></div>
+      <div class="fineprint"><span>${productName("app")}</span><span>${tr("Preview snapshot")}</span><span>${tr("Not affiliated with X")}</span></div>
     </aside>`;
   }
 

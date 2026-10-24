@@ -1,3 +1,4 @@
+<!--
 # Optional live relay (not built)
 
 The site can already show comments that the sync saved. Instagram, Threads, and X do not offer a no-login, browser-readable comment feed: their pages omit CORS for this site, and the public X embed has no reply bodies. A small relay would let the browser ask our own code, on a free host, at the moment someone opens a post.
@@ -24,3 +25,4 @@ The Pages app would call the worker only after fxtwitter, Invidious, and Piped m
 ## Why it stays optional
 
 The sync fallback already covers what those public pages return, without a second account. The worker only removes the delay until the next sync for Threads replies (and X/Instagram post fields). It does not unlock Instagram comment bodies or X reply bodies, because those are not on the public no-login endpoints.
+-->

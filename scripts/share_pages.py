@@ -413,6 +413,8 @@ def meta_tags(page: dict) -> str:
         '<meta name="viewport" content="width=device-width, initial-scale=1">',
         '<meta name="theme-color" content="#000000">',
         '<meta name="referrer" content="no-referrer">',
+        '<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">',
+        '<meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">',
         f'<title>{esc(page["title"])}</title>',
         f'<link rel="canonical" href="{esc(page["url"])}">',
         '<meta property="og:site_name" content="' + SITE_NAME + '">',

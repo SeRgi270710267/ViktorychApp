@@ -35,7 +35,8 @@ function json(status, body, extra) {
   const headers = {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
-    "x-content-type-options": "nosniff"
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
   };
   if (extra) Object.keys(extra).forEach((key) => { headers[key] = extra[key]; });
   return new Response(JSON.stringify(body), { status, headers });
@@ -43,7 +44,12 @@ function json(status, body, extra) {
 
 function withCors(request, env, response) {
   const origin = request.headers.get("Origin");
-  if (!origin) return response;
+  if (!origin) {
+    if (response.headers.get("x-robots-tag")) return response;
+    const bareHeaders = new Headers(response.headers);
+    bareHeaders.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
+    return new Response(response.body, { status: response.status, headers: bareHeaders });
+  }
   if (allowedOrigins(env).indexOf(origin) < 0) {
     return json(403, { error: "origin" });
   }
@@ -54,6 +60,7 @@ function withCors(request, env, response) {
   headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag");
   headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
+  headers.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
   return new Response(response.body, { status: response.status, headers });
 }
 
@@ -794,7 +801,8 @@ function discordData(request, object) {
   const headers = {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "private, max-age=30, stale-while-revalidate=86400",
-    "x-content-type-options": "nosniff"
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
   };
   if (etag) headers.etag = etag;
   if (etag && etagMatches(request.headers.get("If-None-Match"), etag)) {
@@ -1450,7 +1458,8 @@ async function handleOwnerMedia(request, env, url) {
         "content-type": "application/vnd.apple.mpegurl",
         "cache-control": "private, no-store",
         "cdn-cache-control": "no-store",
-        "x-content-type-options": "nosniff"
+        "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
       }
     });
   }
@@ -1460,7 +1469,8 @@ async function handleOwnerMedia(request, env, url) {
       "content-type": type || "application/octet-stream",
       "cache-control": "private, no-store",
       "cdn-cache-control": "no-store",
-      "x-content-type-options": "nosniff"
+      "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
     }
   });
 }
@@ -1517,7 +1527,8 @@ async function handleArchive(request, env, name) {
       "content-type": archiveType(name),
       "cache-control": "public, max-age=31536000, immutable",
       "accept-ranges": "bytes",
-      "x-content-type-options": "nosniff"
+      "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
     };
     if (head.size) headers["content-length"] = String(head.size);
     return new Response(null, { status: 200, headers });
@@ -1534,7 +1545,8 @@ async function handleArchive(request, env, name) {
     "content-type": archiveType(name),
     "cache-control": "public, max-age=31536000, immutable",
     "accept-ranges": "bytes",
-    "x-content-type-options": "nosniff"
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
   };
   if (range) {
     headers["content-range"] = "bytes " + range.offset + "-" + range.end + "/" + size;
@@ -1561,7 +1573,8 @@ async function handleAccountMedia(request, env, kind, publicId, file) {
     "content-type": type,
     "cache-control": "private, max-age=86400",
     "cdn-cache-control": "no-store",
-    "x-content-type-options": "nosniff"
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
   };
   if (object.size) headers["content-length"] = String(object.size);
   return new Response(object.body, { status: 200, headers });
@@ -1796,7 +1809,8 @@ async function telegramBody(env, row) {
         "content-type": mime,
         "content-length": String(bytes.byteLength),
         "cache-control": "public, max-age=31536000, immutable",
-        "x-content-type-options": "nosniff"
+        "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
       }
     });
     try { await cache.put(cacheKey, stored.clone()); }
@@ -1809,7 +1823,8 @@ async function telegramBody(env, row) {
       "content-type": packed.mime || "application/octet-stream",
       "content-length": String(packed.bytes.byteLength),
       "cache-control": "public, max-age=31536000, immutable",
-      "x-content-type-options": "nosniff"
+      "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
     }
   });
 }
@@ -1820,7 +1835,8 @@ function mediaResponse(bytes, mime, status, extra) {
     "content-length": String(bytes.byteLength),
     "accept-ranges": "bytes",
     "cache-control": "private, max-age=31536000",
-    "x-content-type-options": "nosniff"
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
   };
   if (extra) Object.keys(extra).forEach((name) => { headers[name] = extra[name]; });
   return new Response(bytes, { status: status, headers: headers });
@@ -1927,7 +1943,8 @@ async function handleTelegram(request, env, path) {
     const headers = {
       "content-type": "application/vnd.apple.mpegurl",
       "cache-control": immutable ? "public, max-age=31536000, immutable" : "private, max-age=60",
-      "x-content-type-options": "nosniff"
+      "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
     };
     if (immutable) headers["cdn-cache-control"] = "public, max-age=31536000, immutable";
     return new Response(text, { status: 200, headers: headers });
@@ -1966,7 +1983,8 @@ async function serveKeptOriginal(request, env, key) {
     "content-type": mime,
     "accept-ranges": "bytes",
     "cache-control": "private, max-age=31536000, immutable",
-    "x-content-type-options": "nosniff"
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
   };
   if (request.method === "HEAD") {
     if (size) headers["content-length"] = String(size);
@@ -2944,6 +2962,17 @@ async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+  if (path === "/robots.txt" && (request.method === "GET" || request.method === "HEAD")) {
+    return new Response(request.method === "HEAD" ? null : "User-agent: *\nDisallow: /\n", {
+      status: 200,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "cache-control": "public, max-age=86400",
+        "x-content-type-options": "nosniff",
+        "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
+      }
+    });
+  }
   await ensureSchema(env);
   if (path === "/v1/health" && request.method === "GET") {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });

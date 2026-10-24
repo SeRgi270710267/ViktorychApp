@@ -1,3 +1,4 @@
+<!--
 # ViktorychApp
 
 An X-style home for posts from X, Threads, Instagram, YouTube, VK, and other RSS sources. The page is a static site (`index.html`, `styles.css`, `app.js`). GitHub Actions builds the timeline and publishes it. The repository keeps the code, the config, and a small `feeds.json` seed. X replies and YouTube comments load in the browser when a post opens.
@@ -547,3 +548,4 @@ Periodic background sync is registered only after notifications are turned on, a
 ## GitHub Pages
 
 Pages has to be built by GitHub Actions (Settings → Pages → Build and deployment → Source: GitHub Actions). A deploy-from-branch source will not pick up this workflow. `.nojekyll` is in the artifact so Pages does not run Jekyll. Paths are relative (`feeds.json`, `styles.css`), so the site works at `/` or under the repository directory. The published path follows the repository: `https://<owner>.github.io/<repo>/`. `404.html` sends a missing file under that directory back to the matching hash route. Saved settings stay under `viktorychapp-settings-v1` and the other `viktorychapp-` keys. The first load copies `superintelapp-` keys, then the older keys, so a rename does not drop them.
+-->

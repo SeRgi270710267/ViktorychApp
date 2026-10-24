@@ -51,6 +51,7 @@ SITE_FILES = (
     "communities.js",
     "communities.css",
     "404.html",
+    "robots.txt",
     "favicon.svg",
     "favicon.ico",
     "manifest.webmanifest",
