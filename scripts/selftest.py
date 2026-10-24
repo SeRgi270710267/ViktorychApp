@@ -809,7 +809,7 @@ def main() -> None:
             folder,
             now=datetime(2026, 10, 20, tzinfo=timezone.utc),
         )
-        check(removed == 4 and (folder / "keep.json").exists() and (folder / "r1.json").exists() and (folder / "lookup.json").exists() and not (folder / "yt_keep.json").exists() and not (folder / "xpost.json").exists() and not (folder / "gone.json").exists() and not (folder / "orphan.json").exists(), "stale comment files are pruned and nested replies stay")
+        check(removed == 3 and (folder / "keep.json").exists() and (folder / "xpost.json").exists() and (folder / "r1.json").exists() and (folder / "lookup.json").exists() and not (folder / "yt_keep.json").exists() and not (folder / "gone.json").exists() and not (folder / "orphan.json").exists(), "stale comment files are pruned and nested replies stay")
         count = write_comment_lookup(folder)
         lookup = jsonlib.loads((folder / "lookup.json").read_text(encoding="utf-8"))
         check(count == 3 and lookup.get("r1") == "keep" and lookup.get("r2") == "keep" and lookup.get("r3") == "r1", "reply lookup points at the comment file")

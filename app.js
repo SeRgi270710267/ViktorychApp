@@ -2740,7 +2740,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (q && typeof q.totalVideoFrames === "number") return q.totalVideoFrames > 0 && q.totalVideoFrames > (q.corruptedVideoFrames || 0);
     }
     if (typeof video.webkitDecodedFrameCount === "number") return video.webkitDecodedFrameCount > 0;
-    return video.currentTime > 0.05;
+    return video.currentTime > 0.02;
   }
 
   function armStall(el, video, gen, fail, wait) {
@@ -2748,11 +2748,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const started = video.currentTime;
     el._stall = setTimeout(() => {
       if (el._gen !== gen) return;
-      if (video.currentTime > started + 0.2 && (el._framed || hasDecodedFrames(video))) return;
+      if (video.currentTime > started + 0.2 && video.videoWidth > 0) return;
       fail();
     }, wait || 3500);
     const clear = () => {
-      if (video.currentTime > 0.2 && (el._framed || hasDecodedFrames(video)) && el._stall) { clearTimeout(el._stall); el._stall = 0; }
+      if (video.currentTime > 0.2 && video.videoWidth > 0 && el._stall) { clearTimeout(el._stall); el._stall = 0; }
     };
     video.addEventListener("timeupdate", clear);
     video.addEventListener("playing", clear);
@@ -2808,6 +2808,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         nudge();
         setTimeout(nudge, 250);
         setTimeout(nudge, 700);
+        setTimeout(() => {
+          if (el._gen === gen && frame.isConnected && !el.classList.contains("is-failed")) {
+            markShown(el);
+          }
+        }, 850);
       });
       el.appendChild(frame);
       el.classList.add("is-playing");
@@ -2840,23 +2845,30 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     };
     el._framed = false;
     if (typeof video.requestVideoFrameCallback === "function") {
-      video.requestVideoFrameCallback(() => {
+      const onFrame = () => {
         if (el._gen !== gen || el._src !== token) return;
-        if (video.videoWidth > 0 && video.videoHeight > 0) { el._framed = true; markShown(el); }
-      });
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          el._framed = true;
+          markShown(el);
+        } else if (!el._framed) {
+          video.requestVideoFrameCallback(onFrame);
+        }
+      };
+      video.requestVideoFrameCallback(onFrame);
     }
     video.addEventListener("error", fail);
     video.addEventListener("playing", () => {
       if (el._gen !== gen) return;
-      if ((el._framed || hasDecodedFrames(video)) && video.currentTime > 0.02) markShown(el);
+      if (video.videoWidth > 0 && (el._framed || hasDecodedFrames(video) || video.currentTime > 0)) markShown(el);
     });
     video.addEventListener("loadedmetadata", () => {
       if (el._gen !== gen || !opts.preview) return;
       if (clipLoops(media, video.duration)) video.loop = true;
+      if (video.videoWidth > 0 && (video.readyState >= 2 || video.currentTime > 0)) markShown(el);
     });
     video.addEventListener("loadeddata", () => {
       if (el._gen !== gen) return;
-      if (el._framed || hasDecodedFrames(video)) markShown(el);
+      if (video.videoWidth > 0) markShown(el);
       const img = el.querySelector(".vposter.face, .yt-thumb img.face");
       if (!img || !video.videoWidth) return;
       try {
@@ -2875,8 +2887,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     });
     video.addEventListener("timeupdate", () => {
       if (el._gen !== gen) return;
-      if ((el._framed || hasDecodedFrames(video)) && video.currentTime > 0.02) markShown(el);
-      else if (video.currentTime > 0.5 && !el._framed && !hasDecodedFrames(video)) { fail(); return; }
+      if (video.videoWidth > 0 && (video.currentTime > 0.01 || el._framed || hasDecodedFrames(video))) markShown(el);
+      else if (video.currentTime > 0.8 && video.videoWidth === 0) { fail(); return; }
       if (!isFinite(video.duration) || video.duration <= 0) return;
       const label = clock(Math.max(0, Math.ceil(video.duration - video.currentTime)));
       const left = el.querySelector(".vleft");
@@ -3126,7 +3138,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       }).catch(() => {});
       setTimeout(() => {
         if (el._gen !== gen || el.classList.contains("is-shown")) return;
-        const file = !el.querySelector("iframe") ? fileOf(el._sources) : null;
+        const file = fileOf(el._sources);
         if (file) useFile(file);
       }, 1200);
       return;
@@ -12983,7 +12995,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (!data || typeof data !== "object") return;
     document.querySelectorAll(".vplay iframe").forEach((frame) => {
-      if (frame.contentWindow !== event.source) return;
+      if (frame.contentWindow !== event.source && (!data.id || data.id !== frame.id)) return;
       const tile = frame.closest(".vplay");
       if (!tile) return;
       if (data.event === "onReady" && tile._nudge) {

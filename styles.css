@@ -896,6 +896,8 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .vplay.is-shown > .play,
 .vplay.is-shown .vdur { visibility: hidden; }
 .vplay.is-shown video, .vplay.is-shown iframe { z-index: 2; }
+.vplay.is-playing > .play,
+.yt-thumb.is-playing > .play { visibility: hidden; }
 .vmute {
   position: absolute;
   right: 8px;

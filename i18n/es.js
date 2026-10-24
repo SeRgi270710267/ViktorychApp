@@ -919,5 +919,14 @@ SI18n.addPack("es", {
   "Reddit subscribers": "suscriptores de Reddit",
   "Join": "Unirme",
   "Joined": "Unido",
-  "Removed": "Quitada"
+  "Removed": "Quitada",
+  "Search Communities": "Buscar comunidades",
+  "Rules": "Reglas",
+  "Community rules": "Reglas de la comunidad",
+  "Open on Reddit": "Abrir en Reddit",
+  "Discover Communities": "Descubrir comunidades",
+  "Your Communities": "Tus comunidades",
+  "Members": "Miembros",
+  "Comments": "Comentarios",
+  "Post into r/{name}": "Publicar en r/{name}"
 });
