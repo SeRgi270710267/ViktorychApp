@@ -38,9 +38,26 @@
       var key = "superintelapp-lang";
       var code = "en";
       try {
+        var userPicked = localStorage.getItem("viktorychapp-lang-user-picked") === "1";
+        var hasSession = !!localStorage.getItem("viktorychapp-accounts-session-v1");
+        var isRu = false;
+        try {
+          var tz = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+          if (/^(Europe\/(Moscow|Samara|Kaliningrad|Volgograd|Kirov|Astrakhan|Ulyanovsk|Saratov)|Asia\/(Yekaterinburg|Omsk|Novosibirsk|Barnaul|Tomsk|Novokuznetsk|Krasnoyarsk|Irkutsk|Chita|Yakutsk|Vladivostok|Magadan|Sakhalin|Srednekolymsk|Kamchatka|Anadyr))$/i.test(tz)) {
+            isRu = true;
+          }
+          if (sessionStorage.getItem("viktorychapp-is-ru") === "1") isRu = true;
+        } catch (e) {}
+
         var saved = localStorage.getItem(key);
-        if (saved === "ru" || saved === "es" || saved === "en") code = saved;
-        else if (saved == null) {
+        if ((userPicked || hasSession) && (saved === "ru" || saved === "es" || saved === "en")) {
+          code = saved;
+        } else if (isRu) {
+          code = "ru";
+          try { localStorage.setItem(key, "ru"); } catch (err) {}
+        } else if (saved === "ru" || saved === "es" || saved === "en") {
+          code = saved;
+        } else if (saved == null) {
           var list = navigator.languages || [navigator.language || ""];
           var i;
           for (i = 0; i < list.length; i++) {

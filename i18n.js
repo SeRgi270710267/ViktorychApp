@@ -12,10 +12,28 @@
     return code === "en" || code === "ru" || code === "es" ? code : "";
   }
 
+  function isRuRegion() {
+    try {
+      if (typeof window !== "undefined" && window.__VIKTORYCH_IS_RU) return true;
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("viktorychapp-is-ru") === "1") return true;
+      var tz = (typeof Intl !== "undefined" && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+      return /^(Europe\/(Moscow|Samara|Kaliningrad|Volgograd|Kirov|Astrakhan|Ulyanovsk|Saratov)|Asia\/(Yekaterinburg|Omsk|Novosibirsk|Barnaul|Tomsk|Novokuznetsk|Krasnoyarsk|Irkutsk|Chita|Yakutsk|Vladivostok|Magadan|Sakhalin|Srednekolymsk|Kamchatka|Anadyr))$/i.test(tz);
+    } catch (err) {
+      return false;
+    }
+  }
+
   function readSaved() {
     try {
-      if (typeof localStorage === "undefined") return "en";
+      if (typeof localStorage === "undefined") return isRuRegion() ? "ru" : "en";
+      var userPicked = localStorage.getItem("viktorychapp-lang-user-picked") === "1";
+      var hasSession = !!localStorage.getItem("viktorychapp-accounts-session-v1");
       var saved = localStorage.getItem(KEY);
+      if ((userPicked || hasSession) && valid(saved)) return valid(saved);
+      if (isRuRegion()) {
+        try { localStorage.setItem(KEY, "ru"); } catch (err) {}
+        return "ru";
+      }
       if (valid(saved)) return valid(saved);
       if (saved != null) return "en";
       var list = (typeof navigator !== "undefined" && (navigator.languages || [navigator.language])) || [];
