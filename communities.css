@@ -192,3 +192,53 @@
 
 /* Notice note */
 .cm-footer-note { padding: 16px; text-align: center; font-size: 13px; color: var(--muted); }
+
+/* Mobile Optimizations & Responsive Layout */
+@media (max-width: 600px) {
+  .cm-hero-banner { height: 130px; }
+  .cm-hero-avatar { width: 68px; height: 68px; border-radius: 16px; margin-top: -34px; border-width: 3px; font-size: 26px; }
+  .cm-hero-bar { margin-top: -34px; margin-bottom: 8px; }
+  .cm-hero-title { font-size: 20px; }
+  .cm-hero-body { padding: 0 12px 12px; }
+  .cm-hero-meta { font-size: 12px; gap: 6px; }
+  .cm-hero-about { font-size: 14px; }
+  .cm-spotlight { margin: 10px; border-radius: 14px; }
+  .cm-spotlight-banner { height: 100px; }
+  .cm-spotlight-avatar { width: 52px; height: 52px; border-radius: 12px; margin-top: -36px; font-size: 20px; }
+  .cm-spotlight-top { margin-top: -36px; margin-bottom: 8px; }
+  .cm-spotlight-title { font-size: 17px; }
+  .cm-spotlight-body { padding: 10px 12px 12px; }
+  .cm-card-cover { height: 95px; }
+  .cm-card-body { padding: 0 12px 12px; }
+  .cm-card-row { margin-top: -26px; margin-bottom: 8px; }
+  .cm-card-avatar { width: 48px; height: 48px; border-radius: 12px; font-size: 18px; }
+  .cm-card-title { font-size: 16px; }
+  .cm-section-head { padding: 12px; font-size: 17px; }
+  .cm-filter-bar { padding: 8px 12px; }
+  .cm-chip { padding: 5px 12px; font-size: 12px; }
+  .cm-reddit-vote { display: none; }
+  .cm-reddit-main { padding: 10px 12px 10px 12px; }
+  .cm-reddit-title { font-size: 16px; margin-bottom: 4px; }
+  .cm-reddit-text { font-size: 13.5px; margin-bottom: 6px; }
+  .cm-reddit-photo, .cm-reddit-video { max-height: 380px; }
+  .cm-reddit-actions { gap: 6px; margin-top: 6px; }
+  .cm-reddit-action-btn { padding: 5px 10px; font-size: 11.5px; }
+  .cm-mobile-vote { display: inline-flex; align-items: center; background: var(--chip, rgba(255,255,255,.06)); border-radius: 9999px; padding: 2px 6px; }
+  .cm-mobile-vote .cm-vote-arrow { width: 28px; height: 28px; }
+  .cm-mobile-vote .cm-reddit-score { margin: 0 4px; font-size: 12px; }
+  .cm-app-card { padding: 10px 12px; gap: 10px; }
+  .cm-app-ava { width: 36px; height: 36px; font-size: 15px; }
+  .cm-app-text { font-size: 14px; }
+  .cm-composer { padding: 10px 12px; }
+  .cm-composer-ava { width: 36px; height: 36px; }
+  .cm-composer-area { font-size: 15px; min-height: 50px; }
+  .cm-thread-focus .cm-reddit-title { font-size: 18px; }
+  .cm-reddit-comment { padding: 10px 12px; gap: 8px; }
+}
+
+@media (max-width: 499px) {
+  .cm-search-wrap {
+    position: static;
+    padding: 8px 12px;
+  }
+}

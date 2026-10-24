@@ -6054,6 +6054,7 @@ const here = parseRoute();
     return `<nav class="bottom-nav" aria-label="${tr("Primary")}">
       ${item("#/", route.name === "home" ? "homeOn" : "home", tr("Home"), route.name === "home")}
       ${item("#/explore", "search", tr("Search"), route.name === "explore")}
+      ${item("#/communities", "communities", tr("Communities"), route.name === "communities")}
       ${item("#/feeds", "spark", tr("Feeds"), route.name === "feeds")}
       ${item("#/notifications", "bell", tr("Notifications"), route.name === "notifications")}
       ${item("#/messages", "mail", tr("Messages"), route.name === "messages")}
@@ -9608,6 +9609,7 @@ const here = parseRoute();
     if (!STATE.drawer) return "";
     const music = parseRoute().name === "music" && window.SIntelMusic;
     const links = music ? window.SIntelMusic.drawerLinks(icon) : `<a href="#/lists">${icon("lists")} ${tr("Lists")}</a>
+      <a href="#/communities">${icon("communities")} ${tr("Communities")}</a>
       <a href="#/history">${icon("clock")} ${tr("History")}</a>
       <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} ${tr("Subscriptions")}</a>
       <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
@@ -9782,7 +9784,7 @@ if (STATE.histClear) {
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const top = route.name === "shorts" ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
