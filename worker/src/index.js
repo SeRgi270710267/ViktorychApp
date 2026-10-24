@@ -1475,6 +1475,58 @@ async function handleOwnerMedia(request, env, url) {
   });
 }
 
+const PUBLIC_MEDIA_HOST = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com|ytimg\.com|redd\.it|tiktokcdn(?:-us|-eu)?\.com|bytefcdn(?:-oversea)?\.com|ibytedtos\.com)$/i;
+
+function publicMediaHostOk(hostname) {
+  return PUBLIC_MEDIA_HOST.test(String(hostname || ""));
+}
+
+async function handlePublicMediaProxy(request, env, url) {
+  const target = url.searchParams.get("url") || "";
+  let parsed = null;
+  try { parsed = new URL(target); } catch (err) { parsed = null; }
+  if (!parsed || parsed.protocol !== "https:" || parsed.username || parsed.password || !publicMediaHostOk(parsed.hostname)) {
+    return json(400, { error: "bad_url" });
+  }
+  const headers = new Headers();
+  headers.set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+  headers.set("accept", "image/*,video/*,*/*");
+  headers.set("referer", parsed.origin + "/");
+  const range = request.headers.get("range") || "";
+  if (/^bytes=\d*-\d*$/.test(range)) headers.set("range", range);
+  let upstream = null;
+  try {
+    upstream = await fetch(parsed.toString(), {
+      headers,
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+      cf: { cacheTtl: 604800, cacheEverything: true }
+    });
+  } catch (err) {
+    return json(502, { error: "upstream" });
+  }
+  let finalHost = "";
+  try { finalHost = new URL(upstream.url).hostname; } catch (err) { finalHost = ""; }
+  if (!publicMediaHostOk(finalHost)) {
+    dropBody(upstream);
+    return json(400, { error: "bad_url" });
+  }
+  const respHeaders = new Headers();
+  const ctype = upstream.headers.get("content-type") || "image/jpeg";
+  respHeaders.set("content-type", ctype);
+  const length = upstream.headers.get("content-length");
+  if (length) respHeaders.set("content-length", length);
+  const contentRange = upstream.headers.get("content-range");
+  if (contentRange) respHeaders.set("content-range", contentRange);
+  const acceptRanges = upstream.headers.get("accept-ranges");
+  if (acceptRanges) respHeaders.set("accept-ranges", acceptRanges);
+  respHeaders.set("cache-control", "public, max-age=86400, s-maxage=604800");
+  respHeaders.set("cdn-cache-control", "public, max-age=604800");
+  respHeaders.set("x-content-type-options", "nosniff");
+  respHeaders.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
+  return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
+}
+
 async function handleHandle(env, url) {
   const handle = url.searchParams.get("handle") || "";
   const checked = inspectHandle(handle);
@@ -2974,6 +3026,13 @@ async function route(request, env) {
     });
   }
   await ensureSchema(env);
+  if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {
+    const country = (request.cf && request.cf.country) || request.headers.get("cf-ipcountry") || "XX";
+    return json(200, { country: country, isRu: country === "RU" });
+  }
+  if (path === "/v1/media" && (request.method === "GET" || request.method === "HEAD")) {
+    return handlePublicMediaProxy(request, env, url);
+  }
   if (path === "/v1/health" && request.method === "GET") {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });
   }

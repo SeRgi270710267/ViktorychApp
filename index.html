@@ -135,10 +135,33 @@
   <link rel="stylesheet" href="games.css">
   <link rel="stylesheet" href="communities.css">
   <link rel="stylesheet" href="yt-player.css">
-  <link rel="preconnect" href="https://pbs.twimg.com" crossorigin>
-  <link rel="preconnect" href="https://video.twimg.com" crossorigin>
-  <link rel="preconnect" href="https://i.ytimg.com" crossorigin>
-  <link rel="preconnect" href="https://api.fxtwitter.com" crossorigin>
+  <script>
+    (function () {
+      var isRu = false;
+      try {
+        var cached = sessionStorage.getItem("viktorychapp-is-ru");
+        if (cached != null) {
+          isRu = cached === "1";
+        } else {
+          var tz = (Intl && Intl.DateTimeFormat) ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+          if (/^(Europe\/(Moscow|Samara|Kaliningrad|Volgograd|Kirov|Astrakhan|Ulyanovsk|Saratov)|Asia\/(Yekaterinburg|Omsk|Novosibirsk|Barnaul|Tomsk|Novokuznetsk|Krasnoyarsk|Irkutsk|Chita|Yakutsk|Vladivostok|Magadan|Sakhalin|Srednekolymsk|Kamchatka|Anadyr))$/i.test(tz)) {
+            isRu = true;
+          }
+        }
+      } catch (err) {}
+      window.__VIKTORYCH_IS_RU = isRu;
+      if (!isRu) {
+        var hosts = ["https://pbs.twimg.com", "https://video.twimg.com", "https://i.ytimg.com", "https://api.fxtwitter.com"];
+        for (var i = 0; i < hosts.length; i++) {
+          var l = document.createElement("link");
+          l.rel = "preconnect";
+          l.href = hosts[i];
+          l.crossOrigin = "";
+          document.head.appendChild(l);
+        }
+      }
+    })();
+  </script>
   <link rel="preload" href="feeds.json" as="fetch" crossorigin="anonymous">
   <script>
     (function () {
