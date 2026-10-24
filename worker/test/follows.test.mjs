@@ -217,4 +217,62 @@ test("follows persist for the signed-in account and stay private", async () => {
   assert.equal(beaList.body.ids.includes("app:" + ada.account.publicId), true);
   assert.equal(beaList.body.ids.includes("app:" + bea.account.publicId), false);
   assert.equal(beaList.body.ids.includes("app:000000000000"), false);
+
+  // Private follows test
+  const setPrivate = await call("/v1/profile", {
+    method: "PATCH",
+    ip: "203.0.113.232",
+    token: ada.token,
+    body: { privateFollows: true }
+  });
+  assert.equal(setPrivate.status, 200);
+  assert.equal(setPrivate.body.account.privateFollows, true);
+
+  const adaCheck = await call("/v1/profile/ada_fl", { ip: "203.0.113.233", token: bea.token });
+  assert.equal(adaCheck.body.account.privateFollows, true);
+
+  // Bea visits Ada's following list - should be private
+  const beaViewsAdaFollowing = await call("/v1/follows?id=" + encodeURIComponent("app:" + ada.account.publicId) + "&tab=following", {
+    ip: "203.0.113.234",
+    token: bea.token
+  });
+  assert.equal(beaViewsAdaFollowing.status, 200);
+  assert.equal(beaViewsAdaFollowing.body.isPrivate, true);
+  assert.equal(beaViewsAdaFollowing.body.accounts.length, 0);
+
+  // Bea visits Ada's followers list - should be private
+  const beaViewsAdaFollowers = await call("/v1/follows?id=" + encodeURIComponent("app:" + ada.account.publicId) + "&tab=followers", {
+    ip: "203.0.113.235",
+    token: bea.token
+  });
+  assert.equal(beaViewsAdaFollowers.status, 200);
+  assert.equal(beaViewsAdaFollowers.body.isPrivate, true);
+  assert.equal(beaViewsAdaFollowers.body.accounts.length, 0);
+
+  // Ada views their own following list - owner can view
+  const adaViewsOwnFollowing = await call("/v1/follows?id=" + encodeURIComponent("app:" + ada.account.publicId) + "&tab=following", {
+    ip: "203.0.113.236",
+    token: ada.token
+  });
+  assert.equal(adaViewsOwnFollowing.status, 200);
+  assert.equal(adaViewsOwnFollowing.body.isPrivate, true);
+  assert.equal(adaViewsOwnFollowing.body.accounts.length > 0, true);
+
+  // Reset privateFollows back to false
+  const resetPrivate = await call("/v1/profile", {
+    method: "PATCH",
+    ip: "203.0.113.237",
+    token: ada.token,
+    body: { privateFollows: false }
+  });
+  assert.equal(resetPrivate.status, 200);
+  assert.equal(resetPrivate.body.account.privateFollows, false);
+
+  const beaViewsAdaAgain = await call("/v1/follows?id=" + encodeURIComponent("app:" + ada.account.publicId) + "&tab=following", {
+    ip: "203.0.113.238",
+    token: bea.token
+  });
+  assert.equal(beaViewsAdaAgain.status, 200);
+  assert.equal(beaViewsAdaAgain.body.isPrivate, false);
+  assert.equal(beaViewsAdaAgain.body.accounts.length > 0, true);
 });

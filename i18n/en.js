@@ -940,5 +940,14 @@ SI18n.addPack("en", {
   "Playback speed": "Playback speed",
   "Normal": "Normal",
   "Loop": "Loop",
-  "Replay": "Replay"
+  "Replay": "Replay",
+  "Private followers and following": "Private followers and following",
+  "Keep followers and following private": "Keep followers and following private",
+  "Keep your followers and following list private. Only you will be able to see who you follow and who follows you.": "Keep your followers and following list private. Only you will be able to see who you follow and who follows you.",
+  "Keep lists private": "Keep lists private",
+  "These lists are private": "These lists are private",
+  "Only @{handle} can see who they follow and who follows them.": "Only @{handle} can see who they follow and who follows them.",
+  "Private": "Private",
+  "Followers and following are private": "Followers and following are private",
+  "Only you can see your followers and following lists.": "Only you can see your followers and following lists."
 });

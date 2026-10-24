@@ -940,5 +940,14 @@ SI18n.addPack("ru", {
   "Playback speed": "Скорость воспроизведения",
   "Normal": "Обычная",
   "Loop": "Повтор",
-  "Replay": "Смотреть снова"
+  "Replay": "Смотреть снова",
+  "Private followers and following": "Приватные подписчики и подписки",
+  "Keep followers and following private": "Скрыть подписчиков и подписки",
+  "Keep your followers and following list private. Only you will be able to see who you follow and who follows you.": "Сделайте списки подписчиков и подписок приватными. Только вы сможете видеть, на кого вы подписаны и кто подписан на вас.",
+  "Keep lists private": "Сделать списки приватными",
+  "These lists are private": "Эти списки приватны",
+  "Only @{handle} can see who they follow and who follows them.": "Только @{handle} видит, на кого подписан и кто подписан на этот аккаунт.",
+  "Private": "Приватно",
+  "Followers and following are private": "Подписчики и подписки скрыты",
+  "Only you can see your followers and following lists.": "Только вы можете просматривать свои списки подписчиков и подписок."
 });

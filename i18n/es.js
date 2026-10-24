@@ -940,5 +940,14 @@ SI18n.addPack("es", {
   "Playback speed": "Velocidad de reproducción",
   "Normal": "Normal",
   "Loop": "Bucle",
-  "Replay": "Reproducir de nuevo"
+  "Replay": "Reproducir de nuevo",
+  "Private followers and following": "Seguidores y seguidos privados",
+  "Keep followers and following private": "Mantener seguidores y seguidos privados",
+  "Keep your followers and following list private. Only you will be able to see who you follow and who follows you.": "Mantén tu lista de seguidores y seguidos privada. Solo tú podrás ver a quién sigues y quién te sigue.",
+  "Keep lists private": "Mantener listas privadas",
+  "These lists are private": "Estas listas son privadas",
+  "Only @{handle} can see who they follow and who follows them.": "Solo @{handle} puede ver a quién sigue y quién le sigue.",
+  "Private": "Privado",
+  "Followers and following are private": "Los seguidores y seguidos son privados",
+  "Only you can see your followers and following lists.": "Solo tú puedes ver tus listas de seguidores y seguidos."
 });
