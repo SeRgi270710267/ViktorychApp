@@ -1,2 +1,8 @@
 User-agent: *
-Disallow: /
+Disallow: /data/
+Disallow: /live/
+Disallow: /archive/
+Disallow: /comments/
+Disallow: /fallback/
+Disallow: /discord/
+Disallow: /owner/

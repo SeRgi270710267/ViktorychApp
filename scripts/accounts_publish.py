@@ -221,7 +221,10 @@ def lock_shell(site: Path, api: str, turnstile: str) -> None:
         html = re.sub(r'(<meta name="twitter:description" content=")[^"]*(")', r"\1ViktorychApp\2", html, count=1)
         html = re.sub(r'\n?  <link rel="preload" href="feeds\.json"[^>]*>', "", html, count=1)
         index.write_text(html, encoding="utf-8")
-    (site / "robots.txt").write_text("User-agent: *\nDisallow: /\n", encoding="utf-8")
+    (site / "robots.txt").write_text(
+        "User-agent: *\nDisallow: /data/\nDisallow: /live/\nDisallow: /archive/\nDisallow: /comments/\nDisallow: /fallback/\nDisallow: /discord/\nDisallow: /owner/\n",
+        encoding="utf-8",
+    )
 
 
 def strip(site: Path) -> None:

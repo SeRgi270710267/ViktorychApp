@@ -1074,7 +1074,7 @@ def main() -> None:
     googlebot_tag = '<meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">'
     worker_index = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
     discord_pub = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
-    check("User-agent: *" in robots_text and "Disallow: /" in robots_text and "robots.txt" in workflow and '"robots.txt"' in discord_pub, "robots.txt disallows crawlers and is published with the site")
+    check("User-agent: *" in robots_text and "Disallow: /data/" in robots_text and "robots.txt" in workflow and '"robots.txt"' in discord_pub, "robots.txt disallows data directories while letting crawlers read noindex on HTML pages")
     check(noindex_tag in (ROOT / "index.html").read_text(encoding="utf-8") and googlebot_tag in (ROOT / "index.html").read_text(encoding="utf-8") and noindex_tag in missing_text and googlebot_tag in missing_text, "the shell and 404 pages block search engine indexing")
     check('"x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"' in worker_index and 'path === "/robots.txt"' in worker_index, "the Worker sends X-Robots-Tag and serves /robots.txt")
     check("https://github.com/${GITHUB_REPO}" not in (ROOT / "app.js").read_text(encoding="utf-8"), "the sidebar fineprint does not link crawlers to the GitHub repository")
