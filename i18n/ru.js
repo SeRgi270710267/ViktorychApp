@@ -919,5 +919,14 @@ SI18n.addPack("ru", {
   "Reddit subscribers": "подписчики Reddit",
   "Join": "Вступить",
   "Joined": "Вы вступили",
-  "Removed": "Удалено"
+  "Removed": "Удалено",
+  "Search Communities": "Поиск сообществ",
+  "Rules": "Правила",
+  "Community rules": "Правила сообщества",
+  "Open on Reddit": "Открыть в Reddit",
+  "Discover Communities": "Поиск новых сообществ",
+  "Your Communities": "Ваши сообщества",
+  "Members": "Участники",
+  "Comments": "Комментарии",
+  "Post into r/{name}": "Опубликовать в r/{name}"
 });
