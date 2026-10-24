@@ -526,7 +526,7 @@ def prune_comments(doc: dict, comments_dir: Path | None = None, now=None) -> int
     comments_dir = comments_dir or (ROOT / "comments")
     keep = set()
     for post in doc.get("posts") or []:
-        if not comments_kept(post, now):
+        if not comments_kept(post, now, allow_x=True):
             continue
         for key in (post.get("id"), post.get("statusId")):
             if key:

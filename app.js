@@ -4314,6 +4314,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const post = fxFromStatus(status);
       if (!post) return;
       post.kind = "reply";
+      if (!post.conversationId) post.conversationId = parent;
+      if (!((post.replyingTo || {}).id)) post.replyingTo = Object.assign({}, post.replyingTo || {}, { id: parent });
       if (fxBelongs(post, parent) === false) return;
       out.push(post);
     });
@@ -4534,12 +4536,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return Promise.all([
       soft({}),
       soft({ ranking_mode: "recency" })
-    ]).then((pair) => {
-      const recent = pair[1];
-      const cursor = recent && recent.cursor && recent.cursor.bottom;
-      if (!cursor) return pair;
-      return soft({ ranking_mode: "recency", cursor: cursor }).then((next) => pair.concat([next]));
-    });
+    ]);
   }
 
   function loadXThread(post, fresh) {
@@ -4569,10 +4566,23 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           });
           const primary = usable.find((payload) => payload.status) || usable[0];
           const author = ((primary.status || {}).author || {}).screen_name || post.handle || "";
-          return fxFill(merged, id).then((filled) => {
-            const pack = { replies: fxRank(filled, author, 60), stats: fxStats(primary.status || {}), fetchedAt: Date.now() };
-            if (!pack.replies.length) return pack;
-            return cacheSet(key, pack).then(() => pack);
+          const subCandidates = merged.filter((row) => fxNum((row.stats || {}).replies) > 0).slice(0, 25);
+          const subPromises = subCandidates.map((row) => fxConversation(postKey(row)).catch(() => null));
+          return Promise.all(subPromises).then((subPages) => {
+            (subPages || []).filter(fxUsable).forEach((payload) => {
+              fxExtract(payload, id).forEach((row) => {
+                const sid = postKey(row);
+                if (!sid || seen[sid]) return;
+                seen[sid] = true;
+                merged.push(row);
+              });
+            });
+            const limit = fresh || String(STATE.focusId || "") === id ? 1000 : 60;
+            return fxFill(merged, id).then((filled) => {
+              const pack = { replies: fxRank(filled, author, limit), stats: fxStats(primary.status || {}), fetchedAt: Date.now() };
+              if (!pack.replies.length) return pack;
+              return cacheSet(key, pack).then(() => pack);
+            });
           });
         });
       });
@@ -4583,7 +4593,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const clean = [];
     const spam = [];
     (replies || []).forEach((row) => { (row.spam ? spam : clean).push(row); });
-    return clean.slice(0, cap).concat(spam.slice(0, 20));
+    return (cap >= 1000 ? clean : clean.slice(0, cap)).concat(spam.slice(0, 20));
   }
 
   function selectSubthreads(replies) {
@@ -4621,7 +4631,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const id = postKey(post);
     if (!id) return { loading: false, replies: [], missing: true };
     const focused = String(STATE.focusId || "") === id;
-    const want = focused ? 60 : 20;
+    const want = focused ? 1000 : 20;
     if ((post.platform || "") === "telegram") {
       const bucket = { loading: false, replies: [], missing: !post.discussion, cap: want, fetchedAt: Date.now(), settled: true };
       STATE.replies[id] = bucket;
@@ -4691,9 +4701,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         if (STATE.replyEpoch[id] !== epoch) return;
         if (pack && (pack.replies || []).length) {
           applyLiveStats(id, pack.stats);
-          const capNow = String(STATE.focusId || "") === id ? 60 : 20;
+          const capNow = String(STATE.focusId || "") === id ? 1000 : 20;
           const rows = takeRanked(pack.replies, capNow);
-          if (capNow === 60 && !PREFETCHED[id]) {
+          if (capNow >= 60 && !PREFETCHED[id]) {
             PREFETCHED[id] = true;
             selectSubthreads(rows).forEach((reply) => {
               const cid = postKey(reply);
@@ -5551,7 +5561,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const clean = all.filter((reply) => !reply.spam);
     const junk = all.filter((reply) => reply.spam && isDirect(post, reply));
     const pool = ui.spam ? clean.concat(junk) : clean;
-    let directs = pool.filter((reply) => isDirect(post, reply) && !hiddenPost(reply));
+    const directIds = new Set(pool.map(postKey));
+    let directs = pool.filter((reply) => (isDirect(post, reply) || !directIds.has(String((reply.replyingTo || {}).id || ""))) && !hiddenPost(reply));
     const sort = replySortMode();
     let shown;
     if (sort === "recent") shown = directs.slice().sort(byRecent);
@@ -5581,7 +5592,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const out = [];
     const used = new Set();
     let cursor = reply;
-    for (let guard = 0; guard < 3; guard++) {
+    for (let guard = 0; guard < 50; guard++) {
       const next = (pool || []).find((other) => other && !other.spam && !used.has(postKey(other)) && sameThread(cursor, other));
       if (!next) break;
       out.push(next);
