@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T07:19:52Z",
+  "fetchedAt": "2026-10-25T07:57:26Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,127 @@
       ]
     },
     {
+      "id": "42741",
+      "title": "Best approach for multiple Signal accounts with temporary numbers?",
+      "author": "bvss12",
+      "authorUsername": "bvss12",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1791734339,
+      "lastPostedAt": 1792914880,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42741-best-approach-for-multiple-signal-accounts-with-temporary-numbers",
+      "media": [],
+      "text": "<p>Hi everyone. I'm running GrapheneOS and I'd like to keep several separate Signal identities (personal, work, online accounts). I know Signal requires one phone number per account. What's the most practical setup — GrapheneOS user profiles with a separate Signal install and number each? And has anyone had luck with temporary number services for the SMS verification code? I've read Signal often blocks VoIP numbers — are there providers selling non-VoIP numbers that reliably work? If you know of a company selling numbers for receiving SMS verification codes, I'd appreciate pointers. Thanks!</p>",
+      "replies": [
+        {
+          "id": "274356",
+          "number": 3,
+          "author": "Kamika242",
+          "authorUsername": "Kamika242",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
+          "score": 0,
+          "created": 1791736901,
+          "parent": "42741",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42741-best-approach-for-multiple-signal-accounts-with-temporary-numbers/1\" class=\"PostMention\" data-id=\"274351\"><i class=\"icon fas fa-reply\"></i>bvss12</a></p>\n\n<p>Or you can buy several phone number independent accounts.</p>\n\n<p><a href=\"https://discuss.grapheneos.org/d/42245-signal-will-let-you-sign-up-without-a-phone-number-for-3/\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#42245</span></a></p>"
+        },
+        {
+          "id": "277259",
+          "number": 4,
+          "author": "Juan_1249",
+          "authorUsername": "Juan_1249",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792914880,
+          "parent": "42741",
+          "text": "<p>There's a website called Wantsms, they do sell non voip sim numbers for verification.</p> "
+        }
+      ]
+    },
+    {
+      "id": "20507",
+      "title": "Will we ever get WiFi calling over VPN or at least tunneled domains?",
+      "author": "lah23",
+      "authorUsername": "lah23",
+      "authorAvatar": "",
+      "score": 14,
+      "comments": 14,
+      "views": 350,
+      "participantCount": 10,
+      "created": 1741130104,
+      "lastPostedAt": 1792914343,
+      "category": "Development",
+      "categoryColor": "#2e52e0",
+      "tags": [
+        "Development",
+        "kernel"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/20507-will-we-ever-get-wifi-calling-over-vpn-or-at-least-tunneled-domains",
+      "media": [],
+      "text": "<p>Once SIM card is inserted into phone, it starts making queries to WiFi calling domains, even if WiFi calling is disabled on device. These queries ignore DNS over TLS private DNS server settings and ignore VPN tunnels. When is this going to change? WiFi calling uses its own IPSec tunnel, but it does not hide your info from ISP and mobile provider. Why can't GOS introduce IPSec WiFi calling tunneling over VPN apps? It can be done with routers supporting VPN's. VPN routers simply tunnel client IPSec data through VPN tunnels (OpenVPN, WireGuard) configured in router.</p>",
+      "replies": []
+    },
+    {
+      "id": "43086",
+      "title": "Signal, FairEmail ",
+      "author": "Try",
+      "authorUsername": "Try",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792914080,
+      "lastPostedAt": 1792914080,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43086-signal-fairemail",
+      "media": [],
+      "text": "<p>Which one should I keep, optimized or unrestricted?</p>",
+      "replies": []
+    },
+    {
+      "id": "43081",
+      "title": "Pixel 7a won't boot after battery died",
+      "author": "Twix_E",
+      "authorUsername": "Twix_E",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792890900,
+      "lastPostedAt": 1792912914,
+      "category": "Pixel 7a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 7a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died",
+      "media": [],
+      "text": "<p>My battery ran out, probably during an update. Now the phone shows the boot animation, then the lock screen for under 1 second, then goes black and starts recovery: \"Cannot load Android system. Your data may be corrupt.\"<br>\nI tried: Try again, safe mode, no SIM, rescue mode, charging. No change.<br>\nSideload of the newest OTA fails: \"Update package is older than the current build\". Recovery also says \"Overwrite in-progress update?\" and \"Unknown state: 5\".<br>\nBefore, fastboot showed \"snapshot-update-status: merging\". I ran \"fastboot snapshot-update merge\" and now it says \"none\".<br>\nI have no backup and need my data. Can I fix this without a reset or unlock?</p>",
+      "replies": []
+    },
+    {
       "id": "42734",
       "title": "Crypto receive addresses on Graphene vs stick Android and iOS",
       "author": "grapheneos3lgjvelo",
@@ -1879,30 +2000,7 @@
       "url": "https://discuss.grapheneos.org/d/42734-crypto-receive-addresses-on-graphene-vs-stick-android-and-ios",
       "media": [],
       "text": "<p>Hello,</p>\n\n<p>I recently found that receive addresses on the Bep 20 network generated by my wallet are always the same. I was told that on stock android and on IOS, wallets generate a new address every time for privacy reasons and that perhaps this is caused by OS limitations. I'm wondering if there exists a fix for this?</p>",
-      "replies": [
-        {
-          "id": "274361",
-          "number": 2,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1791739489,
-          "parent": "42734",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42734-crypto-receive-addresses-on-graphene-vs-stick-android-and-ios/1\" class=\"PostMention\" data-id=\"274301\"><i class=\"icon fas fa-reply\"></i>grapheneos3lgjvelo</a> That sounds like something that would be up to the wallet implementation.  People may be able to comment more if a specific app is named.</p>"
-        },
-        {
-          "id": "277255",
-          "number": 3,
-          "author": "grapheneos3lgjvelo",
-          "authorUsername": "grapheneos3lgjvelo",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792912350,
-          "parent": "42734",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42734-crypto-receive-addresses-on-graphene-vs-stick-android-and-ios/2\" class=\"PostMention\" data-id=\"274361\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> Thank you for your reply! I've tried on various apps - Safepal, Cake... And it's always the same. A friend uses Safepal and gets a new address each time. He said it must be due to me using Graphene as he is using iOS.</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43085",
@@ -2098,104 +2196,6 @@
       "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
       "media": [],
       "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
-      "replies": []
-    },
-    {
-      "id": "43083",
-      "title": "Decrescent: my fork of Accrescent, with the apps I actually use and optional Tor",
-      "author": "LionNest",
-      "authorUsername": "LionNest",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792896720,
-      "lastPostedAt": 1792899411,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43083-decrescent-my-fork-of-accrescent-with-the-apps-i-actually-use-and-optional-tor",
-      "media": [],
-      "text": "<p>I like Accrescent. Every app is tied to its developer’s signing key, and it won’t install older versions over newer ones. But the last release of the app was 0.28.1 on 10 November 2025, almost a year ago. There’s still activity in the code, but nothing has shipped, and fixes don’t help anyone until they do.</p>\n\n<p>So I made my own version, Decrescent. It isn’t affiliated with Accrescent. It keeps their credit and licence.</p>\n\n<p>What’s different:</p>\n\n<p>It has the apps I use and trust: Parakeet (my Molly fork), Holevad (my Mullvad VPN fork), Aurora Light, CoMaps, SimpMusic, WizeStream, Bitwarden, Ente Auth, Ente Photos, Tuta Mail, plus my own HawkEye and Dodo Bird. The apps they replace are hidden.<br>\nThere’s an optional switch to send everything through Tor with Orbot. If Orbot isn’t running, it just doesn’t connect. It won’t quietly go around Tor.<br>\nThe app list is signed and rebuilt every 6 hours. Each app is tied to its signing key, and anything signed with a different key is refused.<br>\nWhen Accrescent puts out a new release, mine picks it up and builds it automatically.</p>\n\n<p>It’s open source under Apache-2.0, built with AI assistance, and it hasn’t had an independent audit yet. Everything is in the repo and I welcome review. For apps from other developers, I pin the signing key from their official release, so after that first download any APK signed with a different key is refused.</p>\n\n<p>You can check the APK’s signing fingerprint on the release page.</p>\n\n<p><a href=\"https://gitlab.com/LionNest/decrescent\" rel=\"ugc nofollow\">https://gitlab.com/LionNest/decrescent</a></p>\n\n<p>Tell me what you’d change or what’s missing.</p>",
-      "replies": []
-    },
-    {
-      "id": "43073",
-      "title": "How to Convince People to Use GrapheneOS",
-      "author": "Reboot",
-      "authorUsername": "Reboot",
-      "authorAvatar": "",
-      "score": 21,
-      "comments": 21,
-      "views": 560,
-      "participantCount": 16,
-      "created": 1792855754,
-      "lastPostedAt": 1792895365,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
-      "media": [],
-      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": []
-    },
-    {
-      "id": "43082",
-      "title": "Visual Voicemail with Mint Mobile on the Google Pixel 10",
-      "author": "itzzen",
-      "authorUsername": "itzzen",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/NBJ2i3wndRIZnvqP.png",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792893583,
-      "lastPostedAt": 1792893583,
-      "category": "Pixel 10",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 10"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43082-visual-voicemail-with-mint-mobile-on-the-google-pixel-10",
-      "media": [],
-      "text": "<p>I've been trying to setup Visual Voicemail on my Pixel 10 but to no avail. I'd like to avoid using the dialer app or third party apps. I got this working with the 8a but after I activated my esim on the 10 it doesn't want to work now.</p>\n\n<p>I did the whole call forwarding stuff, having VMM off &amp; wifi off and rebooting the phone constantly thru the setup process. nothing. tried calling support but they \"don't have access\" to VM stuff on their end so brick wall there.</p>\n\n<p>Please help!</p>",
-      "replies": []
-    },
-    {
-      "id": "43081",
-      "title": "Pixel 7a won't boot after battery died",
-      "author": "Twix_E",
-      "authorUsername": "Twix_E",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792890900,
-      "lastPostedAt": 1792890900,
-      "category": "Pixel 7a",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 7a"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died",
-      "media": [],
-      "text": "<p>My battery ran out, probably during an update. Now the phone shows the boot animation, then the lock screen for under 1 second, then goes black and starts recovery: \"Cannot load Android system. Your data may be corrupt.\"<br>\nI tried: Try again, safe mode, no SIM, rescue mode, charging. No change.<br>\nSideload of the newest OTA fails: \"Update package is older than the current build\". Recovery also says \"Overwrite in-progress update?\" and \"Unknown state: 5\".<br>\nBefore, fastboot showed \"snapshot-update-status: merging\". I ran \"fastboot snapshot-update merge\" and now it says \"none\".<br>\nI have no backup and need my data. Can I fix this without a reset or unlock?</p>",
       "replies": []
     }
   ]
