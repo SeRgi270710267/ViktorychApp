@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T10:49:42Z",
+  "fetchedAt": "2026-10-25T11:27:19Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,17 +1858,243 @@
       ]
     },
     {
+      "id": "43080",
+      "title": "grapheneos typing character before another backwards",
+      "author": "mandan",
+      "authorUsername": "mandan",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1792882745,
+      "lastPostedAt": 1792927634,
+      "category": "Pixel 9a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 9a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
+      "media": [],
+      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
+      "replies": [
+        {
+          "id": "277226",
+          "number": 2,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792884296,
+          "parent": "43080",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards/1\" class=\"PostMention\" data-id=\"277223\"><i class=\"icon fas fa-reply\"></i>mandan</a> Is this throughout the system or just in the Messaging app?</p>"
+        },
+        {
+          "id": "277242",
+          "number": 3,
+          "author": "ManofGraphene",
+          "authorUsername": "ManofGraphene",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/o3PBXnuUKOULO5T5.png",
+          "score": 0,
+          "created": 1792904803,
+          "parent": "43080",
+          "text": "<p>I had the exact same problem start around the time the messaging app got its re-fresh. For me its not all the time, but randomly. And it only happens within the stock messaging app as far as I know. I'm on FUTO Keyboard mostly. I originally thought it was a FUTO issue with the stock messaging app, so never brought it up. Bit if the stock keyboard does it too, of might be an issue within the messaging app or android system update from the last month or two.</p>"
+        },
+        {
+          "id": "277243",
+          "number": 4,
+          "author": "steam-studio-manly",
+          "authorUsername": "steam-studio-manly",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792905256,
+          "parent": "43080",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards/1\" class=\"PostMention\" data-id=\"277223\"><i class=\"icon fas fa-reply\"></i>mandan</a> If it is the messaging app, see under 'conversations', looks to be fixed in the next release:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/Messaging/releases/tag/17\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/Messaging/releases/tag/17</a></p>"
+        },
+        {
+          "id": "277245",
+          "number": 5,
+          "author": "Johnnyloans",
+          "authorUsername": "Johnnyloans",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
+          "score": 2,
+          "created": 1792906009,
+          "parent": "43080",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards/4\" class=\"PostMention\" data-id=\"277243\"><i class=\"icon fas fa-reply\"></i>steam-studio-manly</a></p> \n\n<p>It could be fixed in version 17 but the backspace issue is separate from typing without using backspace as described here.</p>"
+        },
+        {
+          "id": "277290",
+          "number": 6,
+          "author": "steam-studio-manly",
+          "authorUsername": "steam-studio-manly",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792927634,
+          "parent": "43080",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards/5\" class=\"PostMention\" data-id=\"277245\"><i class=\"icon fas fa-reply\"></i>Johnnyloans</a> Ah, you're right. Misread op. Thank you for the correction.</p> "
+        }
+      ]
+    },
+    {
+      "id": "43089",
+      "title": "Tutanota update through Obtanium",
+      "author": "AKRAKU",
+      "authorUsername": "AKRAKU",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/OZTjv8P30Ni9NyAD.png",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792927610,
+      "lastPostedAt": 1792927610,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services",
+        "Pixel 10"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium",
+      "media": [],
+      "text": "<p>During the last days a warning appeared beside the Tuta mail app on Obtanium which is informing me that the current setting may prevent updates.<br>\n<img src=\"https://imgur.com/a/3CNhp7Z\" alt=\"\"><br>\nI'm currently on the v.xxx1006.0, which is marked as the latest on Obtanium, while they are on the v.xxx1023.2 on Github.<br>\nI didn't edit no settings when I've installed it pulling it from the Obtanium website and if I try to copy the github link it tries to install the Tuta Drive instead.</p>\n\n<p>Do you have any suggestion on how to pull the last update?</p>",
+      "replies": []
+    },
+    {
+      "id": "41495",
+      "title": "Neer - water reminder",
+      "author": "distro-nix",
+      "authorUsername": "distro-nix",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/N1giHPsdYhT34OSP.png",
+      "score": 7,
+      "comments": 7,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1787792874,
+      "lastPostedAt": 1792927281,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/41495-neer-water-reminder",
+      "media": [],
+      "text": "<p>After having 3 surgeries for kidney stones, I wanted to share my experience with Neer. It's a minimalist app that does one job well: reminds you to drink water and tracks your progress. Its very flexible and looks good. I got it on Github through Obtainium and the dev publish their hash certificate.  Anyone else tried it?</p> ",
+      "replies": []
+    },
+    {
+      "id": "43073",
+      "title": "How to Convince People to Use GrapheneOS",
+      "author": "Reboot",
+      "authorUsername": "Reboot",
+      "authorAvatar": "",
+      "score": 23,
+      "comments": 23,
+      "views": 630,
+      "participantCount": 18,
+      "created": 1792855754,
+      "lastPostedAt": 1792927239,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
+      "media": [],
+      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
+      "replies": []
+    },
+    {
+      "id": "43088",
+      "title": "Simple Login app",
+      "author": "MotherShipton",
+      "authorUsername": "MotherShipton",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792925733,
+      "lastPostedAt": 1792926793,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43088-simple-login-app",
+      "media": [],
+      "text": "<p>I am using the Simple Login app from github (<a href=\"https://github.com/simple-login/Simple-Login-Android\" rel=\"ugc nofollow\">https://github.com/simple-login/Simple-Login-Android</a>) and notice that it has not been updated for 2 years. Is this a cause for concern? Is there a better way to use the Simple Login service? I use it mainly to create the reverse alias address for sending an email from a newly created address.</p> \n",
+      "replies": []
+    },
+    {
+      "id": "22209",
+      "title": "UBS Access App is no longer working",
+      "author": "graphene1728372",
+      "authorUsername": "graphene1728372",
+      "authorAvatar": "",
+      "score": 89,
+      "comments": 89,
+      "views": 980,
+      "participantCount": 28,
+      "created": 1746305160,
+      "lastPostedAt": 1792926538,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/22209-ubs-access-app-is-no-longer-working",
+      "media": [],
+      "text": "<p>Hello everyone,</p> \n\n<p>After trying to log in to my account from the UBS key 4 app and touching the \"Log In with UBS Access\" button :</p> \n\n<p>UBS Access tells me to contact UBS support and after trying to still get through (by clearing cache and storage) shows me a message that my device is rooted (of course not the case).</p>\n\n<p>Can anyone confirm the same issue ? I can no longer access my banking account following the new UBS Access app update...</p>\n\n<p>com.ubs.swidK2Y.android<br>\nversionCode 7050100</p>\n\n<p>Have a good day!</p>\n\n",
+      "replies": []
+    },
+    {
+      "id": "43075",
+      "title": "Easy Notes flagged as a Trojan on Accrescent",
+      "author": "Nemko",
+      "authorUsername": "Nemko",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1792873134,
+      "lastPostedAt": 1792926191,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
+      "media": [],
+      "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
+      "replies": []
+    },
+    {
       "id": "43076",
       "title": "Obtainium requires DCL via memory now?",
       "author": "gvprtskvni",
       "authorUsername": "gvprtskvni",
       "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 140,
-      "participantCount": 4,
+      "score": 6,
+      "comments": 6,
+      "views": 175,
+      "participantCount": 5,
       "created": 1792878767,
-      "lastPostedAt": 1792925200,
+      "lastPostedAt": 1792926138,
       "category": "Third party apps and services",
       "categoryColor": "#994ce6",
       "tags": [
@@ -1879,41 +2105,7 @@
       "url": "https://discuss.grapheneos.org/d/43076-obtainium-requires-dcl-via-memory-now",
       "media": [],
       "text": "<p>After the latest update Obtainium keeps crashing and apparently requires DCL via memory when it worked with full exploit protections previously. Anyone else experiencing this?</p>",
-      "replies": [
-        {
-          "id": "277229",
-          "number": 2,
-          "author": "joel_hayes",
-          "authorUsername": "joel_hayes",
-          "authorAvatar": "",
-          "score": 6,
-          "created": 1792888419,
-          "parent": "43076",
-          "text": "<p>Issue filed here: <a href=\"https://github.com/ImranR98/Obtainium/issues/3458\" rel=\"ugc nofollow\">https://github.com/ImranR98/Obtainium/issues/3458</a></p>"
-        },
-        {
-          "id": "277266",
-          "number": 3,
-          "author": "KitsuneNoBaka",
-          "authorUsername": "KitsuneNoBaka",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792919103,
-          "parent": "43076",
-          "text": "<p>There was one library change that is doing that. Developer thinks about adding option in settings for user to chose which library to use.</p>"
-        },
-        {
-          "id": "277280",
-          "number": 4,
-          "author": "MotherShipton",
-          "authorUsername": "MotherShipton",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792925200,
-          "parent": "43076",
-          "text": "<p>I have the app on both phone and tablet. I noticed it started to crash on my phone due to this issue but it was not crashing on my tablet. When I looked into the app settings on both I found that the default settings were different on each. On my phone the default setting is 'off' and on my tablet the default setting is 'on'. I can't see why they would be different</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43079",
@@ -1937,30 +2129,6 @@
       "url": "https://discuss.grapheneos.org/d/43079-grapheneos-messaging-version-17-released",
       "media": [],
       "text": "<p>GrapheneOS Messaging version 17 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/Messaging/releases/tag/17\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/Messaging/releases/tag/17</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>",
-      "replies": []
-    },
-    {
-      "id": "43075",
-      "title": "Easy Notes flagged as a Trojan on Accrescent",
-      "author": "Nemko",
-      "authorUsername": "Nemko",
-      "authorAvatar": "",
-      "score": 5,
-      "comments": 5,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792873134,
-      "lastPostedAt": 1792924509,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
-      "media": [],
-      "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
       "replies": []
     },
     {
@@ -2036,30 +2204,6 @@
       "replies": []
     },
     {
-      "id": "43073",
-      "title": "How to Convince People to Use GrapheneOS",
-      "author": "Reboot",
-      "authorUsername": "Reboot",
-      "authorAvatar": "",
-      "score": 22,
-      "comments": 22,
-      "views": 595,
-      "participantCount": 17,
-      "created": 1792855754,
-      "lastPostedAt": 1792923241,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
-      "media": [],
-      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": []
-    },
-    {
       "id": "43009",
       "title": "Mail client ",
       "author": "Try",
@@ -2081,128 +2225,6 @@
       "url": "https://discuss.grapheneos.org/d/43009-mail-client",
       "media": [],
       "text": "<p>Which would you prefer between FairMail and K9 mail clients?</p>",
-      "replies": []
-    },
-    {
-      "id": "43087",
-      "title": "Cyber security",
-      "author": "Barramundi22",
-      "authorUsername": "Barramundi22",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792919698,
-      "lastPostedAt": 1792919698,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43087-cyber-security",
-      "media": [],
-      "text": "<p>Hello,</p>\n\n <p>Does anyone have tips for finding a cyber security expert? Not for a company but for a individual being targeted.</p>",
-      "replies": []
-    },
-    {
-      "id": "23152",
-      "title": "LuxTrust Mobile 4.18.0 Fails to Launch on GrapheneOS (Pixel 6a)",
-      "author": "stubble1861",
-      "authorUsername": "stubble1861",
-      "authorAvatar": "",
-      "score": 23,
-      "comments": 23,
-      "views": 490,
-      "participantCount": 14,
-      "created": 1750004107,
-      "lastPostedAt": 1792919458,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/23152-luxtrust-mobile-4180-fails-to-launch-on-grapheneos-pixel-6a",
-      "media": [],
-      "text": "<p>Hi all, I appreciate that this a very niche issue but it seems that the latest update of the LuxTrust mobile app. It crashes after starting and shows a weird message \"<em>Error code: LT_ROOTED_DEVICE: LuxTrust mobile app has stopped working because the configuration of your device may compromise data security</em>.\".</p> \n\n<p>The app logs shows a series of \"<em>W libc: Access denied finding property</em>\" messages:</p> \n\n<ul><li>ro.debuggable</li>\n<li>ro.secure</li>\n<li>ro.boot.serialno</li>\n<li>qemu.*</li>\n<li>vendor.*</li>\n<li>init.svc.*</li></ul>\n\n<p>Are there any workarounds besides downgrading? I downloaded the previous version but need to get the phone with their support to get it validated.</p>\n",
-      "replies": []
-    },
-    {
-      "id": "42741",
-      "title": "Best approach for multiple Signal accounts with temporary numbers?",
-      "author": "bvss12",
-      "authorUsername": "bvss12",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 210,
-      "participantCount": 6,
-      "created": 1791734339,
-      "lastPostedAt": 1792918088,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42741-best-approach-for-multiple-signal-accounts-with-temporary-numbers",
-      "media": [],
-      "text": "<p>Hi everyone. I'm running GrapheneOS and I'd like to keep several separate Signal identities (personal, work, online accounts). I know Signal requires one phone number per account. What's the most practical setup — GrapheneOS user profiles with a separate Signal install and number each? And has anyone had luck with temporary number services for the SMS verification code? I've read Signal often blocks VoIP numbers — are there providers selling non-VoIP numbers that reliably work? If you know of a company selling numbers for receiving SMS verification codes, I'd appreciate pointers. Thanks!</p>",
-      "replies": []
-    },
-    {
-      "id": "20507",
-      "title": "Will we ever get WiFi calling over VPN or at least tunneled domains?",
-      "author": "lah23",
-      "authorUsername": "lah23",
-      "authorAvatar": "",
-      "score": 14,
-      "comments": 14,
-      "views": 350,
-      "participantCount": 10,
-      "created": 1741130104,
-      "lastPostedAt": 1792914343,
-      "category": "Development",
-      "categoryColor": "#2e52e0",
-      "tags": [
-        "Development",
-        "kernel"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/20507-will-we-ever-get-wifi-calling-over-vpn-or-at-least-tunneled-domains",
-      "media": [],
-      "text": "<p>Once SIM card is inserted into phone, it starts making queries to WiFi calling domains, even if WiFi calling is disabled on device. These queries ignore DNS over TLS private DNS server settings and ignore VPN tunnels. When is this going to change? WiFi calling uses its own IPSec tunnel, but it does not hide your info from ISP and mobile provider. Why can't GOS introduce IPSec WiFi calling tunneling over VPN apps? It can be done with routers supporting VPN's. VPN routers simply tunnel client IPSec data through VPN tunnels (OpenVPN, WireGuard) configured in router.</p>",
-      "replies": []
-    },
-    {
-      "id": "43081",
-      "title": "Pixel 7a won't boot after battery died",
-      "author": "Twix_E",
-      "authorUsername": "Twix_E",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792890900,
-      "lastPostedAt": 1792912914,
-      "category": "Pixel 7a",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 7a"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died",
-      "media": [],
-      "text": "<p>My battery ran out, probably during an update. Now the phone shows the boot animation, then the lock screen for under 1 second, then goes black and starts recovery: \"Cannot load Android system. Your data may be corrupt.\"<br>\nI tried: Try again, safe mode, no SIM, rescue mode, charging. No change.<br>\nSideload of the newest OTA fails: \"Update package is older than the current build\". Recovery also says \"Overwrite in-progress update?\" and \"Unknown state: 5\".<br>\nBefore, fastboot showed \"snapshot-update-status: merging\". I ran \"fastboot snapshot-update merge\" and now it says \"none\".<br>\nI have no backup and need my data. Can I fix this without a reset or unlock?</p>",
       "replies": []
     }
   ]
