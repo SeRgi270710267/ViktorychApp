@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T15:28:03Z",
+  "fetchedAt": "2026-10-25T16:01:56Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,17 +1858,252 @@
       ]
     },
     {
+      "id": "8274",
+      "title": "How do I prevent apps from knowing when I screenshot?",
+      "author": "antsyboy",
+      "authorUsername": "antsyboy",
+      "authorAvatar": "",
+      "score": 21,
+      "comments": 21,
+      "views": 630,
+      "participantCount": 18,
+      "created": 1697589169,
+      "lastPostedAt": 1792942955,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
+      "media": [],
+      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
+      "replies": [
+        {
+          "id": "48399",
+          "number": 2,
+          "author": "fl1pper",
+          "authorUsername": "fl1pper",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1697616934,
+          "parent": "8274",
+          "text": "<p>this is not possible on unmodified firmware. However, modifications to some applications allow you to do this, but it is a rather unsafe way. Among more or less safe examples of such modifications, I've seen open-source Telegram forks</p>"
+        },
+        {
+          "id": "48526",
+          "number": 3,
+          "author": "antsyboy",
+          "authorUsername": "antsyboy",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1697670126,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/2\" class=\"PostMention\" data-id=\"48399\"><i class=\"icon fas fa-reply\"></i>fl1pper</a> Thank you for clarifying on this. This answered my only question.</p>"
+        },
+        {
+          "id": "48534",
+          "number": 4,
+          "author": "router99",
+          "authorUsername": "router99",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/siwFkkailTNbeABD.png",
+          "score": 6,
+          "created": 1697672401,
+          "parent": "8274",
+          "text": "<p>There should absolutely be a way to disable it. It's none of an app's business if I screenshot or not.</p>"
+        },
+        {
+          "id": "48539",
+          "number": 5,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 12,
+          "created": 1697672998,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/4\" class=\"PostMention\" data-id=\"48534\"><i class=\"icon fas fa-reply\"></i>router99</a> A feature to control this has been considered and may be added in the future.</p>\n\n<p>Marking this as solved as the OP's question has been answered.</p>"
+        },
+        {
+          "id": "48540",
+          "number": 6,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 0,
+          "created": 1697673002,
+          "parent": "8274",
+          "text": ""
+        },
+        {
+          "id": "60001",
+          "number": 7,
+          "author": "kuvaldini",
+          "authorUsername": "kuvaldini",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1704228804,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/4\" class=\"PostMention\" data-id=\"48534\"><i class=\"icon fas fa-reply\"></i>router99</a> sure, +1</p>\n"
+        },
+        {
+          "id": "78650",
+          "number": 8,
+          "author": "davdevs",
+          "authorUsername": "davdevs",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1715094882,
+          "parent": "8274",
+          "text": "<p>+1</p>"
+        },
+        {
+          "id": "100488",
+          "number": 9,
+          "author": "bla",
+          "authorUsername": "bla",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1726608556,
+          "parent": "8274",
+          "text": "<p>Hello</p>\n\n<p>Little opening to the topic here because it seems related :</p>\n\n<p>How come the website instagram.com (Not the app) knows i am trying to take a screnshot of a conversation when browsing on firefox or vanadium?</p>\n\n<p>And also; why are firefox and vanadium blocking the screenshot?</p>\n\n<p>I understand for third Party apps; but vanadium?</p>\n\n<p>Thank you!</p>"
+        },
+        {
+          "id": "100505",
+          "number": 10,
+          "author": "DeletedUser88",
+          "authorUsername": "DeletedUser88",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1726614594,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/9\" class=\"PostMention\" data-id=\"100488\"><i class=\"icon fas fa-reply\"></i>bla</a> are you in Incognito mode?</p>\n"
+        },
+        {
+          "id": "100999",
+          "number": 11,
+          "author": "Quotesquestioner",
+          "authorUsername": "Quotesquestioner",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1726787626,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/9\" class=\"PostMention\" data-id=\"100488\"><i class=\"icon fas fa-reply\"></i>bla</a> hope this getbanswered some day too. If not olease repost in a new thread because i really want to know</p>"
+        },
+        {
+          "id": "141656",
+          "number": 12,
+          "author": "DeletedUser316",
+          "authorUsername": "DeletedUser316",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1744259875,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/5\" class=\"PostMention\" data-id=\"48539\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a></p> \n\n<p>Any updates on this feature implementation?</p>"
+        },
+        {
+          "id": "204563",
+          "number": 13,
+          "author": "IAMHereNow288",
+          "authorUsername": "IAMHereNow288",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1768525595,
+          "parent": "8274",
+          "text": "<p>+1 on this feature</p>"
+        },
+        {
+          "id": "212404",
+          "number": 14,
+          "author": "PANICBUTTON",
+          "authorUsername": "PANICBUTTON",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1771446785,
+          "parent": "8274",
+          "text": "<p>+1 to this feature.</p> "
+        },
+        {
+          "id": "230850",
+          "number": 15,
+          "author": "DeletedUser765",
+          "authorUsername": "DeletedUser765",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1777689046,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/5\" class=\"PostMention\" data-id=\"48539\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a> I know this is old and priorities can change, but are there any updates to this feature coming out?</p> "
+        },
+        {
+          "id": "230856",
+          "number": 16,
+          "author": "Tandara",
+          "authorUsername": "Tandara",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/ToqtPbqy0Reovo7K.png",
+          "score": 0,
+          "created": 1777689900,
+          "parent": "8274",
+          "text": "<p>I suspect this will never be implemented due to bypassing apps' clear intentions to either block or invoke certain actions upon screenshot detection. Even with per-app opt-in toggle it might create a lot of uncertainties (e.g. allowing screenshot in signal despite explicitly blocking it in signal itself, or incognito tabs for example). The best way is obviously creating API and letting the apps integrate with OS, but that is a big ask unless AOSP implements something by default.</p> "
+        },
+        {
+          "id": "230983",
+          "number": 17,
+          "author": "Wraith",
+          "authorUsername": "Wraith",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1777743190,
+          "parent": "8274",
+          "text": "<p>You mean like snpachat app? u wanna take silent SS ?</p>"
+        },
+        {
+          "id": "277316",
+          "number": 18,
+          "author": "aguttfx",
+          "authorUsername": "aguttfx",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792934372,
+          "parent": "8274",
+          "text": "<p><a href=\"https://github.com/GrapheneOS/platform_frameworks_base/pull/447\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/platform_frameworks_base/pull/447</a></p>\n\n<p>There is a very small pull request with just 13 lines of code that implements this feature, should be relatively easy to review.</p>"
+        },
+        {
+          "id": "277326",
+          "number": 19,
+          "author": "Roughpebble",
+          "authorUsername": "Roughpebble",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792937523,
+          "parent": "8274",
+          "text": "<p>A lot of the time anti screenshot is in apps to prevent abuse. This is definitely not something that should be a toggle.</p> "
+        },
+        {
+          "id": "277333",
+          "number": 20,
+          "author": "PrivSecAddict",
+          "authorUsername": "PrivSecAddict",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792938449,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/19\" class=\"PostMention\" data-id=\"277326\"><i class=\"icon fas fa-reply\"></i>Roughpebble</a> Why so? Please explain.</p>"
+        }
+      ]
+    },
+    {
       "id": "42717",
       "title": "WhatsApp: call screen only shows after unlock (secondary user, Android 17)",
       "author": "Morfyum",
       "authorUsername": "Morfyum",
       "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/RBqkOvRww7A8oNVS.png",
-      "score": 5,
-      "comments": 5,
+      "score": 6,
+      "comments": 6,
       "views": 70,
       "participantCount": 2,
       "created": 1791632465,
-      "lastPostedAt": 1792941949,
+      "lastPostedAt": 1792942943,
       "category": "Third party apps and services",
       "categoryColor": "#994ce6",
       "tags": [
@@ -1880,52 +2115,31 @@
       "url": "https://discuss.grapheneos.org/d/42717-whatsapp-call-screen-only-shows-after-unlock-secondary-user-android-17",
       "media": [],
       "text": "<p><strong>Device:</strong> Pixel 10 Pro, GrapheneOS 2026091901 (Android 17)<br>\n<strong>App:</strong> WhatsApp 2.26.39.74 from Play Store (updated 2026-10-09), installed in a <strong>secondary user</strong>, which is the profile I always use. Sandboxed Google Play is installed in that user, FCM push works.</p>\n\n<p><strong>Problem:</strong> When a WhatsApp call comes in while the phone is locked/dozing, no full-screen call UI appears. I only get a plain notification. \"Decline\" works, but \"Accept\" requires unlocking with the PIN first. Regular SIM calls in the same user work fine and show the full-screen answer screen.</p>\n\n<p><strong>Already checked (all OK in the secondary user):</strong></p>\n<ul><li>Full-screen notifications allowed for WhatsApp (also toggled off/on in Settings)</li>\n<li>Notifications on, call channel <code>voip_notification_4</code> is high importance</li>\n<li>Battery usage unrestricted, Do Not Disturb off</li>\n<li>Lock screen notifications enabled</li></ul>\n\n<p><strong>What adb logcat / dumpsys show:</strong></p>\n<ol><li>WhatsApp registers the call with Telecom as a self-managed transactional call.</li>\n<li>After 5 s Telecom logs:<br>\n   <code>VoipCallMonitor: A Call-Style-Notification for voip-call ... hasn't posted in time, stopping delegation for app=[com.whatsapp]</code></li>\n<li>Instead WhatsApp posts a <code>BigTextStyle</code> notification with <code>category=call</code>, <code>fullscreenIntent=null</code> and Accept/Decline actions.</li>\n<li>Because the FGS delegation is stopped, the ringtone gets muted:<br>\n   <code>AS.AudioService: AudioHardening background playback would be muted for com.whatsapp ... usage: USAGE_NOTIFICATION_RINGTONE</code></li>\n<li>Only after I unlock (<sub>15</sub> s later) Telecom logs <code>onCallNotificationPosted</code> and SystemUI shows<br>\n   <code>FSI suppressed: expected to heads-up instead</code>, i.e. WhatsApp only posts the real CallStyle notification with full-screen intent once the device is unlocked.</li></ol>\n\n<p>So the OS doesn't seem to block anything. WhatsApp just doesn't post its CallStyle notification while the device is locked. I already reported this to WhatsApp via in-app feedback.</p>\n\n<p><strong>Questions:</strong></p>\n<ul><li>Is anyone else seeing this with current WhatsApp on Android 17, especially in a secondary user?</li>\n<li>Is there anything GrapheneOS-specific (secondary user, sandboxed Play, Android 17 transactional Telecom API) that could make WhatsApp delay the CallStyle notification until unlock?<br>\nMorfyum</li></ul>\n",
-      "replies": [
-        {
-          "id": "277327",
-          "number": 2,
-          "author": "StanimirStoykov6",
-          "authorUsername": "StanimirStoykov6",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792937559,
-          "parent": "42717",
-          "text": "<p>Hi, I have the same problem. I did report that in the Meta app. I tried everything in terms of settings, but nothing helped..did you manage to resolve it somehow?</p>"
-        },
-        {
-          "id": "277340",
-          "number": 3,
-          "author": "Morfyum",
-          "authorUsername": "Morfyum",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/RBqkOvRww7A8oNVS.png",
-          "score": 0,
-          "created": 1792940525,
-          "parent": "42717",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42717-whatsapp-call-screen-only-shows-after-unlock-secondary-user-android-17/2\" class=\"PostMention\" data-id=\"277327\"><i class=\"icon fas fa-reply\"></i>StanimirStoykov6</a> -DeepL translatet- Just tested this again—no problems this time: Log sequence (device locked, screen off since 15:49:51):<br>\n15:50:09 A high-priority FCM wakes up WhatsApp; the process is unfrozen.<br>\n15:50:11.2 WhatsApp registers the call with Telecom.<br>\n15:50:11.9 WhatsApp posts the CallStyle notification in the voip_notification_4 channel—that is, after about 0.7 seconds instead of only after the device is unlocked.<br>\n15:50:12.1 SystemUI triggers the full-screen intent and wakes up the screen. <strong>The WhatsApp call interface opens over the lock screen</strong>.</p>"
-        },
-        {
-          "id": "277343",
-          "number": 4,
-          "author": "Morfyum",
-          "authorUsername": "Morfyum",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/RBqkOvRww7A8oNVS.png",
-          "score": 0,
-          "created": 1792940930,
-          "parent": "42717",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42717-whatsapp-call-screen-only-shows-after-unlock-secondary-user-android-17/1\" class=\"PostMention\" data-id=\"274176\"><i class=\"icon fas fa-reply\"></i>Morfyum</a> <em><strong>I'd say the problem is solved on my end—probably on WhatsApp's end.</strong></em></p>"
-        },
-        {
-          "id": "277345",
-          "number": 5,
-          "author": "Morfyum",
-          "authorUsername": "Morfyum",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/RBqkOvRww7A8oNVS.png",
-          "score": 0,
-          "created": 1792941949,
-          "parent": "42717",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42717-whatsapp-call-screen-only-shows-after-unlock-secondary-user-android-17/4\" class=\"PostMention\" data-id=\"277343\"><i class=\"icon fas fa-reply\"></i>Morfyum</a> I was too quick—the problem isn't solved yet. I just locked the screen again and put it into forced Deep Doze, and the error came back.</p>"
-        }
-      ]
+      "replies": []
+    },
+    {
+      "id": "43091",
+      "title": "Android Auto developer settings/allow all sources ",
+      "author": "Mrtigger",
+      "authorUsername": "Mrtigger",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792932485,
+      "lastPostedAt": 1792942544,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43091-android-auto-developer-settingsallow-all-sources",
+      "media": [],
+      "text": "<p>I'm trying to add an app to AA and the general guide is enabled developer settings to allow it however the \"tap version\" does not work, and I can't find them already enabled.... Are they hiding?</p> ",
+      "replies": []
     },
     {
       "id": "43088",
@@ -1973,31 +2187,6 @@
       "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
       "media": [],
       "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": []
-    },
-    {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 20,
-      "comments": 20,
-      "views": 630,
-      "participantCount": 18,
-      "created": 1697589169,
-      "lastPostedAt": 1792940650,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
       "replies": []
     },
     {
@@ -2196,30 +2385,6 @@
       "url": "https://discuss.grapheneos.org/d/43090-tuta-mail-issues-on-gos",
       "media": [],
       "text": "<p>I've tried to make a new account with Tuta mail and each time I would get the flag that I need to be manually approved by them...which I understand is something that happens when a user can have VPN running. However, each time I would get a rejection after the 48 hour wait. I wondered if it had something to do with my phone, so I attempted to make an account on my laptop while running a VPN and it went through. As someone who was curious if this was a fluke, I attempted to make another account on a different laptop and it too was successful.</p>\n\n<p>Is there an issue with GOS and Tuta Mail? Do I need to change some settings on my phone so Tuta doesn't think I'm some spammer? Both laptops had Mullvad running, so I'm pretty certain it has nothing to do with VPN. It just seems to be whenever I am trying to make an account from my phone that I have issues. App was downloaded off Obtanium on each occasion if that matters...</p>",
-      "replies": []
-    },
-    {
-      "id": "18184",
-      "title": "WhatsApp \"You need the official WhatsApp to log in\".",
-      "author": "emilycestmoi",
-      "authorUsername": "emilycestmoi",
-      "authorAvatar": "",
-      "score": 149,
-      "comments": 149,
-      "views": 2450,
-      "participantCount": 70,
-      "created": 1734157952,
-      "lastPostedAt": 1792937885,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/18184-whatsapp-you-need-the-official-whatsapp-to-log-in",
-      "media": [],
-      "text": "<p>I've been using WhatsApp for a year or so without issue on GrapheneOS. Recently I purchased a new phone number. Adding that account to WhatsApp was blocked and I got the \"You need the official WhatsApp to log in\" error message. (<a href=\"https://appuals.com/you-need-the-official-whatsapp-to-log-in-error/\" rel=\"ugc nofollow\">https://appuals.com/you-need-the-official-whatsapp-to-log-in-error/</a>).</p>\n\n<p>I presume this is because WhatsApp is detecting that the app is running on GrapheneOS and now blocking new accounts. Does anyone know of a workaround for this or am I out of luck? Do not really want to get into rooting etc, would prefer to stay stock.</p>",
       "replies": []
     }
   ]
