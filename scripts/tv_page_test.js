@@ -21,14 +21,14 @@ eval(tvCode);
 assert(global.ViktorychTV, "ViktorychTV should be exported");
 
 const streams = global.ViktorychTV.getStreams();
-assert.strictEqual(streams.length, 10, "Should have 10 streams (7 NTVSTREAM + 3 DaddyLive)");
+assert.strictEqual(streams.length, 12, "Should have 12 streams (7 NTVSTREAM + 3 DaddyLive + 2 EasyWebTV)");
 
 console.log("Checking stream links...");
 streams.forEach((s, idx) => {
   assert(s.name, `Stream ${idx} must have name`);
-  assert(s.embedUrl.includes("ntv.st/embed") || s.embedUrl.includes("dembed.st"), `Stream ${idx} embedUrl must be valid embed`);
-  assert(s.directUrl.includes("embed.st/embed") || s.directUrl.includes("thedaddy.pk"), `Stream ${idx} directUrl must be valid direct`);
-  assert(s.originalUrl.includes("barcelona-vs-real-madrid") || s.originalUrl.includes("thedaddy.pk"), `Stream ${idx} originalUrl must link to match or channel`);
+  assert(s.embedUrl.includes("ntv.st/embed") || s.embedUrl.includes("dembed.st") || s.embedUrl.includes("zhangboheng.github.io"), `Stream ${idx} embedUrl must be valid embed`);
+  assert(s.directUrl.includes("embed.st/embed") || s.directUrl.includes("thedaddy.pk") || s.directUrl.includes("zhangboheng.github.io"), `Stream ${idx} directUrl must be valid direct`);
+  assert(s.originalUrl.includes("barcelona-vs-real-madrid") || s.originalUrl.includes("thedaddy.pk") || s.originalUrl.includes("zhangboheng.github.io"), `Stream ${idx} originalUrl must link to match or channel`);
   console.log(`  Stream #${s.streamNo}: [${s.source}] ${s.language} (HD: ${s.hd})`);
 });
 

@@ -143,6 +143,30 @@
       embedUrl: "https://dembed.st/premiumtv/daddy.php?id=415",
       directUrl: "https://thedaddy.pk/stream/stream-415.php",
       originalUrl: "https://thedaddy.pk/watch.php?id=415"
+    },
+    {
+      id: "ez-spain",
+      streamNo: 11,
+      name: "Stream 11 · Easy Web TV - Spain Hub [HD]",
+      short: "EasyTV Spain",
+      source: "EasyWebTV",
+      language: "Spanish - RMTV & TDP",
+      hd: true,
+      embedUrl: "https://zhangboheng.github.io/Easy-Web-TV-M3u8/catalogues/tvplay.html?type=countries&key=es&title=Spain",
+      directUrl: "https://zhangboheng.github.io/Easy-Web-TV-M3u8/routes/tv.html",
+      originalUrl: "https://zhangboheng.github.io/Easy-Web-TV-M3u8/routes/tv.html"
+    },
+    {
+      id: "ez-sports",
+      streamNo: 12,
+      name: "Stream 12 · Easy Web TV - Sports Hub [HD]",
+      short: "EasyTV Sports",
+      source: "EasyWebTV",
+      language: "Multi - Sports Hub",
+      hd: true,
+      embedUrl: "https://zhangboheng.github.io/Easy-Web-TV-M3u8/catalogues/tvplay.html?type=categories&key=sports&title=Sports",
+      directUrl: "https://zhangboheng.github.io/Easy-Web-TV-M3u8/routes/tv.html",
+      originalUrl: "https://zhangboheng.github.io/Easy-Web-TV-M3u8/routes/tv.html"
     }
   ];
 
@@ -152,7 +176,7 @@
   /* Chat Messages (Pre-Match & Live Fan Chat) */
   var SEED_CHAT = [
     { author: "ViktorychBot", badge: "mod", text: "🛡️ Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.", color: "#00ba7c" },
-    { author: "ViktorychBot", badge: "mod", text: "⏰ Kickoff tonight at 21:00 CET! 10 backup streams armed for zero-buffering failover.", color: "#00ba7c" },
+    { author: "ViktorychBot", badge: "mod", text: "⏰ Kickoff tonight at 21:00 CET! 12 backup streams armed for zero-buffering failover.", color: "#00ba7c" },
     { author: "BarcaFan_09", badge: "barca", text: "El Clásico day! Yamal vs Mbappé is going to be cinematic 🔥", color: "#EDBB00" },
     { author: "Madridista_7", badge: "madrid", text: "Hala Madrid! Bernabéu will be buzzing tonight 🤍", color: "#6F3294" },
     { author: "StreamWatcher", badge: "vip", text: "Finally an ad-free stream with no ghost popups opening new tabs! 👏", color: "#f91880" },
