@@ -20,6 +20,10 @@ on:
         description: Mirror the published radio loops and skip the rest of the backup
         type: boolean
         default: false
+      shard:
+        description: Shard fraction to process (e.g. 0/2 or 1/2)
+        type: string
+        default: ""
   workflow_run:
     workflows: ["Publish radio loop"]
     types: [completed]
@@ -202,6 +206,7 @@ jobs:
         if: steps.secrets.outputs.present == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKENS: ${{ secrets.TELEGRAM_BOT_TOKENS }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
           TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
@@ -211,6 +216,7 @@ jobs:
           TG_MAX_MB: ${{ vars.TG_MAX_MB }}
           TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
           TG_WORKER_URL: ${{ vars.TG_WORKER_URL }}
+          TG_SHARD: ${{ github.event.inputs.shard || vars.TG_SHARD || '' }}
           TELEGRAM_LOCAL: ${{ steps.preflight.outputs.local == 'true' && '1' || '0' }}
           PYTHONUNBUFFERED: "1"
         run: |
@@ -305,6 +311,7 @@ jobs:
         if: steps.secrets.outputs.present == 'true' && steps.marker.outputs.run == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKENS: ${{ secrets.TELEGRAM_BOT_TOKENS }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
