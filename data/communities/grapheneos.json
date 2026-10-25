@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T02:29:16Z",
+  "fetchedAt": "2026-10-25T04:04:26Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,101 @@
       ]
     },
     {
+      "id": "43083",
+      "title": "Decrescent: my fork of Accrescent, with the apps I actually use and optional Tor",
+      "author": "LionNest",
+      "authorUsername": "LionNest",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792896720,
+      "lastPostedAt": 1792899411,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43083-decrescent-my-fork-of-accrescent-with-the-apps-i-actually-use-and-optional-tor",
+      "media": [],
+      "text": "<p>I like Accrescent. Every app is tied to its developer’s signing key, and it won’t install older versions over newer ones. But the last release of the app was 0.28.1 on 10 November 2025, almost a year ago. There’s still activity in the code, but nothing has shipped, and fixes don’t help anyone until they do.</p>\n\n<p>So I made my own version, Decrescent. It isn’t affiliated with Accrescent. It keeps their credit and licence.</p>\n\n<p>What’s different:</p>\n\n<p>It has the apps I use and trust: Parakeet (my Molly fork), Holevad (my Mullvad VPN fork), Aurora Light, CoMaps, SimpMusic, WizeStream, Bitwarden, Ente Auth, Ente Photos, Tuta Mail, plus my own HawkEye and Dodo Bird. The apps they replace are hidden.<br>\nThere’s an optional switch to send everything through Tor with Orbot. If Orbot isn’t running, it just doesn’t connect. It won’t quietly go around Tor.<br>\nThe app list is signed and rebuilt every 6 hours. Each app is tied to its signing key, and anything signed with a different key is refused.<br>\nWhen Accrescent puts out a new release, mine picks it up and builds it automatically.</p>\n\n<p>It’s open source under Apache-2.0, built with AI assistance, and it hasn’t had an independent audit yet. Everything is in the repo and I welcome review. For apps from other developers, I pin the signing key from their official release, so after that first download any APK signed with a different key is refused.</p>\n\n<p>You can check the APK’s signing fingerprint on the release page.</p>\n\n<p><a href=\"https://gitlab.com/LionNest/decrescent\" rel=\"ugc nofollow\">https://gitlab.com/LionNest/decrescent</a></p>\n\n<p>Tell me what you’d change or what’s missing.</p>",
+      "replies": [
+        {
+          "id": "277239",
+          "number": 2,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
+          "score": 1,
+          "created": 1792897176,
+          "parent": "43083",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43083-decrescent-my-fork-of-accrescent-with-the-apps-i-actually-use-and-optional-tor/1\" class=\"PostMention\" data-id=\"277238\"><i class=\"icon fas fa-reply\"></i>LionNest</a> The app list is signed and rebuilt every 6 hours.</p></blockquote>\n\n<p>To avoid confusion, I think they mean it'll fetch the list of available apps every 6 hours, not rebuilding every app.</p>"
+        },
+        {
+          "id": "277240",
+          "number": 3,
+          "author": "HuskyPython",
+          "authorUsername": "HuskyPython",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792899411,
+          "parent": "43083",
+          "text": "<p>I too wish Accrescent was updated more often, the dev keeps saying that they are working on the backend first and then will be able to work on adding features and opening app submissions, I donated to the project to help out. As well, they recently released a blog post saying what they've been working on in the backend and the last social media post they said a big update was coming soon. Seems like a bunch of devs for popular apps want to publish on Accrescent as soon as submissions open.</p>"
+        }
+      ]
+    },
+    {
+      "id": "43073",
+      "title": "How to Convince People to Use GrapheneOS",
+      "author": "Reboot",
+      "authorUsername": "Reboot",
+      "authorAvatar": "",
+      "score": 21,
+      "comments": 21,
+      "views": 560,
+      "participantCount": 16,
+      "created": 1792855754,
+      "lastPostedAt": 1792895365,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
+      "media": [],
+      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
+      "replies": []
+    },
+    {
+      "id": "42908",
+      "title": "What music streaming services are you using on GOS?",
+      "author": "WelcomeMilk89",
+      "authorUsername": "WelcomeMilk89",
+      "authorAvatar": "",
+      "score": 37,
+      "comments": 37,
+      "views": 980,
+      "participantCount": 28,
+      "created": 1792297664,
+      "lastPostedAt": 1792895363,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
+      "media": [],
+      "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
+      "replies": []
+    },
+    {
       "id": "43082",
       "title": "Visual Voicemail with Mint Mobile on the Google Pixel 10",
       "author": "itzzen",
@@ -1883,30 +1978,6 @@
       "replies": []
     },
     {
-      "id": "43073",
-      "title": "How to Convince People to Use GrapheneOS",
-      "author": "Reboot",
-      "authorUsername": "Reboot",
-      "authorAvatar": "",
-      "score": 20,
-      "comments": 20,
-      "views": 525,
-      "participantCount": 15,
-      "created": 1792855754,
-      "lastPostedAt": 1792892721,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
-      "media": [],
-      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": []
-    },
-    {
       "id": "43081",
       "title": "Pixel 7a won't boot after battery died",
       "author": "Twix_E",
@@ -1929,30 +2000,6 @@
       "url": "https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died",
       "media": [],
       "text": "<p>My battery ran out, probably during an update. Now the phone shows the boot animation, then the lock screen for under 1 second, then goes black and starts recovery: \"Cannot load Android system. Your data may be corrupt.\"<br>\nI tried: Try again, safe mode, no SIM, rescue mode, charging. No change.<br>\nSideload of the newest OTA fails: \"Update package is older than the current build\". Recovery also says \"Overwrite in-progress update?\" and \"Unknown state: 5\".<br>\nBefore, fastboot showed \"snapshot-update-status: merging\". I ran \"fastboot snapshot-update merge\" and now it says \"none\".<br>\nI have no backup and need my data. Can I fix this without a reset or unlock?</p>",
-      "replies": []
-    },
-    {
-      "id": "42908",
-      "title": "What music streaming services are you using on GOS?",
-      "author": "WelcomeMilk89",
-      "authorUsername": "WelcomeMilk89",
-      "authorAvatar": "",
-      "score": 36,
-      "comments": 36,
-      "views": 945,
-      "participantCount": 27,
-      "created": 1792297664,
-      "lastPostedAt": 1792889053,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
-      "media": [],
-      "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
       "replies": []
     },
     {
@@ -2146,30 +2193,6 @@
       "url": "https://discuss.grapheneos.org/d/43078-potential-system-ui-leakbug-when-exiting-guest-profile",
       "media": [],
       "text": "<p>I noticed a strange behavior in GrapheneOS regarding the \"Exit profile\" notification in the Guest User profile.<br>\nWhen I am in the Guest Profile and click the Settings icon inside the \"Exit profile\" notification multiple times, and then proceed to end the session, the Main Profile opens up with the System UI already launched/exposed.<br>\nThis seems like a UI leak or a potential bypass from the Guest profile to the Main profile's System UI. Has anyone else experienced this, or is this a known issue?</p>",
-      "replies": []
-    },
-    {
-      "id": "37",
-      "title": "Molly.im",
-      "author": "Nuttso",
-      "authorUsername": "Nuttso",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/veKvuOzMhuVpoSFY.png",
-      "score": 314,
-      "comments": 314,
-      "views": 3430,
-      "participantCount": 98,
-      "created": 1655036856,
-      "lastPostedAt": 1792880598,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/37-mollyim",
-      "media": [],
-      "text": "<p>Hi everyone</p>\n\n<p>this thread is about <a href=\"https://molly.im/\" rel=\"ugc nofollow\">molly.im</a> the hardened signal fork. Feel free to post any questions or future ideas.</p>\n",
       "replies": []
     }
   ]
