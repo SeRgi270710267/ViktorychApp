@@ -17,7 +17,7 @@
       .replace(/"/g, "&quot;");
   }
 
-  var STORAGE_KEY = "viktorychapp-soccer-scores-v3";
+  var STORAGE_KEY = "viktorychapp-soccer-scores-v4";
 
   /* Inline SVG crests */
   var CRESTS = {
@@ -315,11 +315,12 @@
     }).join("");
   }
 
-  /* Fallback standalone row if Spaces is absent */
+  /* Unified pill row matching Spaces.homeRow */
   function homeRow() {
-    var pills = pillsHtml();
-    if (!pills) return "";
-    return '<div class="sp-row-wrap" role="region" aria-label="' + esc(tr("Soccer Scores")) + '"><div class="sp-row" role="list">' + pills + '</div></div>';
+    var spacePills = (root.Spaces && root.Spaces.homePillsHtml) ? root.Spaces.homePillsHtml() : "";
+    var soccerPills = pillsHtml();
+    if (!spacePills && !soccerPills) return "";
+    return '<div class="sp-row-wrap" role="region" aria-label="' + esc(tr("Live")) + '"><div class="sp-row" role="list">' + spacePills + soccerPills + '</div></div>';
   }
 
   function rowExtra() {
@@ -438,26 +439,31 @@
     }
   }
 
+  function cleanDuplicateRows() {
+    if (typeof document === "undefined") return;
+    var rows = document.querySelectorAll(".sp-row-wrap");
+    if (rows && rows.length > 1) {
+      for (var i = 1; i < rows.length; i++) {
+        rows[i].remove();
+      }
+    }
+  }
+
   function refreshUI() {
     saveTeams();
     if (typeof document === "undefined") return;
     var rowEl = document.querySelector(".sp-row");
     if (rowEl) {
       var wrapEl = rowEl.closest(".sp-row-wrap");
-      if (wrapEl && root.Spaces && root.Spaces.homeRow) {
+      if (wrapEl) {
         var temp = document.createElement("div");
-        temp.innerHTML = root.Spaces.homeRow();
+        temp.innerHTML = (root.Spaces && root.Spaces.homeRow) ? root.Spaces.homeRow() : homeRow();
         if (temp.firstElementChild) {
           wrapEl.replaceWith(temp.firstElementChild);
         }
-      } else if (wrapEl) {
-        var temp2 = document.createElement("div");
-        temp2.innerHTML = homeRow();
-        if (temp2.firstElementChild) {
-          wrapEl.replaceWith(temp2.firstElementChild);
-        }
       }
     }
+    cleanDuplicateRows();
     if (activeModalId) {
       var container = document.getElementById("soccer-sheet");
       if (container && !container.hidden) {
@@ -562,18 +568,22 @@
   var dragSession = null;
 
   if (typeof document !== "undefined") {
-    // Wheel-to-horizontal conversion on the pill row
+    // Wheel-to-horizontal conversion on the pill row without trapping vertical page scroll
     document.addEventListener("wheel", function (event) {
       var target = event.target;
       var row = target && target.closest && target.closest(".sp-row");
       if (!row) return;
       if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && row.scrollWidth > row.clientWidth) {
-        row.scrollLeft += event.deltaY;
-        event.preventDefault();
+        var canScrollRight = event.deltaY > 0 && (row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
+        var canScrollLeft = event.deltaY < 0 && row.scrollLeft > 1;
+        if (canScrollRight || canScrollLeft) {
+          row.scrollLeft += event.deltaY;
+          event.preventDefault();
+        }
       }
     }, { passive: false });
 
-    // Pointer drag-to-scroll
+    // Pointer drag-to-scroll with touch vertical pass-through
     document.addEventListener("pointerdown", function (event) {
       if (event.pointerType === "mouse" && event.button !== 0) return;
       var target = event.target;
@@ -583,6 +593,7 @@
       dragSession = {
         row: row,
         startX: event.clientX,
+        startY: event.clientY,
         scrollStart: row.scrollLeft,
         hasDragged: false
       };
@@ -591,6 +602,11 @@
     document.addEventListener("pointermove", function (event) {
       if (!dragSession) return;
       var dx = event.clientX - dragSession.startX;
+      var dy = event.clientY - dragSession.startY;
+      if (!dragSession.hasDragged && Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 6) {
+        dragSession = null;
+        return;
+      }
       if (Math.abs(dx) > 4) {
         dragSession.hasDragged = true;
         dragSession.row.scrollLeft = dragSession.scrollStart - dx;
@@ -667,6 +683,7 @@
   }
 
   function afterRender(route) {
+    cleanDuplicateRows();
     if (route && route.name === "home") {
       startAutoTicker();
     }

@@ -9,6 +9,9 @@
 }
 .sp-row {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap !important;
+  align-items: center;
   gap: 10px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -18,16 +21,18 @@
   touch-action: pan-x pan-y;
   overscroll-behavior-x: contain;
   cursor: grab;
+  white-space: nowrap;
 }
 .sp-row.is-dragging {
   cursor: grabbing;
 }
 .sp-row::-webkit-scrollbar { display: none; }
 .sp-row-item {
-  flex: 0 0 auto;
-  max-width: none;
+  flex: 0 0 auto !important;
+  max-width: none !important;
   min-width: 0;
   display: flex;
+  align-items: center;
   user-select: none;
   -webkit-user-select: none;
 }

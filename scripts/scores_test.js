@@ -132,4 +132,16 @@ const resetData = L.getTeam("arsenal-tula").isLive ? L.getTeam("arsenal-tula").l
 assert.strictEqual(resetData.homeScore, 4, "Arsenal Tula home score reset to updated default");
 assert.strictEqual(resetData.awayScore, 3, "Arsenal Tula away score reset to updated default");
 
+// Test single unified row guarantee: Spaces pill + Soccer pills inside ONE .sp-row
+context.Spaces.homePillsHtml = function() {
+  return '<div class="sp-row-item" role="listitem"><a class="sp-pill" href="#/spaces/live"><span class="sp-pill-title">Live Radio</span></a></div>';
+};
+const unifiedHtml = context.Spaces.homeRow();
+assert.strictEqual((unifiedHtml.match(/<div class="sp-row-wrap/g) || []).length, 1, "Must have exactly ONE sp-row-wrap container");
+assert.strictEqual((unifiedHtml.match(/<div class="sp-row"/g) || []).length, 1, "Must have exactly ONE sp-row list");
+assert.ok(unifiedHtml.indexOf("Live Radio") < unifiedHtml.indexOf("sc-pill-arsenal-tula"), "Purple Spaces pill is followed by Arsenal Tula in the same row");
+assert.ok(unifiedHtml.indexOf("sc-pill-arsenal-tula") < unifiedHtml.indexOf("sc-pill-cska-moscow"), "Arsenal Tula is followed by CSKA");
+assert.ok(unifiedHtml.indexOf("sc-pill-cska-moscow") < unifiedHtml.indexOf("sc-pill-fc-barcelona"), "CSKA is followed by Barca");
+assert.ok(unifiedHtml.indexOf("sc-pill-fc-barcelona") < unifiedHtml.indexOf("sc-pill-sabadell-ce"), "Barca is followed by Sabadell");
+
 console.log("soccer scores tests ok");
