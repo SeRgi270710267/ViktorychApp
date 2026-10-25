@@ -56,11 +56,11 @@ assert.ok(teamIds.includes("sabadell-ce"), "Includes CE Sabadell");
 // Test pill rendering with updated October 2026 data
 const tula = L.getTeam("arsenal-tula");
 assert.ok(tula, "Arsenal Tula found");
-assert.strictEqual(tula.isLive, false, "Arsenal Tula displays latest result (Oct 24)");
+assert.strictEqual(tula.isLive, true, "Arsenal Tula is playing live");
 const tulaHtml = L.renderPill(tula);
 assert.ok(tulaHtml.includes("sc-pill-arsenal-tula"), "Has Arsenal Tula pill color class");
-assert.ok(tulaHtml.includes("is-ft"), "Arsenal Tula has Full Time badge");
-assert.ok(tulaHtml.includes("4 - 3"), "Displays latest result score 4 - 3 against KAMAZ");
+assert.ok(tulaHtml.includes("is-live"), "Arsenal Tula has Live badge");
+assert.ok(tulaHtml.includes("4 - 3"), "Displays live score 4 - 3 against KAMAZ");
 
 const cska = L.getTeam("cska-moscow");
 assert.ok(cska, "CSKA found");
