@@ -148,6 +148,10 @@
       }
       video.controls = false;
       video.classList.add("video-stream", "html5-main-video");
+      var poster = opts.poster || (opts.media && (opts.media.poster || opts.media.url)) || (opts.post && (opts.post.thumbnail || opts.post.avatar || opts.post.poster)) || "";
+      if (poster && !video.poster && typeof poster === "string" && poster.indexOf(".mp4") < 0) {
+        video.poster = poster;
+      }
       this.video = video;
       videoContainer.appendChild(video);
     }
@@ -1386,6 +1390,22 @@
     }
     if (this.onIframeMsg_ && typeof window !== "undefined" && window.removeEventListener) {
       window.removeEventListener("message", this.onIframeMsg_);
+    }
+    if (this.isIframe_) {
+      try {
+        this.sendIframeCommand_("pauseVideo");
+        this.sendIframeCommand_("stopVideo");
+      } catch (e) {}
+      if (this.iframe_) {
+        try { this.iframe_.src = "about:blank"; } catch (e) {}
+      }
+    }
+    if (this.video) {
+      try {
+        this.video.pause();
+        this.video.removeAttribute("src");
+        this.video.load();
+      } catch (err) {}
     }
     if (this.el && this.el.parentNode) {
       this.el.parentNode.removeChild(this.el);
