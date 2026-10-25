@@ -107,8 +107,10 @@
 .cm-vote-arrow:hover { background: var(--hover); color: #ff4500; }
 .cm-vote-arrow.up.on { color: #ff4500; }
 .cm-vote-arrow.down:hover { color: #7193ff; }
+.cm-vote-arrow.down.on { color: #7193ff; }
 .cm-reddit-score { font-size: 12px; font-weight: 700; color: var(--text); margin: 2px 0; text-align: center; }
 .cm-reddit-score.on { color: #ff4500; }
+.cm-reddit-score.down-on { color: #7193ff; }
 
 /* Reddit Content Column */
 .cm-reddit-main { flex: 1; min-width: 0; padding: 12px 16px 12px 14px; }
@@ -154,6 +156,8 @@
 /* App Native Community Post (X.com Post Layout) */
 .cm-app-card { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--blue, #1d9bf0) 4%, var(--bg)); }
 .cm-app-card:hover { background: color-mix(in srgb, var(--blue, #1d9bf0) 7%, var(--bg)); }
+.cm-reddit-card.cm-app-card { background: color-mix(in srgb, var(--blue, #1d9bf0) 3%, var(--bg)); }
+.cm-reddit-card.cm-app-card:hover { background: color-mix(in srgb, var(--blue, #1d9bf0) 6%, var(--bg)); }
 .cm-app-ava { width: 42px; height: 42px; border-radius: 50%; flex: none; object-fit: cover; }
 .cm-app-letter { display: inline-flex; align-items: center; justify-content: center; background: var(--chip, rgba(255,255,255,.12)); color: var(--text); font-weight: 700; font-size: 17px; }
 .cm-app-main { flex: 1; min-width: 0; }
@@ -183,6 +187,10 @@
 .cm-comment-author { font-weight: 700; color: var(--text); }
 .cm-comment-text { font-size: 14px; color: var(--text); line-height: 1.45; white-space: pre-wrap; margin-bottom: 6px; }
 .cm-comment-actions { display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--muted); }
+.cm-comment-actions .cm-mobile-vote { display: inline-flex; align-items: center; background: var(--chip, rgba(255,255,255,.06)); border-radius: 9999px; padding: 2px 6px; }
+.cm-reddit-comment.cm-app-reply { background: color-mix(in srgb, var(--blue, #1d9bf0) 2.5%, var(--bg)); }
+.cm-reddit-comment.cm-app-reply:hover { background: color-mix(in srgb, var(--blue, #1d9bf0) 5%, var(--bg)); }
+.cm-reddit-comment .cm-app-ava { width: 26px; height: 26px; font-size: 12px; }
 
 /* Owner Add Subreddit Modal / Bar */
 .cm-add-bar { display: flex; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--card, #16181c); align-items: center; }
