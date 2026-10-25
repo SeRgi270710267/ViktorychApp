@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T22:38:11Z",
+  "fetchedAt": "2026-10-25T23:29:06Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,224 @@
       ]
     },
     {
+      "id": "42926",
+      "title": "Browser-Fingerprinting over multiple profiles",
+      "author": "magic-carpet-ride",
+      "authorUsername": "magic-carpet-ride",
+      "authorAvatar": "",
+      "score": 14,
+      "comments": 14,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792352495,
+      "lastPostedAt": 1792968991,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles",
+      "media": [],
+      "text": "<p>Hello,</p>\n\n<p>i've discovered a hackernews article with the headline \"Fingerprints are the new cookies\"<br>\n( <a href=\"https://news.ycombinator.com/item?id=50048642\" rel=\"ugc nofollow\">https://news.ycombinator.com/item?id=50048642</a> ).</p>\n\n<p>The linked site does some browser fingerprints via javascript and shows it as a tag.<br>\nTested it today with my multi-profile setup (one profile with vpn and one without).<br>\nI've opened the site in Vanadium and Ironfox, noted the tags, switched profile, opened it again.<br>\nBoth browsers had the same fingerprint after switching profiles.</p>\n\n<p>I didn't had that on the radar and now i'm looking for ways to get rid of that.</p>\n\n<p>Any Suggestions?</p>\n\n\n<p>Also, thank you for this important work and awesome Project.<br>\nI've switched a few month ago and don't regret it for a second.</p>",
+      "replies": [
+        {
+          "id": "276197",
+          "number": 2,
+          "author": "cone-grill-dumping",
+          "authorUsername": "cone-grill-dumping",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792469984,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/1\" class=\"PostMention\" data-id=\"275855\"><i class=\"icon fas fa-reply\"></i>magic-carpet-ride</a> <br>\nVanadium is not a fingerprint-resistant browser, Ironfox might have some fingerprint resistance but is not a complete anonymity solution. Tor Browser (as noted by the Graphene OS project) is the browser with the best fingerprint resistance, Graphene OS has also recommended Brave in the past but I recommend using it with a VPN to achieve anonymity.</p>\n\n<p>In my experience it's best to have a browser where you do your everyday stuff and identify yourself (Vanadium is great for this), and one that hides your identity (like Brave + VPN, Mullvad Browser + VPN, or Tor Browser). Some people have also noted some success in using multiple browsers for different things, but given most Android browsers kinda suck for security or privacy I think two is a good number.</p> \n\n<p>Note that Firefox browsers are less secure than Chromium and increase attack surface. Also that Brave, unlike Tor, does not hide your timezone or system language.</p>"
+        },
+        {
+          "id": "276310",
+          "number": 3,
+          "author": "mmmm",
+          "authorUsername": "mmmm",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792507602,
+          "parent": "42926",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/2\" class=\"PostMention\" data-id=\"276197\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> recommend using it with a VPN to achieve anonymity.</p></blockquote>\n\n<p>That will not achieve anonymity. That will hide your IP from websites and prevent your ISP from seeing where you go. Good enough in most cases perhaps, but that's not anonymous. The only real way to achieve a modicum of anonymity is with Tor, and that's only with very careful use.</p> "
+        },
+        {
+          "id": "276846",
+          "number": 4,
+          "author": "cone-grill-dumping",
+          "authorUsername": "cone-grill-dumping",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792744854,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/3\" class=\"PostMention\" data-id=\"276310\"><i class=\"icon fas fa-reply\"></i>mmmm</a> <br>\nI would reread my post where I clearly pointed out that Graphene OS recommends Tor Browser for anonymity above all else. Brave is recommended if you're a VPN user.</p>\n\n<p>I'm not a VPN user, so I didn't tell users how to get an anonymous VPN. What I did do is point to a resource that explains fingerprinting and tells users not to use JavaScript, as it increases fingerprinting risk. From my understanding, Tor Browser on safest, or Brave without scripts + an anonymous VPN are the two best options. I didn't say what is best for that user because it is not my threat model, and therefore not my place to sway their thinking. Tor is also not the only anonymity tool, and I try to avoid absolutes when advising others</p>"
+        },
+        {
+          "id": "276967",
+          "number": 5,
+          "author": "mmmm",
+          "authorUsername": "mmmm",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792780041,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/4\" class=\"PostMention\" data-id=\"276846\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> I read your post. And recommending brave and a VPN for anonymity is not a great idea.</p> "
+        },
+        {
+          "id": "277007",
+          "number": 6,
+          "author": "Reboot",
+          "authorUsername": "Reboot",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792789926,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/2\" class=\"PostMention\" data-id=\"276197\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> Regarding Tor Browser, as someone mentioned already, you should be careful.<br>\n<a href=\"https://rknf404.github.io/chromium-hardening-guide/BROWSER_SELECTION/#tor-browser-tor-browser\" rel=\"ugc nofollow\">https://rknf404.github.io/chromium-hardening-guide/BROWSER_SELECTION/#tor-browser-tor-browser</a><br>\n<a href=\"https://nitter.meowing.monster/GrapheneOS/status/1945622753148584427#m\" rel=\"ugc nofollow\">https://nitter.meowing.monster/GrapheneOS/status/1945622753148584427#m</a></p>\n\n<p>Also using multiple browsers is <a href=\"https://rknf404.github.io/chromium-hardening-guide/BROWSER_SELECTION/#using-multiple-browsers\" rel=\"ugc nofollow\">not ideal</a>, and Mullvad Browser <a href=\"https://rknf404.github.io/chromium-hardening-guide/BROWSER_SELECTION/#mullvad-mullvad-browser\" rel=\"ugc nofollow\">neither</a>.</p>"
+        },
+        {
+          "id": "277024",
+          "number": 7,
+          "author": "cone-grill-dumping",
+          "authorUsername": "cone-grill-dumping",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792799757,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/6\" class=\"PostMention\" data-id=\"277007\"><i class=\"icon fas fa-reply\"></i>Reboot</a> <br>\nRecommending a non-anonymous browser and one intended for anonymity is not insane advice. You wouldn't log into your bank on Tor Browser would ya?</p>\n\n<p>That website is specifically recommending against using multiple browsers for clear web activities, which I agree with the website on. Every security researcher I've seen has recommended the use of an everyday browser alongside Tor Browser (for obvious reasons)</p>\n\n<p>I already touched on how bad Firefox security is. Tor Browser is (unfortunately) the best attempt on any platform at fingerprint resistance (which was the entire point of this discussion). Ideally you'd run Tor Browser in a VM of some kind, like Whonix, to mitigate attack surface</p>"
+        },
+        {
+          "id": "277031",
+          "number": 8,
+          "author": "cone-grill-dumping",
+          "authorUsername": "cone-grill-dumping",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792801670,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/5\" class=\"PostMention\" data-id=\"276967\"><i class=\"icon fas fa-reply\"></i>mmmm</a> <br>\nIf you use a fingerprint resistant browser, with scripts disabled, and an anonymous VPN; that's a totally valid way to achieve a good amount of anonymity.</p>\n\n<p>Tech doesn't create anonymity, your usage does. I personally don't recommend browsers plus VPNs because Tor does a lot of the work for you. However, there are people who want to use Chromium for security, and I was pointing out Graphene OS's recommendations because that is a valid approach if done correctly</p>"
+        },
+        {
+          "id": "277078",
+          "number": 9,
+          "author": "Reboot",
+          "authorUsername": "Reboot",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792826214,
+          "parent": "42926",
+          "text": "\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/7\" class=\"PostMention\" data-id=\"277024\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> like Whonix, to mitigate attack surface</p></blockquote>\n\n<p>Whonix isn't good:<br>\n<a href=\"https://nitter.meowing.monster/GrapheneOS/status/1945611285451706610#m\" rel=\"ugc nofollow\">https://nitter.meowing.monster/GrapheneOS/status/1945611285451706610#m</a><br>\n<a href=\"https://nitter.meowing.monster/GrapheneOS/status/1861466149478715700#m\" rel=\"ugc nofollow\">https://nitter.meowing.monster/GrapheneOS/status/1861466149478715700#m</a><br>\n<a href=\"https://discuss.grapheneos.org/d/12764-thoughts-on-security-of-kicksecure-debian-based-linux-distribution/67\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#12764</span><span class=\"UrlLink-post\"><i class=\"icon fas fa-comment UrlLink-postIcon\" aria-hidden=\"true\"></i>67</span></a><br>\n<a href=\"https://discuss.grapheneos.org/d/12764-thoughts-on-security-of-kicksecure-debian-based-linux-distribution/35\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#12764</span><span class=\"UrlLink-post\"><i class=\"icon fas fa-comment UrlLink-postIcon\" aria-hidden=\"true\"></i>35</span></a></p>\n"
+        },
+        {
+          "id": "277090",
+          "number": 10,
+          "author": "mmmm",
+          "authorUsername": "mmmm",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792832497,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/8\" class=\"PostMention\" data-id=\"277031\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> The VPN inherently knows all. It can't possibly be anonymous. Sure you can use one for hiding your traffic from you ISP or who you are from the websites you visit, but nontheless, the VPN provider takes the role. You can trust them, that's fine. But you're in no way anonymous, even if you pay via anon means and do all the other trickery, and use a no logs VPN or whatever, it's not anonymous. Suggesting it is anonymous is definitely not good advice.</p> \n\n"
+        },
+        {
+          "id": "277204",
+          "number": 11,
+          "author": "cone-grill-dumping",
+          "authorUsername": "cone-grill-dumping",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792871725,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/9\" class=\"PostMention\" data-id=\"277078\"><i class=\"icon fas fa-reply\"></i>Reboot</a> <br>\nWhonix is really the best we have at the moment unfortunately, and the concept of sandboxing the Tor daemon in another VM is sound. If you're really concerned you can route any OS through the Whonix gateway for added anonymity</p>\n\n<p>The Tor Browser bundle isn't really secure either, Whonix is a definitive step up from just running Tor Browser on bare metal. It's even a step up from running it in a VM, since Whonix leverages virtualization to ensure that if the Workstation is hacked your IP won't be leaked</p>"
+        },
+        {
+          "id": "277205",
+          "number": 12,
+          "author": "cone-grill-dumping",
+          "authorUsername": "cone-grill-dumping",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792872413,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/10\" class=\"PostMention\" data-id=\"277090\"><i class=\"icon fas fa-reply\"></i>mmmm</a> <br>\nWe need to talk about threat model in relation to OP's situation, as they're looking to beat browser fingerprinting. IP is part of your fingerprint. I recommended ways to be anonymous to WEBSITES, which is what OP was looking for.</p> \n\n<p>You're also bringing up trust and fingerprinting web traffic. You do realize exit relays can track your web traffic too right? You also have to trust Tor to not have their infrastructure compromised, which has happened. Tor is not a magic bullet, and we need to be able to recommend other options for users</p>"
+        },
+        {
+          "id": "277210",
+          "number": 13,
+          "author": "mmmm",
+          "authorUsername": "mmmm",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792874084,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/12\" class=\"PostMention\" data-id=\"277205\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> <br>\nLook, that's not the issue. The issue is this claim you made:</p> \n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/2\" class=\"PostMention\" data-id=\"276197\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> Graphene OS has also recommended Brave in the past but I recommend using it with a VPN to achieve anonymity.</p></blockquote>\n\n<p>This is a dangerous claim because; no matter what extensions you add or how you pay for the VPN, or even what the VPN claims, this is not a path to any kind of anonymity. Yet you claim it is. You even recommend it. It is not the case though.</p> \n\n<p>You're moving the goal posts.</p> \n\n<p>I have stated already that Tor is not fool proof, mentioning several times it still needs care and attention. Regardless, it's the only way to achieve a modicum of anonymity. A VPN does no such thing, aside from protecting your IP from your ISP and your IP from websites visited. That's great if that's what one wants, many do - myself included. But it's not anonymous. You are not browsing the web anonymously, as in the meaning of the word anonymous.</p> "
+        },
+        {
+          "id": "277431",
+          "number": 14,
+          "author": "cone-grill-dumping",
+          "authorUsername": "cone-grill-dumping",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792968991,
+          "parent": "42926",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/13\" class=\"PostMention\" data-id=\"277210\"><i class=\"icon fas fa-reply\"></i>mmmm</a> <br>\nI don't think that pointing out that I'm focusing on what OP needs and using layman language is moving the goal post.</p> \n\n<p>Here's the definition of anonymous from Merriam Webster:</p>\n<ol><li>of unknown authorship or origin</li>\n<li>not named or identified</li>\n<li>lacking individuality, distinction, or recognizability<br>\nThere are VPNs out there that, under certain threat models, would serve to protect OP. We can presume OP is not a high value target, so the money, legal resources, or hacking expertise to deanonymize OP would probably be too great to put to use. Thus, OP remains anonymous -- paying with cash leaves no payment info, leaving no identifying information, leaving no name. If anything, Tor can harm certain threat models by making people stand out too much as compared to a VPN like Mullvad or I-VPN.</li> </ol>\n\n<p>Tor is great because it requires no info to use and handles the browser fingerprinting threat, but it is highly fingerprintable to local network operators and guard nodes. Tor Browser is also insecure, which is why we're even needing this discussion.</p> \n\n<p>Using the word anonymous was loaded, I'll admit. I have a bad habit of compromising correctness for being able to be understood by laymans. I don't think it was necessarily wrong, but loaded. I also feel that VPNs can be a useful tool to protect anonymity in some threat models, especially if you disable javascript and use a common browser. My mindset isn't that tools are inherently anonymous or private, but rather that they protect anonymity and privacy. Your choices online devalue your privacy and anonymity. However explaining that to OP in a post about browser fingerprinting felt like too much at the time</p>\n\n<p>I'm open to having conversations about anonymizing technology and in what circumstances they work. We need other options than Tor, especially since no option is a true panacea</p>"
+        }
+      ]
+    },
+    {
+      "id": "8274",
+      "title": "How do I prevent apps from knowing when I screenshot?",
+      "author": "antsyboy",
+      "authorUsername": "antsyboy",
+      "authorAvatar": "",
+      "score": 36,
+      "comments": 36,
+      "views": 805,
+      "participantCount": 23,
+      "created": 1697589169,
+      "lastPostedAt": 1792968665,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
+      "media": [],
+      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
+      "replies": []
+    },
+    {
+      "id": "41145",
+      "title": "Download official Whatsapp to continue",
+      "author": "Dolfie",
+      "authorUsername": "Dolfie",
+      "authorAvatar": "",
+      "score": 15,
+      "comments": 15,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1786612277,
+      "lastPostedAt": 1792967891,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services",
+        "Pixel 9 Pro"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/41145-download-official-whatsapp-to-continue",
+      "media": [],
+      "text": "<p><strong>How it started</strong><br>\nI forgot my GrapheneOS password, and wiped the device.</p>\n\n<p><strong>What is set up</strong><br>\nAdmin profile running FOSS apps and supported 3rd party apps. Google Play Store has not even touched this profile.<br>\n2nd Profile was for testing whether apps work with Google Play Store &amp; Services if needed...Revolut and WhatsApp were the only two I was looking at on this profile after the wipe.</p>\n\n<p><strong>What is wrong</strong><br>\nWhatsApp can't log in for some strange reason no matter where I get it. I tried the official APK from the website, I have tried Aurora store, I have tried the Google Play Store. Several reboots with a fresh profile, Google Play Store &amp; Services set up first, then download WhatsApp from the Play Store and still I get presented with the same message when I tried to log in with my number:</p>\n\n<p>Download official Whatsapp to continue</p>\n\n<p>Prior to the fresh install of GrapheneOS it was working, now I can't even log into it. I have WhatsApp running on a secondary iPhone as backup and there it obviously works fine. My account was flagged for some reason for bot use when I tried to set it up the first time after the wipe on GrapheneOS, so no dual account was at play at this point in time.</p>\n\n<p>I suspect GrapheneOS is widely being targeted, but I know too little what is going on in the Dev space of this.</p>\n\n<p>Any advice or ideas on how to fix this or get WhatsApp working again?</p>\n",
+      "replies": []
+    },
+    {
       "id": "42908",
       "title": "What music streaming services are you using on GOS?",
       "author": "WelcomeMilk89",
@@ -1879,217 +2097,7 @@
       "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
       "media": [],
       "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
-      "replies": [
-        {
-          "id": "275668",
-          "number": 2,
-          "author": "Developer-Dude",
-          "authorUsername": "Developer-Dude",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/0e3xKlZFGMMPY9z2.png",
-          "score": 1,
-          "created": 1792297785,
-          "parent": "42908",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/1\" class=\"PostMention\" data-id=\"275667\"><i class=\"icon fas fa-reply\"></i>WelcomeMilk89</a> you gotta check out Musify. Its amazing<br>\n<a href=\"https://github.com/gokadzev/Musify\" rel=\"ugc nofollow\">https://github.com/gokadzev/Musify</a></p>"
-        },
-        {
-          "id": "275673",
-          "number": 3,
-          "author": "dryfter",
-          "authorUsername": "dryfter",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/yrF3TPBIpC7APhhS.png",
-          "score": 0,
-          "created": 1792300983,
-          "parent": "42908",
-          "text": "<p>I was on Apple Music when I switched from iPhone. Then I switched to Qobuz due to their stance on AI music, only to find it's literally overrun by AI music. I just switched to Deezer (despite my feelings about ownership) and I'm loving it.</p>\n\n<p>As far as streaming without subscriptions, I use <a href=\"https://github.com/shapeshed/aerial\" rel=\"ugc nofollow\">Aerial</a> for internet radio.</p> "
-        },
-        {
-          "id": "275700",
-          "number": 4,
-          "author": "KitsuneNoBaka",
-          "authorUsername": "KitsuneNoBaka",
-          "authorAvatar": "",
-          "score": 3,
-          "created": 1792311921,
-          "parent": "42908",
-          "text": "<p>storage</p>"
-        },
-        {
-          "id": "275703",
-          "number": 5,
-          "author": "liachra",
-          "authorUsername": "liachra",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792313324,
-          "parent": "42908",
-          "text": "<p>I use <a href=\"https://www.extreamsd.com/index.php/products/usb-audio-player-pro\" rel=\"ugc nofollow\">UAPP (Universal Audio Player Pro)</a>. Supports local file playback &amp; streaming through Tidal and/or Qobuz. It also supports streaming from a self hosted DLNA server as well. You can add local playback &amp; Tidal/Qobuz tracks into the same playlists so you don't have to jump between apps/services for different albums/tracks. Only issue is it is proprietary but considering GrapheneOS has storage scopes that isn't a huge issue. I haven't been able to find <strong>any</strong> open-source music player that will play tracks bit-perfectly with USB DACs so I wouldn't recommend them as all your music will get resampled through Android's crappy audio stack You can either obtain UAPP through Google Play or <a href=\"https://www.extreamsd.com/index.php/direct-purchase\" rel=\"ugc nofollow\">direct purchase on their website</a>.</p>"
-        },
-        {
-          "id": "275704",
-          "number": 6,
-          "author": "liachra",
-          "authorUsername": "liachra",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792314113,
-          "parent": "42908",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a> The DLNA server would probably be easier than running Navidrome as I heard that can be a pain to keep reliable especially on a laptop. You could also look into Roon for a complete solution as it has it's own mobile apps and integrates with high end AVRs and things like that but for the most straight forward way to run at home if you're wanting to \"stream\" your purchased files would be the DLNA server on your thinkpad with Tailscale (for external/not at home on the go access) and use UAPP on your phone, you'll get the added benefit of optionally streaming Tidal or Qobuz and integrate them into the same playlists as your purchased file also.</p>"
-        },
-        {
-          "id": "275723",
-          "number": 7,
-          "author": "AcclaimSublevel19",
-          "authorUsername": "AcclaimSublevel19",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792318478,
-          "parent": "42908",
-          "text": "<p>I've got a combination of streaming from my self-hosted Jellyfin instance via Finamp and from YouTube music via the excellent <a href=\"https://github.com/vivizzz007/vivi-music\" rel=\"ugc nofollow\">VIVI Music</a>. I have YouTube for discovery and then I download songs to my Jellyfin library.</p>"
-        },
-        {
-          "id": "275731",
-          "number": 8,
-          "author": "FunkTastic",
-          "authorUsername": "FunkTastic",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/gkf1ndPwIn0x3LQA.png",
-          "score": 0,
-          "created": 1792319294,
-          "parent": "42908",
-          "text": "<p>Youtube via NewPipe :)</p>\n"
-        },
-        {
-          "id": "275734",
-          "number": 9,
-          "author": "Buffering",
-          "authorUsername": "Buffering",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792319676,
-          "parent": "42908",
-          "text": "<p>YouTube via Grayjay.</p> "
-        },
-        {
-          "id": "275780",
-          "number": 10,
-          "author": "pynosh",
-          "authorUsername": "pynosh",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792331775,
-          "parent": "42908",
-          "text": "<p>I'm using Symfonium with Navidrome.</p> "
-        },
-        {
-          "id": "275795",
-          "number": 11,
-          "author": "MineralWater",
-          "authorUsername": "MineralWater",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792339414,
-          "parent": "42908",
-          "text": "<p>I use YouTube via the Echo App (or you can use Vivi and/ or Metrolist).</p> \n\n<p>These apps act like a streaming app, and they use what is on YouTube for free. So nothing illegal about using them.</p> \n\n<p>I don't listen to music often, so a paid service makes no sense to me.</p> \n\n<p>You can also use the Radio Caprice App from the play store, it's an radio app with channels that only play music without interruption and zero advertisement between or before songs. They have a channel for almost all genres you can think of.</p> \n\n"
-        },
-        {
-          "id": "275796",
-          "number": 12,
-          "author": "nuclear6476",
-          "authorUsername": "nuclear6476",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792339441,
-          "parent": "42908",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a></p> \n\n<p>The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.<br>\n<a href=\"https://github.com/moss-apps/Flick\" rel=\"ugc nofollow\">https://github.com/moss-apps/Flick</a><br>\n<a href=\"https://github.com/Kdroidwin/MusicBeatSP\" rel=\"ugc nofollow\">https://github.com/Kdroidwin/MusicBeatSP</a></p>\n\n<p>Additionally, reTONE—which is scheduled for release soon—is likely not open source, but it appears it will be available for free without data collection or ads.<br>\n<a href=\"https://retone.iidapiano.store/\" rel=\"ugc nofollow\">https://retone.iidapiano.store/</a></p>\n"
-        },
-        {
-          "id": "275869",
-          "number": 13,
-          "author": "mar2112",
-          "authorUsername": "mar2112",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792356618,
-          "parent": "42908",
-          "text": "<p>MPD from my server.</p>"
-        },
-        {
-          "id": "275878",
-          "number": 14,
-          "author": "Jddjjddjsh",
-          "authorUsername": "Jddjjddjsh",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792361196,
-          "parent": "42908",
-          "text": "<p>I like Metrolist because it is only music and it has great UI.</p> "
-        },
-        {
-          "id": "275883",
-          "number": 15,
-          "author": "liachra",
-          "authorUsername": "liachra",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792363180,
-          "parent": "42908",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/12\" class=\"PostMention\" data-id=\"275796\"><i class=\"icon fas fa-reply\"></i>nuclear6476</a> The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.</p></blockquote>\n\n<p>Well there you go, I'll have to check these out. Thanks :)</p>"
-        },
-        {
-          "id": "275937",
-          "number": 16,
-          "author": "skully373",
-          "authorUsername": "skully373",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/piWzj3tLZsYbFwH2.png",
-          "score": 1,
-          "created": 1792384067,
-          "parent": "42908",
-          "text": "<p>Did you ever try Tidal? It's pretty great for a paid service. Huge library and awesome sound quality. I just wish Pixels handled LDAC better.</p>"
-        },
-        {
-          "id": "275943",
-          "number": 17,
-          "author": "schweizer",
-          "authorUsername": "schweizer",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792387216,
-          "parent": "42908",
-          "text": "<p>What makes you think Spotify is a shady company? They do not sell customer data and they are in public ownership. The income flows vastly into the music industry. It is not that buying CDs would support artists more. It is the labels that take a huge share. Switching the streaming service does not solve that problem.</p>\n\n<p>For me there are two features why i do not use my digitalized CD recordings any more:</p>\n<ul><li>Spotify connect lets me start music directly on the player. No interrupted bluetooth connections.</li>\n<li>I can do jams with family and friends.</li></ul>\n"
-        },
-        {
-          "id": "275955",
-          "number": 18,
-          "author": "four",
-          "authorUsername": "four",
-          "authorAvatar": "",
-          "score": 5,
-          "created": 1792391681,
-          "parent": "42908",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> What makes you think Spotify is a shady company?</p></blockquote>\n\n<p>I wouldn't say they're more shady than other surveillance capitalism companies, but any surveillance capitalism company is shady as hell.</p> \n\n<ul><li><p>They collect everything you do in the app. Searches, skips, interactions. They make inferences about your age, interests, preferences, and scans for other devices on your Wi-Fi.</p> </li>\n\n<li><p>They take data from marketing and ad partners and their inferences about you. And Spotify shares your data with those ad partners.</p> </li>\n<li><p>Personalized ads are enabled by default. If you opt out, you still get ads based on context of what you're listening to.</p></li>\n<li><p>Your listen history Is kept for the length of your account.</p> </li>\n<li><p>Your data including voice recordings, if you use them, can be used to train machine learning models and there's no opt-out.</p> </li>\n<li><p>They were fined by Sweden's data protection authority in 2023</p></li></ul>\n\n\n<p>Is this an inaccurate summary of their <a href=\"https://www.spotify.com/us/legal/privacy-policy/\" rel=\"ugc nofollow\">privacy practices</a> and history?</p>"
-        },
-        {
-          "id": "275962",
-          "number": 20,
-          "author": "liachra",
-          "authorUsername": "liachra",
-          "authorAvatar": "",
-          "score": 9,
-          "created": 1792393790,
-          "parent": "42908",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> Well first off, excluding YouTube Music they pay the least to their artists out of all the streaming services.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> It is not that buying CDs would support artists more. It is the labels that take a huge share.</p></blockquote>\n\n<p>This is naive. Yes the labels take a huge share however I <em>personally</em> know many artists who receive a bigger portion of the income with CDs/Vinyl than they do on streaming services.10,000 streams a month equal around 10 cents (<strong>if</strong> you're lucky), a couple hundred CD &amp; vinyl sales are in the dollars. Additionally not every artist are with a major label and only sell CD's through direct purchase meaning they receive majority of the cost you pay for an album (minus printing &amp; payment/store-front processing fees).</p>\n\n<p>Yes CDs/vinyl  sales are smaller than streaming but the artists that have noticed a incline in CD sales are noticing a more of a profit hence why you see so many independent artists are heavily pushing physical media sales to their audience. The more people cop on to this the better for them.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> They do not sell customer data</p></blockquote>\n\n<p>Completely untrue. They aggregate with many major advertising &amp; marketing platforms</p>"
-        },
-        {
-          "id": "275966",
-          "number": 21,
-          "author": "AKRAKU",
-          "authorUsername": "AKRAKU",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/OZTjv8P30Ni9NyAD.png",
-          "score": 1,
-          "created": 1792394850,
-          "parent": "42908",
-          "text": "<p>I won't never get why people jump on GOS and still willing to pay 18€/month to services live Quobuz. After jumping here I found Riplay on Accrescent store and beside some bug I can live with (that will be fixed soon since dev is active on the project) I'm loving it! The algorithm is way better than the one on Spotify or Apple Music and is making me rediscover a lot of music I used to listen during the past and almost forgot about.</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43097",
@@ -2139,31 +2147,6 @@
       "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
       "media": [],
       "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
-      "replies": []
-    },
-    {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 34,
-      "comments": 34,
-      "views": 770,
-      "participantCount": 22,
-      "created": 1697589169,
-      "lastPostedAt": 1792966253,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
       "replies": []
     },
     {
@@ -2334,55 +2317,6 @@
       "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
       "media": [],
       "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
-      "replies": []
-    },
-    {
-      "id": "43095",
-      "title": "Google Account -- Verify it's you",
-      "author": "zach99zulu",
-      "authorUsername": "zach99zulu",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792958662,
-      "lastPostedAt": 1792959023,
-      "category": "Pixel 10a",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 10a"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43095-google-account-verify-its-you",
-      "media": [],
-      "text": "<p>New to GrapheneOS. I installed it last night.</p>\n\n<p>Regarding google accounts, what do I need to do to get the \"Verify it's you\" notifications on my phone? I am getting messages that's saying it's sent to my pixel 10a, but I'm not getting any notifications to verify it's me. Been struggling for hours and it's really getting to me.</p>",
-      "replies": []
-    },
-    {
-      "id": "17303",
-      "title": "Zelle in Schwab banking app",
-      "author": "Safely9659",
-      "authorUsername": "Safely9659",
-      "authorAvatar": "",
-      "score": 24,
-      "comments": 24,
-      "views": 630,
-      "participantCount": 18,
-      "created": 1731393349,
-      "lastPostedAt": 1792956673,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/17303-zelle-in-schwab-banking-app",
-      "media": [],
-      "text": "<p>Hi everyone,</p>\n\n<p>My bank is Charles Schwab, and I (before switching to Graphene) used Zelle through the Schwab banking app. Because of this, using the Zelle standalone app is not an option- it won't let me set up the app, and instead directs me to use Zelle in the Schwab app. I cannot get Zelle to work in the Schwab app, even with compatibility mode enabled and all permissions granted.</p>\n\n<p>It sounds like folks have had success using the Zelle service in other banking apps on Graphene (at least Chase, for instance), so I wonder if Schwab is unique here in having this broken component.</p>\n\n<p>Anyone in a similar situation or found a resolution? FWIW, I am using a Pixel 8</p>\n\n<p>Thanks!</p>",
       "replies": []
     }
   ]
