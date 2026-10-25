@@ -107,6 +107,42 @@
       embedUrl: "https://ntv.st/embed?t=U3kvVGsxU1RSbFNVNzYraHQ0eDVFYW1vbnBjQnNZZEgvOGZBSHNENlF2MjdST1ArTnAzeGxNakZDRjliZmpNY2g1M2ZGRGh4bHFYb1pOOS91SkxDSlFuNnpkNEV4L3lQNVBFVjdGdUpNNEdndG9ValFmRWFPMjR0eEkxUFgycHc~",
       directUrl: "https://embed.st/embed/hotel/barcelona-vs-real-madrid-laliga-ea-sports-1792954800/1",
       originalUrl: "https://ntv.st/watch/kobra/barcelona-vs-real-madrid-2506259"
+    },
+    {
+      id: "dlhd-dazn",
+      streamNo: 8,
+      name: "Stream 8 · DAZN LaLiga [HD]",
+      short: "DAZN LaLiga",
+      source: "DaddyLive",
+      language: "Spanish - DAZN",
+      hd: true,
+      embedUrl: "https://dembed.st/premiumtv/daddy.php?id=538",
+      directUrl: "https://thedaddy.pk/stream/stream-538.php",
+      originalUrl: "https://thedaddy.pk/watch.php?id=538"
+    },
+    {
+      id: "dlhd-laligatv",
+      streamNo: 9,
+      name: "Stream 9 · LaLigaTV UK [HD]",
+      short: "LaLigaTV UK",
+      source: "DaddyLive",
+      language: "English - LaLigaTV",
+      hd: true,
+      embedUrl: "https://dembed.st/premiumtv/daddy.php?id=276",
+      directUrl: "https://thedaddy.pk/stream/stream-276.php",
+      originalUrl: "https://thedaddy.pk/watch.php?id=276"
+    },
+    {
+      id: "dlhd-supersport",
+      streamNo: 10,
+      name: "Stream 10 · SuperSport LaLiga [HD]",
+      short: "SuperSport",
+      source: "DaddyLive",
+      language: "English - SuperSport",
+      hd: true,
+      embedUrl: "https://dembed.st/premiumtv/daddy.php?id=415",
+      directUrl: "https://thedaddy.pk/stream/stream-415.php",
+      originalUrl: "https://thedaddy.pk/watch.php?id=415"
     }
   ];
 
@@ -116,7 +152,7 @@
   /* Chat Messages (Pre-Match & Live Fan Chat) */
   var SEED_CHAT = [
     { author: "ViktorychBot", badge: "mod", text: "🛡️ Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.", color: "#00ba7c" },
-    { author: "ViktorychBot", badge: "mod", text: "⏰ Kickoff tonight at 21:00 CET! 7 backup streams armed for zero-buffering failover.", color: "#00ba7c" },
+    { author: "ViktorychBot", badge: "mod", text: "⏰ Kickoff tonight at 21:00 CET! 10 backup streams armed for zero-buffering failover.", color: "#00ba7c" },
     { author: "BarcaFan_09", badge: "barca", text: "El Clásico day! Yamal vs Mbappé is going to be cinematic 🔥", color: "#EDBB00" },
     { author: "Madridista_7", badge: "madrid", text: "Hala Madrid! Bernabéu will be buzzing tonight 🤍", color: "#6F3294" },
     { author: "StreamWatcher", badge: "vip", text: "Finally an ad-free stream with no ghost popups opening new tabs! 👏", color: "#f91880" },
