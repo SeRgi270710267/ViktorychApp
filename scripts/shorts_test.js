@@ -27,7 +27,14 @@ global.ViktorychAccounts = {
   token: () => "mock-token"
 };
 
+const mockElements = {};
 global.document = {
+  body: {
+    appendChild: (el) => {
+      if (el && el.id) mockElements[el.id] = el;
+      return el;
+    }
+  },
   documentElement: {
     classList: {
       add: () => {},
@@ -35,7 +42,19 @@ global.document = {
       contains: () => false
     }
   },
-  getElementById: () => null,
+  createElement: (tag) => {
+    const el = {
+      tagName: tag.toUpperCase(),
+      attributes: {},
+      setAttribute: (k, v) => { el.attributes[k] = String(v); },
+      getAttribute: (k) => el.attributes[k],
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      classList: { add: () => {}, remove: () => {} }
+    };
+    return el;
+  },
+  getElementById: (id) => mockElements[id] || null,
   querySelectorAll: () => [],
   querySelector: () => null,
   addEventListener: () => {},
@@ -53,6 +72,9 @@ assert.strictEqual(typeof shorts.isLocked, "function", "isLocked must be a funct
 assert.strictEqual(typeof shorts.isUnlocked, "function", "isUnlocked must be a function");
 assert.strictEqual(typeof shorts.setLocked, "function", "setLocked must be a function");
 assert.strictEqual(typeof shorts.toggleLock, "function", "toggleLock must be a function");
+assert.strictEqual(typeof shorts.showCaptcha, "function", "showCaptcha must be a function");
+assert.strictEqual(typeof shorts.closeCaptcha, "function", "closeCaptcha must be a function");
+assert.strictEqual(typeof global.showTikTokCaptcha, "function", "window.showTikTokCaptcha must be a function");
 
 // Bind mock hooks
 shorts.bind({
@@ -99,11 +121,13 @@ const liveHtmlUnlocked = shorts.page({ live: true });
 assert(liveHtmlUnlocked.includes("@pepsi"), "Unlocked live must include @pepsi");
 assert(liveHtmlUnlocked.includes("@gabii_g5"), "Unlocked live must include current account @gabii_g5");
 assert(liveHtmlUnlocked.includes("data-shorts=\"toggle-lock\""), "Live HTML must include lock button");
+assert(liveHtmlUnlocked.includes("tiktok-captcha-modal"), "Live HTML must include captcha modal");
 
 const forYouHtmlUnlocked = shorts.page({ live: false });
 assert(forYouHtmlUnlocked.includes("@pepsi"), "Unlocked For You must include @pepsi");
 assert(forYouHtmlUnlocked.includes("@gabii_g5"), "Unlocked For You must include @gabii_g5");
 assert(forYouHtmlUnlocked.includes("@yt_creator"), "Unlocked For You must include @yt_creator");
+assert(forYouHtmlUnlocked.includes("tiktok-captcha-modal"), "For You HTML must include captcha modal");
 
 console.log("Testing locked mode in Shorts...");
 shorts.setLocked(true);
@@ -131,7 +155,6 @@ assert(liveHtmlLocked.includes("Unlocked accounts"), "Account sheet must contain
 assert(liveHtmlLocked.includes("added accounts"), "Account sheet must contain added accounts heading");
 
 console.log("Testing site-wide isolation when locked...");
-// Test that app.js filters out locked TikTok accounts everywhere when locked
 assert.strictEqual(shorts.isUnlocked("pepsi"), true, "pepsi is unlocked");
 assert.strictEqual(shorts.isUnlocked("gabii_g5"), false, "gabii_g5 is locked");
 
@@ -185,7 +208,20 @@ assert(!lockedVisibleFeeds.some((f) => f.handle === "another_locked"), "Locked T
 shorts.setLocked(false);
 const unlockedVisiblePosts = sitePosts.filter((p) => !isLockedTiktok(p));
 assert.strictEqual(unlockedVisiblePosts.length, sitePosts.length, "All posts visible when unlocked");
-const unlockedVisibleFeeds = siteFeeds.filter((f) => !isLockedTiktok(f));
+const unlockedVisibleFeeds = siteFeeds.filter((p) => !isLockedTiktok(p));
 assert.strictEqual(unlockedVisibleFeeds.length, siteFeeds.length, "All feeds visible when unlocked");
+
+console.log("Testing captcha modal APIs...");
+let retryCalled = false;
+const mockModal = { hidden: true, setAttribute: () => {} };
+mockElements["tiktok-captcha-modal"] = mockModal;
+shorts.showCaptcha({
+  handle: "pepsi",
+  url: "https://www.tiktok.com/@pepsi/live",
+  onRetry: () => { retryCalled = true; }
+});
+assert.strictEqual(mockModal.hidden, false, "Modal must be shown after showCaptcha");
+shorts.closeCaptcha();
+assert.strictEqual(mockModal.hidden, true, "Modal must be hidden after closeCaptcha");
 
 console.log("All Shorts locked mode and site-wide isolation tests passed successfully!");

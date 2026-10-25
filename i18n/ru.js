@@ -1258,5 +1258,11 @@ SI18n.addPack("ru", {
   "Reorder items and organize them into folders.": "Изменяйте порядок элементов и организуйте их по папкам.",
   "Reset navigation to default?": "Сбросить навигацию по умолчанию?",
   "Hidden": "Скрыто",
-  "Visible": "Видимо"
+  "Visible": "Видимо",
+  "TikTok Verification": "Проверка TikTok",
+  "TikTok requires a quick verification or reached a temporary limit. Complete the challenge to continue.": "TikTok требует быструю проверку или достиг временного лимита. Пройдите проверку, чтобы продолжить.",
+  "Open TikTok to Solve": "Открыть TikTok для прохождения",
+  "I’ve completed it — Continue": "Я прошёл проверку — продолжить",
+  "Solve verification": "Пройти проверку",
+  "Verification required": "Требуется проверка"
 });

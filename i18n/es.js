@@ -1258,5 +1258,11 @@ SI18n.addPack("es", {
   "Reorder items and organize them into folders.": "Reordena elementos y organízalos en carpetas.",
   "Reset navigation to default?": "¿Restablecer navegación predeterminada?",
   "Hidden": "Oculto",
-  "Visible": "Visible"
+  "Visible": "Visible",
+  "TikTok Verification": "Verificación de TikTok",
+  "TikTok requires a quick verification or reached a temporary limit. Complete the challenge to continue.": "TikTok requiere una verificación rápida o alcanzó un límite temporal. Completa el desafío para continuar.",
+  "Open TikTok to Solve": "Abrir TikTok para resolver",
+  "I’ve completed it — Continue": "Ya lo completé — Continuar",
+  "Solve verification": "Resolver verificación",
+  "Verification required": "Verificación requerida"
 });

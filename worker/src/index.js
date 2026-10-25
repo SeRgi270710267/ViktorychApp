@@ -1165,8 +1165,18 @@ async function handleOwnerLive(request, env, rawHandle) {
   if (!TIKTOK_HANDLE.test(handle)) return json(400, { error: "bad_handle" });
   const stored = await readOwnerDoc(env);
   const prev = stored && stored.live && stored.live[handle] ? stored.live[handle] : {};
+  const clearParam = new URL(request.url).searchParams.get("clear") === "1";
+  if (clearParam && prev && (prev.backoffUntil || prev.backoffStep)) {
+    prev.backoffUntil = "";
+    prev.backoffStep = 0;
+    if (stored && stored.live && stored.live[handle] && env.DATA) {
+      stored.live[handle].backoffUntil = "";
+      stored.live[handle].backoffStep = 0;
+      await env.DATA.put("owner/tiktok.json", JSON.stringify(stored)).catch(() => {});
+    }
+  }
   const statsOnly = new URL(request.url).searchParams.get("stats") === "1";
-  if (backoffActive(prev)) return json(200, blockedPayload(handle, prev, !statsOnly));
+  if (!clearParam && backoffActive(prev)) return json(200, blockedPayload(handle, prev, !statsOnly));
   if (statsOnly) return handleLiveStats(request, env, handle, gate, prev);
   const roomKey = "https://live-roomid.internal/" + handle.toLowerCase();
   let roomId = "";
@@ -3357,9 +3367,12 @@ async function route(request, env) {
   }
   if (path === "/v1/account/identities" || path.startsWith("/v1/account/identities/")) {
     return handleIdentitiesRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
-  }
-  if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
-    return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
+
+  if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
+
+    return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
+
   }
   return json(404, { error: "not_found" });
 }
