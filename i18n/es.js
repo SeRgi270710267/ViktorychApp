@@ -1120,5 +1120,17 @@ SI18n.addPack("es", {
   "Auto-Jump active: switches streams instantly on buffering.": "Salto automático activo: cambia transmisiones al instante al almacenar en búfer.",
   "Send a message…": "Enviar un mensaje…",
   "Send": "Enviar",
-  "Watch Live on TV": "Ver en vivo en TV"
+  "Watch Live on TV": "Ver en vivo en TV",
+  "AdBlock Active": "AdBlock activo",
+  "Ghost Popups Blocked": "Ventanas emergentes bloqueadas",
+  "TONIGHT 21:00": "ESTA NOCHE 21:00",
+  "Kickoff in {time}": "Inicio en {time}",
+  "Kickoff at 21:00": "Inicio a las 21:00",
+  "Pre-Match": "Previo al partido",
+  "Predicted Lineups": "Alineaciones probables",
+  "Lineups": "Alineaciones",
+  "Head to Head": "Cara a cara",
+  "Simulate Live Match": "Simular partido en vivo",
+  "Show Pre-Match Countdown": "Mostrar cuenta regresiva",
+  "Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.": "AdBlock integrado activo: ventanas emergentes fantasma, trampas de clic y redirecciones están completamente bloqueadas."
 });

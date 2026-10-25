@@ -1120,5 +1120,17 @@ SI18n.addPack("ru", {
   "Auto-Jump active: switches streams instantly on buffering.": "Автопереключение активно: мгновенно меняет поток при буферизации.",
   "Send a message…": "Отправить сообщение…",
   "Send": "Отправить",
-  "Watch Live on TV": "Смотреть в прямом эфире"
+  "Watch Live on TV": "Смотреть в прямом эфире",
+  "AdBlock Active": "AdBlock активен",
+  "Ghost Popups Blocked": "Всплывающие окна заблокированы",
+  "TONIGHT 21:00": "СЕГОДНЯ В 21:00",
+  "Kickoff in {time}": "Начало через {time}",
+  "Kickoff at 21:00": "Начало в 21:00",
+  "Pre-Match": "Перед матчем",
+  "Predicted Lineups": "Ориентировочные составы",
+  "Lineups": "Составы",
+  "Head to Head": "Очные встречи",
+  "Simulate Live Match": "Показать матч в прямом эфире",
+  "Show Pre-Match Countdown": "Показать обратный отсчёт",
+  "Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.": "Встроенный AdBlock активен: всплывающие окна, ловушки кликов и перенаправления полностью заблокированы."
 });

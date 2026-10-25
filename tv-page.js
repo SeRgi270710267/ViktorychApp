@@ -1,5 +1,5 @@
 /* Viktorych TV: Twitch-Style Live Stream Page in X Style.
-   Plays Barcelona vs Real Madrid from NTVSTREAM with instant multi-stream auto-failover. */
+   Barcelona vs Real Madrid (El Clásico) with Built-in AdBlock & Multi-Stream Failover Watchdog. */
 (function (root) {
   "use strict";
 
@@ -22,7 +22,7 @@
     madrid: '<svg class="sc-crest-svg" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="17" r="13" fill="#FFFFFF" stroke="#FEBE10" stroke-width="2"/><circle cx="16" cy="17" r="10.5" fill="none" stroke="#6F3294" stroke-width="1.5"/><path d="M7 11.5l14 14" stroke="#6F3294" stroke-width="3.5"/><text x="16" y="21" font-size="7" font-weight="900" fill="#FEBE10" text-anchor="middle" font-family="sans-serif">MCF</text><path d="M11 6l2.5 3 2.5-4 2.5 4L21 6v3h-10V6z" fill="#FEBE10"/><circle cx="16" cy="3.5" r="1" fill="#FEBE10"/><circle cx="11" cy="4.5" r="0.8" fill="#FEBE10"/><circle cx="21" cy="4.5" r="0.8" fill="#FEBE10"/></svg>'
   };
 
-  /* The 7 Streams extracted from https://ntv.st/watch/kobra/barcelona-vs-real-madrid-2506259 */
+  /* The 7 Streams extracted from NTVSTREAM */
   var STREAMS = [
     {
       id: "admin-1",
@@ -110,36 +110,38 @@
     }
   ];
 
-  /* Simulated Live Chat Seed Messages */
+  /* Match Schedule: October 25, 2026, 21:00:00 (Santiago Bernabéu) */
+  var KICKOFF_DATE = new Date(2026, 9, 25, 21, 0, 0);
+
+  /* Chat Messages (Pre-Match & Live Fan Chat) */
   var SEED_CHAT = [
-    { author: "ViktorychBot", badge: "mod", text: "Welcome to El Clásico! ⚡ Auto-Jump is ON. If any link buffers, it switches instantly.", color: "#00ba7c" },
-    { author: "BarcaFan_09", badge: "barca", text: "VISCA EL BARÇA! Yamal starting on the right 🔥", color: "#EDBB00" },
-    { author: "Madridista_7", badge: "madrid", text: "Hala Madrid y nada más! Vini & Bellingham ready 🤍", color: "#6F3294" },
-    { author: "StreamWatcher", badge: "vip", text: "Quality is insane, 1080p 60fps running buttery smooth!", color: "#f91880" },
-    { author: "SoccerGeek", badge: "", text: "Who do you think scores first? Lewandowski or Mbappé?", color: "#1d9bf0" },
-    { author: "CatalanPride", badge: "barca", text: "Pedri's through balls will decide this match 🔵🔴", color: "#EDBB00" },
-    { author: "Raul_Legend", badge: "madrid", text: "Defense needs to stay sharp on the counter ⚔️", color: "#ff7a00" }
+    { author: "ViktorychBot", badge: "mod", text: "🛡️ Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.", color: "#00ba7c" },
+    { author: "ViktorychBot", badge: "mod", text: "⏰ Kickoff tonight at 21:00 CET! 7 backup streams armed for zero-buffering failover.", color: "#00ba7c" },
+    { author: "BarcaFan_09", badge: "barca", text: "El Clásico day! Yamal vs Mbappé is going to be cinematic 🔥", color: "#EDBB00" },
+    { author: "Madridista_7", badge: "madrid", text: "Hala Madrid! Bernabéu will be buzzing tonight 🤍", color: "#6F3294" },
+    { author: "StreamWatcher", badge: "vip", text: "Finally an ad-free stream with no ghost popups opening new tabs! 👏", color: "#f91880" },
+    { author: "SoccerGeek", badge: "", text: "Both teams in top form, 3 points at the top of La Liga at stake.", color: "#1d9bf0" },
+    { author: "CatalanPride", badge: "barca", text: "Flick's high line vs Vinicius speed will be the tactical battle.", color: "#EDBB00" }
   ];
 
   var RANDOM_MESSAGES = [
-    { author: "ElClasicoLover", badge: "vip", text: "WHAT A SAVE! Incredible reflexes 🧤", color: "#f91880" },
-    { author: "YamalSuperfan", badge: "barca", text: "Yamal is only 19 and playing like a Ballon d'Or winner 🌟", color: "#EDBB00" },
-    { author: "BellinghamZone", badge: "madrid", text: "Jude controlling the entire midfield right now 🎯", color: "#6F3294" },
-    { author: "TulaSupporter", badge: "", text: "Checking in from Tula, loving this Viktorych TV stream!", color: "#00ba7c" },
-    { author: "StreamWatcher", badge: "vip", text: "Zero lag here, auto-jump watchdog is genius 👌", color: "#1d9bf0" },
-    { author: "RaphinhaSpeed", badge: "barca", text: "That run was electric! Barcelona pressing high!", color: "#EDBB00" },
-    { author: "WhiteArmy", badge: "madrid", text: "Penalty appeal?! Referee waved play on!", color: "#ff7a00" },
-    { author: "TacticsBoard", badge: "", text: "Notice how Barca is overloading the left half-space.", color: "#7856ff" },
-    { author: "GolazoGuy", badge: "", text: "SO CLOSE! Off the crossbar!! 😱😱", color: "#f91880" },
-    { author: "FastNet", badge: "", text: "Switched to Stream 3 Golf HD, crystal clear audio 🔊", color: "#00ba7c" }
+    { author: "ElClasicoLover", badge: "vip", text: "Countdown is ticking down! Cannot wait for 21:00 ⏳", color: "#f91880" },
+    { author: "YamalSuperfan", badge: "barca", text: "Lamine Yamal starting XI confirmed! Let's go Barça! 🔵🔴", color: "#EDBB00" },
+    { author: "BellinghamZone", badge: "madrid", text: "Jude Bellingham in the #10 role behind Vinicius & Kylian ⚡", color: "#6F3294" },
+    { author: "CleanStream", badge: "vip", text: "The native AdBlock sandbox is blocking all embed redirects! Pure gold 🛡️", color: "#00ba7c" },
+    { author: "TacticsBoard", badge: "", text: "Key matchup: Koundé vs Vinícius on the flank.", color: "#7856ff" },
+    { author: "GolazoGuy", badge: "", text: "Streams 1-7 all tested healthy and ready for kickoff ⚽", color: "#f91880" },
+    { author: "Madridista_7", badge: "madrid", text: "Santiago Bernabéu under the lights is unmatched! 🏟️", color: "#6F3294" }
   ];
 
   /* State */
   var STATE = {
     currentIndex: 0,
     autoJump: true,
+    adblockEnabled: true,
+    simulatedLive: false,
     theaterMode: false,
-    activeTab: "overview", // 'overview' | 'sources' | 'stats'
+    activeTab: "overview", // 'overview' | 'lineups' | 'sources' | 'stats'
     chatList: [].concat(SEED_CHAT),
     streamHealth: { 0: "healthy", 1: "healthy", 2: "healthy", 3: "healthy", 4: "healthy", 5: "healthy", 6: "healthy" },
     failoverCount: 0,
@@ -147,11 +149,70 @@
     hudTimer: null,
     watchdogTimer: null,
     chatLoopTimer: null,
+    countdownTimer: null,
+    popBlockInstalled: false,
     mounted: false
   };
 
   function getCurrentStream() {
     return STREAMS[STATE.currentIndex] || STREAMS[0];
+  }
+
+  function isMatchLive() {
+    if (STATE.simulatedLive) return true;
+    return Date.now() >= KICKOFF_DATE.getTime();
+  }
+
+  function getTimeRemaining() {
+    var now = Date.now();
+    var diff = KICKOFF_DATE.getTime() - now;
+    if (diff <= 0) return { total: 0, hours: 0, minutes: 0, seconds: 0 };
+    var seconds = Math.floor((diff / 1000) % 60);
+    var minutes = Math.floor((diff / (1000 * 60)) % 60);
+    var hours = Math.floor(diff / (1000 * 60 * 60));
+    return { total: diff, hours: hours, minutes: minutes, seconds: seconds };
+  }
+
+  function formatTimeRemaining(rem) {
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    return rem.hours + "h " + pad(rem.minutes) + "m " + pad(rem.seconds) + "s";
+  }
+
+  /* Built-in AdBlock & Ghost Popup Neutralizer */
+  function installAdblockProtection() {
+    if (STATE.popBlockInstalled || typeof window === "undefined") return;
+    STATE.popBlockInstalled = true;
+
+    // 1. Intercept window.open calls to drop ad popups
+    try {
+      var origOpen = window.open;
+      window.open = function (url, target, features) {
+        if (!STATE.adblockEnabled) return origOpen.apply(window, arguments);
+        var u = String(url || "").toLowerCase();
+        // Check for ad signatures
+        if (
+          !u ||
+          u === "about:blank" ||
+          /ad\.html|aclib|pop|zoneid|click|traffic|track|bet|casino|banner|strmd/i.test(u)
+        ) {
+          console.log("[Viktorych AdBlock] Blocked ghost popup:", url);
+          showHudNotice("🛡️ " + tr("Ghost Popups Blocked"), 2500);
+          return null;
+        }
+        return origOpen.apply(window, arguments);
+      };
+    } catch (e) {}
+
+    // 2. Click trap disarmer on the player stage
+    var stage = document.getElementById("tv-stage");
+    if (stage) {
+      stage.addEventListener("auxclick", function (e) {
+        if (STATE.adblockEnabled) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
+    }
   }
 
   function showHudNotice(text, duration) {
@@ -169,13 +230,12 @@
     }, duration || 4500);
   }
 
-  /* Jump to next stream in the pool automatically or manually */
+  /* Multi-Stream Failover Engine */
   function jumpNextStream(reason) {
     var prevIndex = STATE.currentIndex;
     STATE.streamHealth[prevIndex] = "stalled";
     STATE.failoverCount++;
 
-    // Pick next stream
     var nextIndex = (prevIndex + 1) % STREAMS.length;
     STATE.currentIndex = nextIndex;
     var nextStream = STREAMS[nextIndex];
@@ -183,7 +243,6 @@
     var msg = (reason ? reason + " · " : "") + tr("Auto-Jumped to {name}", { name: nextStream.name });
     showHudNotice("⚡ " + msg, 5000);
 
-    // Add notice to chat
     addChatMessage({
       author: "AutoWatchdog",
       badge: "mod",
@@ -213,6 +272,13 @@
     updateUIElements();
   }
 
+  function toggleLiveSimulation() {
+    STATE.simulatedLive = !STATE.simulatedLive;
+    var text = STATE.simulatedLive ? tr("Simulate Live Match") : tr("Show Pre-Match Countdown");
+    showHudNotice(text, 2500);
+    renderMainSection();
+  }
+
   function toggleTheater() {
     STATE.theaterMode = !STATE.theaterMode;
     var stage = document.getElementById("tv-stage");
@@ -237,7 +303,6 @@
     var frame = document.getElementById("tv-player-frame");
     if (!frame) return;
     var stream = getCurrentStream();
-    // Use embedUrl with direct fallback
     frame.src = stream.embedUrl;
   }
 
@@ -245,7 +310,6 @@
     if (STATE.watchdogTimer) clearTimeout(STATE.watchdogTimer);
     if (!STATE.autoJump) return;
 
-    // Watchdog check: If iframe stalls or triggers error, automatically switch
     var frame = document.getElementById("tv-player-frame");
     if (frame) {
       frame.onerror = function () {
@@ -273,7 +337,6 @@
   }
 
   function triggerEmote(emoji) {
-    // Add emote to chat
     var author = "You";
     try {
       if (window.ViktorychAccounts && window.ViktorychAccounts.profile) {
@@ -288,7 +351,6 @@
       color: "#1d9bf0"
     });
 
-    // Spawn floating particle
     var particle = document.createElement("div");
     particle.className = "tv-floating-emoji";
     particle.textContent = emoji;
@@ -299,20 +361,36 @@
     }, 1200);
   }
 
+  function updateCountdownDisplay() {
+    var rem = getTimeRemaining();
+    var pill = document.getElementById("tv-countdown-pill");
+    if (pill) {
+      if (rem.total > 0) {
+        pill.textContent = "⏳ " + tr("Kickoff in {time}", { time: formatTimeRemaining(rem) });
+      } else {
+        pill.textContent = "🔴 " + tr("LIVE");
+      }
+    }
+
+    var hEl = document.getElementById("tv-count-hours");
+    var mEl = document.getElementById("tv-count-mins");
+    var sEl = document.getElementById("tv-count-secs");
+    if (hEl && mEl && sEl) {
+      hEl.textContent = (rem.hours < 10 ? "0" : "") + rem.hours;
+      mEl.textContent = (rem.minutes < 10 ? "0" : "") + rem.minutes;
+      sEl.textContent = (rem.seconds < 10 ? "0" : "") + rem.seconds;
+    }
+  }
+
   function updateUIElements() {
-    // Update active stream pill
     var pills = document.querySelectorAll(".tv-stream-pill");
     for (var i = 0; i < pills.length; i++) {
       var idx = parseInt(pills[i].getAttribute("data-stream-idx"), 10);
-      if (idx === STATE.currentIndex) {
-        pills[i].classList.add("active");
-      } else {
-        pills[i].classList.remove("active");
-      }
+      if (idx === STATE.currentIndex) pills[i].classList.add("active");
+      else pills[i].classList.remove("active");
       if (STATE.streamHealth[idx] === "stalled") pills[i].classList.add("stalled");
     }
 
-    // Update auto jump button
     var autoBtn = document.getElementById("tv-autojump-btn");
     if (autoBtn) {
       if (STATE.autoJump) {
@@ -324,9 +402,17 @@
       }
     }
 
-    // Update active badge in top HUD
     var hudStream = document.getElementById("tv-hud-stream-name");
     if (hudStream) hudStream.textContent = getCurrentStream().short;
+  }
+
+  function renderMainSection() {
+    var parentCard = document.querySelector(".tv-info-card");
+    if (parentCard) {
+      var oldBox = parentCard.querySelector(".tv-score-box, .tv-prematch-hub, .tv-sources-grid, .tv-lineups-grid");
+      if (oldBox) oldBox.remove();
+      parentCard.insertAdjacentHTML("beforeend", renderTabContent());
+    }
   }
 
   /* HTML Generators */
@@ -337,6 +423,10 @@
         '<span>' + tr("Viktorych TV") + '</span>' +
       '</div>' +
       '<div class="tv-topbar-actions">' +
+        '<button class="tv-btn-action adblock-btn" data-act="tv-adblock-info" title="' + tr("Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.") + '">' +
+          '<svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>' +
+          '<span>' + tr("AdBlock Active") + '</span>' +
+        '</button>' +
         '<button class="tv-btn-action" data-act="tv-share" title="' + tr("Share stream") + '">' +
           '<svg viewBox="0 0 24 24"><path d="M12 2.59l5.7 5.7-1.41 1.42L13 6.41V16h-2V6.41l-3.3 3.3-1.41-1.42L12 2.59zM21 15l-.02 3.51c0 1.38-1.12 2.49-2.5 2.49H5.5C4.11 21 3 19.88 3 18.5V15h2v3.5c0 .28.22.5.5.5h12.98c.28 0 .5-.22.5-.5L19 15h2z"/></svg>' +
           '<span>' + tr("Share") + '</span>' +
@@ -361,14 +451,27 @@
 
   function renderVideoStage() {
     var cur = getCurrentStream();
+    var rem = getTimeRemaining();
+    var live = isMatchLive();
+
+    var statusPill = live
+      ? '<span class="tv-live-pill"><span class="tv-live-dot"></span>' + tr("LIVE") + '</span>'
+      : '<span class="tv-live-pill upcoming"><span class="tv-upcoming-dot"></span>' + tr("TONIGHT 21:00") + '</span>';
+
+    var countdownPill = live
+      ? '<span class="tv-meta-pill">👁️ ' + tr("{n} viewers", { n: "84,219" }) + '</span>'
+      : '<span id="tv-countdown-pill" class="tv-meta-pill">⏳ ' + tr("Kickoff in {time}", { time: formatTimeRemaining(rem) }) + '</span>';
+
     return '<div id="tv-stage" class="tv-stage' + (STATE.theaterMode ? ' theater-mode' : '') + '">' +
-      '<iframe id="tv-player-frame" class="tv-frame" src="' + esc(cur.embedUrl) + '" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>' +
+      /* Critical native AdBlock: sandbox omits allow-popups & allow-top-navigation to block all ghost popups */
+      '<iframe id="tv-player-frame" class="tv-frame" src="' + esc(cur.embedUrl) + '" sandbox="allow-scripts allow-same-origin allow-presentation allow-forms" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowfullscreen></iframe>' +
       
       /* HUD Top */
       '<div class="tv-hud-top">' +
         '<div class="tv-hud-left">' +
-          '<span class="tv-live-pill"><span class="tv-live-dot"></span>' + tr("LIVE") + '</span>' +
-          '<span class="tv-meta-pill">👁️ ' + tr("{n} viewers", { n: "84,219" }) + '</span>' +
+          statusPill +
+          countdownPill +
+          '<span class="tv-meta-pill adblock-active"><svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>' + tr("AdBlock Active") + '</span>' +
           '<span id="tv-hud-stream-name" class="tv-meta-pill">' + esc(cur.short) + '</span>' +
           '<span class="tv-meta-pill autojump-on"><svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 9.8l-5.3 4.6 1.6 7-6.3-4.1-6.3 4.1 1.6-7L3 9.8l6.6-1.2L12 2z"/></svg>' + tr("Auto-Jump") + '</span>' +
         '</div>' +
@@ -395,6 +498,16 @@
     '</div>';
   }
 
+  function renderAdblockBanner() {
+    return '<div class="tv-adblock-banner">' +
+      '<div class="tv-adblock-banner-content">' +
+        '<svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>' +
+        '<span>' + tr("Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.") + '</span>' +
+      '</div>' +
+      '<span class="tv-adblock-tag">' + tr("Shield Active") + '</span>' +
+    '</div>';
+  }
+
   function renderBroadcasterInfo() {
     return '<div class="tv-info-card">' +
       '<div class="tv-info-top">' +
@@ -406,6 +519,8 @@
           '<div class="tv-titles">' +
             '<h1>Barcelona vs Real Madrid - Watch Live Stream</h1>' +
             '<p>' +
+              '<span>' + tr("Kickoff at 21:00") + '</span>' +
+              '<span class="dot">·</span>' +
               '<span>' + tr("LaLiga EA Sports") + '</span>' +
               '<span class="dot">·</span>' +
               '<span><b>NTVSTREAM</b> · Server Kobra</span>' +
@@ -419,16 +534,16 @@
             '<svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 9.8l-5.3 4.6 1.6 7-6.3-4.1-6.3 4.1 1.6-7L3 9.8l6.6-1.2L12 2z"/></svg>' +
             (STATE.autoJump ? tr("Auto-Jump ON") : tr("Auto-Jump OFF")) +
           '</button>' +
-          '<button class="tv-btn-action" data-act="tv-next-stream">' +
-            '<svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>' +
-            tr("Next Stream") +
+          '<button class="tv-btn-action" data-act="tv-toggle-live-sim" title="' + (STATE.simulatedLive ? tr("Show Pre-Match Countdown") : tr("Simulate Live Match")) + '">' +
+            (STATE.simulatedLive ? '⏳ ' + tr("Show Pre-Match Countdown") : '🔴 ' + tr("Simulate Live Match")) +
           '</button>' +
         '</div>' +
       '</div>' +
       
       /* Tabs Header */
       '<div class="tv-tabs-nav">' +
-        '<button class="tv-tab-item' + (STATE.activeTab === 'overview' ? ' active' : '') + '" data-act="tv-tab" data-tab="overview">' + tr("Overview & Score") + '</button>' +
+        '<button class="tv-tab-item' + (STATE.activeTab === 'overview' ? ' active' : '') + '" data-act="tv-tab" data-tab="overview">' + (isMatchLive() ? tr("Overview & Score") : tr("Pre-Match")) + '</button>' +
+        '<button class="tv-tab-item' + (STATE.activeTab === 'lineups' ? ' active' : '') + '" data-act="tv-tab" data-tab="lineups">' + tr("Lineups") + '</button>' +
         '<button class="tv-tab-item' + (STATE.activeTab === 'sources' ? ' active' : '') + '" data-act="tv-tab" data-tab="sources">' + tr("Stream Sources ({n})", { n: STREAMS.length }) + '</button>' +
         '<button class="tv-tab-item' + (STATE.activeTab === 'stats' ? ' active' : '') + '" data-act="tv-tab" data-tab="stats">' + tr("Match Stats") + '</button>' +
       '</div>' +
@@ -442,10 +557,61 @@
     if (STATE.activeTab === 'sources') {
       return renderSourcesGrid();
     }
+    if (STATE.activeTab === 'lineups') {
+      return renderLineupsGrid();
+    }
     if (STATE.activeTab === 'stats') {
       return renderStatsWidget();
     }
-    return renderOverviewScore();
+    return isMatchLive() ? renderOverviewScore() : renderPreMatchHub();
+  }
+
+  /* Pre-Match Hub with Real Countdown */
+  function renderPreMatchHub() {
+    var rem = getTimeRemaining();
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+
+    return '<div class="tv-prematch-hub">' +
+      '<div class="tv-prematch-badge">⏳ ' + tr("Kickoff at 21:00") + ' (CET)</div>' +
+      
+      '<div class="tv-scoreboard" style="width:100%;max-width:540px">' +
+        '<div class="tv-team-side">' +
+          '<div style="width:38px;height:38px">' + CRESTS.barcelona + '</div>' +
+          '<span>FC Barcelona</span>' +
+        '</div>' +
+        '<div class="tv-score-mid">' +
+          '<span class="tv-big-score" style="color:#ffd400">VS</span>' +
+          '<span style="font-size:12px;color:var(--sub, #71767b);font-weight:700">Santiago Bernabéu</span>' +
+        '</div>' +
+        '<div class="tv-team-side">' +
+          '<span>Real Madrid</span>' +
+          '<div style="width:38px;height:38px">' + CRESTS.madrid + '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="tv-countdown-grid">' +
+        '<div class="tv-count-card">' +
+          '<span id="tv-count-hours" class="tv-count-num">' + pad(rem.hours) + '</span>' +
+          '<span class="tv-count-label">Hours</span>' +
+        '</div>' +
+        '<span class="tv-count-sep">:</span>' +
+        '<div class="tv-count-card">' +
+          '<span id="tv-count-mins" class="tv-count-num">' + pad(rem.minutes) + '</span>' +
+          '<span class="tv-count-label">Mins</span>' +
+        '</div>' +
+        '<span class="tv-count-sep">:</span>' +
+        '<div class="tv-count-card">' +
+          '<span id="tv-count-secs" class="tv-count-num">' + pad(rem.seconds) + '</span>' +
+          '<span class="tv-count-label">Secs</span>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="tv-prematch-venue">' +
+        '<span>🏟️ Santiago Bernabéu, Madrid</span>' +
+        '<span class="dot">·</span>' +
+        '<span>Referee: José María Sánchez Martínez</span>' +
+      '</div>' +
+    '</div>';
   }
 
   function renderOverviewScore() {
@@ -467,6 +633,45 @@
       '<div style="font-size:12.5px;color:var(--sub, #71767b);display:flex;justify-content:space-around;text-align:center;border-top:1px solid rgba(255,255,255,0.08);padding-top:10px">' +
         '<div>⚽ 24\' R. Lewandowski<br>⚽ 61\' L. Yamal</div>' +
         '<div>⚽ 42\' Vinicius Jr</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderLineupsGrid() {
+    return '<div class="tv-lineups-grid">' +
+      '<div class="tv-lineup-card">' +
+        '<div class="tv-lineup-header">' +
+          '<div style="display:flex;align-items:center;gap:8px"><div style="width:20px;height:20px">' + CRESTS.barcelona + '</div><span>FC Barcelona</span></div>' +
+          '<span style="font-size:12px;color:#EDBB00;font-weight:700">4-2-3-1</span>' +
+        '</div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">13</span><span>Iñaki Peña</span><span style="color:var(--sub,#71767b);font-size:11px">GK</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">23</span><span>Jules Koundé</span><span style="color:var(--sub,#71767b);font-size:11px">RB</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">2</span><span>Pau Cubarsí</span><span style="color:var(--sub,#71767b);font-size:11px">CB</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">5</span><span>Iñigo Martínez</span><span style="color:var(--sub,#71767b);font-size:11px">CB</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">3</span><span>Alejandro Balde</span><span style="color:var(--sub,#71767b);font-size:11px">LB</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">17</span><span>Marc Casadó</span><span style="color:var(--sub,#71767b);font-size:11px">DM</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">8</span><span>Pedri</span><span style="color:var(--sub,#71767b);font-size:11px">CM</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">19</span><span>Lamine Yamal</span><span style="color:var(--sub,#71767b);font-size:11px">RW</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">20</span><span>Dani Olmo</span><span style="color:var(--sub,#71767b);font-size:11px">AM</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">11</span><span>Raphinha</span><span style="color:var(--sub,#71767b);font-size:11px">LW</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">9</span><span>Robert Lewandowski</span><span style="color:var(--sub,#71767b);font-size:11px">ST</span></div>' +
+      '</div>' +
+      '<div class="tv-lineup-card">' +
+        '<div class="tv-lineup-header">' +
+          '<div style="display:flex;align-items:center;gap:8px"><div style="width:20px;height:20px">' + CRESTS.madrid + '</div><span>Real Madrid</span></div>' +
+          '<span style="font-size:12px;color:#fff;font-weight:700">4-3-3</span>' +
+        '</div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">13</span><span>Andriy Lunin</span><span style="color:var(--sub,#71767b);font-size:11px">GK</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">17</span><span>Lucas Vázquez</span><span style="color:var(--sub,#71767b);font-size:11px">RB</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">3</span><span>Éder Militão</span><span style="color:var(--sub,#71767b);font-size:11px">CB</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">22</span><span>Antonio Rüdiger</span><span style="color:var(--sub,#71767b);font-size:11px">CB</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">23</span><span>Ferland Mendy</span><span style="color:var(--sub,#71767b);font-size:11px">LB</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">8</span><span>Federico Valverde</span><span style="color:var(--sub,#71767b);font-size:11px">CM</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">14</span><span>Aurélien Tchouaméni</span><span style="color:var(--sub,#71767b);font-size:11px">DM</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">6</span><span>Eduardo Camavinga</span><span style="color:var(--sub,#71767b);font-size:11px">CM</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">5</span><span>Jude Bellingham</span><span style="color:var(--sub,#71767b);font-size:11px">AM</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">7</span><span>Vinícius Júnior</span><span style="color:var(--sub,#71767b);font-size:11px">LW</span></div>' +
+        '<div class="tv-player-row"><span class="tv-player-num">9</span><span>Kylian Mbappé</span><span style="color:var(--sub,#71767b);font-size:11px">ST</span></div>' +
       '</div>' +
     '</div>';
   }
@@ -542,8 +747,8 @@
       '</div>' +
 
       '<div class="tv-chat-pin-msg">' +
-        '<svg viewBox="0 0 24 24"><path d="M16 3H8v2l1 5-3 3v2h5v6l1 1 1-1v-6h5v-2l-3-3 1-5V3z"/></svg>' +
-        '<span>' + tr("Auto-Jump active: switches streams instantly on buffering.") + '</span>' +
+        '<svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>' +
+        '<span>' + tr("AdBlock Active") + ' · ' + tr("Ghost Popups Blocked") + '</span>' +
       '</div>' +
 
       '<div id="tv-chat-msgs" class="tv-chat-messages">' +
@@ -577,6 +782,7 @@
       '<div class="tv-layout">' +
         '<div class="tv-main">' +
           renderVideoStage() +
+          renderAdblockBanner() +
           renderBroadcasterInfo() +
         '</div>' +
         renderChatPane() +
@@ -589,13 +795,23 @@
     if (STATE.mounted) return;
     STATE.mounted = true;
 
+    // Activate AdBlock & Ghost Killer
+    installAdblockProtection();
+
+    // Start Live Countdown Timer Loop (ticks every second)
+    if (STATE.countdownTimer) clearInterval(STATE.countdownTimer);
+    STATE.countdownTimer = setInterval(function () {
+      if (!STATE.mounted) return;
+      updateCountdownDisplay();
+    }, 1000);
+
     // Start Chat Simulation Loop
     if (STATE.chatLoopTimer) clearInterval(STATE.chatLoopTimer);
     STATE.chatLoopTimer = setInterval(function () {
       if (!STATE.mounted) return;
       var pick = RANDOM_MESSAGES[Math.floor(Math.random() * RANDOM_MESSAGES.length)];
       addChatMessage(pick);
-    }, 4200);
+    }, 4500);
 
     // Watchdog initial timer
     restartWatchdog();
@@ -604,13 +820,13 @@
     var msgs = document.getElementById("tv-chat-msgs");
     if (msgs) msgs.scrollTop = msgs.scrollHeight;
 
-    // Delegate clicks
     document.addEventListener("click", handleDocClick, false);
     document.addEventListener("submit", handleDocSubmit, false);
   }
 
   function unmount() {
     STATE.mounted = false;
+    if (STATE.countdownTimer) clearInterval(STATE.countdownTimer);
     if (STATE.chatLoopTimer) clearInterval(STATE.chatLoopTimer);
     if (STATE.watchdogTimer) clearTimeout(STATE.watchdogTimer);
     if (STATE.hudTimer) clearTimeout(STATE.hudTimer);
@@ -633,6 +849,9 @@
     } else if (act === "tv-toggle-autojump") {
       e.preventDefault();
       toggleAutoJump();
+    } else if (act === "tv-toggle-live-sim") {
+      e.preventDefault();
+      toggleLiveSimulation();
     } else if (act === "tv-theater") {
       e.preventDefault();
       toggleTheater();
@@ -643,6 +862,9 @@
       e.preventDefault();
       updatePlayerIframe();
       showHudNotice(tr("Reloading stream player…"), 2000);
+    } else if (act === "tv-adblock-info") {
+      e.preventDefault();
+      showHudNotice("🛡️ " + tr("Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked."), 4000);
     } else if (act === "tv-share") {
       e.preventDefault();
       var url = location.origin + location.pathname + "#/tv";
@@ -662,12 +884,7 @@
         if (tabs[i].getAttribute("data-tab") === tab) tabs[i].classList.add("active");
         else tabs[i].classList.remove("active");
       }
-      var parentCard = document.querySelector(".tv-info-card");
-      if (parentCard) {
-        var oldBox = parentCard.querySelector(".tv-score-box, .tv-sources-grid");
-        if (oldBox) oldBox.remove();
-        parentCard.insertAdjacentHTML("beforeend", renderTabContent());
-      }
+      renderMainSection();
     } else if (act === "tv-emote") {
       e.preventDefault();
       var emoji = btn.getAttribute("data-emoji");
@@ -707,6 +924,7 @@
     unmount: unmount,
     jumpNextStream: jumpNextStream,
     jumpToStream: jumpToStream,
+    toggleLiveSimulation: toggleLiveSimulation,
     getStreams: function () { return STREAMS; },
     getState: function () { return STATE; }
   };

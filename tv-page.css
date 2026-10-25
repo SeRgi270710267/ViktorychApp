@@ -149,12 +149,26 @@
   border-radius: 6px;
 }
 
+.tv-live-pill.upcoming {
+  background: rgba(255, 212, 0, 0.15);
+  border: 1px solid rgba(255, 212, 0, 0.5);
+  color: #ffd400;
+}
+
 .tv-live-dot {
   width: 7px;
   height: 7px;
   background: #fff;
   border-radius: 50%;
   animation: tv-pulse 1.4s infinite ease-in-out;
+}
+
+.tv-upcoming-dot {
+  width: 7px;
+  height: 7px;
+  background: #ffd400;
+  border-radius: 50%;
+  animation: tv-pulse 2s infinite ease-in-out;
 }
 
 @keyframes tv-pulse {
@@ -185,6 +199,20 @@
 
 .tv-meta-pill.autojump-on svg {
   fill: #00ba7c;
+}
+
+/* AdBlock Active HUD Pill */
+.tv-meta-pill.adblock-active {
+  background: rgba(0, 186, 124, 0.12);
+  border-color: rgba(0, 186, 124, 0.45);
+  color: #00ba7c;
+  font-weight: 700;
+}
+
+.tv-meta-pill.adblock-active svg {
+  fill: #00ba7c;
+  width: 13px;
+  height: 13px;
 }
 
 .tv-meta-pill svg {
@@ -361,6 +389,43 @@
   border-color: #1d9bf0;
 }
 
+/* AdBlock Banner Callout */
+.tv-adblock-banner {
+  background: rgba(0, 186, 124, 0.08);
+  border: 1px solid rgba(0, 186, 124, 0.25);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12.5px;
+  color: #eff3f4;
+}
+
+.tv-adblock-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tv-adblock-banner svg {
+  width: 18px;
+  height: 18px;
+  fill: #00ba7c;
+  flex-shrink: 0;
+}
+
+.tv-adblock-tag {
+  background: #00ba7c;
+  color: #000;
+  font-size: 10px;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
 /* Broadcaster / Match Header bar below player */
 .tv-info-card {
   background: var(--card, #16181c);
@@ -491,12 +556,22 @@
   color: #1d9bf0;
 }
 
+.tv-btn-action.adblock-btn {
+  border-color: rgba(0, 186, 124, 0.4);
+  color: #00ba7c;
+}
+
+.tv-btn-action.adblock-btn:hover {
+  background: rgba(0, 186, 124, 0.12);
+}
+
 /* Tabs Navigation */
 .tv-tabs-nav {
   display: flex;
   border-bottom: 1px solid var(--border, #2f3336);
   gap: 8px;
   margin-top: 4px;
+  overflow-x: auto;
 }
 
 .tv-tab-item {
@@ -508,6 +583,7 @@
   background: none;
   cursor: pointer;
   position: relative;
+  white-space: nowrap;
   transition: color 0.15s;
 }
 
@@ -528,6 +604,81 @@
   height: 3px;
   background: #1d9bf0;
   border-radius: 3px;
+}
+
+/* Pre-Match Hub & Countdown Center */
+.tv-prematch-hub {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--border, #2f3336);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+  text-align: center;
+}
+
+.tv-prematch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 212, 0, 0.15);
+  border: 1px solid rgba(255, 212, 0, 0.4);
+  color: #ffd400;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.04em;
+}
+
+.tv-countdown-grid {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+}
+
+.tv-count-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px 16px;
+  min-width: 68px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tv-count-num {
+  font-size: 28px;
+  font-weight: 900;
+  font-family: monospace;
+  color: #fff;
+  line-height: 1;
+}
+
+.tv-count-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sub, #71767b);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+
+.tv-count-sep {
+  font-size: 24px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.tv-prematch-venue {
+  font-size: 13.5px;
+  color: var(--sub, #71767b);
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Match Center / Scoreboard */
@@ -577,6 +728,53 @@
   background: rgba(0, 186, 124, 0.15);
   padding: 2px 8px;
   border-radius: 6px;
+}
+
+/* Lineups View */
+.tv-lineups-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .tv-lineups-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tv-lineup-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border, #2f3336);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tv-lineup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.tv-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  padding: 2px 0;
+}
+
+.tv-player-num {
+  font-weight: 800;
+  color: var(--sub, #71767b);
+  width: 22px;
 }
 
 /* Stats Comparison Bars */
@@ -755,11 +953,11 @@
 }
 
 .tv-chat-pin-msg {
-  background: rgba(29, 155, 240, 0.08);
-  border-bottom: 1px solid rgba(29, 155, 240, 0.2);
+  background: rgba(0, 186, 124, 0.08);
+  border-bottom: 1px solid rgba(0, 186, 124, 0.2);
   padding: 8px 12px;
   font-size: 11.5px;
-  color: #1d9bf0;
+  color: #00ba7c;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -769,7 +967,7 @@
 .tv-chat-pin-msg svg {
   width: 14px;
   height: 14px;
-  fill: #1d9bf0;
+  fill: #00ba7c;
   flex-shrink: 0;
 }
 
