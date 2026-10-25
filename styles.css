@@ -29,6 +29,8 @@
   --tab-arrow: rgba(61, 66, 72, 0.78);
   --tab-arrow-hover: rgba(91, 98, 107, 0.92);
   --tab-arrow-shadow: 0 0 8px rgba(0, 0, 0, 0.45);
+  --tooltip-bg: rgba(91, 112, 131, 0.88);
+  --tooltip-text: #ffffff;
   --bell-border: #536471;
   --font: TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --top: 53px;
@@ -47,6 +49,8 @@ html[data-theme="dim"] {
   --tab-arrow: rgba(56, 68, 77, 0.82);
   --tab-arrow-hover: rgba(90, 106, 120, 0.92);
   --tab-arrow-shadow: 0 0 8px rgba(0, 0, 0, 0.35);
+  --tooltip-bg: rgba(91, 112, 131, 0.88);
+  --tooltip-text: #ffffff;
   color-scheme: dark;
 }
 html[data-theme="default"] {
@@ -74,6 +78,8 @@ html[data-theme="default"] {
   --tab-arrow: rgba(255, 255, 255, 0.88);
   --tab-arrow-hover: rgba(247, 249, 249, 0.98);
   --tab-arrow-shadow: 0 0 8px rgba(101, 119, 134, 0.35);
+  --tooltip-bg: rgba(15, 20, 25, 0.78);
+  --tooltip-text: #ffffff;
   color-scheme: light;
 }
 .vh {
@@ -265,7 +271,7 @@ html[data-nav="icons"] .nav-label,
 html[data-nav="icons"] .account-meta,
 html[data-nav="icons"] .post-label,
 html[data-nav="icons"] .account-pill .dots { display: none; }
-html[data-nav="icons"] .nav-item { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; }
+html[data-nav="icons"] .nav-item { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; overflow: visible; }
 html[data-nav="icons"] .post-btn { width: 50px; height: 50px; padding: 0; max-width: none; }
 html[data-nav="icons"] .post-btn .post-ico { display: block; width: 24px; height: 24px; margin: 0 auto; fill: var(--on-fill); }
 html[data-nav="icons"] .account-pill { width: 50px; height: 50px; justify-content: center; padding: 0; }
@@ -273,35 +279,37 @@ html[data-nav="icons"] .nav-item,
 html[data-nav="icons"] .logo,
 html[data-nav="icons"] .post-btn,
 html[data-nav="icons"] .account-pill { position: relative; }
-html[data-nav="icons"] .nav-item::after,
-html[data-nav="icons"] .logo::after,
-html[data-nav="icons"] .post-btn::after,
-html[data-nav="icons"] .account-pill::after {
-  content: attr(aria-label);
-  position: absolute;
-  left: calc(100% + 8px);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 4px 8px;
-  border-radius: 4px;
-  background: var(--text);
-  color: var(--bg);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 16px;
-  white-space: nowrap;
+
+/* X-Style Tooltip */
+.x-tooltip {
+  position: fixed;
+  z-index: 100000;
   pointer-events: none;
+  background-color: var(--tooltip-bg, rgba(91, 112, 131, 0.88));
+  color: var(--tooltip-text, #ffffff);
+  font-family: var(--font, TwitterChirp, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 12px;
+  letter-spacing: 0.01em;
+  padding: 3px 6px;
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  max-width: 240px;
+  text-overflow: ellipsis;
+  overflow: hidden;
   opacity: 0;
-  z-index: 8;
+  transform: scale(0.96);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  will-change: opacity, transform;
+  display: none;
 }
-html[data-nav="icons"] .nav-item:hover::after,
-html[data-nav="icons"] .nav-item:focus-visible::after,
-html[data-nav="icons"] .logo:hover::after,
-html[data-nav="icons"] .logo:focus-visible::after,
-html[data-nav="icons"] .post-btn:hover::after,
-html[data-nav="icons"] .post-btn:focus-visible::after,
-html[data-nav="icons"] .account-pill:hover::after,
-html[data-nav="icons"] .account-pill:focus-visible::after { opacity: 1; }
+.x-tooltip.is-visible {
+  display: block;
+  opacity: 1;
+  transform: scale(1);
+}
 .center {
   width: 600px;
   flex: 0 0 600px;
@@ -3434,6 +3442,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 .nav-item.nav-back { gap: 10px; padding-left: 8px; padding-right: 8px; }
 .nav-item.nav-back .nav-label { letter-spacing: -0.01em; }
 .nav-item { overflow: hidden; }
+html[data-nav="icons"] .nav-item { overflow: visible; }
 .page-head h1, .head-text h1 { overflow-wrap: anywhere; }
 .page-head.settings-head { height: auto; min-height: 53px; padding-top: 8px; padding-bottom: 8px; }
 .outline { height: auto; min-height: 36px; padding: 8px 16px; white-space: normal; text-align: center; }

@@ -501,7 +501,7 @@
   }
 
   function brand() {
-    return '<a class="logo" href="#/" aria-label="' + productName("music") + '">' + wordmark("logo-full", "music") +
+    return '<a class="logo" href="#/" aria-label="' + productName("music") + '" data-tooltip="' + productName("music") + '">' + wordmark("logo-full", "music") +
       wordmark("logo-short", "musicShort") + wordmark("logo-si", "musicMark") + '</a>';
   }
 
@@ -515,7 +515,7 @@
       navItem("#/music/liked", "muHeart", tr("Liked songs"), section === "liked") +
       navItem("#/music/add", "muAdd", tr("Add song"), section === "add" || section === "edit") +
       navItem("#/music/radio", "muRadio", tr("Radio"), section === "radio") +
-      navItem("#/", "muBack", tr("Back to {app}", { app: productName("pwa") }), false, tr("Back to {app}", { app: productName("pwa") }));
+      navItem("#/", "muBack", tr("Back to {app}", { app: productName("pwa") }), false, tr("Back to {app}", { app: productName("pwa") }), tr("Back"));
   }
 
   function drawerLinks(icon) {

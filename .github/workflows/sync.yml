@@ -203,15 +203,14 @@ jobs:
   build:
     needs: [gate, wait-accounts]
     if: needs.gate.outputs.go == 'true'
-    concurrency:
-      group: pages
-      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pages: write
       id-token: write
       actions: write
+    outputs:
+      refreshed: ${{ steps.filter.outputs.refresh }}
     services:
       rsshub:
         image: diygod/rsshub
@@ -236,7 +235,52 @@ jobs:
       - name: Check interface strings
         run: python3 scripts/check_i18n.py
 
+      - name: Detect configuration or feed changes
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          event = os.environ.get("EVENT_NAME", "")
+          # Cron schedule and manual dispatch always refresh all feeds
+          if event in ("schedule", "workflow_dispatch"):
+              print("Scheduled or manual trigger: refreshing feeds.")
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+                  f.write("refresh=true\n")
+              raise SystemExit(0)
+
+          # On push, check what changed
+          event_path = os.environ.get("EVENT_PATH")
+          needs_refresh = True
+          if event == "push" and event_path and os.path.exists(event_path):
+              try:
+                  with open(event_path, "r", encoding="utf-8") as f:
+                      payload = json.load(f)
+                  commits = payload.get("commits") or []
+                  touched = set()
+                  for c in commits:
+                      for f in c.get("added", []) + c.get("modified", []) + c.get("removed", []):
+                          touched.add(f)
+                  if touched:
+                      needs_refresh = any(
+                          f == "feeds.config.json" or
+                          f.startswith("scripts/adapters/") or
+                          f in ("scripts/update_feeds.py", "scripts/tiktok_sync.py")
+                          for f in touched
+                      )
+              except Exception:
+                  needs_refresh = True
+
+          val = "true" if needs_refresh else "false"
+          print(f"Push trigger: feed refresh={val}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+              f.write(f"refresh={val}\n")
+          PY
+
       - name: Wait for local feed services
+        if: steps.filter.outputs.refresh == 'true'
         run: |
           python3 - <<'PY'
           import socket, time
@@ -264,6 +308,7 @@ jobs:
         run: python3 scripts/pull_snapshot.py
 
       - name: Restore the VK browser
+        if: steps.filter.outputs.refresh == 'true'
         continue-on-error: true
         uses: actions/cache@v4
         with:
@@ -271,6 +316,7 @@ jobs:
           key: playwright-chromium-v1-${{ runner.os }}
 
       - name: Restore the VK session cache
+        if: steps.filter.outputs.refresh == 'true'
         continue-on-error: true
         uses: actions/cache/restore@v4
         with:
@@ -280,6 +326,7 @@ jobs:
             vk-web-session-
 
       - name: Install the VK browser
+        if: steps.filter.outputs.refresh == 'true'
         env:
           VK_LOGIN: ${{ secrets.VK_LOGIN }}
           VK_SESSION: ${{ secrets.VK_SESSION }}
@@ -295,6 +342,7 @@ jobs:
           python3 -m playwright install --with-deps chromium
 
       - name: Refresh feeds
+        if: steps.filter.outputs.refresh == 'true'
         # Timelines, Meta CDN refreshes, and Instagram/Threads comments under 7 days.
         # X replies and YouTube video comments are fetched in the browser.
         # Community post comments are written to fallback/ytpost_<id>.json here.
@@ -377,7 +425,7 @@ jobs:
           retention-days: 1
 
       - name: Save the VK session cache
-        if: always()
+        if: always() && steps.filter.outputs.refresh == 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -392,6 +440,7 @@ jobs:
           mkdir -p _site/shared
           cp shared/handle-skeleton.js shared/reposts.js _site/shared/
           cp shared/drive-crypto.js shared/drive-photos.js _site/shared/
+          if [ -f tv-page.js ]; then cp tv-page.js tv-page.css _site/; fi
           mkdir -p _site/i18n
           cp i18n/*.js _site/i18n/
           if [ -f data/music.json ]; then mkdir -p _site/data; cp data/music.json _site/data/; fi
@@ -487,7 +536,7 @@ jobs:
   # left off the list.
   save-auto-feeds:
     needs: build
-    if: needs.build.result == 'success'
+    if: needs.build.result == 'success' && needs.build.outputs.refreshed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -538,7 +587,7 @@ jobs:
   # Pages and, when the list changed, commits that one file on the data branch.
   publish-stories:
     needs: build
-    if: needs.gate.outputs.go == 'true' && needs.build.result == 'success'
+    if: needs.gate.outputs.go == 'true' && needs.build.result == 'success' && needs.build.outputs.refreshed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -728,7 +777,7 @@ jobs:
   # the backup is started here with workflow_dispatch. That event does fire.
   queue-telegram:
     needs: [gate, build]
-    if: needs.gate.outputs.go == 'true' && needs.build.result == 'success'
+    if: needs.gate.outputs.go == 'true' && needs.build.result == 'success' && needs.build.outputs.refreshed == 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -756,7 +805,7 @@ jobs:
   # the pages concurrency group, and GITHUB_TOKEN may dispatch this workflow.
   keepalive:
     needs: [gate, deploy]
-    if: needs.gate.outputs.go == 'true' && needs.deploy.result == 'success'
+    if: needs.gate.outputs.go == 'true' && needs.deploy.result == 'success' && needs.build.outputs.refreshed == 'true'
     runs-on: ubuntu-latest
     permissions:
       actions: write
