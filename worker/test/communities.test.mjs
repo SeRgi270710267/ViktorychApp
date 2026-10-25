@@ -186,3 +186,48 @@ test("internal community posts stay off anonymous responses and attach to a Redd
   assert.equal(again.status, 404);
   assert.equal(again.text.indexOf("Written here"), -1);
 });
+
+test("profile-less accounts post and comment anonymously without revealing authorId or public profile", async () => {
+  const anon = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.210",
+    body: { profileLess: true }
+  });
+  assert.equal(anon.status, 201);
+  assert.equal(anon.body.account.profileLess, true);
+
+  const stranger = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.211",
+    body: { displayName: "Stranger", handle: "stranger_cm" }
+  });
+  assert.equal(stranger.status, 201);
+
+  // Post in community as profile-less user
+  const postRes = await call("/v1/communities/teslamotors/posts", {
+    method: "POST",
+    ip: "203.0.113.212",
+    token: anon.body.token,
+    body: { text: "Anonymous comment in community", parentId: "t1_c0mm3nt99" }
+  });
+  assert.equal(postRes.status, 200);
+  assert.equal(postRes.body.post.authorId, "");
+  assert.equal(postRes.body.post.author.displayName, "Anonymous");
+  assert.equal(postRes.body.post.author.handle, "anonymous");
+  assert.equal(postRes.body.post.author.profileLess, true);
+  assert.equal(postRes.body.post.mine, true);
+
+  // Read feed as stranger
+  const feed = await call("/v1/communities/teslamotors", {
+    ip: "203.0.113.213",
+    token: stranger.body.token
+  });
+  assert.equal(feed.status, 200);
+  const anonPost = feed.body.posts.find((p) => p.id === postRes.body.post.id);
+  assert.ok(anonPost);
+  assert.equal(anonPost.authorId, "");
+  assert.equal(anonPost.author.displayName, "Anonymous");
+  assert.equal(anonPost.author.handle, "anonymous");
+  assert.equal(anonPost.author.profileLess, true);
+  assert.equal(anonPost.mine, false);
+});

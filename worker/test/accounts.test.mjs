@@ -776,3 +776,61 @@ test("reposts and quotes stay on the account and show on that profile", async ()
     assert.equal(all.body.reposts.some((row) => row.post && row.post.platform === platform), true, platform);
   });
 });
+
+test("profile-less account hides public profile, permits own view, and prevents following", async () => {
+  const anon = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.195",
+    body: { profileLess: true }
+  });
+  assert.equal(anon.status, 201);
+  assert.equal(anon.body.account.profileLess, true);
+  assert.equal(anon.body.account.displayName, "Anonymous");
+  assert.match(anon.body.account.handle, /^anon_\d{8}$/);
+
+  const stranger = await call("/v1/signup", {
+    method: "POST",
+    ip: "203.0.113.196",
+    body: { displayName: "Observer", handle: "observer_pl" }
+  });
+  assert.equal(stranger.status, 201);
+
+  const publicView = await call("/v1/profile/" + anon.body.account.handle, {
+    ip: "203.0.113.197",
+    token: stranger.body.token
+  });
+  assert.equal(publicView.status, 404);
+  assert.equal(publicView.body.error, "not_found");
+
+  const ownView = await call("/v1/profile/" + anon.body.account.handle, {
+    ip: "203.0.113.198",
+    token: anon.body.token
+  });
+  assert.equal(ownView.status, 200);
+  assert.equal(ownView.body.account.profileLess, true);
+  assert.equal(ownView.body.account.displayName, "Anonymous");
+
+  const followAttempt = await call("/v1/follows", {
+    method: "PUT",
+    ip: "203.0.113.199",
+    token: stranger.body.token,
+    body: { id: "app:" + anon.body.account.publicId }
+  });
+  assert.equal(followAttempt.status, 404);
+
+  const patched = await call("/v1/profile", {
+    method: "PATCH",
+    ip: "203.0.113.200",
+    token: anon.body.token,
+    body: { profileLess: false }
+  });
+  assert.equal(patched.status, 200);
+  assert.equal(patched.body.account.profileLess, false);
+
+  const nowPublic = await call("/v1/profile/" + anon.body.account.handle, {
+    ip: "203.0.113.201",
+    token: stranger.body.token
+  });
+  assert.equal(nowPublic.status, 200);
+  assert.equal(nowPublic.body.account.profileLess, false);
+});

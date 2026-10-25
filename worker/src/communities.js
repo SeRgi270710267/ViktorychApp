@@ -68,14 +68,26 @@ async function writeOwner(env, doc) {
 }
 
 async function authorOf(env, request, publicId, presentAccount) {
-  const row = await env.DB.prepare("SELECT public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, hide_avatar, avatar_empty, banner_empty FROM accounts WHERE public_id = ?").bind(publicId).first();
-  if (!row) return { handle: "", displayName: "", avatar: "", owner: false };
+  const row = await env.DB.prepare("SELECT public_id, handle, display_name, avatar, banner, bio, location, website, owner, created_at, hide_avatar, avatar_empty, banner_empty, profile_less FROM accounts WHERE public_id = ?").bind(publicId).first();
+  if (!row) return { publicId: publicId || "", handle: "", displayName: "", avatar: "", owner: false, profileLess: false };
+  if (row.profile_less === 1) {
+    return {
+      publicId: "",
+      handle: "anonymous",
+      displayName: "Anonymous",
+      avatar: "",
+      owner: false,
+      profileLess: true
+    };
+  }
   const pub = await presentAccount(env, request, row, false);
   return {
+    publicId: pub.publicId || row.public_id || publicId || "",
     handle: pub.handle || "",
     displayName: pub.displayName || "",
     avatar: pub.avatar || "",
-    owner: pub.owner === true
+    owner: pub.owner === true,
+    profileLess: false
   };
 }
 
@@ -171,6 +183,7 @@ async function readFeed(request, env, name, row, json, rateHit, limited, present
     if (!authors[item.author_id]) authors[item.author_id] = await authorOf(env, request, item.author_id, presentAccount);
     out.push({
       id: item.id,
+      authorId: (authors[item.author_id] && authors[item.author_id].profileLess) ? "" : item.author_id,
       parentId: item.parent_id || "",
       body: item.body,
       createdAt: item.created_at,
@@ -227,7 +240,7 @@ async function createPost(request, env, name, row, json, readJson, rateHit, limi
     await env.DB.prepare("INSERT INTO community_notes (id, public_id, payload, created_at, seen) VALUES (?, ?, ?, ?, 0)").bind(noteId, parentAuthor, JSON.stringify(payload), now).run();
   }
   const author = await authorOf(env, request, row.public_id, presentAccount);
-  return json(200, { post: { id, parentId: parent, body: text, createdAt: now, author, mine: true } });
+  return json(200, { post: { id, authorId: (author && author.profileLess) ? "" : row.public_id, parentId: parent, body: text, createdAt: now, author, mine: true } });
 }
 
 async function deletePost(env, name, rawId, row, json, rateHit, limited) {

@@ -454,6 +454,9 @@
   }
 
   function face(author) {
+    if (author && (author.profileLess || author.handle === "anonymous")) {
+      return '<span class="cm-app-ava cm-app-anon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm0 2c-2.67 0-8 1.34-8 4v1h16v-1c0-2.66-5.33-4-8-4z"/></svg></span>';
+    }
     var letter = String(author.displayName || author.handle || "?").slice(0, 1).toUpperCase();
     if (author.avatar && /^https:\/\//.test(author.avatar)) return '<img class="cm-app-ava" alt="" src="' + esc(author.avatar) + '">';
     return '<span class="cm-app-ava cm-app-letter">' + esc(letter) + "</span>";
@@ -581,14 +584,22 @@
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
     var liked = (bag.mine || []).indexOf(post.id) >= 0;
     var likeCount = Number((bag.likes || {})[post.id]) || 0;
+    var isAnon = !!(author && (author.profileLess || author.handle === "anonymous"));
+    var authorId = String((author && (author.publicId || author.id)) || post.authorId || post.author_id || "").replace(/^app:/, "");
+    var authorHandle = String(author.handle || "");
+    if (!isAnon && authorId && authorHandle && !authorHandle.endsWith(authorId)) {
+      authorHandle += authorId;
+    }
+    var authorName = isAnon ? tr("Anonymous") : (author.displayName || author.handle || "");
+    var displayHandle = isAnon ? "anonymous" : authorHandle;
 
     return '<article class="cm-app-card" data-post="' + esc(post.id) + '">' +
       face(author) +
       '<div class="cm-app-main">' +
         '<div class="cm-app-byline">' +
-          '<span class="cm-app-name">' + esc(author.displayName || author.handle || "") + (author.owner ? " ✓" : "") + '</span>' +
-          '<span class="cm-app-handle">@' + esc(author.handle || "") + '</span>' +
-          '<span class="cm-app-badge">' + esc(tr("Only on ViktorychApp")) + '</span>' +
+          '<span class="cm-app-name">' + esc(authorName) + (author.owner ? " ✓" : "") + '</span>' +
+          '<span class="cm-app-handle">@' + esc(displayHandle) + '</span>' +
+          '<span class="cm-app-badge' + (isAnon ? " cm-badge-anon" : "") + '">' + esc(isAnon ? tr("Anonymous") : tr("Only on ViktorychApp")) + '</span>' +
         '</div>' +
         '<a class="cm-app-text" href="' + href + '">' + esc(post.body || "") + '</a>' +
         '<div class="cm-app-actions">' +
@@ -772,12 +783,17 @@
       ? tr("Post into {name}", { name: doc.title || doc.name })
       : tr("Post into r/{name}", { name: name });
 
+    var isAnonAccount = Boolean(session().account && session().account.profileLess);
+    var composePlaceholder = isDisc
+      ? (isAnonAccount ? tr("Start an anonymous discussion") : tr("Start a new topic"))
+      : (isAnonAccount ? tr("Post an anonymous reply") : tr("Post to {sub}", { sub: "r/" + name }));
     var composer = signedIn()
       ? '<form class="cm-composer' + (isDisc ? " cm-d-composer" : "") + '" data-cm="inline-post" data-sub="' + esc(name) + '">' +
           face(session().account || {}) +
           '<div class="cm-composer-main">' +
             '<textarea class="cm-composer-area" name="text" placeholder="' + esc(composePlaceholder) + '" aria-label="' + esc(composePlaceholder) + '"></textarea>' +
             '<div class="cm-composer-bottom">' +
+              (isAnonAccount ? '<span class="cm-anon-indicator">' + esc(tr("Posting anonymously")) + '</span>' : "") +
               '<button type="submit" class="cm-composer-btn">' + esc(tr("Post")) + '</button>' +
             '</div>' +
           '</div>' +
@@ -1022,12 +1038,14 @@
       return appCard(name, item.post);
     }).join("");
 
+    var isAnonAccount = Boolean(session().account && session().account.profileLess);
     var box = signedIn()
       ? '<form class="cm-composer" data-cm="reply" data-sub="' + esc(name) + '" data-parent="' + esc(id) + '">' +
           face(session().account || {}) +
           '<div class="cm-composer-main">' +
-            '<textarea class="cm-composer-area" name="text" aria-label="' + esc(tr("Post your reply")) + '" placeholder="' + esc(tr("Post your reply")) + '"></textarea>' +
+            '<textarea class="cm-composer-area" name="text" aria-label="' + esc(isAnonAccount ? tr("Post an anonymous reply") : tr("Post your reply")) + '" placeholder="' + esc(isAnonAccount ? tr("Post an anonymous reply") : tr("Post your reply")) + '"></textarea>' +
             '<div class="cm-composer-bottom">' +
+              (isAnonAccount ? '<span class="cm-anon-indicator">' + esc(tr("Posting anonymously")) + '</span>' : "") +
               '<button type="submit" class="cm-composer-btn">' + esc(tr("Reply")) + '</button>' +
             '</div>' +
           '</div>' +
