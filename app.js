@@ -583,6 +583,9 @@
     const platform = (post && post.platform) || "";
     const rawId = String((post && post.id) || "");
     if (rawId.indexOf("repost:") === 0) return rawId;
+    const by = post && post.repostedBy;
+    const reposter = String((by && by.handle) || "").replace(/^@/, "").toLowerCase();
+    if (reposter && post.kind === "repost" && post.statusId && platform !== "youtube") return "repost:" + reposter + ":" + String(post.statusId);
     let raw = String((post && (post.statusId || post.id)) || "");
     const url = String((post && post.url) || "");
     if (platform === "instagram") {
@@ -10442,7 +10445,8 @@ if (STATE.histClear) {
     const by = post.repostedBy || {};
     const reposterId = by.feedId || ((by.platform || platform) + ":" + (by.handle || ""));
     const known = (channel && feedById(platform + ":" + channel)) || findFeed(platform, handle) || (channel && findFeed(platform, channel)) || null;
-    if (known && known.id !== reposterId) return known;
+    const selfRepost = !!handle && handle.toLowerCase() === String(by.handle || "").replace(/^@/, "").toLowerCase();
+    if (known && (known.id !== reposterId || selfRepost)) return known;
     return {
       id: platform + ":" + (channel || handle),
       platform: platform,
