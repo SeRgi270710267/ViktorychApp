@@ -60,29 +60,31 @@ assert.strictEqual(tula.isLive, true, "Arsenal Tula is playing live");
 const tulaHtml = L.renderPill(tula);
 assert.ok(tulaHtml.includes("sc-pill-arsenal-tula"), "Has Arsenal Tula pill color class");
 assert.ok(tulaHtml.includes("is-live"), "Arsenal Tula has Live badge");
-assert.ok(tulaHtml.includes("4 - 3"), "Displays live score 4 - 3 against KAMAZ");
+assert.ok(tulaHtml.includes("1 - 1"), "Displays live score 1 - 1 against Shinnik");
 
 const cska = L.getTeam("cska-moscow");
 assert.ok(cska, "CSKA found");
-assert.strictEqual(cska.isLive, true, "CSKA shows live derby against Spartak Moscow");
+assert.strictEqual(cska.isLive, false, "CSKA shows Full Time latest result");
 const cskaHtml = L.renderPill(cska);
 assert.ok(cskaHtml.includes("sc-pill-cska-moscow"), "Has CSKA pill color class");
-assert.ok(cskaHtml.includes("is-live"), "CSKA has live badge");
-assert.ok(cskaHtml.includes("2 - 1"), "Displays live derby score 2 - 1");
+assert.ok(cskaHtml.includes("is-ft"), "CSKA has Full Time badge");
+assert.ok(cskaHtml.includes("0 - 0"), "Displays result 0 - 0 against Fakel");
 
 const barca = L.getTeam("fc-barcelona");
 assert.ok(barca, "FC Barcelona found");
-assert.strictEqual(barca.isLive, true, "Barca is playing live El Clasico");
+assert.strictEqual(barca.isLive, false, "Barca shows Full Time latest result");
 const barcaHtml = L.renderPill(barca);
 assert.ok(barcaHtml.includes("sc-pill-fc-barcelona"), "Has FC Barcelona blaugrana pill class");
-assert.ok(barcaHtml.includes("3 - 2"), "Displays Barca score against Real Madrid");
+assert.ok(barcaHtml.includes("is-ft"), "Barca has Full Time badge");
+assert.ok(barcaHtml.includes("0 - 4"), "Displays Barca 0 - 4 El Clasico victory");
 
 const sabadell = L.getTeam("sabadell-ce");
 assert.ok(sabadell, "CE Sabadell found");
-assert.strictEqual(sabadell.isLive, true, "Sabadell is live against Tenerife");
+assert.strictEqual(sabadell.isLive, false, "Sabadell shows Full Time latest result");
 const sabadellHtml = L.renderPill(sabadell);
 assert.ok(sabadellHtml.includes("sc-pill-sabadell-ce"), "Has Sabadell royal blue/white pill class");
-assert.ok(sabadellHtml.includes("1 - 0"), "Displays Sabadell score against Tenerife");
+assert.ok(sabadellHtml.includes("is-ft"), "Sabadell has Full Time badge");
+assert.ok(sabadellHtml.includes("3 - 2"), "Displays Sabadell 3 - 2 victory over Atletico Baleares");
 
 // Test pillsHtml for unified row
 const pills = S.pillsHtml();
@@ -111,9 +113,9 @@ assert.strictEqual(context.Spaces.rowExtra(), 65, "Spaces.rowExtra returns 65px 
 
 // Test Live toggle
 S.toggleLive("cska-moscow");
-assert.strictEqual(L.getTeam("cska-moscow").isLive, false, "CSKA can toggle to FT");
+assert.strictEqual(L.getTeam("cska-moscow").isLive, true, "CSKA can toggle to Live");
 S.toggleLive("cska-moscow");
-assert.strictEqual(L.getTeam("cska-moscow").isLive, true, "CSKA can toggle back to Live");
+assert.strictEqual(L.getTeam("cska-moscow").isLive, false, "CSKA can toggle back to FT");
 
 // Test Score updates
 const activeData = tula.isLive ? tula.liveMatch : tula.latestResult;
@@ -129,8 +131,8 @@ assert.strictEqual(((L.getTeam("arsenal-tula").isLive ? L.getTeam("arsenal-tula"
 // Test Reset Team
 S.resetTeam("arsenal-tula");
 const resetData = L.getTeam("arsenal-tula").isLive ? L.getTeam("arsenal-tula").liveMatch : L.getTeam("arsenal-tula").latestResult;
-assert.strictEqual(resetData.homeScore, 4, "Arsenal Tula home score reset to updated default");
-assert.strictEqual(resetData.awayScore, 3, "Arsenal Tula away score reset to updated default");
+assert.strictEqual(resetData.homeScore, 1, "Arsenal Tula home score reset to updated default");
+assert.strictEqual(resetData.awayScore, 1, "Arsenal Tula away score reset to updated default");
 
 // Test single unified row guarantee: Spaces pill + Soccer pills inside ONE .sp-row
 context.Spaces.homePillsHtml = function() {
