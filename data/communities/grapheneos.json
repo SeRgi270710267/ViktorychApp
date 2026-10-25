@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T20:43:15Z",
+  "fetchedAt": "2026-10-25T21:12:16Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,31 @@
       ]
     },
     {
+      "id": "43096",
+      "title": "How to bypass google sign-in to use certain apps with AndroidAuto ",
+      "author": "stonewll123",
+      "authorUsername": "stonewll123",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792962351,
+      "lastPostedAt": 1792962351,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services",
+        "Pixel 10a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43096-how-to-bypass-google-sign-in-to-use-certain-apps-with-androidauto",
+      "media": [],
+      "text": "<p>Howdy,<br>\nI am a somewhat new user to GrapheneOS, stable release, Pixel 10a. My threat model is \"trying to minimize crumbs now because I know I will be a surveillance target in the near future.\" Since discovering Aurora, I have used a google-free owner profile for almost everything, with a work profile that has play services during the day for critical app notifications, and another profile for androidauto, which has very limited apps. However, also since discovering Aurora, I see androidauto connects just fine but will not display the apps I want.</p> \n\n<p>Because so little of this driving profile is actually personal, I am happy to let play services run for that one for the rare occasions I use it. However, I cannot figure out how to get the apps I need without signing in to play store on that profile. Thoughts? I imagine the straightforward way to do this is have the owner profile install the google apps and import them to the driving profile, then use other more private techniques on the everyday profile, which is not owner. However, I would prefer a workaround if possible, so I don't have to rebuild my entire phone. I see that there are websites that claim to snatch APKs from google play in a browser—but I don't really trust these, and I generally know that obtanium does something like that—but it does not seem to work for play store.</p>\n\n<p>Appreciate any suggestions.</p>",
+      "replies": []
+    },
+    {
       "id": "41738",
       "title": "Ryanair app, play services needed?",
       "author": "becomeparmesan",
@@ -1879,74 +1904,7 @@
       "url": "https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed",
       "media": [],
       "text": "<p>I am about to buy some flight tickets and one option is via Ryanair. I know that the app became mandatory for checking in. But as I use my phone without google play services, I would consider booking otherwise, if the app needs it.</p>\n\n<p>Does someone know if it will require play services? Anything more? Would also block connections via a firewall app.</p>\n\n<p>Ideally of course, someone knows a way how to avoid it completely by saying \"phone is broken, battery empty, don't have a phone...\"</p>",
-      "replies": [
-        {
-          "id": "265840",
-          "number": 2,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 2,
-          "created": 1788623455,
-          "parent": "41738",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed/1\" class=\"PostMention\" data-id=\"265830\"><i class=\"icon fas fa-reply\"></i>becomeparmesan</a></p> \n\n<p>I just installed the app via Aurora, but I have Play Services with network permission only installed. It work's so far, for me in guest mode, as I don't have a Ryanair account. I think it would also work without Play Services, but then without push notifications. The app opens a connection to \"firebaseinstallations.googleapis.com\" to register for push notifications, \"firebaseremoteconfig.googleapis.com\" for remote in-app configuration and notifications, \"graph.facebook.com\" for spy services and all other connections are made directly to Ryanair service apis.</p>"
-        },
-        {
-          "id": "265849",
-          "number": 3,
-          "author": "veryimportantplasticbag",
-          "authorUsername": "veryimportantplasticbag",
-          "authorAvatar": "",
-          "score": 4,
-          "created": 1788626420,
-          "parent": "41738",
-          "text": "<p><a href=\"https://help.ryanair.com/hc/en-gb/articles/39758330098577-What-about-passengers-who-don-t-have-a-smartphone-or-tablet\" rel=\"ugc nofollow\">https://help.ryanair.com/hc/en-gb/articles/39758330098577-What-about-passengers-who-don-t-have-a-smartphone-or-tablet</a></p>\n\n<p>Simply go to the counter and tell them that you don't have digital boarding pass.</p>\n\n<p>They could let customers to download the boarding pass, but they want to milk them.</p>\n\n<p>Edited for clarification: You can book a ticket and also check-in on their website. The app is required only to get the boarding pass.</p>"
-        },
-        {
-          "id": "266066",
-          "number": 4,
-          "author": "becomeparmesan",
-          "authorUsername": "becomeparmesan",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1788730777,
-          "parent": "41738",
-          "text": "<p>Thanks, both.</p>\n\n<p>Indeed, the crucial part seems to check in online and then you can request the printed boarding pass with whatever reason. Let's see how much resistance I will get.</p>"
-        },
-        {
-          "id": "276561",
-          "number": 5,
-          "author": "becomeparmesan",
-          "authorUsername": "becomeparmesan",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792612434,
-          "parent": "41738",
-          "text": "<p>Update after the flight: you can indeed just say your battery died and can get the printed boarding pass. No arguing, no comments. Just remember to check-in online before that.</p>"
-        },
-        {
-          "id": "277382",
-          "number": 6,
-          "author": "andrej567",
-          "authorUsername": "andrej567",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792953988,
-          "parent": "41738",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed/5\" class=\"PostMention\" data-id=\"276561\"><i class=\"icon fas fa-reply\"></i>becomeparmesan</a> Ok. I had printed boarding passes but the scanner did not accept them. I was told it does not work anymore. There was no time to start a discussion.. I had the same printed as on cellphone. No idea. weird.</p>"
-        },
-        {
-          "id": "277412",
-          "number": 7,
-          "author": "Foggy",
-          "authorUsername": "Foggy",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792960880,
-          "parent": "41738",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed/6\" class=\"PostMention\" data-id=\"277382\"><i class=\"icon fas fa-reply\"></i>andrej567</a> I wonder if that's airport dependent? I was flying Jet2 from a Greek airport and the scanners accepted my downloaded PDF even though Jet2 say you have to install their app. The PDF had a rectangular 2D code while I saw online some people saying it only works with square codes. I expect this is set by the airport equipment rather than the airline (although at hubs it's more plausible there is airline specific equipment).</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43009",
@@ -2043,6 +2001,30 @@
       "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
       "media": [],
       "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
+      "replies": []
+    },
+    {
+      "id": "43094",
+      "title": "Graphene OS for Normies and Newbies",
+      "author": "YiyaK",
+      "authorUsername": "YiyaK",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792955202,
+      "lastPostedAt": 1792960039,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
+      "media": [],
+      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
       "replies": []
     },
     {
@@ -2189,54 +2171,6 @@
       "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
       "media": [],
       "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": []
-    },
-    {
-      "id": "43092",
-      "title": "Viber",
-      "author": "redacted_handle",
-      "authorUsername": "redacted_handle",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792936160,
-      "lastPostedAt": 1792952526,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43092-viber",
-      "media": [],
-      "text": "<p>Hi!<br>\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.<br>\nIs there a way to not show the call log and activate the account?</p>",
-      "replies": []
-    },
-    {
-      "id": "41396",
-      "title": "Hi everyone ☺️ soon to join from AU",
-      "author": "Smurfinator",
-      "authorUsername": "Smurfinator",
-      "authorAvatar": "",
-      "score": 16,
-      "comments": 16,
-      "views": 385,
-      "participantCount": 11,
-      "created": 1787481279,
-      "lastPostedAt": 1792952223,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/41396-hi-everyone-soon-to-join-from-au",
-      "media": [],
-      "text": "<p>In probably about a week or two I'm going to get a get a Pixel 10 pro, and I'm in Australia and so all this ID shit/similar stuff happening in UK is starting be pushed more so I'm about to make the switch soon</p> \n\n<p>I'm a techy person who likes learning new things, and from YouTube videos, I've seen it's extremely easy to install GrapheneOS, taking about 10-15 minutes.</p>\n\n<p>I've been on full Linux for almost two years now and have had no problems on my gaming PC, laptop, or even my ROG Ally Bazzite. I've also switched to Proton Mail and NordVPN for about 10 years.</p>\n\n<p>What are some recommended apps to use or alternative types?</p>\n\n<p>For example I've been using Waze over Google Maps for about three years now.</p>\n\n<p>Or spelling/grammar check, because I'm on the spectrum. I don't use AI, but Gemini is built into the keyboard. I have it fix my wording or grammar, but I always write it myself, and then it fixes it, which makes it more readable to others and isn't one long run-on sentence. Then I'll double check it but it's only if I make a long post or text something like this.</p>\n\n<p>Anyway I can't wait to join the Grapheneos family soon</p> ",
       "replies": []
     }
   ]
