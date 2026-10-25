@@ -33,6 +33,7 @@ UI_FILES = (
     "communities.js",
     "yt-player.js",
     "scores.js",
+    "weather.js",
 )
 # Short words that also appear as data, and phrases that are allowed to stay
 # in English because they are product names or technical tokens.

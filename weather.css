@@ -1,0 +1,683 @@
+/* Weather pills, customizable locations & pill pinning management.
+   Matches the X-style dark & light theme pill row (.sp-row) in ViktorychApp. */
+
+/* Base Weather Pill */
+.wx-pill {
+  cursor: pointer;
+}
+
+/* Weather condition gradient variants */
+.wx-pill.wx-clear {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 45%, #d97706 100%);
+  border-color: rgba(245, 196, 0, 0.55);
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
+}
+.wx-pill.wx-clear .wx-icon-ring {
+  border-color: #f5c400;
+  background: rgba(2, 132, 199, 0.6);
+}
+
+.wx-pill.wx-partly-cloudy {
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #f59e0b 100%);
+  border-color: rgba(251, 191, 36, 0.5);
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35);
+}
+.wx-pill.wx-partly-cloudy .wx-icon-ring {
+  border-color: #fbbf24;
+  background: rgba(30, 58, 138, 0.6);
+}
+
+.wx-pill.wx-cloudy {
+  background: linear-gradient(135deg, #334155 0%, #475569 50%, #64748b 100%);
+  border-color: rgba(203, 213, 225, 0.4);
+  box-shadow: 0 2px 10px rgba(51, 65, 85, 0.35);
+}
+.wx-pill.wx-cloudy .wx-icon-ring {
+  border-color: #cbd5e1;
+  background: rgba(51, 65, 85, 0.6);
+}
+
+.wx-pill.wx-rain {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #0284c7 100%);
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
+}
+.wx-pill.wx-rain .wx-icon-ring {
+  border-color: #38bdf8;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.wx-pill.wx-thunder {
+  background: linear-gradient(135deg, #18181b 0%, #2e1065 50%, #581c87 100%);
+  border-color: rgba(192, 132, 252, 0.5);
+  box-shadow: 0 2px 10px rgba(88, 28, 135, 0.35);
+}
+.wx-pill.wx-thunder .wx-icon-ring {
+  border-color: #c084fc;
+  background: rgba(24, 24, 27, 0.6);
+}
+
+.wx-pill.wx-snow {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #7dd3fc 100%);
+  border-color: rgba(186, 230, 253, 0.6);
+  box-shadow: 0 2px 10px rgba(125, 211, 252, 0.35);
+}
+.wx-pill.wx-snow .wx-icon-ring {
+  border-color: #bae6fd;
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.wx-pill.wx-fog {
+  background: linear-gradient(135deg, #1e293b 0%, #475569 50%, #94a3b8 100%);
+  border-color: rgba(148, 163, 184, 0.5);
+  box-shadow: 0 2px 10px rgba(71, 85, 105, 0.35);
+}
+.wx-pill.wx-fog .wx-icon-ring {
+  border-color: #94a3b8;
+  background: rgba(30, 41, 59, 0.6);
+}
+
+/* Icon Ring */
+.wx-icon-ring {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.wx-icon-svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+  fill: currentColor;
+}
+
+/* Weather Badges & Labels */
+.wx-badge {
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.wx-badge.is-temp {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.wx-cond {
+  color: rgba(255, 255, 255, 0.85);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wx-range {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+/* Pin indicator badge inside pill */
+.pill-pin-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  margin-left: 4px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+  opacity: 0.95;
+  transition: transform 0.15s ease;
+}
+.pill-pin-mark:hover {
+  transform: scale(1.2);
+}
+
+/* Customize Pills manage button in row */
+.sp-pill-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 48px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px dashed rgba(255, 255, 255, 0.28);
+  color: var(--text, #fff);
+  cursor: pointer;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sp-pill-manage-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.45);
+  transform: translateY(-1px);
+}
+.sp-pill-manage-btn:active {
+  transform: translateY(0);
+}
+.sp-manage-pin-ico {
+  font-size: 14px;
+  display: inline-block;
+}
+
+/* ==========================================================================
+   Weather Details & Manage Modals (Shared Styling with Match Details)
+   ========================================================================== */
+
+.wx-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.wx-modal-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.wx-modal-dialog {
+  background: var(--bg, #12141a);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.14));
+  border-radius: 20px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  color: var(--text, #fff);
+  box-sizing: border-box;
+  transform: translateY(12px) scale(0.98);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.wx-modal-overlay.is-open .wx-modal-dialog {
+  transform: translateY(0) scale(1);
+}
+
+.wx-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+.wx-modal-title-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.wx-modal-city {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.wx-modal-country {
+  font-size: 12px;
+  color: var(--sub, #8b98a5);
+}
+
+.wx-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--sub, #8b98a5);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.wx-close-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text, #fff);
+}
+.wx-close-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* Weather Hero Section */
+.wx-hero {
+  padding: 24px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  background: linear-gradient(180deg, rgba(2, 132, 199, 0.25) 0%, rgba(0, 0, 0, 0) 100%);
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+.wx-hero-icon-large {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+.wx-hero-icon-large svg {
+  width: 46px;
+  height: 46px;
+}
+
+.wx-hero-temp-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.wx-hero-temp {
+  font-size: 52px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+.wx-unit-toggle {
+  display: inline-flex;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+.wx-unit-btn {
+  background: transparent;
+  border: none;
+  color: var(--sub, #8b98a5);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.wx-unit-btn.active {
+  background: #fff;
+  color: #000;
+}
+
+.wx-hero-cond {
+  font-size: 17px;
+  font-weight: 700;
+  margin-top: 6px;
+  color: var(--text, #fff);
+}
+.wx-hero-sub {
+  font-size: 13px;
+  color: var(--sub, #8b98a5);
+  margin-top: 4px;
+}
+
+/* Modal Toolbar Actions */
+.wx-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+.wx-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text, #fff);
+  transition: background 0.15s ease, border-color 0.15s ease;
+  font-family: inherit;
+}
+.wx-action-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.wx-action-btn.is-pinned-on {
+  background: #f59e0b;
+  color: #000;
+  border-color: #f59e0b;
+}
+
+/* Weather Stats Grid (2x2) */
+.wx-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 14px 18px;
+}
+.wx-stat-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.wx-stat-label {
+  font-size: 11px;
+  color: var(--sub, #8b98a5);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.wx-stat-val {
+  font-size: 18px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+/* Hourly Forecast Strip */
+.wx-section-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sub, #8b98a5);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 12px 18px 6px;
+}
+.wx-hourly-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 18px 12px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.wx-hourly-strip::-webkit-scrollbar { display: none; }
+.wx-hourly-item {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  padding: 8px 12px;
+  min-width: 58px;
+  box-sizing: border-box;
+}
+.wx-hourly-time {
+  font-size: 11px;
+  color: var(--sub, #8b98a5);
+  font-weight: 600;
+}
+.wx-hourly-item svg {
+  width: 22px;
+  height: 22px;
+  margin: 6px 0;
+}
+.wx-hourly-temp {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* Daily Forecast Rows */
+.wx-daily-list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 18px 16px;
+  gap: 8px;
+}
+.wx-daily-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.wx-daily-day {
+  width: 80px;
+  font-weight: 700;
+}
+.wx-daily-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wx-daily-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.wx-daily-cond {
+  flex: 1;
+  margin-left: 10px;
+  color: var(--sub, #8b98a5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wx-daily-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+.wx-daily-min {
+  color: var(--sub, #8b98a5);
+}
+.wx-daily-bar {
+  width: 50px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+.wx-daily-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, #38bdf8, #f59e0b);
+  border-radius: 2px;
+}
+
+/* ==========================================================================
+   Manage Pills & Weather Modal (.manage-pills-dialog)
+   ========================================================================== */
+
+.manage-pills-list {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 18px;
+  gap: 8px;
+}
+.manage-pill-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  gap: 8px;
+}
+.manage-pill-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+.manage-pill-type-tag {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text, #fff);
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.manage-pill-type-tag.is-weather { background: #0284c7; }
+.manage-pill-type-tag.is-soccer { background: #b81424; }
+.manage-pill-type-tag.is-space { background: #6b21a8; }
+
+.manage-pill-name {
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manage-pill-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.manage-arrow-btn {
+  background: transparent;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.15));
+  color: var(--text, #fff);
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.15s ease;
+}
+.manage-arrow-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+}
+.manage-arrow-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.manage-pin-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.2));
+  color: var(--text, #fff);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  font-family: inherit;
+}
+.manage-pin-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.manage-pin-btn.is-active {
+  background: #f59e0b;
+  color: #000;
+  border-color: #f59e0b;
+}
+
+/* Add Place Form */
+.wx-add-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px 18px;
+}
+.wx-add-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.15));
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 14px;
+  color: var(--text, #fff);
+  outline: none;
+  font-family: inherit;
+}
+.wx-add-input:focus {
+  border-color: #0284c7;
+  background: rgba(255, 255, 255, 0.1);
+}
+.wx-add-btn {
+  background: #0284c7;
+  border: none;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.wx-add-btn:hover {
+  background: #0369a1;
+}
+
+/* Popular Places Chips */
+.wx-chip-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 18px 14px;
+}
+.wx-place-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  color: var(--text, #fff);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.wx-place-chip:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.manage-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}

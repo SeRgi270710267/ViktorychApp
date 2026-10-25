@@ -9,6 +9,7 @@ import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from "./identities.js";
+import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -161,7 +162,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -3356,6 +3357,9 @@ async function route(request, env) {
   }
   if (path === "/v1/account/identities" || path.startsWith("/v1/account/identities/")) {
     return handleIdentitiesRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
+  if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
+    return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
   }
   return json(404, { error: "not_found" });
 }

@@ -79,6 +79,7 @@
     lists: "M3 5.5C3 4.12 4.12 3 5.5 3h13C19.88 3 21 4.12 21 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-13C4.12 21 3 19.88 3 18.5v-13zM5.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h13c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-13zM7 8h10v2H7V8zm0 4h10v2H7v-2zm0 4h7v2H7v-2z",
     bookmark: "M4 4.5C4 3.12 5.119 2 6.5 2h11C18.881 2 20 3.12 20 4.5v18.44l-8-5.71-8 5.71V4.5zM6.5 4c-.276 0-.5.22-.5.5v14.56l6-4.29 6 4.29V4.5c0-.28-.224-.5-.5-.5h-11z",
     storage: "M12 5c3.2 0 5.7 2 6.4 4.6 2.4.4 4.1 2.4 4.1 4.8 0 2.7-2.2 4.8-4.9 4.8H7C4.4 19.2 2.3 17.1 2.3 14.5c0-2.3 1.6-4.2 3.8-4.7C6.9 7 9.2 5 12 5zm0 2c-2.2 0-3.9 1.5-4.5 3.6l-.3.8-.8.2c-1.6.4-2.7 1.8-2.7 3.4 0 1.9 1.5 3.4 3.4 3.4h10.5c1.6 0 2.9-1.3 2.9-2.9 0-1.5-1.1-2.7-2.5-2.9l-.8-.1-.2-.8C16 8.4 14.2 7 12 7z",
+    vault: "M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
     games: "M8 8.5h8c1.9 0 3.5 1.3 3.9 3.1l.7 3.6c.2 1.1-.6 2.1-1.7 2.1-.5 0-1-.2-1.3-.6L16.4 15H7.6l-1.2 1.7c-.3.4-.8.6-1.3.6-1.1 0-1.9-1-1.7-2.1l.7-3.6C4.5 9.8 6.1 8.5 8 8.5zm.2 1.7c-1.1 0-2 .8-2.2 1.8l-.7 3.6c-.1.4.2.7.6.7.2 0 .3-.1.4-.2l1.3-1.6h7.8l1.3 1.6c.1.1.2.2.4.2.4 0 .7-.3.6-.7l-.7-3.6c-.2-1-1.1-1.8-2.2-1.8H8.2zM9 11.6h1.1v1.1h1.1v1.1H10.1v1.1H9v-1.1H7.9v-1.1H9v-1.1zm5.6.9a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7zm1.7-.9a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7z",
     communities: "M9 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm6 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM4 18v-1.2C4 14.6 6.4 13 9 13s5 1.6 5 3.8V18H4zm10.5 0v-1.1c0-.7-.2-1.4-.6-2 .9-.4 2-.6 3.1-.6 2.4 0 5 1.4 5 3.5V18h-7.5z",
     subs: "M4 5.5C4 4.12 5.12 3 6.5 3h11C18.88 3 20 4.12 20 5.5v13c0 1.38-1.12 2.5-2.5 2.5h-11C5.12 21 4 19.88 4 18.5v-13zM6.5 5c-.28 0-.5.22-.5.5v13c0 .28.22.5.5.5h11c.28 0 .5-.22.5-.5v-13c0-.28-.22-.5-.5-.5h-11zM10 8.2v7.6l6-3.8-6-3.8z",
@@ -320,7 +321,39 @@
     }[c]));
   }
 
-  function feeds() { return (STATE.data && STATE.data.feeds) || []; }
+  function isShortsLocked() {
+    if (window.ViktorychShorts && typeof window.ViktorychShorts.isLocked === "function") {
+      return window.ViktorychShorts.isLocked();
+    }
+    try {
+      return localStorage.getItem("viktorych_shorts_locked") === "1";
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function isTiktokUnlocked(handle) {
+    if (window.ViktorychShorts && typeof window.ViktorychShorts.isUnlocked === "function") {
+      return window.ViktorychShorts.isUnlocked(handle);
+    }
+    const clean = String(handle || "").toLowerCase().replace(/^@/, "");
+    return clean === "pepsi";
+  }
+
+  function isLockedTiktok(entity) {
+    if (!entity) return false;
+    const platform = entity.platform || (entity.id && String(entity.id).startsWith("tiktok:") ? "tiktok" : "");
+    if (platform !== "tiktok") return false;
+    return isShortsLocked() && !isTiktokUnlocked(entity.handle || entity.account);
+  }
+
+  function feeds() {
+    let list = (STATE.data && STATE.data.feeds) || [];
+    if (isShortsLocked()) {
+      list = list.filter((feed) => !isLockedTiktok(feed));
+    }
+    return list;
+  }
 
   const ARCHIVE = { order: [], loaded: {}, posts: [] };
   const HYDRATED = {};
@@ -733,7 +766,11 @@
     const seen = {};
     full.forEach((post) => { seen[postIdentity(post)] = true; });
     const extra = ARCHIVE.posts.filter((post) => !seen[postIdentity(post)]).map((post) => HYDRATED[postIdentity(post)] || post);
-    return collapseSameUrl(full.concat(extra)).filter((post) => !bridgeErrorPost(post));
+    let list = collapseSameUrl(full.concat(extra)).filter((post) => !bridgeErrorPost(post));
+    if (isShortsLocked()) {
+      list = list.filter((post) => !isLockedTiktok(post));
+    }
+    return list;
   }
 
   function httpsUrl(value) {
@@ -1429,6 +1466,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const copy = fillOwnerProfile(have, pending);
       rows[rows.indexOf(have)] = copy;
     });
+    if (isShortsLocked()) {
+      rows = rows.filter((feed) => !isLockedTiktok(feed));
+    }
     return rows.filter(keepAfterRemove);
   }
   function catalogAccount(platform, handle) {
@@ -6275,6 +6315,7 @@ const here = parseRoute();
       }
       return { name: "drive", section: "files", trash: false, folder: "", view: "", album: "", query };
     }
+    if (parts[0] === "vault") return { name: "vault", tab: parts[1] || "my", query };
     if (parts[0] === "settings") return { name: "settings", section: parts[1] || "", sub: parts[2] || "", query };
     const names = ["explore", "notifications", "messages", "feeds", "lists", "settings", "incoming"];
     if (names.includes(parts[0]) && parts.length === 1) return { name: parts[0], query };
@@ -6343,6 +6384,7 @@ const here = parseRoute();
         ${navItem("#/tv", "tv", tr("TV"), name === "tv")}
         ${navItem("#/communities", "communities", tr("Communities"), name === "communities")}
         ${navItem(subsHash(STATE.settings.subsGroup), "subs", tr("Subscriptions"), name === "subscriptions")}
+        ${window.ViktorychVault && window.ViktorychVault.visible() ? navItem("#/vault", "vault", tr("Vault"), name === "vault") : ""}
         ${navItem("#/settings", "more", tr("More"), name === "settings")}`;
     const post = music
       ? `<button class="post-btn" data-act="music-add" aria-label="${tr("Add song")}" data-tooltip="${tr("Add song")}"><span class="post-label">${tr("Add song")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
@@ -6570,6 +6612,9 @@ const here = parseRoute();
   }
 
   function homeLivePillsRow() {
+    if (window.WeatherPills && window.WeatherPills.homeRow) {
+      return window.WeatherPills.homeRow();
+    }
     const spacePills = (window.Spaces && window.Spaces.homePillsHtml) ? window.Spaces.homePillsHtml() : "";
     const soccerPills = (window.SoccerScores && window.SoccerScores.pillsHtml) ? window.SoccerScores.pillsHtml() : "";
     if (!spacePills && !soccerPills) return "";
@@ -7739,6 +7784,9 @@ const here = parseRoute();
   }
 
   function connectionsView(route) {
+    if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
+      return pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This account is currently locked."));
+    }
     const tab = (route.tab === "followers" || route.tab === "friends") ? route.tab : "following";
     const subject = connectionsSubject(route);
     const name = subject.name || subject.handle || route.handle || "";
@@ -7785,6 +7833,9 @@ const here = parseRoute();
   }
 
   function profileView(route) {
+    if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
+      return pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This account is currently locked."));
+    }
     if (window.ViktorychAccounts && window.ViktorychAccounts.profileHtml) {
       const accountPage = window.ViktorychAccounts.profileHtml(route);
       if (accountPage) return accountPage;
@@ -7884,6 +7935,9 @@ const here = parseRoute();
   }
 
   function statusView(route) {
+    if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
+      return pageHead(tr("Post noun"), "", true) + emptyBlock(tr("Post unavailable"), tr("This post isn’t in the current snapshot."));
+    }
     let post = findPost(route.platform, route.handle, route.id);
     if (!post && (route.platform === "instagram" || route.platform === "threads" || route.platform === "youtube")) {
       const archived = (ARCHIVE.posts || []).find((item) => item && item.p === route.platform && String(item.id) === String(route.id));
@@ -9836,7 +9890,8 @@ const here = parseRoute();
         shorts: tr("Shorts"),
         games: route.game === "regone" ? "ReGone" : tr("Games"),
         communities: tr("Communities"),
-        drive: route.section === "photos" ? tr("Photos") : tr("brand.storage")
+        drive: route.section === "photos" ? tr("Photos") : tr("brand.storage"),
+        vault: tr("Viktorych Vault")
       };
       key = map[route.name] || "";
     }
@@ -10028,6 +10083,7 @@ const here = parseRoute();
       ${window.ViktorychShorts && window.ViktorychShorts.visible() ? `<a href="#/shorts">${icon("shorts")} ${tr("Shorts")}</a>` : ""}
       <a href="#/games">${icon("games")} ${tr("Games")}</a>
       ${window.ViktorychDrive && window.ViktorychDrive.visible() ? `<a href="#/storage">${icon("storage")} ${tr("brand.storage")}</a>` : ""}
+      ${window.ViktorychVault && window.ViktorychVault.visible() ? `<a href="#/vault">${icon("vault")} ${tr("Vault")}</a>` : ""}
       <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>${tr("You")}</b><div class="phandle">@reader</div></div></div>`}
@@ -10192,10 +10248,10 @@ if (STATE.histClear) {
 
   function shell(main, route) {
     const gamePlay = route.name === "games" && !!route.game;
-    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "tv" || gamePlay;
+    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
@@ -11584,6 +11640,7 @@ if (STATE.histClear) {
     if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
     if (route.name === "shorts") return (window.ViktorychShorts && window.ViktorychShorts.visible() && window.ViktorychShorts.page(route)) || pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     if (route.name === "drive" && window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
+    if (route.name === "vault" && window.ViktorychVault && window.ViktorychVault.visible()) return window.ViktorychVault.page(route);
     if (route.name === "games") return (window.ViktorychGames && window.ViktorychGames.page(route)) || pageHead(tr("Games")) + emptyBlock(tr("Games"), tr("Reload the page."));
     if (route.name === "communities") return (window.ViktorychCommunities && window.ViktorychCommunities.page(route)) || pageHead(tr("Communities")) + emptyBlock(tr("Communities"), tr("Reload the page."));
     if (route.name === "tv") return (window.ViktorychTV && window.ViktorychTV.page(route)) || pageHead(tr("TV")) + emptyBlock(tr("TV"), tr("Reload the page."));
@@ -11659,6 +11716,7 @@ if (STATE.histClear) {
     if (name === "list") return "lists";
     if (name === "bookmarks") return "history";
     if (name === "games") return "games";
+    if (name === "vault") return "vault";
     if (name === "home" || name === "explore" || name === "notifications" || name === "messages" || name === "feeds" || name === "lists" || name === "history" || name === "settings" || name === "subscriptions") return name;
     return "";
   }
@@ -11886,6 +11944,10 @@ if (STATE.histClear) {
         if (route.name === "drive") window.ViktorychDrive.mount(route);
         else window.ViktorychDrive.unmount();
       }
+      if (window.ViktorychVault) {
+        if (route.name === "vault") window.ViktorychVault.mount(route);
+        else window.ViktorychVault.unmount();
+      }
       if (window.ViktorychTV) {
         if (route.name === "tv") window.ViktorychTV.mount(route);
         else window.ViktorychTV.unmount();
@@ -11934,6 +11996,7 @@ if (STATE.histClear) {
       syncMediaSession();
       if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);
       if (window.SoccerScores && window.SoccerScores.afterRender) window.SoccerScores.afterRender(route);
+      if (window.WeatherPills && window.WeatherPills.afterRender) window.WeatherPills.afterRender(route);
       bindPlayers();
       primeTelegramImages();
       resumePlayback();
@@ -15560,7 +15623,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       toggle: toggleReaction,
       token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
       productName: function () { return productName("app"); },
-      logo: function () { return markSvg("app", "logo-full") + markSvg("appShort", "logo-short"); }
+      logo: function () { return markSvg("app", "logo-full") + markSvg("appShort", "logo-short"); },
+      requestRender: function () { render(); }
     });
   }
   if (window.ViktorychAccounts) {

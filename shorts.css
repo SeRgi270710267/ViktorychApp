@@ -196,6 +196,108 @@ html.shorts-on .app { min-height: 100dvh; align-items: stretch; }
 }
 .shorts-tabs { display: flex; align-items: center; min-width: 0; }
 .shorts-tabs .tabs-bar { flex: 1; min-width: 0; }
+.shorts-lock {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 0 0;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  font: 700 13px/1.2 inherit;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.shorts-lock:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.shorts-lock.is-locked {
+  background: #f4212e;
+  border-color: #f4212e;
+  color: #fff;
+}
+.shorts-lock.is-locked:hover {
+  background: #dc1e29;
+}
+.shorts-lock svg, .shorts-lock-toggle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+.shorts-lock-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.shorts-lock-info b {
+  display: block;
+  font-size: 14px;
+}
+.shorts-lock-info small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+.shorts-lock-toggle {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  font: 700 13px/1.2 inherit;
+  padding: 6px 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.shorts-lock-toggle.on {
+  background: #f4212e;
+  border-color: #f4212e;
+  color: #fff;
+}
+.shorts-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.shorts-pill.unlocked {
+  background: rgba(0, 186, 124, 0.15);
+  color: #00ba7c;
+}
+.shorts-pill.locked {
+  background: rgba(244, 33, 46, 0.15);
+  color: #f4212e;
+}
+.shorts-fixed-badge {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 4px 8px;
+}
+.shorts-account-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .shorts-add {
   flex: 0 0 auto;
   margin: 0 12px 0 0;

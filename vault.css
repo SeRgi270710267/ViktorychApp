@@ -1,0 +1,442 @@
+/* Viktorych Vault - Zero-Knowledge Encrypted Vault & Shared Credential Manager */
+
+.vault {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  color: var(--text);
+}
+
+.vault-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.vault-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 19px;
+}
+
+.vault-brand svg {
+  width: 24px;
+  height: 24px;
+  fill: var(--blue);
+}
+
+.vault-nav-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
+  overflow-x: auto;
+}
+
+.vault-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.vault-tab-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.vault-tab-btn.on {
+  background: var(--blue);
+  color: #fff;
+}
+
+.vault-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.vault-search {
+  flex: 1 1 200px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--search);
+  border-radius: 9999px;
+  padding: 0 14px;
+  min-height: 38px;
+}
+
+.vault-search input {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.vault-search svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--muted);
+}
+
+.vault-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--blue);
+  color: #fff;
+  border: 0;
+  border-radius: 9999px;
+  padding: 8px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.vault-btn:hover {
+  opacity: 0.9;
+}
+
+.vault-btn.secondary {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.vault-btn.secondary:hover {
+  background: var(--hover);
+}
+
+.vault-btn.spotify {
+  background: #1db954;
+  color: #000;
+  font-weight: 700;
+}
+
+.vault-btn.spotify:hover {
+  background: #1ed760;
+}
+
+.vault-lock-screen {
+  max-width: 440px;
+  margin: 40px auto;
+  padding: 24px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.vault-lock-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(29, 155, 240, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+}
+
+.vault-lock-icon svg {
+  width: 28px;
+  height: 28px;
+  fill: var(--blue);
+}
+
+.vault-lock-screen h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.vault-lock-screen p {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 20px;
+  margin: 0 0 20px;
+}
+
+.vault-form-row {
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.vault-form-row label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.vault-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.vault-input:focus {
+  border-color: var(--blue);
+}
+
+.vault-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
+.vault-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.vault-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: rgba(29, 155, 240, 0.4);
+}
+
+.vault-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vault-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-weight: bold;
+}
+
+.vault-badge.spotify {
+  background: rgba(29, 185, 84, 0.15);
+  color: #1db954;
+}
+
+.vault-badge.spotify svg {
+  fill: #1db954;
+}
+
+.vault-badge.netflix {
+  background: rgba(229, 9, 20, 0.15);
+  color: #e50914;
+}
+
+.vault-badge.discord {
+  background: rgba(88, 101, 242, 0.15);
+  color: #5865f2;
+}
+
+.vault-badge.generic {
+  background: rgba(29, 155, 240, 0.15);
+  color: var(--blue);
+}
+
+.vault-badge svg {
+  width: 22px;
+  height: 22px;
+}
+
+.vault-card-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.vault-card-title {
+  font-weight: 700;
+  font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vault-card-sub {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vault-secret-box {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+}
+
+.vault-secret-val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 1px;
+}
+
+.vault-secret-val.unmasked {
+  letter-spacing: normal;
+  color: var(--text);
+}
+
+.vault-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.vault-action-btn {
+  background: var(--hover);
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vault-action-btn:hover {
+  background: var(--line);
+}
+
+.vault-action-btn.primary {
+  background: var(--blue);
+  color: #fff;
+}
+
+.vault-action-btn.spotify-play {
+  background: #1db954;
+  color: #000;
+  font-weight: 700;
+}
+
+.vault-empty {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--muted);
+}
+
+.vault-empty svg {
+  width: 48px;
+  height: 48px;
+  fill: var(--muted);
+  opacity: 0.5;
+  margin-bottom: 12px;
+}
+
+.vault-modal-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.vault-modal {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
+  padding: 24px;
+  position: relative;
+}
+
+.vault-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.vault-modal-head h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.vault-close-btn {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 50%;
+}
+
+.vault-close-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.vault-player-frame {
+  width: 100%;
+  height: 352px;
+  border: 0;
+  border-radius: 12px;
+  margin-top: 12px;
+}
