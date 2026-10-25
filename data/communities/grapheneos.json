@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T09:19:44Z",
+  "fetchedAt": "2026-10-25T09:25:15Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "Try",
       "authorUsername": "Try",
       "authorAvatar": "",
-      "score": 7,
-      "comments": 7,
-      "views": 210,
-      "participantCount": 6,
+      "score": 8,
+      "comments": 8,
+      "views": 245,
+      "participantCount": 7,
       "created": 1792649851,
-      "lastPostedAt": 1792919939,
+      "lastPostedAt": 1792920199,
       "category": "Off Topic",
       "categoryColor": "#c55bec",
       "tags": [
@@ -1930,7 +1930,7 @@
           "author": "GoSaM",
           "authorUsername": "GoSaM",
           "authorAvatar": "",
-          "score": 0,
+          "score": 1,
           "created": 1792916581,
           "parent": "43009",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/43009-mail-client/4\" class=\"PostMention\" data-id=\"276657\"><i class=\"icon fas fa-reply\"></i>mulfi</a> Thunderbird 24.0 has a general configuration option to switch between HTML vs. Only plain text.</p>"
@@ -1945,6 +1945,17 @@
           "created": 1792919939,
           "parent": "43009",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/43009-mail-client/1\" class=\"PostMention\" data-id=\"276632\"><i class=\"icon fas fa-reply\"></i>Try</a></p> \n\n<p>It seems like I have used K9/Thunderbird forever... so my choice would be Thunderbird.<br>\nnever had a problem using it on laptop (Debian, Fedora, Qubes or Tails)  No problems with it on GrapheneOS either.<br>\nI use three different email suppliers, all are PGP encrypted with keys I keep, not stored on the suppliers server. All they see is emails with encrypted attachments.<br>\nI suppose anyone reading this can say, well FairMail does all that as well, and I suppose it does, I only used it briefly.  It worked on my phone, however I lost that feeling of familiarity of Thunderbird so reverted and not looked back.</p> "
+        },
+        {
+          "id": "277271",
+          "number": 8,
+          "author": "n2o",
+          "authorUsername": "n2o",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792920199,
+          "parent": "43009",
+          "text": "<p>As I refuse to send web sites as emails, I have so far only found Thunderbird to be able to send and display text emails. The only thing I dislike about it is that once emails have the status \"read\", they are displayed in an unreadably dimmed font in the mail list.</p>"
         }
       ]
     },
