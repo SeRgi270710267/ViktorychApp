@@ -6495,6 +6495,13 @@ const here = parseRoute();
     return true;
   }
 
+  function homeLivePillsRow() {
+    const spacePills = (window.Spaces && window.Spaces.homePillsHtml) ? window.Spaces.homePillsHtml() : "";
+    const soccerPills = (window.SoccerScores && window.SoccerScores.pillsHtml) ? window.SoccerScores.pillsHtml() : "";
+    if (!spacePills && !soccerPills) return "";
+    return `<div class="sp-row-wrap" role="region" aria-label="${esc(tr("Live"))}"><div class="sp-row" role="list">${spacePills}${soccerPills}</div></div>`;
+  }
+
   function homeHeader(tab) {
     const lists = STATE.settings.lists.filter((l) => l.pinned);
     const cats = feedTabs().filter((item) => item.showHome !== false);
@@ -6523,7 +6530,7 @@ const here = parseRoute();
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
-      ${window.Spaces && window.Spaces.homeRow ? window.Spaces.homeRow() : (window.SoccerScores && window.SoccerScores.homeRow ? window.SoccerScores.homeRow() : "")}
+      ${homeLivePillsRow()}
     </div>`;
   }
 

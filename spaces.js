@@ -752,7 +752,7 @@
     const spacePills = homePillsHtml();
     const soccerPills = (root.SoccerScores && root.SoccerScores.pillsHtml) ? root.SoccerScores.pillsHtml() : "";
     if (!spacePills && !soccerPills) return "";
-    return '<div class="sp-row-wrap"><div class="sp-row" role="list">' + spacePills + soccerPills + "</div></div>";
+    return '<div class="sp-row-wrap" role="region" aria-label="' + esc(tr("Live")) + '"><div class="sp-row" role="list">' + spacePills + soccerPills + "</div></div>";
   }
 
   function rowExtra() {
