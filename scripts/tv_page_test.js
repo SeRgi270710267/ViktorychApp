@@ -55,4 +55,11 @@ assert(html.includes("Barcelona vs Real Madrid"), "HTML should include match tit
 assert(html.includes("tv-stream-pill"), "HTML should include quick switcher pills");
 assert(html.includes("tv-scoreboard"), "HTML should include match score board");
 
-console.log("All TV page tests passed successfully!");
+console.log("Verifying app.js route handling for tv...");
+const appCode = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
+assert(appCode.includes('if (parts[0] === "tv") return { name: "tv"'), "parseRouteInner must handle tv route");
+assert(appCode.includes('if (route.name === "tv") return (window.ViktorychTV && window.ViktorychTV.page(route))'), "view(route) must handle tv route without falling back to home");
+assert(appCode.includes('route.name === "tv" || gamePlay'), "shell() wide must include tv");
+assert(appCode.includes('if (route.name === "tv") window.ViktorychTV.mount(route)'), "render() must mount tv");
+
+console.log("All TV page tests and app routing checks passed successfully!");
