@@ -155,6 +155,28 @@
     if (!nativeFetch || window.fetch === patchedFetch) return;
     window.fetch = patchedFetch;
   }
+  var activeApiRoot = "";
+  function apiEndpoints() {
+    var c = config();
+    var list = [];
+    if (Array.isArray(c.apis)) list = list.concat(c.apis);
+    if (c.api && list.indexOf(c.api) === -1) list.unshift(c.api);
+    if (c.backupApi && list.indexOf(c.backupApi) === -1) list.push(c.backupApi);
+    return list.map(function (u) { return String(u || "").replace(/\/$/, ""); }).filter(Boolean);
+  }
+  function currentApi() {
+    if (activeApiRoot) return activeApiRoot;
+    var list = apiEndpoints();
+    activeApiRoot = list[0] || String(config().api || "").replace(/\/$/, "");
+    return activeApiRoot;
+  }
+  function rotateApi(failedRoot) {
+    var list = apiEndpoints();
+    if (list.length <= 1) return;
+    var idx = list.indexOf(failedRoot || activeApiRoot);
+    var nextIdx = (idx + 1) % list.length;
+    activeApiRoot = list[nextIdx];
+  }
   function patchedFetch(input, init) {
     var raw = typeof input === "string" ? input : (input && input.url) || "";
     var url;
@@ -166,35 +188,71 @@
     if (!config().gate) return nativeFetch(input, init);
     var session = readSession();
     if (key === "BLOCK" || !session) return Promise.resolve(new Response("", { status: 401 }));
-    var api = String(config().api || "").replace(/\/$/, "");
-    if (!api) return Promise.resolve(new Response("", { status: 401 }));
+    var apiRoot = currentApi();
+    if (!apiRoot) return Promise.resolve(new Response("", { status: 401 }));
     var headers = new Headers(init && init.headers || (typeof input !== "string" && input && input.headers) || {});
     headers.set("Authorization", "Bearer " + session.token);
-    return nativeFetch(api + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/"), {
+    return nativeFetch(apiRoot + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/"), {
       method: "GET",
       headers: headers,
       credentials: "omit",
       cache: "no-store"
+    }).then(function (res) {
+      if ((res.status === 429 || res.status === 502 || res.status === 503) && apiEndpoints().length > 1) {
+        rotateApi(apiRoot);
+        var fallbackRoot = currentApi();
+        if (fallbackRoot && fallbackRoot !== apiRoot) {
+          return nativeFetch(fallbackRoot + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/"), {
+            method: "GET",
+            headers: headers,
+            credentials: "omit",
+            cache: "no-store"
+          });
+        }
+      }
+      return res;
     });
   }
   function api(path, opts) {
-    var root = String(config().api || "").replace(/\/$/, "");
-    var headers = {};
+    var list = apiEndpoints();
+    if (!list.length) list = [String(config().api || "").replace(/\/$/, "")];
     opts = opts || {};
+    var headers = {};
     if (opts.body) headers["content-type"] = "application/json";
     if (opts.token) headers.Authorization = "Bearer " + opts.token;
-    return nativeFetch(root + path, {
-      method: opts.method || "GET",
-      headers: headers,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
-      credentials: "omit"
-    }).then(function (res) {
-      return res.json().catch(function () { return {}; }).then(function (body) {
-        body = body || {};
-        body.status = res.status;
-        return body;
+
+    function attempt(endpointIndex) {
+      if (endpointIndex >= list.length) {
+        return Promise.resolve({ status: 503, error: "all_endpoints_failed" });
+      }
+      var root = list[endpointIndex];
+      return nativeFetch(root + path, {
+        method: opts.method || "GET",
+        headers: headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        credentials: "omit"
+      }).then(function (res) {
+        if ((res.status === 429 || (res.status >= 502 && res.status <= 504)) && endpointIndex + 1 < list.length) {
+          rotateApi(root);
+          return attempt(endpointIndex + 1);
+        }
+        activeApiRoot = root;
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          body = body || {};
+          body.status = res.status;
+          return body;
+        });
+      }).catch(function (err) {
+        if (endpointIndex + 1 < list.length) {
+          rotateApi(root);
+          return attempt(endpointIndex + 1);
+        }
+        throw err;
       });
-    });
+    }
+
+    var startIdx = Math.max(0, list.indexOf(currentApi()));
+    return attempt(startIdx);
   }
   function errorMessage(code) {
     if (code === "handle_reserved") return tr("That handle is reserved.");

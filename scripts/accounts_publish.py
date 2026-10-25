@@ -197,11 +197,13 @@ def read_audience(site: Path) -> str:
 def lock_shell(site: Path, api: str, turnstile: str) -> None:
     config = site / "accounts.config.js"
     audience = read_audience(site)
+    backup_api = (os.environ.get("ACCOUNTS_BACKUP_API") or "").strip().rstrip("/")
     # JS object, not JSON. `gate: true` is what a publisher already in
     # progress looks for when it keeps the wall across a refresh.
     config.write_text(
         "window.VIKTORYCH_ACCOUNTS = {\n"
         f"  api: {json.dumps(api, ensure_ascii=True)},\n"
+        f"  backupApi: {json.dumps(backup_api, ensure_ascii=True)},\n"
         "  gate: true,\n"
         f"  turnstileSiteKey: {json.dumps(turnstile, ensure_ascii=True)},\n"
         f"  tiktokAudience: {json.dumps(audience, ensure_ascii=True)},\n"
