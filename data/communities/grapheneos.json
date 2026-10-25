@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T10:18:53Z",
+  "fetchedAt": "2026-10-25T10:49:42Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,184 @@
       ]
     },
     {
+      "id": "43076",
+      "title": "Obtainium requires DCL via memory now?",
+      "author": "gvprtskvni",
+      "authorUsername": "gvprtskvni",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792878767,
+      "lastPostedAt": 1792925200,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43076-obtainium-requires-dcl-via-memory-now",
+      "media": [],
+      "text": "<p>After the latest update Obtainium keeps crashing and apparently requires DCL via memory when it worked with full exploit protections previously. Anyone else experiencing this?</p>",
+      "replies": [
+        {
+          "id": "277229",
+          "number": 2,
+          "author": "joel_hayes",
+          "authorUsername": "joel_hayes",
+          "authorAvatar": "",
+          "score": 6,
+          "created": 1792888419,
+          "parent": "43076",
+          "text": "<p>Issue filed here: <a href=\"https://github.com/ImranR98/Obtainium/issues/3458\" rel=\"ugc nofollow\">https://github.com/ImranR98/Obtainium/issues/3458</a></p>"
+        },
+        {
+          "id": "277266",
+          "number": 3,
+          "author": "KitsuneNoBaka",
+          "authorUsername": "KitsuneNoBaka",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792919103,
+          "parent": "43076",
+          "text": "<p>There was one library change that is doing that. Developer thinks about adding option in settings for user to chose which library to use.</p>"
+        },
+        {
+          "id": "277280",
+          "number": 4,
+          "author": "MotherShipton",
+          "authorUsername": "MotherShipton",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792925200,
+          "parent": "43076",
+          "text": "<p>I have the app on both phone and tablet. I noticed it started to crash on my phone due to this issue but it was not crashing on my tablet. When I looked into the app settings on both I found that the default settings were different on each. On my phone the default setting is 'off' and on my tablet the default setting is 'on'. I can't see why they would be different</p>"
+        }
+      ]
+    },
+    {
+      "id": "43079",
+      "title": "GrapheneOS Messaging version 17 released",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792880687,
+      "lastPostedAt": 1792924603,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43079-grapheneos-messaging-version-17-released",
+      "media": [],
+      "text": "<p>GrapheneOS Messaging version 17 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/Messaging/releases/tag/17\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/Messaging/releases/tag/17</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>",
+      "replies": []
+    },
+    {
+      "id": "43075",
+      "title": "Easy Notes flagged as a Trojan on Accrescent",
+      "author": "Nemko",
+      "authorUsername": "Nemko",
+      "authorAvatar": "",
+      "score": 5,
+      "comments": 5,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792873134,
+      "lastPostedAt": 1792924509,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
+      "media": [],
+      "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
+      "replies": []
+    },
+    {
+      "id": "42734",
+      "title": "Crypto receive addresses on Graphene vs stick Android and iOS",
+      "author": "grapheneos3lgjvelo",
+      "authorUsername": "grapheneos3lgjvelo",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1791715444,
+      "lastPostedAt": 1792924441,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42734-crypto-receive-addresses-on-graphene-vs-stick-android-and-ios",
+      "media": [],
+      "text": "<p>Hello,</p>\n\n<p>I recently found that receive addresses on the Bep 20 network generated by my wallet are always the same. I was told that on stock android and on IOS, wallets generate a new address every time for privacy reasons and that perhaps this is caused by OS limitations. I'm wondering if there exists a fix for this?</p>",
+      "replies": []
+    },
+    {
+      "id": "43086",
+      "title": "Signal, FairEmail ",
+      "author": "Try",
+      "authorUsername": "Try",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792914080,
+      "lastPostedAt": 1792924222,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43086-signal-fairemail",
+      "media": [],
+      "text": "<p>Which one should I keep, optimized or unrestricted?</p>",
+      "replies": []
+    },
+    {
+      "id": "43085",
+      "title": "User Profile Setup",
+      "author": "mumbai",
+      "authorUsername": "mumbai",
+      "authorAvatar": "",
+      "score": 5,
+      "comments": 5,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1792912088,
+      "lastPostedAt": 1792924126,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43085-user-profile-setup",
+      "media": [],
+      "text": "<p>I want to setup user profile but I'm little confused.<br>\nWant some suggestsions<br>\n<strong>Use Case</strong><br>\nI only use open-source apps.</p>\n\n<p>I'll make a Education user profile for educational stuff. (I'm clear about this)</p>\n\n<p>I read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> posted by GrapheneOS Devs <br>\nI'll say you people read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> once<br>\nI'm thinking for <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#empty-owner-profile\" rel=\"ugc nofollow\">Empty Owner Profile</a> OR should I go with <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#no-secondary-user-profiles\" rel=\"ugc nofollow\">No Secondary User Profiles</a> and have only two profiles one for daily and educational</p>",
+      "replies": []
+    },
+    {
       "id": "43073",
       "title": "How to Convince People to Use GrapheneOS",
       "author": "Reboot",
@@ -1879,217 +2057,7 @@
       "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
       "media": [],
       "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": [
-        {
-          "id": "277147",
-          "number": 2,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 12,
-          "created": 1792857090,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> I want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p></blockquote>\n\n<p>You can't. Either there is a basic interest or not. You can simply talk about GrapheneOS and it's benefis, but you can't persuade anyone to do switch.<br>\nAll you can do is to assist people who already have the own intention to switch.</p>"
-        },
-        {
-          "id": "277149",
-          "number": 3,
-          "author": "tango",
-          "authorUsername": "tango",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1792857192,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a></p> \n\n<p>Hi,</p> \n\n<p>Its quite difficult really as most people are either too busy to be bothered or they literally dont have a clue, apart from basic security (strong passwords / updates etc). I would reckon it takes most people quite a while before they jump to GOS. If only they realised sooner how simple it is to get started and the huge security benefits from using it.</p>\n\n<p>In my opinion the best way is to lend them a good book and hope that they find it interesting enough to keep learning. There are 2 books that come to mind and they are \"Data and Goliath by Bruce Schneier\" and also \"Privacy is Power by Carissa Veliz\". Hope that helps a bit.</p> "
-        },
-        {
-          "id": "277156",
-          "number": 4,
-          "author": "router99",
-          "authorUsername": "router99",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/siwFkkailTNbeABD.png",
-          "score": 1,
-          "created": 1792858813,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> the combination of herd behavior and not caring much about privacy means people generally aren't interested. It has to be popularized in media for most people to care.</p> "
-        },
-        {
-          "id": "277158",
-          "number": 5,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 0,
-          "created": 1792859541,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>Not even that. Think about how many scandals Meta, Facebook, WhatsApp* and all the others had during the years, most people don't care, they are afraid of losing (imaginary) friends when they quit specific services and anyway, \"Everyone has WhatsApp and ... and I couldn't live without!\". That's what I hear again and again.</p>\n\n<p>*deputy examples</p>"
-        },
-        {
-          "id": "277160",
-          "number": 6,
-          "author": "ryrona",
-          "authorUsername": "ryrona",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1792859833,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>I doubt they would care even then. Maybe they will start using GrapheneOS is that is the defacto default most phones are sold with, but it would not be because they care, but exactly because they don't.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> I want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p></blockquote>\n\n<p>Buy them a new phone which is better than what they use, and install GrapheneOS on it before giving it to them. Now they are using GrapheneOS.</p>"
-        },
-        {
-          "id": "277167",
-          "number": 7,
-          "author": "penglix",
-          "authorUsername": "penglix",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792861249,
-          "parent": "43073",
-          "text": "<p>Maybe this argument will help you convince them: They can save money and lots of it. I booked hotels through booking.com and was able to get a much better price for exactly the same hotel and same room and everything than my parents who used a standard iPhone. I don't know why exactly that was. But I presume that it was because they weren't able to find out much about me, since I was using Vanadium on GrapheneOS.</p> "
-        },
-        {
-          "id": "277173",
-          "number": 8,
-          "author": "Byku",
-          "authorUsername": "Byku",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792862989,
-          "parent": "43073",
-          "text": "<p>Honestly I think it is pointless if the person isn't already interested in the subject. Maybe someone who is pissed off with the bloat and ads on their phone would appreciate having GrapheneOS installed. In practice though I've seen people using terrible Android-based phones where entries in god damn settings redirected you to ads/shops and the person still maintained how they like how easy to use their phone is. Even ones who claim to be privacy conscious just buy and iPhone, don't change any settings and call it a day. So I wouldn't bother.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>The closest thing that ever happened was circa 2013-2015, probably due to Snowden leaks. It was the only time I actually heard the subject being brought up during casual conversations with my friends. Of course no one did anything.</p>"
-        },
-        {
-          "id": "277174",
-          "number": 9,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792863206,
-          "parent": "43073",
-          "text": "<p>You're all right about not being able to changing people's minds, but we could brainstorm and refine positive talking points with each other. Just briefly mentioning a security feature and a 1 sentence highlight of what it does, such as sandboxed Google play can prevent chosen apps from having access to my microphone, could pique people's interest.</p> "
-        },
-        {
-          "id": "277180",
-          "number": 10,
-          "author": "de0u",
-          "authorUsername": "de0u",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792864535,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/8\" class=\"PostMention\" data-id=\"277173\"><i class=\"icon fas fa-reply\"></i>Byku</a> The closest thing that ever happened was circa 2013-2015, probably due to Snowden leaks.</p></blockquote>\n\n<p>I wonder if it might be possible to dust off an old <a href=\"https://en.wikipedia.org/wiki/Citizenfour\" rel=\"ugc nofollow\">Citizen Four</a> DVD?  Maybe used book stores have <a href=\"https://en.wikipedia.org/wiki/Permanent_Record_%28autobiography%29\" rel=\"ugc nofollow\">Permanent Record</a>?  I think many people have a vague understanding of what happened but don't know any details, and the details are important.</p>"
-        },
-        {
-          "id": "277182",
-          "number": 11,
-          "author": "subfloor9963",
-          "authorUsername": "subfloor9963",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792864653,
-          "parent": "43073",
-          "text": "<p>You can't help people who don't want to be helped. It is simple as that. Sure, you can talk about grapheneos to your peers. But, at the end of the day, it's their choice.</p> "
-        },
-        {
-          "id": "277184",
-          "number": 12,
-          "author": "Novaliss",
-          "authorUsername": "Novaliss",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 2,
-          "created": 1792865714,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> make sure to explain that GrapheneOS is for anybody. It isn't complicated to use since go no bloat at all. They can use it like a normal phone, but with outstanding security and privacy out of the box. Their important apps will probably just work.</p> "
-        },
-        {
-          "id": "277185",
-          "number": 13,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792865765,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/11\" class=\"PostMention\" data-id=\"277182\"><i class=\"icon fas fa-reply\"></i>subfloor9963</a> of course. However, there's a difference between immediately making someone convert (not possible) and slowly over time exposing someone to the benefits enough that they eventually start questioning their own decisions (very possible, but not instant gratification).</p> "
-        },
-        {
-          "id": "277198",
-          "number": 14,
-          "author": "longshots",
-          "authorUsername": "longshots",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792870160,
-          "parent": "43073",
-          "text": "<p>+1 to the answers above. As we all know, there's no-one more radical than a convert. Be happy with your conversion because they may not like the sacrifices that need to be made.</p>"
-        },
-        {
-          "id": "277212",
-          "number": 15,
-          "author": "mmmm",
-          "authorUsername": "mmmm",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792875066,
-          "parent": "43073",
-          "text": "<p>You could introduce it as an entirely new, but android compatible OS. I mean - that's what it is really. Frame it like this: iOS for iPhone, android for other phones, GrapheneOS for pixels (and soon Motorola). You could suggest that with ios you end up locked in. You could suggest android is spyware, as in anything you do on an android phone is essentially visible to the manufacturer of the phone and Google. You could frame grapheneOS as a solution to those two problems. There is no lock in and there is no surveillance built in. You could explain it in a way that suggests the phone becomes what you want it to be instead of what the company who sold the phone wants it to be.</p> \n\n<p>One thing that I have done to make other people more aware (read: scared) is to talk about the keyboard. Anything that is typed potentially can be read. Not so with GrapheneOS and the right selection of keyboard and the correct settings. <br>\nPeople are often not worried about abstract (to them) ideas. But if people understand that anything they type has potential to be seen then they think in different terms.</p> "
-        },
-        {
-          "id": "277217",
-          "number": 16,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 0,
-          "created": 1792880086,
-          "parent": "43073",
-          "text": "<p>As others said, dont even try. Dont shy away from letting it be known that you are running a secure os and that you have some advantages as far as privacy and security go, but trying to convince someone is a fools errand. Just let them know if they ever want to be more sovereign digitally to hit you up... Nothing else is needed on your part. And honestly who cares, they are fine; just do your own thing and you can assist if ever needed.</p> "
-        },
-        {
-          "id": "277218",
-          "number": 17,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 2,
-          "created": 1792880398,
-          "parent": "43073",
-          "text": "<p>My favorite is normies coping by saying \"its impossible to get away from it, so who cares\". I just laugh and say 'its definitely possible to be private and secure, you just have to put in a little effort. Its even possible to be invisible, youre just a loser!' ....but thats just me.</p> "
-        },
-        {
-          "id": "277222",
-          "number": 18,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 1,
-          "created": 1792881046,
-          "parent": "43073",
-          "text": "<p>Sorry for the spam, but i'll add a caveat: if its your girl/immediate family (kids), then yeah definitely just buy her a pixel with gos and they are with you (google enabled)(and as long as youre not going down a psychotic rabbit hole). My earlier posts were in regards to loved ones like parents, siblings, extended family &amp; friends. Your immediate people are to be secured (still convenient and as normal as possible), everyone else who cares.</p> "
-        },
-        {
-          "id": "277231",
-          "number": 19,
-          "author": "YiyaK",
-          "authorUsername": "YiyaK",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792888716,
-          "parent": "43073",
-          "text": "<p>I can't even get a significant fraction of the people in my life to use Signal, let alone spend many hundreds of dollars  to buy a Pixel to convert to Graphene!</p> "
-        },
-        {
-          "id": "277234",
-          "number": 20,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792892721,
-          "parent": "43073",
-          "text": "<p>Not yet. But not yet is not never. As long as you're not pestering them. One day, when something happens that scares them, it's good for them to know who to go to. Someday someone will ask you about that secure phone thing you talked about.</p> "
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43009",
@@ -2140,30 +2108,6 @@
       "replies": []
     },
     {
-      "id": "43086",
-      "title": "Signal, FairEmail ",
-      "author": "Try",
-      "authorUsername": "Try",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792914080,
-      "lastPostedAt": 1792919524,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43086-signal-fairemail",
-      "media": [],
-      "text": "<p>Which one should I keep, optimized or unrestricted?</p>",
-      "replies": []
-    },
-    {
       "id": "23152",
       "title": "LuxTrust Mobile 4.18.0 Fails to Launch on GrapheneOS (Pixel 6a)",
       "author": "stubble1861",
@@ -2188,54 +2132,6 @@
       "replies": []
     },
     {
-      "id": "43076",
-      "title": "Obtainium requires DCL via memory now?",
-      "author": "gvprtskvni",
-      "authorUsername": "gvprtskvni",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792878767,
-      "lastPostedAt": 1792919103,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43076-obtainium-requires-dcl-via-memory-now",
-      "media": [],
-      "text": "<p>After the latest update Obtainium keeps crashing and apparently requires DCL via memory when it worked with full exploit protections previously. Anyone else experiencing this?</p>",
-      "replies": []
-    },
-    {
-      "id": "43085",
-      "title": "User Profile Setup",
-      "author": "mumbai",
-      "authorUsername": "mumbai",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792912088,
-      "lastPostedAt": 1792918670,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43085-user-profile-setup",
-      "media": [],
-      "text": "<p>I want to setup user profile but I'm little confused.<br>\nWant some suggestsions<br>\n<strong>Use Case</strong><br>\nI only use open-source apps.</p>\n\n<p>I'll make a Education user profile for educational stuff. (I'm clear about this)</p>\n\n<p>I read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> posted by GrapheneOS Devs <br>\nI'll say you people read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> once<br>\nI'm thinking for <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#empty-owner-profile\" rel=\"ugc nofollow\">Empty Owner Profile</a> OR should I go with <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#no-secondary-user-profiles\" rel=\"ugc nofollow\">No Secondary User Profiles</a> and have only two profiles one for daily and educational</p>",
-      "replies": []
-    },
-    {
       "id": "42741",
       "title": "Best approach for multiple Signal accounts with temporary numbers?",
       "author": "bvss12",
@@ -2243,8 +2139,8 @@
       "authorAvatar": "",
       "score": 4,
       "comments": 4,
-      "views": 175,
-      "participantCount": 5,
+      "views": 210,
+      "participantCount": 6,
       "created": 1791734339,
       "lastPostedAt": 1792918088,
       "category": "General",
@@ -2307,78 +2203,6 @@
       "url": "https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died",
       "media": [],
       "text": "<p>My battery ran out, probably during an update. Now the phone shows the boot animation, then the lock screen for under 1 second, then goes black and starts recovery: \"Cannot load Android system. Your data may be corrupt.\"<br>\nI tried: Try again, safe mode, no SIM, rescue mode, charging. No change.<br>\nSideload of the newest OTA fails: \"Update package is older than the current build\". Recovery also says \"Overwrite in-progress update?\" and \"Unknown state: 5\".<br>\nBefore, fastboot showed \"snapshot-update-status: merging\". I ran \"fastboot snapshot-update merge\" and now it says \"none\".<br>\nI have no backup and need my data. Can I fix this without a reset or unlock?</p>",
-      "replies": []
-    },
-    {
-      "id": "42734",
-      "title": "Crypto receive addresses on Graphene vs stick Android and iOS",
-      "author": "grapheneos3lgjvelo",
-      "authorUsername": "grapheneos3lgjvelo",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1791715444,
-      "lastPostedAt": 1792912350,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42734-crypto-receive-addresses-on-graphene-vs-stick-android-and-ios",
-      "media": [],
-      "text": "<p>Hello,</p>\n\n<p>I recently found that receive addresses on the Bep 20 network generated by my wallet are always the same. I was told that on stock android and on IOS, wallets generate a new address every time for privacy reasons and that perhaps this is caused by OS limitations. I'm wondering if there exists a fix for this?</p>",
-      "replies": []
-    },
-    {
-      "id": "43012",
-      "title": "GrapheneOS version 2026102100 released",
-      "author": "GrapheneOS",
-      "authorUsername": "GrapheneOS",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-      "score": 61,
-      "comments": 61,
-      "views": 1260,
-      "participantCount": 36,
-      "created": 1792663953,
-      "lastPostedAt": 1792911813,
-      "category": "Announcements",
-      "categoryColor": "#f00a0a",
-      "tags": [
-        "Announcements"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43012-grapheneos-version-2026102100-released",
-      "media": [],
-      "text": "<p>GrapheneOS version 2026102100 released:</p>\n\n<p><a href=\"https://grapheneos.org/releases#2026102100\" rel=\"ugc nofollow\">https://grapheneos.org/releases#2026102100</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release.</p>\n",
-      "replies": []
-    },
-    {
-      "id": "43084",
-      "title": " Syncthing Android Download ",
-      "author": "Try",
-      "authorUsername": "Try",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792910794,
-      "lastPostedAt": 1792911119,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43084-syncthing-android-download",
-      "media": [],
-      "text": "<p>Can't find Syncthing Android APK</p>",
       "replies": []
     }
   ]
