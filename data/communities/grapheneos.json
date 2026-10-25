@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T21:16:59Z",
+  "fetchedAt": "2026-10-25T21:58:48Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,139 @@
       ]
     },
     {
+      "id": "43097",
+      "title": "App with accessibility permissions needed in Private Space",
+      "author": "flashcard5",
+      "authorUsername": "flashcard5",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792963268,
+      "lastPostedAt": 1792965463,
+      "category": "Pixel 10 Pro XL",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 10 Pro XL"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space",
+      "media": [],
+      "text": "<p>Hi all,<br>\nI have Action Notch installed, however some banking apps are complaining because it doesn't want it to be installed as well.<br>\nSo I tried to move the banking apps in Private Space, but they complain again, this time because they think the phone is rooted.<br>\nUnless there is a way to fix that (if so, how?) then I tried the other way, having Action Notch in the Private Space.<br>\nAction Notch asks for accessibility permissions, which I'm fine giving, but when I click to toggle it on, it doesn't work, it stays off.<br>\nIs there a setting or something I'm missing ? <br>\nAny help to make that (having both apps) work would be very helpful.<br>\nThanks</p>",
+      "replies": [
+        {
+          "id": "277418",
+          "number": 2,
+          "author": "KitsuneNoBaka",
+          "authorUsername": "KitsuneNoBaka",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792964895,
+          "parent": "43097",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/1\" class=\"PostMention\" data-id=\"277414\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> My banking apps are working in <code>Work</code> profile</p>"
+        },
+        {
+          "id": "277419",
+          "number": 3,
+          "author": "flashcard5",
+          "authorUsername": "flashcard5",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792965064,
+          "parent": "43097",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/2\" class=\"PostMention\" data-id=\"277418\"><i class=\"icon fas fa-reply\"></i>KitsuneNoBaka</a> ah so it's not a private space but rather a separate profile. Do you need to \"logout\" profile 1 and switch to profile 2 or is it a bit like private space where you can run an app smoothly and almost instantly? Asking because the way I use my banking apps I cannot spend X seconds to switch apps when paying for example</p> "
+        },
+        {
+          "id": "277420",
+          "number": 4,
+          "author": "KitsuneNoBaka",
+          "authorUsername": "KitsuneNoBaka",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792965463,
+          "parent": "43097",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/3\" class=\"PostMention\" data-id=\"277419\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> No, it's work profile that runs alongside owner, uses same screen and login and is always on. You activate it with <code>Shelter</code> app (old, but still best, waiting for new breeds)</p>"
+        }
+      ]
+    },
+    {
+      "id": "27948",
+      "title": "Disappearing contacts",
+      "author": "User21M",
+      "authorUsername": "User21M",
+      "authorAvatar": "",
+      "score": 35,
+      "comments": 35,
+      "views": 350,
+      "participantCount": 10,
+      "created": 1762720244,
+      "lastPostedAt": 1792964630,
+      "category": "Pixel 9 Pro",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 9 Pro"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/27948-disappearing-contacts",
+      "media": [],
+      "text": "<p>Hi guys, i'm experiencing a bug where my contacts just randomly disappear.</p>\n\n<p>First i thought i simply didn't save them, but today i noticed that my GFs number isn't saved any more, so  now i'm quite sure XD<br>\nIt doesn't appear to have a specific order, for example the older ones first, or the newer ones, it appears to be random, but i can't really tell</p>\n\n<p>Anyone that had the same issue? I did a quick search in the forum, but didn't find anything that sounds like this (only questions about syncing contacts)</p>\n\n<p>Any idea where to start debugging?<br>\nI suppose the easiest and best is to re flash the phone, but still thought it might be a good thing for the devs to know</p>\n\n<p>chears</p>\n\n\n",
+      "replies": []
+    },
+    {
+      "id": "43094",
+      "title": "Graphene OS for Normies and Newbies",
+      "author": "YiyaK",
+      "authorUsername": "YiyaK",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792955202,
+      "lastPostedAt": 1792964321,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
+      "media": [],
+      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
+      "replies": []
+    },
+    {
+      "id": "8274",
+      "title": "How do I prevent apps from knowing when I screenshot?",
+      "author": "antsyboy",
+      "authorUsername": "antsyboy",
+      "authorAvatar": "",
+      "score": 33,
+      "comments": 33,
+      "views": 770,
+      "participantCount": 22,
+      "created": 1697589169,
+      "lastPostedAt": 1792963684,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
+      "media": [],
+      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
+      "replies": []
+    },
+    {
       "id": "43096",
       "title": "How to bypass google sign-in to use certain apps with AndroidAuto ",
       "author": "stonewll123",
@@ -1931,31 +2064,6 @@
       "replies": []
     },
     {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 32,
-      "comments": 32,
-      "views": 735,
-      "participantCount": 21,
-      "created": 1697589169,
-      "lastPostedAt": 1792960329,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
-      "replies": []
-    },
-    {
       "id": "42154",
       "title": "New messaging app",
       "author": "ojzula",
@@ -2004,30 +2112,6 @@
       "replies": []
     },
     {
-      "id": "43094",
-      "title": "Graphene OS for Normies and Newbies",
-      "author": "YiyaK",
-      "authorUsername": "YiyaK",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792955202,
-      "lastPostedAt": 1792960039,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
-      "media": [],
-      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
-      "replies": []
-    },
-    {
       "id": "43095",
       "title": "Google Account -- Verify it's you",
       "author": "zach99zulu",
@@ -2035,8 +2119,8 @@
       "authorAvatar": "",
       "score": 2,
       "comments": 2,
-      "views": 70,
-      "participantCount": 2,
+      "views": 105,
+      "participantCount": 3,
       "created": 1792958662,
       "lastPostedAt": 1792959023,
       "category": "Pixel 10a",
@@ -2123,54 +2207,6 @@
       "url": "https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium",
       "media": [],
       "text": "<p>During the last days a warning appeared beside the Tuta mail app on Obtanium which is informing me that the current setting may prevent updates.<br>\n<a href=\"https://imgur.com/a/3CNhp7Z\" rel=\"ugc nofollow\">https://imgur.com/a/3CNhp7Z</a><br>\nI'm currently on the v.xxx1006.0, which is marked as the latest on Obtanium, while they are on the v.xxx1023.2 on Github.<br>\nI didn't edit no settings when I've installed it pulling it from the Obtanium website and if I try to copy the github link it tries to install the Tuta Drive instead.</p>\n\n<p>Do you have any suggestion on how to pull the last update?</p>",
-      "replies": []
-    },
-    {
-      "id": "40781",
-      "title": "Pixel 6, forensic fail",
-      "author": "Break11",
-      "authorUsername": "Break11",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1785321870,
-      "lastPostedAt": 1792955637,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/40781-pixel-6-forensic-fail",
-      "media": [],
-      "text": "<p><a href=\"https://imgur.com/a/wRFc0G0\" rel=\"ugc nofollow\">https://imgur.com/a/wRFc0G0</a></p>\n \n<p>6 digit pin, BFU state.<br>\nTranslation:</p>\n\n<p>\"The District Prosecutor's Office.</p>\n\n<p>In response to the resolution of ***, 2024, regarding the ongoing proceedings, I hereby inform that the Google Pixel 6 mobile phone submitted for examination has security features that are currently impossible to crack/read. In this situation, due to the inability to access the memory of the mobile phone in question, I must refrain from providing an expert opinion on it.</p>\n\n<p>Court Expert ***\"</p>",
-      "replies": []
-    },
-    {
-      "id": "43073",
-      "title": "How to Convince People to Use GrapheneOS",
-      "author": "Reboot",
-      "authorUsername": "Reboot",
-      "authorAvatar": "",
-      "score": 39,
-      "comments": 39,
-      "views": 840,
-      "participantCount": 24,
-      "created": 1792855754,
-      "lastPostedAt": 1792955397,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
-      "media": [],
-      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
       "replies": []
     }
   ]
