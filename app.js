@@ -1031,7 +1031,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: true, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null) });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null) });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1046,7 +1046,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.bookmarks = parsed.bookmarks || {};
       parsed.reposts = parsed.reposts || {};
       parsed.savedPosts = parsed.savedPosts || {};
-      parsed.privacyEmbedShield = parsed.privacyEmbedShield !== false;
+      parsed.privacyEmbedShield = parsed.privacyEmbedShield === true;
       parsed.privacyWebRTC = parsed.privacyWebRTC !== false;
       parsed.privacyNoReferrer = parsed.privacyNoReferrer !== false;
       parsed.privacyStripTrackers = parsed.privacyStripTrackers !== false;
@@ -2512,7 +2512,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function embedUrl(id, preview) {
     const base = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id);
-    const api = "&enablejsapi=1&origin=" + encodeURIComponent(location.origin) + "&widget_referrer=" + encodeURIComponent(location.origin + "/");
+    const origin = (typeof location !== "undefined" && location.origin && location.origin.indexOf("http") === 0) ? location.origin : "https://viktorychapp.com";
+    const api = "&enablejsapi=1&origin=" + encodeURIComponent(origin) + "&widget_referrer=" + encodeURIComponent(origin + "/");
     if (preview) return base + "?autoplay=1&mute=1&playsinline=1&controls=0&rel=0" + api;
     return base + "?autoplay=1&playsinline=1&controls=0&modestbranding=1&iv_load_policy=3&fs=0&disablekb=1&rel=0" + api;
   }
@@ -3099,6 +3100,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (q && typeof q.totalVideoFrames === "number") return q.totalVideoFrames > 0 && q.totalVideoFrames > (q.corruptedVideoFrames || 0);
     }
     if (typeof video.webkitDecodedFrameCount === "number") return video.webkitDecodedFrameCount > 0;
+    if (video.readyState >= 2 || video.currentTime > 0.05) return true;
     return false;
   }
 
@@ -3131,12 +3133,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const frame = document.createElement("iframe");
       frame.id = "ytf" + gen;
       if (/youtube-nocookie\.com|youtube\.com/.test(url || "")) {
-        const strictNoRef = STATE.settings && (STATE.settings.privacyNoReferrer !== false || STATE.settings.privacyEmbedShield);
-        frame.setAttribute("referrerpolicy", strictNoRef ? "no-referrer" : "strict-origin-when-cross-origin");
-        frame.referrerPolicy = strictNoRef ? "no-referrer" : "strict-origin-when-cross-origin";
-      }
-      if (STATE.settings && STATE.settings.privacyEmbedShield) {
-        frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation allow-forms");
+        frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+        frame.referrerPolicy = "strict-origin-when-cross-origin";
+        frame.removeAttribute("sandbox");
       }
       frame.src = url;
       frame.title = (post && (post.title || post.text)) || tr("Video");
@@ -3172,6 +3171,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         setTimeout(nudge, 250);
         setTimeout(nudge, 700);
         setTimeout(nudge, 1500);
+        setTimeout(() => {
+          if (el._gen === gen && frame.isConnected && !el.classList.contains("is-failed")) {
+            markShown(el);
+          }
+        }, 500);
       });
       if (!opts.preview && typeof window.YtPlayer === "function") {
         const posterSrc = (media && (media.poster || media.url)) || (post && post.poster) || "";
@@ -3215,7 +3219,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     el._framed = false;
     const checkFrame = () => {
       if (el._gen !== gen || el._src !== token) return false;
-      if (video.videoWidth > 0 && (el._framed || hasDecodedFrames(video))) {
+      if (video.videoWidth > 0 && video.videoHeight > 0 && (el._framed || hasDecodedFrames(video) || video.readyState >= 2 || video.currentTime > 0.05)) {
         el._framed = true;
         markShown(el);
         return true;
@@ -15141,7 +15145,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (view.time > 0.3) { try { video.currentTime = view.time; } catch (err) { /* not seekable yet */ } }
       };
       const startFile = (url, kind) => {
-        const go = () => { seek(); video.play().catch(() => {}); };
+        const go = () => {
+          if (!STATE.viewer || !STATE.viewer.video) {
+            try { video.pause(); video.removeAttribute("src"); video.load(); } catch (err) {}
+            return;
+          }
+          seek();
+          video.play().catch(() => {});
+        };
         if (kind === "hls" && !video.canPlayType("application/vnd.apple.mpegurl")) {
           loadHls().then((Hls) => {
             if (!STATE.viewer || !STATE.viewer.video || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) return;
@@ -15149,7 +15160,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             box._hls = hls;
             hls.loadSource(url);
             hls.attachMedia(video);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => { lockHlsTop(hls); go(); });
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+              if (!STATE.viewer || !STATE.viewer.video) {
+                try { video.pause(); hls.destroy(); } catch (err) {}
+                return;
+              }
+              lockHlsTop(hls);
+              go();
+            });
           });
           return;
         }
@@ -15168,6 +15186,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       const showCover = () => {
         if (!STATE.viewer || !STATE.viewer.video) return;
+        if (box._ytPlayer && box._ytPlayer.destroy) {
+          try { box._ytPlayer.destroy(); } catch (err) {}
+          box._ytPlayer = null;
+        }
         const poster = (media && (media.poster || media.url)) || "";
         const stills = stillCandidates(post || {}, media);
         const posterKey = stills[0] || "";
@@ -15300,12 +15322,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       box.innerHTML = "";
     }
-    document.querySelectorAll("#viewer video, #viewer audio").forEach((m) => {
+    document.querySelectorAll("video, audio").forEach((m) => {
       try { m.pause(); m.removeAttribute("src"); m.load(); } catch (err) {}
+    });
+    document.querySelectorAll("iframe").forEach((f) => {
+      try {
+        if (/youtube|player/i.test(f.src || "")) {
+          f.contentWindow.postMessage(JSON.stringify({ event: "command", func: "pauseVideo", args: [] }), "*");
+          f.contentWindow.postMessage(JSON.stringify({ event: "command", func: "stopVideo", args: [] }), "*");
+        }
+      } catch (err) {}
     });
     if (STATE.autoEl) pausePreview(STATE.autoEl);
     STATE.autoEl = null;
-    document.querySelectorAll(".vplay.is-playing").forEach((el) => pausePreview(el));
+    document.querySelectorAll(".vplay").forEach((el) => {
+      if (el.querySelector("video, iframe") || el.classList.contains("is-playing")) pausePreview(el);
+    });
     STATE.viewer = null;
     paintViewer();
   }
