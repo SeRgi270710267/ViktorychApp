@@ -2646,7 +2646,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function accountsApi() {
-    return String((window.VIKTORYCH_ACCOUNTS && window.VIKTORYCH_ACCOUNTS.api) || "").replace(/\/$/, "");
+    if (window.ViktorychAccounts && window.ViktorychAccounts.currentApi) {
+      const cur = window.ViktorychAccounts.currentApi();
+      if (cur) return cur;
+    }
+    const bag = window.VIKTORYCH_ACCOUNTS || {};
+    return String(bag.api || bag.backupApi || "").replace(/\/$/, "");
   }
 
   function accountToken() {

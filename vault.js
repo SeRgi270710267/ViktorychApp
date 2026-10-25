@@ -50,8 +50,12 @@ function account() {
 }
 
 function apiRoot() {
+  if (window.ViktorychAccounts && window.ViktorychAccounts.currentApi) {
+    var cur = window.ViktorychAccounts.currentApi();
+    if (cur) return cur;
+  }
   var cfg = window.VIKTORYCH_ACCOUNTS || {};
-  return String(cfg.api || "").replace(/\/$/, "");
+  return String(cfg.api || cfg.backupApi || "").replace(/\/$/, "");
 }
 
 function token() {

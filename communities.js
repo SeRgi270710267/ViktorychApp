@@ -35,7 +35,12 @@
     });
   }
   function cfg() {
-    return window.VIKTORYCH_ACCOUNTS || { api: "", gate: false };
+    var bag = window.VIKTORYCH_ACCOUNTS || { api: "", gate: false };
+    if (window.ViktorychAccounts && window.ViktorychAccounts.currentApi) {
+      var cur = window.ViktorychAccounts.currentApi();
+      if (cur) return Object.assign({}, bag, { api: cur });
+    }
+    return Object.assign({}, bag, { api: bag.api || bag.backupApi || "" });
   }
   function session() {
     var accounts = window.ViktorychAccounts;

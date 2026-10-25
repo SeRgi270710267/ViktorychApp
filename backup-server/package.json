@@ -1,0 +1,14 @@
+{
+  "name": "viktorych-backup-server",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Turnkey 100% free backup accounts backend for ViktorychApp",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test.mjs"
+  },
+  "dependencies": {
+    "miniflare": "^4.20251008.0"
+  }
+}
