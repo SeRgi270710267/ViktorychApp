@@ -1264,5 +1264,17 @@ SI18n.addPack("ru", {
   "Open TikTok to Solve": "Открыть TikTok для прохождения",
   "I’ve completed it — Continue": "Я прошёл проверку — продолжить",
   "Solve verification": "Пройти проверку",
-  "Verification required": "Требуется проверка"
+  "Verification required": "Требуется проверка",
+  "Restore session from another device": "Восстановить сессию с другого устройства",
+  "Restore session": "Восстановить сессию",
+  "Paste your session code from another device to sign in.": "Вставьте код сессии с другого устройства для входа.",
+  "Session code": "Код сессии",
+  "Enter your session code.": "Введите код сессии.",
+  "Invalid session code.": "Неверный код сессии.",
+  "Back to sign in": "Назад ко входу",
+  "Device sync": "Синхронизация устройств",
+  "Transfer your session to another browser or device.": "Перенесите сессию в другой браузер или на другое устройство.",
+  "Copy session code": "Скопировать код сессии",
+  "Copy session code:": "Скопируйте код сессии:",
+  "Session code copied": "Код сессии скопирован"
 });

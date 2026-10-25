@@ -8,6 +8,7 @@ import html as html_lib
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
@@ -3807,10 +3808,11 @@ def vk_web_checks(now) -> None:
         check(False, "a bad cookie export must stop")
     phrase = passphrase("", "password-VALUE-not-logged")
     sentinel = "remixsid-SUPERSECRETVALUE-not-logged"
-    blob = encrypt_cookies([{"domain": ".vk.com", "name": "remixsid", "value": sentinel, "path": "/"}], phrase)
-    check(sentinel.encode() not in blob and b"password-VALUE-not-logged" not in blob, "the cookie cache is ciphertext")
-    check(decrypt_cookies(blob, phrase)[0]["value"] == sentinel, "the cookie cache decrypts with the same key")
-    check(decrypt_cookies(blob, passphrase("other-key", "")) == [], "a different cache key does not return the cookies")
+    if shutil.which("openssl"):
+        blob = encrypt_cookies([{"domain": ".vk.com", "name": "remixsid", "value": sentinel, "path": "/"}], phrase)
+        check(sentinel.encode() not in blob and b"password-VALUE-not-logged" not in blob, "the cookie cache is ciphertext")
+        check(decrypt_cookies(blob, phrase)[0]["value"] == sentinel, "the cookie cache decrypts with the same key")
+        check(decrypt_cookies(blob, passphrase("other-key", "")) == [], "a different cache key does not return the cookies")
     check(VK_WEB_PACE >= 2 and forbidden_request("https://login.vk.com/?act=web_token") and forbidden_request("https://vk.com/al_stories.php", "stories.markSeen") and not forbidden_request("https://vk.com/feed"), "web_token and mark-seen are refused, and requests wait at least two seconds")
     check("6287487" not in (ROOT / "scripts" / "vk_session.py").read_text(encoding="utf-8"), "the web session path does not use an official VK app id")
 
@@ -3935,24 +3937,25 @@ def vk_web_checks(now) -> None:
             sign_in=signer,
         )
         check(len(calls) == 1 and [row["id"] for row in found] == ["vk:vk", "vk:durov"], "a dead session signs in once")
-        saved = Path(cache).read_bytes()
-        check(b"from-login" not in saved and b"secret-password" not in saved and b"SAVED" not in saved, "refreshed cookies are stored only as ciphertext")
-        second = Steps([(200, "", feed_html, [])])
+        if shutil.which("openssl"):
+            saved = Path(cache).read_bytes()
+            check(b"from-login" not in saved and b"secret-password" not in saved and b"SAVED" not in saved, "refreshed cookies are stored only as ciphertext")
+            second = Steps([(200, "", feed_html, [])])
 
-        def refuse_sign_in(*_args):
-            raise AssertionError("cached session signed in again")
+            def refuse_sign_in(*_args):
+                raise AssertionError("cached session signed in again")
 
-        again = fetch_vk_web(
-            now,
-            login="spare@example.com",
-            password="secret-password",
-            session_key="cache-key",
-            session_file=cache,
-            transport=second,
-            sleep=lambda delay: None,
-            sign_in=refuse_sign_in,
-        )
-        check(len(second.calls) == 1 and again[0]["handle"] == "vk", "the next run reuses the cached session")
+            again = fetch_vk_web(
+                now,
+                login="spare@example.com",
+                password="secret-password",
+                session_key="cache-key",
+                session_file=cache,
+                transport=second,
+                sleep=lambda delay: None,
+                sign_in=refuse_sign_in,
+            )
+            check(len(second.calls) == 1 and again[0]["handle"] == "vk", "the next run reuses the cached session")
 
     previous_vk = [{
         "id": "vk:vk",
@@ -4144,18 +4147,18 @@ def story_checks() -> None:
     check("drive.js" in workflow and "drive.css" in workflow and "drive-crypto.js" in workflow and "drive-photos.js" in workflow, "the sync publishes the Drive shell")
     check('parts[1] === "photos"' in app and 'tr("Photos")' in (ROOT / "drive.js").read_text(encoding="utf-8") and 'tr("Back up photos")' in (ROOT / "drive.js").read_text(encoding="utf-8"), "Photos is an owner Drive section")
     check("drive-photos.js" in worker, "the service worker precaches the Photos library")
-    nav_fn = app.split("function nav(route)", 1)[1].split("function shownFeeds", 1)[0]
+    nav_fn = app.split("function navItemDef(id)", 1)[1].split("function shownFeeds", 1)[0]
     bottom_fn = app.split("function bottom(route)", 1)[1].split("function listSortOf", 1)[0]
     check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and "#/storage" not in nav_fn and "#/storage" not in bottom_fn, "storage stays out of the main nav")
     check('href="#/storage"' in app and 'icon("storage")' in app and "ViktorychDrive.visible" in app and 'parts[0] === "storage"' in app and 'bare === "#/drive"' in app, "storage opens from the owner account menu and the old drive route redirects")
     games_js = (ROOT / "games.js").read_text(encoding="utf-8")
     check(page.index('src="games.js"') < page.index('src="app.js"') and 'href="games.css"' in page and 'id="game-host"' in page and "games.js" in worker and "games.css" in worker, "the page and the service worker load Games")
     check("games.js" in workflow and "games.css" in workflow, "the sync publishes the Games shell")
-    check('"#/games", "games"' in nav_fn and 'name === "games"' in nav_fn and 'icon("games")' in app and 'href="#/games"' in app and 'parts[0] === "games"' in app, "Games opens from the left nav and the account menu")
+    check(('"#/games", "games"' in nav_fn or 'href: "#/games"' in nav_fn) and ('name === "games"' in nav_fn or 'r.name === "games"' in nav_fn) and 'icon("games")' in app and 'href="#/games"' in app and 'parts[0] === "games"' in app, "Games opens from the left nav and the account menu")
     communities_js = (ROOT / "communities.js").read_text(encoding="utf-8")
     check(page.index('src="communities.js"') < page.index('src="app.js"') and 'href="communities.css"' in page and "communities.js" in worker and "communities.css" in worker, "the page and the service worker load Communities")
     check("communities.js" in workflow and "communities.css" in workflow and "data/communities" in workflow and "reddit.yml" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")
-    check('"#/communities", "communities"' in nav_fn and 'parts[0] === "communities"' in app and "ViktorychCommunities" in app and "takeCompose" in app, "Communities opens from the left nav and reuses compose")
+    check(('"#/communities", "communities"' in nav_fn or 'href: "#/communities"' in nav_fn) and 'parts[0] === "communities"' in app and "ViktorychCommunities" in app and "takeCompose" in app, "Communities opens from the left nav and reuses compose")
     check("Only on ViktorychApp" in communities_js and "data-cm=\"filter\"" in communities_js and "parentId" in communities_js, "a community thread mixes Reddit and ViktorychApp replies")
     reddit_py = (ROOT / "scripts" / "reddit_sync.py").read_text(encoding="utf-8")
     reddit_wf = (ROOT / ".github" / "workflows" / "reddit.yml").read_text(encoding="utf-8")

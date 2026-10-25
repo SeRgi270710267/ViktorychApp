@@ -1264,5 +1264,17 @@ SI18n.addPack("en", {
   "Open TikTok to Solve": "Open TikTok to Solve",
   "I’ve completed it — Continue": "I’ve completed it — Continue",
   "Solve verification": "Solve verification",
-  "Verification required": "Verification required"
+  "Verification required": "Verification required",
+  "Restore session from another device": "Restore session from another device",
+  "Restore session": "Restore session",
+  "Paste your session code from another device to sign in.": "Paste your session code from another device to sign in.",
+  "Session code": "Session code",
+  "Enter your session code.": "Enter your session code.",
+  "Invalid session code.": "Invalid session code.",
+  "Back to sign in": "Back to sign in",
+  "Device sync": "Device sync",
+  "Transfer your session to another browser or device.": "Transfer your session to another browser or device.",
+  "Copy session code": "Copy session code",
+  "Copy session code:": "Copy session code:",
+  "Session code copied": "Session code copied"
 });

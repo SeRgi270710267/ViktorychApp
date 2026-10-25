@@ -1928,7 +1928,13 @@ def remember_d1(token: str, account: str, database: str, entry: dict, part: dict
     ])
 
 
+WORKER_LIMITED = False
+
+
 def fetch_worker(url: str, token: str, dest: Path) -> int:
+    global WORKER_LIMITED
+    if WORKER_LIMITED:
+        return 429
     req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token, "User-Agent": UA})
     try:
         with urllib.request.urlopen(req, timeout=180) as res:
@@ -1941,6 +1947,9 @@ def fetch_worker(url: str, token: str, dest: Path) -> int:
                     out.write(block)
             return status
     except urllib.error.HTTPError as err:
+        if err.code == 429:
+            WORKER_LIMITED = True
+            log("[telegram-backup] Cloudflare worker daily request limit reached (429); pausing worker verifications")
         return err.code
 
 

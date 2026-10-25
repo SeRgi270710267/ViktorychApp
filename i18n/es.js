@@ -1264,5 +1264,17 @@ SI18n.addPack("es", {
   "Open TikTok to Solve": "Abrir TikTok para resolver",
   "I’ve completed it — Continue": "Ya lo completé — Continuar",
   "Solve verification": "Resolver verificación",
-  "Verification required": "Verificación requerida"
+  "Verification required": "Verificación requerida",
+  "Restore session from another device": "Restaurar sesión desde otro dispositivo",
+  "Restore session": "Restaurar sesión",
+  "Paste your session code from another device to sign in.": "Pega el código de sesión de otro dispositivo para iniciar sesión.",
+  "Session code": "Código de sesión",
+  "Enter your session code.": "Introduce tu código de sesión.",
+  "Invalid session code.": "Código de sesión no válido.",
+  "Back to sign in": "Volver a iniciar sesión",
+  "Device sync": "Sincronización de dispositivos",
+  "Transfer your session to another browser or device.": "Transfiere tu sesión a otro navegador o dispositivo.",
+  "Copy session code": "Copiar código de sesión",
+  "Copy session code:": "Copia el código de sesión:",
+  "Session code copied": "Código de sesión copiado"
 });
