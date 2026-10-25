@@ -113,7 +113,10 @@ shorts.bind({
   logo: () => "<svg class=\"logo\"></svg>"
 });
 
-console.log("Testing unlocked mode (initial state)...");
+console.log("Testing default locked state (initial state)...");
+assert.strictEqual(shorts.isLocked(), true, "Shorts should be locked by default");
+
+console.log("Testing unlocked mode...");
 shorts.setLocked(false);
 assert.strictEqual(shorts.isLocked(), false, "Shorts should be unlocked");
 
@@ -153,6 +156,8 @@ console.log("Testing account sheet...");
 assert(liveHtmlLocked.includes("shorts-lock-panel"), "Account sheet must contain locked mode panel");
 assert(liveHtmlLocked.includes("Unlocked accounts"), "Account sheet must contain Unlocked accounts heading");
 assert(liveHtmlLocked.includes("added accounts"), "Account sheet must contain added accounts heading");
+assert(liveHtmlUnlocked.includes("@gabii_g5"), "Account sheet must list @gabii_g5 under locked accounts when unlocked");
+assert(liveHtmlUnlocked.includes("Locked behind"), "Account sheet must show Locked behind pill");
 
 console.log("Testing site-wide isolation when locked...");
 assert.strictEqual(shorts.isUnlocked("pepsi"), true, "pepsi is unlocked");

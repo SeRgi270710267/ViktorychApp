@@ -335,9 +335,10 @@
       return window.ViktorychShorts.isLocked();
     }
     try {
-      return localStorage.getItem("viktorych_shorts_locked") === "1";
+      var stored = localStorage.getItem("viktorych_shorts_locked");
+      return stored === null ? true : stored === "1";
     } catch (e) {
-      return false;
+      return true;
     }
   }
 
@@ -1491,7 +1492,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function catalogRows() {
-    const rows = feeds().slice();
+    let rows = feeds().slice();
     const extra = STATE.catalog && STATE.catalog.feeds;
     if (Array.isArray(extra)) extra.forEach((row) => {
       if (!row || !row.id) return;

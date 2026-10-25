@@ -35,7 +35,7 @@ function makeElement(tag) {
   };
 }
 
-const mockStorage = {};
+const mockStorage = { "viktorych_shorts_locked": "0" };
 const mockWindow = {
   innerWidth: 1024,
   innerHeight: 768,
@@ -90,7 +90,7 @@ const hook = `
     isFeedFollowed
   };
 `;
-const patchedCode = appCode.replace("boot();\n})();", `${hook}\n  // boot();\n})();`);
+const patchedCode = appCode.replace(/boot\(\);\r?\n\}\)\(\);/, `${hook}\n  // boot();\n})();`);
 
 const context = vm.createContext(Object.assign({}, mockWindow, {
   window: mockWindow,

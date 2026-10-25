@@ -41,30 +41,17 @@
   var PEPSI_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23004b93'/%3E%3Cpath d='M50 2A48 48 0 0 1 98 50C98 50 80 58 50 42C20 26 2 50 2 50A48 48 0 0 1 50 2Z' fill='%23c8102e'/%3E%3Cpath d='M2 50C2 50 20 26 50 42C80 58 98 50 98 50A48 48 0 0 1 50 98A48 48 0 0 1 2 50Z' fill='%23004b93'/%3E%3Cpath d='M2 50C2 50 20 34 50 50C80 66 98 50 98 50C98 50 80 58 50 42C20 26 2 50 2 50Z' fill='%23ffffff'/%3E%3C/svg%3E";
   var PEPSI_POSTER = PEPSI_AVATAR;
   var LOCKED_KEY = "viktorych_shorts_locked";
-  var lockedMode = false;
+  var lockedMode = true;
   try {
-    lockedMode = localStorage.getItem(LOCKED_KEY) === "1";
+    var storedLock = localStorage.getItem(LOCKED_KEY);
+    if (storedLock !== null) {
+      lockedMode = storedLock === "1";
+    }
   } catch (err) { /* private browsing */ }
   var unlockedAccounts = ["pepsi"];
 
   function isLocked() {
     return !!lockedMode;
-  }
-  function pruneLockedData() {
-    var data = hooks.data();
-    if (!data || !isLocked()) return;
-    if (Array.isArray(data.posts)) {
-      data.posts = data.posts.filter(function (post) {
-        if (!post || post.platform !== "tiktok") return true;
-        return isUnlocked(post.handle);
-      });
-    }
-    if (Array.isArray(data.feeds)) {
-      data.feeds = data.feeds.filter(function (feed) {
-        if (!feed || feed.platform !== "tiktok") return true;
-        return isUnlocked(feed.handle);
-      });
-    }
   }
 
   function setLocked(on) {
@@ -72,15 +59,15 @@
     try {
       localStorage.setItem(LOCKED_KEY, lockedMode ? "1" : "0");
     } catch (err) { /* private mode */ }
-    if (lockedMode) {
-      pruneLockedData();
-    } else if (cached) {
-      absorb(cached);
-    }
     livePaintKey = "";
-    schedulePaint();
-    if (!onLiveRoute()) paintForYou();
+    if (onLiveRoute()) {
+      paintLive();
+      liveRows().forEach(function (row) { if (row && row.handle) refreshLive(row.handle); });
+    } else {
+      paintForYou();
+    }
     renderLockButtons();
+    renderAdded();
     if (hooks.requestRender) {
       try { hooks.requestRender(); } catch (err) {}
     } else if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) {
@@ -200,6 +187,30 @@
     ];
   }
 
+  function gabiiDefaultPosts() {
+    return [
+      {
+        id: "tiktok:gabii_g5:7695476356548660503",
+        statusId: "7695476356548660503",
+        platform: "tiktok",
+        handle: "gabii_g5",
+        author: "gabii",
+        text: "Dance & vibes ✨ #dance #viral",
+        url: "https://www.tiktok.com/@gabii_g5/video/7695476356548660503",
+        avatar: "",
+        date: "2026-10-24T18:00:00Z",
+        stats: { likes: 4320, replies: 128 },
+        media: [
+          {
+            type: "video",
+            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+            poster: ""
+          }
+        ]
+      }
+    ];
+  }
+
   function forYou() {
     var list = (hooks.posts() || []).slice();
     ((cached && cached.posts) || []).forEach(function (post) {
@@ -207,6 +218,9 @@
     });
     if (!list.some(function (p) { return p && foldHandle(p.handle) === "pepsi"; })) {
       pepsiDefaultPosts().forEach(function (p) { list.push(p); });
+    }
+    if (!list.some(function (p) { return p && foldHandle(p.handle) === "gabii_g5"; })) {
+      gabiiDefaultPosts().forEach(function (p) { list.push(p); });
     }
     return list.filter(function (post) {
       if (!post) return false;
@@ -273,12 +287,11 @@
         push(h, h === "pepsi" ? { handle: "pepsi", name: "Pepsi", avatar: PEPSI_AVATAR } : {});
       });
     } else {
+      push("gabii_g5", { handle: "gabii_g5", name: "gabii" });
       if (addedAccounts.length) {
         addedAccounts.forEach(function (item) { if (item && item.handle) push(item.handle, item); });
-      } else {
-        Object.keys(liveMap()).forEach(function (name) { push(name, liveMap()[name]); });
-        push("gabii_g5", {});
       }
+      Object.keys(liveMap()).forEach(function (name) { push(name, liveMap()[name]); });
       unlockedAccounts.forEach(function (h) {
         push(h, h === "pepsi" ? { handle: "pepsi", name: "Pepsi", avatar: PEPSI_AVATAR } : {});
       });
@@ -479,7 +492,7 @@
       : "";
     var locked = isLocked();
     var lockBtn = '<button type="button" class="shorts-lock' + (locked ? " is-locked" : "") + '" data-shorts="toggle-lock" aria-label="' + hooks.esc(locked ? tr("Unlock Shorts") : tr("Lock Shorts")) + '" title="' + hooks.esc(locked ? tr("Unlock Shorts") : tr("Lock Shorts")) + '">' +
-      lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Lock")) + "</span></button>";
+      lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Unlocked")) + "</span></button>";
     return '<div class="shorts-tabs"><div class="tabs-bar"><div class="tabs" role="tablist">' +
       '<a class="tab' + (live ? " on" : "") + '" href="#/shorts/live" role="tab" aria-selected="' + (live ? "true" : "false") + '"><span>' + hooks.esc(tr("Live")) + "</span></a>" +
       '<a class="tab' + (live ? "" : " on") + '" href="#/shorts" role="tab" aria-selected="' + (live ? "false" : "true") + '"><span>' + hooks.esc(tr("For you")) + "</span></a>" +
@@ -492,6 +505,35 @@
       '<span><b>Pepsi</b><small>@pepsi</small><span class="shorts-pill unlocked">' + hooks.esc(tr("Unlocked")) + "</span></span>" +
       '<span class="shorts-fixed-badge">' + hooks.esc(tr("Default")) + "</span>" +
       "</li>";
+  }
+
+  function renderAddedHtml() {
+    if (isLocked()) return "";
+    var allLocked = [];
+    allLocked.push({
+      handle: "gabii_g5",
+      name: "gabii",
+      avatar: avatarFor("gabii_g5", {}),
+      builtIn: true
+    });
+    addedAccounts.forEach(function (row) {
+      if (row && row.handle && foldHandle(row.handle) !== "gabii_g5" && !isUnlocked(row.handle)) {
+        allLocked.push(row);
+      }
+    });
+    return allLocked.map(function (row) {
+      var handle = String((row && row.handle) || "");
+      var name = String((row && row.name) || handle);
+      var face = row && row.avatar
+        ? '<img alt="" src="' + hooks.esc(row.avatar) + '" referrerpolicy="no-referrer">'
+        : hooks.avatar("", name);
+      var lockedBadge = '<span class="shorts-pill locked">' + hooks.esc(tr("Locked behind")) + "</span>";
+      var actionBtn = row.builtIn
+        ? '<span class="shorts-fixed-badge">' + hooks.esc(tr("Default")) + "</span>"
+        : '<button type="button" data-shorts="remove-account" data-handle="' + hooks.esc(handle) + '">' + hooks.esc(tr("Remove")) + "</button>";
+      return '<li class="shorts-account"><span class="shorts-account-face">' + face + "</span><span><b>" + hooks.esc(name) + "</b><small>@" + hooks.esc(handle) + "</small>" + lockedBadge + "</span>" +
+        '<div class="shorts-account-actions">' + actionBtn + "</div></li>";
+    }).join("");
   }
 
   function accountSheet() {
@@ -507,12 +549,12 @@
       '<p class="shorts-accounts-note" id="shorts-accounts-note"></p>' +
       '<div class="shorts-lock-panel">' +
       '<div class="shorts-lock-info"><b>' + hooks.esc(tr("Locked mode")) + "</b><small>" + hooks.esc(tr("When locked, only unlocked accounts (@pepsi) are visible.")) + "</small></div>" +
-      '<button type="button" class="shorts-lock-toggle' + (locked ? " on" : "") + '" data-shorts="toggle-lock">' + lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Lock")) + "</span></button>" +
+      '<button type="button" class="shorts-lock-toggle' + (locked ? " on" : "") + '" data-shorts="toggle-lock">' + lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Unlocked")) + "</span></button>" +
       "</div>" +
       "<h3>" + hooks.esc(tr("Unlocked accounts")) + "</h3>" +
       '<ul class="shorts-account-list shorts-unlocked-list" id="shorts-unlocked">' + renderUnlocked() + "</ul>" +
       "<h3>" + hooks.esc(tr("added accounts")) + "</h3>" +
-      '<ul class="shorts-account-list" id="shorts-added"></ul></div></div>';
+      '<ul class="shorts-account-list" id="shorts-added">' + renderAddedHtml() + "</ul></div></div>";
   }
 
   var captchaActive = null;
@@ -1123,10 +1165,10 @@
         btn.className = "shorts-lock" + (locked ? " is-locked" : "");
         btn.setAttribute("aria-label", locked ? tr("Unlock Shorts") : tr("Lock Shorts"));
         btn.setAttribute("title", locked ? tr("Unlock Shorts") : tr("Lock Shorts"));
-        btn.innerHTML = lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Lock")) + "</span>";
+        btn.innerHTML = lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Unlocked")) + "</span>";
       } else if (btn.classList.contains("shorts-lock-toggle")) {
         btn.className = "shorts-lock-toggle" + (locked ? " on" : "");
-        btn.innerHTML = lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Lock")) + "</span>";
+        btn.innerHTML = lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Unlocked")) + "</span>";
       }
     }
   }
@@ -1988,20 +2030,7 @@
     if (unlockedEl) unlockedEl.innerHTML = renderUnlocked();
     var list = document.getElementById("shorts-added");
     if (!list) return;
-    if (!addedAccounts.length) {
-      list.innerHTML = '<li class="shorts-account-empty">' + hooks.esc(tr("No added accounts yet.")) + "</li>";
-      return;
-    }
-    list.innerHTML = addedAccounts.map(function (row) {
-      var handle = String((row && row.handle) || "");
-      var name = String((row && row.name) || handle);
-      var face = row && row.avatar
-        ? '<img alt="" src="' + hooks.esc(row.avatar) + '" referrerpolicy="no-referrer">'
-        : hooks.avatar("", name);
-      var lockedBadge = '<span class="shorts-pill locked">' + hooks.esc(tr("Locked behind")) + "</span>";
-      return '<li class="shorts-account"><span class="shorts-account-face">' + face + "</span><span><b>" + hooks.esc(name) + "</b><small>@" + hooks.esc(handle) + "</small>" + lockedBadge + "</span>" +
-        '<div class="shorts-account-actions"><button type="button" data-shorts="remove-account" data-handle="' + hooks.esc(handle) + '">' + hooks.esc(tr("Remove")) + "</button></div></li>";
-    }).join("");
+    list.innerHTML = renderAddedHtml();
   }
 
   function accountsNote(text) {
@@ -2214,13 +2243,18 @@
       if (target) target.scrollIntoView();
     }
     playActive();
-    if (route && route.live) {
-      Promise.all([pull(), loadAccounts()]).then(function () {
-        accountsLoaded = true;
+    Promise.all([pull(), loadAccounts()]).then(function () {
+      accountsLoaded = true;
+      if (onLiveRoute()) {
         paintLive();
         refreshRecordings();
         liveRows().forEach(function (row) { if (row && row.handle) refreshLive(row.handle); });
-      });
+      } else {
+        paintForYou();
+      }
+      renderAdded();
+    });
+    if (route && route.live) {
       poll = setInterval(function () {
         if (document.visibilityState !== "visible") return;
         refreshRecordings();
