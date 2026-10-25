@@ -10,3 +10,4 @@ sync-report.json
 discord/
 .vk-session/
 owner/
+.wrangler/

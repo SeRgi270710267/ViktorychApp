@@ -11,7 +11,7 @@ export const COMMUNITY_SCHEMA = [
 
 const COMMUNITIES_KEY = "owner/added-communities.json";
 const NAME_RE = /^[a-z0-9_]{2,21}$/;
-const PARENT_RE = /^(?:t[13]_[A-Za-z0-9]{1,12}|va_[a-f0-9]{16})$/;
+const PARENT_RE = /^(?:t[13]_[A-Za-z0-9]{1,12}|va_[a-f0-9]{16}|[0-9]{1,18}|[a-z0-9_-]{1,32})$/;
 const CAP = 40;
 
 export function communityName(value) {

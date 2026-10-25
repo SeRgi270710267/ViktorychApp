@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Miniflare } from "miniflare";
 import { decryptFile, encryptFile, encryptJson, newItemKey, setupVault } from "../../shared/drive-crypto.js";
@@ -10,8 +11,8 @@ const CHANNEL = "-1004242";
 function workerOptions(files, deleted, names) {
   return {
     modules: true,
-    scriptPath: new URL("../src/index.js", import.meta.url).pathname,
-    modulesRoot: new URL("../..", import.meta.url).pathname,
+    scriptPath: fileURLToPath(new URL("../src/index.js", import.meta.url)),
+    modulesRoot: fileURLToPath(new URL("../..", import.meta.url)),
     modulesRules: [{ type: "ESModule", include: ["**/*.js"], fallthrough: true }],
     compatibilityDate: "2026-01-15",
     d1Databases: ["DB"],

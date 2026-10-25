@@ -19,6 +19,13 @@
   var painted = "";
   var pushTimer = 0;
   var pushing = false;
+  var friendsCache = {};
+  var friendsLoads = {};
+  var friendRequestsCache = { incoming: [], outgoing: [] };
+  var friendRequestsLoading = false;
+  var friendsSearchQuery = "";
+  var friendsSubTab = "all";
+  var unfriendTarget = null;
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -362,6 +369,7 @@
     else if (view === "edit") html += editModal(editBody());
     else if (view === "crop") html += cropModal();
     else if (view === "legal") html += modal(legalTitle || tr("About"), legalBody());
+    else if (view === "unfriend") html += modal(tr("Unfriend @{handle}?", { handle: unfriendTarget ? unfriendTarget.handle : "" }), '<p class="acct-sub">' + esc(tr("This removes @{handle} from your friends.", { handle: unfriendTarget ? unfriendTarget.handle : "" })) + '</p><button class="acct-next acct-danger" type="button" data-friend-act="unfriend-confirm" style="background:#f4212e;border-color:#f4212e;color:#fff">' + esc(tr("Remove Friend")) + '</button><button class="acct-line" type="button" data-acct="close" style="width:100%;margin-top:12px">' + esc(tr("Cancel")) + '</button>');
     else if (view === "leave") html += modal(tr("Save your account number"), '<p class="acct-sub">' + esc(tr("Leave without saving the account number?")) + '</p><button class="acct-next" type="button" data-acct="abandon">' + esc(tr("Close")) + '</button><button class="acct-line" type="button" data-acct="stay" style="width:100%;margin-top:12px">' + esc(tr("Back")) + "</button>");
     root.innerHTML = html;
     var mark = (view || "") + ":" + step + ":" + (form.claimOpen ? "1" : "0");
@@ -1053,6 +1061,7 @@
     if (known && known[field] != null) return known[field];
     if (field === "following" && account && account.followingCount != null) return account.followingCount;
     if (field === "followers" && account && account.followersCount != null) return account.followersCount;
+    if (field === "friends" && account && account.friendsCount != null) return account.friendsCount;
     return 0;
   }
   function noteProfile(account) {
@@ -1061,14 +1070,17 @@
     graphCounts[id] = graphCounts[id] || {};
     if (account.followingCount != null && !graphCounts[id].fresh) graphCounts[id].following = account.followingCount;
     if (account.followersCount != null && !graphCounts[id].fresh) graphCounts[id].followers = account.followersCount;
+    if (account.friendsCount != null && !graphCounts[id].fresh) graphCounts[id].friends = account.friendsCount;
+    if (account.viewerFriendStatus != null) graphCounts[id].friendStatus = account.viewerFriendStatus;
+    if (account.mutualFriendsCount != null) graphCounts[id].mutualFriendsCount = account.mutualFriendsCount;
   }
   function countLink(account, tab, n, label) {
-    var href = "#/@" + encodeURIComponent(account.handle || "") + "/" + tab;
+    var href = tab === "friends" ? ("#/@" + encodeURIComponent(account.handle || "") + "?tab=friends") : ("#/@" + encodeURIComponent(account.handle || "") + "/" + tab);
     return '<a href="' + esc(href) + '"><b>' + esc(formatNum(n)) + "</b> <span>" + esc(label) + "</span></a>";
   }
   function accountCountsHtml(account) {
     var priv = account && account.privateFollows ? '<span class="private-badge" title="' + esc(tr("Followers and following are private")) + '" aria-label="' + esc(tr("Followers and following are private")) + '">' + lockIcon(12) + ' <span>' + esc(tr("Private")) + '</span></span>' : "";
-    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + priv + "</div>";
+    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + countLink(account, "friends", accountStat(account, "friends"), tr("Friends")) + priv + "</div>";
   }
   function followersOf(id) {
     var known = graphCounts[id];
@@ -1234,18 +1246,279 @@
     }
     return null;
   }
-  function accountPage(account) {
+  function friendButtonHtml(account) {
+    var session = readSession();
+    if (!session || !account || !account.publicId) return "";
+    if (session.account && session.account.publicId === account.publicId) return "";
+    var status = (graphCounts["app:" + account.publicId] && graphCounts["app:" + account.publicId].friendStatus) || account.viewerFriendStatus || "none";
+    var pid = account.publicId;
+    var handle = account.handle || "";
+
+    if (status === "friends") {
+      return '<button class="friend-btn friend-mutual" type="button" data-friend-act="unfriend" data-friend-id="' + esc(pid) + '" data-handle="' + esc(handle) + '" aria-label="' + esc(tr("Friends")) + '"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg><span class="f">' + esc(tr("Friends")) + '</span><span class="u">' + esc(tr("Unfriend")) + '</span></button>';
+    }
+    if (status === "sent") {
+      return '<button class="friend-btn friend-pending" type="button" data-friend-act="cancel" data-friend-id="' + esc(pid) + '" data-handle="' + esc(handle) + '" aria-label="' + esc(tr("Request Sent")) + '"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg><span class="f">' + esc(tr("Request Sent")) + '</span><span class="u">' + esc(tr("Cancel Request")) + '</span></button>';
+    }
+    if (status === "received") {
+      return '<div class="friend-btn-group"><button class="friend-btn friend-accept" type="button" data-friend-act="accept" data-friend-id="' + esc(pid) + '" data-handle="' + esc(handle) + '">' + esc(tr("Confirm")) + '</button><button class="friend-btn friend-decline" type="button" data-friend-act="decline" data-friend-id="' + esc(pid) + '" data-handle="' + esc(handle) + '">' + esc(tr("Delete")) + '</button></div>';
+    }
+    return '<button class="friend-btn friend-add" type="button" data-friend-act="request" data-friend-id="' + esc(pid) + '" data-handle="' + esc(handle) + '"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M15 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm-9-2V7H4v3H1v2h3v3h2v-3h3v-2H6zm9 4c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>' + esc(tr("Add Friend")) + '</span></button>';
+  }
+
+  function ensureFriends(targetId) {
+    var session = readSession();
+    if (!targetId || !session || !config().api) return;
+    if (friendsLoads[targetId] || friendsCache[targetId]) return;
+    friendsLoads[targetId] = true;
+    api("/v1/friends?id=" + encodeURIComponent("app:" + targetId) + "&tab=friends", { token: session.token }).then(function (res) {
+      friendsLoads[targetId] = false;
+      if (!res || res.status !== 200) return;
+      friendsCache[targetId] = Array.isArray(res.friends) ? res.friends : [];
+      var id = "app:" + targetId;
+      graphCounts[id] = graphCounts[id] || {};
+      if (res.friendsCount != null) graphCounts[id].friends = res.friendsCount;
+      if (res.status != null) graphCounts[id].friendStatus = res.status;
+      if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () { friendsLoads[targetId] = false; });
+  }
+
+  function ensureFriendRequests() {
+    var session = readSession();
+    if (!session || !config().api || friendRequestsLoading) return;
+    friendRequestsLoading = true;
+    api("/v1/friends?tab=requests", { token: session.token }).then(function (res) {
+      friendRequestsLoading = false;
+      if (!res || res.status !== 200) return;
+      friendRequestsCache = {
+        incoming: Array.isArray(res.incoming) ? res.incoming : [],
+        outgoing: Array.isArray(res.outgoing) ? res.outgoing : []
+      };
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () { friendRequestsLoading = false; });
+  }
+
+  function syncFriends() {
+    var session = readSession();
+    if (!session || !config().api) return Promise.resolve();
+    ensureFriendRequests();
+    if (session.account && session.account.publicId) {
+      ensureFriends(session.account.publicId);
+    }
+    return Promise.resolve();
+  }
+
+  function doFriendAction(action, targetId, handle) {
+    var session = readSession();
+    if (!session || !config().api || !targetId) return;
+    var me = session.account && session.account.publicId;
+    var tId = targetId.replace(/^app:/, "");
+    var idKey = "app:" + tId;
+    var meKey = "app:" + me;
+
+    graphCounts[idKey] = graphCounts[idKey] || {};
+    var prevStatus = graphCounts[idKey].friendStatus || "none";
+    var prevCount = graphCounts[idKey].friends || 0;
+    var prevMyCount = (graphCounts[meKey] && graphCounts[meKey].friends) || 0;
+
+    if (action === "request") {
+      graphCounts[idKey].friendStatus = "sent";
+    } else if (action === "accept") {
+      graphCounts[idKey].friendStatus = "friends";
+      graphCounts[idKey].friends = prevCount + 1;
+      graphCounts[meKey] = graphCounts[meKey] || {};
+      graphCounts[meKey].friends = prevMyCount + 1;
+      friendRequestsCache.incoming = friendRequestsCache.incoming.filter(function (r) {
+        return r.id !== "app:" + tId && r.publicId !== tId;
+      });
+      delete friendsCache[me];
+      delete friendsCache[tId];
+    } else if (action === "decline") {
+      graphCounts[idKey].friendStatus = "none";
+      friendRequestsCache.incoming = friendRequestsCache.incoming.filter(function (r) {
+        return r.id !== "app:" + tId && r.publicId !== tId;
+      });
+    } else if (action === "cancel") {
+      graphCounts[idKey].friendStatus = "none";
+      friendRequestsCache.outgoing = friendRequestsCache.outgoing.filter(function (r) {
+        return r.id !== "app:" + tId && r.publicId !== tId;
+      });
+    } else if (action === "remove") {
+      graphCounts[idKey].friendStatus = "none";
+      graphCounts[idKey].friends = Math.max(0, prevCount - 1);
+      graphCounts[meKey] = graphCounts[meKey] || {};
+      graphCounts[meKey].friends = Math.max(0, prevMyCount - 1);
+      delete friendsCache[me];
+      delete friendsCache[tId];
+    }
+
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+
+    var ep = "/v1/friends/" + action;
+    api(ep, { method: "POST", token: session.token, body: { targetId: tId } }).then(function (res) {
+      if (!res || res.status !== 200) {
+        graphCounts[idKey].friendStatus = prevStatus;
+        graphCounts[idKey].friends = prevCount;
+        if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
+        if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        return;
+      }
+      if (res.status != null) graphCounts[idKey].friendStatus = res.status;
+      if (res.friendsCount != null && graphCounts[meKey]) graphCounts[meKey].friends = res.friendsCount;
+      if (window.ViktorychAccounts && window.ViktorychAccounts.toast) {
+        if (action === "request") window.ViktorychAccounts.toast(tr("Friend request sent"));
+        else if (action === "accept") window.ViktorychAccounts.toast(tr("Friend request accepted"));
+        else if (action === "decline") window.ViktorychAccounts.toast(tr("Friend request declined"));
+        else if (action === "cancel") window.ViktorychAccounts.toast(tr("Friend request cancelled"));
+        else if (action === "remove") window.ViktorychAccounts.toast(tr("Friend removed"));
+      }
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {
+      graphCounts[idKey].friendStatus = prevStatus;
+      graphCounts[idKey].friends = prevCount;
+      if (graphCounts[meKey]) graphCounts[meKey].friends = prevMyCount;
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    });
+  }
+
+  function friendsSectionHtml(account) {
+    var session = readSession();
+    var mine = session && session.account && session.account.publicId === account.publicId;
+    if (!session) {
+      return '<div class="empty"><h2>' + esc(tr("Friends")) + '</h2><p>' + esc(tr("Sign in to see this list.")) + '</p></div>';
+    }
+
+    var pid = account.publicId;
+    ensureFriends(pid);
+    if (mine) ensureFriendRequests();
+
+    if (friendsLoads[pid] && !friendsCache[pid]) {
+      return '<div class="reply-empty">' + esc(tr("Loading…")) + '</div>';
+    }
+
+    var friendsList = friendsCache[pid] || [];
+    var incoming = (mine && friendRequestsCache.incoming) || [];
+    var requestsCount = incoming.length;
+
+    var headerRight = '<div class="friends-search-box">' +
+      '<svg viewBox="0 0 24 24"><path fill="currentColor" d="M10.25 3.75a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm-8.5 6.5a8.5 8.5 0 1114.86 5.66l4.47 4.46-1.42 1.42-4.46-4.47A8.5 8.5 0 011.75 10.25z"/></svg>' +
+      '<input type="text" class="friends-search-input" placeholder="' + esc(tr("Search Friends")) + '" value="' + esc(friendsSearchQuery) + '" data-friends-search="1">' +
+    '</div>';
+
+    var pills = "";
+    if (mine) {
+      pills = '<div class="friends-pills">' +
+        '<button class="friends-pill' + (friendsSubTab === "all" ? " active" : "") + '" type="button" data-friend-sub="all">' + esc(tr("All Friends")) + ' <span class="pill-count">(' + friendsList.length + ')</span></button>' +
+        '<button class="friends-pill' + (friendsSubTab === "requests" ? " active" : "") + '" type="button" data-friend-sub="requests">' + esc(tr("Friend Requests")) + (requestsCount > 0 ? ' <span class="pill-badge">' + requestsCount + '</span>' : '') + '</button>' +
+      '</div>';
+    }
+
+    var cardsHtml = "";
+    if (mine && friendsSubTab === "requests") {
+      if (!incoming.length) {
+        cardsHtml = '<div class="empty"><h2>' + esc(tr("No friend requests")) + '</h2><p>' + esc(tr("You don’t have any pending friend requests.")) + '</p></div>';
+      } else {
+        cardsHtml = '<div class="friends-grid">' + incoming.map(function (req) {
+          var rpid = req.id ? req.id.replace(/^app:/, "") : "";
+          var photo = publicAvatar(req.avatar, req.avatarFace, "friend-avatar");
+          var mutual = req.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tr("{count} mutual friends", { count: req.mutualFriendsCount })) + '</div>' : '';
+          return '<div class="friend-card" data-friend-card="app:' + esc(rpid) + '">' +
+            '<a class="friend-card-media" href="#/@' + encodeURIComponent(req.handle) + '">' + photo + '</a>' +
+            '<div class="friend-card-info">' +
+              '<a class="friend-card-name" href="#/@' + encodeURIComponent(req.handle) + '">' + esc(req.name || req.handle) + (req.owner ? badge() : "") + '</a>' +
+              '<div class="friend-card-handle">@' + esc(req.handle) + '</div>' +
+              mutual +
+            '</div>' +
+            '<div class="friend-card-actions">' +
+              '<button class="friend-btn friend-accept" type="button" data-friend-act="accept" data-friend-id="' + esc(rpid) + '" data-handle="' + esc(req.handle) + '">' + esc(tr("Confirm")) + '</button>' +
+              '<button class="friend-btn friend-decline" type="button" data-friend-act="decline" data-friend-id="' + esc(rpid) + '" data-handle="' + esc(req.handle) + '">' + esc(tr("Delete")) + '</button>' +
+            '</div>' +
+          '</div>';
+        }).join("") + '</div>';
+      }
+    } else {
+      var query = friendsSearchQuery.trim().toLowerCase();
+      var filtered = friendsList;
+      if (query) {
+        filtered = friendsList.filter(function (f) {
+          var name = String(f.name || f.displayName || "").toLowerCase();
+          var handle = String(f.handle || "").toLowerCase();
+          return name.indexOf(query) >= 0 || handle.indexOf(query) >= 0;
+        });
+      }
+
+      if (!friendsList.length) {
+        cardsHtml = '<div class="empty"><h2>' + esc(tr("No friends yet")) + '</h2><p>' + esc(tr("When you become friends with people, they’ll show up here.")) + '</p></div>';
+      } else if (!filtered.length) {
+        cardsHtml = '<div class="empty"><h2>' + esc(tr("No friends found")) + '</h2><p>' + esc(tr("Couldn’t find any friends matching your search.")) + '</p></div>';
+      } else {
+        cardsHtml = '<div class="friends-grid">' + filtered.map(function (fr) {
+          var fpid = fr.id ? fr.id.replace(/^app:/, "") : fr.publicId;
+          var photo = publicAvatar(fr.avatar, fr.avatarFace, "friend-avatar");
+          var mutual = fr.mutualFriendsCount ? '<div class="friend-card-mutual">' + esc(tr("{count} mutual friends", { count: fr.mutualFriendsCount })) + '</div>' : '';
+          var btn = "";
+          if (mine) {
+            btn = '<button class="friend-btn friend-mutual" type="button" data-friend-act="unfriend" data-friend-id="' + esc(fpid) + '" data-handle="' + esc(fr.handle) + '"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg><span class="f">' + esc(tr("Friends")) + '</span><span class="u">' + esc(tr("Unfriend")) + '</span></button>';
+          } else {
+            btn = friendButtonHtml({ publicId: fpid, handle: fr.handle, viewerFriendStatus: fr.friendStatus });
+          }
+          return '<div class="friend-card" data-friend-card="app:' + esc(fpid) + '">' +
+            '<a class="friend-card-media" href="#/@' + encodeURIComponent(fr.handle) + '">' + photo + '</a>' +
+            '<div class="friend-card-info">' +
+              '<a class="friend-card-name" href="#/@' + encodeURIComponent(fr.handle) + '">' + esc(fr.name || fr.displayName || fr.handle) + (fr.owner ? badge() : "") + '</a>' +
+              '<div class="friend-card-handle">@' + esc(fr.handle) + '</div>' +
+              mutual +
+            '</div>' +
+            '<div class="friend-card-actions">' + btn + '</div>' +
+          '</div>';
+        }).join("") + '</div>';
+      }
+    }
+
+    var totalFriends = friendsList.length;
+    var headingHtml = '<div class="friends-header">' +
+      '<div class="friends-header-left">' +
+        '<h2 class="friends-heading">' + esc(tr("Friends")) + '</h2>' +
+        '<span class="friends-sub">' + esc(tr("{count} friends", { count: totalFriends })) + '</span>' +
+      '</div>' +
+      '<div class="friends-header-right">' + headerRight + '</div>' +
+    '</div>';
+
+    return '<div class="friends-section">' + headingHtml + pills + cardsHtml + '</div>';
+  }
+
+  function accountPage(account, route) {
     var session = readSession();
     var mine = session && session.account && session.account.publicId === account.publicId;
     var photo = publicAvatar(account.avatar, account.avatarFace, "pava");
     var banner = publicBanner(account.banner, account.bannerFace);
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
     var followBtn = !mine && account.publicId && window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton("app:" + account.publicId, true) || "") : "";
+    var friendBtn = !mine && account.publicId ? friendButtonHtml(account) : "";
+    var activeTab = (route && route.query && route.query.get("tab")) || (route && route.tab) || "posts";
+    if (activeTab !== "friends") activeTab = "posts";
+
     var pack = { html: "", count: 0 };
     if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account) || pack;
     var count = String(pack.count || 0);
-    var body = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>");
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div><div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + accountCountsHtml(account) + "</div>" + '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '"><a class="tab on" role="tab" aria-selected="true"><span>' + esc(tr("Posts")) + "</span></a></div>" + body;
+
+    var postsBody = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>");
+    var friendsBody = friendsSectionHtml(account);
+    var body = activeTab === "friends" ? friendsBody : postsBody;
+
+    var profileHref = "#/@" + encodeURIComponent(account.handle || "");
+    var friendsHref = "#/@" + encodeURIComponent(account.handle || "") + "?tab=friends";
+
+    var mutualCount = (graphCounts["app:" + account.publicId] && graphCounts["app:" + account.publicId].mutualFriendsCount) || account.mutualFriendsCount;
+    var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tr("{count} mutual friends", { count: mutualCount })) + '</div>' : '';
+
+    var tabs = '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '">' +
+      '<a class="tab' + (activeTab === "posts" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "posts" ? "true" : "false") + '" href="' + esc(profileHref) + '"><span>' + esc(tr("Posts")) + '</span></a>' +
+      '<a class="tab' + (activeTab === "friends" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "friends" ? "true" : "false") + '" href="' + esc(friendsHref) + '"><span>' + esc(tr("Friends")) + (accountStat(account, "friends") > 0 ? ' <small class="tab-n">(' + formatNum(accountStat(account, "friends")) + ')</small>' : '') + '</span></a>' +
+    '</div>';
+
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + '<div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + accountCountsHtml(account) + "</div>" + tabs + body;
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -1259,7 +1532,7 @@
       return "";
     }
     if (!account.repostsLoaded) loadProfile(route.handle);
-    return accountPage(account);
+    return accountPage(account, route);
   }
   function profilePending(handle) {
     var key = skel(handle);
@@ -1386,9 +1659,43 @@
       loadBackupChannels();
       health = healthHtml() + channelsHtml();
     }
-    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
+    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
   }
   function onClick(event) {
+    var friendSub = event.target && event.target.closest ? event.target.closest("[data-friend-sub]") : null;
+    if (friendSub) {
+      event.preventDefault();
+      event.stopPropagation();
+      friendsSubTab = friendSub.dataset.friendSub || "all";
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      return;
+    }
+    var friendAct = event.target && event.target.closest ? event.target.closest("[data-friend-act]") : null;
+    if (friendAct) {
+      event.preventDefault();
+      event.stopPropagation();
+      var fact = friendAct.dataset.friendAct;
+      var fid = friendAct.dataset.friendId;
+      var fhandle = friendAct.dataset.handle;
+      if (fact === "unfriend") {
+        unfriendTarget = { id: fid, handle: fhandle };
+        view = "unfriend";
+        paint();
+        return;
+      }
+      if (fact === "unfriend-confirm") {
+        if (unfriendTarget) {
+          doFriendAction("remove", unfriendTarget.id, unfriendTarget.handle);
+          unfriendTarget = null;
+        }
+        closeAuth();
+        return;
+      }
+      if (fact === "request" || fact === "accept" || fact === "decline" || fact === "cancel") {
+        doFriendAction(fact, fid, fhandle);
+        return;
+      }
+    }
     var acct = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;
     if (!acct) return;
     event.preventDefault();
@@ -1437,6 +1744,8 @@
     else if (act === "avatar-clear") { form.avatar = ""; form.avatarTouched = true; form.avatarEmpty = "default"; form.mediaMenu = ""; paint(); }
     else if (act === "toggle-form-private") { form.privateFollows = !form.privateFollows; paint(); }
     else if (act === "toggle-private-follows") { var s = readSession(); if (s && s.account) setPrivateFollows(!s.account.privateFollows); }
+    else if (act === "toggle-fed-ap") toggleFederationAp();
+    else if (act === "toggle-fed-nostr") toggleFederationNostr();
     else if (act === "hide-avatar") hideAvatar(acct.dataset.mode || "");
     else if (act === "crop-apply") applyCrop();
     else if (act === "logout") logout(false);
@@ -1444,6 +1753,59 @@
     else if (act === "remove-channel") removeBackupChannel(acct.dataset.index);
     else if (act === "logout-all") logout(true);
     else if (act === "legal") { legalTitle = acct.dataset.title || tr("About"); view = "legal"; paint(); }
+  }
+  var federationState = { loaded: false, loading: false, enabled_ap: false, enabled_nostr: false, nostr_pubkey: "", ap_handle: "", nostr_nip05: "" };
+  function loadFederationSettings() {
+    var session = readSession();
+    if (!session || !session.token || federationState.loading) return;
+    federationState.loading = true;
+    api("/v1/federation/settings", { token: session.token }).then(function (res) {
+      federationState.loading = false;
+      if (res && res.status === 200) {
+        federationState.loaded = true;
+        federationState.enabled_ap = !!res.enabled_ap;
+        federationState.enabled_nostr = !!res.enabled_nostr;
+        federationState.nostr_pubkey = res.nostr_pubkey || "";
+        federationState.ap_handle = res.ap_handle || "";
+        federationState.nostr_nip05 = res.nostr_nip05 || "";
+        if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      }
+    }).catch(function () {
+      federationState.loading = false;
+    });
+  }
+  function toggleFederationAp() {
+    var session = readSession();
+    if (!session || !session.token) return;
+    var next = !federationState.enabled_ap;
+    api("/v1/federation/settings", { method: "POST", token: session.token, body: { enabled_ap: next } }).then(function (res) {
+      if (res && res.status === 200) {
+        federationState.loaded = true;
+        federationState.enabled_ap = !!res.enabled_ap;
+        federationState.ap_handle = res.ap_handle || "";
+        if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      }
+    }).catch(function () {});
+  }
+  function toggleFederationNostr() {
+    var session = readSession();
+    if (!session || !session.token) return;
+    var next = !federationState.enabled_nostr;
+    var pubkey = federationState.nostr_pubkey;
+    if (next && !pubkey) {
+      var entered = window.prompt("Enter your Nostr public key (npub or hex):", "");
+      if (!entered) return;
+      pubkey = entered.trim();
+    }
+    api("/v1/federation/settings", { method: "POST", token: session.token, body: { enabled_nostr: next, nostr_pubkey: pubkey } }).then(function (res) {
+      if (res && res.status === 200) {
+        federationState.loaded = true;
+        federationState.enabled_nostr = !!res.enabled_nostr;
+        federationState.nostr_pubkey = res.nostr_pubkey || "";
+        federationState.nostr_nip05 = res.nostr_nip05 || "";
+        if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      }
+    }).catch(function () {});
   }
   var cropDrag = null;
   function setPrivateFollows(val) {
@@ -1524,6 +1886,11 @@
   document.addEventListener("click", onClick, true);
   document.addEventListener("input", function (event) {
     var el = event.target;
+    if (el && (el.dataset.friendsSearch || el.classList.contains("friends-search-input"))) {
+      friendsSearchQuery = el.value;
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      return;
+    }
     if (!el || !el.closest || !el.closest("#account-layer") || !el.name) return;
     if (el.name === "accountNumber") {
       var digits = String(el.value || "").replace(/\D/g, "").slice(0, 16);
@@ -1577,7 +1944,10 @@
   if (window.SI18n && window.SI18n.onChange) window.SI18n.onChange(function () { if (blocking() || view) paint(); });
   if (blocking()) enter();
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible") syncFollows();
+    if (document.visibilityState === "visible") {
+      syncFollows();
+      syncFriends();
+    }
   });
 
   window.ViktorychAccounts = {
@@ -1601,6 +1971,11 @@
     onServerFollows: null,
     changeFollow: changeFollow,
     syncFollows: syncFollows,
+    syncFriends: syncFriends,
+    friendButton: friendButtonHtml,
+    friendsSectionHtml: friendsSectionHtml,
+    doFriendAction: doFriendAction,
+    ensureFriends: ensureFriends,
     ensureCounts: ensureCounts,
     ensureList: ensureList,
     listPack: listPack,

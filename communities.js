@@ -1,11 +1,12 @@
-/* Communities: a mirrored subreddit and the posts signed-in people write here. */
+/* Communities: mirrored subreddits & Discourse forums and the posts signed-in people write here. */
 (function () {
   var state = {
     index: null,
     docs: {},
     internal: {},
-    tab: "top",
+    tab: "latest",
     filter: "all",
+    category: "all",
     hubTab: "explore",
     search: "",
     showAdd: false,
@@ -63,6 +64,10 @@
     var account = session().account;
     return !!(account && account.owner);
   }
+  function isDiscourse(docOrRow) {
+    if (!docOrRow) return false;
+    return docOrRow.type === "discourse" || docOrRow.source === "discourse" || docOrRow.source === "flarum";
+  }
 
   function count(n) {
     var value = Number(n) || 0;
@@ -94,6 +99,33 @@
     return s.trim();
   }
 
+  function cleanDiscourseExcerpt(raw) {
+    if (!raw) return "";
+    var s = String(raw).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+    if (s.length > 150) s = s.slice(0, 150).trim() + "…";
+    return s;
+  }
+
+  function sanitizeDiscourseHtml(raw) {
+    if (!raw) return "";
+    var str = String(raw).trim();
+    if (!/<[a-z][\s\S]*>/i.test(str)) {
+      return "<p>" + esc(str) + "</p>";
+    }
+    // Remove unsafe script/iframe/style/form elements
+    str = str.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+             .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+             .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+             .replace(/<form\b[^<]*(?:(?!<\/form>)<[^<]*)*<\/form>/gi, "");
+    // Remove inline event handlers
+    str = str.replace(/\son\w+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, "");
+    // Remove javascript: links
+    str = str.replace(/\shref\s*=\s*(?:['"]\s*javascript:[^'"]*['"]|javascript:[^\s>]+)/gi, ' href="#"');
+    // Ensure all links open securely in external window
+    str = str.replace(/<a\s+(?:[^>]*?\s+)?href=/gi, '<a target="_blank" rel="noopener noreferrer" href=');
+    return str;
+  }
+
   function timeAgo(ms) {
     if (!ms) return "";
     try {
@@ -113,6 +145,7 @@
 
   /* SVG Icons */
   var svgSnoo = '<svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 0a10 10 0 1 0 10 10A10 10 0 0 0 10 0zm6.81 10.45a2 2 0 0 1-1.32 1.88 5.76 5.76 0 0 1-.09.91c0 2.29-2.43 4.14-5.4 4.14s-5.4-1.85-5.4-4.14a5.76 5.76 0 0 1-.09-.91 2 2 0 1 1 2.37-2.92 7.7 7.7 0 0 1 3.51-1.07l.72-3.39 2.36.5a1.41 1.41 0 1 1 1.34 1.77 1.4 1.4 0 0 1-1.12-.56l-1.87-.4-.56 2.65a7.7 7.7 0 0 1 3.5 1.07 2 2 0 0 1 1.46.47zm-9.31.55a1.25 1.25 0 1 0 1.25 1.25 1.25 1.25 0 0 0-1.25-1.25zm5 0a1.25 1.25 0 1 0 1.25 1.25 1.25 1.25 0 0 0-1.25-1.25zm-4.7 3.25a.25.25 0 0 0-.2.4 3.75 3.75 0 0 0 4.8 0 .25.25 0 0 0-.2-.4 3.25 3.25 0 0 1-4.4 0z"/></svg>';
+  var svgDiscourse = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.1 2C6.5 2 2 6.5 2 12.1c0 2.2.7 4.3 2 6L2.1 22.9c-.2.5.3 1 1 1l4.9-1.9c1.7 1.3 3.8 2 6.1 2 5.6 0 10.1-4.5 10.1-10.1C22.2 6.5 17.7 2 12.1 2zm0 18.2c-1.9 0-3.7-.6-5.2-1.7l-.4-.3-3.6 1.4 1.4-3.6-.3-.4c-1.1-1.5-1.7-3.3-1.7-5.2 0-4.6 3.7-8.3 8.3-8.3s8.3 3.7 8.3 8.3c0 4.6-3.7 8.3-8.3 8.3z"/><circle cx="12.1" cy="12.1" r="3.2"/></svg>';
   var svgUp = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 4.5l-7 7h4v8h6v-8h4l-7-7z"/></svg>';
   var svgDown = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 19.5l7-7h-4v-8h-6v8h-4l7 7z"/></svg>';
   var svgComment = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1.751 10c0-4.42 3.584-8 8.005-8h4.366c4.49 0 8.129 3.64 8.129 8.13 0 2.96-1.607 5.68-4.196 7.11l-8.054 4.46v-3.69h-.067c-4.49.1-8.183-3.51-8.183-8.01zm8.005-6c-3.317 0-6.005 2.69-6.005 6 0 3.37 2.77 6.08 6.138 6.01l.351-.01h1.761v2.3l5.087-2.81c1.951-1.08 3.163-3.13 3.163-5.36 0-3.39-2.744-6.13-6.129-6.13H9.756z"/></svg>';
@@ -123,9 +156,12 @@
   var svgHeart = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.697 5.5c-1.222-.06-2.679.51-3.89 2.16l-.805 1.09-.806-1.09C9.984 6.01 8.526 5.44 7.304 5.5c-1.243.07-2.349.78-2.91 1.91-.552 1.12-.633 2.78.479 4.82 1.074 1.97 3.257 4.27 7.129 6.61 3.87-2.34 6.052-4.64 7.126-6.61 1.111-2.04 1.03-3.7.477-4.82-.561-1.13-1.666-1.84-2.908-1.91zm4.187 7.69c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg>';
   var svgHeartOn = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.884 13.19c-1.351 2.48-4.001 5.12-8.379 7.67l-.503.3-.504-.3c-4.379-2.55-7.029-5.19-8.382-7.67-1.36-2.5-1.41-4.86-.514-6.67.887-1.79 2.647-2.91 4.601-3.01 1.651-.09 3.368.56 4.798 2.01 1.429-1.45 3.146-2.1 4.796-2.01 1.954.1 3.714 1.22 4.601 3.01.896 1.81.846 4.17-.514 6.67z"/></svg>';
   var svgTrash = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 6V4.5C16 3.12 14.88 2 13.5 2h-3C9.12 2 8 3.12 8 4.5V6H3v2h1.06l.81 12.16C4.94 21.27 5.86 22 6.98 22h10.04c1.12 0 2.04-.73 2.11-1.84L19.94 8H21V6h-5zm-6-1.5c0-.28.22-.5.5-.5h3c.28 0 .5.22.5.5V6h-4V4.5zm7.88 15.36c-.02.37-.33.64-.7.64H6.98c-.37 0-.68-.27-.7-.64L5.07 8h13.86l-.81 11.86z"/></svg>';
-  var svgExternal = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6H5.5C4.12 6 3 7.12 3 8.5v10C3 19.88 4.12 21 5.5 21h10c1.38 0 2.5-1.12 2.5-2.5V14h-2v4.5c0 .28-.22.5-.5.5h-10a.5.5 0 0 1-.5-.5v-10c0-.28.22-.5.5-.5H10V6zm4 0V4h7v7h-2V7.41l-7.29 7.3-1.42-1.42L17.58 6H14z"/></svg>';
+  var svgExternal = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 6H5.5C4.12 6 3 7.12 3 8.5v10C3 19.88 4.12 21 5.5 21h10c1.38 0 2.5-1.12 2.5-2.5V14h-2v4.5c0 .28.22.5.5.5h-10a.5.5 0 0 1-.5-.5v-10c0-.28.22-.5.5-.5H10V6zm4 0V4h7v7h-2V7.41l-7.29 7.3-1.42-1.42L17.58 6H14z"/></svg>';
   var svgCommunities = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm6 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM4 18v-1.2C4 14.6 6.4 13 9 13s5 1.6 5 3.8V18H4zm10.5 0v-1.1c0-.7-.2-1.4-.6-2 .9-.4 2-.6 3.1-.6 2.4 0 5 1.4 5 3.5V18h-7.5z"/></svg>';
   var svgSpark = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z"/></svg>';
+  var svgPin = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>';
+  var svgReply = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>';
+  var svgViews = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
 
   function loadIndex() {
     if (state.index) return Promise.resolve(state.index);
@@ -209,64 +245,162 @@
     });
   }
   function scoreOf(item) {
-    if (item.source === "reddit") return Number(item.score) || 0;
+    if (item.source === "reddit" || item.source === "discourse") return Number(item.score) || 0;
     var bag = state.internal[item.community] || {};
     return Number((bag.likes || {})[item.id]) || 0;
   }
+
   function feedItems(name, doc) {
-    var reddit = redditPosts(doc).map(function (post) {
-      return { source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, score: post.score, post: post };
-    });
+    var items = [];
+    if (isDiscourse(doc)) {
+      items = (doc.posts || []).filter(function (post) {
+        return post && !hidden(post.author, (post.title || "") + " " + (post.text || ""), "forum");
+      }).map(function (post) {
+        return {
+          source: "discourse",
+          community: name,
+          id: post.id,
+          created: (Number(post.created) || 0) * 1000,
+          lastPostedAt: (Number(post.lastPostedAt || post.created) || 0) * 1000,
+          score: Number(post.score || 0),
+          post: post
+        };
+      });
+      if (state.category && state.category !== "all") {
+        items = items.filter(function (item) {
+          var cName = (item.post.category || "").toLowerCase();
+          var target = state.category.toLowerCase();
+          var catMatch = cName === target;
+          var tagMatch = (item.post.tags || []).some(function (t) { return String(t).toLowerCase() === target; });
+          return catMatch || tagMatch;
+        });
+      }
+    } else {
+      items = redditPosts(doc).map(function (post) {
+        return { source: "reddit", community: name, id: post.id, created: (Number(post.created) || 0) * 1000, score: post.score, post: post };
+      });
+    }
+
     var internal = internalPosts(name).filter(function (post) { return !post.parentId; }).map(function (post) {
       return { source: "app", community: name, id: post.id, created: Number(post.createdAt) || 0, score: 0, post: post };
     });
-    var items = reddit.concat(internal);
+
+    items = items.concat(internal);
     if (state.filter === "reddit") items = items.filter(function (item) { return item.source === "reddit"; });
+    if (state.filter === "discourse") items = items.filter(function (item) { return item.source === "discourse"; });
     if (state.filter === "app") items = items.filter(function (item) { return item.source === "app"; });
     if (state.tab === "media") items = items.filter(function (item) { return item.source === "reddit" && item.post.media && item.post.media.length; });
+
     items.sort(function (a, b) {
-      if (state.tab === "latest") return b.created - a.created;
+      if (a.post && a.post.pinned && !(b.post && b.post.pinned)) return -1;
+      if (b.post && b.post.pinned && !(a.post && a.post.pinned)) return 1;
+
+      if (state.tab === "latest") {
+        var aTime = a.lastPostedAt || a.created;
+        var bTime = b.lastPostedAt || b.created;
+        return bTime - aTime;
+      }
       var delta = scoreOf(b) - scoreOf(a);
       return delta || (b.created - a.created);
     });
     return items;
   }
+
   function repliesFor(name, parentId, doc) {
-    var reddit = [];
-    (doc.posts || []).forEach(function (post) {
-      (post.replies || []).forEach(function (reply) {
-        if (reply.parent === parentId && !hidden(reply.author, reply.text, "reddit")) {
-          reddit.push({ source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply });
+    var items = [];
+    if (isDiscourse(doc)) {
+      (doc.posts || []).forEach(function (post) {
+        if (String(post.id) === String(parentId)) {
+          (post.replies || []).forEach(function (reply) {
+            if (!hidden(reply.author, reply.text, "forum")) {
+              items.push({
+                source: "discourse",
+                id: reply.id,
+                created: (Number(reply.created) || 0) * 1000,
+                reply: reply
+              });
+            }
+          });
         }
       });
-    });
-    var internal = internalPosts(name).filter(function (post) { return post.parentId === parentId; }).map(function (post) {
+    } else {
+      (doc.posts || []).forEach(function (post) {
+        (post.replies || []).forEach(function (reply) {
+          if (reply.parent === parentId && !hidden(reply.author, reply.text, "reddit")) {
+            items.push({ source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply });
+          }
+        });
+      });
+    }
+    var internal = internalPosts(name).filter(function (post) { return String(post.parentId) === String(parentId); }).map(function (post) {
       return { source: "app", id: post.id, created: Number(post.createdAt) || 0, post: post };
     });
-    var items = reddit.concat(internal);
+    items = items.concat(internal);
     if (state.filter === "reddit") items = items.filter(function (item) { return item.source === "reddit"; });
+    if (state.filter === "discourse") items = items.filter(function (item) { return item.source === "discourse"; });
     if (state.filter === "app") items = items.filter(function (item) { return item.source === "app"; });
     items.sort(function (a, b) { return a.created - b.created; });
     return items;
   }
 
-  function chips() {
+  function chips(doc) {
+    var isDisc = isDiscourse(doc);
+    var sourceId = isDisc ? "discourse" : "reddit";
+    var sourceLabel = isDisc ? tr("Discourse") : tr("Reddit");
     var chip = function (id, label) {
       return '<button class="cm-chip' + (state.filter === id ? " on" : "") + '" type="button" data-cm="filter" data-filter="' + id + '">' + esc(label) + "</button>";
     };
-    return '<div class="cm-filter-bar" role="tablist">' + chip("all", tr("All")) + chip("reddit", tr("Reddit")) + chip("app", tr("ViktorychApp")) + "</div>";
+    return '<div class="cm-filter-bar" role="tablist">' + chip("all", tr("All")) + chip(sourceId, sourceLabel) + chip("app", tr("ViktorychApp")) + "</div>";
   }
-  function tabs() {
+
+  function tabs(doc) {
+    var isDisc = isDiscourse(doc);
     var tab = function (id, label) {
       return '<button class="tab' + (state.tab === id ? " on" : "") + '" type="button" data-cm="tab" data-tab="' + id + '"><span>' + esc(label) + "</span></button>";
     };
+    if (isDisc) {
+      return '<div class="tabs" role="tablist">' + tab("latest", tr("Latest")) + tab("top", tr("Top")) + tab("categories", tr("Categories")) + "</div>";
+    }
     return '<div class="tabs" role="tablist">' + tab("top", tr("Top")) + tab("latest", tr("Latest")) + tab("media", tr("Media")) + "</div>";
   }
+
   function hubTabs() {
     var tab = function (id, label) {
       return '<button class="tab' + (state.hubTab === id ? " on" : "") + '" type="button" data-cm="hub-tab" data-hub="' + id + '"><span>' + esc(label) + "</span></button>";
     };
     return '<div class="tabs" role="tablist">' + tab("explore", tr("Explore")) + tab("joined", tr("Joined")) + "</div>";
+  }
+
+  function categoryPills(doc) {
+    var tags = (doc && doc.tags) || [];
+    var cats = [];
+    var seen = {};
+    tags.forEach(function (t) {
+      if (t && t.name && !seen[t.name]) {
+        seen[t.name] = true;
+        cats.push({ name: t.name, color: t.color || "#71767b" });
+      }
+    });
+    (doc.posts || []).forEach(function (p) {
+      if (p.category && !seen[p.category]) {
+        seen[p.category] = true;
+        cats.push({ name: p.category, color: p.categoryColor || "#71767b" });
+      }
+    });
+    if (!cats.length) return "";
+
+    var allActive = state.category === "all";
+    var allPill = '<button class="cm-d-cat-chip' + (allActive ? " on" : "") + '" type="button" data-cm="d-cat" data-cat="all">' +
+      esc(tr("All Categories")) + '</button>';
+
+    var pills = cats.map(function (c) {
+      var on = state.category.toLowerCase() === c.name.toLowerCase();
+      var dot = '<span class="cm-d-cat-dot" style="background:' + esc(c.color) + '"></span>';
+      return '<button class="cm-d-cat-chip' + (on ? " on" : "") + '" type="button" data-cm="d-cat" data-cat="' + esc(c.name) + '">' +
+        dot + '<span>' + esc(c.name) + '</span></button>';
+    }).join("");
+
+    return '<div class="cm-d-cat-bar" role="tablist">' + allPill + pills + '</div>';
   }
 
   function playUrl(name, post, media, index) {
@@ -295,12 +429,21 @@
     return '<span class="cm-app-ava cm-app-letter">' + esc(letter) + "</span>";
   }
 
+  function discourseAvatar(url, name, sizeCls) {
+    var letter = String(name || "?").slice(0, 1).toUpperCase();
+    var cls = "cm-d-ava " + (sizeCls || "");
+    if (url && /^https?:\/\//i.test(url)) {
+      return '<img class="' + cls + '" src="' + esc(url) + '" alt="" loading="lazy">';
+    }
+    return '<span class="' + cls + ' cm-d-letter">' + esc(letter) + "</span>";
+  }
+
   function joinBtn(name, joined) {
     return '<button type="button" class="cm-btn-join' + (joined ? " joined" : "") + '" data-cm="join" data-sub="' + esc(name) + '" data-leave-text="' + esc(tr("Leave")) + '"><span>' +
       esc(joined ? tr("Joined") : tr("Join")) + "</span></button>";
   }
 
-  /* Reddit Post Card — Authentic Reddit Layout + X.com Theme */
+  /* Reddit Post Card */
   function redditCard(name, post, isThread) {
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
     var bag = state.internal[name] || {};
@@ -344,7 +487,64 @@
     '</article>';
   }
 
-  /* ViktorychApp Native Post Card — X.com Post Layout */
+  /* Discourse Topic Row — Authentic Discourse Forum Layout */
+  function discourseCard(name, post) {
+    var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
+    var topicUrl = post.url || ("https://discuss.grapheneos.org/d/" + encodeURIComponent(post.id));
+    var commentsCount = Number(post.comments || 0);
+    var viewsCount = Number(post.views || 0);
+    var catName = post.category || "General";
+    var catColor = post.categoryColor || "#71767b";
+    var catDot = '<span class="cm-d-cat-dot" style="background:' + esc(catColor) + '"></span>';
+
+    var tagsHtml = (post.tags || []).slice(0, 3).map(function (t) {
+      return '<span class="cm-d-tag">#' + esc(t) + '</span>';
+    }).join("");
+
+    var pinnedBadge = post.pinned
+      ? '<span class="cm-d-badge-pinned">' + svgPin + ' ' + esc(tr("Pinned")) + '</span>'
+      : "";
+
+    var excerpt = post.text ? cleanDiscourseExcerpt(post.text) : "";
+    var timeText = timeAgo((Number(post.lastPostedAt || post.created) || 0) * 1000);
+
+    return '<article class="cm-d-topic-row" data-topic="' + esc(post.id) + '">' +
+      '<div class="cm-d-topic-main">' +
+        '<div class="cm-d-topic-top">' +
+          pinnedBadge +
+          '<a class="cm-d-topic-title" href="' + href + '">' + esc(post.title || "") + '</a>' +
+        '</div>' +
+        (excerpt ? '<p class="cm-d-topic-excerpt">' + esc(excerpt) + '</p>' : "") +
+        '<div class="cm-d-topic-meta">' +
+          '<span class="cm-d-cat-pill">' + catDot + '<span>' + esc(catName) + '</span></span>' +
+          tagsHtml +
+          '<span class="cm-d-meta-sep">•</span>' +
+          '<div class="cm-d-author-meta">' +
+            discourseAvatar(post.authorAvatar, post.author, "mini") +
+            '<span class="cm-d-author-name">@' + esc(post.author || "author") + '</span>' +
+          '</div>' +
+          '<span class="cm-d-meta-sep">•</span>' +
+          '<span class="cm-d-time">' + esc(timeText) + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="cm-d-topic-aside">' +
+        '<a class="cm-d-metric-box replies" href="' + href + '" title="' + esc(tr("Replies")) + '">' +
+          svgComment + '<span>' + esc(count(commentsCount)) + '</span>' +
+        '</a>' +
+        '<div class="cm-d-metric-box views" title="' + esc(tr("Views")) + '">' +
+          svgViews + '<span>' + esc(count(viewsCount)) + '</span>' +
+        '</div>' +
+        '<button class="cm-d-icon-act" type="button" data-cm="share" data-href="' + href + '" title="' + esc(tr("Share")) + '">' +
+          svgShare +
+        '</button>' +
+        '<a class="cm-d-icon-act" href="' + esc(topicUrl) + '" target="_blank" rel="noopener noreferrer" title="' + esc(tr("Open on forum")) + '">' +
+          svgExternal +
+        '</a>' +
+      '</div>' +
+    '</article>';
+  }
+
+  /* ViktorychApp Native Post Card */
   function appCard(name, post) {
     var author = post.author || {};
     var bag = state.internal[name] || {};
@@ -375,6 +575,7 @@
 
   function card(name, item) {
     if (item.source === "reddit") return redditCard(name, item.post, false);
+    if (item.source === "discourse") return discourseCard(name, item.post);
     return appCard(name, item.post);
   }
 
@@ -384,7 +585,7 @@
     return nameOf(parts[1]);
   }
 
-  /* Communities Hub / Explore Page (X.com 1-to-1 Style) */
+  /* Communities Hub / Explore Page */
   function listPage() {
     var index = state.index;
     if (!index) {
@@ -424,19 +625,26 @@
     if (state.hubTab === "explore" && !state.search && list.length > 0) {
       var top = list[0];
       var topJoined = state.internal[top.name] && state.internal[top.name].joined;
+      var topIsDisc = isDiscourse(top);
+      var topAvatar = top.icon
+        ? '<img class="cm-spotlight-avatar" src="' + esc(top.icon) + '" alt="">'
+        : ('<div class="cm-spotlight-avatar">' + (topIsDisc ? svgDiscourse : svgSnoo) + '</div>');
+      var topTitle = topIsDisc ? esc(top.title || top.name) : ("r/" + esc(top.name));
+      var topBadge = topIsDisc ? '<span class="cm-discourse-badge">' + svgDiscourse + ' Discourse</span>' : '<span class="cm-spotlight-badge">' + esc(tr("Explore")) + '</span>';
+
       spotlightHtml = '<div class="cm-spotlight">' +
         '<div class="cm-spotlight-banner">' +
           (top.banner ? '<img src="' + esc(top.banner) + '" alt="" style="width:100%;height:100%;object-fit:cover;">' : "") +
-          '<span class="cm-spotlight-badge">' + esc(tr("Explore")) + '</span>' +
+          topBadge +
         '</div>' +
         '<div class="cm-spotlight-body">' +
           '<div class="cm-spotlight-top">' +
-            (top.icon ? '<img class="cm-spotlight-avatar" src="' + esc(top.icon) + '" alt="">' : '<div class="cm-spotlight-avatar">' + svgSnoo + '</div>') +
+            topAvatar +
             joinBtn(top.name, topJoined) +
           '</div>' +
           '<a href="#/communities/' + encodeURIComponent(top.name) + '" style="text-decoration:none;color:inherit;">' +
-            '<h2 class="cm-spotlight-title">r/' + esc(top.name) + '</h2>' +
-            '<p class="cm-spotlight-desc">' + esc(top.about || (top.title || ("r/" + top.name))) + '</p>' +
+            '<h2 class="cm-spotlight-title">' + topTitle + '</h2>' +
+            '<p class="cm-spotlight-desc">' + esc(top.about || top.title || top.name) + '</p>' +
             '<div class="cm-facepile-wrap">' +
               '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
               '<span>' + esc(count(top.subscribers || 2800000)) + ' ' + esc(tr("Members")) + '</span>' +
@@ -448,20 +656,27 @@
 
     var cards = list.map(function (row) {
       var isJoined = state.internal[row.name] && state.internal[row.name].joined;
+      var isDisc = isDiscourse(row);
       var bannerStyle = row.banner ? ' style="background-image:url(\'' + esc(row.banner) + '\');background-size:cover;background-position:center;"' : "";
+      var avaHtml = row.icon
+        ? '<img class="cm-card-avatar" alt="" src="' + esc(row.icon) + '">'
+        : ('<div class="cm-card-avatar">' + (isDisc ? svgDiscourse : svgSnoo) + '</div>');
+      var cardTitle = isDisc ? esc(row.title || row.name) : ("r/" + esc(row.name));
+      var discPill = isDisc ? '<span class="cm-discourse-pill">' + svgDiscourse + ' Discourse</span>' : "";
+
       return '<div class="cm-card">' +
         '<a class="cm-card-cover"' + bannerStyle + ' href="#/communities/' + encodeURIComponent(row.name) + '"></a>' +
         '<div class="cm-card-body">' +
           '<div class="cm-card-row">' +
-            (row.icon ? '<img class="cm-card-avatar" alt="" src="' + esc(row.icon) + '">' : '<div class="cm-card-avatar">' + svgSnoo + '</div>') +
+            avaHtml +
             joinBtn(row.name, isJoined) +
           '</div>' +
           '<a href="#/communities/' + encodeURIComponent(row.name) + '" style="text-decoration:none;color:inherit;">' +
-            '<h3 class="cm-card-title">r/' + esc(row.name) + '</h3>' +
-            '<p class="cm-card-desc">' + esc(row.about || row.title || ("r/" + row.name)) + '</p>' +
+            '<h3 class="cm-card-title">' + cardTitle + ' ' + discPill + '</h3>' +
+            '<p class="cm-card-desc">' + esc(row.about || row.title || row.name) + '</p>' +
             '<div class="cm-facepile-wrap">' +
               '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
-              '<span>' + esc(count(row.subscribers || 100000)) + ' ' + esc(tr("Members")) + '</span>' +
+              '<span>' + esc(count(row.subscribers || 35000)) + ' ' + esc(tr("Members")) + '</span>' +
             '</div>' +
           '</a>' +
         '</div>' +
@@ -482,7 +697,7 @@
       (cards ? '<div class="cm-card-grid">' + cards + '</div>' : emptyHtml);
   }
 
-  /* Single Community Feed Page (X.com 1-to-1 Clone) */
+  /* Single Community Feed Page */
   function communityPage(route) {
     var name = nameOf(route.sub);
     if (!name) return head(tr("Communities"), "#/communities") + '<div class="empty"><h2>' + esc(tr("That community wasn’t found.")) + "</h2></div>";
@@ -495,18 +710,21 @@
           render();
         });
       }
-      return head("r/" + name, "#/communities") + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
+      return head(name, "#/communities") + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
     }
 
     var bag = state.internal[name];
     var joined = bag && bag.joined;
+    var isDisc = isDiscourse(doc);
+
     var bannerImg = doc.banner
       ? '<img class="cm-hero-banner" alt="" src="' + esc(doc.banner) + '">'
       : '<div class="cm-hero-banner"></div>';
 
+    var defaultSvg = isDisc ? svgDiscourse : svgSnoo;
     var avatarImg = doc.icon
       ? '<img class="cm-hero-avatar" alt="" src="' + esc(doc.icon) + '">'
-      : '<div class="cm-hero-avatar">' + svgSnoo + '</div>';
+      : '<div class="cm-hero-avatar">' + defaultSvg + '</div>';
 
     var shareBtn = '<button class="cm-icon-btn" type="button" data-cm="share" aria-label="' + esc(tr("Share")) + '">' + svgShare + '</button>';
     var removeBtn = owner() ? '<button class="cm-icon-btn" type="button" data-cm="remove" data-sub="' + esc(name) + '" aria-label="' + esc(tr("Remove")) + '">' + svgTrash + '</button>' : "";
@@ -519,11 +737,16 @@
       ? '<details class="cm-rules-box"><summary class="cm-rules-summary"><span>' + esc(tr("Community rules")) + '</span><span>▾</span></summary><div class="cm-rules-content">' + rulesList + '</div></details>'
       : "";
 
+    var pageTitle = isDisc ? (doc.title || doc.name) : ("r/" + name);
+    var composePlaceholder = isDisc
+      ? tr("Post into {name}", { name: doc.title || doc.name })
+      : tr("Post into r/{name}", { name: name });
+
     var composer = signedIn()
-      ? '<form class="cm-composer" data-cm="inline-post" data-sub="' + esc(name) + '">' +
+      ? '<form class="cm-composer' + (isDisc ? " cm-d-composer" : "") + '" data-cm="inline-post" data-sub="' + esc(name) + '">' +
           face(session().account || {}) +
           '<div class="cm-composer-main">' +
-            '<textarea class="cm-composer-area" name="text" placeholder="' + esc(tr("Post into r/{name}", { name: name })) + '" aria-label="' + esc(tr("Post into r/{name}", { name: name })) + '"></textarea>' +
+            '<textarea class="cm-composer-area" name="text" placeholder="' + esc(composePlaceholder) + '" aria-label="' + esc(composePlaceholder) + '"></textarea>' +
             '<div class="cm-composer-bottom">' +
               '<button type="submit" class="cm-composer-btn">' + esc(tr("Post")) + '</button>' +
             '</div>' +
@@ -536,8 +759,30 @@
       ? '<div class="empty"><p>' + esc(tr("Sign in to post here.")) + "</p></div>"
       : (items.length ? "" : '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2></div>");
 
-    return head("r/" + name, "#/communities", shareBtn) +
-      '<section class="cm-hero">' +
+    var metaRow = "";
+    if (isDisc) {
+      var forumUrl = doc.url || "https://discuss.grapheneos.org";
+      metaRow = '<div class="cm-hero-meta cm-d-hero-meta">' +
+        '<span class="cm-discourse-tag-badge">' + svgDiscourse + ' ' + esc(tr("Discourse Forum")) + '</span>' +
+        '<span><b>' + esc(count(doc.posts ? doc.posts.length : 0)) + '</b> ' + esc(tr("Topics")) + '</span>' +
+        '<span class="cm-sep">·</span>' +
+        '<span><b>' + esc(count(doc.subscribers || 35000)) + '</b> ' + esc(tr("Members")) + '</span>' +
+        (bag && bag.members ? '<span class="cm-sep">·</span><span><b>' + esc(count(bag.members)) + '</b> ' + esc(tr("ViktorychApp members")) + '</span>' : "") +
+        '<a class="cm-d-link-btn" href="' + esc(forumUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open on forum")) + ' ' + svgExternal + '</a>' +
+      '</div>';
+    } else {
+      metaRow = '<div class="cm-hero-meta">' +
+        '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
+        '<span><b>' + esc(count(doc.subscribers || 2800000)) + '</b> ' + esc(tr("Reddit subscribers")) + '</span>' +
+        (bag && bag.members ? '<span class="cm-sep">·</span><span><b>' + esc(count(bag.members)) + '</b> ' + esc(tr("ViktorychApp members")) + '</span>' : "") +
+      '</div>';
+    }
+
+    var catBar = isDisc ? categoryPills(doc) : "";
+    var footerNotice = isDisc ? tr("Nothing is sent to the forum.") : tr("Nothing is sent to Reddit.");
+
+    return head(pageTitle, "#/communities", shareBtn) +
+      '<section class="cm-hero' + (isDisc ? " cm-d-hero" : "") + '">' +
         bannerImg +
         '<div class="cm-hero-body">' +
           '<div class="cm-hero-bar">' +
@@ -548,36 +793,33 @@
               joinBtn(name, joined) +
             '</div>' +
           '</div>' +
-          '<h1 class="cm-hero-title">r/' + esc(name) + '</h1>' +
-          '<div class="cm-hero-meta">' +
-            '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
-            '<span><b>' + esc(count(doc.subscribers || 2800000)) + '</b> ' + esc(tr("Reddit subscribers")) + '</span>' +
-            (bag && bag.members ? '<span class="cm-sep">·</span><span><b>' + esc(count(bag.members)) + '</b> ' + esc(tr("ViktorychApp members")) + '</span>' : "") +
-          '</div>' +
+          '<h1 class="cm-hero-title">' + esc(pageTitle) + '</h1>' +
+          metaRow +
           (doc.about ? '<p class="cm-hero-about">' + esc(doc.about) + '</p>' : "") +
           rulesAccordion +
         '</div>' +
       '</section>' +
-      tabs() +
-      chips() +
+      tabs(doc) +
+      catBar +
+      chips(doc) +
       composer +
       empty +
       items.map(function (item) { return card(name, item); }).join("") +
-      '<p class="cm-footer-note">' + esc(tr("Nothing is sent to Reddit.")) + '</p>';
+      '<p class="cm-footer-note">' + esc(footerNotice) + '</p>';
   }
 
-  function findReddit(doc, id) {
+  function findPost(doc, id) {
     var found = null;
     (doc.posts || []).forEach(function (post) {
-      if (post.id === id) found = { kind: "post", post: post };
+      if (String(post.id) === String(id)) found = { kind: "post", post: post };
       (post.replies || []).forEach(function (reply) {
-        if (reply.id === id) found = { kind: "reply", reply: reply, post: post };
+        if (String(reply.id) === String(id)) found = { kind: "reply", reply: reply, post: post };
       });
     });
     return found;
   }
 
-  /* Single Thread / Post View (Reddit Comments Tree + X.com Theme) */
+  /* Single Thread / Topic View */
   function threadPage(route) {
     var name = nameOf(route.sub);
     var id = decodeURIComponent(route.post || "");
@@ -591,17 +833,138 @@
       loadInternal(name).then(function () { state.loading[name] = false; render(); });
     }
     var bag = state.internal[name] || { posts: [], likes: {}, mine: [] };
-    var internal = (bag.posts || []).filter(function (post) { return post.id === id; })[0];
-    var reddit = findReddit(doc, id);
+    var internal = (bag.posts || []).filter(function (post) { return String(post.id) === String(id); })[0];
+    var matched = findPost(doc, id);
+    var isDisc = isDiscourse(doc);
+
+    if (isDisc) {
+      var topic = matched ? matched.post : null;
+      if (!topic && !internal) {
+        return head(doc.title || doc.name, "#/communities/" + name) + '<div class="empty"><h2>' + esc(tr("That community wasn’t found.")) + "</h2></div>";
+      }
+
+      var topicTitle = topic ? topic.title : (internal ? internal.body.slice(0, 40) : "");
+      var topicUrl = topic ? (topic.url || ("https://discuss.grapheneos.org/d/" + encodeURIComponent(topic.id))) : "";
+      var catDot = topic ? ('<span class="cm-d-cat-dot" style="background:' + esc(topic.categoryColor || "#71767b") + '"></span>') : "";
+
+      var threadHeader = '<div class="cm-d-thread-header">' +
+        (topic && topic.category ? ('<div class="cm-d-cat-pill">' + catDot + '<span>' + esc(topic.category) + '</span></div>') : "") +
+        '<h1 class="cm-d-thread-title">' + esc(topicTitle) + '</h1>' +
+        (topic ? (
+          '<div class="cm-d-thread-meta">' +
+            '<div class="cm-d-author-meta">' +
+              discourseAvatar(topic.authorAvatar, topic.author, "mini") +
+              '<span class="cm-d-author-name">@' + esc(topic.author || "author") + '</span>' +
+            '</div>' +
+            '<span class="cm-d-meta-sep">•</span>' +
+            '<span>' + esc(timeAgo(topic.created * 1000)) + '</span>' +
+            '<span class="cm-d-meta-sep">•</span>' +
+            '<span><b>' + esc(count(topic.comments || 0)) + '</b> ' + esc(tr("Replies")) + '</span>' +
+            '<span class="cm-d-meta-sep">•</span>' +
+            '<span><b>' + esc(count(topic.views || 0)) + '</b> ' + esc(tr("Views")) + '</span>' +
+            (topicUrl ? ('<a class="cm-d-link-btn" href="' + esc(topicUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(tr("Open on forum")) + ' ' + svgExternal + '</a>') : "") +
+          '</div>'
+        ) : "") +
+      '</div>';
+
+      // OP Card
+      var extraLikes = Number((bag.likes || {})[topic ? topic.id : id]) || 0;
+      var liked = (bag.mine || []).indexOf(topic ? topic.id : id) >= 0;
+      var opLikes = (topic ? Number(topic.score || 0) : 0) + extraLikes;
+
+      var opHtml = "";
+      if (topic) {
+        opHtml = '<article class="cm-d-post op" data-post="' + esc(topic.id) + '">' +
+          '<div class="cm-d-post-top">' +
+            discourseAvatar(topic.authorAvatar, topic.author, "med") +
+            '<div class="cm-d-post-byline">' +
+              '<div class="cm-d-post-user-row">' +
+                '<span class="cm-d-post-user">@' + esc(topic.author || "author") + '</span>' +
+                '<span class="cm-d-badge op">OP</span>' +
+              '</div>' +
+              '<span class="cm-d-post-time">' + esc(timeAgo(topic.created * 1000)) + '</span>' +
+            '</div>' +
+            '<span class="cm-d-post-num">#1</span>' +
+          '</div>' +
+          '<div class="cm-d-post-body">' + sanitizeDiscourseHtml(topic.text) + '</div>' +
+          '<div class="cm-d-post-actions">' +
+            '<button class="cm-d-act-btn like' + (liked ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(topic.id) + '">' +
+              (liked ? svgHeartOn : svgHeart) + '<span>' + esc(count(opLikes)) + '</span>' +
+            '</button>' +
+            '<button class="cm-d-act-btn" type="button" data-cm="d-focus-reply">' + svgReply + '<span>' + esc(tr("Reply")) + '</span></button>' +
+            '<button class="cm-d-act-btn" type="button" data-cm="share" data-href="#/communities/' + encodeURIComponent(name) + '/' + encodeURIComponent(topic.id) + '">' + svgShare + '</button>' +
+          '</div>' +
+        '</article>';
+      } else if (internal) {
+        opHtml = appCard(name, internal);
+      }
+
+      // Stream of replies
+      var repliesList = repliesFor(name, id, doc).map(function (item, idx) {
+        if (item.source === "discourse") {
+          var rep = item.reply;
+          var repNum = rep.number || (idx + 2);
+          var repLiked = (bag.mine || []).indexOf(rep.id) >= 0;
+          var repExtra = Number((bag.likes || {})[rep.id]) || 0;
+          var repTotal = (Number(rep.score) || 0) + repExtra;
+
+          return '<article class="cm-d-post" data-post="' + esc(rep.id) + '">' +
+            '<div class="cm-d-post-top">' +
+              discourseAvatar(rep.authorAvatar, rep.author, "med") +
+              '<div class="cm-d-post-byline">' +
+                '<div class="cm-d-post-user-row">' +
+                  '<span class="cm-d-post-user">@' + esc(rep.author || "author") + '</span>' +
+                '</div>' +
+                '<span class="cm-d-post-time">' + esc(timeAgo(item.created)) + '</span>' +
+              '</div>' +
+              '<span class="cm-d-post-num">#' + esc(repNum) + '</span>' +
+            '</div>' +
+            '<div class="cm-d-post-body">' + sanitizeDiscourseHtml(rep.text) + '</div>' +
+            '<div class="cm-d-post-actions">' +
+              '<button class="cm-d-act-btn like' + (repLiked ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(rep.id) + '">' +
+                (repLiked ? svgHeartOn : svgHeart) + '<span>' + esc(count(repTotal)) + '</span>' +
+              '</button>' +
+              '<button class="cm-d-act-btn" type="button" data-cm="d-focus-reply">' + svgReply + '<span>' + esc(tr("Reply")) + '</span></button>' +
+              '<button class="cm-d-act-btn" type="button" data-cm="share" data-href="#/communities/' + encodeURIComponent(name) + '/' + encodeURIComponent(id) + '">' + svgShare + '</button>' +
+            '</div>' +
+          '</article>';
+        }
+        return appCard(name, item.post);
+      }).join("");
+
+      var discourseReplyBox = signedIn()
+        ? '<form class="cm-composer cm-d-composer" data-cm="reply" data-sub="' + esc(name) + '" data-parent="' + esc(id) + '">' +
+            face(session().account || {}) +
+            '<div class="cm-composer-main">' +
+              '<textarea class="cm-composer-area" name="text" aria-label="' + esc(tr("Reply to this topic")) + '" placeholder="' + esc(tr("Reply to this topic")) + '"></textarea>' +
+              '<div class="cm-composer-bottom">' +
+                '<button type="submit" class="cm-composer-btn">' + svgReply + ' ' + esc(tr("Reply")) + '</button>' +
+              '</div>' +
+            '</div>' +
+          '</form>'
+        : '<div class="cm-footer-note"><p>' + esc(tr("Sign in to post here.")) + '</p></div>';
+
+      return head(doc.title || doc.name, "#/communities/" + name) +
+        threadHeader +
+        '<div class="cm-d-stream">' +
+          opHtml +
+          repliesList +
+        '</div>' +
+        chips(doc) +
+        discourseReplyBox +
+        '<p class="cm-footer-note">' + esc(tr("Nothing is sent to the forum.")) + '</p>';
+    }
+
+    // Default Reddit thread view
     var focus = "";
     if (internal && signedIn()) focus = appCard(name, internal);
-    else if (reddit && reddit.kind === "post") focus = redditCard(name, reddit.post, true);
-    else if (reddit && reddit.kind === "reply") {
+    else if (matched && matched.kind === "post") focus = redditCard(name, matched.post, true);
+    else if (matched && matched.kind === "reply") {
       focus = '<article class="cm-reddit-comment">' +
         '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + svgSnoo + '</span><span class="cm-comment-line"></span></div>' +
         '<div class="cm-comment-body">' +
-          '<div class="cm-comment-byline"><span class="cm-comment-author">u/' + esc(cleanAuthor(reddit.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo((Number(reddit.reply.created) || 0) * 1000)) + '</span></div>' +
-          '<div class="cm-comment-text">' + esc(reddit.reply.text || "") + '</div>' +
+          '<div class="cm-comment-byline"><span class="cm-comment-author">u/' + esc(cleanAuthor(matched.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo((Number(matched.reply.created) || 0) * 1000)) + '</span></div>' +
+          '<div class="cm-comment-text">' + esc(matched.reply.text || "") + '</div>' +
         '</div>' +
       '</article>';
     }
@@ -643,7 +1006,7 @@
 
     return head("r/" + name, "#/communities/" + name) +
       focus +
-      chips() +
+      chips(doc) +
       '<div class="cm-thread-replies-head">' + esc(tr("Comments")) + '</div>' +
       kids +
       box;
@@ -678,6 +1041,20 @@
     if (!el) return;
     var act = el.dataset.cm;
 
+    if (act === "d-cat") {
+      state.category = el.dataset.cat || "all";
+      render();
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (act === "d-focus-reply") {
+      event.preventDefault();
+      event.stopPropagation();
+      var area = document.querySelector(".cm-composer-area");
+      if (area) { area.focus(); area.scrollIntoView({ behavior: "smooth" }); }
+      return;
+    }
     if (act === "hub-tab") {
       state.hubTab = el.dataset.hub || "explore";
       render();
@@ -693,7 +1070,7 @@
       return;
     }
     if (act === "tab") {
-      state.tab = el.dataset.tab || "top";
+      state.tab = el.dataset.tab || "latest";
       render();
       event.preventDefault();
       event.stopPropagation();
@@ -732,8 +1109,8 @@
     if (act === "focus-reply") {
       event.preventDefault();
       event.stopPropagation();
-      var area = document.querySelector(".cm-composer-area");
-      if (area) { area.focus(); area.scrollIntoView({ behavior: "smooth" }); }
+      var fArea = document.querySelector(".cm-composer-area");
+      if (fArea) { fArea.focus(); fArea.scrollIntoView({ behavior: "smooth" }); }
       return;
     }
     if (act === "like") {
@@ -782,7 +1159,6 @@
     var el = event.target.closest("[data-cm='search-input']");
     if (!el) return;
     state.search = el.value;
-    var container = document.querySelector(".cm-card-grid");
     var clearBtn = document.querySelector(".cm-search-clear");
     if (clearBtn) clearBtn.hidden = !state.search;
     render();
