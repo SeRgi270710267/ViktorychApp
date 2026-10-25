@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T21:58:48Z",
+  "fetchedAt": "2026-10-25T22:36:04Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "flashcard5",
       "authorUsername": "flashcard5",
       "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 70,
-      "participantCount": 2,
+      "score": 7,
+      "comments": 7,
+      "views": 105,
+      "participantCount": 3,
       "created": 1792963268,
-      "lastPostedAt": 1792965463,
+      "lastPostedAt": 1792967643,
       "category": "Pixel 10 Pro XL",
       "categoryColor": "#7659e8",
       "tags": [
@@ -1913,8 +1913,91 @@
           "created": 1792965463,
           "parent": "43097",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/3\" class=\"PostMention\" data-id=\"277419\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> No, it's work profile that runs alongside owner, uses same screen and login and is always on. You activate it with <code>Shelter</code> app (old, but still best, waiting for new breeds)</p>"
+        },
+        {
+          "id": "277421",
+          "number": 5,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
+          "score": 0,
+          "created": 1792965706,
+          "parent": "43097",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/3\" class=\"PostMention\" data-id=\"277419\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> banking apps I cannot spend X seconds to switch apps when paying for example</p></blockquote>\n\n<p>One way might be using split-screen when doing time critical simultaneous actions with banking apps. It makes the apps not losing their focus as fast.</p>"
+        },
+        {
+          "id": "277422",
+          "number": 6,
+          "author": "flashcard5",
+          "authorUsername": "flashcard5",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792966132,
+          "parent": "43097",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/4\" class=\"PostMention\" data-id=\"277420\"><i class=\"icon fas fa-reply\"></i>KitsuneNoBaka</a> sorry just to understand, so I first create a profile, set it up etc. But then, thabks to Shelter app I can use it without having to switch, that's what you mean?</p>\n\n<p>How to use the split screen? I'm really discovering GOS still.<br>\nBut split screen will still make the banking app detect Action Notch no ?</p>\n\n<p>Otherwise maybe there is an option to \"disable\" an installed app temporarily like a toggle to make it look like uninstalled ? That way I can disable for few min Action Notch, to run the banking app, then toggle it back on.</p>\n\n\n<p>Edit: OK I got it, I first need to install shelter app from fdroid, the setup a work profile from there (not to mix with a new profile named work) and then from there clone banking app to that profile and switch from there.</p>\n\n<p>Testing</p>"
+        },
+        {
+          "id": "277425",
+          "number": 7,
+          "author": "flashcard5",
+          "authorUsername": "flashcard5",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792967643,
+          "parent": "43097",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/6\" class=\"PostMention\" data-id=\"277422\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> so it didn't work. Banking app thinks it's in rooted device. And action notch being \"cloned\" thinks it's not purchased (not linked to play store)...<br>\nMaybe I forgot some settings? <br>\nAlternatively, if there is simply a way to have the accessibility settings for apps in private space that would solve it I think...</p> \n"
         }
       ]
+    },
+    {
+      "id": "43080",
+      "title": "grapheneos typing character before another backwards",
+      "author": "mandan",
+      "authorUsername": "mandan",
+      "authorAvatar": "",
+      "score": 9,
+      "comments": 9,
+      "views": 280,
+      "participantCount": 8,
+      "created": 1792882745,
+      "lastPostedAt": 1792967232,
+      "category": "Pixel 9a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 9a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
+      "media": [],
+      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
+      "replies": []
+    },
+    {
+      "id": "8274",
+      "title": "How do I prevent apps from knowing when I screenshot?",
+      "author": "antsyboy",
+      "authorUsername": "antsyboy",
+      "authorAvatar": "",
+      "score": 34,
+      "comments": 34,
+      "views": 770,
+      "participantCount": 22,
+      "created": 1697589169,
+      "lastPostedAt": 1792966253,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
+      "media": [],
+      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
+      "replies": []
     },
     {
       "id": "27948",
@@ -1963,31 +2046,6 @@
       "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
       "media": [],
       "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
-      "replies": []
-    },
-    {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 33,
-      "comments": 33,
-      "views": 770,
-      "participantCount": 22,
-      "created": 1697589169,
-      "lastPostedAt": 1792963684,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
       "replies": []
     },
     {
@@ -2182,31 +2240,6 @@
       "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
       "media": [],
       "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
-      "replies": []
-    },
-    {
-      "id": "43089",
-      "title": "Tutanota update through Obtanium",
-      "author": "AKRAKU",
-      "authorUsername": "AKRAKU",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/OZTjv8P30Ni9NyAD.png",
-      "score": 10,
-      "comments": 10,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792927610,
-      "lastPostedAt": 1792956060,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services",
-        "Pixel 10"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium",
-      "media": [],
-      "text": "<p>During the last days a warning appeared beside the Tuta mail app on Obtanium which is informing me that the current setting may prevent updates.<br>\n<a href=\"https://imgur.com/a/3CNhp7Z\" rel=\"ugc nofollow\">https://imgur.com/a/3CNhp7Z</a><br>\nI'm currently on the v.xxx1006.0, which is marked as the latest on Obtanium, while they are on the v.xxx1023.2 on Github.<br>\nI didn't edit no settings when I've installed it pulling it from the Obtanium website and if I try to copy the github link it tries to install the Tuta Drive instead.</p>\n\n<p>Do you have any suggestion on how to pull the last update?</p>",
       "replies": []
     }
   ]
