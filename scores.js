@@ -17,7 +17,7 @@
       .replace(/"/g, "&quot;");
   }
 
-  var STORAGE_KEY = "viktorychapp-soccer-scores-v4";
+  var STORAGE_KEY = "viktorychapp-soccer-scores-v5";
 
   /* Inline SVG crests */
   var CRESTS = {
@@ -36,7 +36,7 @@
         nameKey: tr("Arsenal Tula"),
         short: "ARS",
         leagueKey: tr("Russian First League"),
-        isLive: false,
+        isLive: true,
         liveMatch: {
           minute: 74,
           homeKey: tr("Arsenal Tula"),
