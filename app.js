@@ -3044,11 +3044,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         nudge();
         setTimeout(nudge, 250);
         setTimeout(nudge, 700);
-        setTimeout(() => {
-          if (el._gen === gen && frame.isConnected && !el.classList.contains("is-failed")) {
-            markShown(el);
-          }
-        }, 850);
+        setTimeout(nudge, 1500);
       });
       if (!opts.preview && typeof window.YtPlayer === "function") {
         const posterSrc = (media && (media.poster || media.url)) || (post && post.poster) || "";
@@ -14395,8 +14391,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>`;
       let video;
+      const viewerPoster = (media && (media.poster || media.url)) || (post && post.poster) || "";
       if (typeof window.YtPlayer === "function") {
-        box._ytPlayer = new window.YtPlayer(box, { post: post, media: media });
+        box._ytPlayer = new window.YtPlayer(box, { post: post, media: media, poster: viewerPoster });
         video = box._ytPlayer.video;
         video.id = "viewer-video";
       } else {
@@ -14406,10 +14403,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         box.appendChild(video);
       }
       if (!video) return;
+      if (viewerPoster && !video.poster && typeof viewerPoster === "string" && viewerPoster.indexOf(".mp4") < 0) {
+        video.poster = viewerPoster;
+      }
       video.playsInline = true;
       video.muted = false;
       video.loop = clipLoops(media);
       video.preload = "auto";
+      let viewerFramed = false;
+      if (typeof video.requestVideoFrameCallback === "function") {
+        const onVFrame = () => {
+          if (!STATE.viewer || !STATE.viewer.video) return;
+          if (video.videoWidth > 0 && video.videoHeight > 0) {
+            viewerFramed = true;
+          } else if (!viewerFramed) {
+            video.requestVideoFrameCallback(onVFrame);
+          }
+        };
+        video.requestVideoFrameCallback(onVFrame);
+      }
       const seek = () => {
         if (view.time > 0.3) { try { video.currentTime = view.time; } catch (err) { /* not seekable yet */ } }
       };
@@ -14496,6 +14508,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
         try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
         video.addEventListener("error", fail, { once: true });
+        const onBlackScreen = () => {
+          if (!STATE.viewer || !STATE.viewer.video) return;
+          if (!viewerFramed && video.currentTime > 1.0 && !hasDecodedFrames(video)) {
+            video.removeEventListener("timeupdate", onBlackScreen);
+            fail();
+          }
+        };
+        video.addEventListener("timeupdate", onBlackScreen);
         startFile(file.url, file.kind === "hls" ? "hls" : "mp4");
       };
       sourcesFor(post || {}, media, 0).then((list) => playAt(list, 0)).catch(() => showCover());
@@ -14558,9 +14578,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     document.querySelectorAll("#viewer video, #viewer audio").forEach((m) => {
       try { m.pause(); m.removeAttribute("src"); m.load(); } catch (err) {}
     });
+    if (STATE.autoEl) pausePreview(STATE.autoEl);
+    STATE.autoEl = null;
+    document.querySelectorAll(".vplay.is-playing").forEach((el) => pausePreview(el));
     STATE.viewer = null;
     paintViewer();
-    schedulePreview();
   }
 
   function shiftViewer(delta) {
