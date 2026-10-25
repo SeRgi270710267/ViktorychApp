@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T08:36:50Z",
+  "fetchedAt": "2026-10-25T08:51:27Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,66 @@
       ]
     },
     {
+      "id": "43085",
+      "title": "User Profile Setup",
+      "author": "mumbai",
+      "authorUsername": "mumbai",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792912088,
+      "lastPostedAt": 1792918262,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43085-user-profile-setup",
+      "media": [],
+      "text": "<p>I want to setup user profile but I'm little confused.<br>\nWant some suggestsions<br>\n<strong>Use Case</strong><br>\nI only use open-source apps.</p>\n\n<p>I'll make a Education user profile for educational stuff. (I'm clear about this)</p>\n\n<p>I read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> posted by GrapheneOS Devs <br>\nI'll say you people read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> once<br>\nI'm thinking for <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#empty-owner-profile\" rel=\"ugc nofollow\">Empty Owner Profile</a> OR should I go with <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#no-secondary-user-profiles\" rel=\"ugc nofollow\">No Secondary User Profiles</a> and have only two profiles one for daily and educational</p>",
+      "replies": [
+        {
+          "id": "277262",
+          "number": 2,
+          "author": "mmmm",
+          "authorUsername": "mmmm",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792918262,
+          "parent": "43085",
+          "text": "<p>First try owner for regular use and private space for your educational stuff. Unless you understand or know why you want to keep your owner 'tidy', then there is likely no point to it. <br>\nIf you user owner and private space its essentially like two profiles but infinitely easier to work with.</p> "
+        }
+      ]
+    },
+    {
+      "id": "42741",
+      "title": "Best approach for multiple Signal accounts with temporary numbers?",
+      "author": "bvss12",
+      "authorUsername": "bvss12",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1791734339,
+      "lastPostedAt": 1792918088,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42741-best-approach-for-multiple-signal-accounts-with-temporary-numbers",
+      "media": [],
+      "text": "<p>Hi everyone. I'm running GrapheneOS and I'd like to keep several separate Signal identities (personal, work, online accounts). I know Signal requires one phone number per account. What's the most practical setup — GrapheneOS user profiles with a separate Signal install and number each? And has anyone had luck with temporary number services for the SMS verification code? I've read Signal often blocks VoIP numbers — are there providers selling non-VoIP numbers that reliably work? If you know of a company selling numbers for receiving SMS verification codes, I'd appreciate pointers. Thanks!</p>",
+      "replies": []
+    },
+    {
       "id": "43009",
       "title": "Mail client ",
       "author": "Try",
@@ -1879,86 +1939,6 @@
       "url": "https://discuss.grapheneos.org/d/43009-mail-client",
       "media": [],
       "text": "<p>Which would you prefer between FairMail and K9 mail clients?</p>",
-      "replies": [
-        {
-          "id": "276633",
-          "number": 2,
-          "author": "GoSaM",
-          "authorUsername": "GoSaM",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792651050,
-          "parent": "43009",
-          "text": "<p>Started with K9 mail some years ago and sticked to it. Nowadays it is called Thunderbid, which I am running. So 2 differently branded builds are available: K9 vs. Thunderbird.</p>"
-        },
-        {
-          "id": "276636",
-          "number": 3,
-          "author": "phone-company",
-          "authorUsername": "phone-company",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Ee1Jv2MN5xreV9qU.png",
-          "score": 3,
-          "created": 1792652541,
-          "parent": "43009",
-          "text": "<p>Fairemail is one of the best email clients available today. I've been using it for years. It also supports PGP.</p> "
-        },
-        {
-          "id": "276657",
-          "number": 4,
-          "author": "mulfi",
-          "authorUsername": "mulfi",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792663245,
-          "parent": "43009",
-          "text": "<p>In terms of security which one is better? K9-Mail/Thunderbird does not allow to disable html parsing and showing only plain text content like Thunderbird Desktop. Does FairMail allow this?</p>"
-        },
-        {
-          "id": "276675",
-          "number": 5,
-          "author": "Ghost_User",
-          "authorUsername": "Ghost_User",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792672178,
-          "parent": "43009",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43009-mail-client/4\" class=\"PostMention\" data-id=\"276657\"><i class=\"icon fas fa-reply\"></i>mulfi</a> <br>\nI use FairEmail and I am very satisfied with it. It does not have a modern and attractive UI, but it does everything that a privacy-conscious client should do. It has Safe message view (styling, scripting and unsafe HTML removed)<br>\n<a href=\"https://email.faircode.eu/\" rel=\"ugc nofollow\">https://email.faircode.eu/</a></p>"
-        },
-        {
-          "id": "277260",
-          "number": 6,
-          "author": "GoSaM",
-          "authorUsername": "GoSaM",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792916581,
-          "parent": "43009",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43009-mail-client/4\" class=\"PostMention\" data-id=\"276657\"><i class=\"icon fas fa-reply\"></i>mulfi</a> Thunderbird 24.0 has a general configuration option to switch between HTML vs. Only plain text.</p>"
-        }
-      ]
-    },
-    {
-      "id": "42741",
-      "title": "Best approach for multiple Signal accounts with temporary numbers?",
-      "author": "bvss12",
-      "authorUsername": "bvss12",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1791734339,
-      "lastPostedAt": 1792914880,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42741-best-approach-for-multiple-signal-accounts-with-temporary-numbers",
-      "media": [],
-      "text": "<p>Hi everyone. I'm running GrapheneOS and I'd like to keep several separate Signal identities (personal, work, online accounts). I know Signal requires one phone number per account. What's the most practical setup — GrapheneOS user profiles with a separate Signal install and number each? And has anyone had luck with temporary number services for the SMS verification code? I've read Signal often blocks VoIP numbers — are there providers selling non-VoIP numbers that reliably work? If you know of a company selling numbers for receiving SMS verification codes, I'd appreciate pointers. Thanks!</p>",
       "replies": []
     },
     {
@@ -2057,30 +2037,6 @@
       "url": "https://discuss.grapheneos.org/d/42734-crypto-receive-addresses-on-graphene-vs-stick-android-and-ios",
       "media": [],
       "text": "<p>Hello,</p>\n\n<p>I recently found that receive addresses on the Bep 20 network generated by my wallet are always the same. I was told that on stock android and on IOS, wallets generate a new address every time for privacy reasons and that perhaps this is caused by OS limitations. I'm wondering if there exists a fix for this?</p>",
-      "replies": []
-    },
-    {
-      "id": "43085",
-      "title": "User Profile Setup",
-      "author": "mumbai",
-      "authorUsername": "mumbai",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792912088,
-      "lastPostedAt": 1792912088,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43085-user-profile-setup",
-      "media": [],
-      "text": "<p>I want to setup user profile but I'm little confused.<br>\nWant some suggestsions<br>\n<strong>Use Case</strong><br>\nI only use open-source apps.</p>\n\n<p>I'll make a Education user profile for educational stuff. (I'm clear about this)</p>\n\n<p>I read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> posted by GrapheneOS Devs <br>\nI'll say you people read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> once<br>\nI'm thinking for <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#empty-owner-profile\" rel=\"ugc nofollow\">Empty Owner Profile</a> OR should I go with <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#no-secondary-user-profiles\" rel=\"ugc nofollow\">No Secondary User Profiles</a> and have only two profiles one for daily and educational</p>",
       "replies": []
     },
     {
