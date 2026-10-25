@@ -2351,9 +2351,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function youtubeSources(id) {
     const narrow = (window.innerWidth || 390) < 700;
     const itags = narrow ? ["18", "22"] : ["22", "18"];
+    const ru = isRuVisitor();
     return healthyIv().then((bases) => {
       const tgOut = [];
-      if (accountToken()) pushTelegram(tgOut, "social/youtube/" + id + "/video/0");
+      pushTelegram(tgOut, "social/youtube/" + id + "/video/0");
+      pushTelegram(tgOut, "social/youtube/" + id + "/video");
       const out = [];
       let chain = Promise.resolve();
       bases.slice(0, 3).forEach((base) => {
@@ -2376,7 +2378,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           });
         });
       });
-      return chain.then(() => tgOut.concat(out));
+      return chain.then(() => {
+        return ru ? tgOut.concat(out) : out.concat(tgOut);
+      });
     }).then((out) => {
       const pipedBases = PIPED_SEEDS.filter((base) => !LIVE.dead[base]).slice(0, 2);
       let chain = Promise.resolve();
@@ -2396,7 +2400,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       });
       return chain.then(() => {
         pushSource(out, { kind: "iframe", url: embedUrl(id, false) });
-        return out.slice(0, 7);
+        pushTelegram(out, "social/youtube/" + id + "/video/0");
+        pushTelegram(out, "social/youtube/" + id + "/video");
+        return out.slice(0, 9);
       });
     });
   }
@@ -2800,6 +2806,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const cors = saved ? iaCorsUrl(saved) : "";
       if (cors && playableFile(cors)) pushSource(out, { kind: "mp4", url: cors });
     });
+    if (lead) pushTelegram(out, lead);
+    if (social && social !== lead) pushTelegram(out, social);
+    if (key && key !== lead && key !== social) pushTelegram(out, key);
     return out;
   }
 
@@ -2835,6 +2844,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     const src = tiktokPlayUrl(post);
     if (src && !photo) pushSource(out, { kind: "mp4", url: src });
+    (keys.length ? keys : [socialFileKey(post, media)]).forEach((key) => {
+      if (key) pushTelegram(out, key);
+    });
     return out;
   }
 
@@ -3220,10 +3232,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       }
     };
     if (source.kind === "tg") {
-      const auth = accountToken();
-      if (!auth) { fail(); return; }
       const ready = window.ViktorychAccounts && window.ViktorychAccounts.syncPlaybackAuth
-        ? window.ViktorychAccounts.syncPlaybackAuth()
+        ? window.ViktorychAccounts.syncPlaybackAuth().catch(() => {})
         : Promise.resolve();
       ready.then(() => {
         if (el._gen !== gen || el._src !== token) return;
@@ -3234,7 +3244,6 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     if (source.kind === "hls") {
       const telegram = !!source.telegram;
-      if (telegram && !accountToken()) { fail(); return; }
       const native = !telegram && video.canPlayType("application/vnd.apple.mpegurl");
       if (native) { video.src = source.url; start(); return; }
       const authReady = telegram && window.ViktorychAccounts && window.ViktorychAccounts.syncPlaybackAuth
@@ -3453,7 +3462,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function recoverPreview(el, post, media, opts, gen) {
     const platform = (post && post.platform) || "";
     const can = platform === "vk" || platform === "instagram" || platform === "threads" || platform === "x";
-    if (!can || el._recovered) { notePlay(el, "no-source"); showVideoCard(el, post, media); return; }
+    if (!can || el._recovered) {
+      const yt = youtubeId(post, media);
+      const tgKey = yt ? ("social/youtube/" + yt + "/video/0") : socialFileKey(post, media);
+      const tgUrl = tgKey ? tgMediaUrl(tgKey) : "";
+      if (tgUrl && !el._triedTgBackup) {
+        el._triedTgBackup = true;
+        el._src = (el._src || 0) + 1;
+        playSource(el, { kind: "hls", url: tgUrl + "/index.m3u8", telegram: true }, post, media, opts, gen, () => {
+          playSource(el, { kind: "tg", url: tgUrl, telegram: true }, post, media, opts, gen, () => {
+            notePlay(el, "no-source");
+            showVideoCard(el, post, media);
+          });
+        });
+        return;
+      }
+      notePlay(el, "no-source");
+      showVideoCard(el, post, media);
+      return;
+    }
     el._recovered = 1;
     el._sources = [];
     notePlay(el, "refresh-" + platform);
@@ -4043,7 +4070,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   const UNAVAILABLE = ["this post is unavailable", "this tweet is unavailable", "this post was deleted", "deleted by the post author", "account is suspended", "account has been suspended"];
 
   function commentsCurrent(post, doc) {
-    if (!doc || !doc.fetchedAt) return false;
+    if (!doc) return false;
+    if (Array.isArray(doc.replies) && doc.replies.length > 0) return true;
+    if (!doc.fetchedAt) return false;
     const fetched = Date.parse(doc.fetchedAt);
     if (!isFinite(fetched)) return false;
     const now = Date.now();
@@ -4156,7 +4185,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function fetchJson(url) {
-    return fetch(url, { cache: "no-cache", signal: AbortSignal.timeout(8000) }).then((res) => {
+    let signal;
+    try {
+      if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+        signal = AbortSignal.timeout(8000);
+      }
+    } catch (e) {}
+    return fetch(url, { cache: "no-cache", signal: signal }).then((res) => {
       if (!res.ok) {
         const err = new Error(String(res.status));
         err.status = res.status;
@@ -4848,35 +4883,40 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           const merged = [];
           const seen = {};
           usable.forEach((payload) => {
-            fxExtract(payload, id).forEach((row) => {
-              const sid = postKey(row);
-              if (!sid || seen[sid]) return;
-              seen[sid] = true;
-              merged.push(row);
-            });
-          });
-          const primary = usable.find((payload) => payload.status) || usable[0];
-          const author = ((primary.status || {}).author || {}).screen_name || post.handle || "";
-          const subCandidates = merged.filter((row) => fxNum((row.stats || {}).replies) > 0).slice(0, 25);
-          const subPromises = subCandidates.map((row) => fxConversation(postKey(row)).catch(() => null));
-          return Promise.all(subPromises).then((subPages) => {
-            (subPages || []).filter(fxUsable).forEach((payload) => {
+            try {
               fxExtract(payload, id).forEach((row) => {
                 const sid = postKey(row);
                 if (!sid || seen[sid]) return;
                 seen[sid] = true;
                 merged.push(row);
               });
+            } catch (err) {}
+          });
+          if (!merged.length) return null;
+          const primary = usable.find((payload) => payload.status) || usable[0];
+          const author = ((primary.status || {}).author || {}).screen_name || post.handle || "";
+          const subCandidates = merged.filter((row) => fxNum((row.stats || {}).replies) > 0).slice(0, 10);
+          const subPromises = subCandidates.map((row) => fxConversation(postKey(row)).catch(() => null));
+          return Promise.all(subPromises).then((subPages) => {
+            (subPages || []).filter(fxUsable).forEach((payload) => {
+              try {
+                fxExtract(payload, id).forEach((row) => {
+                  const sid = postKey(row);
+                  if (!sid || seen[sid]) return;
+                  seen[sid] = true;
+                  merged.push(row);
+                });
+              } catch (err) {}
             });
             const limit = fresh || String(STATE.focusId || "") === id ? 1000 : 60;
             return fxFill(merged, id).then((filled) => {
               const pack = { replies: fxRank(filled, author, limit), stats: fxStats(primary.status || {}), fetchedAt: Date.now() };
               if (!pack.replies.length) return pack;
-              return cacheSet(key, pack).then(() => pack);
-            });
-          });
-        });
-      });
+              return cacheSet(key, pack).then(() => pack).catch(() => pack);
+            }).catch(() => null);
+          }).catch(() => null);
+        }).catch(() => null);
+      }).catch(() => null);
     }).catch(() => null));
   }
 
@@ -4912,9 +4952,20 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function snapshotDoc(file) {
-    return fetch("comments/" + encodeURIComponent(file) + ".json", { cache: "no-cache" }).then((res) => {
+    if (!file) return Promise.resolve(null);
+    const local = "comments/" + encodeURIComponent(file) + ".json";
+    return fetch(local, { cache: "no-cache" }).then((res) => {
       if (!res.ok) throw new Error(String(res.status));
       return res.json();
+    }).catch(() => {
+      const api = accountsApi();
+      if (!api) throw new Error("not_found");
+      const token = accountToken();
+      const headers = token ? { Authorization: "Bearer " + token } : {};
+      return fetch(api + "/tg/comments/" + encodeURIComponent(file) + ".json", { headers: headers, cache: "no-cache" }).then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.json();
+      });
     });
   }
 
@@ -4951,10 +5002,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!fresh && bucket && bucket.loading) return bucket;
     const epoch = (STATE.replyEpoch[id] || 0) + 1;
     STATE.replyEpoch[id] = epoch;
-    STATE.replies[id] = { loading: true, replies: (bucket && bucket.replies) || [], missing: false, cap: want, fetchedAt: fresh ? 0 : cachedAt || 0 };
+    const seedReplies = (bucket && bucket.replies && bucket.replies.length) ? bucket.replies : (Array.isArray(post.replies) ? post.replies : []);
+    STATE.replies[id] = { loading: true, replies: seedReplies, missing: false, cap: want, fetchedAt: fresh ? 0 : cachedAt || 0 };
     const finish = (replies, missing, cap, fetchedAt) => {
-      if (STATE.replyEpoch[id] !== epoch) return;
-      STATE.replies[id] = { loading: false, replies: replies || [], missing: !!missing, cap: cap || want, fetchedAt: typeof fetchedAt === "number" ? fetchedAt : Date.now(), settled: true };
+      if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
+      STATE.replies[id] = { loading: false, replies: (replies && replies.length) ? replies : (seedReplies.length ? seedReplies : []), missing: !!missing && !seedReplies.length && (!replies || !replies.length), cap: cap || want, fetchedAt: typeof fetchedAt === "number" ? fetchedAt : Date.now(), settled: true };
       render();
     };
     const snap = (ownAt) => snapshotDoc(id).then((doc) => {
@@ -4966,30 +5018,47 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       finish(((doc && doc.replies) || []).slice(), false, want, isFinite(stamped) ? stamped : Date.now());
     }).catch(() => finish([], true, want, ownAt || Date.now()));
     const ownThenSnap = () => ownPack(id).then((own) => {
-      if (STATE.replyEpoch[id] !== epoch) return;
+      if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
       if (own && own.stats) applyLiveStats(id, own.stats);
       if (own && (own.replies || []).length) {
         finish(own.replies.slice(0, want), false, want, own._at || Date.now());
         return;
       }
       snap(own && own._at);
-    });
+    }).catch(() => snap());
+
+    setTimeout(() => {
+      const cur = STATE.replies[id];
+      if (cur && cur.loading && STATE.replyEpoch[id] === epoch) {
+        snapshotDoc(id).then((doc) => {
+          if (STATE.replyEpoch[id] !== epoch) return;
+          if (doc && Array.isArray(doc.replies) && doc.replies.length) {
+            finish(doc.replies.slice(0, want), false, want, Date.now());
+          } else {
+            finish([], true, want, Date.now());
+          }
+        }).catch(() => {
+          if (STATE.replyEpoch[id] === epoch) finish([], true, want, Date.now());
+        });
+      }
+    }, 6000);
+
     if ((post.platform || "") === "youtube") {
       loadYtComments(post).then((doc) => {
-        if (STATE.replyEpoch[id] !== epoch) return;
+        if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
         const rows = (doc && doc.replies) || [];
         const at = ytFetchedAt(doc);
         if (!rows.length) finish([], !(doc && doc.commentCount != null), want, at);
         else finish(rows.slice(0, want), false, want, at);
       }).catch(() => {
-        if (STATE.replyEpoch[id] !== epoch) return;
-        finish([], true, want, 0);
+        if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
+        ownThenSnap();
       });
       return STATE.replies[id];
     }
     if ((post.platform || "") === "x") {
       loadXThread(post, fresh || focused).then((pack) => {
-        if (STATE.replyEpoch[id] !== epoch) return;
+        if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
         if (pack && (pack.replies || []).length) {
           applyLiveStats(id, pack.stats);
           const capNow = String(STATE.focusId || "") === id ? 1000 : 20;
@@ -5005,6 +5074,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           return;
         }
         if (pack && pack.stats) applyLiveStats(id, pack.stats);
+        ownThenSnap();
+      }).catch(() => {
+        if (STATE.replyEpoch[id] !== epoch && STATE.replies[id] && !STATE.replies[id].loading) return;
         ownThenSnap();
       });
       return STATE.replies[id];
@@ -5352,7 +5424,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const stored = community
         ? ownPack("ytpost_" + id).then((own) => ytUsable(own) ? own : ytPostStub(id))
         : ownPack("yt_" + id).then((own) => ytUsable(own) ? own : ytStub(id));
-      return loadStatus().then(() => live.then((doc) => {
+      return loadStatus().then(() => live.catch(() => null).then((doc) => {
         if (ytUsable(doc)) return rememberYt(id, doc, true);
         return stored.then((own) => own ? rememberYt(id, own, false) : null);
       }));
@@ -5842,11 +5914,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function replySlice(post) {
     const bucket = replyBucket(post);
-    if (bucket.loading) return { loading: true, shown: [], more: false, spam: false, missing: false };
     const fetched = bucket.replies || [];
     const have = new Set(fetched.map(postKey));
     const extras = threadChildren(post).filter((child) => !have.has(postKey(child)));
     const all = fetched.concat(extras);
+    if (bucket.loading && !all.length) return { loading: true, shown: [], more: false, spam: false, missing: false };
     if (!all.length) return { loading: false, shown: [], more: false, spam: false, missing: !!bucket.missing };
     const ui = STATE.replyUi[postKey(post)] || {};
     const clean = all.filter((reply) => !reply.spam);
@@ -9948,6 +10020,7 @@ const here = parseRoute();
     const music = parseRoute().name === "music" && window.SIntelMusic;
     const links = music ? window.SIntelMusic.drawerLinks(icon) : `<a href="#/lists">${icon("lists")} ${tr("Lists")}</a>
       <a href="#/communities">${icon("communities")} ${tr("Communities")}</a>
+      <a href="#/tv">${icon("tv")} ${tr("TV")}</a>
       <a href="#/history">${icon("clock")} ${tr("History")}</a>
       <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} ${tr("Subscriptions")}</a>
       <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
@@ -10119,13 +10192,13 @@ if (STATE.histClear) {
 
   function shell(main, route) {
     const gamePlay = route.name === "games" && !!route.game;
-    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || gamePlay;
+    const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
-    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities"].includes(route.name);
+    const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const top = route.name === "shorts" ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
+    const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
@@ -11057,21 +11130,26 @@ if (STATE.histClear) {
     if (STATE.replies[key]) return STATE.replies[key];
     STATE.replies[key] = { loading: true, doc: null, missing: false };
     const snap = () => snapshotDoc(file).then((doc) => {
-      STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: ytFetchedAt(doc) };
+      STATE.replies[key] = { loading: false, doc: doc, missing: !doc, fetchedAt: ytFetchedAt(doc) };
       render();
     }).catch(() => {
       STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: 0 };
       render();
     });
+    setTimeout(() => {
+      const cur = STATE.replies[key];
+      if (cur && cur.loading) snap();
+    }, 6000);
     if (post.platform === "youtube") {
       loadYtComments(post).then((doc) => {
         const at = ytFetchedAt(doc);
-        if (!ytUsable(doc)) STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: at };
-        else STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: at };
-        render();
+        if (!ytUsable(doc)) snap();
+        else {
+          STATE.replies[key] = { loading: false, doc: doc, missing: false, fetchedAt: at };
+          render();
+        }
       }).catch(() => {
-        STATE.replies[key] = { loading: false, doc: null, missing: true, fetchedAt: 0 };
-        render();
+        snap();
       });
       return STATE.replies[key];
     }
@@ -11508,6 +11586,7 @@ if (STATE.histClear) {
     if (route.name === "drive" && window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
     if (route.name === "games") return (window.ViktorychGames && window.ViktorychGames.page(route)) || pageHead(tr("Games")) + emptyBlock(tr("Games"), tr("Reload the page."));
     if (route.name === "communities") return (window.ViktorychCommunities && window.ViktorychCommunities.page(route)) || pageHead(tr("Communities")) + emptyBlock(tr("Communities"), tr("Reload the page."));
+    if (route.name === "tv") return (window.ViktorychTV && window.ViktorychTV.page(route)) || pageHead(tr("TV")) + emptyBlock(tr("TV"), tr("Reload the page."));
     if (route.name === "status" && route.id && STATE.shared && STATE.shared[String(route.id)]) return statusView(route);
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
@@ -12631,6 +12710,7 @@ if (STATE.histClear) {
         tile.classList.remove("is-failed", "is-playing", "is-shown");
         tile._gen = (tile._gen || 0) + 1;
         tile._recovered = 0;
+        delete tile._triedTgBackup;
         delete tile._sources;
         delete tile._prefetch;
         clearPlayer(tile);
