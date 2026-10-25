@@ -945,8 +945,12 @@
   }
 
   function accountsApi() {
+    if (root.ViktorychAccounts && root.ViktorychAccounts.currentApi) {
+      const cur = root.ViktorychAccounts.currentApi();
+      if (cur) return cur;
+    }
     const bag = root.VIKTORYCH_ACCOUNTS || {};
-    return String(bag.api || "").replace(/\/$/, "");
+    return String(bag.api || bag.backupApi || "").replace(/\/$/, "");
   }
 
   function telegramLoopRequest(requestUrl) {

@@ -104,7 +104,11 @@
     return !!(row && row.owner);
   }
   function apiBase() {
-    return String(cfg().api || "").replace(/\/$/, "");
+    if (window.ViktorychAccounts && window.ViktorychAccounts.currentApi) {
+      var cur = window.ViktorychAccounts.currentApi();
+      if (cur) return cur;
+    }
+    return String(cfg().api || cfg().backupApi || "").replace(/\/$/, "");
   }
   function authHeaders() {
     var token = hooks.token();

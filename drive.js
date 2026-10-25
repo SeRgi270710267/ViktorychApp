@@ -86,8 +86,12 @@ function visible() {
   return !!(row && (row.owner === true || row.owner === 1));
 }
 function apiRoot() {
+  if (window.ViktorychAccounts && window.ViktorychAccounts.currentApi) {
+    var cur = window.ViktorychAccounts.currentApi();
+    if (cur) return cur;
+  }
   var cfg = window.VIKTORYCH_ACCOUNTS || {};
-  return String(cfg.api || "").replace(/\/$/, "");
+  return String(cfg.api || cfg.backupApi || "").replace(/\/$/, "");
 }
 function token() {
   return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : "";
@@ -279,6 +283,16 @@ async function apiJson(path, opts) {
     credentials: "omit",
     cache: "no-store"
   });
+  if ((res.status === 429 || res.status === 502 || res.status === 503) && window.ViktorychAccounts && window.ViktorychAccounts.rotateApi) {
+    window.ViktorychAccounts.rotateApi();
+    res = await fetch(apiRoot() + path, {
+      method: opts.method || "GET",
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      credentials: "omit",
+      cache: "no-store"
+    });
+  }
   var body = await res.json().catch(function () { return {}; });
   body = body || {};
   body.status = res.status;

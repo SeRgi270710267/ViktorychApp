@@ -177,6 +177,9 @@
     var nextIdx = (idx + 1) % list.length;
     activeApiRoot = list[nextIdx];
   }
+  function hasApi() {
+    return !!(currentApi() || (config().api || config().backupApi));
+  }
   function patchedFetch(input, init) {
     var raw = typeof input === "string" ? input : (input && input.url) || "";
     var url;
@@ -729,7 +732,7 @@
   }
   function pushPayload(payload, base) {
     var session = readSession();
-    if (!session || !config().api) return Promise.resolve();
+    if (!session || !hasApi()) return Promise.resolve();
     pushing = true;
     return api("/v1/sync", { method: "PUT", token: session.token, body: { payload: payload, baseUpdatedAt: base || 0 } }).then(function (body) {
       pushing = false;
@@ -746,7 +749,7 @@
   }
   function mergeSync() {
     var session = readSession();
-    if (!session || !config().api) return Promise.resolve();
+    if (!session || !hasApi()) return Promise.resolve();
     return api("/v1/sync", { token: session.token }).then(function (body) {
       var local = localSnapshot();
       if (!body || body.status !== 200) return;
@@ -763,7 +766,7 @@
     if (readSession()) mergeSync().then(function () { return syncFollows(); }, function () { return syncFollows(); });
   }
   function onLocalChange() {
-    if (!readSession() || !config().api || pushing) return;
+    if (!readSession() || !hasApi() || pushing) return;
     clearTimeout(pushTimer);
     pushTimer = setTimeout(function () {
       var session = readSession();
@@ -948,7 +951,7 @@
     var token = pending && pending.token;
     clearPending();
     view = "";
-    if (token && config().api) api("/v1/logout", { method: "POST", token: token }).catch(function () {});
+    if (token && hasApi()) api("/v1/logout", { method: "POST", token: token }).catch(function () {});
     paint();
   }
   function logout(all) {
@@ -957,7 +960,7 @@
     removeStored("account-v1");
     tellSW(false);
     var done = function () { location.replace(location.pathname + location.search); location.reload(); };
-    if (!token || !config().api) { done(); return; }
+    if (!token || !hasApi()) { done(); return; }
     api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
   }
   function fitImage(file, edge, maxChars) {
@@ -1148,7 +1151,7 @@
   function loadProfile(handle) {
     var key = skel(handle);
     var session = readSession();
-    if (!session || profileLoads[key] || profileMiss[key] || !config().api) return;
+    if (!session || profileLoads[key] || profileMiss[key] || !hasApi()) return;
     if (profiles[key] && profiles[key].repostsLoaded) return;
     profileLoads[key] = true;
     var epoch = profileEpoch[key] || 0;
@@ -1244,7 +1247,7 @@
   }
   function ensureCounts(id) {
     var session = readSession();
-    if (!id || !session || !config().api) return;
+    if (!id || !session || !hasApi()) return;
     if (countLoads[id] || (graphCounts[id] && graphCounts[id].fresh)) return;
     var epoch = followEpoch;
     countLoads[id] = true;
@@ -1264,7 +1267,7 @@
   function ensureList(id, tab) {
     var session = readSession();
     var key = id + "|" + tab;
-    if (!id || !session || !config().api) return;
+    if (!id || !session || !hasApi()) return;
     var pack = listCache[key];
     if (pack && (pack.loading || (pack.accounts && !pack.dirty))) return;
     var epoch = followEpoch;
@@ -1299,7 +1302,7 @@
   }
   function changeFollow(id, follow, profile) {
     var session = readSession();
-    if (!session || !config().api || !id) return Promise.resolve(true);
+    if (!session || !hasApi() || !id) return Promise.resolve(true);
     if (id === myAccountId()) return Promise.resolve(false);
     followEpoch += 1;
     var epoch = followEpoch;
@@ -1346,7 +1349,7 @@
   }
   function syncFollows() {
     var session = readSession();
-    if (!session || !config().api || !session.account) return Promise.resolve();
+    if (!session || !hasApi() || !session.account) return Promise.resolve();
     if (syncingFollows) {
       syncAgain = true;
       return Promise.resolve();
@@ -1396,7 +1399,7 @@
     if (account && account.publicId) {
       return { id: "app:" + account.publicId, kind: "account", name: account.displayName || account.handle, handle: account.handle, platform: "x" };
     }
-    if ((platform || "x") === "x" && readSession() && config().api && !profileMiss[key]) {
+    if ((platform || "x") === "x" && readSession() && hasApi() && !profileMiss[key]) {
       loadProfile(handle);
       return { pending: true };
     }
@@ -1424,7 +1427,7 @@
 
   function ensureFriends(targetId) {
     var session = readSession();
-    if (!targetId || !session || !config().api) return;
+    if (!targetId || !session || !hasApi()) return;
     if (friendsLoads[targetId] || friendsCache[targetId]) return;
     friendsLoads[targetId] = true;
     api("/v1/friends?id=" + encodeURIComponent("app:" + targetId) + "&tab=friends", { token: session.token }).then(function (res) {
@@ -1442,7 +1445,7 @@
 
   function ensureFriendRequests() {
     var session = readSession();
-    if (!session || !config().api || friendRequestsLoading) return;
+    if (!session || !hasApi() || friendRequestsLoading) return;
     friendRequestsLoading = true;
     api("/v1/friends?tab=requests", { token: session.token }).then(function (res) {
       friendRequestsLoading = false;
@@ -1457,7 +1460,7 @@
 
   function syncFriends() {
     var session = readSession();
-    if (!session || !config().api) return Promise.resolve();
+    if (!session || !hasApi()) return Promise.resolve();
     ensureFriendRequests();
     if (session.account && session.account.publicId) {
       ensureFriends(session.account.publicId);
@@ -1467,7 +1470,7 @@
 
   function doFriendAction(action, targetId, handle) {
     var session = readSession();
-    if (!session || !config().api || !targetId) return;
+    if (!session || !hasApi() || !targetId) return;
     var me = session.account && session.account.publicId;
     var tId = targetId.replace(/^app:/, "");
     var idKey = "app:" + tId;
@@ -2397,6 +2400,10 @@
   window.ViktorychAccounts = {
     blocking: blocking,
     enter: enter,
+    currentApi: currentApi,
+    apiEndpoints: apiEndpoints,
+    rotateApi: rotateApi,
+    hasApi: hasApi,
     profileHtml: profileHtml,
     pillInner: pillInner,
     drawerHead: drawerHead,
@@ -2459,7 +2466,7 @@
     },
     refreshToken: function () {
       var session = readSession();
-      if (!session || !session.token || !config().api) return Promise.resolve("");
+      if (!session || !session.token || !hasApi()) return Promise.resolve("");
       return api("/v1/session/refresh", { method: "POST", token: session.token }).then(function (body) {
         if (!body || body.status !== 200 || !body.token) return "";
         session.token = body.token;

@@ -594,7 +594,11 @@
   }
 
   function musicApi() {
-    return String((root.VIKTORYCH_ACCOUNTS && root.VIKTORYCH_ACCOUNTS.api) || "").replace(/\/$/, "");
+    if (root.ViktorychAccounts && root.ViktorychAccounts.currentApi) {
+      var cur = root.ViktorychAccounts.currentApi();
+      if (cur) return cur;
+    }
+    return String((root.VIKTORYCH_ACCOUNTS && (root.VIKTORYCH_ACCOUNTS.api || root.VIKTORYCH_ACCOUNTS.backupApi)) || "").replace(/\/$/, "");
   }
 
   function musicSession() {

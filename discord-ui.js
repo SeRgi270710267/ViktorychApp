@@ -1655,7 +1655,11 @@
   function accountsBase() {
     try {
       const host = typeof window !== "undefined" ? window : null;
-      const api = host && host.VIKTORYCH_ACCOUNTS && host.VIKTORYCH_ACCOUNTS.api;
+      if (host && host.ViktorychAccounts && host.ViktorychAccounts.currentApi) {
+        const cur = host.ViktorychAccounts.currentApi();
+        if (cur) return cur;
+      }
+      const api = host && host.VIKTORYCH_ACCOUNTS && (host.VIKTORYCH_ACCOUNTS.api || host.VIKTORYCH_ACCOUNTS.backupApi);
       return String(api || "").replace(/\/$/, "");
     } catch (err) {
       return "";
