@@ -400,6 +400,7 @@
       + '<div class="sc-toolbar">'
       + '<div class="sc-btn-group">'
       + '<button class="sc-action-btn' + (isLive ? " is-toggle-active" : "") + '" type="button" data-sc-act="toggle-live" data-sc-id="' + esc(team.id) + '">' + (isLive ? '🔴 ' + esc(tr("LIVE")) : '🏁 ' + esc(tr("Latest Result"))) + '</button>'
+      + (team.id === "fc-barcelona" ? '<a class="sc-action-btn is-toggle-active" href="#/tv" style="text-decoration:none"><span>📺 ' + esc(tr("Watch Live on TV")) + '</span></a>' : '')
       + '<button class="sc-action-btn" type="button" data-sc-act="update-score" data-sc-id="' + esc(team.id) + '"><svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg><span>' + esc(tr("Update Score")) + '</span></button>'
       + '</div>'
       + '<div class="sc-btn-group">'

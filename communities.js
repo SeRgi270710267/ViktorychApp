@@ -381,6 +381,11 @@
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
     var v = voteState(name, post.id);
     var total = (Number((bag.likes || {})[post.id]) || 0) + (v.down ? -1 : 0);
+    var authorId = String((author && (author.publicId || author.id)) || post.authorId || post.author_id || "").replace(/^app:/, "");
+    var authorHandle = String(author.handle || "");
+    if (authorId && authorHandle && !authorHandle.endsWith(authorId)) {
+      authorHandle += authorId;
+    }
 
     return '<article class="cm-reddit-card cm-app-card' + (isThread ? " cm-thread-focus" : "") + '" data-post="' + esc(post.id) + '">' +
       voteGutter(name, post.id, total, v) +
@@ -388,7 +393,7 @@
         '<div class="cm-reddit-byline">' +
           face(author) +
           '<span class="cm-app-name">' + esc(author.displayName || author.handle || "") + (author.owner ? " ✓" : "") + '</span>' +
-          '<span class="cm-app-handle">@' + esc(author.handle || "") + '</span>' +
+          '<span class="cm-app-handle">@' + esc(authorHandle) + '</span>' +
           '<span>•</span>' +
           '<span class="cm-reddit-time">' + esc(timeAgo(Number(post.createdAt) || Date.now())) + '</span>' +
           '<span class="cm-app-badge">' + esc(tr("Only on ViktorychApp")) + '</span>' +
@@ -657,6 +662,11 @@
         '</article>';
       }
       var aAuthor = item.post.author || {};
+      var aAuthorId = String((aAuthor && (aAuthor.publicId || aAuthor.id)) || item.post.authorId || item.post.author_id || "").replace(/^app:/, "");
+      var aAuthorHandle = String(aAuthor.handle || "");
+      if (aAuthorId && aAuthorHandle && !aAuthorHandle.endsWith(aAuthorId)) {
+        aAuthorHandle += aAuthorId;
+      }
       var aV = voteState(name, item.post.id);
       var aBag = state.internal[name] || {};
       var aTotal = (Number((aBag.likes || {})[item.post.id]) || 0) + (aV.down ? -1 : 0);
@@ -668,7 +678,7 @@
         '<div class="cm-comment-body">' +
           '<div class="cm-comment-byline">' +
             '<span class="cm-app-name">' + esc(aAuthor.displayName || aAuthor.handle || "") + (aAuthor.owner ? " ✓" : "") + '</span>' +
-            '<span class="cm-app-handle">@' + esc(aAuthor.handle || "") + '</span>' +
+            '<span class="cm-app-handle">@' + esc(aAuthorHandle) + '</span>' +
             '<span>•</span>' +
             '<span class="cm-reddit-time">' + esc(timeAgo(Number(item.post.createdAt) || item.created)) + '</span>' +
             '<span class="cm-app-badge">' + esc(tr("Only on ViktorychApp")) + '</span>' +

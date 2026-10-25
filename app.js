@@ -70,6 +70,8 @@
     bell: "M19.993 9.042C19.48 5.017 16.054 2 11.996 2s-7.49 3.021-7.999 7.051L2.866 18H7.1c.463 2.282 2.481 4 4.9 4s4.437-1.718 4.9-4h4.236l-1.143-8.958zM12 20c-1.306 0-2.417-.835-2.829-2h5.658c-.412 1.165-1.523 2-2.829 2zm-6.866-4l.847-6.698C6.364 6.272 8.941 4 11.996 4s5.627 2.268 6.013 5.295L18.864 16H5.134z",
     bellOn: "M19.993 9.042C19.48 5.017 16.054 2 11.996 2s-7.49 3.021-7.999 7.051L2.866 18H7.1c.463 2.282 2.481 4 4.9 4s4.437-1.718 4.9-4h4.236l-1.143-8.958z",
     video: "M4 6.5C4 5.12 5.12 4 6.5 4h8c1.38 0 2.5 1.12 2.5 2.5v11c0 1.38-1.12 2.5-2.5 2.5h-8C5.12 20 4 18.88 4 17.5v-11zM15.2 8.4l4.3-2.2v11.6l-4.3-2.2V8.4z",
+    tv: "M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H3V5h18v12z",
+    tvOn: "M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z",
     shorts: "M8 2.5C8 1.12 9.12 0 10.5 0h3C14.88 0 16 1.12 16 2.5v19c0 1.38-1.12 2.5-2.5 2.5h-3C9.12 24 8 22.88 8 21.5v-19zM10.5 2c-.28 0-.5.22-.5.5v19c0 .28.22.5.5.5h3c.28 0 .5-.22.5-.5v-19c0-.28-.22-.5-.5-.5h-3z",
     tiktok: "M14 3v10.55A4 4 0 1 1 12 10V6.2A6.2 6.2 0 0 0 16.2 8V5.4A3.6 3.6 0 0 1 14 3z",
     mail: "M1.998 5.5c0-1.381 1.119-2.5 2.5-2.5h15c1.381 0 2.5 1.119 2.5 2.5v13c0 1.381-1.119 2.5-2.5 2.5h-15c-1.381 0-2.5-1.119-2.5-2.5v-13zm2.5-.5c-.276 0-.5.224-.5.5v2.764l8 3.638 8-3.636V5.5c0-.276-.224-.5-.5-.5h-15zm15.5 5.463l-8 3.636-8-3.638V18.5c0 .276.224.5.5.5h15c.276 0 .5-.224.5-.5v-8.037z",
@@ -3871,25 +3873,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const liked = !!STATE.settings.likes[id];
     const booked = !!STATE.settings.bookmarks[id];
     const reposted = !!STATE.settings.reposts[id];
-    const btn = (cls, act, path, label, count) => `
-      <button class="action ${cls}${cls === "like" && liked ? " on" : ""}${cls === "bookmark" && booked ? " on" : ""}${cls === "repost" && reposted ? " on" : ""}" data-act="${act}" data-id="${esc(id)}" aria-label="${esc(label)}">
+    const btn = (cls, act, path, label, count, tip) => `
+      <button class="action ${cls}${cls === "like" && liked ? " on" : ""}${cls === "bookmark" && booked ? " on" : ""}${cls === "repost" && reposted ? " on" : ""}" data-act="${act}" data-id="${esc(id)}" aria-label="${esc(label)}" data-tooltip="${esc(tip || label)}">
         <span class="ic">${icon(path)}</span>${count ? `<span class="count">${esc(count)}</span>` : ""}
       </button>`;
     const replyCount = shownCount(stats.replies, 0);
-    const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="${tr("Replies")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
+    const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="${tr("Replies")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
     const menuOpen = STATE.repostMenu === id;
     const repostMenu = menuOpen ? `<div class="menu repost-menu" data-act="stop" role="menu" aria-label="${esc(tr("Repost"))}"><button type="button" data-act="repost-do" data-id="${esc(id)}">${reposted ? tr("Undo repost") : tr("Repost")}</button><button type="button" data-act="quote-open" data-id="${esc(id)}">${tr("Quote")}</button></div>` : "";
-    const repostBtn = `<span class="repost-wrap">${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0))}${repostMenu}</span>`;
+    const repostBtn = `<span class="repost-wrap">${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0), tr("Repost"))}${repostMenu}</span>`;
     return `<div class="actions">
       <div class="action-stats">
         ${replyLink}
         ${repostBtn}
-        ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0))}
-        ${btn("views", "open-status", "views", tr("Views"), shownCount(stats.views, 0))}
+        ${btn("like", "like", liked ? "heartOn" : "heart", tr("Like"), shownCount(stats.likes, liked ? 1 : 0), tr("Like"))}
+        ${btn("views", "open-status", "views", tr("Views"), shownCount(stats.views, 0), tr("Views"))}
       </div>
       <div class="action-more">
-        ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", tr("Bookmark"), "")}
-        ${btn("share", "share", "share", tr("Share"), "")}
+        ${btn("bookmark", "bookmark", booked ? "bookmarkOn" : "bookmark", tr("Bookmark"), "", tr("Bookmark"))}
+        ${btn("share", "share", "share", tr("Share"), "", tr("Share"))}
       </div>
     </div>`;
   }
@@ -6189,6 +6191,7 @@ const here = parseRoute();
     if (parts[0] === "shorts") return { name: "shorts", live: parts[1] === "live", query };
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
+    if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
     if (parts[0] === "storage" || parts[0] === "drive") {
       if (parts[1] === "trash") return { name: "drive", section: "files", trash: true, folder: "", view: "", album: "", query };
       if (parts[1] === "folder" && parts[2]) return { name: "drive", section: "files", trash: false, folder: parts[2], view: "", album: "", query };
@@ -6233,13 +6236,14 @@ const here = parseRoute();
     return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
   }
 
-  function navItem(href, name, label, on, aria) {
+  function navItem(href, name, label, on, aria, tip) {
     const onName = name + tr("On");
     const glyph = icon(on && PATH[onName] && (name === "home" || name.indexOf("mu") === 0) ? onName : name);
     const badge = name === "bell" ? bellBadgeHtml() : "";
     const accessible = aria || label;
+    const tooltipText = tip || (name === "muBack" ? tr("Back") : label);
     const tight = name === "muBack" ? " nav-back" : "";
-    return `<a class="nav-item${on ? " on" : ""}${tight}" href="${href}" aria-label="${esc(accessible)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${esc(label)}</span></a>`;
+    return `<a class="nav-item${on ? " on" : ""}${tight}" href="${href}" aria-label="${esc(accessible)}" data-tooltip="${esc(tooltipText)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${esc(label)}</span></a>`;
   }
 
   function wordmarkSvg(cls) {
@@ -6247,7 +6251,7 @@ const here = parseRoute();
   }
 
   function brandLink() {
-    return `<a class="logo" href="#/" aria-label="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}${markSvg("mark", "logo-si")}</a>`;
+    return `<a class="logo" href="#/" aria-label="${productName("app")}" data-tooltip="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}${markSvg("mark", "logo-si")}</a>`;
   }
 
   function nav(route) {
@@ -6264,12 +6268,13 @@ const here = parseRoute();
         ${navItem("#/music", "muNote", tr("Music"), false)}
         ${window.ViktorychShorts && window.ViktorychShorts.visible() ? navItem("#/shorts", "shorts", tr("Shorts"), name === "shorts") : ""}
         ${navItem("#/games", "games", tr("Games"), name === "games")}
+        ${navItem("#/tv", "tv", tr("TV"), name === "tv")}
         ${navItem("#/communities", "communities", tr("Communities"), name === "communities")}
         ${navItem(subsHash(STATE.settings.subsGroup), "subs", tr("Subscriptions"), name === "subscriptions")}
         ${navItem("#/settings", "more", tr("More"), name === "settings")}`;
     const post = music
-      ? `<button class="post-btn" data-act="music-add" aria-label="${tr("Add song")}"><span class="post-label">${tr("Add song")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
-      : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
+      ? `<button class="post-btn" data-act="music-add" aria-label="${tr("Add song")}" data-tooltip="${tr("Add song")}"><span class="post-label">${tr("Add song")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
+      : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}" data-tooltip="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
     return `<header class="nav">
       <div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>
       <div class="nav-scroll">
@@ -6277,7 +6282,7 @@ const here = parseRoute();
         ${links}
         ${post}
       </div>
-      <button class="account-pill" data-act="drawer" aria-label="${tr("Account menu")}">
+      <button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">
         ${(window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials">Y</span><span class="account-meta"><b>${tr("You")}</b><span>@reader</span></span>`}
         <span class="dots">${icon("more")}</span>
       </button>
@@ -6320,6 +6325,7 @@ const here = parseRoute();
     return `<nav class="bottom-nav" aria-label="${tr("Primary")}">
       ${item("#/", route.name === "home" ? "homeOn" : "home", tr("Home"), route.name === "home")}
       ${item("#/explore", "search", tr("Search"), route.name === "explore")}
+      ${item("#/tv", "tv", tr("TV"), route.name === "tv")}
       ${item("#/communities", "communities", tr("Communities"), route.name === "communities")}
       ${item("#/feeds", "spark", tr("Feeds"), route.name === "feeds")}
       ${item("#/notifications", "bell", tr("Notifications"), route.name === "notifications")}
@@ -9754,6 +9760,7 @@ const here = parseRoute();
         person: tr("Profile"),
         connections: route.tab === "followers" ? tr("Followers") : tr("Following count"),
         spaces: tr("Space"),
+        tv: tr("TV"),
         shorts: tr("Shorts"),
         games: route.game === "regone" ? "ReGone" : tr("Games"),
         communities: tr("Communities"),
@@ -11799,6 +11806,10 @@ if (STATE.histClear) {
       if (window.ViktorychDrive) {
         if (route.name === "drive") window.ViktorychDrive.mount(route);
         else window.ViktorychDrive.unmount();
+      }
+      if (window.ViktorychTV) {
+        if (route.name === "tv") window.ViktorychTV.mount(route);
+        else window.ViktorychTV.unmount();
       }
       if (window.ViktorychGames) {
         if (route.name === "games" && route.game === "regone") window.ViktorychGames.mount(route);
@@ -15505,5 +15516,208 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     picture: function (src, accountFace) { return faceChoice("picture", src, accountFace); },
     banner: function (src, accountFace) { return faceChoice("banner", src, accountFace); }
   };
+  /* X-Style Tooltip Controller */
+  function initTooltipController() {
+    let tooltipEl = null;
+    let activeTarget = null;
+    let tooltipTimer = 0;
+    let lastHideTime = 0;
+
+    function ensureTooltipEl() {
+      if (!tooltipEl || !tooltipEl.isConnected) {
+        tooltipEl = document.getElementById("x-tooltip");
+        if (!tooltipEl) {
+          tooltipEl = document.createElement("div");
+          tooltipEl.id = "x-tooltip";
+          tooltipEl.className = "x-tooltip";
+          tooltipEl.setAttribute("role", "tooltip");
+          tooltipEl.setAttribute("aria-hidden", "true");
+          document.body.appendChild(tooltipEl);
+        }
+      }
+      return tooltipEl;
+    }
+
+    function isNavCollapsed(navEl) {
+      if (document.documentElement.getAttribute("data-nav") === "icons") return true;
+      const w = window.innerWidth || document.documentElement.clientWidth || 0;
+      if (w >= 688 && w < 1280) return true;
+      if (navEl && navEl.clientWidth > 0 && navEl.clientWidth <= 100) return true;
+      return false;
+    }
+
+    function findTooltipTarget(node) {
+      if (!node || !node.closest) return null;
+      const el = node.closest(
+        ".nav-item, .logo, .post-btn, .account-pill, .icon-btn, .action, .ytp-button, button[data-tooltip], a[data-tooltip], [data-tooltip]"
+      );
+      if (!el) {
+        const btn = node.closest("button, a");
+        if (btn && (btn.getAttribute("data-tooltip") || btn.getAttribute("aria-label"))) {
+          const hasIcon = !!btn.querySelector("svg, .ic, .nav-ico, .vbadge, img, [class*='icon']");
+          if (hasIcon) {
+            const textNodes = Array.prototype.filter.call(btn.childNodes, (n) => n.nodeType === 3 && n.textContent.trim().length > 0);
+            if (!textNodes.length) return btn;
+          }
+        }
+        return null;
+      }
+      const nav = el.closest(".nav");
+      if (nav && !isNavCollapsed(nav)) return null;
+      return el;
+    }
+
+    function extractTooltipText(el) {
+      if (!el) return "";
+      const custom = el.getAttribute("data-tooltip");
+      if (custom && custom.trim()) return custom.trim();
+
+      if (el.classList.contains("reply")) return tr("Reply");
+      if (el.classList.contains("repost")) return tr("Repost");
+      if (el.classList.contains("like")) return tr("Like");
+      if (el.classList.contains("bookmark")) return tr("Bookmark");
+      if (el.classList.contains("share")) return tr("Share");
+      if (el.classList.contains("views")) return tr("Views");
+      if (el.classList.contains("account-pill")) return tr("Accounts");
+
+      const navLabel = el.querySelector(".nav-label");
+      if (navLabel && navLabel.textContent.trim()) return navLabel.textContent.trim();
+
+      const postLabel = el.querySelector(".post-label");
+      if (postLabel && postLabel.textContent.trim()) return postLabel.textContent.trim();
+
+      const aria = el.getAttribute("aria-label");
+      if (aria && aria.trim()) return aria.trim();
+
+      const tempTitle = el.getAttribute("data-tooltip-title") || el.getAttribute("title");
+      if (tempTitle && tempTitle.trim()) return tempTitle.trim();
+
+      return "";
+    }
+
+    function hideTooltip(immediate) {
+      clearTimeout(tooltipTimer);
+      if (activeTarget && activeTarget.hasAttribute("data-tooltip-title")) {
+        activeTarget.setAttribute("title", activeTarget.getAttribute("data-tooltip-title"));
+        activeTarget.removeAttribute("data-tooltip-title");
+      }
+      activeTarget = null;
+      if (!tooltipEl) return;
+      if (tooltipEl.classList.contains("is-visible")) {
+        lastHideTime = Date.now();
+        tooltipEl.classList.remove("is-visible");
+        if (immediate) {
+          tooltipEl.style.display = "none";
+        } else {
+          setTimeout(() => {
+            if (!activeTarget && tooltipEl) tooltipEl.style.display = "none";
+          }, 120);
+        }
+      }
+    }
+
+    function positionTooltip(el, text) {
+      const tip = ensureTooltipEl();
+      tip.textContent = text;
+      tip.style.display = "block";
+      tip.classList.remove("is-visible");
+
+      const rect = el.getBoundingClientRect();
+      const tipW = tip.offsetWidth;
+      const tipH = tip.offsetHeight;
+      const winW = window.innerWidth;
+      const winH = window.innerHeight;
+
+      const inNav = !!el.closest(".nav");
+      const inBottomNav = !!el.closest(".bottom-nav");
+
+      let left = 0;
+      let top = 0;
+
+      if (inNav) {
+        left = rect.right + 10;
+        top = rect.top + (rect.height - tipH) / 2;
+      } else if (inBottomNav) {
+        left = rect.left + (rect.width - tipW) / 2;
+        top = rect.top - tipH - 8;
+      } else {
+        left = rect.left + (rect.width - tipW) / 2;
+        if (rect.bottom + tipH + 8 < winH) {
+          top = rect.bottom + 6;
+        } else {
+          top = rect.top - tipH - 6;
+        }
+      }
+
+      left = Math.max(6, Math.min(winW - tipW - 6, left));
+      top = Math.max(6, Math.min(winH - tipH - 6, top));
+
+      tip.style.left = Math.round(left) + "px";
+      tip.style.top = Math.round(top) + "px";
+
+      requestAnimationFrame(() => {
+        tip.classList.add("is-visible");
+      });
+    }
+
+    function showTooltip(target, immediate) {
+      const el = findTooltipTarget(target);
+      if (!el) {
+        hideTooltip(false);
+        return;
+      }
+      if (el === activeTarget) return;
+
+      hideTooltip(true);
+
+      const text = extractTooltipText(el);
+      if (!text) return;
+
+      if (el.hasAttribute("title")) {
+        el.setAttribute("data-tooltip-title", el.getAttribute("title"));
+        el.removeAttribute("title");
+      }
+
+      activeTarget = el;
+      const now = Date.now();
+      const recentlyActive = (now - lastHideTime) < 320;
+      const delay = immediate || recentlyActive ? 0 : 200;
+
+      tooltipTimer = setTimeout(() => {
+        if (activeTarget === el && el.isConnected) {
+          positionTooltip(el, text);
+        }
+      }, delay);
+    }
+
+    document.addEventListener("pointerover", (event) => {
+      if (event.pointerType === "touch") return;
+      showTooltip(event.target, false);
+    }, { passive: true });
+
+    document.addEventListener("pointerout", (event) => {
+      if (event.pointerType === "touch") return;
+      const related = event.relatedTarget;
+      if (!related || (activeTarget && !activeTarget.contains(related))) {
+        hideTooltip(false);
+      }
+    }, { passive: true });
+
+    document.addEventListener("focusin", (event) => {
+      showTooltip(event.target, true);
+    }, { passive: true });
+
+    document.addEventListener("focusout", () => {
+      hideTooltip(true);
+    }, { passive: true });
+
+    window.addEventListener("scroll", () => hideTooltip(true), { passive: true, capture: true });
+    window.addEventListener("pointerdown", () => hideTooltip(true), { passive: true });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") hideTooltip(true);
+    }, { passive: true });
+  }
+
+  initTooltipController();
   boot();
 })();
