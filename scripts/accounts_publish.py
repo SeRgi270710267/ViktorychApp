@@ -12,6 +12,7 @@ non-zero. The Pages deploy is skipped and the previous site stays up.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -90,7 +91,7 @@ def fetch_health(api: str) -> dict | None:
             api.rstrip("/") + "/v1/health",
             headers={"User-Agent": "viktorych-accounts-publish"},
         )
-        with urllib.request.urlopen(req, timeout=20) as res:
+        with urllib.request.urlopen(req, timeout=35) as res:
             if res.status != 200:
                 return None
             body = json.loads(res.read().decode("utf-8"))
@@ -293,6 +294,7 @@ def publish(site: Path, source: Path) -> int:
         if backup_health:
             print(f"primary API ({api}) is not ready; using backup API ({backup_api})")
             ready_health = backup_health
+            api = backup_api
     if not ready_health:
         return unlocked("accounts API is not ready;")
     files = collect(source)
@@ -322,6 +324,8 @@ def repair(site: Path, prior: dict) -> int:
         backup_api = (os.environ.get("ACCOUNTS_BACKUP_API") or "").strip().rstrip("/")
         if not (health and health.get("ready") and health.get("data")) and backup_api:
             health = fetch_health(backup_api)
+            if health and health.get("ready") and health.get("data"):
+                prior["api"] = backup_api
         if health and health.get("ready") and health.get("data"):
             try:
                 for key, path in sorted(collect(site).items()):
