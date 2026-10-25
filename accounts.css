@@ -706,3 +706,15 @@ html[data-theme="default"] .acct-field { border-color: #cfd9de; }
   padding: 10px 12px;
   font-size: 14px;
 }
+
+.acct-ident-add {
+  cursor: pointer;
+  background: var(--accent-dim, rgba(29, 155, 240, 0.15));
+  border-color: var(--accent, #1d9bf0);
+  color: var(--accent, #1d9bf0);
+  font-weight: 600;
+}
+.acct-ident-add:hover {
+  background: var(--accent, #1d9bf0);
+  color: #fff;
+}
