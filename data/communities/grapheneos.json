@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T15:15:17Z",
+  "fetchedAt": "2026-10-25T15:28:03Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "Morfyum",
       "authorUsername": "Morfyum",
       "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/RBqkOvRww7A8oNVS.png",
-      "score": 4,
-      "comments": 4,
+      "score": 5,
+      "comments": 5,
       "views": 70,
       "participantCount": 2,
       "created": 1791632465,
-      "lastPostedAt": 1792940930,
+      "lastPostedAt": 1792941949,
       "category": "Third party apps and services",
       "categoryColor": "#994ce6",
       "tags": [
@@ -1913,8 +1913,43 @@
           "created": 1792940930,
           "parent": "42717",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/42717-whatsapp-call-screen-only-shows-after-unlock-secondary-user-android-17/1\" class=\"PostMention\" data-id=\"274176\"><i class=\"icon fas fa-reply\"></i>Morfyum</a> <em><strong>I'd say the problem is solved on my end—probably on WhatsApp's end.</strong></em></p>"
+        },
+        {
+          "id": "277345",
+          "number": 5,
+          "author": "Morfyum",
+          "authorUsername": "Morfyum",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/RBqkOvRww7A8oNVS.png",
+          "score": 0,
+          "created": 1792941949,
+          "parent": "42717",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42717-whatsapp-call-screen-only-shows-after-unlock-secondary-user-android-17/4\" class=\"PostMention\" data-id=\"277343\"><i class=\"icon fas fa-reply\"></i>Morfyum</a> I was too quick—the problem isn't solved yet. I just locked the screen again and put it into forced Deep Doze, and the error came back.</p>"
         }
       ]
+    },
+    {
+      "id": "43088",
+      "title": "Simple Login app",
+      "author": "MotherShipton",
+      "authorUsername": "MotherShipton",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792925733,
+      "lastPostedAt": 1792941902,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43088-simple-login-app",
+      "media": [],
+      "text": "<p>I am using the Simple Login app from github (<a href=\"https://github.com/simple-login/Simple-Login-Android\" rel=\"ugc nofollow\">https://github.com/simple-login/Simple-Login-Android</a>) and notice that it has not been updated for 2 years. Is this a cause for concern? Is there a better way to use the Simple Login service? I use it mainly to create the reverse alias address for sending an email from a newly created address.</p> \n",
+      "replies": []
     },
     {
       "id": "43073",
@@ -2185,30 +2220,6 @@
       "url": "https://discuss.grapheneos.org/d/18184-whatsapp-you-need-the-official-whatsapp-to-log-in",
       "media": [],
       "text": "<p>I've been using WhatsApp for a year or so without issue on GrapheneOS. Recently I purchased a new phone number. Adding that account to WhatsApp was blocked and I got the \"You need the official WhatsApp to log in\" error message. (<a href=\"https://appuals.com/you-need-the-official-whatsapp-to-log-in-error/\" rel=\"ugc nofollow\">https://appuals.com/you-need-the-official-whatsapp-to-log-in-error/</a>).</p>\n\n<p>I presume this is because WhatsApp is detecting that the app is running on GrapheneOS and now blocking new accounts. Does anyone know of a workaround for this or am I out of luck? Do not really want to get into rooting etc, would prefer to stay stock.</p>",
-      "replies": []
-    },
-    {
-      "id": "43092",
-      "title": "Viber",
-      "author": "redacted_handle",
-      "authorUsername": "redacted_handle",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792936160,
-      "lastPostedAt": 1792936575,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43092-viber",
-      "media": [],
-      "text": "<p>Hi!<br>\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.<br>\nIs there a way to not show the call log and activate the account?</p>",
       "replies": []
     }
   ]
