@@ -745,7 +745,19 @@
 
   function homePillsHtml() {
     const items = homeItems();
-    return items.map((item) => '<div class="sp-row-item" role="listitem">' + pill(item) + "</div>").join("");
+    if (items.length) {
+      return items.map((item) => '<div class="sp-row-item" role="listitem">' + pill(item) + "</div>").join("");
+    }
+    const musicSpace = spaceModel("superintelmusic") || {
+      id: "superintelmusic",
+      title: productName("music") || "ViktorychMusic",
+      cover: "icons/sergi-telegram.jpg",
+      host: { name: "SеРgИ3775996834", handle: "redacted_handle", platform: "telegram", avatar: "icons/sergi-telegram.jpg" },
+      live: true,
+      state: "live",
+      href: "#/spaces/superintelmusic"
+    };
+    return '<div class="sp-row-item" role="listitem">' + pill(musicSpace) + "</div>";
   }
 
   function homeRow() {
