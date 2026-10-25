@@ -360,7 +360,8 @@
   function editBody() {
     var privRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Keep followers and following private")) + '</b><p>' + esc(tr("Only you can see your followers and following lists.")) + '</p></div><button class="tab-switch' + (form.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.privateFollows ? "true" : "false") + '" data-acct="toggle-form-private"><i></i></button></div>';
     var profLessRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Profile-less account")) + '</b><p>' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p></div><button class="tab-switch' + (form.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.profileLess ? "true" : "false") + '" data-acct="toggle-form-profileless"><i></i></button></div>';
-    return editMedia() + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + privRow + profLessRow + '<p class="acct-error">' + esc(errorText) + "</p>";
+    var linkRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Linked social accounts")) + '</b><p>' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p></div><button class="outline" type="button" data-acct="open-link-identity">' + esc(tr("Link social account")) + '</button></div>';
+    return editMedia() + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + privRow + profLessRow + linkRow + '<p class="acct-error">' + esc(errorText) + "</p>";
   }
   function editModal(body) {
     return '<div class="acct-back"><div class="acct-modal acct-edit" role="dialog" aria-modal="true" aria-label="' + esc(tr("Edit profile")) + '"><div class="acct-head acct-edit-head"><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button><h1>' + esc(tr("Edit profile")) + '</h1><button class="acct-save" type="button" data-acct="save-profile">' + esc(tr("Save")) + '</button></div><div class="acct-body acct-edit-body">' + body + "</div></div></div>";
@@ -1548,7 +1549,10 @@
 
   function linkedIdentitiesHtml(account) {
     var list = (account && account.identities) || [];
-    if (!list.length) return "";
+    var session = readSession();
+    var mine = !!(session && session.account && (session.account.publicId === account.publicId || skel(session.account.handle) === skel(account.handle)));
+    if (!list.length && !mine) return "";
+    var addBtn = mine ? '<button class="acct-ident-chip acct-ident-add" type="button" data-acct="open-link-identity"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg> <span>' + esc(tr("Link social profile")) + '</span></button>' : '';
     var chips = list.map(function (item) {
       var platform = item.platform || "x";
       var handle = item.handle || "";
@@ -1559,7 +1563,7 @@
         '<span class="acct-ident-handle">@' + esc(handle) + '</span>' +
         verifiedSvg() +
       '</a>';
-    }).join("");
+    }).join("") + addBtn;
     return '<div class="acct-ident-row"><span class="acct-ident-label">' + esc(tr("Linked profiles")) + ':</span><div class="acct-ident-chips">' + chips + '</div></div>';
   }
 
