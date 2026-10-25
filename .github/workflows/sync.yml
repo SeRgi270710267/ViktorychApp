@@ -239,10 +239,9 @@ jobs:
         id: filter
         env:
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_PATH: ${{ github.event_path }}
         run: |
           python3 - <<'PY'
-          import json, os
+          import os, subprocess
           event = os.environ.get("EVENT_NAME", "")
           # Cron schedule and manual dispatch always refresh all feeds
           if event in ("schedule", "workflow_dispatch"):
@@ -251,30 +250,21 @@ jobs:
                   f.write("refresh=true\n")
               raise SystemExit(0)
 
-          # On push, check what changed
-          event_path = os.environ.get("EVENT_PATH")
-          needs_refresh = True
-          if event == "push" and event_path and os.path.exists(event_path):
-              try:
-                  with open(event_path, "r", encoding="utf-8") as f:
-                      payload = json.load(f)
-                  commits = payload.get("commits") or []
-                  touched = set()
-                  for c in commits:
-                      for f in c.get("added", []) + c.get("modified", []) + c.get("removed", []):
-                          touched.add(f)
-                  if touched:
-                      needs_refresh = any(
-                          f == "feeds.config.json" or
-                          f.startswith("scripts/adapters/") or
-                          f in ("scripts/update_feeds.py", "scripts/tiktok_sync.py")
-                          for f in touched
-                      )
-              except Exception:
-                  needs_refresh = True
+          # On push, check what changed in HEAD commit
+          try:
+              files = subprocess.check_output(["git", "show", "--name-only", "--format=", "HEAD"], text=True).splitlines()
+          except Exception:
+              files = []
+
+          needs_refresh = any(
+              f == "feeds.config.json" or
+              f.startswith("scripts/adapters/") or
+              f in ("scripts/update_feeds.py", "scripts/tiktok_sync.py")
+              for f in files
+          )
 
           val = "true" if needs_refresh else "false"
-          print(f"Push trigger: feed refresh={val}")
+          print(f"Push trigger: feed refresh={val} (files: {len(files)})")
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
               f.write(f"refresh={val}\n")
           PY
