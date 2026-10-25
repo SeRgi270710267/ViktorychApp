@@ -116,6 +116,10 @@ jobs:
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.loop_only != 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["0/2", "1/2"]
     steps:
       - name: Skip when a required secret is missing
         id: secrets
@@ -216,7 +220,7 @@ jobs:
           TG_MAX_MB: ${{ vars.TG_MAX_MB }}
           TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
           TG_WORKER_URL: ${{ vars.TG_WORKER_URL }}
-          TG_SHARD: ${{ github.event.inputs.shard || vars.TG_SHARD || '' }}
+          TG_SHARD: ${{ github.event.inputs.shard || matrix.shard }}
           TELEGRAM_LOCAL: ${{ steps.preflight.outputs.local == 'true' && '1' || '0' }}
           PYTHONUNBUFFERED: "1"
         run: |
