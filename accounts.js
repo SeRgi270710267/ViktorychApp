@@ -289,7 +289,14 @@
       '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
   }
   function loginBody() {
-    return field("accountNumber", tr("Account number")) + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="do-login">' + esc(tr("Log in")) + '</button><p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + "</button></p>";
+    return field("accountNumber", tr("Account number")) + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="do-login">' + esc(tr("Log in")) + '</button><p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-restore">' + esc(tr("Restore session from another device")) + "</button></p>";
+  }
+  function restoreBody() {
+    return '<p class="acct-sub">' + esc(tr("Paste your session code from another device to sign in.")) + '</p>' +
+      textArea("sessionCode", tr("Session code"), 2000) +
+      '<p class="acct-error">' + esc(errorText) + '</p>' +
+      '<button class="acct-next" type="button" data-acct="do-restore">' + esc(tr("Restore session")) + '</button>' +
+      '<p class="acct-switch"><button type="button" data-acct="login">' + esc(tr("Back to sign in")) + '</button></p>';
   }
   function photoHtml(url, cls) {
     if (!url) return "";
@@ -380,6 +387,7 @@
     if (blocking()) html += landing();
     if (view === "signup") html += modal(tr("Create your account"), signupBody());
     else if (view === "login") html += modal(tr("Sign in to {app}", { app: appName() }), loginBody());
+    else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "edit") html += editModal(editBody());
     else if (view === "crop") html += cropModal();
     else if (view === "legal") html += modal(legalTitle || tr("About"), legalBody());
@@ -779,7 +787,11 @@
     errorText = "";
     api("/v1/login", { method: "POST", body: { accountNumber: digits, turnstileToken: turnstileToken() } }).then(function (res) {
       if (res.status !== 200 || !res.token) {
-        errorText = errorMessage(res.error);
+        if (res.status === 429) {
+          errorText = tr("Too many attempts. Try again later.");
+        } else {
+          errorText = errorMessage(res.error) || tr("Could not sign in.");
+        }
         paint();
         return;
       }
@@ -788,6 +800,64 @@
       errorText = tr("Something went wrong. Try again.");
       paint();
     });
+  }
+  function doRestoreSession() {
+    var raw = String(form.sessionCode || "").trim();
+    errorText = "";
+    if (!raw) {
+      errorText = tr("Enter your session code.");
+      paint();
+      return;
+    }
+    var parsed = null;
+    try {
+      var decoded = decodeURIComponent(escape(atob(raw.replace(/\s+/g, ""))));
+      parsed = JSON.parse(decoded);
+    } catch (e) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (e2) {
+        if (/^[a-zA-Z0-9_-]{20,}$/.test(raw)) {
+          parsed = { token: raw };
+        }
+      }
+    }
+    if (!parsed || !parsed.token) {
+      errorText = tr("Invalid session code.");
+      paint();
+      return;
+    }
+    if (parsed.account && parsed.account.handle) {
+      commitSession(parsed.token, parsed.account);
+      return;
+    }
+    api("/v1/session", { token: parsed.token }).then(function (res) {
+      if (res.status === 200 && res.account) {
+        commitSession(parsed.token, res.account);
+      } else {
+        errorText = tr("Invalid session code.");
+        paint();
+      }
+    }).catch(function () {
+      errorText = tr("Something went wrong. Try again.");
+      paint();
+    });
+  }
+  function copySession() {
+    var session = readSession();
+    if (!session || !session.token) return;
+    var payload = btoa(unescape(encodeURIComponent(JSON.stringify({ token: session.token, account: session.account }))));
+    var done = function () {
+      errorText = tr("Session code copied");
+      paint();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(payload).then(done, function () {
+        prompt(tr("Copy session code:"), payload);
+      });
+    } else {
+      prompt(tr("Copy session code:"), payload);
+    }
   }
   function copyNumber() {
     var pending = readPending();
@@ -1806,7 +1876,7 @@
       health = healthHtml() + channelsHtml();
     }
     return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + '</button><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
   }
   function onClick(event) {
     var friendSub = event.target && event.target.closest ? event.target.closest("[data-friend-sub]") : null;
@@ -1850,6 +1920,7 @@
     var act = acct.dataset.acct;
     if (act === "signup") openAuth("signup");
     else if (act === "login") openAuth("login");
+    else if (act === "open-restore") openAuth("restore");
     else if (act === "close") closeAuth();
     else if (act === "open-link-identity") {
       linkIdentityForm = { platform: "x", handle: "", proofUrl: "", step: 0, challenge: null, loading: false };
@@ -1964,6 +2035,8 @@
     else if (act === "stay") { view = "signup"; step = 2; paint(); }
     else if (act === "next") nextSignup();
     else if (act === "do-login") doLogin();
+    else if (act === "do-restore") doRestoreSession();
+    else if (act === "copy-session") copySession();
     else if (act === "claim") { form.claimOpen = true; paint(); }
     else if (act === "copy") copyNumber();
     else if (act === "download") downloadNumber();
@@ -2200,7 +2273,44 @@
       if (button) button.disabled = !form.saved;
     }
   }, true);
+  function checkUrlSession() {
+    var hash = location.hash || "";
+    var m = hash.match(/^#\/(?:session|restore)=([A-Za-z0-9+/=_-]+)/);
+    if (!m) return false;
+    try {
+      var raw = decodeURIComponent(escape(atob(m[1])));
+      var parsed = JSON.parse(raw);
+      if (parsed && parsed.token && parsed.account) {
+        history.replaceState(null, "", location.pathname + location.search + "#/");
+        commitSession(parsed.token, parsed.account);
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+    var el = event.target;
+    if (!el || !el.closest || !el.closest("#account-layer")) return;
+    if (el.tagName === "TEXTAREA") return;
+    event.preventDefault();
+    if (view === "login") {
+      doLogin();
+    } else if (view === "restore") {
+      doRestoreSession();
+    } else if (view === "signup") {
+      if (step === 2) {
+        if (form.saved) {
+          var pending = readPending();
+          if (pending) commitSession(pending.token, pending.account);
+        }
+      } else {
+        nextSignup();
+      }
+    }
+  }, true);
   window.addEventListener("hashchange", function () {
+    if (checkUrlSession()) return;
     if (!blocking()) return;
     var hash = location.hash || "";
     if (hash && hash !== "#" && hash !== "#/") {
@@ -2217,6 +2327,7 @@
     tellSW(!!mine);
   }
   if (window.SI18n && window.SI18n.onChange) window.SI18n.onChange(function () { if (blocking() || view) paint(); });
+  checkUrlSession();
   if (blocking()) enter();
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
