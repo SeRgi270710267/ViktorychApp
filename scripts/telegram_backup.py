@@ -68,6 +68,7 @@ LOOP_MAX_FILES = 2000
 MIN_INTERVAL = 3.0
 REQUIRED = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHANNEL_ID")
 SECRET_NAMES = REQUIRED + (
+    "TELEGRAM_BOT_TOKENS",
     "TELEGRAM_API_ID",
     "TELEGRAM_API_HASH",
     "TG_BACKUP_KEY",
@@ -135,12 +136,74 @@ def scrub(text: str, secrets) -> str:
     return out
 
 
+def get_bot_tokens() -> list[str]:
+    raw = (os.environ.get("TELEGRAM_BOT_TOKENS") or "").strip()
+    tokens: list[str] = []
+    if raw:
+        for t in re.split(r"[\s,;]+", raw):
+            t = t.strip()
+            if ":" in t and len(t) >= 20 and "\n" not in t and "\r" not in t:
+                if t not in tokens:
+                    tokens.append(t)
+    single = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if single and ":" in single and len(single) >= 20 and "\n" not in single and "\r" not in single:
+        if single not in tokens:
+            tokens.append(single)
+    return tokens
+
+
 def current_secrets() -> list:
-    return [os.environ.get(name) or "" for name in SECRET_NAMES]
+    secrets = [os.environ.get(name) or "" for name in SECRET_NAMES]
+    for token in get_bot_tokens():
+        if token and token not in secrets:
+            secrets.append(token)
+    return secrets
 
 
 def log(message: str) -> None:
     print(scrub(message, current_secrets()), flush=True)
+
+
+def parse_shard(arg: str | None = None) -> tuple[int, int] | None:
+    raw = (arg or os.environ.get("TG_SHARD") or "").strip()
+    if not raw:
+        return None
+    m = re.match(r"^(\d+)/(\d+)$", raw)
+    if not m:
+        return None
+    k, n = int(m.group(1)), int(m.group(2))
+    if n <= 1 or k < 0 or k >= n:
+        return None
+    return (k, n)
+
+
+def shard_match(key: str, shard: tuple[int, int] | None) -> bool:
+    if not shard:
+        return True
+    k, n = shard
+    h = int(hashlib.md5(key.encode("utf-8")).hexdigest()[:8], 16)
+    return (h % n) == k
+
+
+def next_bot(cf: dict, state: dict) -> str:
+    bots = cf.get("bots") or ([cf.get("bot")] if cf.get("bot") else [])
+    if not bots:
+        return ""
+    if len(bots) == 1:
+        return bots[0]
+    bot_lasts = state.setdefault("bot_lasts", {})
+    now = time.time()
+    best_bot = bots[0]
+    best_wait = gap_seconds(bot_lasts.get(best_bot) or 0, now)
+    best_last = float(bot_lasts.get(best_bot) or 0)
+    for b in bots[1:]:
+        w = gap_seconds(bot_lasts.get(b) or 0, now)
+        l = float(bot_lasts.get(b) or 0)
+        if w < best_wait or (w == best_wait and l < best_last):
+            best_bot = b
+            best_wait = w
+            best_last = l
+    return best_bot
 
 
 def max_mb() -> float:
@@ -1794,16 +1857,21 @@ def curl_form(api_base: str, token: str, channel: str, path: Path, caption: str)
 
 
 def send_document(api_base: str, token: str, channel: str, path: Path, caption: str, state: dict) -> dict:
+    bot_lasts = state.setdefault("bot_lasts", {})
     for _attempt in range(6):
-        wait = gap_seconds(state.get("last") or 0, time.time())
+        wait = gap_seconds(bot_lasts.get(token) or 0, time.time())
         if wait:
             time.sleep(wait)
         parsed = curl_form(api_base, token, channel, path, caption)
-        state["last"] = time.time()
+        now = time.time()
+        bot_lasts[token] = now
+        state["last"] = now
         delay = retry_after(int(parsed.get("_status") or 0), parsed)
         if delay is not None:
             time.sleep(delay)
-            state["last"] = time.time()
+            now = time.time()
+            bot_lasts[token] = now
+            state["last"] = now
             continue
         if not parsed.get("ok"):
             desc = scrub(str(parsed.get("description") or ""), current_secrets())
@@ -1961,7 +2029,8 @@ def upload_path(api_base: str, token: str, channel: str, path: Path, caption: st
             upsert_part(entry, saved)
             log("[telegram-backup] already saved %s" % stored_key)
             return
-    sent = send_document(api_base, token, channel, path, caption, state)
+    active_token = next_bot(cf, state) or token
+    sent = send_document(api_base, active_token, channel, path, caption, state)
     if int(sent.get("file_size") or 0) != path.stat().st_size:
         raise RuntimeError("telegram reported a different size")
     when = int(sent.get("date") or 0)
@@ -2142,12 +2211,15 @@ def needs_local(objects: list) -> bool:
 
 
 def missing_required() -> bool:
-    return any(not (os.environ.get(name) or "").strip() for name in REQUIRED)
+    has_tokens = bool(get_bot_tokens()) or bool((os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip())
+    has_channel = bool((os.environ.get("TELEGRAM_CHANNEL_ID") or "").strip())
+    return not (has_tokens and has_channel)
 
 
 def validate_channel() -> bool:
     channel = (os.environ.get("TELEGRAM_CHANNEL_ID") or "").strip()
-    token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    tokens = get_bot_tokens()
+    token = tokens[0] if tokens else (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
     if "\n" in channel or "\r" in token or "\n" in token or "\r" in channel:
         return False
     if re.fullmatch(r"-?\d{5,30}", channel) is None:
@@ -2581,13 +2653,18 @@ def process(obj: dict, manifest: dict, cf: dict, state: dict, directory: Path) -
     return "ok"
 
 
-def backup(loop_only: bool = False) -> int:
+def backup(loop_only: bool = False, shard: tuple[int, int] | None = None) -> int:
     cf = prepare_clients()
     if cf is None:
         return 0
     if cf.get("error"):
         return 1
-    bot = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if shard is None:
+        shard = parse_shard()
+    if shard:
+        log("[telegram-backup] active shard %s/%s" % (shard[0], shard[1]))
+    bots = get_bot_tokens()
+    bot = bots[0] if bots else (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
     channel = (os.environ.get("TELEGRAM_CHANNEL_ID") or "").strip()
     directory = Path(tempfile.mkdtemp(prefix="tg-backup-"))
     try:
@@ -2618,6 +2695,7 @@ def backup(loop_only: bool = False) -> int:
         blocked = collect_blocked_keys(cf, rows, directory)
         cf.update({
             "bot": bot,
+            "bots": bots,
             "channel": channel,
             "database": database,
             "worker": worker,
@@ -2625,6 +2703,8 @@ def backup(loop_only: bool = False) -> int:
             "loop_version": version,
             "blocked_keys": blocked,
         })
+        if len(bots) > 1:
+            log("[telegram-backup] multi-bot pool active (%s bots)" % len(bots))
         state = new_entry_state()
         if loop_only:
             state["file_cap"] = loop_file_cap()
@@ -2655,8 +2735,11 @@ def backup(loop_only: bool = False) -> int:
         for obj in sort_objects(rows, rank):
             if stopped:
                 break
-            owned = find_entry(manifest, "cdn", str(obj.get("key") or ""))
-            if owned and owned.get("parts") and str(obj.get("key") or "").startswith(("tiktok/", "social/")):
+            key_str = str(obj.get("key") or "")
+            if shard and not shard_match(key_str, shard):
+                continue
+            owned = find_entry(manifest, "cdn", key_str)
+            if owned and owned.get("parts") and key_str.startswith(("tiktok/", "social/")):
                 continue
             if structural_role(obj["key"]) == "manifest":
                 continue
@@ -2683,6 +2766,8 @@ def backup(loop_only: bool = False) -> int:
         log_d1_newest(cf)
         if loop_only:
             log("[telegram-backup] loop mirror stored %s segments, largest %s bytes" % (state.get("loop_segments") or 0, state.get("loop_max") or 0))
+        if shard:
+            log("[telegram-backup] shard %s/%s finished" % (shard[0], shard[1]))
         return 0
     except Exception as err:
         log("[telegram-backup] backup failed")
@@ -2984,8 +3069,22 @@ process.stdout.write([
     check(probed.returncode == 0, "the probe self-test passes")
     restored = subprocess.run([sys.executable, str(ROOT / "scripts" / "telegram_restore.py"), "--selftest"], capture_output=True, text=True, check=False)
     check(restored.returncode == 0, "the restore self-test passes")
+    check(parse_shard("1/3") == (1, 3) and parse_shard("invalid") is None, "shard parser parses K/N format")
+    check(shard_match("test-key-abc", (0, 2)) != shard_match("test-key-abc", (1, 2)), "shard matcher splits keys disjointly")
+    check(next_bot({"bots": ["botA", "botB"]}, {"bot_lasts": {"botA": 1000000000.0, "botB": 0.0}}) == "botB", "multi-bot pool chooses the idle bot")
     print("telegram backup selftest ok")
     return 0
+
+
+def continuous_loop(loop_only: bool = False, shard: tuple[int, int] | None = None, interval: float = 120.0) -> int:
+    log("[telegram-backup] starting continuous backup runner (interval %ss)" % interval)
+    while True:
+        try:
+            backup(loop_only=loop_only, shard=shard)
+        except Exception as err:
+            log("[telegram-backup] continuous cycle error: %s" % scrub(str(err), current_secrets()))
+        log("[telegram-backup] sleeping %ss before next cycle..." % interval)
+        time.sleep(interval)
 
 
 def main(argv: list | None = None) -> int:
@@ -2995,9 +3094,30 @@ def main(argv: list | None = None) -> int:
             return selftest()
         if "--preflight" in args:
             return preflight()
-        if "--loop" in args:
-            return backup(loop_only=True)
-        return backup()
+        loop_only = "--loop" in args
+        shard = None
+        continuous = "--continuous" in args
+        interval = 120.0
+        for i, a in enumerate(args):
+            if a.startswith("--shard="):
+                shard = parse_shard(a.split("=", 1)[1])
+            elif a == "--shard" and i + 1 < len(args):
+                shard = parse_shard(args[i + 1])
+            elif a.startswith("--interval="):
+                try:
+                    interval = float(a.split("=", 1)[1])
+                except ValueError:
+                    pass
+            elif a == "--interval" and i + 1 < len(args):
+                try:
+                    interval = float(args[i + 1])
+                except ValueError:
+                    pass
+        if shard is None:
+            shard = parse_shard()
+        if continuous:
+            return continuous_loop(loop_only=loop_only, shard=shard, interval=interval)
+        return backup(loop_only=loop_only, shard=shard)
     except SystemExit:
         raise
     except Exception as err:
