@@ -533,6 +533,10 @@
       }
       entered = true;
     }
+    try {
+      if (window.Audio && window.SIntelMusic && window.SIntelMusic.pause) window.SIntelMusic.pause();
+      document.querySelectorAll("audio, video").forEach(function (el) { el.pause(); });
+    } catch (e) {}
     document.documentElement.setAttribute("data-wall", "1");
     if (readPending()) {
       view = "signup";
@@ -1864,7 +1868,9 @@
   }
   function pillInner() {
     var session = readSession();
-    if (!session || !session.account) return "";
+    if (!session || !session.account) {
+      return '<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>' + esc(tr("Sign in")) + '</b><span>' + esc(tr("Not signed in")) + '</span></span>';
+    }
     var account = session.account;
     var photo = publicAvatar(account.avatar, account.avatarFace, "");
     var isAnon = !!account.profileLess;
@@ -1874,13 +1880,20 @@
   }
   function drawerHead() {
     var session = readSession();
-    if (!session || !session.account) return "";
+    if (!session || !session.account) {
+      return '<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer">' +
+        '<span class="ava initials">?</span>' +
+        '<div style="flex:1"><b>' + esc(tr("Sign in")) + '</b><div class="phandle">' + esc(tr("Not signed in")) + '</div></div>' +
+        '<button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">' + esc(tr("Sign in")) + '</button>' +
+        '</div>';
+    }
     var account = session.account;
     var photo = publicAvatar(account.avatar, account.avatarFace, "");
     var isAnon = !!account.profileLess;
     var name = isAnon ? (account.displayName || tr("Anonymous")) : (account.displayName || "");
     var sub = isAnon ? tr("Profile-less account") : "@" + (account.handle || "");
-    return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(name) + '</b><div class="phandle">' + esc(sub) + "</div></div></a>";
+    return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(name) + '</b><div class="phandle">' + esc(sub) + "</div></div></a>" +
+      '<div style="padding:0 20px 12px"><button class="outline" type="button" data-acct="logout" style="width:100%;font-size:13px;padding:6px 12px;border-color:rgba(244,33,46,0.4);color:#f4212e">' + esc(tr("Log out")) + '</button></div>';
   }
   var tiktokHealth = null;
   var tiktokHealthAt = 0;
@@ -1976,7 +1989,15 @@
   }
   function settingsHtml() {
     var session = readSession();
-    if (!session || !session.account) return "";
+    if (!session || !session.account) {
+      return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + '</h2>' +
+        '<p class="phandle">' + esc(tr("Not signed in")) + '</p>' +
+        '<button class="outline" type="button" data-acct="login" style="margin-top:8px">' + esc(tr("Sign in to {app}", { app: appName() })) + '</button>' +
+        '<button class="outline" type="button" data-acct="signup">' + esc(tr("Create account")) + '</button>' +
+        '<button class="outline" type="button" data-acct="open-emergency">' + esc(tr("Emergency Offline Access")) + '</button>' +
+        '<button class="outline" type="button" data-acct="open-restore">' + esc(tr("Restore session")) + '</button>' +
+        '</div>';
+    }
     var account = session.account;
     var hidden = account.hideAvatar === "none" || account.hideAvatar === "default" ? account.hideAvatar : "";
     function hideBtn(mode, label) {
@@ -2034,6 +2055,7 @@
     if (act === "signup") openAuth("signup");
     else if (act === "login") openAuth("login");
     else if (act === "open-restore") openAuth("restore");
+    else if (act === "open-emergency") openAuth("emergency");
     else if (act === "close") closeAuth();
     else if (act === "open-link-identity") {
       linkIdentityForm = { platform: "x", handle: "", proofUrl: "", step: 0, challenge: null, loading: false };
@@ -2441,6 +2463,23 @@
   if (config().gate) {
     installFetch();
     tellSW(!!mine);
+  } else {
+    try {
+      if (typeof fetch === "function") {
+        nativeFetch("./accounts.config.js?_cb=" + Date.now(), { cache: "no-store" })
+          .then(function (res) { return res.ok ? res.text() : ""; })
+          .then(function (code) {
+            if (/gate:\s*true/.test(code)) {
+              try { (new Function(code))(); } catch (e) {}
+              if (config().gate && !readSession()) {
+                installFetch();
+                enter();
+                paint();
+              }
+            }
+          }).catch(function () {});
+      }
+    } catch (e) {}
   }
   if (window.SI18n && window.SI18n.onChange) window.SI18n.onChange(function () { if (blocking() || view) paint(); });
   checkUrlSession();
