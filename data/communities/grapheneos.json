@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T16:27:35Z",
+  "fetchedAt": "2026-10-25T17:39:57Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,128 @@
       ]
     },
     {
+      "id": "43093",
+      "title": "Mobile Forensics Today and Tomorrow",
+      "author": "goslov9",
+      "authorUsername": "goslov9",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792949462,
+      "lastPostedAt": 1792949462,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43093-mobile-forensics-today-and-tomorrow",
+      "media": [],
+      "text": "<p>Currently, the biggest players are MOBILedit, XRY, and Cellebrite. They mostly rely on USB-C port, RAM, and Bluetooth/Wi-Fi exploits. GrapheneOS mitigates these threats by disabling the USB-C port, Bluetooth, and Wi-Fi while the device is in BFU mode, making typical attacks impossible. Furthermore, GrapheneOS hardens the phone by limiting the possibilities for RAM exploits. The Titan M2 chip limits the possibility of brute-force attacks, software downgrades, and much more.</p>\n\n<p>My question is: How could a theoretical, well-funded attacker exploit GrapheneOS while it is in BFU mode? What possible attack vectors remain if most are closed?</p>",
+      "replies": []
+    },
+    {
+      "id": "43091",
+      "title": "Android Auto developer settings/allow all sources ",
+      "author": "Mrtigger",
+      "authorUsername": "Mrtigger",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792932485,
+      "lastPostedAt": 1792949440,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43091-android-auto-developer-settingsallow-all-sources",
+      "media": [],
+      "text": "<p>I'm trying to add an app to AA and the general guide is enabled developer settings to allow it however the \"tap version\" does not work, and I can't find them already enabled.... Are they hiding?</p> ",
+      "replies": []
+    },
+    {
+      "id": "20507",
+      "title": "Will we ever get WiFi calling over VPN or at least tunneled domains?",
+      "author": "lah23",
+      "authorUsername": "lah23",
+      "authorAvatar": "",
+      "score": 15,
+      "comments": 15,
+      "views": 385,
+      "participantCount": 11,
+      "created": 1741130104,
+      "lastPostedAt": 1792948595,
+      "category": "Development",
+      "categoryColor": "#2e52e0",
+      "tags": [
+        "Development",
+        "kernel"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/20507-will-we-ever-get-wifi-calling-over-vpn-or-at-least-tunneled-domains",
+      "media": [],
+      "text": "<p>Once SIM card is inserted into phone, it starts making queries to WiFi calling domains, even if WiFi calling is disabled on device. These queries ignore DNS over TLS private DNS server settings and ignore VPN tunnels. When is this going to change? WiFi calling uses its own IPSec tunnel, but it does not hide your info from ISP and mobile provider. Why can't GOS introduce IPSec WiFi calling tunneling over VPN apps? It can be done with routers supporting VPN's. VPN routers simply tunnel client IPSec data through VPN tunnels (OpenVPN, WireGuard) configured in router.</p>",
+      "replies": []
+    },
+    {
+      "id": "43073",
+      "title": "How to Convince People to Use GrapheneOS",
+      "author": "Reboot",
+      "authorUsername": "Reboot",
+      "authorAvatar": "",
+      "score": 35,
+      "comments": 35,
+      "views": 805,
+      "participantCount": 23,
+      "created": 1792855754,
+      "lastPostedAt": 1792947043,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
+      "media": [],
+      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
+      "replies": []
+    },
+    {
+      "id": "8274",
+      "title": "How do I prevent apps from knowing when I screenshot?",
+      "author": "antsyboy",
+      "authorUsername": "antsyboy",
+      "authorAvatar": "",
+      "score": 24,
+      "comments": 24,
+      "views": 665,
+      "participantCount": 19,
+      "created": 1697589169,
+      "lastPostedAt": 1792945868,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
+      "media": [],
+      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
+      "replies": []
+    },
+    {
       "id": "43081",
       "title": "Pixel 7a won't boot after battery died",
       "author": "Twix_E",
@@ -1880,41 +2002,7 @@
       "url": "https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died",
       "media": [],
       "text": "<p>My battery ran out, probably during an update. Now the phone shows the boot animation, then the lock screen for under 1 second, then goes black and starts recovery: \"Cannot load Android system. Your data may be corrupt.\"<br>\nI tried: Try again, safe mode, no SIM, rescue mode, charging. No change.<br>\nSideload of the newest OTA fails: \"Update package is older than the current build\". Recovery also says \"Overwrite in-progress update?\" and \"Unknown state: 5\".<br>\nBefore, fastboot showed \"snapshot-update-status: merging\". I ran \"fastboot snapshot-update merge\" and now it says \"none\".<br>\nI have no backup and need my data. Can I fix this without a reset or unlock?</p>",
-      "replies": [
-        {
-          "id": "277256",
-          "number": 2,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 1,
-          "created": 1792912914,
-          "parent": "43081",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died/1\" class=\"PostMention\" data-id=\"277233\"><i class=\"icon fas fa-reply\"></i>Twix_E</a> Sideload of the newest OTA fails: \"Update package is older than the current build\"</p></blockquote>\n\n<p>Try this:<br>\n<a href=\"https://releases.grapheneos.org/lynx-ota_update-2026102101.zip\" rel=\"ugc nofollow\">https://releases.grapheneos.org/lynx-ota_update-2026102101.zip</a></p>"
-        },
-        {
-          "id": "277332",
-          "number": 3,
-          "author": "phone-company",
-          "authorUsername": "phone-company",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Ee1Jv2MN5xreV9qU.png",
-          "score": 0,
-          "created": 1792938249,
-          "parent": "43081",
-          "text": "<p>If the device starts up, stop the boot process and then try to charge the device.</p> "
-        },
-        {
-          "id": "277354",
-          "number": 4,
-          "author": "Twix_E",
-          "authorUsername": "Twix_E",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792945486,
-          "parent": "43081",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died/2\" class=\"PostMention\" data-id=\"277256\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a>  it flashed succesfully, still same \"Cannot load Android system. Your data may be corrupt.\" issue</p>\n\n<p><a href=\"https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died/3\" class=\"PostMention\" data-id=\"277332\"><i class=\"icon fas fa-reply\"></i>phone-company</a>  already tried multiple times</p>\n"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43087",
@@ -1938,30 +2026,6 @@
       "url": "https://discuss.grapheneos.org/d/43087-cyber-security",
       "media": [],
       "text": "<p>Hello,</p>\n\n <p>Does anyone have tips for finding a cyber security expert? Not for a company but for a individual being targeted.</p>",
-      "replies": []
-    },
-    {
-      "id": "43073",
-      "title": "How to Convince People to Use GrapheneOS",
-      "author": "Reboot",
-      "authorUsername": "Reboot",
-      "authorAvatar": "",
-      "score": 33,
-      "comments": 33,
-      "views": 770,
-      "participantCount": 22,
-      "created": 1792855754,
-      "lastPostedAt": 1792944652,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
-      "media": [],
-      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
       "replies": []
     },
     {
@@ -1989,31 +2053,6 @@
       "replies": []
     },
     {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 22,
-      "comments": 22,
-      "views": 665,
-      "participantCount": 19,
-      "created": 1697589169,
-      "lastPostedAt": 1792944417,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
-      "replies": []
-    },
-    {
       "id": "42717",
       "title": "WhatsApp: call screen only shows after unlock (secondary user, Android 17)",
       "author": "Morfyum",
@@ -2036,30 +2075,6 @@
       "url": "https://discuss.grapheneos.org/d/42717-whatsapp-call-screen-only-shows-after-unlock-secondary-user-android-17",
       "media": [],
       "text": "<p><strong>Device:</strong> Pixel 10 Pro, GrapheneOS 2026091901 (Android 17)<br>\n<strong>App:</strong> WhatsApp 2.26.39.74 from Play Store (updated 2026-10-09), installed in a <strong>secondary user</strong>, which is the profile I always use. Sandboxed Google Play is installed in that user, FCM push works.</p>\n\n<p><strong>Problem:</strong> When a WhatsApp call comes in while the phone is locked/dozing, no full-screen call UI appears. I only get a plain notification. \"Decline\" works, but \"Accept\" requires unlocking with the PIN first. Regular SIM calls in the same user work fine and show the full-screen answer screen.</p>\n\n<p><strong>Already checked (all OK in the secondary user):</strong></p>\n<ul><li>Full-screen notifications allowed for WhatsApp (also toggled off/on in Settings)</li>\n<li>Notifications on, call channel <code>voip_notification_4</code> is high importance</li>\n<li>Battery usage unrestricted, Do Not Disturb off</li>\n<li>Lock screen notifications enabled</li></ul>\n\n<p><strong>What adb logcat / dumpsys show:</strong></p>\n<ol><li>WhatsApp registers the call with Telecom as a self-managed transactional call.</li>\n<li>After 5 s Telecom logs:<br>\n   <code>VoipCallMonitor: A Call-Style-Notification for voip-call ... hasn't posted in time, stopping delegation for app=[com.whatsapp]</code></li>\n<li>Instead WhatsApp posts a <code>BigTextStyle</code> notification with <code>category=call</code>, <code>fullscreenIntent=null</code> and Accept/Decline actions.</li>\n<li>Because the FGS delegation is stopped, the ringtone gets muted:<br>\n   <code>AS.AudioService: AudioHardening background playback would be muted for com.whatsapp ... usage: USAGE_NOTIFICATION_RINGTONE</code></li>\n<li>Only after I unlock (<sub>15</sub> s later) Telecom logs <code>onCallNotificationPosted</code> and SystemUI shows<br>\n   <code>FSI suppressed: expected to heads-up instead</code>, i.e. WhatsApp only posts the real CallStyle notification with full-screen intent once the device is unlocked.</li></ol>\n\n<p>So the OS doesn't seem to block anything. WhatsApp just doesn't post its CallStyle notification while the device is locked. I already reported this to WhatsApp via in-app feedback.</p>\n\n<p><strong>Questions:</strong></p>\n<ul><li>Is anyone else seeing this with current WhatsApp on Android 17, especially in a secondary user?</li>\n<li>Is there anything GrapheneOS-specific (secondary user, sandboxed Play, Android 17 transactional Telecom API) that could make WhatsApp delay the CallStyle notification until unlock?<br>\nMorfyum</li></ul>\n",
-      "replies": []
-    },
-    {
-      "id": "43091",
-      "title": "Android Auto developer settings/allow all sources ",
-      "author": "Mrtigger",
-      "authorUsername": "Mrtigger",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792932485,
-      "lastPostedAt": 1792942544,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43091-android-auto-developer-settingsallow-all-sources",
-      "media": [],
-      "text": "<p>I'm trying to add an app to AA and the general guide is enabled developer settings to allow it however the \"tap version\" does not work, and I can't find them already enabled.... Are they hiding?</p> ",
       "replies": []
     },
     {
@@ -2158,56 +2173,6 @@
       "url": "https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium",
       "media": [],
       "text": "<p>During the last days a warning appeared beside the Tuta mail app on Obtanium which is informing me that the current setting may prevent updates.<br>\n<a href=\"https://imgur.com/a/3CNhp7Z\" rel=\"ugc nofollow\">https://imgur.com/a/3CNhp7Z</a><br>\nI'm currently on the v.xxx1006.0, which is marked as the latest on Obtanium, while they are on the v.xxx1023.2 on Github.<br>\nI didn't edit no settings when I've installed it pulling it from the Obtanium website and if I try to copy the github link it tries to install the Tuta Drive instead.</p>\n\n<p>Do you have any suggestion on how to pull the last update?</p>",
-      "replies": []
-    },
-    {
-      "id": "43012",
-      "title": "GrapheneOS version 2026102100 released",
-      "author": "GrapheneOS",
-      "authorUsername": "GrapheneOS",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-      "score": 62,
-      "comments": 62,
-      "views": 1260,
-      "participantCount": 36,
-      "created": 1792663953,
-      "lastPostedAt": 1792938526,
-      "category": "Announcements",
-      "categoryColor": "#f00a0a",
-      "tags": [
-        "Announcements"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43012-grapheneos-version-2026102100-released",
-      "media": [],
-      "text": "<p>GrapheneOS version 2026102100 released:</p>\n\n<p><a href=\"https://grapheneos.org/releases#2026102100\" rel=\"ugc nofollow\">https://grapheneos.org/releases#2026102100</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release.</p>\n",
-      "replies": []
-    },
-    {
-      "id": "42753",
-      "title": "Date stuck on last update",
-      "author": "Onlyfun",
-      "authorUsername": "Onlyfun",
-      "authorAvatar": "",
-      "score": 10,
-      "comments": 10,
-      "views": 175,
-      "participantCount": 5,
-      "created": 1791791536,
-      "lastPostedAt": 1792938208,
-      "category": "Vanadium",
-      "categoryColor": "#d57676",
-      "tags": [
-        "General",
-        "Vanadium",
-        "Pixel 8"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42753-date-stuck-on-last-update",
-      "media": [],
-      "text": "<p>Anybody seen this happen? P8 is stuck on sep 19 date, which is the same update it had. It does switch date when it's on, but if battery dies it's back to sep 19. Also can't update to recent due to Chain validation failed.</p>\n\n<p>Another p8 is not responding to Tap to Check for updates. But seems to update automatically without issues.</p> ",
       "replies": []
     }
   ]
