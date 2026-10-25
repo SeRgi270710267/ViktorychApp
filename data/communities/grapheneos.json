@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T19:21:43Z",
+  "fetchedAt": "2026-10-25T19:56:51Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,313 @@
       ]
     },
     {
+      "id": "8274",
+      "title": "How do I prevent apps from knowing when I screenshot?",
+      "author": "antsyboy",
+      "authorUsername": "antsyboy",
+      "authorAvatar": "",
+      "score": 31,
+      "comments": 31,
+      "views": 735,
+      "participantCount": 21,
+      "created": 1697589169,
+      "lastPostedAt": 1792958097,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
+      "media": [],
+      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
+      "replies": [
+        {
+          "id": "48399",
+          "number": 2,
+          "author": "fl1pper",
+          "authorUsername": "fl1pper",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1697616934,
+          "parent": "8274",
+          "text": "<p>this is not possible on unmodified firmware. However, modifications to some applications allow you to do this, but it is a rather unsafe way. Among more or less safe examples of such modifications, I've seen open-source Telegram forks</p>"
+        },
+        {
+          "id": "48526",
+          "number": 3,
+          "author": "antsyboy",
+          "authorUsername": "antsyboy",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1697670126,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/2\" class=\"PostMention\" data-id=\"48399\"><i class=\"icon fas fa-reply\"></i>fl1pper</a> Thank you for clarifying on this. This answered my only question.</p>"
+        },
+        {
+          "id": "48534",
+          "number": 4,
+          "author": "router99",
+          "authorUsername": "router99",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/siwFkkailTNbeABD.png",
+          "score": 6,
+          "created": 1697672401,
+          "parent": "8274",
+          "text": "<p>There should absolutely be a way to disable it. It's none of an app's business if I screenshot or not.</p>"
+        },
+        {
+          "id": "48539",
+          "number": 5,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 12,
+          "created": 1697672998,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/4\" class=\"PostMention\" data-id=\"48534\"><i class=\"icon fas fa-reply\"></i>router99</a> A feature to control this has been considered and may be added in the future.</p>\n\n<p>Marking this as solved as the OP's question has been answered.</p>"
+        },
+        {
+          "id": "48540",
+          "number": 6,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 0,
+          "created": 1697673002,
+          "parent": "8274",
+          "text": ""
+        },
+        {
+          "id": "60001",
+          "number": 7,
+          "author": "kuvaldini",
+          "authorUsername": "kuvaldini",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1704228804,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/4\" class=\"PostMention\" data-id=\"48534\"><i class=\"icon fas fa-reply\"></i>router99</a> sure, +1</p>\n"
+        },
+        {
+          "id": "78650",
+          "number": 8,
+          "author": "davdevs",
+          "authorUsername": "davdevs",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1715094882,
+          "parent": "8274",
+          "text": "<p>+1</p>"
+        },
+        {
+          "id": "100488",
+          "number": 9,
+          "author": "bla",
+          "authorUsername": "bla",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1726608556,
+          "parent": "8274",
+          "text": "<p>Hello</p>\n\n<p>Little opening to the topic here because it seems related :</p>\n\n<p>How come the website instagram.com (Not the app) knows i am trying to take a screnshot of a conversation when browsing on firefox or vanadium?</p>\n\n<p>And also; why are firefox and vanadium blocking the screenshot?</p>\n\n<p>I understand for third Party apps; but vanadium?</p>\n\n<p>Thank you!</p>"
+        },
+        {
+          "id": "100505",
+          "number": 10,
+          "author": "DeletedUser88",
+          "authorUsername": "DeletedUser88",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1726614594,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/9\" class=\"PostMention\" data-id=\"100488\"><i class=\"icon fas fa-reply\"></i>bla</a> are you in Incognito mode?</p>\n"
+        },
+        {
+          "id": "100999",
+          "number": 11,
+          "author": "Quotesquestioner",
+          "authorUsername": "Quotesquestioner",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1726787626,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/9\" class=\"PostMention\" data-id=\"100488\"><i class=\"icon fas fa-reply\"></i>bla</a> hope this getbanswered some day too. If not olease repost in a new thread because i really want to know</p>"
+        },
+        {
+          "id": "141656",
+          "number": 12,
+          "author": "DeletedUser316",
+          "authorUsername": "DeletedUser316",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1744259875,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/5\" class=\"PostMention\" data-id=\"48539\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a></p> \n\n<p>Any updates on this feature implementation?</p>"
+        },
+        {
+          "id": "204563",
+          "number": 13,
+          "author": "IAMHereNow288",
+          "authorUsername": "IAMHereNow288",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1768525595,
+          "parent": "8274",
+          "text": "<p>+1 on this feature</p>"
+        },
+        {
+          "id": "212404",
+          "number": 14,
+          "author": "PANICBUTTON",
+          "authorUsername": "PANICBUTTON",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1771446785,
+          "parent": "8274",
+          "text": "<p>+1 to this feature.</p> "
+        },
+        {
+          "id": "230850",
+          "number": 15,
+          "author": "DeletedUser765",
+          "authorUsername": "DeletedUser765",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1777689046,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/5\" class=\"PostMention\" data-id=\"48539\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a> I know this is old and priorities can change, but are there any updates to this feature coming out?</p> "
+        },
+        {
+          "id": "230856",
+          "number": 16,
+          "author": "Tandara",
+          "authorUsername": "Tandara",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/ToqtPbqy0Reovo7K.png",
+          "score": 0,
+          "created": 1777689900,
+          "parent": "8274",
+          "text": "<p>I suspect this will never be implemented due to bypassing apps' clear intentions to either block or invoke certain actions upon screenshot detection. Even with per-app opt-in toggle it might create a lot of uncertainties (e.g. allowing screenshot in signal despite explicitly blocking it in signal itself, or incognito tabs for example). The best way is obviously creating API and letting the apps integrate with OS, but that is a big ask unless AOSP implements something by default.</p> "
+        },
+        {
+          "id": "230983",
+          "number": 17,
+          "author": "Wraith",
+          "authorUsername": "Wraith",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1777743190,
+          "parent": "8274",
+          "text": "<p>You mean like snpachat app? u wanna take silent SS ?</p>"
+        },
+        {
+          "id": "277316",
+          "number": 18,
+          "author": "aguttfx",
+          "authorUsername": "aguttfx",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1792934372,
+          "parent": "8274",
+          "text": "<p><a href=\"https://github.com/GrapheneOS/platform_frameworks_base/pull/447\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/platform_frameworks_base/pull/447</a></p>\n\n<p>There is a very small pull request with just 13 lines of code that implements this feature, should be relatively easy to review.</p>"
+        },
+        {
+          "id": "277326",
+          "number": 19,
+          "author": "Roughpebble",
+          "authorUsername": "Roughpebble",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792937523,
+          "parent": "8274",
+          "text": "<p>A lot of the time anti screenshot is in apps to prevent abuse. This is definitely not something that should be a toggle.</p> "
+        },
+        {
+          "id": "277333",
+          "number": 20,
+          "author": "PrivSecAddict",
+          "authorUsername": "PrivSecAddict",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792938449,
+          "parent": "8274",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/19\" class=\"PostMention\" data-id=\"277326\"><i class=\"icon fas fa-reply\"></i>Roughpebble</a> Why so? Please explain.</p>"
+        }
+      ]
+    },
+    {
+      "id": "17303",
+      "title": "Zelle in Schwab banking app",
+      "author": "Safely9659",
+      "authorUsername": "Safely9659",
+      "authorAvatar": "",
+      "score": 24,
+      "comments": 24,
+      "views": 630,
+      "participantCount": 18,
+      "created": 1731393349,
+      "lastPostedAt": 1792956673,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/17303-zelle-in-schwab-banking-app",
+      "media": [],
+      "text": "<p>Hi everyone,</p>\n\n<p>My bank is Charles Schwab, and I (before switching to Graphene) used Zelle through the Schwab banking app. Because of this, using the Zelle standalone app is not an option- it won't let me set up the app, and instead directs me to use Zelle in the Schwab app. I cannot get Zelle to work in the Schwab app, even with compatibility mode enabled and all permissions granted.</p>\n\n<p>It sounds like folks have had success using the Zelle service in other banking apps on Graphene (at least Chase, for instance), so I wonder if Schwab is unique here in having this broken component.</p>\n\n<p>Anyone in a similar situation or found a resolution? FWIW, I am using a Pixel 8</p>\n\n<p>Thanks!</p>",
+      "replies": []
+    },
+    {
+      "id": "43075",
+      "title": "Easy Notes flagged as a Trojan on Accrescent",
+      "author": "Nemko",
+      "authorUsername": "Nemko",
+      "authorAvatar": "",
+      "score": 10,
+      "comments": 10,
+      "views": 210,
+      "participantCount": 6,
+      "created": 1792873134,
+      "lastPostedAt": 1792956565,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
+      "media": [],
+      "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
+      "replies": []
+    },
+    {
+      "id": "42154",
+      "title": "New messaging app",
+      "author": "ojzula",
+      "authorUsername": "ojzula",
+      "authorAvatar": "",
+      "score": 7,
+      "comments": 7,
+      "views": 245,
+      "participantCount": 7,
+      "created": 1789897701,
+      "lastPostedAt": 1792956299,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42154-new-messaging-app",
+      "media": [],
+      "text": "<p>When new messaging app willa be addee to beta ? <br>\nCheers</p>\n",
+      "replies": []
+    },
+    {
       "id": "43089",
       "title": "Tutanota update through Obtanium",
       "author": "AKRAKU",
@@ -1880,107 +2187,7 @@
       "url": "https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium",
       "media": [],
       "text": "<p>During the last days a warning appeared beside the Tuta mail app on Obtanium which is informing me that the current setting may prevent updates.<br>\n<a href=\"https://imgur.com/a/3CNhp7Z\" rel=\"ugc nofollow\">https://imgur.com/a/3CNhp7Z</a><br>\nI'm currently on the v.xxx1006.0, which is marked as the latest on Obtanium, while they are on the v.xxx1023.2 on Github.<br>\nI didn't edit no settings when I've installed it pulling it from the Obtanium website and if I try to copy the github link it tries to install the Tuta Drive instead.</p>\n\n<p>Do you have any suggestion on how to pull the last update?</p>",
-      "replies": [
-        {
-          "id": "277299",
-          "number": 2,
-          "author": "AgentM",
-          "authorUsername": "AgentM",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/GHvYJuyhvwYwBLpU.webp",
-          "score": 1,
-          "created": 1792930862,
-          "parent": "43089",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/1\" class=\"PostMention\" data-id=\"277289\"><i class=\"icon fas fa-reply\"></i>AKRAKU</a> I don't see a newer mail release for Android than 361.261006.0 on Github and I think this can be ignored for now (three dots behind the detected app below the update health menu). Perhaps check the filters to exclude/ignore all other releases beside the ones for Android and with \"Drive\".</p>"
-        },
-        {
-          "id": "277323",
-          "number": 3,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 1,
-          "created": 1792936585,
-          "parent": "43089",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/1\" class=\"PostMention\" data-id=\"277289\"><i class=\"icon fas fa-reply\"></i>AKRAKU</a> this is a quirkiness with (among a few other apps) Tutanota managed through Obtainium. I recommend setting 'Track only' for this app. Releases for several Tuta products, Mail, Calendar, now also Drive, for several platforms both desktop and mobile, these all share this one release page. <br>\nThe 'release count'-filter in Obtainium, from your screenshot, seems to have counted a lot of released files besides the only one of interest: Mail for Android. I've tried configuring Obtainium to only look for the correct file, but settled for just Track Only. When the entry shows something new have arrived, I visit the Github page and look for the release manually.</p> "
-        },
-        {
-          "id": "277325",
-          "number": 4,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 1,
-          "created": 1792937146,
-          "parent": "43089",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/1\" class=\"PostMention\" data-id=\"277289\"><i class=\"icon fas fa-reply\"></i>AKRAKU</a> currently on the v.xxx1006.0, which is marked as the latest on Obtanium, while they are on the v.xxx1023.2 on Github.</p></blockquote>\n\n<p>If you tap the 'pen' -icon here: <a href=\"https://ibb.co/hF9mH6zg\" rel=\"ugc nofollow\">https://ibb.co/hF9mH6zg</a><br>\nand scroll to bottom, you'll find the apps <em>individual</em> release count filter settings.</p>\n\n<p>And at top of the same page, you could opt for 'Include pre-releases'. This should bring you the  v.xxx1023.2 release.</p>"
-        },
-        {
-          "id": "277330",
-          "number": 5,
-          "author": "Dumdum",
-          "authorUsername": "Dumdum",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1792938138,
-          "parent": "43089",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/1\" class=\"PostMention\" data-id=\"277289\"><i class=\"icon fas fa-reply\"></i>AKRAKU</a> <a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/3\" class=\"PostMention\" data-id=\"277323\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> <br>\nTry setting the \"Filter links by regular expression\" in Obtainium as: <code>tutanota</code></p>\n\n<hr>\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/4\" class=\"PostMention\" data-id=\"277325\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> And at top of the same page, you could opt for 'Include pre-releases'. This should bring you the  v.xxx1023.2 release.</p></blockquote>\n\n<p>It's unclear how toggling the pre-releases option would do anything since none of the releases are marked as pre-releases. And as AgentM pointed out, the xxx1006.0 release is the most recent Android release. Getting the xxx1023.2 <em>Desktop</em> release would not help.</p>"
-        },
-        {
-          "id": "277336",
-          "number": 6,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 0,
-          "created": 1792938979,
-          "parent": "43089",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/5\" class=\"PostMention\" data-id=\"277330\"><i class=\"icon fas fa-reply\"></i>Dumdum</a> xxx1006.0 release is the most recent Android release.</p></blockquote>\n\n<p>Thanks, and you're right. I got lost on the page.🙂‍↕️</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/5\" class=\"PostMention\" data-id=\"277330\"><i class=\"icon fas fa-reply\"></i>Dumdum</a> setting the \"Filter links by regular expression\" in Obtainium as: tutanota</p></blockquote>\n\n<p>And this seems to be working.</p>"
-        },
-        {
-          "id": "277362",
-          "number": 7,
-          "author": "AKRAKU",
-          "authorUsername": "AKRAKU",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/OZTjv8P30Ni9NyAD.png",
-          "score": 2,
-          "created": 1792950054,
-          "parent": "43089",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/5\" class=\"PostMention\" data-id=\"277330\"><i class=\"icon fas fa-reply\"></i>Dumdum</a> I've set the \"Filter links by regular expression to <code>tutanota</code> instead of <code>tutanota-app</code> as it was before.<br>\n<a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/3\" class=\"PostMention\" data-id=\"277323\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a>  It's not clear to me how do I set the app to Track only.</p>\n\n<p>Anyway, now it's clear how their releases work, I just thought I was way behind with them, but that is the desktop one not the Android release</p> \n\n<p>Thanks guys</p>"
-        },
-        {
-          "id": "277366",
-          "number": 8,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 0,
-          "created": 1792951075,
-          "parent": "43089",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/7\" class=\"PostMention\" data-id=\"277362\"><i class=\"icon fas fa-reply\"></i>AKRAKU</a> not clear to me how do I set the app to Track only.</p></blockquote>\n\n<p>If the configuration that  <a href=\"https://discuss.grapheneos.org/u/Dumdum\" class=\"UserMention\">@Dumdum</a> described works for you, then no more need for 'track only'. 🙂</p>"
-        },
-        {
-          "id": "277388",
-          "number": 9,
-          "author": "AgentM",
-          "authorUsername": "AgentM",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/GHvYJuyhvwYwBLpU.webp",
-          "score": 1,
-          "created": 1792955339,
-          "parent": "43089",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/7\" class=\"PostMention\" data-id=\"277362\"><i class=\"icon fas fa-reply\"></i>AKRAKU</a> Fine. Perhaps the update health feature in Obtainium could be further optimised to not count any release for different OS's as a (missed) newer release for Android. I have a different case with the feature where it could count and report even more, not less like in your case. An enhancement issue could be filed of course. The feature is still quite new.</p>"
-        },
-        {
-          "id": "277391",
-          "number": 10,
-          "author": "Dumdum",
-          "authorUsername": "Dumdum",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792956060,
-          "parent": "43089",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43089-tutanota-update-through-obtanium/7\" class=\"PostMention\" data-id=\"277362\"><i class=\"icon fas fa-reply\"></i>AKRAKU</a> tutanota-app</p></blockquote>\n\n<p>To be fair, this works as well. I hadn't realised you already filter the APK and are tracking the correct releases. It seems that \"8 newer versions have been hidden\" has caused a whole lot of confusion. At least it can be ignored so long as Obtainium is properly tracking the Android APKs.</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "40781",
@@ -2028,30 +2235,6 @@
       "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
       "media": [],
       "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": []
-    },
-    {
-      "id": "42154",
-      "title": "New messaging app",
-      "author": "ojzula",
-      "authorUsername": "ojzula",
-      "authorAvatar": "",
-      "score": 6,
-      "comments": 6,
-      "views": 210,
-      "participantCount": 6,
-      "created": 1789897701,
-      "lastPostedAt": 1792954492,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42154-new-messaging-app",
-      "media": [],
-      "text": "<p>When new messaging app willa be addee to beta ? <br>\nCheers</p>\n",
       "replies": []
     },
     {
@@ -2103,31 +2286,6 @@
       "replies": []
     },
     {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 25,
-      "comments": 25,
-      "views": 700,
-      "participantCount": 20,
-      "created": 1697589169,
-      "lastPostedAt": 1792953421,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
-      "replies": []
-    },
-    {
       "id": "43092",
       "title": "Viber",
       "author": "redacted_handle",
@@ -2149,30 +2307,6 @@
       "url": "https://discuss.grapheneos.org/d/43092-viber",
       "media": [],
       "text": "<p>Hi!<br>\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.<br>\nIs there a way to not show the call log and activate the account?</p>",
-      "replies": []
-    },
-    {
-      "id": "17303",
-      "title": "Zelle in Schwab banking app",
-      "author": "Safely9659",
-      "authorUsername": "Safely9659",
-      "authorAvatar": "",
-      "score": 23,
-      "comments": 23,
-      "views": 595,
-      "participantCount": 17,
-      "created": 1731393349,
-      "lastPostedAt": 1792952293,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/17303-zelle-in-schwab-banking-app",
-      "media": [],
-      "text": "<p>Hi everyone,</p>\n\n<p>My bank is Charles Schwab, and I (before switching to Graphene) used Zelle through the Schwab banking app. Because of this, using the Zelle standalone app is not an option- it won't let me set up the app, and instead directs me to use Zelle in the Schwab app. I cannot get Zelle to work in the Schwab app, even with compatibility mode enabled and all permissions granted.</p>\n\n<p>It sounds like folks have had success using the Zelle service in other banking apps on Graphene (at least Chase, for instance), so I wonder if Schwab is unique here in having this broken component.</p>\n\n<p>Anyone in a similar situation or found a resolution? FWIW, I am using a Pixel 8</p>\n\n<p>Thanks!</p>",
       "replies": []
     },
     {
@@ -2245,30 +2379,6 @@
       "url": "https://discuss.grapheneos.org/d/43091-android-auto-developer-settingsallow-all-sources",
       "media": [],
       "text": "<p>I'm trying to add an app to AA and the general guide is enabled developer settings to allow it however the \"tap version\" does not work, and I can't find them already enabled.... Are they hiding?</p> ",
-      "replies": []
-    },
-    {
-      "id": "43083",
-      "title": "Decrescent: my fork of Accrescent, with the apps I actually use and optional Tor",
-      "author": "LionNest",
-      "authorUsername": "LionNest",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792896720,
-      "lastPostedAt": 1792950365,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": true,
-      "url": "https://discuss.grapheneos.org/d/43083-decrescent-my-fork-of-accrescent-with-the-apps-i-actually-use-and-optional-tor",
-      "media": [],
-      "text": "<p>I like Accrescent. Every app is tied to its developer’s signing key, and it won’t install older versions over newer ones. But the last release of the app was 0.28.1 on 10 November 2025, almost a year ago. There’s still activity in the code, but nothing has shipped, and fixes don’t help anyone until they do.</p>\n\n<p>So I made my own version, Decrescent. It isn’t affiliated with Accrescent. It keeps their credit and licence.</p>\n\n<p>What’s different:</p>\n\n<p>It has the apps I use and trust: Parakeet (my Molly fork), Holevad (my Mullvad VPN fork), Aurora Light, CoMaps, SimpMusic, WizeStream, Bitwarden, Ente Auth, Ente Photos, Tuta Mail, plus my own HawkEye and Dodo Bird. The apps they replace are hidden.<br>\nThere’s an optional switch to send everything through Tor with Orbot. If Orbot isn’t running, it just doesn’t connect. It won’t quietly go around Tor.<br>\nThe app list is signed and rebuilt every 6 hours. Each app is tied to its signing key, and anything signed with a different key is refused.<br>\nWhen Accrescent puts out a new release, mine picks it up and builds it automatically.</p>\n\n<p>It’s open source under Apache-2.0, built with AI assistance, and it hasn’t had an independent audit yet. Everything is in the repo and I welcome review. For apps from other developers, I pin the signing key from their official release, so after that first download any APK signed with a different key is refused.</p>\n\n<p>You can check the APK’s signing fingerprint on the release page.</p>\n\n<p><a href=\"https://gitlab.com/LionNest/decrescent\" rel=\"ugc nofollow\">https://gitlab.com/LionNest/decrescent</a></p>\n\n<p>Tell me what you’d change or what’s missing.</p>",
       "replies": []
     }
   ]
