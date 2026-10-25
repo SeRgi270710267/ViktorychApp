@@ -53,7 +53,15 @@
     return accounts.call(path, opts).catch(function () { return null; });
   }
   function render() {
-    if (window.ViktorychCommunities && window.ViktorychCommunities.requestRender) window.ViktorychCommunities.requestRender();
+    if (window.ViktorychCommunities && window.ViktorychCommunities.requestRender) {
+      window.ViktorychCommunities.requestRender();
+    } else {
+      setTimeout(function () {
+        if (window.ViktorychCommunities && window.ViktorychCommunities.requestRender) {
+          window.ViktorychCommunities.requestRender();
+        }
+      }, 50);
+    }
   }
   function toast(text) {
     if (window.ViktorychCommunities && window.ViktorychCommunities.toast) window.ViktorychCommunities.toast(text);
@@ -88,6 +96,7 @@
   function cleanAuthor(author) {
     var s = String(author || "").trim();
     s = s.replace(/https?:\/\/(?:www\.)?reddit\.com.*$/i, "");
+    s = s.replace(/https?:\/\/.*$/i, "");
     s = s.replace(/^\/?u\//i, "");
     s = s.trim();
     return s || "reddit";
@@ -96,6 +105,9 @@
   function cleanRedditText(raw) {
     if (!raw) return "";
     var s = String(raw);
+    s = s.replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n\n")
+      .replace(/<[^>]+>/g, "");
     s = s.replace(/&#32;/g, " ")
       .replace(/&amp;/g, "&")
       .replace(/&lt;/g, "<")
@@ -141,32 +153,101 @@
   var svgCommunities = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3zm6 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3zM4 18v-1.2C4 14.6 6.4 13 9 13s5 1.6 5 3.8V18H4zm10.5 0v-1.1c0-.7-.2-1.4-.6-2 .9-.4 2-.6 3.1-.6 2.4 0 5 1.4 5 3.5V18h-7.5z"/></svg>';
   var svgSpark = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z"/></svg>';
 
+  function basePath() {
+    var p = location.pathname || "/";
+    if (/\/index\.html$/i.test(p)) p = p.slice(0, -"index.html".length);
+    if (!p.endsWith("/")) p += "/";
+    return p;
+  }
+
+  var DEFAULT_INDEX = {
+    communities: [
+      {
+        name: "teslamotors",
+        title: "Tesla Motors",
+        subscribers: 2840000,
+        icon: "",
+        about: "A community dedicated to Tesla, Inc., motor vehicles, and energy products."
+      },
+      {
+        name: "grapheneos",
+        title: "GrapheneOS Discussion",
+        type: "discourse",
+        subscribers: 35000,
+        icon: "https://discuss.grapheneos.org/assets/favicon-snu6s6q2.png",
+        banner: "https://grapheneos.org/opengraph.png",
+        about: "The official discussion forum for GrapheneOS, a privacy and security focused mobile OS with Android app compatibility."
+      }
+    ]
+  };
+
   function loadIndex() {
-    if (state.index) return Promise.resolve(state.index);
-    return fetch("data/communities/index.json", { cache: "no-store" }).then(function (res) {
-      if (!res.ok) throw new Error("index");
+    if (state.index && state.index.communities && state.index.communities.length) {
+      return Promise.resolve(state.index);
+    }
+    if (state.indexPromise) return state.indexPromise;
+    var url = basePath() + "data/communities/index.json";
+    state.indexPromise = fetch(url, { cache: "no-cache" }).then(function (res) {
+      if (!res.ok) throw new Error("index " + res.status);
       return res.json();
     }).then(function (doc) {
-      state.index = doc && Array.isArray(doc.communities) ? doc : { communities: [] };
+      if (doc && Array.isArray(doc.communities) && doc.communities.length) {
+        state.index = doc;
+      } else {
+        state.index = DEFAULT_INDEX;
+      }
+      state.indexPromise = null;
       return state.index;
     }).catch(function () {
-      state.index = { communities: [] };
-      return state.index;
+      return fetch("data/communities/index.json", { cache: "no-cache" }).then(function (res2) {
+        if (!res2.ok) throw new Error("index fallback " + res2.status);
+        return res2.json();
+      }).then(function (doc2) {
+        if (doc2 && Array.isArray(doc2.communities) && doc2.communities.length) {
+          state.index = doc2;
+        } else {
+          state.index = DEFAULT_INDEX;
+        }
+        state.indexPromise = null;
+        return state.index;
+      }).catch(function () {
+        state.index = DEFAULT_INDEX;
+        state.indexPromise = null;
+        return state.index;
+      });
     });
+    return state.indexPromise;
   }
+
   function loadDoc(name) {
-    if (state.docs[name]) return Promise.resolve(state.docs[name]);
-    return fetch("data/communities/" + name + ".json", { cache: "no-store" }).then(function (res) {
-      if (!res.ok) throw new Error("doc");
+    if (state.docs[name] && !state.docs[name].missing) return Promise.resolve(state.docs[name]);
+    state.docPromises = state.docPromises || {};
+    if (state.docPromises[name]) return state.docPromises[name];
+    var url = basePath() + "data/communities/" + encodeURIComponent(name) + ".json";
+    state.docPromises[name] = fetch(url, { cache: "no-cache" }).then(function (res) {
+      if (!res.ok) throw new Error("doc " + res.status);
       return res.json();
     }).then(function (doc) {
       state.docs[name] = doc || { name: name, posts: [] };
+      delete state.docPromises[name];
       return state.docs[name];
     }).catch(function () {
-      state.docs[name] = { name: name, title: name, posts: [], missing: true };
-      return state.docs[name];
+      return fetch("data/communities/" + encodeURIComponent(name) + ".json", { cache: "no-cache" }).then(function (res2) {
+        if (!res2.ok) throw new Error("doc fallback " + res2.status);
+        return res2.json();
+      }).then(function (doc2) {
+        state.docs[name] = doc2 || { name: name, posts: [] };
+        delete state.docPromises[name];
+        return state.docs[name];
+      }).catch(function () {
+        state.docs[name] = { name: name, title: name, posts: [], missing: true };
+        delete state.docPromises[name];
+        return state.docs[name];
+      });
     });
+    return state.docPromises[name];
   }
+
   function loadInternal(name) {
     if (!signedIn()) {
       state.internal[name] = null;
@@ -180,6 +261,9 @@
         call("/v1/communities/notes/seen", { method: "POST", body: { ids: notes.map(function (item) { return item.id; }) } });
       }
       return state.internal[name];
+    }).catch(function () {
+      state.internal[name] = null;
+      return null;
     });
   }
 
@@ -423,8 +507,14 @@
   /* Communities Hub / Explore Page (X.com 1-to-1 Style) */
   function listPage() {
     var index = state.index;
-    if (!index) {
-      loadIndex().then(render);
+    if (!index || !index.communities || state.loadingIndex) {
+      if (!state.loadingIndex) {
+        state.loadingIndex = true;
+        loadIndex().finally(function () {
+          state.loadingIndex = false;
+          render();
+        });
+      }
       return head(tr("Communities")) + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
     }
 
@@ -507,7 +597,7 @@
     var sectionTitle = state.hubTab === "joined" ? tr("Your Communities") : tr("Discover Communities");
     var emptyHtml = state.hubTab === "joined"
       ? '<div class="empty"><h2>' + esc(tr("No communities yet.")) + '</h2><p>' + esc(tr("Search Communities")) + '</p></div>'
-      : '<div class="empty"><h2>' + esc(tr("That community wasn’t found.")) + '</h2></div>';
+      : '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + '</h2></div>';
 
     return head(tr("Communities"), null, addToggle) +
       addBar +
@@ -521,17 +611,26 @@
   /* Single Community Feed Page (X.com 1-to-1 Clone) */
   function communityPage(route) {
     var name = nameOf(route.sub);
-    if (!name) return head(tr("Communities"), "#/communities") + '<div class="empty"><h2>' + esc(tr("That community wasn’t found.")) + "</h2></div>";
+    if (!name) return head(tr("Communities"), "#/communities") + '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + "</h2></div>";
     var doc = state.docs[name];
     if (!doc || state.loading[name]) {
       if (!state.loading[name]) {
         state.loading[name] = true;
-        Promise.all([loadDoc(name), loadInternal(name)]).then(function () {
+        Promise.all([
+          loadDoc(name).catch(function () { return null; }),
+          loadInternal(name).catch(function () { return null; })
+        ]).finally(function () {
           state.loading[name] = false;
           render();
         });
       }
       return head("r/" + name, "#/communities") + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
+    }
+
+    if (doc.missing) {
+      return head("r/" + name, "#/communities") +
+        '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + '</h2>' +
+        '<button class="retry" type="button" data-cm="retry" data-sub="' + esc(name) + '">' + esc(tr("Retry")) + '</button></div>';
     }
 
     var bag = state.internal[name];
@@ -618,13 +717,23 @@
     var name = nameOf(route.sub);
     var id = decodeURIComponent(route.post || "");
     var doc = state.docs[name];
-    if (!doc) {
-      loadDoc(name).then(function () { return loadInternal(name); }).then(render);
+    if (!doc || state.loading[name]) {
+      if (!state.loading[name]) {
+        state.loading[name] = true;
+        Promise.all([
+          loadDoc(name).catch(function () { return null; }),
+          loadInternal(name).catch(function () { return null; })
+        ]).finally(function () {
+          state.loading[name] = false;
+          render();
+        });
+      }
       return head(tr("Communities"), "#/communities/" + name) + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
     }
-    if (!state.internal[name] && signedIn() && !state.loading[name]) {
-      state.loading[name] = true;
-      loadInternal(name).then(function () { state.loading[name] = false; render(); });
+    if (doc.missing) {
+      return head("r/" + name, "#/communities") +
+        '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + '</h2>' +
+        '<button class="retry" type="button" data-cm="retry" data-sub="' + esc(name) + '">' + esc(tr("Retry")) + '</button></div>';
     }
     var bag = state.internal[name] || { posts: [], likes: {}, mine: [] };
     var internal = (bag.posts || []).filter(function (post) { return post.id === id; })[0];
@@ -642,7 +751,7 @@
       '</article>';
     }
 
-    if (!focus) return head("r/" + name, "#/communities/" + name) + '<div class="empty"><h2>' + esc(tr("That community wasn’t found.")) + "</h2></div>";
+    if (!focus) return head("r/" + name, "#/communities/" + name) + '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + "</h2></div>";
 
     var kids = repliesFor(name, id, doc).map(function (item) {
       if (item.source === "reddit") {
@@ -848,6 +957,20 @@
       });
       return;
     }
+    if (act === "retry") {
+      event.preventDefault();
+      event.stopPropagation();
+      var subRetry = el.dataset.sub;
+      if (subRetry) {
+        delete state.docs[subRetry];
+        state.loading[subRetry] = false;
+        loadDoc(subRetry).finally(render);
+      } else {
+        state.index = null;
+        loadIndex().finally(render);
+      }
+      return;
+    }
     if (act === "join") {
       event.preventDefault();
       event.stopPropagation();
@@ -886,7 +1009,7 @@
     if (form.dataset.cm === "add") {
       var input = form.querySelector("input");
       var name = nameOf(input && input.value);
-      if (!name) { toast(tr("That community wasn’t found.")); return; }
+      if (!name) { toast(tr("That community wasn't found.")); return; }
       call("/v1/owner/communities", { method: "POST", body: { name: name } }).then(function (body) {
         if (!body || !body.community) { toast(tr("Couldn't post.")); return; }
         toast(tr("New posts show up after the next sync."));

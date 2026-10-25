@@ -1,7 +1,7 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
-const VERSION = "viktorych-a20-__SW_VERSION__";
-// cache-bust: 2026-10-25T10:45:00Z-identities-v2
+const VERSION = "viktorych-a19-__SW_VERSION__";
+// cache-bust: 2026-10-25T11:00:00Z-communities-fix
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -339,8 +339,13 @@ async function rememberMedia(url, bytes) {
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(DATA);
   const cached = await cache.match(request);
-  const update = fetch(request).then((res) => {
-    if (res && res.ok) cache.put(request, res.clone());
+  const update = fetch(request).then(async (res) => {
+    if (res && res.ok) {
+      try {
+        const cacheReq = request.cache === "no-store" ? new Request(request.url, { method: "GET" }) : request;
+        await cache.put(cacheReq, res.clone());
+      } catch (_) {}
+    }
     return res;
   }).catch(() => null);
   if (cached) {
