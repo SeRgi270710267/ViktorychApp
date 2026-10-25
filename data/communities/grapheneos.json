@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T20:11:53Z",
+  "fetchedAt": "2026-10-25T20:43:15Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,194 @@
       ]
     },
     {
+      "id": "41738",
+      "title": "Ryanair app, play services needed?",
+      "author": "becomeparmesan",
+      "authorUsername": "becomeparmesan",
+      "authorAvatar": "",
+      "score": 7,
+      "comments": 7,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1788619688,
+      "lastPostedAt": 1792960880,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed",
+      "media": [],
+      "text": "<p>I am about to buy some flight tickets and one option is via Ryanair. I know that the app became mandatory for checking in. But as I use my phone without google play services, I would consider booking otherwise, if the app needs it.</p>\n\n<p>Does someone know if it will require play services? Anything more? Would also block connections via a firewall app.</p>\n\n<p>Ideally of course, someone knows a way how to avoid it completely by saying \"phone is broken, battery empty, don't have a phone...\"</p>",
+      "replies": [
+        {
+          "id": "265840",
+          "number": 2,
+          "author": "Kamika242",
+          "authorUsername": "Kamika242",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
+          "score": 2,
+          "created": 1788623455,
+          "parent": "41738",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed/1\" class=\"PostMention\" data-id=\"265830\"><i class=\"icon fas fa-reply\"></i>becomeparmesan</a></p> \n\n<p>I just installed the app via Aurora, but I have Play Services with network permission only installed. It work's so far, for me in guest mode, as I don't have a Ryanair account. I think it would also work without Play Services, but then without push notifications. The app opens a connection to \"firebaseinstallations.googleapis.com\" to register for push notifications, \"firebaseremoteconfig.googleapis.com\" for remote in-app configuration and notifications, \"graph.facebook.com\" for spy services and all other connections are made directly to Ryanair service apis.</p>"
+        },
+        {
+          "id": "265849",
+          "number": 3,
+          "author": "veryimportantplasticbag",
+          "authorUsername": "veryimportantplasticbag",
+          "authorAvatar": "",
+          "score": 4,
+          "created": 1788626420,
+          "parent": "41738",
+          "text": "<p><a href=\"https://help.ryanair.com/hc/en-gb/articles/39758330098577-What-about-passengers-who-don-t-have-a-smartphone-or-tablet\" rel=\"ugc nofollow\">https://help.ryanair.com/hc/en-gb/articles/39758330098577-What-about-passengers-who-don-t-have-a-smartphone-or-tablet</a></p>\n\n<p>Simply go to the counter and tell them that you don't have digital boarding pass.</p>\n\n<p>They could let customers to download the boarding pass, but they want to milk them.</p>\n\n<p>Edited for clarification: You can book a ticket and also check-in on their website. The app is required only to get the boarding pass.</p>"
+        },
+        {
+          "id": "266066",
+          "number": 4,
+          "author": "becomeparmesan",
+          "authorUsername": "becomeparmesan",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1788730777,
+          "parent": "41738",
+          "text": "<p>Thanks, both.</p>\n\n<p>Indeed, the crucial part seems to check in online and then you can request the printed boarding pass with whatever reason. Let's see how much resistance I will get.</p>"
+        },
+        {
+          "id": "276561",
+          "number": 5,
+          "author": "becomeparmesan",
+          "authorUsername": "becomeparmesan",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792612434,
+          "parent": "41738",
+          "text": "<p>Update after the flight: you can indeed just say your battery died and can get the printed boarding pass. No arguing, no comments. Just remember to check-in online before that.</p>"
+        },
+        {
+          "id": "277382",
+          "number": 6,
+          "author": "andrej567",
+          "authorUsername": "andrej567",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792953988,
+          "parent": "41738",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed/5\" class=\"PostMention\" data-id=\"276561\"><i class=\"icon fas fa-reply\"></i>becomeparmesan</a> Ok. I had printed boarding passes but the scanner did not accept them. I was told it does not work anymore. There was no time to start a discussion.. I had the same printed as on cellphone. No idea. weird.</p>"
+        },
+        {
+          "id": "277412",
+          "number": 7,
+          "author": "Foggy",
+          "authorUsername": "Foggy",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792960880,
+          "parent": "41738",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed/6\" class=\"PostMention\" data-id=\"277382\"><i class=\"icon fas fa-reply\"></i>andrej567</a> I wonder if that's airport dependent? I was flying Jet2 from a Greek airport and the scanners accepted my downloaded PDF even though Jet2 say you have to install their app. The PDF had a rectangular 2D code while I saw online some people saying it only works with square codes. I expect this is set by the airport equipment rather than the airline (although at hubs it's more plausible there is airline specific equipment).</p>"
+        }
+      ]
+    },
+    {
+      "id": "43009",
+      "title": "Mail client ",
+      "author": "Try",
+      "authorUsername": "Try",
+      "authorAvatar": "",
+      "score": 12,
+      "comments": 12,
+      "views": 315,
+      "participantCount": 9,
+      "created": 1792649851,
+      "lastPostedAt": 1792960768,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43009-mail-client",
+      "media": [],
+      "text": "<p>Which would you prefer between FairMail and K9 mail clients?</p>",
+      "replies": []
+    },
+    {
+      "id": "8274",
+      "title": "How do I prevent apps from knowing when I screenshot?",
+      "author": "antsyboy",
+      "authorUsername": "antsyboy",
+      "authorAvatar": "",
+      "score": 32,
+      "comments": 32,
+      "views": 735,
+      "participantCount": 21,
+      "created": 1697589169,
+      "lastPostedAt": 1792960329,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
+      "media": [],
+      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
+      "replies": []
+    },
+    {
+      "id": "42154",
+      "title": "New messaging app",
+      "author": "ojzula",
+      "authorUsername": "ojzula",
+      "authorAvatar": "",
+      "score": 8,
+      "comments": 8,
+      "views": 280,
+      "participantCount": 8,
+      "created": 1789897701,
+      "lastPostedAt": 1792960153,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42154-new-messaging-app",
+      "media": [],
+      "text": "<p>When new messaging app willa be addee to beta ? <br>\nCheers</p>\n",
+      "replies": []
+    },
+    {
+      "id": "43048",
+      "title": "More native code debugging attempts recently",
+      "author": "cupcake-alibi",
+      "authorUsername": "cupcake-alibi",
+      "authorAvatar": "",
+      "score": 10,
+      "comments": 10,
+      "views": 280,
+      "participantCount": 8,
+      "created": 1792786787,
+      "lastPostedAt": 1792960092,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
+      "media": [],
+      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
+      "replies": []
+    },
+    {
       "id": "43095",
       "title": "Google Account -- Verify it's you",
       "author": "zach99zulu",
@@ -1880,43 +2068,6 @@
       "url": "https://discuss.grapheneos.org/d/43095-google-account-verify-its-you",
       "media": [],
       "text": "<p>New to GrapheneOS. I installed it last night.</p>\n\n<p>Regarding google accounts, what do I need to do to get the \"Verify it's you\" notifications on my phone? I am getting messages that's saying it's sent to my pixel 10a, but I'm not getting any notifications to verify it's me. Been struggling for hours and it's really getting to me.</p>",
-      "replies": [
-        {
-          "id": "277403",
-          "number": 2,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
-          "score": 0,
-          "created": 1792959023,
-          "parent": "43095",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43095-google-account-verify-its-you/1\" class=\"PostMention\" data-id=\"277402\"><i class=\"icon fas fa-reply\"></i>zach99zulu</a></p> \n\n<p>Probably the <strong>network</strong> permission and turn on  <strong>notifications</strong> for google play services.</p> \n\n<p>Settings &gt; apps &gt; in the middle is an option called sandboxed google play &gt; play services app info</p>\n\n<p>Here you have notifications and permissions as an option to pick and the top of the list.</p>\n\n<p>If it still doesn't work, add these for each private space or user where you have google play services installed.</p>"
-        }
-      ]
-    },
-    {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 31,
-      "comments": 31,
-      "views": 735,
-      "participantCount": 21,
-      "created": 1697589169,
-      "lastPostedAt": 1792958097,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
       "replies": []
     },
     {
@@ -1965,30 +2116,6 @@
       "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
       "media": [],
       "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
-      "replies": []
-    },
-    {
-      "id": "42154",
-      "title": "New messaging app",
-      "author": "ojzula",
-      "authorUsername": "ojzula",
-      "authorAvatar": "",
-      "score": 7,
-      "comments": 7,
-      "views": 245,
-      "participantCount": 7,
-      "created": 1789897701,
-      "lastPostedAt": 1792956299,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42154-new-messaging-app",
-      "media": [],
-      "text": "<p>When new messaging app willa be addee to beta ? <br>\nCheers</p>\n",
       "replies": []
     },
     {
@@ -2065,54 +2192,6 @@
       "replies": []
     },
     {
-      "id": "43048",
-      "title": "More native code debugging attempts recently",
-      "author": "cupcake-alibi",
-      "authorUsername": "cupcake-alibi",
-      "authorAvatar": "",
-      "score": 8,
-      "comments": 8,
-      "views": 210,
-      "participantCount": 6,
-      "created": 1792786787,
-      "lastPostedAt": 1792954395,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
-      "media": [],
-      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
-      "replies": []
-    },
-    {
-      "id": "41738",
-      "title": "Ryanair app, play services needed?",
-      "author": "becomeparmesan",
-      "authorUsername": "becomeparmesan",
-      "authorAvatar": "",
-      "score": 6,
-      "comments": 6,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1788619688,
-      "lastPostedAt": 1792953988,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed",
-      "media": [],
-      "text": "<p>I am about to buy some flight tickets and one option is via Ryanair. I know that the app became mandatory for checking in. But as I use my phone without google play services, I would consider booking otherwise, if the app needs it.</p>\n\n<p>Does someone know if it will require play services? Anything more? Would also block connections via a firewall app.</p>\n\n<p>Ideally of course, someone knows a way how to avoid it completely by saying \"phone is broken, battery empty, don't have a phone...\"</p>",
-      "replies": []
-    },
-    {
       "id": "43092",
       "title": "Viber",
       "author": "redacted_handle",
@@ -2158,30 +2237,6 @@
       "url": "https://discuss.grapheneos.org/d/41396-hi-everyone-soon-to-join-from-au",
       "media": [],
       "text": "<p>In probably about a week or two I'm going to get a get a Pixel 10 pro, and I'm in Australia and so all this ID shit/similar stuff happening in UK is starting be pushed more so I'm about to make the switch soon</p> \n\n<p>I'm a techy person who likes learning new things, and from YouTube videos, I've seen it's extremely easy to install GrapheneOS, taking about 10-15 minutes.</p>\n\n<p>I've been on full Linux for almost two years now and have had no problems on my gaming PC, laptop, or even my ROG Ally Bazzite. I've also switched to Proton Mail and NordVPN for about 10 years.</p>\n\n<p>What are some recommended apps to use or alternative types?</p>\n\n<p>For example I've been using Waze over Google Maps for about three years now.</p>\n\n<p>Or spelling/grammar check, because I'm on the spectrum. I don't use AI, but Gemini is built into the keyboard. I have it fix my wording or grammar, but I always write it myself, and then it fixes it, which makes it more readable to others and isn't one long run-on sentence. Then I'll double check it but it's only if I make a long post or text something like this.</p>\n\n<p>Anyway I can't wait to join the Grapheneos family soon</p> ",
-      "replies": []
-    },
-    {
-      "id": "43093",
-      "title": "Mobile Forensics Today and Tomorrow",
-      "author": "goslov9",
-      "authorUsername": "goslov9",
-      "authorAvatar": "",
-      "score": 5,
-      "comments": 5,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792949462,
-      "lastPostedAt": 1792952092,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43093-mobile-forensics-today-and-tomorrow",
-      "media": [],
-      "text": "<p>Currently, the biggest players are MOBILedit, XRY, and Cellebrite. They mostly rely on USB-C port, RAM, and Bluetooth/Wi-Fi exploits. GrapheneOS mitigates these threats by disabling the USB-C port, Bluetooth, and Wi-Fi while the device is in BFU mode, making typical attacks impossible. Furthermore, GrapheneOS hardens the phone by limiting the possibilities for RAM exploits. The Titan M2 chip limits the possibility of brute-force attacks, software downgrades, and much more.</p>\n\n<p>My question is: How could a theoretical, well-funded attacker exploit GrapheneOS while it is in BFU mode? What possible attack vectors remain if most are closed?</p>",
       "replies": []
     }
   ]
