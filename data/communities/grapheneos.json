@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T08:51:27Z",
+  "fetchedAt": "2026-10-25T09:05:50Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,17 +1858,88 @@
       ]
     },
     {
-      "id": "43085",
-      "title": "User Profile Setup",
-      "author": "mumbai",
-      "authorUsername": "mumbai",
+      "id": "43076",
+      "title": "Obtainium requires DCL via memory now?",
+      "author": "gvprtskvni",
+      "authorUsername": "gvprtskvni",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792878767,
+      "lastPostedAt": 1792919103,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43076-obtainium-requires-dcl-via-memory-now",
+      "media": [],
+      "text": "<p>After the latest update Obtainium keeps crashing and apparently requires DCL via memory when it worked with full exploit protections previously. Anyone else experiencing this?</p>",
+      "replies": [
+        {
+          "id": "277229",
+          "number": 2,
+          "author": "joel_hayes",
+          "authorUsername": "joel_hayes",
+          "authorAvatar": "",
+          "score": 5,
+          "created": 1792888419,
+          "parent": "43076",
+          "text": "<p>Issue filed here: <a href=\"https://github.com/ImranR98/Obtainium/issues/3458\" rel=\"ugc nofollow\">https://github.com/ImranR98/Obtainium/issues/3458</a></p>"
+        },
+        {
+          "id": "277266",
+          "number": 3,
+          "author": "KitsuneNoBaka",
+          "authorUsername": "KitsuneNoBaka",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792919103,
+          "parent": "43076",
+          "text": "<p>There was one library change that is doing that. Developer thinks about adding option in settings for user to chose which library to use.</p>"
+        }
+      ]
+    },
+    {
+      "id": "43086",
+      "title": "Signal, FairEmail ",
+      "author": "Try",
+      "authorUsername": "Try",
       "authorAvatar": "",
       "score": 2,
       "comments": 2,
       "views": 70,
       "participantCount": 2,
+      "created": 1792914080,
+      "lastPostedAt": 1792918899,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43086-signal-fairemail",
+      "media": [],
+      "text": "<p>Which one should I keep, optimized or unrestricted?</p>",
+      "replies": []
+    },
+    {
+      "id": "43085",
+      "title": "User Profile Setup",
+      "author": "mumbai",
+      "authorUsername": "mumbai",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 140,
+      "participantCount": 4,
       "created": 1792912088,
-      "lastPostedAt": 1792918262,
+      "lastPostedAt": 1792918670,
       "category": "General",
       "categoryColor": "#c7c7c7",
       "tags": [
@@ -1879,19 +1950,7 @@
       "url": "https://discuss.grapheneos.org/d/43085-user-profile-setup",
       "media": [],
       "text": "<p>I want to setup user profile but I'm little confused.<br>\nWant some suggestsions<br>\n<strong>Use Case</strong><br>\nI only use open-source apps.</p>\n\n<p>I'll make a Education user profile for educational stuff. (I'm clear about this)</p>\n\n<p>I read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> posted by GrapheneOS Devs <br>\nI'll say you people read <a href=\"https://seprand.github.io/articles/best-user-profile-setup/\" rel=\"ugc nofollow\">this</a> once<br>\nI'm thinking for <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#empty-owner-profile\" rel=\"ugc nofollow\">Empty Owner Profile</a> OR should I go with <a href=\"https://seprand.github.io/articles/best-user-profile-setup/#no-secondary-user-profiles\" rel=\"ugc nofollow\">No Secondary User Profiles</a> and have only two profiles one for daily and educational</p>",
-      "replies": [
-        {
-          "id": "277262",
-          "number": 2,
-          "author": "mmmm",
-          "authorUsername": "mmmm",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792918262,
-          "parent": "43085",
-          "text": "<p>First try owner for regular use and private space for your educational stuff. Unless you understand or know why you want to keep your owner 'tidy', then there is likely no point to it. <br>\nIf you user owner and private space its essentially like two profiles but infinitely easier to work with.</p> "
-        }
-      ]
+      "replies": []
     },
     {
       "id": "42741",
@@ -1964,30 +2023,6 @@
       "url": "https://discuss.grapheneos.org/d/20507-will-we-ever-get-wifi-calling-over-vpn-or-at-least-tunneled-domains",
       "media": [],
       "text": "<p>Once SIM card is inserted into phone, it starts making queries to WiFi calling domains, even if WiFi calling is disabled on device. These queries ignore DNS over TLS private DNS server settings and ignore VPN tunnels. When is this going to change? WiFi calling uses its own IPSec tunnel, but it does not hide your info from ISP and mobile provider. Why can't GOS introduce IPSec WiFi calling tunneling over VPN apps? It can be done with routers supporting VPN's. VPN routers simply tunnel client IPSec data through VPN tunnels (OpenVPN, WireGuard) configured in router.</p>",
-      "replies": []
-    },
-    {
-      "id": "43086",
-      "title": "Signal, FairEmail ",
-      "author": "Try",
-      "authorUsername": "Try",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792914080,
-      "lastPostedAt": 1792914080,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43086-signal-fairemail",
-      "media": [],
-      "text": "<p>Which one should I keep, optimized or unrestricted?</p>",
       "replies": []
     },
     {
@@ -2159,31 +2194,6 @@
       "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
       "media": [],
       "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
-      "replies": []
-    },
-    {
-      "id": "43027",
-      "title": "Wi-Fi reconnect on restart doesn't work",
-      "author": "Onlyfun",
-      "authorUsername": "Onlyfun",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792709856,
-      "lastPostedAt": 1792906641,
-      "category": "Pixel 8",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 8"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43027-wi-fi-reconnect-on-restart-doesnt-work",
-      "media": [],
-      "text": "<p>That's it in the title. It's probably not a common issue since my other p8 reconnects as expected. But still asking if anybody seen this to happen? Any remedy?</p>",
       "replies": []
     }
   ]
