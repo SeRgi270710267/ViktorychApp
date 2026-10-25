@@ -1276,5 +1276,10 @@ SI18n.addPack("ru", {
   "Transfer your session to another browser or device.": "Перенесите сессию в другой браузер или на другое устройство.",
   "Copy session code": "Скопировать код сессии",
   "Copy session code:": "Скопируйте код сессии:",
-  "Session code copied": "Код сессии скопирован"
+  "Session code copied": "Код сессии скопирован",
+  "Emergency Offline Access": "Аварийный офлайн-доступ",
+  "Unlock offline access with your claim code if servers are down.": "Разблокируйте офлайн-доступ кодом подтверждения, если серверы недоступны.",
+  "Unlock Offline": "Войти офлайн",
+  "Invalid claim code.": "Неверный код подтверждения.",
+  "Servers unreachable. Try Emergency Offline Access.": "Серверы недоступны. Попробуйте аварийный офлайн-доступ."
 });

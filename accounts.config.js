@@ -15,6 +15,7 @@
     backupApi: "",
     gate: false,
     turnstileSiteKey: "",
-    tiktokAudience: "owner"
+    tiktokAudience: "owner",
+    emergencyHash: ""
   };
 })();
