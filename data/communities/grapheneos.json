@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T04:44:17Z",
+  "fetchedAt": "2026-10-25T05:14:01Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,78 @@
       ]
     },
     {
+      "id": "43080",
+      "title": "grapheneos typing character before another backwards",
+      "author": "mandan",
+      "authorUsername": "mandan",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792882745,
+      "lastPostedAt": 1792904803,
+      "category": "Pixel 9a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 9a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
+      "media": [],
+      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
+      "replies": [
+        {
+          "id": "277226",
+          "number": 2,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792884296,
+          "parent": "43080",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards/1\" class=\"PostMention\" data-id=\"277223\"><i class=\"icon fas fa-reply\"></i>mandan</a> Is this throughout the system or just in the Messaging app?</p>"
+        },
+        {
+          "id": "277242",
+          "number": 3,
+          "author": "ManofGraphene",
+          "authorUsername": "ManofGraphene",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/o3PBXnuUKOULO5T5.png",
+          "score": 0,
+          "created": 1792904803,
+          "parent": "43080",
+          "text": "<p>I had the exact same problem start around the time the messaging app got its re-fresh. For me its not all the time, but randomly. And it only happens within the stock messaging app as far as I know. I'm on FUTO Keyboard mostly. I originally thought it was a FUTO issue with the stock messaging app, so never brought it up. Bit if the stock keyboard does it too, of might be an issue within the messaging app or android system update from the last month or two.</p>"
+        }
+      ]
+    },
+    {
+      "id": "43075",
+      "title": "Easy Notes flagged as a Trojan on Accrescent",
+      "author": "Nemko",
+      "authorUsername": "Nemko",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792873134,
+      "lastPostedAt": 1792904318,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
+      "media": [],
+      "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
+      "replies": []
+    },
+    {
       "id": "43083",
       "title": "Decrescent: my fork of Accrescent, with the apps I actually use and optional Tor",
       "author": "LionNest",
@@ -1879,30 +1951,7 @@
       "url": "https://discuss.grapheneos.org/d/43083-decrescent-my-fork-of-accrescent-with-the-apps-i-actually-use-and-optional-tor",
       "media": [],
       "text": "<p>I like Accrescent. Every app is tied to its developer’s signing key, and it won’t install older versions over newer ones. But the last release of the app was 0.28.1 on 10 November 2025, almost a year ago. There’s still activity in the code, but nothing has shipped, and fixes don’t help anyone until they do.</p>\n\n<p>So I made my own version, Decrescent. It isn’t affiliated with Accrescent. It keeps their credit and licence.</p>\n\n<p>What’s different:</p>\n\n<p>It has the apps I use and trust: Parakeet (my Molly fork), Holevad (my Mullvad VPN fork), Aurora Light, CoMaps, SimpMusic, WizeStream, Bitwarden, Ente Auth, Ente Photos, Tuta Mail, plus my own HawkEye and Dodo Bird. The apps they replace are hidden.<br>\nThere’s an optional switch to send everything through Tor with Orbot. If Orbot isn’t running, it just doesn’t connect. It won’t quietly go around Tor.<br>\nThe app list is signed and rebuilt every 6 hours. Each app is tied to its signing key, and anything signed with a different key is refused.<br>\nWhen Accrescent puts out a new release, mine picks it up and builds it automatically.</p>\n\n<p>It’s open source under Apache-2.0, built with AI assistance, and it hasn’t had an independent audit yet. Everything is in the repo and I welcome review. For apps from other developers, I pin the signing key from their official release, so after that first download any APK signed with a different key is refused.</p>\n\n<p>You can check the APK’s signing fingerprint on the release page.</p>\n\n<p><a href=\"https://gitlab.com/LionNest/decrescent\" rel=\"ugc nofollow\">https://gitlab.com/LionNest/decrescent</a></p>\n\n<p>Tell me what you’d change or what’s missing.</p>",
-      "replies": [
-        {
-          "id": "277239",
-          "number": 2,
-          "author": "Johnnyloans",
-          "authorUsername": "Johnnyloans",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
-          "score": 1,
-          "created": 1792897176,
-          "parent": "43083",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43083-decrescent-my-fork-of-accrescent-with-the-apps-i-actually-use-and-optional-tor/1\" class=\"PostMention\" data-id=\"277238\"><i class=\"icon fas fa-reply\"></i>LionNest</a> The app list is signed and rebuilt every 6 hours.</p></blockquote>\n\n<p>To avoid confusion, I think they mean it'll fetch the list of available apps every 6 hours, not rebuilding every app.</p>"
-        },
-        {
-          "id": "277240",
-          "number": 3,
-          "author": "HuskyPython",
-          "authorUsername": "HuskyPython",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792899411,
-          "parent": "43083",
-          "text": "<p>I too wish Accrescent was updated more often, the dev keeps saying that they are working on the backend first and then will be able to work on adding features and opening app submissions, I donated to the project to help out. As well, they recently released a blog post saying what they've been working on in the backend and the last social media post they said a big update was coming soon. Seems like a bunch of devs for popular apps want to publish on Accrescent as soon as submissions open.</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43073",
@@ -2075,31 +2124,6 @@
       "replies": []
     },
     {
-      "id": "43080",
-      "title": "grapheneos typing character before another backwards",
-      "author": "mandan",
-      "authorUsername": "mandan",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792882745,
-      "lastPostedAt": 1792884296,
-      "category": "Pixel 9a",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 9a"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
-      "media": [],
-      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
-      "replies": []
-    },
-    {
       "id": "43061",
       "title": "Parakeet (Molly fork with newer Signal security fixes) + my other privacy apps",
       "author": "LionNest",
@@ -2121,30 +2145,6 @@
       "url": "https://discuss.grapheneos.org/d/43061-parakeet-molly-fork-with-newer-signal-security-fixes-my-other-privacy-apps",
       "media": [],
       "text": "<p>I build a handful of privacy apps for GrapheneOS in my spare time, and this week the main one got some real security work, so I figured I'd share.</p>\n\n<p>Parakeet is my fork of Molly. Molly hasn't had a release since July and is still on Signal 8.19.2, so I started pulling Signal's security fixes in myself. The big one was the RingRTC hot mic bug (CVE-2026-113380), where someone on a call could keep your mic on after you hang up. Molly still ships the vulnerable version, so I rebuilt their RingRTC with Signal's fix. I also backported 19 of Signal's other hardening commits from 8.19.2 to 8.33.1, mostly stricter checks on images, attachments, mentions and call messages. On top of that it has no Google push, screen security always on, and disappearing messages by default. It's still 8.19.2 underneath, so no new Signal features, just the fixes. It syncs with Molly every 6 hours and drops each patch once Molly catches up.</p>\n\n<p>The other stuff, if any of it's useful to you:</p>\n\n<p>Molevad VPN is my fork of the open-source Mullvad app with on-device tracker and SDK domain blocking added. DAITA still works.</p>\n\n<p>Dodo Bird identifies birds by their songs and calls, fully offline with no internet permission, around 10,000 species with pictures. Built on BirdNET Live.</p>\n\n<p>HawkEye logs every plane that flies over you, pings you as it passes, and ranks the regulars. Built on the airplanes.live app.</p>\n\n<p>Everything's free and open source, and you can keep it updated with Obtainium or ObtainX: <a href=\"https://gitlab.com/LionNest\" rel=\"ugc nofollow\">https://gitlab.com/LionNest</a></p>\n\n<p>None of it is affiliated with Signal, Molly, Mullvad or the original projects. Happy to answer questions or hear if something breaks.</p>",
-      "replies": []
-    },
-    {
-      "id": "43075",
-      "title": "Easy Notes flagged as a Trojan on Accrescent",
-      "author": "Nemko",
-      "authorUsername": "Nemko",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792873134,
-      "lastPostedAt": 1792883510,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
-      "media": [],
-      "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
       "replies": []
     },
     {
