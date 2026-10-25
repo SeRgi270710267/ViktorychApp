@@ -19,52 +19,44 @@ Provides seamless auto-failover whenever the primary Cloudflare Worker reaches i
 
 ---
 
-## Free Hosting Options
+## Free Hosting Options (No Paid Plans Required)
 
-### Option 1: Hugging Face Spaces (Recommended — 100% Free Forever)
-Hugging Face Spaces provides a **free Docker CPU Basic tier** with:
-- **2 vCPUs, 16 GB RAM, 50 GB persistent storage**
-- **Unmetered bandwidth and requests** (no 100k daily cap)
-- **Automatic HTTPS** (`https://<username>-<spacename>.hf.space`)
-- **Cost**: **$0 / month forever**
+### Option 1: Secondary Cloudflare Free Account (Recommended — Fastest & Easiest)
+Cloudflare free accounts cost **$0 forever** and require **no credit card**. A second free account provides another **100,000 requests/day** with identical D1 and R2 support and zero code translation.
 
 #### Setup Steps:
-1. Go to [Hugging Face](https://huggingface.co/new-space).
-2. Create a new Space:
-   - **Space name**: `viktorych-backup` (or any name you choose)
-   - **License**: MIT or Apache 2.0
-   - **Select the Space SDK**: **Docker** -> **Blank**
-   - **Space hardware**: **CPU Basic (2 vCPU · 16 GB RAM) - Free**
-3. In your Space's **Settings** -> **Variables and secrets**:
-   - Secret `ACCOUNT_PEPPER`: Enter the same pepper string used in your primary Cloudflare Worker.
-   - Secret `OWNER_CLAIM_CODE`: Enter your owner claim code.
-   - Variable `ALLOWED_ORIGINS`: `https://viktorychgroup.github.io`
-4. Deploy the code to your Space:
-   - You can git push this repository directly to the Hugging Face Space remote, or push just the Dockerfile and source files.
-5. Copy your Space URL:
-   - `https://<your-username>-<space-name>.hf.space`
-6. In your GitHub repository **ViktorychApp**:
+1. Register a second free account on [cloudflare.com](https://dash.cloudflare.com/sign-up) (or use a secondary worker name).
+2. Create an API token with Workers / D1 edit permissions.
+3. Deploy the worker from your terminal:
+   ```bash
+   cd worker
+   CLOUDFLARE_API_TOKEN="<token>" CLOUDFLARE_ACCOUNT_ID="<id>" npx wrangler deploy --name viktorych-accounts-backup
+   ```
+4. Copy the resulting URL:
+   - `https://viktorych-accounts-backup.<second-subdomain>.workers.dev`
+5. In your GitHub repository **ViktorychApp**:
    - Go to **Settings** -> **Secrets and variables** -> **Actions**.
    - Under **Variables** (or Secrets), add:
      - Name: `ACCOUNTS_BACKUP_API`
-     - Value: `https://<your-username>-<space-name>.hf.space`
-7. Done! The next deploy of ViktorychApp will automatically include `backupApi`.
+     - Value: `https://viktorych-accounts-backup.<second-subdomain>.workers.dev`
+6. Done! GitHub Actions automatically injects `backupApi` into your site deploys.
 
 ---
 
-### Option 2: Secondary Cloudflare Worker (Free Tier)
-If you have a second free Cloudflare account or want to run a secondary worker:
-1. Deploy `worker/` to your second Cloudflare account or under a secondary name:
-   ```bash
-   cd worker
-   npx wrangler deploy --name viktorych-accounts-backup
-   ```
-2. Set `ACCOUNTS_BACKUP_API` in GitHub repository variables:
-   - `https://viktorych-accounts-backup.<your-subdomain>.workers.dev`
+### Option 2: Deno Deploy (1,000,000 Free Requests / Month)
+Deno Deploy has a generous **Free Tier**:
+- **1,000,000 free requests / month**
+- **Global edge network** with < 50ms latency
+- **No credit card required**
+- Automatic HTTPS: `https://<app-name>.deno.dev`
 
 ---
 
-### Option 3: Koyeb / Render / Fly.io / Docker VPS
+### Option 3: Koyeb / Render / Free Docker Host
+If you prefer running a containerized Node.js backend:
+- **Koyeb**: Free Eco/Hobby tier (runs Docker containers 24/7 without credit card).
+- **Render**: Free web services (750 free hours/month).
+
 Run with Docker:
 ```bash
 docker build -f backup-server/Dockerfile -t viktorych-backup-server .
