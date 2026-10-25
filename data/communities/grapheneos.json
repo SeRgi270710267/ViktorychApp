@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T22:36:04Z",
+  "fetchedAt": "2026-10-25T22:38:11Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,240 @@
       ]
     },
     {
+      "id": "42908",
+      "title": "What music streaming services are you using on GOS?",
+      "author": "WelcomeMilk89",
+      "authorUsername": "WelcomeMilk89",
+      "authorAvatar": "",
+      "score": 40,
+      "comments": 40,
+      "views": 1015,
+      "participantCount": 29,
+      "created": 1792297664,
+      "lastPostedAt": 1792967805,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
+      "media": [],
+      "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
+      "replies": [
+        {
+          "id": "275668",
+          "number": 2,
+          "author": "Developer-Dude",
+          "authorUsername": "Developer-Dude",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/0e3xKlZFGMMPY9z2.png",
+          "score": 1,
+          "created": 1792297785,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/1\" class=\"PostMention\" data-id=\"275667\"><i class=\"icon fas fa-reply\"></i>WelcomeMilk89</a> you gotta check out Musify. Its amazing<br>\n<a href=\"https://github.com/gokadzev/Musify\" rel=\"ugc nofollow\">https://github.com/gokadzev/Musify</a></p>"
+        },
+        {
+          "id": "275673",
+          "number": 3,
+          "author": "dryfter",
+          "authorUsername": "dryfter",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/yrF3TPBIpC7APhhS.png",
+          "score": 0,
+          "created": 1792300983,
+          "parent": "42908",
+          "text": "<p>I was on Apple Music when I switched from iPhone. Then I switched to Qobuz due to their stance on AI music, only to find it's literally overrun by AI music. I just switched to Deezer (despite my feelings about ownership) and I'm loving it.</p>\n\n<p>As far as streaming without subscriptions, I use <a href=\"https://github.com/shapeshed/aerial\" rel=\"ugc nofollow\">Aerial</a> for internet radio.</p> "
+        },
+        {
+          "id": "275700",
+          "number": 4,
+          "author": "KitsuneNoBaka",
+          "authorUsername": "KitsuneNoBaka",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1792311921,
+          "parent": "42908",
+          "text": "<p>storage</p>"
+        },
+        {
+          "id": "275703",
+          "number": 5,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792313324,
+          "parent": "42908",
+          "text": "<p>I use <a href=\"https://www.extreamsd.com/index.php/products/usb-audio-player-pro\" rel=\"ugc nofollow\">UAPP (Universal Audio Player Pro)</a>. Supports local file playback &amp; streaming through Tidal and/or Qobuz. It also supports streaming from a self hosted DLNA server as well. You can add local playback &amp; Tidal/Qobuz tracks into the same playlists so you don't have to jump between apps/services for different albums/tracks. Only issue is it is proprietary but considering GrapheneOS has storage scopes that isn't a huge issue. I haven't been able to find <strong>any</strong> open-source music player that will play tracks bit-perfectly with USB DACs so I wouldn't recommend them as all your music will get resampled through Android's crappy audio stack You can either obtain UAPP through Google Play or <a href=\"https://www.extreamsd.com/index.php/direct-purchase\" rel=\"ugc nofollow\">direct purchase on their website</a>.</p>"
+        },
+        {
+          "id": "275704",
+          "number": 6,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792314113,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a> The DLNA server would probably be easier than running Navidrome as I heard that can be a pain to keep reliable especially on a laptop. You could also look into Roon for a complete solution as it has it's own mobile apps and integrates with high end AVRs and things like that but for the most straight forward way to run at home if you're wanting to \"stream\" your purchased files would be the DLNA server on your thinkpad with Tailscale (for external/not at home on the go access) and use UAPP on your phone, you'll get the added benefit of optionally streaming Tidal or Qobuz and integrate them into the same playlists as your purchased file also.</p>"
+        },
+        {
+          "id": "275723",
+          "number": 7,
+          "author": "AcclaimSublevel19",
+          "authorUsername": "AcclaimSublevel19",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792318478,
+          "parent": "42908",
+          "text": "<p>I've got a combination of streaming from my self-hosted Jellyfin instance via Finamp and from YouTube music via the excellent <a href=\"https://github.com/vivizzz007/vivi-music\" rel=\"ugc nofollow\">VIVI Music</a>. I have YouTube for discovery and then I download songs to my Jellyfin library.</p>"
+        },
+        {
+          "id": "275731",
+          "number": 8,
+          "author": "FunkTastic",
+          "authorUsername": "FunkTastic",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/gkf1ndPwIn0x3LQA.png",
+          "score": 0,
+          "created": 1792319294,
+          "parent": "42908",
+          "text": "<p>Youtube via NewPipe :)</p>\n"
+        },
+        {
+          "id": "275734",
+          "number": 9,
+          "author": "Buffering",
+          "authorUsername": "Buffering",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792319676,
+          "parent": "42908",
+          "text": "<p>YouTube via Grayjay.</p> "
+        },
+        {
+          "id": "275780",
+          "number": 10,
+          "author": "pynosh",
+          "authorUsername": "pynosh",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792331775,
+          "parent": "42908",
+          "text": "<p>I'm using Symfonium with Navidrome.</p> "
+        },
+        {
+          "id": "275795",
+          "number": 11,
+          "author": "MineralWater",
+          "authorUsername": "MineralWater",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792339414,
+          "parent": "42908",
+          "text": "<p>I use YouTube via the Echo App (or you can use Vivi and/ or Metrolist).</p> \n\n<p>These apps act like a streaming app, and they use what is on YouTube for free. So nothing illegal about using them.</p> \n\n<p>I don't listen to music often, so a paid service makes no sense to me.</p> \n\n<p>You can also use the Radio Caprice App from the play store, it's an radio app with channels that only play music without interruption and zero advertisement between or before songs. They have a channel for almost all genres you can think of.</p> \n\n"
+        },
+        {
+          "id": "275796",
+          "number": 12,
+          "author": "nuclear6476",
+          "authorUsername": "nuclear6476",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792339441,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a></p> \n\n<p>The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.<br>\n<a href=\"https://github.com/moss-apps/Flick\" rel=\"ugc nofollow\">https://github.com/moss-apps/Flick</a><br>\n<a href=\"https://github.com/Kdroidwin/MusicBeatSP\" rel=\"ugc nofollow\">https://github.com/Kdroidwin/MusicBeatSP</a></p>\n\n<p>Additionally, reTONE—which is scheduled for release soon—is likely not open source, but it appears it will be available for free without data collection or ads.<br>\n<a href=\"https://retone.iidapiano.store/\" rel=\"ugc nofollow\">https://retone.iidapiano.store/</a></p>\n"
+        },
+        {
+          "id": "275869",
+          "number": 13,
+          "author": "mar2112",
+          "authorUsername": "mar2112",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792356618,
+          "parent": "42908",
+          "text": "<p>MPD from my server.</p>"
+        },
+        {
+          "id": "275878",
+          "number": 14,
+          "author": "Jddjjddjsh",
+          "authorUsername": "Jddjjddjsh",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792361196,
+          "parent": "42908",
+          "text": "<p>I like Metrolist because it is only music and it has great UI.</p> "
+        },
+        {
+          "id": "275883",
+          "number": 15,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792363180,
+          "parent": "42908",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/12\" class=\"PostMention\" data-id=\"275796\"><i class=\"icon fas fa-reply\"></i>nuclear6476</a> The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.</p></blockquote>\n\n<p>Well there you go, I'll have to check these out. Thanks :)</p>"
+        },
+        {
+          "id": "275937",
+          "number": 16,
+          "author": "skully373",
+          "authorUsername": "skully373",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/piWzj3tLZsYbFwH2.png",
+          "score": 1,
+          "created": 1792384067,
+          "parent": "42908",
+          "text": "<p>Did you ever try Tidal? It's pretty great for a paid service. Huge library and awesome sound quality. I just wish Pixels handled LDAC better.</p>"
+        },
+        {
+          "id": "275943",
+          "number": 17,
+          "author": "schweizer",
+          "authorUsername": "schweizer",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792387216,
+          "parent": "42908",
+          "text": "<p>What makes you think Spotify is a shady company? They do not sell customer data and they are in public ownership. The income flows vastly into the music industry. It is not that buying CDs would support artists more. It is the labels that take a huge share. Switching the streaming service does not solve that problem.</p>\n\n<p>For me there are two features why i do not use my digitalized CD recordings any more:</p>\n<ul><li>Spotify connect lets me start music directly on the player. No interrupted bluetooth connections.</li>\n<li>I can do jams with family and friends.</li></ul>\n"
+        },
+        {
+          "id": "275955",
+          "number": 18,
+          "author": "four",
+          "authorUsername": "four",
+          "authorAvatar": "",
+          "score": 5,
+          "created": 1792391681,
+          "parent": "42908",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> What makes you think Spotify is a shady company?</p></blockquote>\n\n<p>I wouldn't say they're more shady than other surveillance capitalism companies, but any surveillance capitalism company is shady as hell.</p> \n\n<ul><li><p>They collect everything you do in the app. Searches, skips, interactions. They make inferences about your age, interests, preferences, and scans for other devices on your Wi-Fi.</p> </li>\n\n<li><p>They take data from marketing and ad partners and their inferences about you. And Spotify shares your data with those ad partners.</p> </li>\n<li><p>Personalized ads are enabled by default. If you opt out, you still get ads based on context of what you're listening to.</p></li>\n<li><p>Your listen history Is kept for the length of your account.</p> </li>\n<li><p>Your data including voice recordings, if you use them, can be used to train machine learning models and there's no opt-out.</p> </li>\n<li><p>They were fined by Sweden's data protection authority in 2023</p></li></ul>\n\n\n<p>Is this an inaccurate summary of their <a href=\"https://www.spotify.com/us/legal/privacy-policy/\" rel=\"ugc nofollow\">privacy practices</a> and history?</p>"
+        },
+        {
+          "id": "275962",
+          "number": 20,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 9,
+          "created": 1792393790,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> Well first off, excluding YouTube Music they pay the least to their artists out of all the streaming services.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> It is not that buying CDs would support artists more. It is the labels that take a huge share.</p></blockquote>\n\n<p>This is naive. Yes the labels take a huge share however I <em>personally</em> know many artists who receive a bigger portion of the income with CDs/Vinyl than they do on streaming services.10,000 streams a month equal around 10 cents (<strong>if</strong> you're lucky), a couple hundred CD &amp; vinyl sales are in the dollars. Additionally not every artist are with a major label and only sell CD's through direct purchase meaning they receive majority of the cost you pay for an album (minus printing &amp; payment/store-front processing fees).</p>\n\n<p>Yes CDs/vinyl  sales are smaller than streaming but the artists that have noticed a incline in CD sales are noticing a more of a profit hence why you see so many independent artists are heavily pushing physical media sales to their audience. The more people cop on to this the better for them.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> They do not sell customer data</p></blockquote>\n\n<p>Completely untrue. They aggregate with many major advertising &amp; marketing platforms</p>"
+        },
+        {
+          "id": "275966",
+          "number": 21,
+          "author": "AKRAKU",
+          "authorUsername": "AKRAKU",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/OZTjv8P30Ni9NyAD.png",
+          "score": 1,
+          "created": 1792394850,
+          "parent": "42908",
+          "text": "<p>I won't never get why people jump on GOS and still willing to pay 18€/month to services live Quobuz. After jumping here I found Riplay on Accrescent store and beside some bug I can live with (that will be fixed soon since dev is active on the project) I'm loving it! The algorithm is way better than the one on Spotify or Apple Music and is making me rediscover a lot of music I used to listen during the past and almost forgot about.</p>"
+        }
+      ]
+    },
+    {
       "id": "43097",
       "title": "App with accessibility permissions needed in Private Space",
       "author": "flashcard5",
@@ -1880,74 +2114,7 @@
       "url": "https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space",
       "media": [],
       "text": "<p>Hi all,<br>\nI have Action Notch installed, however some banking apps are complaining because it doesn't want it to be installed as well.<br>\nSo I tried to move the banking apps in Private Space, but they complain again, this time because they think the phone is rooted.<br>\nUnless there is a way to fix that (if so, how?) then I tried the other way, having Action Notch in the Private Space.<br>\nAction Notch asks for accessibility permissions, which I'm fine giving, but when I click to toggle it on, it doesn't work, it stays off.<br>\nIs there a setting or something I'm missing ? <br>\nAny help to make that (having both apps) work would be very helpful.<br>\nThanks</p>",
-      "replies": [
-        {
-          "id": "277418",
-          "number": 2,
-          "author": "KitsuneNoBaka",
-          "authorUsername": "KitsuneNoBaka",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792964895,
-          "parent": "43097",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/1\" class=\"PostMention\" data-id=\"277414\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> My banking apps are working in <code>Work</code> profile</p>"
-        },
-        {
-          "id": "277419",
-          "number": 3,
-          "author": "flashcard5",
-          "authorUsername": "flashcard5",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792965064,
-          "parent": "43097",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/2\" class=\"PostMention\" data-id=\"277418\"><i class=\"icon fas fa-reply\"></i>KitsuneNoBaka</a> ah so it's not a private space but rather a separate profile. Do you need to \"logout\" profile 1 and switch to profile 2 or is it a bit like private space where you can run an app smoothly and almost instantly? Asking because the way I use my banking apps I cannot spend X seconds to switch apps when paying for example</p> "
-        },
-        {
-          "id": "277420",
-          "number": 4,
-          "author": "KitsuneNoBaka",
-          "authorUsername": "KitsuneNoBaka",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792965463,
-          "parent": "43097",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/3\" class=\"PostMention\" data-id=\"277419\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> No, it's work profile that runs alongside owner, uses same screen and login and is always on. You activate it with <code>Shelter</code> app (old, but still best, waiting for new breeds)</p>"
-        },
-        {
-          "id": "277421",
-          "number": 5,
-          "author": "Novaliss",
-          "authorUsername": "Novaliss",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 0,
-          "created": 1792965706,
-          "parent": "43097",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/3\" class=\"PostMention\" data-id=\"277419\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> banking apps I cannot spend X seconds to switch apps when paying for example</p></blockquote>\n\n<p>One way might be using split-screen when doing time critical simultaneous actions with banking apps. It makes the apps not losing their focus as fast.</p>"
-        },
-        {
-          "id": "277422",
-          "number": 6,
-          "author": "flashcard5",
-          "authorUsername": "flashcard5",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792966132,
-          "parent": "43097",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/4\" class=\"PostMention\" data-id=\"277420\"><i class=\"icon fas fa-reply\"></i>KitsuneNoBaka</a> sorry just to understand, so I first create a profile, set it up etc. But then, thabks to Shelter app I can use it without having to switch, that's what you mean?</p>\n\n<p>How to use the split screen? I'm really discovering GOS still.<br>\nBut split screen will still make the banking app detect Action Notch no ?</p>\n\n<p>Otherwise maybe there is an option to \"disable\" an installed app temporarily like a toggle to make it look like uninstalled ? That way I can disable for few min Action Notch, to run the banking app, then toggle it back on.</p>\n\n\n<p>Edit: OK I got it, I first need to install shelter app from fdroid, the setup a work profile from there (not to mix with a new profile named work) and then from there clone banking app to that profile and switch from there.</p>\n\n<p>Testing</p>"
-        },
-        {
-          "id": "277425",
-          "number": 7,
-          "author": "flashcard5",
-          "authorUsername": "flashcard5",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792967643,
-          "parent": "43097",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space/6\" class=\"PostMention\" data-id=\"277422\"><i class=\"icon fas fa-reply\"></i>flashcard5</a> so it didn't work. Banking app thinks it's in rooted device. And action notch being \"cloned\" thinks it's not purchased (not linked to play store)...<br>\nMaybe I forgot some settings? <br>\nAlternatively, if there is simply a way to have the accessibility settings for apps in private space that would solve it I think...</p> \n"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43080",
@@ -2216,30 +2383,6 @@
       "url": "https://discuss.grapheneos.org/d/17303-zelle-in-schwab-banking-app",
       "media": [],
       "text": "<p>Hi everyone,</p>\n\n<p>My bank is Charles Schwab, and I (before switching to Graphene) used Zelle through the Schwab banking app. Because of this, using the Zelle standalone app is not an option- it won't let me set up the app, and instead directs me to use Zelle in the Schwab app. I cannot get Zelle to work in the Schwab app, even with compatibility mode enabled and all permissions granted.</p>\n\n<p>It sounds like folks have had success using the Zelle service in other banking apps on Graphene (at least Chase, for instance), so I wonder if Schwab is unique here in having this broken component.</p>\n\n<p>Anyone in a similar situation or found a resolution? FWIW, I am using a Pixel 8</p>\n\n<p>Thanks!</p>",
-      "replies": []
-    },
-    {
-      "id": "43075",
-      "title": "Easy Notes flagged as a Trojan on Accrescent",
-      "author": "Nemko",
-      "authorUsername": "Nemko",
-      "authorAvatar": "",
-      "score": 10,
-      "comments": 10,
-      "views": 210,
-      "participantCount": 6,
-      "created": 1792873134,
-      "lastPostedAt": 1792956565,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
-      "media": [],
-      "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
       "replies": []
     }
   ]
