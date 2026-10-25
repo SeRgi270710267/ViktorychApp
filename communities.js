@@ -1,5 +1,18 @@
 /* Communities: a mirrored subreddit and the posts signed-in people write here. */
 (function () {
+  function getDownvotes() {
+    try {
+      return JSON.parse(localStorage.getItem("va_cm_downvotes") || "{}");
+    } catch (_) {
+      return {};
+    }
+  }
+  function setDownvotes(obj) {
+    try {
+      localStorage.setItem("va_cm_downvotes", JSON.stringify(obj));
+    } catch (_) {}
+  }
+
   var state = {
     index: null,
     docs: {},
@@ -9,6 +22,7 @@
     hubTab: "explore",
     search: "",
     showAdd: false,
+    downvotes: getDownvotes(),
     loading: {}
   };
 
@@ -300,23 +314,43 @@
       esc(joined ? tr("Joined") : tr("Join")) + "</span></button>";
   }
 
+  function voteState(sub, id) {
+    var bag = state.internal[sub] || {};
+    var up = (bag.mine || []).indexOf(id) >= 0;
+    var down = !!(state.downvotes && state.downvotes[id]);
+    return { up: up, down: down };
+  }
+
+  function voteGutter(sub, id, total, v) {
+    return '<div class="cm-reddit-vote">' +
+      '<button class="cm-vote-arrow up' + (v.up ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(id) + '" aria-label="' + esc(tr("Like")) + '">' + svgUp + '</button>' +
+      '<span class="cm-reddit-score' + (v.up ? " on" : v.down ? " down-on" : "") + '">' + esc(count(total)) + '</span>' +
+      '<button class="cm-vote-arrow down' + (v.down ? " on" : "") + '" type="button" data-cm="downvote" data-id="' + esc(id) + '" aria-label="Downvote">' + svgDown + '</button>' +
+    '</div>';
+  }
+
+  function votePill(sub, id, total, v, forceDisplay) {
+    var style = forceDisplay ? ' style="display:inline-flex;"' : "";
+    return '<span class="cm-mobile-vote"' + style + '>' +
+      '<button class="cm-vote-arrow up' + (v.up ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(id) + '" aria-label="' + esc(tr("Like")) + '">' + svgUp + '</button>' +
+      '<span class="cm-reddit-score' + (v.up ? " on" : v.down ? " down-on" : "") + '">' + esc(count(total)) + '</span>' +
+      '<button class="cm-vote-arrow down' + (v.down ? " on" : "") + '" type="button" data-cm="downvote" data-id="' + esc(id) + '" aria-label="Downvote">' + svgDown + '</button>' +
+    '</span>';
+  }
+
   /* Reddit Post Card — Authentic Reddit Layout + X.com Theme */
   function redditCard(name, post, isThread) {
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
     var bag = state.internal[name] || {};
+    var v = voteState(name, post.id);
     var extra = Number((bag.likes || {})[post.id]) || 0;
-    var liked = (bag.mine || []).indexOf(post.id) >= 0;
-    var total = (Number(post.score) || 0) + extra;
+    var total = (Number(post.score) || 0) + extra + (v.down ? -1 : 0);
     var cleanTxt = cleanRedditText(post.text);
     var authorClean = cleanAuthor(post.author);
     var redditHref = post.url || ("https://www.reddit.com/r/" + encodeURIComponent(name) + "/comments/" + encodeURIComponent(String(post.id).replace(/^t3_/, "")));
 
     return '<article class="cm-reddit-card' + (isThread ? " cm-thread-focus" : "") + '" data-post="' + esc(post.id) + '">' +
-      '<div class="cm-reddit-vote">' +
-        '<button class="cm-vote-arrow up' + (liked ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(post.id) + '" aria-label="' + esc(tr("Like")) + '">' + svgUp + '</button>' +
-        '<span class="cm-reddit-score' + (liked ? " on" : "") + '">' + esc(count(total)) + '</span>' +
-        '<button class="cm-vote-arrow down" type="button" data-cm="downvote" data-id="' + esc(post.id) + '" aria-label="Downvote">' + svgDown + '</button>' +
-      '</div>' +
+      voteGutter(name, post.id, total, v) +
       '<div class="cm-reddit-main">' +
         '<div class="cm-reddit-byline">' +
           '<span class="cm-reddit-snoo">' + svgSnoo + '</span>' +
@@ -331,11 +365,7 @@
         (cleanTxt ? '<div class="cm-reddit-text">' + esc(cleanTxt) + '</div>' : "") +
         mediaHtml(name, post, post.media) +
         '<div class="cm-reddit-actions">' +
-          '<div class="cm-mobile-vote">' +
-            '<button class="cm-vote-arrow up' + (liked ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(post.id) + '">' + svgUp + '</button>' +
-            '<span class="cm-reddit-score' + (liked ? " on" : "") + '">' + esc(count(total)) + '</span>' +
-            '<button class="cm-vote-arrow down" type="button" data-cm="downvote" data-id="' + esc(post.id) + '">' + svgDown + '</button>' +
-          '</div>' +
+          votePill(name, post.id, total, v, false) +
           '<a class="cm-reddit-action-btn" href="' + href + '">' + svgComment + '<span>' + esc(count(post.comments)) + " " + esc(tr("Comments")) + '</span></a>' +
           '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '<span>' + esc(tr("Share")) + '</span></button>' +
           '<a class="cm-reddit-action-btn reddit-link" href="' + esc(redditHref) + '" target="_blank" rel="noopener noreferrer">' + svgSnoo + '<span>' + esc(tr("Open on Reddit")) + '</span> ' + svgExternal + '</a>' +
@@ -344,30 +374,31 @@
     '</article>';
   }
 
-  /* ViktorychApp Native Post Card — X.com Post Layout */
-  function appCard(name, post) {
+  /* ViktorychApp Native Post Card — Same Upvote/Downvote System & Layout */
+  function appCard(name, post, isThread) {
     var author = post.author || {};
     var bag = state.internal[name] || {};
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
-    var liked = (bag.mine || []).indexOf(post.id) >= 0;
-    var likeCount = Number((bag.likes || {})[post.id]) || 0;
+    var v = voteState(name, post.id);
+    var total = (Number((bag.likes || {})[post.id]) || 0) + (v.down ? -1 : 0);
 
-    return '<article class="cm-app-card" data-post="' + esc(post.id) + '">' +
-      face(author) +
-      '<div class="cm-app-main">' +
-        '<div class="cm-app-byline">' +
+    return '<article class="cm-reddit-card cm-app-card' + (isThread ? " cm-thread-focus" : "") + '" data-post="' + esc(post.id) + '">' +
+      voteGutter(name, post.id, total, v) +
+      '<div class="cm-reddit-main">' +
+        '<div class="cm-reddit-byline">' +
+          face(author) +
           '<span class="cm-app-name">' + esc(author.displayName || author.handle || "") + (author.owner ? " ✓" : "") + '</span>' +
           '<span class="cm-app-handle">@' + esc(author.handle || "") + '</span>' +
+          '<span>•</span>' +
+          '<span class="cm-reddit-time">' + esc(timeAgo(Number(post.createdAt) || Date.now())) + '</span>' +
           '<span class="cm-app-badge">' + esc(tr("Only on ViktorychApp")) + '</span>' +
         '</div>' +
-        '<a class="cm-app-text" href="' + href + '">' + esc(post.body || "") + '</a>' +
-        '<div class="cm-app-actions">' +
-          '<a class="cm-app-act" href="' + href + '">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></a>' +
-          '<button class="cm-app-act like' + (liked ? " on" : "") + '" type="button" data-cm="like" data-id="' + esc(post.id) + '">' +
-            (liked ? svgHeartOn : svgHeart) + '<span>' + esc(count(likeCount)) + '</span>' +
-          '</button>' +
-          '<button class="cm-app-act" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '</button>' +
-          (post.mine || owner() ? '<button class="cm-app-act del" type="button" data-cm="delete" data-id="' + esc(post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '</button>' : "") +
+        '<a class="cm-reddit-text" href="' + href + '" style="font-size:15px;text-decoration:none;">' + esc(post.body || "") + '</a>' +
+        '<div class="cm-reddit-actions">' +
+          votePill(name, post.id, total, v, false) +
+          '<a class="cm-reddit-action-btn" href="' + href + '">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></a>' +
+          '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '<span>' + esc(tr("Share")) + '</span></button>' +
+          (post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '<span>' + esc(tr("Delete")) + '</span></button>' : "") +
         '</div>' +
       '</div>' +
     '</article>';
@@ -594,7 +625,7 @@
     var internal = (bag.posts || []).filter(function (post) { return post.id === id; })[0];
     var reddit = findReddit(doc, id);
     var focus = "";
-    if (internal && signedIn()) focus = appCard(name, internal);
+    if (internal && signedIn()) focus = appCard(name, internal, true);
     else if (reddit && reddit.kind === "post") focus = redditCard(name, reddit.post, true);
     else if (reddit && reddit.kind === "reply") {
       focus = '<article class="cm-reddit-comment">' +
@@ -611,22 +642,46 @@
     var kids = repliesFor(name, id, doc).map(function (item) {
       if (item.source === "reddit") {
         var replyScore = Number(item.reply.score) || 0;
-        return '<article class="cm-reddit-comment reply-card">' +
+        var rV = voteState(name, item.reply.id);
+        var rTotal = replyScore + (rV.up ? 1 : 0) + (rV.down ? -1 : 0);
+        return '<article class="cm-reddit-comment reply-card" data-post="' + esc(item.reply.id) + '">' +
           '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + svgSnoo + '</span><span class="cm-comment-line"></span></div>' +
           '<div class="cm-comment-body">' +
             '<div class="cm-comment-byline"><span class="cm-comment-author">u/' + esc(cleanAuthor(item.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo(item.created)) + '</span></div>' +
             '<div class="cm-comment-text">' + esc(item.reply.text || "") + '</div>' +
             '<div class="cm-comment-actions">' +
-              '<span class="cm-mobile-vote">' +
-                '<button class="cm-vote-arrow up" type="button" data-cm="like" data-id="' + esc(item.reply.id) + '">' + svgUp + '</button>' +
-                '<span class="cm-reddit-score">' + esc(count(replyScore)) + '</span>' +
-              '</span>' +
+              votePill(name, item.reply.id, rTotal, rV, true) +
               '<button class="cm-reddit-action-btn" type="button" data-cm="focus-reply">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></button>' +
             '</div>' +
           '</div>' +
         '</article>';
       }
-      return appCard(name, item.post);
+      var aAuthor = item.post.author || {};
+      var aV = voteState(name, item.post.id);
+      var aBag = state.internal[name] || {};
+      var aTotal = (Number((aBag.likes || {})[item.post.id]) || 0) + (aV.down ? -1 : 0);
+      return '<article class="cm-reddit-comment reply-card cm-app-reply" data-post="' + esc(item.post.id) + '">' +
+        '<div class="cm-comment-gutter">' +
+          face(aAuthor) +
+          '<span class="cm-comment-line"></span>' +
+        '</div>' +
+        '<div class="cm-comment-body">' +
+          '<div class="cm-comment-byline">' +
+            '<span class="cm-app-name">' + esc(aAuthor.displayName || aAuthor.handle || "") + (aAuthor.owner ? " ✓" : "") + '</span>' +
+            '<span class="cm-app-handle">@' + esc(aAuthor.handle || "") + '</span>' +
+            '<span>•</span>' +
+            '<span class="cm-reddit-time">' + esc(timeAgo(Number(item.post.createdAt) || item.created)) + '</span>' +
+            '<span class="cm-app-badge">' + esc(tr("Only on ViktorychApp")) + '</span>' +
+          '</div>' +
+          '<div class="cm-comment-text">' + esc(item.post.body || "") + '</div>' +
+          '<div class="cm-comment-actions">' +
+            votePill(name, item.post.id, aTotal, aV, true) +
+            '<button class="cm-reddit-action-btn" type="button" data-cm="focus-reply">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></button>' +
+            '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="#/communities/' + encodeURIComponent(name) + '/' + encodeURIComponent(id) + '">' + svgShare + '</button>' +
+            (item.post.mine || owner() ? '<button class="cm-reddit-action-btn del" type="button" data-cm="delete" data-id="' + esc(item.post.id) + '" data-sub="' + esc(name) + '">' + svgTrash + '</button>' : "") +
+          '</div>' +
+        '</div>' +
+      '</article>';
     }).join("");
 
     var box = signedIn()
@@ -727,6 +782,26 @@
     if (act === "downvote") {
       event.preventDefault();
       event.stopPropagation();
+      if (!signedIn()) { toast(tr("Sign in to post here.")); return; }
+      var id = el.dataset.id;
+      var sub = currentSub();
+      state.downvotes = state.downvotes || {};
+      var wasDown = !!state.downvotes[id];
+      var bag = state.internal[sub] || {};
+      var wasUp = (bag.mine || []).indexOf(id) >= 0;
+      if (wasUp) {
+        call("/v1/communities/" + encodeURIComponent(sub) + "/likes", { method: "DELETE", body: { itemId: id } }).then(function () {
+          delete state.internal[sub];
+          loadInternal(sub).then(render);
+        });
+      }
+      if (wasDown) {
+        delete state.downvotes[id];
+      } else {
+        state.downvotes[id] = true;
+      }
+      setDownvotes(state.downvotes);
+      render();
       return;
     }
     if (act === "focus-reply") {
@@ -742,6 +817,10 @@
       if (!signedIn()) { toast(tr("Sign in to post here.")); return; }
       var id = el.dataset.id;
       var sub = currentSub();
+      if (state.downvotes && state.downvotes[id]) {
+        delete state.downvotes[id];
+        setDownvotes(state.downvotes);
+      }
       var bag = state.internal[sub] || {};
       var on = (bag.mine || []).indexOf(id) >= 0;
       call("/v1/communities/" + encodeURIComponent(sub) + "/likes", { method: on ? "DELETE" : "POST", body: { itemId: id } }).then(function () {
