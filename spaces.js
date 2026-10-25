@@ -743,14 +743,22 @@
     return '<a class="sp-card' + (reconnect ? " is-reconnect" : "") + '" href="#/spaces/' + esc(item.id) + '" data-space-open="' + esc(item.id) + '" data-space-state="' + esc(item.state || "") + '"><span class="sp-card-top"><span class="sp-live-pill">' + tr("LIVE") + "</span>" + (reconnect ? '<span class="sp-reconnect-dot" aria-hidden="true"></span>' : "") + '<span class="sp-eq' + (reconnect ? " is-quiet" : "") + '" aria-hidden="true"><i></i><i></i><i></i><i></i></span></span><span class="sp-card-title">' + esc(item.title) + '</span><span class="sp-card-foot">' + stack(item) + (count ? '<span class="sp-count">' + esc(count) + "</span>" : "") + "</span></a>";
   }
 
-  function homeRow() {
+  function homePillsHtml() {
     const items = homeItems();
-    if (!items.length) return "";
-    return '<div class="sp-row-wrap"><div class="sp-row" role="list">' + items.map((item) => '<div class="sp-row-item" role="listitem">' + pill(item) + "</div>").join("") + "</div></div>";
+    return items.map((item) => '<div class="sp-row-item" role="listitem">' + pill(item) + "</div>").join("");
+  }
+
+  function homeRow() {
+    const spacePills = homePillsHtml();
+    const soccerPills = (root.SoccerScores && root.SoccerScores.pillsHtml) ? root.SoccerScores.pillsHtml() : "";
+    if (!spacePills && !soccerPills) return "";
+    return '<div class="sp-row-wrap"><div class="sp-row" role="list">' + spacePills + soccerPills + "</div></div>";
   }
 
   function rowExtra() {
-    return homeItems().length ? 65 : 0;
+    const hasSpaces = homeItems().length > 0;
+    const hasScores = !!(root.SoccerScores && root.SoccerScores.loadTeams && root.SoccerScores.loadTeams().length);
+    return (hasSpaces || hasScores) ? 65 : 0;
   }
 
   function homeCard() {
@@ -2161,6 +2169,7 @@
     bind: bind,
     start: start,
     homeRow: homeRow,
+    homePillsHtml: homePillsHtml,
     rowExtra: rowExtra,
     homeCard: homeCard,
     sideCard: sideCard,

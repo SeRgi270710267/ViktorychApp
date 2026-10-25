@@ -1,0 +1,1 @@
+ALTER TABLE accounts ADD COLUMN profile_less INTEGER NOT NULL DEFAULT 0;

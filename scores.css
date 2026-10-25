@@ -1,30 +1,6 @@
 /* Soccer live scores pill row & X-style match sheet modal.
    Arsenal Tula (red & yellow), CSKA Moscow (red & blue), FC Barcelona (blaugrana), CE Sabadell (arlequinat royal blue & white). */
 
-.sc-row-wrap {
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-  position: relative;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.sc-row {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding: 8px 12px;
-  scrollbar-width: none;
-  scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch;
-}
-.sc-row::-webkit-scrollbar { display: none; }
-.sc-row-item {
-  flex: 0 0 auto;
-  max-width: 88%;
-  min-width: 0;
-  display: flex;
-}
-
 .sc-pill {
   display: inline-flex;
   align-items: center;
@@ -44,6 +20,10 @@
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   font-family: inherit;
   outline: none;
+  flex: 0 0 auto;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
 }
 .sc-pill:hover,
 .sc-pill:focus-visible {
@@ -374,6 +354,35 @@
   justify-content: center;
   flex: 0 0 auto;
 }
+.sc-score-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.sc-score-step {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  line-height: 1;
+}
+.sc-score-step:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(1.1);
+}
+.sc-score-step:active {
+  transform: scale(0.95);
+}
 .sc-score-digits {
   font-size: 38px;
   font-weight: 900;
@@ -381,7 +390,6 @@
   color: #fff;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   line-height: 1;
-  margin-bottom: 6px;
 }
 .sc-hero-clock {
   display: inline-flex;

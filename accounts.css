@@ -608,3 +608,101 @@ html[data-theme="default"] .acct-field { border-color: #cfd9de; }
   .acct-ava { width: 96px; height: 96px; bottom: -40px; }
   .acct-hero { margin-bottom: 56px; }
 }
+
+/* Linked identities */
+.acct-ident-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+.acct-ident-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted, #71767b);
+}
+.acct-ident-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.acct-ident-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--hover, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+  border-radius: 9999px;
+  color: var(--text, #fff);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
+}
+.acct-ident-chip:hover {
+  background: var(--active, rgba(255, 255, 255, 0.15));
+  border-color: var(--accent, #1d9bf0);
+}
+.acct-ident-chip svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.acct-ident-chip .ident-verified {
+  color: var(--accent, #1d9bf0);
+}
+.acct-ident-settings-list {
+  margin-bottom: 12px;
+}
+.acct-ident-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--hover, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  margin-bottom: 8px;
+}
+.acct-ident-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.acct-ident-item-left svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.acct-ident-item-left .ident-verified {
+  color: var(--accent, #1d9bf0);
+}
+.acct-code-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--box-bg, rgba(29, 155, 240, 0.1));
+  border: 1px dashed var(--accent, #1d9bf0);
+  border-radius: 10px;
+  margin: 12px 0 16px;
+}
+.acct-code-box code {
+  font-family: monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent, #1d9bf0);
+  letter-spacing: 0.5px;
+}
+.acct-select {
+  width: 100%;
+  background: var(--input-bg, #000);
+  color: var(--text, #fff);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+}

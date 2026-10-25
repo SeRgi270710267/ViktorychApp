@@ -3898,6 +3898,19 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     </div>`;
   }
 
+  function internalPostHandle(handle, post, creator) {
+    const raw = String(handle || "").replace(/^@/, "");
+    if (!raw) return "";
+    const isInternal = (post && (post.platform === "app" || (post.feedId && post.feedId.startsWith("app:")) || !!post.publicId)) ||
+      (creator && (creator.platform === "app" || (creator.feedId && creator.feedId.startsWith("app:")) || !!creator.publicId));
+    if (!isInternal) return raw;
+    const pid = String((post && (post.publicId || post.authorId)) || (creator && creator.publicId) ||
+      (post && post.feedId && post.feedId.startsWith("app:") && /^\d+$/.test(post.feedId.slice(4)) ? post.feedId.slice(4) : "") ||
+      (creator && creator.feedId && creator.feedId.startsWith("app:") && /^\d+$/.test(creator.feedId.slice(4)) ? creator.feedId.slice(4) : "") || "").replace(/^app:/, "");
+    if (pid && !raw.endsWith(pid)) return raw + pid;
+    return raw;
+  }
+
   function quoteCard(quoted) {
     if (!quoted) return "";
     const platform = quoted.platform || "x";
@@ -3908,11 +3921,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const open = external ? ` data-href="${esc(href)}"` : ` data-open="${esc(href)}"`;
     const key = "q:" + (quoted.statusId || quoted.id || "x");
     const shown = displayPost(asQuoted);
+    const quotedHandle = internalPostHandle(quoted.handle || "", quoted);
     return `<div class="quote"${open}>
       <div class="quote-head">
         ${avatar(quoted.avatar, quoted.author || quoted.handle)}
         <span class="name">${esc(quoted.author || quoted.handle || tr("Post noun"))}${badge(quoted.verifiedType)}</span>
-        ${quoted.handle ? `<span class="handle">@${esc(quoted.handle)}</span>` : ""}
+        ${quotedHandle ? `<span class="handle">@${esc(quotedHandle)}</span>` : ""}
         ${quoted.date ? `<span class="dot">·</span><span class="time">${esc(relTime(quoted.date))}</span>` : ""}
       </div>
       ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
@@ -5982,13 +5996,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function tombstoneCard(post) {
     const face = authorFace(post);
     const when = post.date ? `<span class="dot">·</span><a class="time" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>` : "";
+    const tombHandle = internalPostHandle(post.handle || "", post);
     return `<article class="post tombstone">
       <div class="post-row">
         ${avatar(face.avatar, post.author || post.handle)}
         <div class="post-main">
           <div class="byline">
             <a class="name" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}">${esc(post.author || post.handle || tr("Post noun"))}${badge(face.verified)}</a>
-            ${post.handle ? `<a class="handle" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + post.handle)}">@${esc(post.handle)}</a>` : ""}
+            ${tombHandle ? `<a class="handle" href="${esc(accountHash(post.platform, post.handle))}" data-card="${esc((post.platform || "x") + ":" + post.handle)}">@${esc(tombHandle)}</a>` : ""}
             ${when}
             ${sourceBadge(post.platform)}
           </div>
@@ -6020,11 +6035,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function contextCard(parent) {
     if (!parent) return "";
     const text = String(parent.text || parent.title || "").replace(/\s+/g, " ").trim();
+    const parentHandle = internalPostHandle(parent.handle || "", parent);
     return `<div class="reply-context">
       <div class="quote-head">
         ${avatar(parent.avatar, parent.author || parent.handle)}
         <span class="name">${esc(parent.author || parent.handle || tr("Post noun"))}</span>
-        ${parent.handle ? `<span class="handle">@${esc(parent.handle)}</span>` : ""}
+        ${parentHandle ? `<span class="handle">@${esc(parentHandle)}</span>` : ""}
       </div>
       ${text ? `<div class="quote-text">${esc(text.slice(0, 220))}</div>` : ""}
     </div>`;
@@ -6055,7 +6071,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const sharedNote = repostQuote(post, hideRepost ? "author" : "");
     const forwarded = forwardLine(post);
     const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
-    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
+    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
     const context = mode !== "status" && post.replyParent && (post.kind === "reply" || post.platform === "telegram") ? contextCard(post.replyParent) : "";
     const repostFeed = feedOf(post);
     const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
@@ -6076,7 +6093,7 @@ const here = parseRoute();
     const dest = articleOf(post) ? articleHash(post) : (post.watch ? watchHash(post) : statusHash(post));
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
-    const displayHandle = creator ? (post.handle || creator.handle || "") : (post.handle || "");
+    const displayHandle = internalPostHandle(creator ? (post.handle || creator.handle || "") : (post.handle || ""), post, creator);
     const avaLink = `<a href="${esc(accountHash(post.platform, who))}" data-card="${esc(post.platform + ":" + who)}" aria-label="${esc(displayName || tr("Profile"))}">${avatar(face.avatar, displayName)}</a>`;
     const avaCol = continues ? `<div class="ava-col">${avaLink}<div class="thread-line"></div></div>` : avaLink;
     const open = ` data-open="${esc(dest)}"`;
@@ -6506,8 +6523,7 @@ const here = parseRoute();
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
-      ${window.Spaces && window.Spaces.homeRow ? window.Spaces.homeRow() : ""}
-      ${window.SoccerScores && window.SoccerScores.homeRow ? window.SoccerScores.homeRow() : ""}
+      ${window.Spaces && window.Spaces.homeRow ? window.Spaces.homeRow() : (window.SoccerScores && window.SoccerScores.homeRow ? window.SoccerScores.homeRow() : "")}
     </div>`;
   }
 
@@ -7853,9 +7869,10 @@ const here = parseRoute();
         ${stats.views != null ? `<div class="status-views"><b>${esc(formatCount(stats.views))}</b> ${tr("Views")}</div>` : `<div class="status-views"></div>`}
         ${actionBar(post)}`;
     const face = authorFace(post);
+    const statusHandle = internalPostHandle(post.handle || "", post);
     const names = `<div>
             <a class="name" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || "")}${badge(face.verified)}</a>
-            <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
+            <a class="handle" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(statusHandle)}</a>
           </div>
           <span style="margin-left:auto;display:flex;gap:8px;align-items:center">${(post.platform === "discord" && post.guildId) || post.handle ? followButtonClean(post.platform === "discord" && post.guildId ? "discord:" + post.guildId : (post.platform || "x") + ":" + post.handle) : ""}${sourceBadge(post.platform)}</span>`;
     const parented = chain.nodes.length > 0 ? " has-parent" : "";
@@ -10098,8 +10115,7 @@ if (STATE.histClear) {
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const soccerExtra = route.name === "home" && window.SoccerScores && window.SoccerScores.rowExtra ? window.SoccerScores.rowExtra() : 0;
-    const top = route.name === "shorts" ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra + soccerExtra;
+    const top = route.name === "shorts" ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
@@ -10226,20 +10242,53 @@ if (STATE.histClear) {
     const lib = repostLib();
     if (!lib || !account) return { html: "", count: 0 };
     const mine = isMyAccount(account);
-    if (!account.repostsLoaded && !rowsForAccount(account).length) {
+    const identities = (account && account.identities) || [];
+    if (!account.repostsLoaded && !rowsForAccount(account).length && !identities.length) {
       return { html: `<div class="reply-empty">${tr("Loading…")}</div>`, count: 0 };
     }
     const rows = rowsForAccount(account);
     if (mine) writeRepostCache(rows);
-    const posts = [];
+    const postList = [];
+    const seen = new Set();
+    function addPost(post) {
+      if (!post) return;
+      const key = (post.platform || "") + ":" + (post.kind === "repost" ? post.id : (post.statusId || post.id));
+      if (seen.has(key)) return;
+      seen.add(key);
+      postList.push(post);
+    }
     rows.forEach((row) => {
       const post = lib.toProfilePost(row, account, { self: mine });
       if (!post) return;
       if (post.kind === "quote" && mine) post.ownQuote = true;
       if (post.platform === "app" || !findAnyPost(post.id)) STATE.shared[String(post.id)] = post;
-      posts.push(post);
+      addPost(post);
     });
-    return { html: posts.map((post) => card(post, "")).join(""), count: posts.length };
+    if (identities.length) {
+      const allPosts = (typeof posts === "function" ? posts() : null) || (STATE.data && STATE.data.posts) || [];
+      identities.forEach((ident) => {
+        if (!ident || !ident.handle) return;
+        const idPlatform = String(ident.platform || "x").toLowerCase();
+        const idHandle = String(ident.handle || "").replace(/^@/, "").toLowerCase();
+        allPosts.forEach((p) => {
+          if (!p) return;
+          const pPlatform = String(p.platform || "x").toLowerCase();
+          if (pPlatform !== idPlatform) return;
+          const pHandle = String(p.handle || "").replace(/^@/, "").toLowerCase();
+          const pChannel = String(p.channelId || "").toLowerCase();
+          const pFeedId = String(p.feedId || "").toLowerCase();
+          const matches = (pHandle && pHandle === idHandle) ||
+                          (pChannel && pChannel === idHandle) ||
+                          (pFeedId === idPlatform + ":" + idHandle) ||
+                          (pFeedId === idHandle);
+          if (matches) {
+            addPost(p);
+          }
+        });
+      });
+    }
+    postList.sort(byStamp);
+    return { html: postList.map((post) => card(post, "")).join(""), count: postList.length };
   }
 
   function repostPostById(handle, id) {
@@ -10550,11 +10599,12 @@ if (STATE.histClear) {
     const href = post.repostUrl || (who ? accountHash(platform, who) : "");
     const external = href.indexOf("http") === 0;
     const open = href ? (external ? ` data-href="${esc(href)}"` : ` data-open="${esc(href)}"`) : "";
+    const byHandle = internalPostHandle(by.handle || "", { platform: platform, publicId: by.publicId });
     return `<div class="quote"${open}>
       <div class="quote-head">
         ${avatar(by.avatar, by.name || by.handle)}
         <span class="name">${esc(by.name || by.handle || tr("Repost"))}</span>
-        ${by.handle ? `<span class="handle">@${esc(by.handle)}</span>` : ""}
+        ${byHandle ? `<span class="handle">@${esc(byHandle)}</span>` : ""}
       </div>
       <div class="quote-text">${esc(text)}</div>
     </div>`;
@@ -11309,14 +11359,16 @@ if (STATE.histClear) {
 
   function ancestorCard(post) {
     const showReply = !!(post.replyingTo && post.replyingTo.handle);
-    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
+    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
+    const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
     const face = authorFace(post);
+    const ancHandle = internalPostHandle(post.handle || "", post);
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
       <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
         <div class="byline">
           <a class="name" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">${esc(post.author || post.handle)}${badge(face.verified)}</a>
-          <a class="handle" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(post.handle || "")}</a>
+          <a class="handle" data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}">@${esc(ancHandle)}</a>
           <span class="dot">·</span>
           <a class="time" data-act="stop" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
         </div>

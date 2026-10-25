@@ -272,9 +272,21 @@
     }
     if (step === 1) {
       var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : '<button class="acct-quiet" type="button" data-acct="claim">' + esc(tr("Have a claim code?")) + "</button>";
-      return '<p class="acct-sub">' + esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters.")) + "</p>" + field("handle", tr("Choose a handle"), "text", 15) + claim + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
+      var handleSub = form.profileLess
+        ? esc(tr("Choose a handle or leave blank to assign an anonymous identifier."))
+        : esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters."));
+      return '<p class="acct-sub">' + handleSub + "</p>" +
+        field("handle", form.profileLess ? tr("Handle (optional)") : tr("Choose a handle"), "text", 15) +
+        claim + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
     }
-    return '<p class="acct-sub">' + esc(tr("Your name is shown on your profile.")) + "</p>" + field("displayName", tr("Name"), "text", 50) + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
+    var subText = form.profileLess
+      ? esc(tr("Your account will have no public profile. Interactions will be anonymous."))
+      : esc(tr("Your name is shown on your profile."));
+    var profRow = '<div class="acct-pref-row" style="margin:16px 0 8px"><div class="acct-pref-text"><b>' + esc(tr("Profile-less account")) + '</b><p>' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p></div><button class="tab-switch' + (form.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.profileLess ? "true" : "false") + '" data-acct="toggle-form-profileless"><i></i></button></div>';
+    return '<p class="acct-sub">' + subText + "</p>" +
+      field("displayName", form.profileLess ? tr("Name (optional)") : tr("Name"), "text", 50) +
+      profRow +
+      '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
   }
   function loginBody() {
     return field("accountNumber", tr("Account number")) + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="do-login">' + esc(tr("Log in")) + '</button><p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + "</button></p>";
@@ -347,7 +359,8 @@
   }
   function editBody() {
     var privRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Keep followers and following private")) + '</b><p>' + esc(tr("Only you can see your followers and following lists.")) + '</p></div><button class="tab-switch' + (form.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.privateFollows ? "true" : "false") + '" data-acct="toggle-form-private"><i></i></button></div>';
-    return editMedia() + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + privRow + '<p class="acct-error">' + esc(errorText) + "</p>";
+    var profLessRow = '<div class="acct-pref-row"><div class="acct-pref-text"><b>' + esc(tr("Profile-less account")) + '</b><p>' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p></div><button class="tab-switch' + (form.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (form.profileLess ? "true" : "false") + '" data-acct="toggle-form-profileless"><i></i></button></div>';
+    return editMedia() + field("displayName", tr("Name"), "text", 50) + textArea("bio", tr("Bio"), 160) + field("location", tr("Location"), "text", 30) + field("website", tr("Website"), "text", 100) + privRow + profLessRow + '<p class="acct-error">' + esc(errorText) + "</p>";
   }
   function editModal(body) {
     return '<div class="acct-back"><div class="acct-modal acct-edit" role="dialog" aria-modal="true" aria-label="' + esc(tr("Edit profile")) + '"><div class="acct-head acct-edit-head"><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button><h1>' + esc(tr("Edit profile")) + '</h1><button class="acct-save" type="button" data-acct="save-profile">' + esc(tr("Save")) + '</button></div><div class="acct-body acct-edit-body">' + body + "</div></div></div>";
@@ -370,6 +383,7 @@
     else if (view === "crop") html += cropModal();
     else if (view === "legal") html += modal(legalTitle || tr("About"), legalBody());
     else if (view === "unfriend") html += modal(tr("Unfriend @{handle}?", { handle: unfriendTarget ? unfriendTarget.handle : "" }), '<p class="acct-sub">' + esc(tr("This removes @{handle} from your friends.", { handle: unfriendTarget ? unfriendTarget.handle : "" })) + '</p><button class="acct-next acct-danger" type="button" data-friend-act="unfriend-confirm" style="background:#f4212e;border-color:#f4212e;color:#fff">' + esc(tr("Remove Friend")) + '</button><button class="acct-line" type="button" data-acct="close" style="width:100%;margin-top:12px">' + esc(tr("Cancel")) + '</button>');
+    else if (view === "link-identity") html += modal(tr("Link social profile"), linkIdentityBody());
     else if (view === "leave") html += modal(tr("Save your account number"), '<p class="acct-sub">' + esc(tr("Leave without saving the account number?")) + '</p><button class="acct-next" type="button" data-acct="abandon">' + esc(tr("Close")) + '</button><button class="acct-line" type="button" data-acct="stay" style="width:100%;margin-top:12px">' + esc(tr("Back")) + "</button>");
     root.innerHTML = html;
     var mark = (view || "") + ":" + step + ":" + (form.claimOpen ? "1" : "0");
@@ -393,7 +407,7 @@
     view = next;
     step = next === "signup" && readPending() ? 2 : 0;
     errorText = "";
-    form = {};
+    form = { profileLess: false };
     if (next === "edit") {
       var account = (readSession() || {}).account || {};
       form.displayName = account.displayName || "";
@@ -405,6 +419,7 @@
       form.avatarEmpty = account.avatarEmpty === "none" ? "none" : "default";
       form.bannerEmpty = account.bannerEmpty === "none" ? "none" : "default";
       form.privateFollows = !!account.privateFollows;
+      form.profileLess = !!account.profileLess;
       form.avatarTouched = false;
       form.bannerTouched = false;
       form.mediaMenu = "";
@@ -706,16 +721,22 @@
     errorText = "";
     if (step === 0) {
       var name = String(form.displayName || "").trim();
-      if (!name) {
+      if (!name && !form.profileLess) {
         errorText = tr("What should we call you?");
         paint();
         return;
+      }
+      if (!name && form.profileLess) {
+        form.displayName = tr("Anonymous");
       }
       step = 1;
       paint();
       return;
     }
     var handle = String(form.handle || "").trim().replace(/^@/, "");
+    if (!handle && form.profileLess) {
+      handle = "anon_" + Math.random().toString(36).slice(2, 10);
+    }
     form.handle = handle;
     var checked = window.HandleSkeleton ? window.HandleSkeleton.inspectHandle(handle) : { ok: true, owner: false };
     if (!checked.ok) {
@@ -730,9 +751,10 @@
       return;
     }
     var body = {
-      displayName: String(form.displayName || "").trim(),
+      displayName: String(form.displayName || "").trim() || tr("Anonymous"),
       handle: handle,
       claimCode: String(form.claimCode || "").trim(),
+      profileLess: !!form.profileLess,
       turnstileToken: turnstileToken()
     };
     api("/v1/signup", { method: "POST", body: body }).then(function (res) {
@@ -961,7 +983,8 @@
       bio: String(form.bio || ""),
       location: String(form.location || "").trim(),
       website: String(form.website || "").trim(),
-      privateFollows: !!form.privateFollows
+      privateFollows: !!form.privateFollows,
+      profileLess: !!form.profileLess
     };
     body.avatarEmpty = form.avatarEmpty === "none" ? "none" : "default";
     body.bannerEmpty = form.bannerEmpty === "none" ? "none" : "default";
@@ -988,6 +1011,10 @@
   function remember(account) {
     if (!account || !account.handle) return;
     profiles[skel(account.handle)] = account;
+    if (account.publicId) {
+      profiles[skel(account.handle + account.publicId)] = account;
+      profiles[skel(account.publicId)] = account;
+    }
   }
   function loadProfile(handle) {
     var key = skel(handle);
@@ -1488,6 +1515,105 @@
     return '<div class="friends-section">' + headingHtml + pills + cardsHtml + '</div>';
   }
 
+    var linkIdentityForm = {
+    platform: "x",
+    handle: "",
+    proofUrl: "",
+    step: 0,
+    challenge: null,
+    loading: false
+  };
+  var copiedIdentityCode = false;
+
+  function platformIcon(platform) {
+    var p = String(platform || "x").toLowerCase();
+    if (p === "x") {
+      return '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
+    }
+    if (p === "telegram") {
+      return '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.74-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>';
+    }
+    if (p === "youtube") {
+      return '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M21.58 7.19a2.76 2.76 0 0 0-1.94-1.95C17.92 4.7 12 4.7 12 4.7s-5.92 0-7.64.54A2.76 2.76 0 0 0 2.42 7.19 28.9 28.9 0 0 0 1.88 12a28.9 28.9 0 0 0 .54 4.81 2.76 2.76 0 0 0 1.94 1.95c1.72.54 7.64.54 7.64.54s5.92 0 7.64-.54a2.76 2.76 0 0 0 1.94-1.95 28.9 28.9 0 0 0 .54-4.81 28.9 28.9 0 0 0-.54-4.81zM10 15V9l5.2 3L10 15z"/></svg>';
+    }
+    if (p === "instagram") {
+      return '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>';
+    }
+    return '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>';
+  }
+
+  function verifiedSvg() {
+    return '<svg class="ident-verified" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-1.8 14.5l-4.2-4.2 1.4-1.4 2.8 2.8 6.8-6.8 1.4 1.4-8.2 8.2z"/></svg>';
+  }
+
+  function linkedIdentitiesHtml(account) {
+    var list = (account && account.identities) || [];
+    if (!list.length) return "";
+    var chips = list.map(function (item) {
+      var platform = item.platform || "x";
+      var handle = item.handle || "";
+      var href = "#/u/" + encodeURIComponent(platform) + "/" + encodeURIComponent(handle);
+      var iconHtml = platformIcon(platform);
+      return '<a class="acct-ident-chip" href="' + esc(href) + '" title="' + esc(tr("Verified Identity")) + '">' +
+        iconHtml +
+        '<span class="acct-ident-handle">@' + esc(handle) + '</span>' +
+        verifiedSvg() +
+      '</a>';
+    }).join("");
+    return '<div class="acct-ident-row"><span class="acct-ident-label">' + esc(tr("Linked profiles")) + ':</span><div class="acct-ident-chips">' + chips + '</div></div>';
+  }
+
+  function identitiesSettingsHtml(account) {
+    var session = readSession();
+    var list = (session && session.account && session.account.identities) || (account && account.identities) || [];
+    var itemsHtml = "";
+    if (!list.length) {
+      itemsHtml = '<p class="set-sub" style="margin-bottom:12px;">' + esc(tr("No linked accounts yet.")) + '</p>';
+    } else {
+      itemsHtml = '<div class="acct-ident-settings-list">' + list.map(function (item) {
+        var plat = (item.platform || "x").toUpperCase();
+        return '<div class="acct-ident-item">' +
+          '<div class="acct-ident-item-left">' +
+            platformIcon(item.platform) +
+            '<span class="acct-ident-item-name"><b>' + esc(plat) + '</b> @' + esc(item.handle) + '</span>' +
+            verifiedSvg() +
+          '</div>' +
+          '<button class="outline acct-ident-unlink" type="button" data-acct="unlink-identity" data-platform="' + esc(item.platform) + '" data-handle="' + esc(item.handle) + '" data-id="' + esc(String(item.id || "")) + '">' + esc(tr("Unlink")) + '</button>' +
+        '</div>';
+      }).join("") + '</div>';
+    }
+    return itemsHtml + '<button class="outline" type="button" data-acct="open-link-identity" style="margin-bottom:20px;">' + esc(tr("Link social account")) + '</button>';
+  }
+
+  function linkIdentityBody() {
+    if (linkIdentityForm.step === 1 && linkIdentityForm.challenge) {
+      var platName = (linkIdentityForm.platform || "x").toUpperCase();
+      var code = linkIdentityForm.challenge.code || "";
+      return '<p class="acct-sub">' + esc(tr("Add this code to your bio or description on {platform}, or publish a public post containing this code.", { platform: platName })) + '</p>' +
+        '<div class="acct-code-box"><code>' + esc(code) + '</code><button class="outline" type="button" data-acct="copy-code">' + esc(copiedIdentityCode ? tr("Copied") : tr("Copy code")) + '</button></div>' +
+        '<div class="acct-field"><label>' + esc(tr("Post URL (optional)")) + '</label><input name="identityProofUrl" type="text" placeholder="https://..." value="' + esc(linkIdentityForm.proofUrl || "") + '"></div>' +
+        '<p class="acct-error">' + esc(errorText) + '</p>' +
+        '<button class="acct-next" type="button" data-acct="verify-identity">' + esc(linkIdentityForm.loading ? tr("Loading…") : tr("Confirm Identity")) + '</button>' +
+        '<button class="acct-line" type="button" data-acct="back-identity" style="width:100%;margin-top:12px">' + esc(tr("Back")) + '</button>';
+    }
+    if (linkIdentityForm.step === 2) {
+      return '<div class="acct-success"><p style="font-size:16px;font-weight:600;color:var(--accent,#1d9bf0);text-align:center;margin:24px 0;">' + esc(tr("Identity confirmed and linked!")) + '</p></div>' +
+        '<button class="acct-next" type="button" data-acct="close">' + esc(tr("Close")) + '</button>';
+    }
+    var selectHtml = '<div class="acct-field"><label>' + esc(tr("Platform")) + '</label>' +
+      '<select class="acct-select" name="identityPlatform">' +
+        '<option value="x"' + (linkIdentityForm.platform === "x" ? " selected" : "") + '>X</option>' +
+        '<option value="telegram"' + (linkIdentityForm.platform === "telegram" ? " selected" : "") + '>Telegram</option>' +
+        '<option value="instagram"' + (linkIdentityForm.platform === "instagram" ? " selected" : "") + '>Instagram</option>' +
+        '<option value="youtube"' + (linkIdentityForm.platform === "youtube" ? " selected" : "") + '>YouTube</option>' +
+        '<option value="threads"' + (linkIdentityForm.platform === "threads" ? " selected" : "") + '>Threads</option>' +
+        '<option value="vk"' + (linkIdentityForm.platform === "vk" ? " selected" : "") + '>VK</option>' +
+      '</select></div>';
+    var handleHtml = '<div class="acct-field"><label>' + esc(tr("Username or channel")) + '</label><input name="identityHandle" type="text" placeholder="@handle" value="' + esc(linkIdentityForm.handle || "") + '"></div>';
+    return selectHtml + handleHtml + '<p class="acct-error">' + esc(errorText) + '</p>' +
+      '<button class="acct-next" type="button" data-acct="gen-challenge">' + esc(linkIdentityForm.loading ? tr("Loading…") : tr("Generate verification code")) + '</button>';
+  }
+
   function accountPage(account, route) {
     var session = readSession();
     var mine = session && session.account && session.account.publicId === account.publicId;
@@ -1518,7 +1644,7 @@
       '<a class="tab' + (activeTab === "friends" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "friends" ? "true" : "false") + '" href="' + esc(friendsHref) + '"><span>' + esc(tr("Friends")) + (accountStat(account, "friends") > 0 ? ' <small class="tab-n">(' + formatNum(accountStat(account, "friends")) + ')</small>' : '') + '</span></a>' +
     '</div>';
 
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + '<div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + accountCountsHtml(account) + "</div>" + tabs + body;
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + '<div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body;
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -1526,7 +1652,10 @@
     if (profileMiss[key]) return "";
     var account = profiles[key];
     var session = readSession();
-    if (!account && session && session.account && skel(session.account.handle) === key) account = session.account;
+    if (!account && session && session.account && (skel(session.account.handle) === key || skel(session.account.handle + session.account.publicId) === key || session.account.publicId === route.handle)) account = session.account;
+    if (!account && /\d{12}$/.test(route.handle)) {
+      account = profiles[skel(route.handle.slice(-12))];
+    }
     if (!account) {
       loadProfile(route.handle);
       return "";
@@ -1551,14 +1680,20 @@
     if (!session || !session.account) return "";
     var account = session.account;
     var photo = publicAvatar(account.avatar, account.avatarFace, "");
-    return photo + '<span class="account-meta"><b>' + esc(account.displayName || "") + "</b><span>@" + esc(account.handle || "") + "</span></span>";
+    var isAnon = !!account.profileLess;
+    var name = isAnon ? (account.displayName || tr("Anonymous")) : (account.displayName || "");
+    var sub = isAnon ? tr("Profile-less") : "@" + (account.handle || "");
+    return photo + '<span class="account-meta"><b>' + esc(name) + "</b><span>" + esc(sub) + "</span></span>";
   }
   function drawerHead() {
     var session = readSession();
     if (!session || !session.account) return "";
     var account = session.account;
     var photo = publicAvatar(account.avatar, account.avatarFace, "");
-    return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(account.displayName || "") + '</b><div class="phandle">@' + esc(account.handle || "") + "</div></div></a>";
+    var isAnon = !!account.profileLess;
+    var name = isAnon ? (account.displayName || tr("Anonymous")) : (account.displayName || "");
+    var sub = isAnon ? tr("Profile-less account") : "@" + (account.handle || "");
+    return '<a href="#/@' + encodeURIComponent(account.handle) + '" style="padding:16px 20px;display:flex;gap:12px;align-items:center;color:inherit;text-decoration:none">' + photo + "<div><b>" + esc(name) + '</b><div class="phandle">' + esc(sub) + "</div></div></a>";
   }
   var tiktokHealth = null;
   var tiktokHealthAt = 0;
@@ -1659,7 +1794,8 @@
       loadBackupChannels();
       health = healthHtml() + channelsHtml();
     }
-    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
+    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
   }
   function onClick(event) {
     var friendSub = event.target && event.target.closest ? event.target.closest("[data-friend-sub]") : null;
@@ -1704,6 +1840,116 @@
     if (act === "signup") openAuth("signup");
     else if (act === "login") openAuth("login");
     else if (act === "close") closeAuth();
+    else if (act === "open-link-identity") {
+      linkIdentityForm = { platform: "x", handle: "", proofUrl: "", step: 0, challenge: null, loading: false };
+      errorText = "";
+      view = "link-identity";
+      paint();
+    }
+    else if (act === "gen-challenge") {
+      if (!linkIdentityForm.handle) {
+        errorText = tr("Username or channel");
+        paint();
+        return;
+      }
+      var session = readSession();
+      if (!session) return;
+      linkIdentityForm.loading = true;
+      errorText = "";
+      paint();
+      api("/v1/account/identities/challenge", {
+        method: "POST",
+        token: session.token,
+        body: { platform: linkIdentityForm.platform, handle: linkIdentityForm.handle }
+      }).then(function (res) {
+        linkIdentityForm.loading = false;
+        if (!res || !res.ok) {
+          errorText = (res && res.error === "identity_already_linked") ? tr("Identity confirmed and linked!") : tr("Verification failed. Make sure the code is in your bio or post.");
+          paint();
+          return;
+        }
+        linkIdentityForm.challenge = res;
+        linkIdentityForm.step = 1;
+        paint();
+      }).catch(function () {
+        linkIdentityForm.loading = false;
+        errorText = tr("Verification failed. Make sure the code is in your bio or post.");
+        paint();
+      });
+    }
+    else if (act === "copy-code") {
+      if (linkIdentityForm.challenge && linkIdentityForm.challenge.code) {
+        try { navigator.clipboard.writeText(linkIdentityForm.challenge.code); } catch (e) {}
+        copiedIdentityCode = true;
+        paint();
+        setTimeout(function () { copiedIdentityCode = false; paint(); }, 2000);
+      }
+    }
+    else if (act === "verify-identity") {
+      var session = readSession();
+      if (!session || !linkIdentityForm.challenge) return;
+      linkIdentityForm.loading = true;
+      errorText = "";
+      paint();
+      api("/v1/account/identities/verify", {
+        method: "POST",
+        token: session.token,
+        body: { challengeId: linkIdentityForm.challenge.challengeId, proofUrl: linkIdentityForm.proofUrl }
+      }).then(function (res) {
+        linkIdentityForm.loading = false;
+        if (!res || !res.ok) {
+          errorText = tr("Verification failed. Make sure the code is in your bio or post.");
+          paint();
+          return;
+        }
+        linkIdentityForm.step = 2;
+        var ident = res.identity;
+        if (session.account) {
+          var idList = session.account.identities || [];
+          idList = idList.filter(function (it) { return !(it.platform === ident.platform && String(it.handle).toLowerCase() === String(ident.handle).toLowerCase()); });
+          idList.push(ident);
+          session.account.identities = idList;
+          writeSession(session);
+          if (profiles[skel(session.account.handle)]) {
+            profiles[skel(session.account.handle)].identities = idList;
+          }
+        }
+        paint();
+        if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      }).catch(function () {
+        linkIdentityForm.loading = false;
+        errorText = tr("Verification failed. Make sure the code is in your bio or post.");
+        paint();
+      });
+    }
+    else if (act === "back-identity") {
+      linkIdentityForm.step = 0;
+      errorText = "";
+      paint();
+    }
+    else if (act === "unlink-identity") {
+      var session = readSession();
+      if (!session) return;
+      var unlinkPlat = acct.dataset.platform;
+      var unlinkHandle = acct.dataset.handle;
+      api("/v1/account/identities", {
+        method: "DELETE",
+        token: session.token,
+        body: { platform: unlinkPlat, handle: unlinkHandle }
+      }).then(function (res) {
+        if (res && res.ok && session.account) {
+          session.account.identities = (session.account.identities || []).filter(function (it) {
+            return !(it.platform === unlinkPlat && String(it.handle).toLowerCase() === String(unlinkHandle).toLowerCase());
+          });
+          writeSession(session);
+          if (profiles[skel(session.account.handle)]) {
+            profiles[skel(session.account.handle)].identities = session.account.identities;
+          }
+          paint();
+          if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        }
+      }).catch(function () {});
+    }
     else if (act === "stay") { view = "signup"; step = 2; paint(); }
     else if (act === "next") nextSignup();
     else if (act === "do-login") doLogin();
@@ -1743,7 +1989,9 @@
     else if (act === "banner-clear") { form.banner = ""; form.bannerTouched = true; form.bannerEmpty = "default"; form.mediaMenu = ""; paint(); }
     else if (act === "avatar-clear") { form.avatar = ""; form.avatarTouched = true; form.avatarEmpty = "default"; form.mediaMenu = ""; paint(); }
     else if (act === "toggle-form-private") { form.privateFollows = !form.privateFollows; paint(); }
+    else if (act === "toggle-form-profileless") { form.profileLess = !form.profileLess; paint(); }
     else if (act === "toggle-private-follows") { var s = readSession(); if (s && s.account) setPrivateFollows(!s.account.privateFollows); }
+    else if (act === "toggle-profileless") { var s = readSession(); if (s && s.account) setProfileLess(!s.account.profileLess); }
     else if (act === "toggle-fed-ap") toggleFederationAp();
     else if (act === "toggle-fed-nostr") toggleFederationNostr();
     else if (act === "hide-avatar") hideAvatar(acct.dataset.mode || "");
@@ -1808,6 +2056,19 @@
     }).catch(function () {});
   }
   var cropDrag = null;
+  function setProfileLess(val) {
+    var session = readSession();
+    if (!session) return;
+    var next = !!val;
+    api("/v1/profile", { method: "PATCH", token: session.token, body: { profileLess: next } }).then(function (res) {
+      if (!res || res.status !== 200 || !res.account) return;
+      session.account = res.account;
+      writeSession(session);
+      remember(res.account);
+      dirtyLists();
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
   function setPrivateFollows(val) {
     var session = readSession();
     if (!session) return;
@@ -1906,6 +2167,8 @@
       return;
     }
     form[el.name] = el.value;
+    if (el.name === "identityHandle") linkIdentityForm.handle = el.value;
+    if (el.name === "identityProofUrl") linkIdentityForm.proofUrl = el.value;
     var count = el.parentNode && el.parentNode.querySelector(".acct-count");
     var max = Number(el.getAttribute("data-max") || 0);
     if (count && max) count.textContent = fieldCount(el.name, el.value, max);
@@ -1919,6 +2182,7 @@
       if (file) startCrop(file, el.name);
       return;
     }
+    if (el.name === "identityPlatform") linkIdentityForm.platform = el.value;
     if (el.name === "saved") {
       form.saved = !!el.checked;
       var button = document.querySelector('#account-layer [data-acct="saved"]');

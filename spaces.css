@@ -2,16 +2,39 @@
    Marquee matches the public X stylesheet: 20s linear, one-copy travel, 32px edge mask.
    Two equal copies make translateX(-50%) the same motion as translate(-100%) on one copy. */
 
-.sp-row-wrap { border-bottom: 1px solid var(--line); }
+.sp-row-wrap {
+  border-bottom: 1px solid var(--line);
+  position: relative;
+  width: 100%;
+}
 .sp-row {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding: 8px 0 8px 12px;
+  overflow-y: hidden;
+  padding: 8px 12px;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+  cursor: grab;
+}
+.sp-row.is-dragging {
+  cursor: grabbing;
 }
 .sp-row::-webkit-scrollbar { display: none; }
-.sp-row-item { flex: 0 0 auto; max-width: 78%; min-width: 0; display: flex; }
+.sp-row-item {
+  flex: 0 0 auto;
+  max-width: none;
+  min-width: 0;
+  display: flex;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sp-row * {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
 .sp-pill {
   display: flex;
   align-items: center;

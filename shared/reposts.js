@@ -153,9 +153,11 @@ export function toProfilePost(row, account, opts) {
   if (!row || !account || row.removed) return null;
   const created = iso(row.createdAt);
   const self = !!(opts && opts.self);
-  const name = clip(account.displayName || account.handle, 80);
-  const handle = clip(account.handle, 80).replace(/^@/, "");
+  const isAnon = !!account.profileLess;
+  const name = isAnon ? (account.displayName || "Anonymous") : clip(account.displayName || account.handle, 80);
+  const handle = isAnon ? "anonymous" : clip(account.handle, 80).replace(/^@/, "");
   if (!handle) return null;
+  const publicId = isAnon ? "" : String(account.publicId || "").replace(/^app:/, "");
   if (row.kind === "quote") {
     const quoted = slimQuoted(row.post);
     if (!quoted) return null;
@@ -165,6 +167,7 @@ export function toProfilePost(row, account, opts) {
       platform: "app",
       handle: handle,
       author: name || handle,
+      publicId: publicId,
       avatar: account.avatar || "",
       text: clip(row.comment, COMMENT_MAX),
       date: created,
@@ -172,7 +175,7 @@ export function toProfilePost(row, account, opts) {
       kind: "quote",
       quoted: quoted,
       stats: {},
-      feedId: "app:" + handle,
+      feedId: "app:" + (publicId || handle),
       url: ""
     };
   }
@@ -183,9 +186,10 @@ export function toProfilePost(row, account, opts) {
   post.repostedBy = {
     handle: handle,
     name: name || handle,
+    publicId: publicId,
     avatar: account.avatar || "",
     platform: "app",
-    feedId: "app:" + handle,
+    feedId: "app:" + (publicId || handle),
     self: self
   };
   return post;

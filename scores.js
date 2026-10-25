@@ -17,7 +17,7 @@
       .replace(/"/g, "&quot;");
   }
 
-  var STORAGE_KEY = "viktorychapp-soccer-scores-v2";
+  var STORAGE_KEY = "viktorychapp-soccer-scores-v3";
 
   /* Inline SVG crests */
   var CRESTS = {
@@ -28,7 +28,7 @@
     "generic": '<svg class="sc-crest-svg" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="14" fill="#333333"/><circle cx="16" cy="16" r="12" fill="#555555"/><circle cx="16" cy="16" r="6" fill="#FFFFFF"/></svg>'
   };
 
-  /* Default Teams Data Factory */
+  /* Default Teams Data with Latest Matches (October 2026) */
   function getDefaultData() {
     return [
       {
@@ -36,44 +36,53 @@
         nameKey: tr("Arsenal Tula"),
         short: "ARS",
         leagueKey: tr("Russian First League"),
-        isLive: true,
+        isLive: false,
         liveMatch: {
           minute: 74,
           homeKey: tr("Arsenal Tula"),
-          awayKey: tr("Torpedo Moscow"),
-          homeScore: 2,
-          awayScore: 1,
+          awayKey: tr("KAMAZ"),
+          homeScore: 4,
+          awayScore: 3,
           venue: "Arsenal Stadium, Tula",
           events: [
-            { minute: "18'", type: "goal", text: "Goal! M. Kaynov", teamKey: tr("Arsenal Tula") },
-            { minute: "34'", type: "card", text: "Yellow Card (Foul)", teamKey: tr("Torpedo Moscow") },
-            { minute: "52'", type: "goal", text: "Goal! I. Lebedenko", teamKey: tr("Torpedo Moscow") },
-            { minute: "71'", type: "goal", text: "Goal! A. Okoronkwo", teamKey: tr("Arsenal Tula") }
+            { minute: "11'", type: "goal", text: "Goal! A. Okoronkwo", teamKey: tr("Arsenal Tula") },
+            { minute: "28'", type: "goal", text: "Goal! D. Shamkin", teamKey: tr("KAMAZ") },
+            { minute: "39'", type: "goal", text: "Goal! M. Kaynov", teamKey: tr("Arsenal Tula") },
+            { minute: "55'", type: "goal", text: "Goal! R. Gorelov", teamKey: tr("KAMAZ") },
+            { minute: "68'", type: "goal", text: "Goal! S. Tkachyov", teamKey: tr("Arsenal Tula") },
+            { minute: "77'", type: "goal", text: "Goal! A. Giraev", teamKey: tr("KAMAZ") },
+            { minute: "86'", type: "goal", text: "Goal! I. Geloyan", teamKey: tr("Arsenal Tula") }
           ],
           stats: {
-            possession: [54, 46],
-            shots: [12, 9],
-            onTarget: [6, 4],
-            corners: [5, 3],
-            fouls: [10, 13]
+            possession: [56, 44],
+            shots: [16, 11],
+            onTarget: [8, 5],
+            corners: [7, 4],
+            fouls: [9, 12]
           }
         },
         latestResult: {
-          date: "Oct 20",
+          date: "Oct 24",
           homeKey: tr("Arsenal Tula"),
-          awayKey: tr("Sokol Saratov"),
-          homeScore: 1,
-          awayScore: 0,
+          awayKey: tr("KAMAZ"),
+          homeScore: 4,
+          awayScore: 3,
           venue: "Arsenal Stadium, Tula",
           events: [
-            { minute: "62'", type: "goal", text: "Goal! S. Tkachyov", teamKey: tr("Arsenal Tula") }
+            { minute: "11'", type: "goal", text: "Goal! A. Okoronkwo", teamKey: tr("Arsenal Tula") },
+            { minute: "28'", type: "goal", text: "Goal! D. Shamkin", teamKey: tr("KAMAZ") },
+            { minute: "39'", type: "goal", text: "Goal! M. Kaynov", teamKey: tr("Arsenal Tula") },
+            { minute: "55'", type: "goal", text: "Goal! R. Gorelov", teamKey: tr("KAMAZ") },
+            { minute: "68'", type: "goal", text: "Goal! S. Tkachyov", teamKey: tr("Arsenal Tula") },
+            { minute: "77'", type: "goal", text: "Goal! A. Giraev", teamKey: tr("KAMAZ") },
+            { minute: "86'", type: "goal", text: "Goal! I. Geloyan", teamKey: tr("Arsenal Tula") }
           ],
           stats: {
-            possession: [59, 41],
-            shots: [15, 6],
-            onTarget: [7, 2],
-            corners: [7, 2],
-            fouls: [8, 11]
+            possession: [56, 44],
+            shots: [16, 11],
+            onTarget: [8, 5],
+            corners: [7, 4],
+            fouls: [9, 12]
           }
         }
       },
@@ -82,43 +91,46 @@
         nameKey: tr("CSKA Moscow"),
         short: "CSK",
         leagueKey: tr("Russian Premier League"),
-        isLive: false,
+        isLive: true,
         liveMatch: {
-          minute: 82,
+          minute: 76,
           homeKey: tr("CSKA Moscow"),
-          awayKey: tr("Dynamo Moscow"),
-          homeScore: 1,
+          awayKey: tr("Spartak Moscow"),
+          homeScore: 2,
           awayScore: 1,
           venue: "VEB Arena, Moscow",
           events: [
-            { minute: "29'", type: "goal", text: "Goal! T. Musayev", teamKey: tr("CSKA Moscow") },
-            { minute: "64'", type: "goal", text: "Goal! K. Tyukavin", teamKey: tr("Dynamo Moscow") }
+            { minute: "23'", type: "goal", text: "Goal! T. Musayev", teamKey: tr("CSKA Moscow") },
+            { minute: "41'", type: "goal", text: "Goal! E. Barco", teamKey: tr("Spartak Moscow") },
+            { minute: "68'", type: "goal", text: "Goal! A. Fayzullaev", teamKey: tr("CSKA Moscow") }
           ],
           stats: {
-            possession: [51, 49],
-            shots: [14, 13],
-            onTarget: [5, 6],
-            corners: [6, 6],
-            fouls: [12, 14]
+            possession: [52, 48],
+            shots: [15, 12],
+            onTarget: [7, 5],
+            corners: [6, 5],
+            fouls: [14, 16]
           }
         },
         latestResult: {
-          date: "Oct 22",
-          homeKey: tr("CSKA Moscow"),
-          awayKey: tr("Akhmat Grozny"),
-          homeScore: 2,
-          awayScore: 0,
-          venue: "VEB Arena, Moscow",
+          date: "Oct 18",
+          homeKey: tr("Dynamo Moscow"),
+          awayKey: tr("CSKA Moscow"),
+          homeScore: 3,
+          awayScore: 1,
+          venue: "VTB Arena, Moscow",
           events: [
             { minute: "19'", type: "goal", text: "Goal! A. Fayzullaev", teamKey: tr("CSKA Moscow") },
-            { minute: "42'", type: "goal", text: "Goal! K. Kellven", teamKey: tr("CSKA Moscow") }
+            { minute: "44'", type: "goal", text: "Goal! K. Tyukavin", teamKey: tr("Dynamo Moscow") },
+            { minute: "67'", type: "goal", text: "Goal! D. Fomin", teamKey: tr("Dynamo Moscow") },
+            { minute: "84'", type: "goal", text: "Goal! M. Ngamaleu", teamKey: tr("Dynamo Moscow") }
           ],
           stats: {
-            possession: [62, 38],
-            shots: [18, 7],
-            onTarget: [8, 2],
-            corners: [8, 3],
-            fouls: [9, 15]
+            possession: [49, 51],
+            shots: [13, 14],
+            onTarget: [6, 5],
+            corners: [5, 7],
+            fouls: [11, 13]
           }
         }
       },
@@ -129,45 +141,49 @@
         leagueKey: tr("La Liga"),
         isLive: true,
         liveMatch: {
-          minute: 68,
+          minute: 82,
           homeKey: tr("FC Barcelona"),
-          awayKey: tr("Sevilla"),
+          awayKey: tr("Real Madrid"),
           homeScore: 3,
-          awayScore: 1,
-          venue: "Estadi Olímpic Lluís Companys",
+          awayScore: 2,
+          venue: "Spotify Camp Nou",
           events: [
-            { minute: "24'", type: "goal", text: "Goal! R. Lewandowski (Pen)", teamKey: tr("FC Barcelona") },
-            { minute: "28'", type: "goal", text: "Goal! Pedri (Top corner)", teamKey: tr("FC Barcelona") },
-            { minute: "39'", type: "goal", text: "Goal! R. Lewandowski", teamKey: tr("FC Barcelona") },
-            { minute: "59'", type: "goal", text: "Goal! S. Idumbo", teamKey: tr("Sevilla") }
-          ],
-          stats: {
-            possession: [67, 33],
-            shots: [19, 6],
-            onTarget: [9, 3],
-            corners: [8, 2],
-            fouls: [8, 12]
-          }
-        },
-        latestResult: {
-          date: "Oct 21",
-          homeKey: tr("Real Madrid"),
-          awayKey: tr("FC Barcelona"),
-          homeScore: 0,
-          awayScore: 4,
-          venue: "Santiago Bernabéu",
-          events: [
-            { minute: "54'", type: "goal", text: "Goal! R. Lewandowski", teamKey: tr("FC Barcelona") },
-            { minute: "56'", type: "goal", text: "Goal! R. Lewandowski", teamKey: tr("FC Barcelona") },
-            { minute: "77'", type: "goal", text: "Goal! Lamine Yamal", teamKey: tr("FC Barcelona") },
-            { minute: "84'", type: "goal", text: "Goal! Raphinha", teamKey: tr("FC Barcelona") }
+            { minute: "18'", type: "goal", text: "Goal! R. Lewandowski", teamKey: tr("FC Barcelona") },
+            { minute: "34'", type: "goal", text: "Goal! Vinícius Júnior", teamKey: tr("Real Madrid") },
+            { minute: "52'", type: "goal", text: "Goal! Lamine Yamal", teamKey: tr("FC Barcelona") },
+            { minute: "69'", type: "goal", text: "Goal! K. Mbappé", teamKey: tr("Real Madrid") },
+            { minute: "79'", type: "goal", text: "Goal! Raphinha", teamKey: tr("FC Barcelona") }
           ],
           stats: {
             possession: [58, 42],
-            shots: [15, 9],
-            onTarget: [7, 4],
-            corners: [5, 4],
-            fouls: [10, 16]
+            shots: [18, 13],
+            onTarget: [9, 6],
+            corners: [7, 5],
+            fouls: [9, 14]
+          }
+        },
+        latestResult: {
+          date: "Oct 17",
+          homeKey: tr("Real Betis"),
+          awayKey: tr("FC Barcelona"),
+          homeScore: 2,
+          awayScore: 5,
+          venue: "Benito Villamarín, Seville",
+          events: [
+            { minute: "14'", type: "goal", text: "Goal! R. Lewandowski", teamKey: tr("FC Barcelona") },
+            { minute: "26'", type: "goal", text: "Goal! Ferran Torres", teamKey: tr("FC Barcelona") },
+            { minute: "40'", type: "goal", text: "Goal! Vitor Roque", teamKey: tr("Real Betis") },
+            { minute: "58'", type: "goal", text: "Goal! Lamine Yamal", teamKey: tr("FC Barcelona") },
+            { minute: "73'", type: "goal", text: "Goal! Raphinha", teamKey: tr("FC Barcelona") },
+            { minute: "82'", type: "goal", text: "Goal! E. Ávila", teamKey: tr("Real Betis") },
+            { minute: "89'", type: "goal", text: "Goal! Dani Olmo", teamKey: tr("FC Barcelona") }
+          ],
+          stats: {
+            possession: [38, 62],
+            shots: [9, 21],
+            onTarget: [4, 11],
+            corners: [3, 8],
+            fouls: [12, 8]
           }
         }
       },
@@ -176,43 +192,42 @@
         nameKey: tr("CE Sabadell"),
         short: "SAB",
         leagueKey: tr("Segunda Federación"),
-        isLive: false,
+        isLive: true,
         liveMatch: {
-          minute: 58,
+          minute: 64,
           homeKey: tr("CE Sabadell"),
-          awayKey: tr("Sant Andreu"),
-          homeScore: 2,
+          awayKey: tr("CD Tenerife"),
+          homeScore: 1,
           awayScore: 0,
-          venue: "Nova Creu Alta, Sabadell",
+          venue: "Estadi Nova Creu Alta, Sabadell",
           events: [
-            { minute: "22'", type: "goal", text: "Goal! M. Cortés", teamKey: tr("CE Sabadell") },
-            { minute: "47'", type: "goal", text: "Goal! Sergio Cortés", teamKey: tr("CE Sabadell") }
+            { minute: "38'", type: "goal", text: "Goal! Sergio Cortés", teamKey: tr("CE Sabadell") },
+            { minute: "52'", type: "card", text: "Yellow Card", teamKey: tr("CD Tenerife") }
           ],
           stats: {
-            possession: [55, 45],
-            shots: [11, 7],
-            onTarget: [6, 2],
+            possession: [52, 48],
+            shots: [10, 8],
+            onTarget: [5, 3],
             corners: [6, 4],
-            fouls: [11, 14]
+            fouls: [11, 13]
           }
         },
         latestResult: {
-          date: "Oct 20",
-          homeKey: tr("CE Sabadell"),
-          awayKey: tr("Valencia Mestalla"),
-          homeScore: 2,
-          awayScore: 1,
-          venue: "Nova Creu Alta, Sabadell",
+          date: "Oct 18",
+          homeKey: tr("Burgos CF"),
+          awayKey: tr("CE Sabadell"),
+          homeScore: 1,
+          awayScore: 0,
+          venue: "El Plantío, Burgos",
           events: [
-            { minute: "14'", type: "goal", text: "Goal! R. Delgado", teamKey: tr("CE Sabadell") },
-            { minute: "68'", type: "goal", text: "Goal! A. González", teamKey: tr("CE Sabadell") }
+            { minute: "63'", type: "goal", text: "Goal! Curro Sánchez (Pen)", teamKey: tr("Burgos CF") }
           ],
           stats: {
-            possession: [53, 47],
-            shots: [13, 8],
-            onTarget: [5, 3],
-            corners: [5, 3],
-            fouls: [12, 10]
+            possession: [54, 46],
+            shots: [11, 9],
+            onTarget: [4, 3],
+            corners: [5, 4],
+            fouls: [13, 11]
           }
         }
       }
@@ -239,6 +254,7 @@
       } catch (err) {}
     }
     teamsState = getDefaultData();
+    saveTeams();
     return teamsState;
   }
 
@@ -290,13 +306,20 @@
       + '</button>';
   }
 
-  function homeRow() {
+  /* Generate only the list items so they can sit in the exact same .sp-row as the purple Space pill */
+  function pillsHtml() {
     var list = loadTeams();
     if (!list.length) return "";
-    var pills = list.map(function (team) {
-      return '<div class="sc-row-item" role="listitem">' + renderPill(team) + '</div>';
+    return list.map(function (team) {
+      return '<div class="sp-row-item" role="listitem">' + renderPill(team) + '</div>';
     }).join("");
-    return '<div class="sc-row-wrap" role="region" aria-label="' + esc(tr("Soccer Scores")) + '"><div class="sc-row" role="list">' + pills + '</div></div>';
+  }
+
+  /* Fallback standalone row if Spaces is absent */
+  function homeRow() {
+    var pills = pillsHtml();
+    if (!pills) return "";
+    return '<div class="sp-row-wrap" role="region" aria-label="' + esc(tr("Soccer Scores")) + '"><div class="sp-row" role="list">' + pills + '</div></div>';
   }
 
   function rowExtra() {
@@ -362,7 +385,14 @@
       + '<div class="sc-hero sc-hero-' + esc(team.id) + '">'
       + '<div class="sc-hero-board">'
       + '<div class="sc-team-side"><div class="sc-team-crest-large">' + (isHome ? getCrest(team.id) : getCrest("generic")) + '</div><span class="sc-team-name">' + esc(data.homeKey) + '</span></div>'
-      + '<div class="sc-score-center"><span class="sc-score-digits">' + esc(data.homeScore) + ' - ' + esc(data.awayScore) + '</span>' + clockLabel + '</div>'
+      + '<div class="sc-score-center">'
+      + '<div class="sc-score-controls">'
+      + '<button class="sc-score-step" type="button" data-sc-act="score-step" data-sc-id="' + esc(team.id) + '" data-sc-side="home" data-sc-delta="-1" aria-label="-">-</button>'
+      + '<span class="sc-score-digits">' + esc(data.homeScore) + ' - ' + esc(data.awayScore) + '</span>'
+      + '<button class="sc-score-step" type="button" data-sc-act="score-step" data-sc-id="' + esc(team.id) + '" data-sc-side="away" data-sc-delta="1" aria-label="+">+</button>'
+      + '</div>'
+      + clockLabel
+      + '</div>'
       + '<div class="sc-team-side"><div class="sc-team-crest-large">' + (!isHome ? getCrest(team.id) : getCrest("generic")) + '</div><span class="sc-team-name">' + esc(data.awayKey) + '</span></div>'
       + '</div>'
       + '</div>'
@@ -411,12 +441,21 @@
   function refreshUI() {
     saveTeams();
     if (typeof document === "undefined") return;
-    var homeRowEl = document.querySelector(".sc-row-wrap");
-    if (homeRowEl) {
-      var temp = document.createElement("div");
-      temp.innerHTML = homeRow();
-      if (temp.firstElementChild) {
-        homeRowEl.replaceWith(temp.firstElementChild);
+    var rowEl = document.querySelector(".sp-row");
+    if (rowEl) {
+      var wrapEl = rowEl.closest(".sp-row-wrap");
+      if (wrapEl && root.Spaces && root.Spaces.homeRow) {
+        var temp = document.createElement("div");
+        temp.innerHTML = root.Spaces.homeRow();
+        if (temp.firstElementChild) {
+          wrapEl.replaceWith(temp.firstElementChild);
+        }
+      } else if (wrapEl) {
+        var temp2 = document.createElement("div");
+        temp2.innerHTML = homeRow();
+        if (temp2.firstElementChild) {
+          wrapEl.replaceWith(temp2.firstElementChild);
+        }
       }
     }
     if (activeModalId) {
@@ -519,8 +558,69 @@
     }, 25000);
   }
 
-  /* Event Delegation */
+  /* Smooth horizontal scrolling: Wheel & Pointer Drag for .sp-row */
+  var dragSession = null;
+
   if (typeof document !== "undefined") {
+    // Wheel-to-horizontal conversion on the pill row
+    document.addEventListener("wheel", function (event) {
+      var target = event.target;
+      var row = target && target.closest && target.closest(".sp-row");
+      if (!row) return;
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX) && row.scrollWidth > row.clientWidth) {
+        row.scrollLeft += event.deltaY;
+        event.preventDefault();
+      }
+    }, { passive: false });
+
+    // Pointer drag-to-scroll
+    document.addEventListener("pointerdown", function (event) {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      var target = event.target;
+      var row = target && target.closest && target.closest(".sp-row");
+      if (!row) return;
+
+      dragSession = {
+        row: row,
+        startX: event.clientX,
+        scrollStart: row.scrollLeft,
+        hasDragged: false
+      };
+    });
+
+    document.addEventListener("pointermove", function (event) {
+      if (!dragSession) return;
+      var dx = event.clientX - dragSession.startX;
+      if (Math.abs(dx) > 4) {
+        dragSession.hasDragged = true;
+        dragSession.row.scrollLeft = dragSession.scrollStart - dx;
+        dragSession.row.classList.add("is-dragging");
+      }
+    });
+
+    function endDrag() {
+      if (!dragSession) return;
+      var wasDragged = dragSession.hasDragged;
+      dragSession.row.classList.remove("is-dragging");
+      dragSession = null;
+
+      if (wasDragged) {
+        var suppressClick = function (ev) {
+          ev.preventDefault();
+          ev.stopPropagation();
+          window.removeEventListener("click", suppressClick, true);
+        };
+        window.addEventListener("click", suppressClick, true);
+        setTimeout(function () {
+          window.removeEventListener("click", suppressClick, true);
+        }, 120);
+      }
+    }
+
+    document.addEventListener("pointerup", endDrag);
+    document.addEventListener("pointercancel", endDrag);
+
+    /* Event Delegation for Pill Actions */
     document.addEventListener("click", function (event) {
       var target = event.target;
       if (!target) return;
@@ -550,6 +650,11 @@
           simulateGoal(id);
         } else if (act === "reset") {
           resetTeam(id);
+        } else if (act === "score-step") {
+          var side = actBtn.getAttribute("data-sc-side");
+          var delta = parseInt(actBtn.getAttribute("data-sc-delta") || "1", 10);
+          if (side === "home") updateScore(id, delta, 0);
+          else updateScore(id, 0, delta);
         }
       }
     });
@@ -568,6 +673,7 @@
   }
 
   var api = {
+    pillsHtml: pillsHtml,
     homeRow: homeRow,
     rowExtra: rowExtra,
     afterRender: afterRender,
@@ -585,6 +691,7 @@
   root.SoccerScoresLogic = {
     loadTeams: loadTeams,
     getTeam: getTeam,
+    pillsHtml: pillsHtml,
     renderPill: renderPill,
     homeRow: homeRow,
     rowExtra: rowExtra,
