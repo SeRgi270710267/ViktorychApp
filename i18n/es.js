@@ -1276,5 +1276,10 @@ SI18n.addPack("es", {
   "Transfer your session to another browser or device.": "Transfiere tu sesión a otro navegador o dispositivo.",
   "Copy session code": "Copiar código de sesión",
   "Copy session code:": "Copia el código de sesión:",
-  "Session code copied": "Código de sesión copiado"
+  "Session code copied": "Código de sesión copiado",
+  "Emergency Offline Access": "Acceso de emergencia sin conexión",
+  "Unlock offline access with your claim code if servers are down.": "Desbloquea el acceso sin conexión con tu código de reclamo si los servidores no responden.",
+  "Unlock Offline": "Desbloquear sin conexión",
+  "Invalid claim code.": "Código de reclamo no válido.",
+  "Servers unreachable. Try Emergency Offline Access.": "Servidores no disponibles. Prueba el acceso de emergencia sin conexión."
 });

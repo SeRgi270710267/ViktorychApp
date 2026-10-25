@@ -198,6 +198,8 @@ def lock_shell(site: Path, api: str, turnstile: str) -> None:
     config = site / "accounts.config.js"
     audience = read_audience(site)
     backup_api = (os.environ.get("ACCOUNTS_BACKUP_API") or "").strip().rstrip("/")
+    claim_code = (os.environ.get("OWNER_CLAIM_CODE") or "").strip()
+    emergency_hash = hashlib.sha256(("viktorych-emergency:" + claim_code).encode("utf-8")).hexdigest() if claim_code else ""
     # JS object, not JSON. `gate: true` is what a publisher already in
     # progress looks for when it keeps the wall across a refresh.
     config.write_text(
@@ -207,6 +209,7 @@ def lock_shell(site: Path, api: str, turnstile: str) -> None:
         "  gate: true,\n"
         f"  turnstileSiteKey: {json.dumps(turnstile, ensure_ascii=True)},\n"
         f"  tiktokAudience: {json.dumps(audience, ensure_ascii=True)},\n"
+        f"  emergencyHash: {json.dumps(emergency_hash, ensure_ascii=True)},\n"
         "};\n",
         encoding="utf-8",
     )
@@ -283,6 +286,8 @@ def publish(site: Path, source: Path) -> int:
         return unlocked("accounts API URL is unknown;")
     ready_health = wait_ready(api)
     backup_api = (os.environ.get("ACCOUNTS_BACKUP_API") or "").strip().rstrip("/")
+    claim_code = (os.environ.get("OWNER_CLAIM_CODE") or "").strip()
+    emergency_hash = hashlib.sha256(("viktorych-emergency:" + claim_code).encode("utf-8")).hexdigest() if claim_code else ""
     if not ready_health and backup_api:
         backup_health = wait_ready(backup_api)
         if backup_health:

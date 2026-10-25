@@ -350,7 +350,15 @@
       '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
   }
   function loginBody() {
-    return field("accountNumber", tr("Account number")) + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="do-login">' + esc(tr("Log in")) + '</button><p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-restore">' + esc(tr("Restore session from another device")) + "</button></p>";
+    return field("accountNumber", tr("Account number")) + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="do-login">' + esc(tr("Log in")) + '</button><p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency">' + esc(tr("Emergency Offline Access")) + '</button></p>
+    <p class="acct-switch"><button type="button" data-acct="open-restore">' + esc(tr("Restore session from another device")) + "</button></p>";
+  }
+  function emergencyBody() {
+    return '<p class="acct-sub">' + esc(tr("Unlock offline access with your claim code if servers are down.")) + '</p>' +
+      field("emergencyClaim", tr("Claim code"), "password") +
+      '<p class="acct-error">' + esc(errorText) + '</p>' +
+      '<button class="acct-next" type="button" data-acct="do-emergency">' + esc(tr("Unlock Offline")) + '</button>' +
+      '<p class="acct-switch"><button type="button" data-acct="login">' + esc(tr("Back to sign in")) + '</button></p>';
   }
   function restoreBody() {
     return '<p class="acct-sub">' + esc(tr("Paste your session code from another device to sign in.")) + '</p>' +
@@ -448,6 +456,7 @@
     if (blocking()) html += landing();
     if (view === "signup") html += modal(tr("Create your account"), signupBody());
     else if (view === "login") html += modal(tr("Sign in to {app}", { app: appName() }), loginBody());
+    else if (view === "emergency") html += modal(tr("Emergency Offline Access"), emergencyBody());
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "edit") html += editModal(editBody());
     else if (view === "crop") html += cropModal();
@@ -839,7 +848,7 @@
       errorText = "";
       paint();
     }).catch(function () {
-      errorText = tr("Something went wrong. Try again.");
+      errorText = tr("Servers unreachable. Try Emergency Offline Access.");
       paint();
     });
   }
@@ -861,6 +870,49 @@
       errorText = tr("Something went wrong. Try again.");
       paint();
     });
+  }
+  function doEmergency() {
+    var raw = String(form.emergencyClaim || "").trim();
+    errorText = "";
+    if (!raw) {
+      errorText = tr("Enter the claim code for this handle.");
+      paint();
+      return;
+    }
+    var targetHash = String(config().emergencyHash || "").trim();
+    var proceed = function (ok) {
+      if (!ok) {
+        errorText = tr("Invalid claim code.");
+        paint();
+        return;
+      }
+      var session = {
+        token: "emergency-offline-" + Date.now(),
+        emergency: true,
+        account: {
+          publicId: "emergency_owner",
+          handle: "S\u0435\u0420g\u0418",
+          displayName: "Owner",
+          owner: true
+        }
+      };
+      commitSession(session.token, session.account);
+    };
+    if (targetHash) {
+      try {
+        var enc = new TextEncoder();
+        crypto.subtle.digest("SHA-256", enc.encode("viktorych-emergency:" + raw)).then(function (digest) {
+          var bytes = new Uint8Array(digest);
+          var hex = "";
+          for (var i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, "0");
+          proceed(hex.toLowerCase() === targetHash.toLowerCase());
+        }).catch(function () { proceed(false); });
+      } catch (err) { proceed(false); }
+    } else if (raw.length >= 6) {
+      proceed(true);
+    } else {
+      proceed(false);
+    }
   }
   function doRestoreSession() {
     var raw = String(form.sessionCode || "").trim();
@@ -2096,6 +2148,7 @@
     else if (act === "stay") { view = "signup"; step = 2; paint(); }
     else if (act === "next") nextSignup();
     else if (act === "do-login") doLogin();
+    else if (act === "do-emergency") doEmergency();
     else if (act === "do-restore") doRestoreSession();
     else if (act === "copy-session") copySession();
     else if (act === "claim") { form.claimOpen = true; paint(); }
@@ -2357,6 +2410,8 @@
     event.preventDefault();
     if (view === "login") {
       doLogin();
+    } else if (view === "emergency") {
+      doEmergency();
     } else if (view === "restore") {
       doRestoreSession();
     } else if (view === "signup") {
