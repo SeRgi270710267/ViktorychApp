@@ -38,6 +38,58 @@
   var mpeg = null;
   var liveZoom = null;
   var prefetchCtrl = null;
+  var PEPSI_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23004b93'/%3E%3Cpath d='M50 2A48 48 0 0 1 98 50C98 50 80 58 50 42C20 26 2 50 2 50A48 48 0 0 1 50 2Z' fill='%23c8102e'/%3E%3Cpath d='M2 50C2 50 20 26 50 42C80 58 98 50 98 50A48 48 0 0 1 50 98A48 48 0 0 1 2 50Z' fill='%23004b93'/%3E%3Cpath d='M2 50C2 50 20 34 50 50C80 66 98 50 98 50C98 50 80 58 50 42C20 26 2 50 2 50Z' fill='%23ffffff'/%3E%3C/svg%3E";
+  var PEPSI_POSTER = PEPSI_AVATAR;
+  var LOCKED_KEY = "viktorych_shorts_locked";
+  var lockedMode = false;
+  try {
+    lockedMode = localStorage.getItem(LOCKED_KEY) === "1";
+  } catch (err) { /* private browsing */ }
+  var unlockedAccounts = ["pepsi"];
+
+  function isLocked() {
+    return !!lockedMode;
+  }
+  function pruneLockedData() {
+    var data = hooks.data();
+    if (!data || !isLocked()) return;
+    if (Array.isArray(data.posts)) {
+      data.posts = data.posts.filter(function (post) {
+        if (!post || post.platform !== "tiktok") return true;
+        return isUnlocked(post.handle);
+      });
+    }
+    if (Array.isArray(data.feeds)) {
+      data.feeds = data.feeds.filter(function (feed) {
+        if (!feed || feed.platform !== "tiktok") return true;
+        return isUnlocked(feed.handle);
+      });
+    }
+  }
+
+  function setLocked(on) {
+    lockedMode = !!on;
+    try {
+      localStorage.setItem(LOCKED_KEY, lockedMode ? "1" : "0");
+    } catch (err) { /* private mode */ }
+    if (lockedMode) {
+      pruneLockedData();
+    } else if (cached) {
+      absorb(cached);
+    }
+    livePaintKey = "";
+    schedulePaint();
+    if (!onLiveRoute()) paintForYou();
+    renderLockButtons();
+    if (hooks.requestRender) {
+      try { hooks.requestRender(); } catch (err) {}
+    } else if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) {
+      try { window.ViktorychAccounts.requestRender(); } catch (err) {}
+    }
+  }
+  function isUnlocked(handle) {
+    return unlockedAccounts.indexOf(foldHandle(handle)) >= 0;
+  }
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -88,10 +140,12 @@
     var posts = data.posts || [];
     (doc.feeds || []).forEach(function (feed) {
       if (!feed || !feed.id) return;
+      if (isLocked() && !isUnlocked(feed.handle)) return;
       if (!feeds.some(function (row) { return row && row.id === feed.id; })) feeds.push(feed);
     });
     (doc.posts || []).forEach(function (post) {
       if (!post || !post.id) return;
+      if (isLocked() && !isUnlocked(post.handle)) return;
       if (!posts.some(function (row) { return row && row.id === post.id; })) posts.push(post);
     });
     data.feeds = feeds;
@@ -101,6 +155,7 @@
     var changed = false;
     (doc.feeds || []).forEach(function (feed) {
       if (!feed || !feed.id) return;
+      if (isLocked() && !isUnlocked(feed.handle)) return;
       if (settings.follows.indexOf(feed.id) < 0) {
         settings.follows.push(feed.id);
         changed = true;
@@ -122,17 +177,48 @@
     }).catch(function () { return null; });
   }
 
+  function pepsiDefaultPosts() {
+    return [
+      {
+        id: "tiktok:pepsi:pinned",
+        platform: "tiktok",
+        handle: "pepsi",
+        author: "Pepsi",
+        text: "That's What I Like #Pepsi",
+        url: "https://www.tiktok.com/@pepsi",
+        avatar: PEPSI_AVATAR,
+        date: "2026-10-25T12:00:00Z",
+        stats: { likes: 125000, replies: 3420 },
+        media: [
+          {
+            type: "video",
+            url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+            poster: PEPSI_POSTER
+          }
+        ]
+      }
+    ];
+  }
+
   function forYou() {
     var list = (hooks.posts() || []).slice();
     ((cached && cached.posts) || []).forEach(function (post) {
       if (post && post.id && !list.some(function (row) { return row && row.id === post.id; })) list.push(post);
     });
+    if (!list.some(function (p) { return p && foldHandle(p.handle) === "pepsi"; })) {
+      pepsiDefaultPosts().forEach(function (p) { list.push(p); });
+    }
     return list.filter(function (post) {
       if (!post) return false;
       var url = String(post.url || "");
       var short = post.platform === "tiktok" || post.short === true || url.indexOf("/shorts/") >= 0;
       if (!short) return false;
-      return (post.media || []).some(function (item) { return item && (item.type === "video" || item.poster || item.url); });
+      var hasMedia = (post.media || []).some(function (item) { return item && (item.type === "video" || item.poster || item.url); });
+      if (!hasMedia) return false;
+      if (isLocked()) {
+        return isUnlocked(post.handle);
+      }
+      return true;
     }).slice().sort(function (a, b) {
       var left = String(a.date || "");
       var right = String(b.date || "");
@@ -173,20 +259,29 @@
         handle: status.handle || (extra && extra.handle) || handle,
         live: !!status.live,
         viewers: status.viewers || 0,
-        title: status.title || "",
+        title: status.title || (extra && extra.title) || "",
         roomId: status.roomId || "",
         lastLiveAt: status.lastLiveAt || "",
         detail: status.detail || "",
-        avatar: (extra && extra.avatar) || status.avatar || "",
-        name: (extra && extra.name) || "",
+        avatar: (extra && extra.avatar) || status.avatar || avatarFor(handle, extra),
+        name: (extra && extra.name) || (key === "pepsi" ? "Pepsi" : ""),
         record: recordOf(handle)
       });
     }
-    if (addedAccounts.length) {
-      addedAccounts.forEach(function (item) { if (item && item.handle) push(item.handle, item); });
-    } else if (!ownerHere() || accountsLoaded) {
-      Object.keys(liveMap()).forEach(function (name) { push(name, liveMap()[name]); });
-      if (!rows.length) push("gabii_g5", {});
+    if (isLocked()) {
+      unlockedAccounts.forEach(function (h) {
+        push(h, h === "pepsi" ? { handle: "pepsi", name: "Pepsi", avatar: PEPSI_AVATAR } : {});
+      });
+    } else {
+      if (addedAccounts.length) {
+        addedAccounts.forEach(function (item) { if (item && item.handle) push(item.handle, item); });
+      } else {
+        Object.keys(liveMap()).forEach(function (name) { push(name, liveMap()[name]); });
+        push("gabii_g5", {});
+      }
+      unlockedAccounts.forEach(function (h) {
+        push(h, h === "pepsi" ? { handle: "pepsi", name: "Pepsi", avatar: PEPSI_AVATAR } : {});
+      });
     }
     rows.sort(function (a, b) {
       if (!!a.live !== !!b.live) return a.live ? -1 : 1;
@@ -290,6 +385,7 @@
   function avatarFor(handle, row) {
     if (row && row.avatar) return row.avatar;
     var want = foldHandle(handle);
+    if (want === "pepsi") return PEPSI_AVATAR;
     var feeds = (cached && cached.feeds) || [];
     for (var i = 0; i < feeds.length; i++) {
       if (feeds[i] && foldHandle(feeds[i].handle) === want && feeds[i].avatar) return feeds[i].avatar;
@@ -370,18 +466,37 @@
       "</div></article>";
   }
 
+  function lockSvg(locked) {
+    if (locked) {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9V7A5 5 0 0 0 7 7v2H5v12h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7zm8 12H7v-8h10v8z"/></svg>';
+    }
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 9V7A5 5 0 0 0 7 7h2a3 3 0 0 1 6 0v2H5v12h14V9h-2zm-8 2h8v8H7v-8h2z"/></svg>';
+  }
+
   function tabs(live) {
     var add = ownerHere()
       ? '<button type="button" class="shorts-add" data-shorts="accounts">' + hooks.esc(tr("Add account")) + "</button>"
       : "";
+    var locked = isLocked();
+    var lockBtn = '<button type="button" class="shorts-lock' + (locked ? " is-locked" : "") + '" data-shorts="toggle-lock" aria-label="' + hooks.esc(locked ? tr("Unlock Shorts") : tr("Lock Shorts")) + '" title="' + hooks.esc(locked ? tr("Unlock Shorts") : tr("Lock Shorts")) + '">' +
+      lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Lock")) + "</span></button>";
     return '<div class="shorts-tabs"><div class="tabs-bar"><div class="tabs" role="tablist">' +
       '<a class="tab' + (live ? " on" : "") + '" href="#/shorts/live" role="tab" aria-selected="' + (live ? "true" : "false") + '"><span>' + hooks.esc(tr("Live")) + "</span></a>" +
       '<a class="tab' + (live ? "" : " on") + '" href="#/shorts" role="tab" aria-selected="' + (live ? "false" : "true") + '"><span>' + hooks.esc(tr("For you")) + "</span></a>" +
-      "</div></div>" + add + "</div>";
+      "</div></div>" + lockBtn + add + "</div>";
+  }
+
+  function renderUnlocked() {
+    return '<li class="shorts-account">' +
+      '<span class="shorts-account-face"><img alt="" src="' + PEPSI_AVATAR + '"></span>' +
+      '<span><b>Pepsi</b><small>@pepsi</small><span class="shorts-pill unlocked">' + hooks.esc(tr("Unlocked")) + "</span></span>" +
+      '<span class="shorts-fixed-badge">' + hooks.esc(tr("Default")) + "</span>" +
+      "</li>";
   }
 
   function accountSheet() {
     if (!ownerHere()) return "";
+    var locked = isLocked();
     return '<div class="shorts-sheet" id="shorts-accounts" hidden>' +
       '<div class="shorts-sheet-card" role="dialog" aria-labelledby="shorts-accounts-title">' +
       '<div class="shorts-sheet-head"><h2 id="shorts-accounts-title">' + hooks.esc(tr("Add account")) + "</h2>" +
@@ -390,7 +505,13 @@
       '<input name="handle" autocomplete="off" spellcheck="false" placeholder="' + hooks.esc(tr("Add account URL or @handle")) + '" aria-label="' + hooks.esc(tr("Add account URL or @handle")) + '">' +
       '<button type="submit">' + hooks.esc(tr("Add account")) + "</button></form>" +
       '<p class="shorts-accounts-note" id="shorts-accounts-note"></p>' +
-      '<h3>' + hooks.esc(tr("added accounts")) + "</h3>" +
+      '<div class="shorts-lock-panel">' +
+      '<div class="shorts-lock-info"><b>' + hooks.esc(tr("Locked mode")) + "</b><small>" + hooks.esc(tr("When locked, only unlocked accounts (@pepsi) are visible.")) + "</small></div>" +
+      '<button type="button" class="shorts-lock-toggle' + (locked ? " on" : "") + '" data-shorts="toggle-lock">' + lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Lock")) + "</span></button>" +
+      "</div>" +
+      "<h3>" + hooks.esc(tr("Unlocked accounts")) + "</h3>" +
+      '<ul class="shorts-account-list shorts-unlocked-list" id="shorts-unlocked">' + renderUnlocked() + "</ul>" +
+      "<h3>" + hooks.esc(tr("added accounts")) + "</h3>" +
       '<ul class="shorts-account-list" id="shorts-added"></ul></div></div>';
   }
 
@@ -877,6 +998,58 @@
   function schedulePaint() {
     clearTimeout(paintTimer);
     paintTimer = setTimeout(paintLive, 40);
+  }
+
+  function paintForYou() {
+    var feed = document.getElementById("shorts-feed");
+    if (!feed || onLiveRoute()) return;
+    var posts = forYou();
+    var slides = posts.map(slide).join("");
+    if (!slides) {
+      slides = '<article class="shorts-slide"><div class="shorts-stage"><div class="shorts-offline"><h2>' + hooks.esc(tr("No posts yet")) + "</h2></div></div></article>";
+    }
+    feed.innerHTML = slides;
+    initZoomOnFeed();
+    playActive();
+  }
+
+  function initZoomOnFeed() {
+    var feed = document.getElementById("shorts-feed");
+    if (!feed) return;
+    var zoomSlides = feed.querySelectorAll('.shorts-slide[data-kind="video"]');
+    for (var z = 0; z < zoomSlides.length; z++) {
+      if (zoomSlides[z]._zoom) continue;
+      var zoomStage = zoomSlides[z].querySelector(".shorts-stage");
+      if (zoomStage) zoomSlides[z]._zoom = bindVideoZoom(zoomStage);
+    }
+  }
+
+  function renderLockButtons() {
+    var locked = isLocked();
+    var btns = document.querySelectorAll('[data-shorts="toggle-lock"]');
+    for (var i = 0; i < btns.length; i++) {
+      var btn = btns[i];
+      if (btn.classList.contains("shorts-lock")) {
+        btn.className = "shorts-lock" + (locked ? " is-locked" : "");
+        btn.setAttribute("aria-label", locked ? tr("Unlock Shorts") : tr("Lock Shorts"));
+        btn.setAttribute("title", locked ? tr("Unlock Shorts") : tr("Lock Shorts"));
+        btn.innerHTML = lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Lock")) + "</span>";
+      } else if (btn.classList.contains("shorts-lock-toggle")) {
+        btn.className = "shorts-lock-toggle" + (locked ? " on" : "");
+        btn.innerHTML = lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Lock")) + "</span>";
+      }
+    }
+  }
+
+  function toggleLock() {
+    setLocked(!isLocked());
+    if (onLiveRoute()) {
+      paintLive();
+      liveRows().forEach(function (row) { if (row && row.handle) refreshLive(row.handle); });
+    } else {
+      paintForYou();
+    }
+    renderAdded();
   }
 
   function paintLive() {
@@ -1683,6 +1856,8 @@
   }
 
   function renderAdded() {
+    var unlockedEl = document.getElementById("shorts-unlocked");
+    if (unlockedEl) unlockedEl.innerHTML = renderUnlocked();
     var list = document.getElementById("shorts-added");
     if (!list) return;
     if (!addedAccounts.length) {
@@ -1695,8 +1870,9 @@
       var face = row && row.avatar
         ? '<img alt="" src="' + hooks.esc(row.avatar) + '" referrerpolicy="no-referrer">'
         : hooks.avatar("", name);
-      return '<li class="shorts-account"><span class="shorts-account-face">' + face + "</span><span><b>" + hooks.esc(name) + "</b><small>@" + hooks.esc(handle) + "</small></span>" +
-        '<button type="button" data-shorts="remove-account" data-handle="' + hooks.esc(handle) + '">' + hooks.esc(tr("Remove")) + "</button></li>";
+      var lockedBadge = '<span class="shorts-pill locked">' + hooks.esc(tr("Locked behind")) + "</span>";
+      return '<li class="shorts-account"><span class="shorts-account-face">' + face + "</span><span><b>" + hooks.esc(name) + "</b><small>@" + hooks.esc(handle) + "</small>" + lockedBadge + "</span>" +
+        '<div class="shorts-account-actions"><button type="button" data-shorts="remove-account" data-handle="' + hooks.esc(handle) + '">' + hooks.esc(tr("Remove")) + "</button></div></li>";
     }).join("");
   }
 
@@ -1815,6 +1991,9 @@
     } else if (kind === "close-accounts") {
       event.preventDefault();
       closeAccounts();
+    } else if (kind === "toggle-lock") {
+      event.preventDefault();
+      toggleLock();
     } else if (kind === "remove-account") {
       event.preventDefault();
       removeAccount(button.getAttribute("data-handle") || "");
@@ -1927,6 +2106,10 @@
     unmount: unmount,
     pull: pull,
     hide: hide,
-    absorb: absorb
+    absorb: absorb,
+    isLocked: isLocked,
+    isUnlocked: isUnlocked,
+    setLocked: setLocked,
+    toggleLock: toggleLock
   };
 })();

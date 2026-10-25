@@ -283,11 +283,13 @@
 
     var scoreLine = esc(homeScore) + " - " + esc(awayScore);
     var teamName = team.nameKey;
+    var isPinned = !!(root.WeatherPills && root.WeatherPills.isPinned && root.WeatherPills.isPinned("soccer:" + team.id));
+    var pinBadge = isPinned ? '<span class="pill-pin-mark" title="' + esc(tr("Pinned")) + '">📌</span>' : "";
 
     return '<button class="sc-pill sc-pill-' + esc(team.id) + '" type="button" data-sc-team="' + esc(team.id) + '" aria-label="' + esc(teamName) + " " + (isLive ? esc(tr("LIVE")) : esc(tr("Full Time"))) + " " + scoreLine + '">'
       + '<span class="sc-crest-ring">' + getCrest(team.id) + '</span>'
       + '<span class="sc-pill-content">'
-      + '<span class="sc-pill-top">' + badgeHtml + '<span class="sc-pill-title">' + esc(teamName) + '</span></span>'
+      + '<span class="sc-pill-top">' + badgeHtml + '<span class="sc-pill-title">' + esc(teamName) + '</span>' + pinBadge + '</span>'
       + '<span class="sc-pill-bottom"><span class="sc-pill-score">' + scoreLine + '</span><span class="sc-pill-opp">vs ' + esc(opponentName) + '</span></span>'
       + '</span>'
       + '<span class="sc-pill-arrow"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg></span>'
@@ -305,6 +307,9 @@
 
   /* Unified pill row matching Spaces.homeRow */
   function homeRow() {
+    if (root.WeatherPills && root.WeatherPills.homeRow) {
+      return root.WeatherPills.homeRow();
+    }
     var spacePills = (root.Spaces && root.Spaces.homePillsHtml) ? root.Spaces.homePillsHtml() : "";
     var soccerPills = pillsHtml();
     if (!spacePills && !soccerPills) return "";
@@ -323,6 +328,8 @@
     var isLive = !!team.isLive;
     var data = isLive ? team.liveMatch : team.latestResult;
     var isHome = data.homeKey === team.nameKey;
+
+    var isPinned = !!(root.WeatherPills && root.WeatherPills.isPinned && root.WeatherPills.isPinned("soccer:" + team.id));
 
     var clockLabel = isLive
       ? '<span class="sc-hero-clock"><span class="sc-dot-live"></span> ' + esc(tr("LIVE")) + " " + esc(data.minute) + '\'</span>'
@@ -387,6 +394,7 @@
       + '</div>'
       + '<div class="sc-toolbar">'
       + '<div class="sc-btn-group">'
+      + '<button class="sc-action-btn' + (isPinned ? " is-toggle-active" : "") + '" type="button" data-sc-act="toggle-pin" data-sc-id="' + esc(team.id) + '"><span>' + (isPinned ? "📌 " + esc(tr("Pinned")) : "📌 " + esc(tr("Pin Match"))) + '</span></button>'
       + '<button class="sc-action-btn' + (isLive ? " is-toggle-active" : "") + '" type="button" data-sc-act="toggle-live" data-sc-id="' + esc(team.id) + '">' + (isLive ? '🔴 ' + esc(tr("LIVE")) : '🏁 ' + esc(tr("Latest Result"))) + '</button>'
       + (team.id === "fc-barcelona" ? '<a class="sc-action-btn is-toggle-active" href="#/tv" style="text-decoration:none"><span>📺 ' + esc(tr("Watch Live on TV")) + '</span></a>' : '')
       + '<button class="sc-action-btn" type="button" data-sc-act="update-score" data-sc-id="' + esc(team.id) + '"><svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg><span>' + esc(tr("Update Score")) + '</span></button>'
@@ -441,6 +449,16 @@
   function refreshUI() {
     saveTeams();
     if (typeof document === "undefined") return;
+    if (root.WeatherPills && root.WeatherPills.refreshUI) {
+      root.WeatherPills.refreshUI();
+      if (activeModalId) {
+        var container = document.getElementById("soccer-sheet");
+        if (container && !container.hidden) {
+          container.innerHTML = renderModalHtml(activeModalId);
+        }
+      }
+      return;
+    }
     var rowEl = document.querySelector(".sp-row");
     if (rowEl) {
       var spaceItems = rowEl.querySelectorAll(".sp-row-item:not(:has([data-sc-team]))");
@@ -650,6 +668,11 @@
           closeModal();
         } else if (act === "close-overlay") {
           if (event.target === actBtn) closeModal();
+        } else if (act === "toggle-pin") {
+          if (root.WeatherPills && root.WeatherPills.togglePin) {
+            root.WeatherPills.togglePin("soccer:" + id);
+            refreshUI();
+          }
         } else if (act === "toggle-live") {
           toggleLive(id);
         } else if (act === "update-score") {
@@ -693,7 +716,8 @@
     simulateGoal: simulateGoal,
     resetTeam: resetTeam,
     loadTeams: loadTeams,
-    getTeam: getTeam
+    getTeam: getTeam,
+    renderPill: renderPill
   };
 
   root.SoccerScores = api;

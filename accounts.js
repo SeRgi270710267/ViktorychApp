@@ -1717,8 +1717,15 @@
   }
   function healthHtml() {
     var body = tiktokHealth;
-    var blocked = body ? (body.blocked403 || 0) + (body.blocked429 || 0) + (body.captcha || 0) : 0;
     var rows = body && body.backoffs || [];
+    try {
+      if (typeof localStorage !== "undefined" && localStorage.getItem("viktorych_shorts_locked") === "1") {
+        rows = rows.filter(function (r) {
+          return String(r && r.handle || "").toLowerCase().replace(/^@/, "") === "pepsi";
+        });
+      }
+    } catch (e) {}
+    var blocked = body ? (body.blocked403 || 0) + (body.blocked429 || 0) + (body.captcha || 0) : 0;
     var lines = '<p class="phandle">' + esc(tr("No recent blocks.")) + "</p>";
     if (body && (blocked || rows.length)) {
       lines = '<p class="phandle">' + esc("403 " + (body.blocked403 || 0) + " · 429 " + (body.blocked429 || 0) + " · captcha " + (body.captcha || 0)) + "</p>";

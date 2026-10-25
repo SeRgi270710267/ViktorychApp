@@ -54,6 +54,8 @@ SITE_FILES = (
     "yt-player.css",
     "scores.js",
     "scores.css",
+    "weather.js",
+    "weather.css",
     "404.html",
     "robots.txt",
     "favicon.svg",

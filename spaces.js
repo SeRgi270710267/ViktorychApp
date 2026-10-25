@@ -761,6 +761,9 @@
   }
 
   function homeRow() {
+    if (root.WeatherPills && root.WeatherPills.homeRow) {
+      return root.WeatherPills.homeRow();
+    }
     const spacePills = homePillsHtml();
     const soccerPills = (root.SoccerScores && root.SoccerScores.pillsHtml) ? root.SoccerScores.pillsHtml() : "";
     if (!spacePills && !soccerPills) return "";

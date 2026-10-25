@@ -81,6 +81,8 @@ const SHELL_FILES = [
   "./yt-player.css",
   "./scores.js",
   "./scores.css",
+  "./weather.js",
+  "./weather.css",
   "./shared/drive-crypto.js",
   "./shared/drive-photos.js",
   "./shared/handle-skeleton.js",
