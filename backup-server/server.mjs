@@ -29,7 +29,7 @@ if (!scriptPath) {
 }
 const modulesRoot = path.resolve(path.dirname(scriptPath), "../..");
 
-const PORT = parseInt(process.env.PORT || "7860", 10);
+const PORT = parseInt(process.env.PORT || "10000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, "./data");
 

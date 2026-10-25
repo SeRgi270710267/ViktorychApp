@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:22-bookworm-slim
 
 # Set working directory
 WORKDIR /app
@@ -12,12 +12,12 @@ COPY worker/ ./worker/
 COPY shared/ ./shared/
 COPY backup-server/server.mjs ./server.mjs
 
-# Default port 7860 (Hugging Face Spaces default)
-ENV PORT=7860
+# Default port (Render standard 10000)
+ENV PORT=10000
 ENV HOST=0.0.0.0
 ENV DATA_DIR=/data
 
-EXPOSE 7860
+EXPOSE 10000
 
 # Persistent storage volume
 VOLUME ["/data"]

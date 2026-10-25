@@ -9,7 +9,7 @@ services:
     healthCheckPath: /v1/health
     envVars:
       - key: PORT
-        value: "7860"
+        value: "10000"
       - key: ALLOWED_ORIGINS
         value: "https://viktorychgroup.github.io"
       - key: ACCOUNT_PEPPER
