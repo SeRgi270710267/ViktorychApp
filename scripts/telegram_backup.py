@@ -1353,22 +1353,34 @@ def cf_json(method: str, url: str, token: str, payload: bytes | None = None, con
     headers = {"Authorization": "Bearer " + token, "User-Agent": UA, "Accept": "application/json"}
     if content_type:
         headers["Content-Type"] = content_type
-    req = urllib.request.Request(url, data=payload, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=120) as res:
-            raw = res.read()
-            status = res.status
-    except urllib.error.HTTPError as err:
-        raw = err.read()
-        status = err.code
-    if status >= 400:
-        raise RuntimeError("cloudflare http " + str(status))
-    if not raw:
-        return {}
-    data = json.loads(raw.decode("utf-8"))
-    if isinstance(data, dict) and data.get("success") is False:
-        raise RuntimeError("cloudflare request failed")
-    return data if isinstance(data, dict) else {}
+    for attempt in range(4):
+        req = urllib.request.Request(url, data=payload, headers=headers, method=method)
+        raw = b""
+        status = 0
+        try:
+            with urllib.request.urlopen(req, timeout=120) as res:
+                raw = res.read()
+                status = res.status
+        except urllib.error.HTTPError as err:
+            raw = err.read()
+            status = err.code
+        except (urllib.error.URLError, TimeoutError) as err:
+            if attempt < 3:
+                time.sleep(1.0 * (attempt + 1))
+                continue
+            raise RuntimeError(f"cloudflare network error: {err}")
+        if status in (429, 500, 502, 503, 504) and attempt < 3:
+            time.sleep(2.0 * (attempt + 1))
+            continue
+        if status >= 400:
+            raise RuntimeError("cloudflare http " + str(status))
+        if not raw:
+            return {}
+        data = json.loads(raw.decode("utf-8"))
+        if isinstance(data, dict) and data.get("success") is False:
+            raise RuntimeError("cloudflare request failed")
+        return data if isinstance(data, dict) else {}
+    raise RuntimeError("cloudflare request timed out")
 
 
 def bucket_names(token: str, account: str) -> list:
@@ -2730,6 +2742,7 @@ def backup(loop_only: bool = False, shard: tuple[int, int] | None = None) -> int
             return (first, -int(obj.get("size") or 0), str(obj.get("uploaded") or ""), key)
 
         stopped = False
+        failed_objects: list[str] = []
         if not loop_only:
             log("[telegram-backup] social originals for added accounts are downloaded by media-extract")
         for obj in sort_objects(rows, rank):
@@ -2751,7 +2764,11 @@ def backup(loop_only: bool = False, shard: tuple[int, int] | None = None) -> int
                 log("[telegram-backup] failed %s/%s" % (obj["bucket"], obj["key"]))
                 log(scrub(str(err), current_secrets()))
                 save_manifest(cf, manifest, directory)
-                return 1
+                failed_objects.append(key_str)
+                if len(failed_objects) >= 5:
+                    log("[telegram-backup] aborting runner after %s object failures" % len(failed_objects))
+                    return 1
+                continue
             if result == "stop":
                 log("[telegram-backup] reached the run cap")
                 break
