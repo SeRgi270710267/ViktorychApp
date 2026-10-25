@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T19:56:51Z",
+  "fetchedAt": "2026-10-25T20:11:53Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,43 @@
       ]
     },
     {
+      "id": "43095",
+      "title": "Google Account -- Verify it's you",
+      "author": "zach99zulu",
+      "authorUsername": "zach99zulu",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792958662,
+      "lastPostedAt": 1792959023,
+      "category": "Pixel 10a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 10a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43095-google-account-verify-its-you",
+      "media": [],
+      "text": "<p>New to GrapheneOS. I installed it last night.</p>\n\n<p>Regarding google accounts, what do I need to do to get the \"Verify it's you\" notifications on my phone? I am getting messages that's saying it's sent to my pixel 10a, but I'm not getting any notifications to verify it's me. Been struggling for hours and it's really getting to me.</p>",
+      "replies": [
+        {
+          "id": "277403",
+          "number": 2,
+          "author": "Johnnyloans",
+          "authorUsername": "Johnnyloans",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
+          "score": 0,
+          "created": 1792959023,
+          "parent": "43095",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43095-google-account-verify-its-you/1\" class=\"PostMention\" data-id=\"277402\"><i class=\"icon fas fa-reply\"></i>zach99zulu</a></p> \n\n<p>Probably the <strong>network</strong> permission and turn on  <strong>notifications</strong> for google play services.</p> \n\n<p>Settings &gt; apps &gt; in the middle is an option called sandboxed google play &gt; play services app info</p>\n\n<p>Here you have notifications and permissions as an option to pick and the top of the list.</p>\n\n<p>If it still doesn't work, add these for each private space or user where you have google play services installed.</p>"
+        }
+      ]
+    },
+    {
       "id": "8274",
       "title": "How do I prevent apps from knowing when I screenshot?",
       "author": "antsyboy",
@@ -1880,217 +1917,7 @@
       "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
       "media": [],
       "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
-      "replies": [
-        {
-          "id": "48399",
-          "number": 2,
-          "author": "fl1pper",
-          "authorUsername": "fl1pper",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1697616934,
-          "parent": "8274",
-          "text": "<p>this is not possible on unmodified firmware. However, modifications to some applications allow you to do this, but it is a rather unsafe way. Among more or less safe examples of such modifications, I've seen open-source Telegram forks</p>"
-        },
-        {
-          "id": "48526",
-          "number": 3,
-          "author": "antsyboy",
-          "authorUsername": "antsyboy",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1697670126,
-          "parent": "8274",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/2\" class=\"PostMention\" data-id=\"48399\"><i class=\"icon fas fa-reply\"></i>fl1pper</a> Thank you for clarifying on this. This answered my only question.</p>"
-        },
-        {
-          "id": "48534",
-          "number": 4,
-          "author": "router99",
-          "authorUsername": "router99",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/siwFkkailTNbeABD.png",
-          "score": 6,
-          "created": 1697672401,
-          "parent": "8274",
-          "text": "<p>There should absolutely be a way to disable it. It's none of an app's business if I screenshot or not.</p>"
-        },
-        {
-          "id": "48539",
-          "number": 5,
-          "author": "matchboxbananasynergy",
-          "authorUsername": "matchboxbananasynergy",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
-          "score": 12,
-          "created": 1697672998,
-          "parent": "8274",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/4\" class=\"PostMention\" data-id=\"48534\"><i class=\"icon fas fa-reply\"></i>router99</a> A feature to control this has been considered and may be added in the future.</p>\n\n<p>Marking this as solved as the OP's question has been answered.</p>"
-        },
-        {
-          "id": "48540",
-          "number": 6,
-          "author": "matchboxbananasynergy",
-          "authorUsername": "matchboxbananasynergy",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
-          "score": 0,
-          "created": 1697673002,
-          "parent": "8274",
-          "text": ""
-        },
-        {
-          "id": "60001",
-          "number": 7,
-          "author": "kuvaldini",
-          "authorUsername": "kuvaldini",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1704228804,
-          "parent": "8274",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/4\" class=\"PostMention\" data-id=\"48534\"><i class=\"icon fas fa-reply\"></i>router99</a> sure, +1</p>\n"
-        },
-        {
-          "id": "78650",
-          "number": 8,
-          "author": "davdevs",
-          "authorUsername": "davdevs",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1715094882,
-          "parent": "8274",
-          "text": "<p>+1</p>"
-        },
-        {
-          "id": "100488",
-          "number": 9,
-          "author": "bla",
-          "authorUsername": "bla",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1726608556,
-          "parent": "8274",
-          "text": "<p>Hello</p>\n\n<p>Little opening to the topic here because it seems related :</p>\n\n<p>How come the website instagram.com (Not the app) knows i am trying to take a screnshot of a conversation when browsing on firefox or vanadium?</p>\n\n<p>And also; why are firefox and vanadium blocking the screenshot?</p>\n\n<p>I understand for third Party apps; but vanadium?</p>\n\n<p>Thank you!</p>"
-        },
-        {
-          "id": "100505",
-          "number": 10,
-          "author": "DeletedUser88",
-          "authorUsername": "DeletedUser88",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1726614594,
-          "parent": "8274",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/9\" class=\"PostMention\" data-id=\"100488\"><i class=\"icon fas fa-reply\"></i>bla</a> are you in Incognito mode?</p>\n"
-        },
-        {
-          "id": "100999",
-          "number": 11,
-          "author": "Quotesquestioner",
-          "authorUsername": "Quotesquestioner",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1726787626,
-          "parent": "8274",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/9\" class=\"PostMention\" data-id=\"100488\"><i class=\"icon fas fa-reply\"></i>bla</a> hope this getbanswered some day too. If not olease repost in a new thread because i really want to know</p>"
-        },
-        {
-          "id": "141656",
-          "number": 12,
-          "author": "DeletedUser316",
-          "authorUsername": "DeletedUser316",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1744259875,
-          "parent": "8274",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/5\" class=\"PostMention\" data-id=\"48539\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a></p> \n\n<p>Any updates on this feature implementation?</p>"
-        },
-        {
-          "id": "204563",
-          "number": 13,
-          "author": "IAMHereNow288",
-          "authorUsername": "IAMHereNow288",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1768525595,
-          "parent": "8274",
-          "text": "<p>+1 on this feature</p>"
-        },
-        {
-          "id": "212404",
-          "number": 14,
-          "author": "PANICBUTTON",
-          "authorUsername": "PANICBUTTON",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1771446785,
-          "parent": "8274",
-          "text": "<p>+1 to this feature.</p> "
-        },
-        {
-          "id": "230850",
-          "number": 15,
-          "author": "DeletedUser765",
-          "authorUsername": "DeletedUser765",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1777689046,
-          "parent": "8274",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/5\" class=\"PostMention\" data-id=\"48539\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a> I know this is old and priorities can change, but are there any updates to this feature coming out?</p> "
-        },
-        {
-          "id": "230856",
-          "number": 16,
-          "author": "Tandara",
-          "authorUsername": "Tandara",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/ToqtPbqy0Reovo7K.png",
-          "score": 0,
-          "created": 1777689900,
-          "parent": "8274",
-          "text": "<p>I suspect this will never be implemented due to bypassing apps' clear intentions to either block or invoke certain actions upon screenshot detection. Even with per-app opt-in toggle it might create a lot of uncertainties (e.g. allowing screenshot in signal despite explicitly blocking it in signal itself, or incognito tabs for example). The best way is obviously creating API and letting the apps integrate with OS, but that is a big ask unless AOSP implements something by default.</p> "
-        },
-        {
-          "id": "230983",
-          "number": 17,
-          "author": "Wraith",
-          "authorUsername": "Wraith",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1777743190,
-          "parent": "8274",
-          "text": "<p>You mean like snpachat app? u wanna take silent SS ?</p>"
-        },
-        {
-          "id": "277316",
-          "number": 18,
-          "author": "aguttfx",
-          "authorUsername": "aguttfx",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1792934372,
-          "parent": "8274",
-          "text": "<p><a href=\"https://github.com/GrapheneOS/platform_frameworks_base/pull/447\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/platform_frameworks_base/pull/447</a></p>\n\n<p>There is a very small pull request with just 13 lines of code that implements this feature, should be relatively easy to review.</p>"
-        },
-        {
-          "id": "277326",
-          "number": 19,
-          "author": "Roughpebble",
-          "authorUsername": "Roughpebble",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792937523,
-          "parent": "8274",
-          "text": "<p>A lot of the time anti screenshot is in apps to prevent abuse. This is definitely not something that should be a toggle.</p> "
-        },
-        {
-          "id": "277333",
-          "number": 20,
-          "author": "PrivSecAddict",
-          "authorUsername": "PrivSecAddict",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792938449,
-          "parent": "8274",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot/19\" class=\"PostMention\" data-id=\"277326\"><i class=\"icon fas fa-reply\"></i>Roughpebble</a> Why so? Please explain.</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "17303",
@@ -2355,30 +2182,6 @@
       "url": "https://discuss.grapheneos.org/d/43093-mobile-forensics-today-and-tomorrow",
       "media": [],
       "text": "<p>Currently, the biggest players are MOBILedit, XRY, and Cellebrite. They mostly rely on USB-C port, RAM, and Bluetooth/Wi-Fi exploits. GrapheneOS mitigates these threats by disabling the USB-C port, Bluetooth, and Wi-Fi while the device is in BFU mode, making typical attacks impossible. Furthermore, GrapheneOS hardens the phone by limiting the possibilities for RAM exploits. The Titan M2 chip limits the possibility of brute-force attacks, software downgrades, and much more.</p>\n\n<p>My question is: How could a theoretical, well-funded attacker exploit GrapheneOS while it is in BFU mode? What possible attack vectors remain if most are closed?</p>",
-      "replies": []
-    },
-    {
-      "id": "43091",
-      "title": "Android Auto developer settings/allow all sources ",
-      "author": "Mrtigger",
-      "authorUsername": "Mrtigger",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792932485,
-      "lastPostedAt": 1792950813,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43091-android-auto-developer-settingsallow-all-sources",
-      "media": [],
-      "text": "<p>I'm trying to add an app to AA and the general guide is enabled developer settings to allow it however the \"tap version\" does not work, and I can't find them already enabled.... Are they hiding?</p> ",
       "replies": []
     }
   ]
