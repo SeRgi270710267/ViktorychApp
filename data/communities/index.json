@@ -9,8 +9,11 @@
     {
       "name": "grapheneos",
       "title": "GrapheneOS Discussion",
+      "type": "discourse",
       "subscribers": 35000,
-      "icon": "https://discuss.grapheneos.org/assets/favicon-snu6s6q2.png"
+      "icon": "https://discuss.grapheneos.org/assets/favicon-snu6s6q2.png",
+      "banner": "https://grapheneos.org/opengraph.png",
+      "about": "The official discussion forum for GrapheneOS, a privacy and security focused mobile OS with Android app compatibility."
     }
   ]
 }
