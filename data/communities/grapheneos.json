@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T05:26:05Z",
+  "fetchedAt": "2026-10-25T06:04:05Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "WelcomeMilk89",
       "authorUsername": "WelcomeMilk89",
       "authorAvatar": "",
-      "score": 38,
-      "comments": 38,
-      "views": 980,
-      "participantCount": 28,
+      "score": 39,
+      "comments": 39,
+      "views": 1015,
+      "participantCount": 29,
       "created": 1792297664,
-      "lastPostedAt": 1792905737,
+      "lastPostedAt": 1792907815,
       "category": "Off Topic",
       "categoryColor": "#c55bec",
       "tags": [
@@ -2062,7 +2062,7 @@
           "author": "four",
           "authorUsername": "four",
           "authorAvatar": "",
-          "score": 4,
+          "score": 5,
           "created": 1792391681,
           "parent": "42908",
           "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> What makes you think Spotify is a shady company?</p></blockquote>\n\n<p>I wouldn't say they're more shady than other surveillance capitalism companies, but any surveillance capitalism company is shady as hell.</p> \n\n<ul><li><p>They collect everything you do in the app. Searches, skips, interactions. They make inferences about your age, interests, preferences, and scans for other devices on your Wi-Fi.</p> </li>\n\n<li><p>They take data from marketing and ad partners and their inferences about you. And Spotify shares your data with those ad partners.</p> </li>\n<li><p>Personalized ads are enabled by default. If you opt out, you still get ads based on context of what you're listening to.</p></li>\n<li><p>Your listen history Is kept for the length of your account.</p> </li>\n<li><p>Your data including voice recordings, if you use them, can be used to train machine learning models and there's no opt-out.</p> </li>\n<li><p>They were fined by Sweden's data protection authority in 2023</p></li></ul>\n\n\n<p>Is this an inaccurate summary of their <a href=\"https://www.spotify.com/us/legal/privacy-policy/\" rel=\"ugc nofollow\">privacy practices</a> and history?</p>"
@@ -2073,7 +2073,7 @@
           "author": "liachra",
           "authorUsername": "liachra",
           "authorAvatar": "",
-          "score": 8,
+          "score": 9,
           "created": 1792393790,
           "parent": "42908",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> Well first off, excluding YouTube Music they pay the least to their artists out of all the streaming services.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> It is not that buying CDs would support artists more. It is the labels that take a huge share.</p></blockquote>\n\n<p>This is naive. Yes the labels take a huge share however I <em>personally</em> know many artists who receive a bigger portion of the income with CDs/Vinyl than they do on streaming services.10,000 streams a month equal around 10 cents (<strong>if</strong> you're lucky), a couple hundred CD &amp; vinyl sales are in the dollars. Additionally not every artist are with a major label and only sell CD's through direct purchase meaning they receive majority of the cost you pay for an album (minus printing &amp; payment/store-front processing fees).</p>\n\n<p>Yes CDs/vinyl  sales are smaller than streaming but the artists that have noticed a incline in CD sales are noticing a more of a profit hence why you see so many independent artists are heavily pushing physical media sales to their audience. The more people cop on to this the better for them.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> They do not sell customer data</p></blockquote>\n\n<p>Completely untrue. They aggregate with many major advertising &amp; marketing platforms</p>"
@@ -2092,17 +2092,68 @@
       ]
     },
     {
+      "id": "42753",
+      "title": "Date stuck on last update",
+      "author": "Onlyfun",
+      "authorUsername": "Onlyfun",
+      "authorAvatar": "",
+      "score": 8,
+      "comments": 8,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1791791536,
+      "lastPostedAt": 1792907173,
+      "category": "Vanadium",
+      "categoryColor": "#d57676",
+      "tags": [
+        "General",
+        "Vanadium",
+        "Pixel 8"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42753-date-stuck-on-last-update",
+      "media": [],
+      "text": "<p>Anybody seen this happen? P8 is stuck on sep 19 date, which is the same update it had. It does switch date when it's on, but if battery dies it's back to sep 19. Also can't update to recent due to Chain validation failed.</p>\n\n<p>Another p8 is not responding to Tap to Check for updates. But seems to update automatically without issues.</p> ",
+      "replies": []
+    },
+    {
+      "id": "43027",
+      "title": "Wi-Fi reconnect on restart doesn't work",
+      "author": "Onlyfun",
+      "authorUsername": "Onlyfun",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792709856,
+      "lastPostedAt": 1792906641,
+      "category": "Pixel 8",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 8"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43027-wi-fi-reconnect-on-restart-doesnt-work",
+      "media": [],
+      "text": "<p>That's it in the title. It's probably not a common issue since my other p8 reconnects as expected. But still asking if anybody seen this to happen? Any remedy?</p>",
+      "replies": []
+    },
+    {
       "id": "43080",
       "title": "grapheneos typing character before another backwards",
       "author": "mandan",
       "authorUsername": "mandan",
       "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 140,
-      "participantCount": 4,
+      "score": 5,
+      "comments": 5,
+      "views": 175,
+      "participantCount": 5,
       "created": 1792882745,
-      "lastPostedAt": 1792905256,
+      "lastPostedAt": 1792906009,
       "category": "Pixel 9a",
       "categoryColor": "#7659e8",
       "tags": [
@@ -2332,54 +2383,6 @@
       "url": "https://discuss.grapheneos.org/d/43061-parakeet-molly-fork-with-newer-signal-security-fixes-my-other-privacy-apps",
       "media": [],
       "text": "<p>I build a handful of privacy apps for GrapheneOS in my spare time, and this week the main one got some real security work, so I figured I'd share.</p>\n\n<p>Parakeet is my fork of Molly. Molly hasn't had a release since July and is still on Signal 8.19.2, so I started pulling Signal's security fixes in myself. The big one was the RingRTC hot mic bug (CVE-2026-113380), where someone on a call could keep your mic on after you hang up. Molly still ships the vulnerable version, so I rebuilt their RingRTC with Signal's fix. I also backported 19 of Signal's other hardening commits from 8.19.2 to 8.33.1, mostly stricter checks on images, attachments, mentions and call messages. On top of that it has no Google push, screen security always on, and disappearing messages by default. It's still 8.19.2 underneath, so no new Signal features, just the fixes. It syncs with Molly every 6 hours and drops each patch once Molly catches up.</p>\n\n<p>The other stuff, if any of it's useful to you:</p>\n\n<p>Molevad VPN is my fork of the open-source Mullvad app with on-device tracker and SDK domain blocking added. DAITA still works.</p>\n\n<p>Dodo Bird identifies birds by their songs and calls, fully offline with no internet permission, around 10,000 species with pictures. Built on BirdNET Live.</p>\n\n<p>HawkEye logs every plane that flies over you, pings you as it passes, and ranks the regulars. Built on the airplanes.live app.</p>\n\n<p>Everything's free and open source, and you can keep it updated with Obtainium or ObtainX: <a href=\"https://gitlab.com/LionNest\" rel=\"ugc nofollow\">https://gitlab.com/LionNest</a></p>\n\n<p>None of it is affiliated with Signal, Molly, Mullvad or the original projects. Happy to answer questions or hear if something breaks.</p>",
-      "replies": []
-    },
-    {
-      "id": "43079",
-      "title": "GrapheneOS Messaging version 17 released",
-      "author": "GrapheneOS",
-      "authorUsername": "GrapheneOS",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792880687,
-      "lastPostedAt": 1792880687,
-      "category": "Announcements",
-      "categoryColor": "#f00a0a",
-      "tags": [
-        "Announcements"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43079-grapheneos-messaging-version-17-released",
-      "media": [],
-      "text": "<p>GrapheneOS Messaging version 17 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/Messaging/releases/tag/17\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/Messaging/releases/tag/17</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>",
-      "replies": []
-    },
-    {
-      "id": "43078",
-      "title": "Potential System UI Leak/Bug when exiting Guest Profile",
-      "author": "SYS",
-      "authorUsername": "SYS",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792880611,
-      "lastPostedAt": 1792880611,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43078-potential-system-ui-leakbug-when-exiting-guest-profile",
-      "media": [],
-      "text": "<p>I noticed a strange behavior in GrapheneOS regarding the \"Exit profile\" notification in the Guest User profile.<br>\nWhen I am in the Guest Profile and click the Settings icon inside the \"Exit profile\" notification multiple times, and then proceed to end the session, the Main Profile opens up with the System UI already launched/exposed.<br>\nThis seems like a UI leak or a potential bypass from the Guest profile to the Main profile's System UI. Has anyone else experienced this, or is this a known issue?</p>",
       "replies": []
     }
   ]
