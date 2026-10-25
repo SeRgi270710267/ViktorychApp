@@ -2296,8 +2296,9 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .short-card .yt-thumb { aspect-ratio: 9 / 16; border-radius: 12px; }
 .short-card .yt-title { margin-top: 8px; font-size: 14px; }
 .watch { display: grid; grid-template-columns: minmax(0, 1fr) 402px; gap: 24px; padding: 12px 24px 48px; align-items: start; }
-.player { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; overflow: hidden; }
-.player iframe, .player video, .player img, .player .html5-video-player { width: 100%; height: 100%; border: 0; display: block; object-fit: contain; background: #000; border-radius: inherit; }
+.player { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 16px; overflow: visible; }
+.player iframe, .player video, .player img, .player .html5-video-player { width: 100%; height: 100%; border: 0; display: block; object-fit: contain; background: #000; border-radius: 16px; }
+.player .html5-video-container { border-radius: 16px; overflow: hidden; }
 .player.is-playing .vposter, .player.is-playing > .play, .player.is-playing .vdur { display: none !important; }
 .watch-title { margin: 12px 0; font-size: 20px; line-height: 28px; font-weight: 700; }
 .watch-chan { display: flex; align-items: center; gap: 12px; }
