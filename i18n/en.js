@@ -1120,5 +1120,17 @@ SI18n.addPack("en", {
   "Auto-Jump active: switches streams instantly on buffering.": "Auto-Jump active: switches streams instantly on buffering.",
   "Send a message…": "Send a message…",
   "Send": "Send",
-  "Watch Live on TV": "Watch Live on TV"
+  "Watch Live on TV": "Watch Live on TV",
+  "AdBlock Active": "AdBlock Active",
+  "Ghost Popups Blocked": "Ghost Popups Blocked",
+  "TONIGHT 21:00": "TONIGHT 21:00",
+  "Kickoff in {time}": "Kickoff in {time}",
+  "Kickoff at 21:00": "Kickoff at 21:00",
+  "Pre-Match": "Pre-Match",
+  "Predicted Lineups": "Predicted Lineups",
+  "Lineups": "Lineups",
+  "Head to Head": "Head to Head",
+  "Simulate Live Match": "Simulate Live Match",
+  "Show Pre-Match Countdown": "Show Pre-Match Countdown",
+  "Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked.": "Built-in AdBlock active: Ghost popups, click-traps, and new tab redirects are completely blocked."
 });
