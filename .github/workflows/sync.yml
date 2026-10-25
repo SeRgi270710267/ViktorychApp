@@ -479,6 +479,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           ACCOUNTS_API: ${{ vars.ACCOUNTS_API }}
+          ACCOUNTS_BACKUP_API: ${{ vars.ACCOUNTS_BACKUP_API || secrets.ACCOUNTS_BACKUP_API || 'https://viktorych-backup.onrender.com' }}
           TURNSTILE_SITEKEY: ${{ secrets.TURNSTILE_SITEKEY }}
         run: python3 scripts/accounts_publish.py --site _site --source .
 

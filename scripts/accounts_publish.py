@@ -281,7 +281,14 @@ def publish(site: Path, source: Path) -> int:
         return unlocked("accounts API URL is unknown;")
     if not api:
         return unlocked("accounts API URL is unknown;")
-    if not wait_ready(api):
+    ready_health = wait_ready(api)
+    backup_api = (os.environ.get("ACCOUNTS_BACKUP_API") or "").strip().rstrip("/")
+    if not ready_health and backup_api:
+        backup_health = wait_ready(backup_api)
+        if backup_health:
+            print(f"primary API ({api}) is not ready; using backup API ({backup_api})")
+            ready_health = backup_health
+    if not ready_health:
         return unlocked("accounts API is not ready;")
     files = collect(source)
     if "feeds.json" not in files:
@@ -307,6 +314,9 @@ def repair(site: Path, prior: dict) -> int:
     account = _account()
     if token and account and prior.get("api"):
         health = fetch_health(str(prior["api"]))
+        backup_api = (os.environ.get("ACCOUNTS_BACKUP_API") or "").strip().rstrip("/")
+        if not (health and health.get("ready") and health.get("data")) and backup_api:
+            health = fetch_health(backup_api)
         if health and health.get("ready") and health.get("data"):
             try:
                 for key, path in sorted(collect(site).items()):
