@@ -1104,9 +1104,10 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .vplay video, .media .vplay video { max-height: none; object-fit: cover; object-position: center; }
 .vplay iframe { object-fit: contain; }
 .vplay.is-shown .vposter,
+.vplay.is-playing.is-shown .vposter,
 .vplay.is-shown > .play,
-.vplay.is-shown .vdur { visibility: hidden; }
-.vplay.is-shown video, .vplay.is-shown iframe { z-index: 2; }
+.vplay.is-shown .vdur { visibility: hidden; opacity: 0; pointer-events: none; }
+.vplay.is-shown video, .vplay.is-shown iframe, .vplay.is-playing iframe { z-index: 2; }
 .vplay.is-playing > .play,
 .yt-thumb.is-playing > .play { visibility: hidden; }
 .vmute {
