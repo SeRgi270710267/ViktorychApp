@@ -1806,7 +1806,10 @@ def send_document(api_base: str, token: str, channel: str, path: Path, caption: 
             state["last"] = time.time()
             continue
         if not parsed.get("ok"):
-            raise RuntimeError("telegram rejected a document")
+            desc = scrub(str(parsed.get("description") or ""), current_secrets())
+            code = parsed.get("error_code")
+            reason = f" ({code}: {desc})" if (code or desc) else ""
+            raise RuntimeError("telegram rejected a document" + reason)
         result = parsed.get("result") or {}
         document = result.get("document") or {}
         file_id = str(document.get("file_id") or "")
