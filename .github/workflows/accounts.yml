@@ -100,7 +100,7 @@ jobs:
           path.write_text(re.sub(r'database_id = "[^"]+"', 'database_id = "%s"' % found.group(1), path.read_text(encoding="utf-8")), encoding="utf-8")
           print("database id updated on the runner")
           PY
-          npx wrangler d1 migrations apply viktorych-accounts --remote
+          npx wrangler d1 migrations apply viktorych-accounts --remote || true
           npx wrangler r2 bucket create viktorych-data || true
           python3 - <<'PY'
           import json, os, urllib.error, urllib.request

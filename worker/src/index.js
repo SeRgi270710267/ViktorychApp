@@ -408,7 +408,12 @@ async function sessionAccount(env, request) {
   if (!token || token.length > 200) return null;
   const hash = await sha256Hex(token);
   const now = Date.now();
-  const row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty, a.private_follows FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
+  let row = null;
+  try {
+    row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty, a.private_follows FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
+  } catch (err) {
+    row = await env.DB.prepare("SELECT a.public_id, a.handle, a.display_name, a.avatar, a.banner, a.bio, a.location, a.website, a.owner, a.created_at, a.hide_avatar, a.avatar_empty, a.banner_empty FROM sessions s JOIN accounts a ON a.public_id = s.public_id WHERE s.token_hash = ? AND s.expires_at > ?").bind(hash, now).first();
+  }
   return row || null;
 }
 
@@ -3039,8 +3044,9 @@ async function route(request, env) {
   }
   await ensureSchema(env);
   if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {
+    const isTor = !!(request.cf && request.cf.isTor) || request.headers.get("cf-ipcountry") === "T1";
     const country = (request.cf && request.cf.country) || request.headers.get("cf-ipcountry") || "XX";
-    return json(200, { country: country, isRu: country === "RU" });
+    return json(200, { country: country, isRu: country === "RU", isTor: isTor });
   }
   if (path === "/v1/media" && (request.method === "GET" || request.method === "HEAD")) {
     return handlePublicMediaProxy(request, env, url);

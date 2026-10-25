@@ -1218,6 +1218,7 @@
 
   function ensureAnalyser() {
     if (player.analyser || player.noAnalyser || !player.audio) return;
+    if (typeof window !== "undefined" && window.isTorBrowser && window.isTorBrowser()) { player.noAnalyser = true; return; }
     const Ctx = root.AudioContext || root.webkitAudioContext;
     if (!Ctx) { player.noAnalyser = true; return; }
     try {
