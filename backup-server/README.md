@@ -19,55 +19,43 @@ Provides seamless auto-failover whenever the primary Cloudflare Worker reaches i
 
 ---
 
-## Free Hosting Options (No Paid Plans Required)
+## Top 100% Free Hosting Options (No Credit Card Required)
 
-### Option 1: Secondary Cloudflare Free Account (Recommended — Fastest & Easiest)
-Cloudflare free accounts cost **$0 forever** and require **no credit card**. A second free account provides another **100,000 requests/day** with identical D1 and R2 support and zero code translation.
-
-#### Setup Steps:
-1. Register a second free account on [cloudflare.com](https://dash.cloudflare.com/sign-up) (or use a secondary worker name).
-2. Create an API token with Workers / D1 edit permissions.
-3. Deploy the worker from your terminal:
-   ```bash
-   cd worker
-   CLOUDFLARE_API_TOKEN="<token>" CLOUDFLARE_ACCOUNT_ID="<id>" npx wrangler deploy --name viktorych-accounts-backup
-   ```
-4. Copy the resulting URL:
-   - `https://viktorych-accounts-backup.<second-subdomain>.workers.dev`
-5. In your GitHub repository **ViktorychApp**:
-   - Go to **Settings** -> **Secrets and variables** -> **Actions**.
-   - Under **Variables** (or Secrets), add:
-     - Name: `ACCOUNTS_BACKUP_API`
-     - Value: `https://viktorych-accounts-backup.<second-subdomain>.workers.dev`
-6. Done! GitHub Actions automatically injects `backupApi` into your site deploys.
+### Option 1: Render (Recommended Container Host — No Credit Card, 1-Click Deploy)
+Render offers a **100% Free Hobby Web Service** (750 free hours/month — enough to run 24/7 forever):
+- **No credit card required** to sign up or deploy.
+- **Auto-builds from Git**: Builds our tested `backup-server/Dockerfile` with full Miniflare and SQLite persistence.
+- **1-Click Blueprint (`render.yaml`)**:
+  1. Go to [render.com](https://render.com) and sign in with GitHub (free, no credit card).
+  2. Click **New +** -> **Blueprint**.
+  3. Select your `ViktorychApp` repository. Render automatically detects `render.yaml`!
+  4. Fill in:
+     - `ACCOUNT_PEPPER`: Your pepper secret (same as your primary worker).
+     - `OWNER_CLAIM_CODE`: Your owner claim code.
+  5. Click **Apply**. Render builds and deploys your backup server!
+  6. Copy your service URL: `https://viktorych-backup.onrender.com`.
+  7. In your GitHub repository **ViktorychApp** -> **Settings** -> **Secrets and variables** -> **Actions**:
+     - Add Variable: `ACCOUNTS_BACKUP_API` = `https://viktorych-backup.onrender.com`.
 
 ---
 
 ### Option 2: Deno Deploy (1,000,000 Free Requests / Month)
-Deno Deploy has a generous **Free Tier**:
 - **1,000,000 free requests / month**
-- **Global edge network** with < 50ms latency
+- **Global edge network** with instant (<10ms) responses
 - **No credit card required**
-- Automatic HTTPS: `https://<app-name>.deno.dev`
+- Deploy directly from GitHub to `https://<app-name>.deno.dev`.
 
 ---
 
-### Option 3: Koyeb / Render / Free Docker Host
-If you prefer running a containerized Node.js backend:
-- **Koyeb**: Free Eco/Hobby tier (runs Docker containers 24/7 without credit card).
-- **Render**: Free web services (750 free hours/month).
-
-Run with Docker:
-```bash
-docker build -f backup-server/Dockerfile -t viktorych-backup-server .
-docker run -d -p 7860:7860 \
-  -e ACCOUNT_PEPPER="your-secret-pepper" \
-  -e OWNER_CLAIM_CODE="your-claim-code" \
-  -e ALLOWED_ORIGINS="https://viktorychgroup.github.io" \
-  -v viktorych_data:/data \
-  --name viktorych-backup \
-  viktorych-backup-server
-```
+### Option 3: Secondary Cloudflare Free Account
+- Free forever, no credit card needed.
+- Another **100,000 requests/day**.
+- Deploy using Wrangler:
+  ```bash
+  cd worker
+  CLOUDFLARE_API_TOKEN="<token>" CLOUDFLARE_ACCOUNT_ID="<id>" npx wrangler deploy --name viktorych-accounts-backup
+  ```
+- Set `ACCOUNTS_BACKUP_API` in GitHub repository variables.
 
 ---
 
