@@ -458,17 +458,60 @@ def added_names(cfg: dict | None = None) -> list[str]:
 
 
 def write_index(names: list[str], docs: dict[str, dict]) -> None:
+    existing = {}
+    index_path = OUT / "index.json"
+    if index_path.exists():
+        try:
+            curr = json.loads(index_path.read_text(encoding="utf-8"))
+            for item in curr.get("communities", []):
+                if isinstance(item, dict) and item.get("name"):
+                    existing[item["name"]] = item
+        except Exception:
+            pass
+
+    for p in OUT.glob("*.json"):
+        if p.name == "index.json":
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(d, dict) and d.get("name"):
+                d_name = d["name"]
+                if d.get("type") == "discourse" or d_name == "grapheneos":
+                    existing[d_name] = {
+                        "name": d_name,
+                        "title": d.get("title") or d_name,
+                        "type": "discourse",
+                        "subscribers": int(d.get("subscribers") or 35000),
+                        "icon": d.get("icon") or "",
+                        "banner": d.get("banner") or "",
+                        "about": d.get("about") or ""
+                    }
+        except Exception:
+            pass
+
     rows = []
     for name in names:
         doc = docs.get(name) or {}
-        rows.append({
+        prev = existing.pop(name, {})
+        row = {
             "name": name,
-            "title": doc.get("title") or name,
-            "subscribers": int(doc.get("subscribers") or 0),
-            "icon": doc.get("icon") or "",
-        })
+            "title": doc.get("title") or prev.get("title") or name,
+            "subscribers": int(doc.get("subscribers") or prev.get("subscribers") or 0),
+            "icon": doc.get("icon") or prev.get("icon") or "",
+        }
+        if doc.get("type") or prev.get("type"):
+            row["type"] = doc.get("type") or prev.get("type")
+        if doc.get("banner") or prev.get("banner"):
+            row["banner"] = doc.get("banner") or prev.get("banner")
+        if doc.get("about") or prev.get("about"):
+            row["about"] = doc.get("about") or prev.get("about")
+        rows.append(row)
+
+    for item in existing.values():
+        rows.append(item)
+
     OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / "index.json").write_text(json.dumps({"communities": rows}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    index_path.write_text(json.dumps({"communities": rows}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def community_doc(name: str, about: dict, rules_payload: dict, hot: list, new: list, threads: dict) -> dict:

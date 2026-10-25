@@ -66,7 +66,8 @@
   }
   function isDiscourse(docOrRow) {
     if (!docOrRow) return false;
-    return docOrRow.type === "discourse" || docOrRow.source === "discourse" || docOrRow.source === "flarum";
+    var name = (docOrRow.name || "").toLowerCase();
+    return docOrRow.type === "discourse" || docOrRow.source === "discourse" || docOrRow.source === "flarum" || name === "grapheneos";
   }
 
   function count(n) {
@@ -163,16 +164,45 @@
   var svgReply = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>';
   var svgViews = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
 
+  var BUILTIN_COMMUNITIES = [
+    {
+      name: "grapheneos",
+      title: "GrapheneOS Discussion",
+      type: "discourse",
+      subscribers: 35000,
+      icon: "https://discuss.grapheneos.org/assets/favicon-snu6s6q2.png",
+      banner: "https://grapheneos.org/opengraph.png",
+      about: "The official discussion forum for GrapheneOS, a privacy and security focused mobile OS with Android app compatibility."
+    },
+    {
+      name: "teslamotors",
+      title: "Tesla Motors",
+      subscribers: 2840000,
+      icon: ""
+    }
+  ];
+
   function loadIndex() {
     if (state.index) return Promise.resolve(state.index);
     return fetch("data/communities/index.json", { cache: "no-store" }).then(function (res) {
       if (!res.ok) throw new Error("index");
       return res.json();
     }).then(function (doc) {
-      state.index = doc && Array.isArray(doc.communities) ? doc : { communities: [] };
+      var list = (doc && Array.isArray(doc.communities)) ? doc.communities.slice() : [];
+      BUILTIN_COMMUNITIES.forEach(function (b) {
+        var existing = list.find(function (c) { return c && c.name === b.name; });
+        if (!existing) {
+          list.push(b);
+        } else if (b.type && !existing.type) {
+          existing.type = b.type;
+          if (!existing.banner) existing.banner = b.banner;
+          if (!existing.about) existing.about = b.about;
+        }
+      });
+      state.index = { communities: list };
       return state.index;
     }).catch(function () {
-      state.index = { communities: [] };
+      state.index = { communities: BUILTIN_COMMUNITIES.slice() };
       return state.index;
     });
   }

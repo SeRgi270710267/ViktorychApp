@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T00:45:34Z",
+  "fetchedAt": "2026-10-25T01:24:11Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,31 @@
       ]
     },
     {
+      "id": "43081",
+      "title": "Pixel 7a won't boot after battery died",
+      "author": "Twix_E",
+      "authorUsername": "Twix_E",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792890900,
+      "lastPostedAt": 1792890900,
+      "category": "Pixel 7a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 7a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43081-pixel-7a-wont-boot-after-battery-died",
+      "media": [],
+      "text": "<p>My battery ran out, probably during an update. Now the phone shows the boot animation, then the lock screen for under 1 second, then goes black and starts recovery: \"Cannot load Android system. Your data may be corrupt.\"<br>\nI tried: Try again, safe mode, no SIM, rescue mode, charging. No change.<br>\nSideload of the newest OTA fails: \"Update package is older than the current build\". Recovery also says \"Overwrite in-progress update?\" and \"Unknown state: 5\".<br>\nBefore, fastboot showed \"snapshot-update-status: merging\". I ran \"fastboot snapshot-update merge\" and now it says \"none\".<br>\nI have no backup and need my data. Can I fix this without a reset or unlock?</p>",
+      "replies": []
+    },
+    {
       "id": "42908",
       "title": "What music streaming services are you using on GOS?",
       "author": "WelcomeMilk89",
@@ -1879,217 +1904,7 @@
       "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
       "media": [],
       "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
-      "replies": [
-        {
-          "id": "275668",
-          "number": 2,
-          "author": "Developer-Dude",
-          "authorUsername": "Developer-Dude",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/0e3xKlZFGMMPY9z2.png",
-          "score": 1,
-          "created": 1792297785,
-          "parent": "42908",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/1\" class=\"PostMention\" data-id=\"275667\"><i class=\"icon fas fa-reply\"></i>WelcomeMilk89</a> you gotta check out Musify. Its amazing<br>\n<a href=\"https://github.com/gokadzev/Musify\" rel=\"ugc nofollow\">https://github.com/gokadzev/Musify</a></p>"
-        },
-        {
-          "id": "275673",
-          "number": 3,
-          "author": "dryfter",
-          "authorUsername": "dryfter",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/yrF3TPBIpC7APhhS.png",
-          "score": 0,
-          "created": 1792300983,
-          "parent": "42908",
-          "text": "<p>I was on Apple Music when I switched from iPhone. Then I switched to Qobuz due to their stance on AI music, only to find it's literally overrun by AI music. I just switched to Deezer (despite my feelings about ownership) and I'm loving it.</p>\n\n<p>As far as streaming without subscriptions, I use <a href=\"https://github.com/shapeshed/aerial\" rel=\"ugc nofollow\">Aerial</a> for internet radio.</p> "
-        },
-        {
-          "id": "275700",
-          "number": 4,
-          "author": "KitsuneNoBaka",
-          "authorUsername": "KitsuneNoBaka",
-          "authorAvatar": "",
-          "score": 3,
-          "created": 1792311921,
-          "parent": "42908",
-          "text": "<p>storage</p>"
-        },
-        {
-          "id": "275703",
-          "number": 5,
-          "author": "liachra",
-          "authorUsername": "liachra",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792313324,
-          "parent": "42908",
-          "text": "<p>I use <a href=\"https://www.extreamsd.com/index.php/products/usb-audio-player-pro\" rel=\"ugc nofollow\">UAPP (Universal Audio Player Pro)</a>. Supports local file playback &amp; streaming through Tidal and/or Qobuz. It also supports streaming from a self hosted DLNA server as well. You can add local playback &amp; Tidal/Qobuz tracks into the same playlists so you don't have to jump between apps/services for different albums/tracks. Only issue is it is proprietary but considering GrapheneOS has storage scopes that isn't a huge issue. I haven't been able to find <strong>any</strong> open-source music player that will play tracks bit-perfectly with USB DACs so I wouldn't recommend them as all your music will get resampled through Android's crappy audio stack You can either obtain UAPP through Google Play or <a href=\"https://www.extreamsd.com/index.php/direct-purchase\" rel=\"ugc nofollow\">direct purchase on their website</a>.</p>"
-        },
-        {
-          "id": "275704",
-          "number": 6,
-          "author": "liachra",
-          "authorUsername": "liachra",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792314113,
-          "parent": "42908",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a> The DLNA server would probably be easier than running Navidrome as I heard that can be a pain to keep reliable especially on a laptop. You could also look into Roon for a complete solution as it has it's own mobile apps and integrates with high end AVRs and things like that but for the most straight forward way to run at home if you're wanting to \"stream\" your purchased files would be the DLNA server on your thinkpad with Tailscale (for external/not at home on the go access) and use UAPP on your phone, you'll get the added benefit of optionally streaming Tidal or Qobuz and integrate them into the same playlists as your purchased file also.</p>"
-        },
-        {
-          "id": "275723",
-          "number": 7,
-          "author": "AcclaimSublevel19",
-          "authorUsername": "AcclaimSublevel19",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792318478,
-          "parent": "42908",
-          "text": "<p>I've got a combination of streaming from my self-hosted Jellyfin instance via Finamp and from YouTube music via the excellent <a href=\"https://github.com/vivizzz007/vivi-music\" rel=\"ugc nofollow\">VIVI Music</a>. I have YouTube for discovery and then I download songs to my Jellyfin library.</p>"
-        },
-        {
-          "id": "275731",
-          "number": 8,
-          "author": "FunkTastic",
-          "authorUsername": "FunkTastic",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/gkf1ndPwIn0x3LQA.png",
-          "score": 0,
-          "created": 1792319294,
-          "parent": "42908",
-          "text": "<p>Youtube via NewPipe :)</p>\n"
-        },
-        {
-          "id": "275734",
-          "number": 9,
-          "author": "Buffering",
-          "authorUsername": "Buffering",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792319676,
-          "parent": "42908",
-          "text": "<p>YouTube via Grayjay.</p> "
-        },
-        {
-          "id": "275780",
-          "number": 10,
-          "author": "pynosh",
-          "authorUsername": "pynosh",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792331775,
-          "parent": "42908",
-          "text": "<p>I'm using Symfonium with Navidrome.</p> "
-        },
-        {
-          "id": "275795",
-          "number": 11,
-          "author": "MineralWater",
-          "authorUsername": "MineralWater",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792339414,
-          "parent": "42908",
-          "text": "<p>I use YouTube via the Echo App (or you can use Vivi and/ or Metrolist).</p> \n\n<p>These apps act like a streaming app, and they use what is on YouTube for free. So nothing illegal about using them.</p> \n\n<p>I don't listen to music often, so a paid service makes no sense to me.</p> \n\n<p>You can also use the Radio Caprice App from the play store, it's an radio app with channels that only play music without interruption and zero advertisement between or before songs. They have a channel for almost all genres you can think of.</p> \n\n"
-        },
-        {
-          "id": "275796",
-          "number": 12,
-          "author": "nuclear6476",
-          "authorUsername": "nuclear6476",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792339441,
-          "parent": "42908",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a></p> \n\n<p>The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.<br>\n<a href=\"https://github.com/moss-apps/Flick\" rel=\"ugc nofollow\">https://github.com/moss-apps/Flick</a><br>\n<a href=\"https://github.com/Kdroidwin/MusicBeatSP\" rel=\"ugc nofollow\">https://github.com/Kdroidwin/MusicBeatSP</a></p>\n\n<p>Additionally, reTONE—which is scheduled for release soon—is likely not open source, but it appears it will be available for free without data collection or ads.<br>\n<a href=\"https://retone.iidapiano.store/\" rel=\"ugc nofollow\">https://retone.iidapiano.store/</a></p>\n"
-        },
-        {
-          "id": "275869",
-          "number": 13,
-          "author": "mar2112",
-          "authorUsername": "mar2112",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792356618,
-          "parent": "42908",
-          "text": "<p>MPD from my server.</p>"
-        },
-        {
-          "id": "275878",
-          "number": 14,
-          "author": "Jddjjddjsh",
-          "authorUsername": "Jddjjddjsh",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792361196,
-          "parent": "42908",
-          "text": "<p>I like Metrolist because it is only music and it has great UI.</p> "
-        },
-        {
-          "id": "275883",
-          "number": 15,
-          "author": "liachra",
-          "authorUsername": "liachra",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792363180,
-          "parent": "42908",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/12\" class=\"PostMention\" data-id=\"275796\"><i class=\"icon fas fa-reply\"></i>nuclear6476</a> The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.</p></blockquote>\n\n<p>Well there you go, I'll have to check these out. Thanks :)</p>"
-        },
-        {
-          "id": "275937",
-          "number": 16,
-          "author": "skully373",
-          "authorUsername": "skully373",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/piWzj3tLZsYbFwH2.png",
-          "score": 1,
-          "created": 1792384067,
-          "parent": "42908",
-          "text": "<p>Did you ever try Tidal? It's pretty great for a paid service. Huge library and awesome sound quality. I just wish Pixels handled LDAC better.</p>"
-        },
-        {
-          "id": "275943",
-          "number": 17,
-          "author": "schweizer",
-          "authorUsername": "schweizer",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792387216,
-          "parent": "42908",
-          "text": "<p>What makes you think Spotify is a shady company? They do not sell customer data and they are in public ownership. The income flows vastly into the music industry. It is not that buying CDs would support artists more. It is the labels that take a huge share. Switching the streaming service does not solve that problem.</p>\n\n<p>For me there are two features why i do not use my digitalized CD recordings any more:</p>\n<ul><li>Spotify connect lets me start music directly on the player. No interrupted bluetooth connections.</li>\n<li>I can do jams with family and friends.</li></ul>\n"
-        },
-        {
-          "id": "275955",
-          "number": 18,
-          "author": "four",
-          "authorUsername": "four",
-          "authorAvatar": "",
-          "score": 4,
-          "created": 1792391681,
-          "parent": "42908",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> What makes you think Spotify is a shady company?</p></blockquote>\n\n<p>I wouldn't say they're more shady than other surveillance capitalism companies, but any surveillance capitalism company is shady as hell.</p> \n\n<ul><li><p>They collect everything you do in the app. Searches, skips, interactions. They make inferences about your age, interests, preferences, and scans for other devices on your Wi-Fi.</p> </li>\n\n<li><p>They take data from marketing and ad partners and their inferences about you. And Spotify shares your data with those ad partners.</p> </li>\n<li><p>Personalized ads are enabled by default. If you opt out, you still get ads based on context of what you're listening to.</p></li>\n<li><p>Your listen history Is kept for the length of your account.</p> </li>\n<li><p>Your data including voice recordings, if you use them, can be used to train machine learning models and there's no opt-out.</p> </li>\n<li><p>They were fined by Sweden's data protection authority in 2023</p></li></ul>\n\n\n<p>Is this an inaccurate summary of their <a href=\"https://www.spotify.com/us/legal/privacy-policy/\" rel=\"ugc nofollow\">privacy practices</a> and history?</p>"
-        },
-        {
-          "id": "275962",
-          "number": 20,
-          "author": "liachra",
-          "authorUsername": "liachra",
-          "authorAvatar": "",
-          "score": 8,
-          "created": 1792393790,
-          "parent": "42908",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> Well first off, excluding YouTube Music they pay the least to their artists out of all the streaming services.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> It is not that buying CDs would support artists more. It is the labels that take a huge share.</p></blockquote>\n\n<p>This is naive. Yes the labels take a huge share however I <em>personally</em> know many artists who receive a bigger portion of the income with CDs/Vinyl than they do on streaming services.10,000 streams a month equal around 10 cents (<strong>if</strong> you're lucky), a couple hundred CD &amp; vinyl sales are in the dollars. Additionally not every artist are with a major label and only sell CD's through direct purchase meaning they receive majority of the cost you pay for an album (minus printing &amp; payment/store-front processing fees).</p>\n\n<p>Yes CDs/vinyl  sales are smaller than streaming but the artists that have noticed a incline in CD sales are noticing a more of a profit hence why you see so many independent artists are heavily pushing physical media sales to their audience. The more people cop on to this the better for them.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> They do not sell customer data</p></blockquote>\n\n<p>Completely untrue. They aggregate with many major advertising &amp; marketing platforms</p>"
-        },
-        {
-          "id": "275966",
-          "number": 21,
-          "author": "AKRAKU",
-          "authorUsername": "AKRAKU",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/OZTjv8P30Ni9NyAD.png",
-          "score": 1,
-          "created": 1792394850,
-          "parent": "42908",
-          "text": "<p>I won't never get why people jump on GOS and still willing to pay 18€/month to services live Quobuz. After jumping here I found Riplay on Accrescent store and beside some bug I can live with (that will be fixed soon since dev is active on the project) I'm loving it! The algorithm is way better than the one on Spotify or Apple Music and is making me rediscover a lot of music I used to listen during the past and almost forgot about.</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43073",
@@ -2354,30 +2169,6 @@
       "url": "https://discuss.grapheneos.org/d/43065-aurora-store-fork-that-fixes-not-available-in-your-country-for-anonymous-use",
       "media": [],
       "text": "<p>I got tired of Aurora Store telling me apps were \"not available in your country\" when I'm sitting in the country they're made for, so I dug into why and made a fork that deals with it.</p>\n\n<p>The short version: when you use Aurora anonymously, Google decides your country from the shared anonymous account Aurora hands you, not from your IP or VPN. Aurora picks one of those accounts and if it happens to be from the wrong country, region-locked apps (banking apps, some betting apps like Kalshi or Novig, etc.) just fail. Changing your VPN doesn't help.</p>\n\n<p>What Aurora Light does differently:</p>\n\n<ul><li>When an app says \"not available in your country\", it keeps pulling fresh anonymous sessions (up to 10, spaced out so the token server doesn't throw \"server busy\") until it gets one from the right country</li>\n<li>It remembers the session that worked for that app and uses it first for installs and updates, so next time it just works on the first tap. If that session expires it forgets it and hunts again on its own</li>\n<li>Upstream picks one token dispenser at random and gives up on the first error. This tries the others before failing</li>\n<li>It sends your phone's real time zone and carrier code to Google. Upstream sends a fixed Hawaii time zone and a broken carrier code, which doesn't help with country checks</li>\n<li>Anonymous only. No Google sign-in at all, so there's no account to get banned</li>\n<li>One tap to route it through Orbot (or Twig) on the default SOCKS port</li>\n<li>Updates come from GitLab releases through Obtainium/ObtainX, not Aurora's own update feed</li></ul>\n\n<p>It's not magic: it can only find a right-country session if one exists in the anonymous pool, so some apps might still need a few tries. But for me it went from \"never works\" to \"works on the first tap after the first time.\"</p>\n\n<p>It's built on Aurora Store 4.8.4 and I check for new Aurora releases every week to merge their fixes in. Big credit to the Aurora team, this is their app with some changes on top, and it's not affiliated with them.</p>\n\n<p><a href=\"https://gitlab.com/LionNest/aurora-light\" rel=\"ugc nofollow\">https://gitlab.com/LionNest/aurora-light</a></p>\n\n<p>Happy to answer questions, and let me know if a region-locked app still won't install for you.</p>",
-      "replies": []
-    },
-    {
-      "id": "23152",
-      "title": "LuxTrust Mobile 4.18.0 Fails to Launch on GrapheneOS (Pixel 6a)",
-      "author": "stubble1861",
-      "authorUsername": "stubble1861",
-      "authorAvatar": "",
-      "score": 22,
-      "comments": 22,
-      "views": 490,
-      "participantCount": 14,
-      "created": 1750004107,
-      "lastPostedAt": 1792874200,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/23152-luxtrust-mobile-4180-fails-to-launch-on-grapheneos-pixel-6a",
-      "media": [],
-      "text": "<p>Hi all, I appreciate that this a very niche issue but it seems that the latest update of the LuxTrust mobile app. It crashes after starting and shows a weird message \"<em>Error code: LT_ROOTED_DEVICE: LuxTrust mobile app has stopped working because the configuration of your device may compromise data security</em>.\".</p> \n\n<p>The app logs shows a series of \"<em>W libc: Access denied finding property</em>\" messages:</p> \n\n<ul><li>ro.debuggable</li>\n<li>ro.secure</li>\n<li>ro.boot.serialno</li>\n<li>qemu.*</li>\n<li>vendor.*</li>\n<li>init.svc.*</li></ul>\n\n<p>Are there any workarounds besides downgrading? I downloaded the previous version but need to get the phone with their support to get it validated.</p>\n",
       "replies": []
     }
   ]
