@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T01:50:56Z",
+  "fetchedAt": "2026-10-25T02:29:16Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,31 @@
       ]
     },
     {
+      "id": "43082",
+      "title": "Visual Voicemail with Mint Mobile on the Google Pixel 10",
+      "author": "itzzen",
+      "authorUsername": "itzzen",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/NBJ2i3wndRIZnvqP.png",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792893583,
+      "lastPostedAt": 1792893583,
+      "category": "Pixel 10",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 10"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43082-visual-voicemail-with-mint-mobile-on-the-google-pixel-10",
+      "media": [],
+      "text": "<p>I've been trying to setup Visual Voicemail on my Pixel 10 but to no avail. I'd like to avoid using the dialer app or third party apps. I got this working with the 8a but after I activated my esim on the 10 it doesn't want to work now.</p>\n\n<p>I did the whole call forwarding stuff, having VMM off &amp; wifi off and rebooting the phone constantly thru the setup process. nothing. tried calling support but they \"don't have access\" to VM stuff on their end so brick wall there.</p>\n\n<p>Please help!</p>",
+      "replies": []
+    },
+    {
       "id": "43073",
       "title": "How to Convince People to Use GrapheneOS",
       "author": "Reboot",
@@ -1879,217 +1904,7 @@
       "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
       "media": [],
       "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": [
-        {
-          "id": "277147",
-          "number": 2,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 12,
-          "created": 1792857090,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> I want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p></blockquote>\n\n<p>You can't. Either there is a basic interest or not. You can simply talk about GrapheneOS and it's benefis, but you can't persuade anyone to do switch.<br>\nAll you can do is to assist people who already have the own intention to switch.</p>"
-        },
-        {
-          "id": "277149",
-          "number": 3,
-          "author": "tango",
-          "authorUsername": "tango",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792857192,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a></p> \n\n<p>Hi,</p> \n\n<p>Its quite difficult really as most people are either too busy to be bothered or they literally dont have a clue, apart from basic security (strong passwords / updates etc). I would reckon it takes most people quite a while before they jump to GOS. If only they realised sooner how simple it is to get started and the huge security benefits from using it.</p>\n\n<p>In my opinion the best way is to lend them a good book and hope that they find it interesting enough to keep learning. There are 2 books that come to mind and they are \"Data and Goliath by Bruce Schneier\" and also \"Privacy is Power by Carissa Veliz\". Hope that helps a bit.</p> "
-        },
-        {
-          "id": "277156",
-          "number": 4,
-          "author": "router99",
-          "authorUsername": "router99",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/siwFkkailTNbeABD.png",
-          "score": 1,
-          "created": 1792858813,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> the combination of herd behavior and not caring much about privacy means people generally aren't interested. It has to be popularized in media for most people to care.</p> "
-        },
-        {
-          "id": "277158",
-          "number": 5,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 0,
-          "created": 1792859541,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>Not even that. Think about how many scandals Meta, Facebook, WhatsApp* and all the others had during the years, most people don't care, they are afraid of losing (imaginary) friends when they quit specific services and anyway, \"Everyone has WhatsApp and ... and I couldn't live without!\". That's what I hear again and again.</p>\n\n<p>*deputy examples</p>"
-        },
-        {
-          "id": "277160",
-          "number": 6,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1792859833,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>I doubt they would care even then. Maybe they will start using GrapheneOS is that is the defacto default most phones are sold with, but it would not be because they care, but exactly because they don't.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> I want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p></blockquote>\n\n<p>Buy them a new phone which is better than what they use, and install GrapheneOS on it before giving it to them. Now they are using GrapheneOS.</p>"
-        },
-        {
-          "id": "277167",
-          "number": 7,
-          "author": "penglix",
-          "authorUsername": "penglix",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792861249,
-          "parent": "43073",
-          "text": "<p>Maybe this argument will help you convince them: They can save money and lots of it. I booked hotels through booking.com and was able to get a much better price for exactly the same hotel and same room and everything than my parents who used a standard iPhone. I don't know why exactly that was. But I presume that it was because they weren't able to find out much about me, since I was using Vanadium on GrapheneOS.</p> "
-        },
-        {
-          "id": "277173",
-          "number": 8,
-          "author": "Byku",
-          "authorUsername": "Byku",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792862989,
-          "parent": "43073",
-          "text": "<p>Honestly I think it is pointless if the person isn't already interested in the subject. Maybe someone who is pissed off with the bloat and ads on their phone would appreciate having GrapheneOS installed. In practice though I've seen people using terrible Android-based phones where entries in god damn settings redirected you to ads/shops and the person still maintained how they like how easy to use their phone is. Even ones who claim to be privacy conscious just buy and iPhone, don't change any settings and call it a day. So I wouldn't bother.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>The closest thing that ever happened was circa 2013-2015, probably due to Snowden leaks. It was the only time I actually heard the subject being brought up during casual conversations with my friends. Of course no one did anything.</p>"
-        },
-        {
-          "id": "277174",
-          "number": 9,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792863206,
-          "parent": "43073",
-          "text": "<p>You're all right about not being able to changing people's minds, but we could brainstorm and refine positive talking points with each other. Just briefly mentioning a security feature and a 1 sentence highlight of what it does, such as sandboxed Google play can prevent chosen apps from having access to my microphone, could pique people's interest.</p> "
-        },
-        {
-          "id": "277180",
-          "number": 10,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792864535,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/8\" class=\"PostMention\" data-id=\"277173\"><i class=\"icon fas fa-reply\"></i>Byku</a> The closest thing that ever happened was circa 2013-2015, probably due to Snowden leaks.</p></blockquote>\n\n<p>I wonder if it might be possible to dust off an old <a href=\"https://en.wikipedia.org/wiki/Citizenfour\" rel=\"ugc nofollow\">Citizen Four</a> DVD?  Maybe used book stores have <a href=\"https://en.wikipedia.org/wiki/Permanent_Record_%28autobiography%29\" rel=\"ugc nofollow\">Permanent Record</a>?  I think many people have a vague understanding of what happened but don't know any details, and the details are important.</p>"
-        },
-        {
-          "id": "277182",
-          "number": 11,
-          "author": "subfloor9963",
-          "authorUsername": "subfloor9963",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792864653,
-          "parent": "43073",
-          "text": "<p>You can't help people who don't want to be helped. It is simple as that. Sure, you can talk about grapheneos to your peers. But, at the end of the day, it's their choice.</p> "
-        },
-        {
-          "id": "277184",
-          "number": 12,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 1,
-          "created": 1792865714,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> make sure to explain that GrapheneOS is for anybody. It isn't complicated to use since go no bloat at all. They can use it like a normal phone, but with outstanding security and privacy out of the box. Their important apps will probably just work.</p> "
-        },
-        {
-          "id": "277185",
-          "number": 13,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792865765,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/11\" class=\"PostMention\" data-id=\"277182\"><i class=\"icon fas fa-reply\"></i>subfloor9963</a> of course. However, there's a difference between immediately making someone convert (not possible) and slowly over time exposing someone to the benefits enough that they eventually start questioning their own decisions (very possible, but not instant gratification).</p> "
-        },
-        {
-          "id": "277198",
-          "number": 14,
-          "author": "longshots",
-          "authorUsername": "longshots",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792870160,
-          "parent": "43073",
-          "text": "<p>+1 to the answers above. As we all know, there's no-one more radical than a convert. Be happy with your conversion because they may not like the sacrifices that need to be made.</p>"
-        },
-        {
-          "id": "277212",
-          "number": 15,
-          "author": "mmmm",
-          "authorUsername": "mmmm",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792875066,
-          "parent": "43073",
-          "text": "<p>You could introduce it as an entirely new, but android compatible OS. I mean - that's what it is really. Frame it like this: iOS for iPhone, android for other phones, GrapheneOS for pixels (and soon Motorola). You could suggest that with ios you end up locked in. You could suggest android is spyware, as in anything you do on an android phone is essentially visible to the manufacturer of the phone and Google. You could frame grapheneOS as a solution to those two problems. There is no lock in and there is no surveillance built in. You could explain it in a way that suggests the phone becomes what you want it to be instead of what the company who sold the phone wants it to be.</p> \n\n<p>One thing that I have done to make other people more aware (read: scared) is to talk about the keyboard. Anything that is typed potentially can be read. Not so with GrapheneOS and the right selection of keyboard and the correct settings. <br>\nPeople are often not worried about abstract (to them) ideas. But if people understand that anything they type has potential to be seen then they think in different terms.</p> "
-        },
-        {
-          "id": "277217",
-          "number": 16,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 0,
-          "created": 1792880086,
-          "parent": "43073",
-          "text": "<p>As others said, dont even try. Dont shy away from letting it be known that you are running a secure os and that you have some advantages as far as privacy and security go, but trying to convince someone is a fools errand. Just let them know if they ever want to be more sovereign digitally to hit you up... Nothing else is needed on your part. And honestly who cares, they are fine; just do your own thing and you can assist if ever needed.</p> "
-        },
-        {
-          "id": "277218",
-          "number": 17,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 1,
-          "created": 1792880398,
-          "parent": "43073",
-          "text": "<p>My favorite is normies coping by saying \"its impossible to get away from it, so who cares\". I just laugh and say 'its definitely possible to be private and secure, you just have to put in a little effort. Its even possible to be invisible, youre just a loser!' ....but thats just me.</p> "
-        },
-        {
-          "id": "277222",
-          "number": 18,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 0,
-          "created": 1792881046,
-          "parent": "43073",
-          "text": "<p>Sorry for the spam, but i'll add a caveat: if its your girl/immediate family (kids), then yeah definitely just buy her a pixel with gos and they are with you (google enabled)(and as long as youre not going down a psychotic rabbit hole). My earlier posts were in regards to loved ones like parents, siblings, extended family &amp; friends. Your immediate people are to be secured (still convenient and as normal as possible), everyone else who cares.</p> "
-        },
-        {
-          "id": "277231",
-          "number": 19,
-          "author": "YiyaK",
-          "authorUsername": "YiyaK",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792888716,
-          "parent": "43073",
-          "text": "<p>I can't even get a significant fraction of the people in my life to use Signal, let alone spend many hundreds of dollars  to buy a Pixel to convert to Graphene!</p> "
-        },
-        {
-          "id": "277234",
-          "number": 20,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792892721,
-          "parent": "43073",
-          "text": "<p>Not yet. But not yet is not never. As long as you're not pestering them. One day, when something happens that scares them, it's good for them to know who to go to. Someday someone will ask you about that secure phone thing you talked about.</p> "
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43081",
@@ -2355,30 +2170,6 @@
       "url": "https://discuss.grapheneos.org/d/37-mollyim",
       "media": [],
       "text": "<p>Hi everyone</p>\n\n<p>this thread is about <a href=\"https://molly.im/\" rel=\"ugc nofollow\">molly.im</a> the hardened signal fork. Feel free to post any questions or future ideas.</p>\n",
-      "replies": []
-    },
-    {
-      "id": "43065",
-      "title": "Aurora Store fork that fixes “not available in your country” for anonymous use",
-      "author": "LionNest",
-      "authorUsername": "LionNest",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792832859,
-      "lastPostedAt": 1792878682,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43065-aurora-store-fork-that-fixes-not-available-in-your-country-for-anonymous-use",
-      "media": [],
-      "text": "<p>I got tired of Aurora Store telling me apps were \"not available in your country\" when I'm sitting in the country they're made for, so I dug into why and made a fork that deals with it.</p>\n\n<p>The short version: when you use Aurora anonymously, Google decides your country from the shared anonymous account Aurora hands you, not from your IP or VPN. Aurora picks one of those accounts and if it happens to be from the wrong country, region-locked apps (banking apps, some betting apps like Kalshi or Novig, etc.) just fail. Changing your VPN doesn't help.</p>\n\n<p>What Aurora Light does differently:</p>\n\n<ul><li>When an app says \"not available in your country\", it keeps pulling fresh anonymous sessions (up to 10, spaced out so the token server doesn't throw \"server busy\") until it gets one from the right country</li>\n<li>It remembers the session that worked for that app and uses it first for installs and updates, so next time it just works on the first tap. If that session expires it forgets it and hunts again on its own</li>\n<li>Upstream picks one token dispenser at random and gives up on the first error. This tries the others before failing</li>\n<li>It sends your phone's real time zone and carrier code to Google. Upstream sends a fixed Hawaii time zone and a broken carrier code, which doesn't help with country checks</li>\n<li>Anonymous only. No Google sign-in at all, so there's no account to get banned</li>\n<li>One tap to route it through Orbot (or Twig) on the default SOCKS port</li>\n<li>Updates come from GitLab releases through Obtainium/ObtainX, not Aurora's own update feed</li></ul>\n\n<p>It's not magic: it can only find a right-country session if one exists in the anonymous pool, so some apps might still need a few tries. But for me it went from \"never works\" to \"works on the first tap after the first time.\"</p>\n\n<p>It's built on Aurora Store 4.8.4 and I check for new Aurora releases every week to merge their fixes in. Big credit to the Aurora team, this is their app with some changes on top, and it's not affiliated with them.</p>\n\n<p><a href=\"https://gitlab.com/LionNest/aurora-light\" rel=\"ugc nofollow\">https://gitlab.com/LionNest/aurora-light</a></p>\n\n<p>Happy to answer questions, and let me know if a region-locked app still won't install for you.</p>",
       "replies": []
     }
   ]
