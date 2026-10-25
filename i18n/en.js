@@ -1281,5 +1281,6 @@ SI18n.addPack("en", {
   "Unlock offline access with your claim code if servers are down.": "Unlock offline access with your claim code if servers are down.",
   "Unlock Offline": "Unlock Offline",
   "Invalid claim code.": "Invalid claim code.",
-  "Servers unreachable. Try Emergency Offline Access.": "Servers unreachable. Try Emergency Offline Access."
+  "Servers unreachable. Try Emergency Offline Access.": "Servers unreachable. Try Emergency Offline Access.",
+  "Not signed in": "Not signed in"
 });

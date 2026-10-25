@@ -1281,5 +1281,6 @@ SI18n.addPack("es", {
   "Unlock offline access with your claim code if servers are down.": "Desbloquea el acceso sin conexión con tu código de reclamo si los servidores no responden.",
   "Unlock Offline": "Desbloquear sin conexión",
   "Invalid claim code.": "Código de reclamo no válido.",
-  "Servers unreachable. Try Emergency Offline Access.": "Servidores no disponibles. Prueba el acceso de emergencia sin conexión."
+  "Servers unreachable. Try Emergency Offline Access.": "Servidores no disponibles. Prueba el acceso de emergencia sin conexión.",
+  "Not signed in": "No has iniciado sesión"
 });

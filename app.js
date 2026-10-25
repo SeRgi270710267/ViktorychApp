@@ -6619,7 +6619,7 @@ const here = parseRoute();
         ${post}
       </div>
       <button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">
-        ${(window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials">Y</span><span class="account-meta"><b>${tr("You")}</b><span>@reader</span></span>`}
+        ${(window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`}
         <span class="dots">${icon("more")}</span>
       </button>
     </header>`;
@@ -10307,7 +10307,7 @@ const here = parseRoute();
       ${window.ViktorychVault && window.ViktorychVault.visible() ? `<a href="#/vault">${icon("vault")} ${tr("Vault")}</a>` : ""}
       <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
-      ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div style="padding:16px 20px;display:flex;gap:12px;align-items:center"><span class="ava initials">Y</span><div><b>${tr("You")}</b><div class="phandle">@reader</div></div></div>`}
+      ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
       ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${tr("Install app")}</button>`}
     </div></div>`;

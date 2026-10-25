@@ -1281,5 +1281,6 @@ SI18n.addPack("ru", {
   "Unlock offline access with your claim code if servers are down.": "Разблокируйте офлайн-доступ кодом подтверждения, если серверы недоступны.",
   "Unlock Offline": "Войти офлайн",
   "Invalid claim code.": "Неверный код подтверждения.",
-  "Servers unreachable. Try Emergency Offline Access.": "Серверы недоступны. Попробуйте аварийный офлайн-доступ."
+  "Servers unreachable. Try Emergency Offline Access.": "Серверы недоступны. Попробуйте аварийный офлайн-доступ.",
+  "Not signed in": "Вход не выполнен"
 });
