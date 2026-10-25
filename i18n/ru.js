@@ -338,6 +338,8 @@ SI18n.addPack("ru", {
   "Privacy and safety": "Конфиденциальность и безопасность",
   "Privacy": "Конфиденциальность",
   "Privacy shield & anti-tracking": "Защита приватности и антитрекинг",
+  "Tor Browser mode active": "Режим Tor Browser активен",
+  "Maximum privacy defenses and zero-canvas protections are enabled.": "Максимальная защита приватности и режим без холста Canvas включены.",
   "Third-party embed shield": "Защита от сторонних плееров",
   "Blocks YouTube and external media players from loading automatically, protecting your IP address and cookies until you tap to play.": "Блокирует автозагрузку плееров YouTube и внешних медиа, защищая ваш IP-адрес и файлы cookie до явного нажатия на воспроизведение.",
   "WebRTC leak protection": "Защита от утечек через WebRTC",

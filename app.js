@@ -205,6 +205,42 @@
   };
   const menuIcon = (name) => `<svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true">${LINE[name] || ""}</svg>`;
 
+  window.isTorBrowser = isTorBrowser;
+  function isTorBrowser() {
+    if (typeof window === "undefined") return false;
+    if (window._isTorBrowser != null) return window._isTorBrowser;
+    try {
+      if (sessionStorage.getItem("viktorychapp-is-tor") === "1" || window.__VIKTORYCH_IS_TOR) {
+        window._isTorBrowser = true;
+        return true;
+      }
+    } catch (e) {}
+    try {
+      const ua = navigator.userAgent || "";
+      const isFirefox = /Firefox\/\d+/i.test(ua) && /Gecko\/20100101/i.test(ua);
+      const tz = Intl && Intl.DateTimeFormat ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+      const isUtc = tz === "UTC" || tz === "Etc/UTC";
+      const noPlugins = navigator.plugins && navigator.plugins.length === 0;
+      const noSw = !navigator.serviceWorker;
+      if (isFirefox && isUtc && (noPlugins || noSw)) {
+        window._isTorBrowser = true;
+        return true;
+      }
+    } catch (e) {}
+    window._isTorBrowser = false;
+    return false;
+  }
+
+  function applyTorProtections() {
+    if (!isTorBrowser() || !STATE.settings) return;
+    STATE.settings.privacyEmbedShield = true;
+    STATE.settings.privacyWebRTC = true;
+    STATE.settings.privacyNoReferrer = true;
+    STATE.settings.privacyStripTrackers = true;
+    STATE.settings.privacyAntiFingerprint = true;
+    STATE.settings.privacyZeroTrace = true;
+  }
+
   function stripTrackingParams(rawUrl) {
     if (!rawUrl || typeof rawUrl !== "string") return rawUrl;
     try {
@@ -891,7 +927,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: false, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: false, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto" });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: true, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto" });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -906,12 +942,12 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.bookmarks = parsed.bookmarks || {};
       parsed.reposts = parsed.reposts || {};
       parsed.savedPosts = parsed.savedPosts || {};
-      parsed.privacyEmbedShield = parsed.privacyEmbedShield === true;
-      parsed.privacyWebRTC = parsed.privacyWebRTC === true;
+      parsed.privacyEmbedShield = parsed.privacyEmbedShield !== false;
+      parsed.privacyWebRTC = parsed.privacyWebRTC !== false;
       parsed.privacyNoReferrer = parsed.privacyNoReferrer !== false;
       parsed.privacyStripTrackers = parsed.privacyStripTrackers !== false;
       parsed.privacyZeroTrace = parsed.privacyZeroTrace === true;
-      parsed.privacyAntiFingerprint = parsed.privacyAntiFingerprint === true;
+      parsed.privacyAntiFingerprint = parsed.privacyAntiFingerprint !== false;
       if (!parsed.appearance) parsed.appearance = "lightsout";
       if (parsed.showPictures !== "default" && parsed.showPictures !== "none") parsed.showPictures = "show";
       if (parsed.showBanners !== "default" && parsed.showBanners !== "none") parsed.showBanners = "show";
@@ -2470,6 +2506,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     fetch(api + "/v1/geo", { cache: "no-store", signal: AbortSignal.timeout(3500) })
       .then((res) => res.ok ? res.json() : null)
       .then((data) => {
+        if (data && typeof data.isTor === "boolean" && data.isTor) {
+          window.__VIKTORYCH_IS_TOR = true;
+          try { sessionStorage.setItem("viktorychapp-is-tor", "1"); } catch (err) {}
+          applyTorProtections();
+        }
         if (data && typeof data.isRu === "boolean") {
           window.__VIKTORYCH_IS_RU = data.isRu;
           try { sessionStorage.setItem("viktorychapp-is-ru", data.isRu ? "1" : "0"); } catch (err) {}
@@ -3076,7 +3117,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (el._gen !== gen) return;
       checkFrame();
       const img = el.querySelector(".vposter.face, .yt-thumb img.face");
-      if (!img || !video.videoWidth) return;
+      if (isTorBrowser() || !img || !video.videoWidth) return;
       try {
         const canvas = document.createElement("canvas");
         canvas.width = Math.min(video.videoWidth, 480);
@@ -9796,13 +9837,14 @@ const here = parseRoute();
       };
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${privSection}
+        ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
-        ${optToggle("privacyEmbedShield", tr("Third-party embed shield"), tr("Blocks YouTube and external media players from loading automatically, protecting your IP address and cookies until you tap to play."), false)}
-        ${optToggle("privacyWebRTC", tr("WebRTC leak protection"), tr("Prevents browser WebRTC requests from exposing your local network and public IP address to network observers."), false)}
+        ${optToggle("privacyEmbedShield", tr("Third-party embed shield"), tr("Blocks YouTube and external media players from loading automatically, protecting your IP address and cookies until you tap to play."), true)}
+        ${optToggle("privacyWebRTC", tr("WebRTC leak protection"), tr("Prevents browser WebRTC requests from exposing your local network and public IP address to network observers."), true)}
         ${optToggle("privacyNoReferrer", tr("Strict no-referrer"), tr("Strips referrer headers when opening external links so destination sites cannot see where you came from."), true)}
         ${optToggle("privacyStripTrackers", tr("Strip tracking parameters"), tr("Automatically cleans tracking identifiers (utm_*, fbclid, gclid, etc.) from copied and shared links."), true)}
         ${optToggle("privacyZeroTrace", tr("Zero-trace browsing"), tr("Stops saving viewing history, recent searches, and post interactions to this device."), false)}
-        ${optToggle("privacyAntiFingerprint", tr("Fingerprint resistance"), tr("Reduces browser fingerprinting by disabling battery status and sensor enumeration APIs."), false)}
+        ${optToggle("privacyAntiFingerprint", tr("Fingerprint resistance"), tr("Reduces browser fingerprinting by disabling battery status and sensor enumeration APIs."), true)}
 
         <h2>${esc(tr("Mute and block"))}</h2>
         <p class="phandle">${esc(tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
@@ -11988,7 +12030,7 @@ if (STATE.histClear) {
     if (act === "toggle-privacy-pref") {
       const key = el.dataset.key;
       if (key && STATE.settings) {
-        const def = key === "privacyNoReferrer" || key === "privacyStripTrackers";
+        const def = key !== "privacyZeroTrace";
         const cur = typeof STATE.settings[key] === "boolean" ? STATE.settings[key] : def;
         STATE.settings[key] = !cur;
         saveSettings();
@@ -15129,6 +15171,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking()) {
       registerSW();
       STATE.settings = loadSettings();
+      applyTorProtections();
       applyTheme();
       window.ViktorychAccounts.enter();
       return;
@@ -15139,6 +15182,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.error = null;
     loadStatus();
     STATE.settings = loadSettings();
+    applyTorProtections();
     applyTheme();
     applyPrivacyProtections();
     if (window.Stories) window.Stories.start();
