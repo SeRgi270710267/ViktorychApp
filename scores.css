@@ -1,0 +1,539 @@
+/* Soccer live scores pill row & X-style match sheet modal.
+   Arsenal Tula (red & yellow), CSKA Moscow (red & blue), FC Barcelona (blaugrana), CE Sabadell (arlequinat royal blue & white). */
+
+.sc-row-wrap {
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.sc-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 8px 12px;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+.sc-row::-webkit-scrollbar { display: none; }
+.sc-row-item {
+  flex: 0 0 auto;
+  max-width: 88%;
+  min-width: 0;
+  display: flex;
+}
+
+.sc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  max-width: 100%;
+  min-width: 0;
+  width: max-content;
+  padding: 0 14px 0 6px;
+  border-radius: 999px;
+  color: #fff;
+  text-decoration: none;
+  box-sizing: border-box;
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  font-family: inherit;
+  outline: none;
+}
+.sc-pill:hover,
+.sc-pill:focus-visible {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.38);
+}
+.sc-pill:active {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+/* Team specific colors */
+.sc-pill-arsenal-tula {
+  background: linear-gradient(135deg, #7a0914 0%, #b81424 50%, #d97706 100%);
+  border-color: rgba(245, 196, 0, 0.5);
+  box-shadow: 0 2px 10px rgba(184, 20, 36, 0.35);
+}
+.sc-pill-arsenal-tula .sc-crest-ring {
+  border-color: #f5c400;
+  background: #7a0914;
+}
+
+.sc-pill-cska-moscow {
+  background: linear-gradient(135deg, #091e4a 0%, #153e90 48%, #9e1422 100%);
+  border-color: rgba(204, 20, 39, 0.45);
+  box-shadow: 0 2px 10px rgba(21, 62, 144, 0.35);
+}
+.sc-pill-cska-moscow .sc-crest-ring {
+  border-color: #3f80ff;
+  background: #091e4a;
+}
+
+.sc-pill-fc-barcelona {
+  background: linear-gradient(135deg, #004d98 0%, #18244a 45%, #a50044 100%);
+  border-color: rgba(237, 187, 0, 0.5);
+  box-shadow: 0 2px 10px rgba(165, 0, 68, 0.35);
+}
+.sc-pill-fc-barcelona .sc-crest-ring {
+  border-color: #edbb00;
+  background: #004d98;
+}
+
+.sc-pill-sabadell-ce {
+  background: linear-gradient(135deg, #003666 0%, #0055a5 55%, #0277bd 100%);
+  border-color: rgba(255, 255, 255, 0.65);
+  box-shadow: 0 2px 10px rgba(0, 85, 165, 0.35);
+}
+.sc-pill-sabadell-ce .sc-crest-ring {
+  border-color: #ffffff;
+  background: #003666;
+}
+
+/* Crest Badge */
+.sc-crest-ring {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.sc-crest-svg {
+  width: 24px;
+  height: 24px;
+  display: block;
+}
+
+/* Pill Body Content */
+.sc-pill-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  line-height: 1.15;
+}
+.sc-pill-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.sc-pill-title {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #fff;
+}
+.sc-pill-bottom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.sc-pill-score {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  color: #fff;
+}
+.sc-pill-opp {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.88;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Live / FT Badges inside Pill */
+.sc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.sc-badge.is-live {
+  background: rgba(244, 33, 46, 0.28);
+  color: #ff5252;
+  border: 1px solid rgba(244, 33, 46, 0.55);
+}
+.sc-badge.is-ft {
+  background: rgba(255, 255, 255, 0.18);
+  color: #f1f1f1;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.sc-dot-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f4212e;
+  box-shadow: 0 0 6px #f4212e;
+  animation: sc-pulse 1.3s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+@keyframes sc-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.75); }
+}
+
+.sc-pill-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.75;
+  margin-left: 2px;
+}
+.sc-pill-arrow svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* Match Sheet Modal (X Style) */
+.sc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.sc-modal-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sc-modal-dialog {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 520px;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(16px) scale(0.98);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  scrollbar-width: thin;
+}
+.sc-modal-overlay.is-open .sc-modal-dialog {
+  transform: translateY(0) scale(1);
+}
+
+/* Modal Header */
+.sc-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+.sc-modal-title-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.sc-modal-league {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--sub);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.sc-modal-venue {
+  font-size: 12px;
+  color: var(--sub);
+}
+.sc-close-btn {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.sc-close-btn:hover {
+  background: var(--hover);
+}
+.sc-close-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+/* Hero Scoreboard Banner */
+.sc-hero {
+  padding: 24px 20px;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.sc-hero-arsenal-tula {
+  background: linear-gradient(135deg, #7a0914 0%, #a81322 55%, #b45309 100%);
+}
+.sc-hero-cska-moscow {
+  background: linear-gradient(135deg, #091e4a 0%, #153e90 50%, #9e1422 100%);
+}
+.sc-hero-fc-barcelona {
+  background: linear-gradient(135deg, #004d98 0%, #18244a 45%, #a50044 100%);
+}
+.sc-hero-sabadell-ce {
+  background: linear-gradient(135deg, #003666 0%, #0055a5 55%, #0277bd 100%);
+}
+
+.sc-hero-board {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  width: 100%;
+  gap: 16px;
+}
+.sc-team-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  flex: 1;
+  min-width: 0;
+}
+.sc-team-crest-large {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.25);
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.sc-team-crest-large svg {
+  width: 36px;
+  height: 36px;
+}
+.sc-team-name {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #fff;
+  white-space: normal;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.sc-score-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.sc-score-digits {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.sc-hero-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+/* Interactive Controls Toolbar */
+.sc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--search);
+  align-items: center;
+  justify-content: space-between;
+}
+.sc-btn-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.sc-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--hover);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  font-family: inherit;
+}
+.sc-action-btn:hover {
+  background: var(--blue-dim);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.sc-action-btn.is-toggle-active {
+  background: var(--blue);
+  color: #fff;
+  border-color: var(--blue);
+}
+.sc-action-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+/* Timeline & Stats Sections */
+.sc-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.sc-section-title {
+  font-size: 14px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sub);
+  margin: 0 0 10px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Timeline Events List */
+.sc-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sc-event-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--hover);
+  font-size: 13px;
+}
+.sc-event-minute {
+  font-weight: 800;
+  color: var(--sub);
+  width: 30px;
+  flex-shrink: 0;
+}
+.sc-event-icon {
+  font-size: 15px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.sc-event-desc {
+  font-weight: 600;
+  flex: 1;
+  color: var(--text);
+}
+.sc-event-team {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--sub);
+  text-transform: uppercase;
+}
+
+/* Match Stats Bars */
+.sc-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sc-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sc-stat-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+}
+.sc-stat-num {
+  font-weight: 800;
+}
+.sc-stat-name {
+  color: var(--sub);
+}
+.sc-stat-bar-track {
+  height: 6px;
+  background: var(--line);
+  border-radius: 999px;
+  display: flex;
+  overflow: hidden;
+}
+.sc-stat-bar-home {
+  background: var(--blue);
+  height: 100%;
+}
+.sc-stat-bar-away {
+  background: #f4212e;
+  height: 100%;
+}

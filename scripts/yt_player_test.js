@@ -132,6 +132,8 @@ const sandbox = {
   self: {},
   console: console,
   setTimeout: setTimeout,
+  setInterval: setInterval,
+  clearInterval: clearInterval,
   clearTimeout: clearTimeout,
   Date: Date,
   Math: Math,
@@ -141,6 +143,8 @@ const sandbox = {
   String: String
 };
 sandbox.window = sandbox;
+sandbox.addEventListener = () => {};
+sandbox.removeEventListener = () => {};
 sandbox.self = sandbox;
 
 const code = fs.readFileSync("yt-player.js", "utf8");
@@ -192,7 +196,26 @@ assert.strictEqual(video.volume, 0.5, "Video volume should restore to 0.5");
 player.setPlaybackRate(1.5);
 assert.strictEqual(video.playbackRate, 1.5, "Video playback rate should be 1.5");
 
-// Test 6: Destruction
+// Test 6: IFrame player mode
+const iframeContainer = createMockElement("div");
+const iframe = createMockElement("iframe");
+iframe.contentWindow = { postMessage() {} };
+const iframePlayer = new YtPlayer(iframeContainer, { iframe: iframe });
+
+assert.strictEqual(iframePlayer.isIframe_, true, "Player should be in iframe mode");
+assert(iframePlayer.clickShield_, "Player should create a click shield overlay for iframes");
+assert(iframePlayer.nextBtn_, "Player should have next button");
+assert(iframePlayer.loopBtn_, "Player should have loop button");
+
+iframePlayer.play();
+assert.strictEqual(iframePlayer.iframePaused_, false, "Iframe player should be playing");
+iframePlayer.pause();
+assert.strictEqual(iframePlayer.iframePaused_, true, "Iframe player should be paused");
+
+iframePlayer.destroy();
+assert.strictEqual(iframePlayer.disposed_, true, "Iframe player should be disposed");
+
+// Test 7: Destruction
 player.destroy();
 assert.strictEqual(player.disposed_, true, "Player should be disposed");
 

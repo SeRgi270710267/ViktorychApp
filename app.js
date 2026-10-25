@@ -2400,7 +2400,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const base = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id);
     const api = "&enablejsapi=1&origin=" + encodeURIComponent(location.origin) + "&widget_referrer=" + encodeURIComponent(location.origin + "/");
     if (preview) return base + "?autoplay=1&mute=1&playsinline=1&controls=0&rel=0" + api;
-    return base + "?rel=0" + api;
+    return base + "?autoplay=1&playsinline=1&controls=0&modestbranding=1&iv_load_policy=3&fs=0&disablekb=1&rel=0" + api;
   }
 
   function metaCode(post) {
@@ -3047,7 +3047,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           }
         }, 850);
       });
-      el.appendChild(frame);
+      if (!opts.preview && typeof window.YtPlayer === "function") {
+        const posterSrc = (media && (media.poster || media.url)) || (post && post.poster) || "";
+        el._ytPlayer = new window.YtPlayer(el, { iframe: frame, post: post, media: media, resume: opts.resume, poster: posterSrc });
+      } else {
+        el.appendChild(frame);
+      }
       el.classList.add("is-playing");
       el.classList.remove("is-failed");
       return;
@@ -6499,6 +6504,7 @@ const here = parseRoute();
       </div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${window.Spaces && window.Spaces.homeRow ? window.Spaces.homeRow() : ""}
+      ${window.SoccerScores && window.SoccerScores.homeRow ? window.SoccerScores.homeRow() : ""}
     </div>`;
   }
 
@@ -10089,7 +10095,8 @@ if (STATE.histClear) {
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities"].includes(route.name);
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
-    const top = route.name === "shorts" ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
+    const soccerExtra = route.name === "home" && window.SoccerScores && window.SoccerScores.rowExtra ? window.SoccerScores.rowExtra() : 0;
+    const top = route.name === "shorts" ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra + soccerExtra;
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
     return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
@@ -11777,6 +11784,7 @@ if (STATE.histClear) {
       if (window.SIntelMusic && window.SIntelMusic.afterRender) window.SIntelMusic.afterRender(route);
       syncMediaSession();
       if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);
+      if (window.SoccerScores && window.SoccerScores.afterRender) window.SoccerScores.afterRender(route);
       bindPlayers();
       primeTelegramImages();
       resumePlayback();
