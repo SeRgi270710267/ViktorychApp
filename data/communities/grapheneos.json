@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T08:14:44Z",
+  "fetchedAt": "2026-10-25T08:25:38Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,86 @@
       ]
     },
     {
+      "id": "43009",
+      "title": "Mail client ",
+      "author": "Try",
+      "authorUsername": "Try",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1792649851,
+      "lastPostedAt": 1792916581,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43009-mail-client",
+      "media": [],
+      "text": "<p>Which would you prefer between FairMail and K9 mail clients?</p>",
+      "replies": [
+        {
+          "id": "276633",
+          "number": 2,
+          "author": "GoSaM",
+          "authorUsername": "GoSaM",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792651050,
+          "parent": "43009",
+          "text": "<p>Started with K9 mail some years ago and sticked to it. Nowadays it is called Thunderbid, which I am running. So 2 differently branded builds are available: K9 vs. Thunderbird.</p>"
+        },
+        {
+          "id": "276636",
+          "number": 3,
+          "author": "phone-company",
+          "authorUsername": "phone-company",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Ee1Jv2MN5xreV9qU.png",
+          "score": 3,
+          "created": 1792652541,
+          "parent": "43009",
+          "text": "<p>Fairemail is one of the best email clients available today. I've been using it for years. It also supports PGP.</p> "
+        },
+        {
+          "id": "276657",
+          "number": 4,
+          "author": "mulfi",
+          "authorUsername": "mulfi",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792663245,
+          "parent": "43009",
+          "text": "<p>In terms of security which one is better? K9-Mail/Thunderbird does not allow to disable html parsing and showing only plain text content like Thunderbird Desktop. Does FairMail allow this?</p>"
+        },
+        {
+          "id": "276675",
+          "number": 5,
+          "author": "Ghost_User",
+          "authorUsername": "Ghost_User",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792672178,
+          "parent": "43009",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43009-mail-client/4\" class=\"PostMention\" data-id=\"276657\"><i class=\"icon fas fa-reply\"></i>mulfi</a> <br>\nI use FairEmail and I am very satisfied with it. It does not have a modern and attractive UI, but it does everything that a privacy-conscious client should do. It has Safe message view (styling, scripting and unsafe HTML removed)<br>\n<a href=\"https://email.faircode.eu/\" rel=\"ugc nofollow\">https://email.faircode.eu/</a></p>"
+        },
+        {
+          "id": "277260",
+          "number": 6,
+          "author": "GoSaM",
+          "authorUsername": "GoSaM",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792916581,
+          "parent": "43009",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43009-mail-client/4\" class=\"PostMention\" data-id=\"276657\"><i class=\"icon fas fa-reply\"></i>mulfi</a> Thunderbird 24.0 has a general configuration option to switch between HTML vs. Only plain text.</p>"
+        }
+      ]
+    },
+    {
       "id": "42741",
       "title": "Best approach for multiple Signal accounts with temporary numbers?",
       "author": "bvss12",
@@ -1879,30 +1959,7 @@
       "url": "https://discuss.grapheneos.org/d/42741-best-approach-for-multiple-signal-accounts-with-temporary-numbers",
       "media": [],
       "text": "<p>Hi everyone. I'm running GrapheneOS and I'd like to keep several separate Signal identities (personal, work, online accounts). I know Signal requires one phone number per account. What's the most practical setup — GrapheneOS user profiles with a separate Signal install and number each? And has anyone had luck with temporary number services for the SMS verification code? I've read Signal often blocks VoIP numbers — are there providers selling non-VoIP numbers that reliably work? If you know of a company selling numbers for receiving SMS verification codes, I'd appreciate pointers. Thanks!</p>",
-      "replies": [
-        {
-          "id": "274356",
-          "number": 3,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 0,
-          "created": 1791736901,
-          "parent": "42741",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42741-best-approach-for-multiple-signal-accounts-with-temporary-numbers/1\" class=\"PostMention\" data-id=\"274351\"><i class=\"icon fas fa-reply\"></i>bvss12</a></p>\n\n<p>Or you can buy several phone number independent accounts.</p>\n\n<p><a href=\"https://discuss.grapheneos.org/d/42245-signal-will-let-you-sign-up-without-a-phone-number-for-3/\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#42245</span></a></p>"
-        },
-        {
-          "id": "277259",
-          "number": 4,
-          "author": "Juan_1249",
-          "authorUsername": "Juan_1249",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792914880,
-          "parent": "42741",
-          "text": "<p>There's a website called Wantsms, they do sell non voip sim numbers for verification.</p> "
-        }
-      ]
+      "replies": []
     },
     {
       "id": "20507",
@@ -2171,31 +2228,6 @@
       "url": "https://discuss.grapheneos.org/d/43027-wi-fi-reconnect-on-restart-doesnt-work",
       "media": [],
       "text": "<p>That's it in the title. It's probably not a common issue since my other p8 reconnects as expected. But still asking if anybody seen this to happen? Any remedy?</p>",
-      "replies": []
-    },
-    {
-      "id": "43080",
-      "title": "grapheneos typing character before another backwards",
-      "author": "mandan",
-      "authorUsername": "mandan",
-      "authorAvatar": "",
-      "score": 5,
-      "comments": 5,
-      "views": 175,
-      "participantCount": 5,
-      "created": 1792882745,
-      "lastPostedAt": 1792906009,
-      "category": "Pixel 9a",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 9a"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
-      "media": [],
-      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
       "replies": []
     }
   ]
