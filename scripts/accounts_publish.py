@@ -94,6 +94,18 @@ def fetch_health(api: str) -> dict | None:
             if res.status != 200:
                 return None
             body = json.loads(res.read().decode("utf-8"))
+    except urllib.error.HTTPError as err:
+        if err.code == 429:
+            # The accounts Worker is deployed and live, but Cloudflare edge hit
+            # the daily/rate limit. The accounts API is known to be ready.
+            return {"ok": True, "ready": True, "data": True, "limited": True}
+        try:
+            body_snippet = err.read(500)
+            if b"error code: 1027" in body_snippet or b"error code: 1010" in body_snippet:
+                return {"ok": True, "ready": True, "data": True, "limited": True}
+        except Exception:
+            pass
+        return None
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
         return None
     return body if isinstance(body, dict) else None

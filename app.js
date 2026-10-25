@@ -6794,13 +6794,12 @@ const here = parseRoute();
 
   function homeMember(post, tab) {
     if (tab === "following") {
-      const followed = STATE.settings.follows || [];
-      return followed.indexOf(post.feedId) >= 0 || followed.indexOf((post.platform || "x") + ":" + (post.handle || "")) >= 0;
+      return followedPost(post);
     }
     if (tab && tab.indexOf("list:") === 0) {
       const found = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
       const ids = (found && found.members) || [];
-      return ids.indexOf(post.feedId) >= 0 || ids.indexOf((post.platform || "x") + ":" + (post.handle || "")) >= 0;
+      return profileMatch(post, ids);
     }
     if (tab && tab.indexOf("cat:") === 0) {
       const found = feedTabById(tab.slice(4));
@@ -10894,16 +10893,27 @@ if (STATE.histClear) {
   function isVideoPost(post) {
     if (!post || post.kind === "reply" || post.kind === "community") return false;
     if (post.platform === "youtube") return true;
+    if (post.platform === "tiktok") return true;
     return (post.media || []).some((item) => item && (item.type === "video" || item.type === "animated_gif"));
   }
 
   function followedPost(post) {
+    if (!post || !STATE.settings || !Array.isArray(STATE.settings.follows)) return false;
     const ids = STATE.settings.follows;
-    return ids.includes(post.feedId) || ids.includes((post.platform || "x") + ":" + post.handle);
+    if (profileMatch(post, ids)) return true;
+    if (post.feedId && accountFollowed(post.feedId)) return true;
+    const plain = (post.platform || "x") + ":" + (post.handle || "");
+    if (accountFollowed(plain)) return true;
+    if (post.channelId && accountFollowed((post.platform || "youtube") + ":" + post.channelId)) return true;
+    const feed = feedOf(post);
+    if (feed && isFeedFollowed(feed)) return true;
+    const creator = creatorOf(post);
+    if (creator && isFeedFollowed(creator)) return true;
+    return false;
   }
 
   function feedOf(post) {
-    return feedById(post.feedId) || findFeed(post.platform, post.handle) || {
+    return feedById(post.feedId) || findFeed(post.platform, post.handle) || (post.channelId && findFeed(post.platform, post.channelId)) || {
       id: (post.platform || "x") + ":" + (post.handle || ""),
       platform: post.platform,
       handle: post.handle,
@@ -11053,19 +11063,47 @@ if (STATE.histClear) {
 
   function countsAsUpload(post, feed) {
     if (!isVideoPost(post) || isRepost(post) || !feed) return false;
-    return post.feedId === feed.id || ((post.platform || "") + ":" + (post.handle || "")) === feed.id || (post.channelId && ((post.platform || "youtube") + ":" + post.channelId) === feed.id);
+    if (post.feedId === feed.id) return true;
+    const keys = feedKeys(feed);
+    if (profileMatch(post, keys)) return true;
+    if (feed.channelId && post.channelId && feed.channelId === post.channelId) return true;
+    if (feed.channelId && ((post.platform || "youtube") + ":" + feed.channelId) === post.feedId) return true;
+    if (Array.isArray(feed.memberIds) && (feed.memberIds.indexOf(post.feedId) >= 0 || profileMatch(post, feed.memberIds))) return true;
+    const postPlat = post.platform || "x";
+    const feedPlat = feed.platform || "x";
+    if (postPlat === feedPlat) {
+      const ph = String(post.handle || "").replace(/^@/, "").toLowerCase();
+      const fh = String(feed.handle || "").replace(/^@/, "").toLowerCase();
+      if (ph && ph === fh) return true;
+    }
+    return false;
   }
 
   function onChannel(post, channel) {
     if (!channel) return true;
+    const target = feedById(channel) || findFeed(channel.split(":")[0], channel.split(":").slice(1).join(":")) || { id: channel };
+    const keys = feedKeys(target);
+    if (keys.indexOf(channel) < 0) keys.push(channel);
     if (isRepost(post)) {
       const by = post.repostedBy || {};
       const reposterId = by.feedId || ((by.platform || post.platform || "x") + ":" + (by.handle || ""));
-      if (reposterId && reposterId === channel) return false;
+      if (reposterId && (reposterId === channel || keys.indexOf(reposterId) >= 0)) return false;
       const creator = creatorOf(post);
-      return creator.id === channel || ((post.platform || "") + ":" + (post.handle || "")) === channel || (post.channelId && ((post.platform || "youtube") + ":" + post.channelId) === channel);
+      if (creator.id === channel || keys.indexOf(creator.id) >= 0) return true;
+      if (profileMatch(creator, keys)) return true;
     }
-    return post.feedId === channel || ((post.platform || "") + ":" + (post.handle || "")) === channel;
+    if (post.feedId === channel || keys.indexOf(post.feedId) >= 0) return true;
+    if (profileMatch(post, keys)) return true;
+    if (target.channelId && post.channelId && target.channelId === post.channelId) return true;
+    const postPlat = post.platform || "x";
+    const targetPlat = target.platform || "x";
+    if (postPlat === targetPlat) {
+      const ph = String(post.handle || "").replace(/^@/, "").toLowerCase();
+      const th = String(target.handle || "").replace(/^@/, "").toLowerCase();
+      if (ph && ph === th) return true;
+    }
+    if (Array.isArray(target.memberIds) && profileMatch(post, target.memberIds)) return true;
+    return false;
   }
 
   function videoOwnerId(post) {
@@ -11264,8 +11302,27 @@ if (STATE.histClear) {
     </div>`;
   }
 
+  function isFeedFollowed(feed) {
+    if (!feed) return false;
+    if (isFollowed(feed.id)) return true;
+    if (accountFollowed(feed.id)) return true;
+    const keys = feedKeys(feed);
+    return keys.some((k) => isFollowed(k) || accountFollowed(k));
+  }
+
   function videoFeeds() {
-    const rows = feeds().filter((feed) => feed && isFollowed(feed.id) && posts().some((post) => countsAsUpload(post, feed)));
+    const list = catalogRows();
+    const seen = new Set();
+    const rows = [];
+    list.forEach((feed) => {
+      if (!feed || !feed.id || seen.has(feed.id)) return;
+      if (!isFeedFollowed(feed)) return;
+      const isVideoChannel = feed.platform === "youtube" || feed.platform === "tiktok";
+      const hasUploads = posts().some((post) => countsAsUpload(post, feed));
+      if (!isVideoChannel && !hasUploads) return;
+      seen.add(feed.id);
+      rows.push(feed);
+    });
     rows.sort((a, b) => {
       const ay = a.platform === "youtube" ? 0 : 1;
       const by = b.platform === "youtube" ? 0 : 1;
@@ -11278,7 +11335,9 @@ if (STATE.histClear) {
   function memberOn(group, feed) {
     if (!group || !feed) return false;
     const members = group.members || [];
-    return members.indexOf(feed.id) >= 0 || members.indexOf((feed.platform || "x") + ":" + feed.handle) >= 0;
+    if (!members.length) return false;
+    const keys = feedKeys(feed);
+    return keys.some((key) => members.indexOf(key) >= 0);
   }
 
   function postInGroup(group, post) {
@@ -11286,7 +11345,7 @@ if (STATE.histClear) {
     const members = group.members || [];
     if (!members.length) return false;
     const feed = feedOf(post);
-    return members.indexOf(post.feedId) >= 0 || members.indexOf((post.platform || "x") + ":" + (post.handle || "")) >= 0 || memberOn(group, feed);
+    return profileMatch(post, members) || memberOn(group, feed);
   }
 
   function feedKeys(feed) {
@@ -11298,8 +11357,20 @@ if (STATE.histClear) {
     };
     add(feed.id);
     add((feed.platform || "x") + ":" + (feed.handle || ""));
-    if (feed.channelId) add((feed.platform || "youtube") + ":" + feed.channelId);
+    if (feed.channelId) {
+      add((feed.platform || "youtube") + ":" + feed.channelId);
+      add(feed.channelId);
+    }
+    if (feed.permanentId) {
+      add((feed.platform || "x") + ":" + feed.permanentId);
+      add(feed.permanentId);
+    }
     if (Array.isArray(feed.memberIds)) feed.memberIds.forEach(add);
+    if (feed.personId) add("person:" + feed.personId);
+    if (window.FeedsPeople && window.FeedsPeople.followIds) {
+      (window.FeedsPeople.followIds(feed.id) || []).forEach(add);
+      if (feed.personId) (window.FeedsPeople.followIds("person:" + feed.personId) || []).forEach(add);
+    }
     return keys;
   }
 
@@ -11435,7 +11506,7 @@ if (STATE.histClear) {
       return `<button class="yt-chip${on ? " on" : ""}" type="button" data-act="subs-group" data-group="${esc(group.id)}" aria-pressed="${on ? "true" : "false"}">${groupFace(group)}<span>${esc(group.name)}</span></button>`;
     }).join("")}<button class="yt-chip yt-chip-add" type="button" data-act="group-new" aria-pressed="false" aria-label="${tr("New group")}">${icon("plus")}<span>${tr("New group")}</span></button></div>`;
     const strip = `<div class="yt-strip" aria-label="${tr("Channels")}"><a class="yt-ch${!route.channel ? " on" : ""}" href="${esc(here)}"${!route.channel ? ' aria-current="page"' : ""}><span class="yt-all">${tr("All")}</span><span class="ch-name">${tr("All")}</span></a>${channels.map((feed) => {
-      const on = route.channel === feed.id;
+      const on = !!(route.channel && (route.channel === feed.id || feedKeys(feed).indexOf(route.channel) >= 0));
       const href = on ? here : subsChannelHash(remembered, feed.id);
       return `<a class="yt-ch${on ? " on" : ""}" data-feed="${esc(feed.id)}" href="${esc(href)}"${on ? ' aria-current="page"' : ""}>${avatar(feed.avatar, feed.name, "ch")}<span class="ch-name">${esc(feed.name || feed.handle)}</span></a>`;
     }).join("")}</div>`;
@@ -15949,6 +16020,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (snap) {
       notePublished(snap);
       STATE.data = snap;
+      STATE.settings = loadSettings();
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
