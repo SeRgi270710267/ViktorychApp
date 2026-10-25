@@ -539,6 +539,10 @@ def canonical_status_id(post: dict) -> str:
     if str(post.get("id") or "").startswith("repost:"):
         return str(post.get("id"))
     platform = post.get("platform") or ""
+    by = post.get("repostedBy") if isinstance(post.get("repostedBy"), dict) else None
+    reposter = str((by or {}).get("handle") or "").lstrip("@").lower()
+    if reposter and post.get("kind") == "repost" and post.get("statusId") and platform != "youtube":
+        return f"repost:{reposter}:{post.get('statusId')}"
     if platform != "youtube" and not raw.startswith("yt:video:"):
         return raw
     if raw.startswith("yt:video:"):
