@@ -93,6 +93,7 @@
     views: "M8.75 21V3h2v18h-2zM18 21V8.5h2V21h-2zM4 21l.004-10h2L6 21H4zm9.248 0v-7h2v7h-2z",
     share: "M12 2.59l5.7 5.7-1.41 1.42L13 6.41V16h-2V6.41l-3.3 3.3-1.41-1.42L12 2.59zM21 15l-.02 3.51c0 1.38-1.12 2.49-2.5 2.49H5.5C4.11 21 3 19.88 3 18.5V15h2v3.5c0 .28.22.5.5.5h12.98c.28 0 .5-.22.5-.5L19 15h2z",
     lock: "M17 9V7A5 5 0 0 0 7 7v2H5v12h14V9h-2zm-8-2a3 3 0 0 1 6 0v2H9V7zm8 12H7v-8h10v8z",
+    shield: "M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 2.18l7 3.12v4.7c0 4.52-3.13 8.75-7 9.88-3.87-1.13-7-5.36-7-9.88V6.3l7-3.12z",
     check: "M20.396 11c-.018-.646-.215-1.275-.57-1.816-.354-.54-.852-.972-1.438-1.246.223-.607.27-1.264.14-1.897-.131-.634-.437-1.218-.882-1.687-.47-.445-1.053-.75-1.687-.882-.633-.13-1.29-.083-1.897.14-.273-.587-.704-1.086-1.245-1.44S11.647 1.62 11 1.604c-.646.017-1.273.213-1.813.568s-.969.854-1.24 1.44c-.608-.223-1.267-.272-1.902-.14-.635.13-1.22.436-1.69.882-.445.47-.749 1.055-.878 1.688-.13.633-.08 1.29.144 1.896-.587.274-1.087.705-1.443 1.245-.356.54-.555 1.17-.574 1.817.02.647.218 1.276.574 1.817.356.54.856.972 1.443 1.245-.224.606-.274 1.263-.144 1.896.13.634.433 1.218.877 1.688.47.443 1.054.747 1.687.878.633.132 1.29.084 1.897-.136.274.586.705 1.084 1.246 1.439.54.354 1.17.551 1.816.569.647-.016 1.276-.213 1.817-.567s.972-.854 1.245-1.44c.604.222 1.261.27 1.894.139.634-.13 1.22-.435 1.689-.882.445-.47.749-1.055.878-1.688.132-.633.084-1.29-.139-1.896.586-.274 1.084-.705 1.438-1.246.354-.54.551-1.17.569-1.816zM9.662 14.85l-3.429-3.428 1.293-1.302 2.072 2.072 4.4-4.794 1.347 1.246z",
     back: "M7.414 13l5.043 5.04-1.414 1.42L3.586 12l7.457-7.46 1.414 1.42L7.414 11H21v2H7.414z",
     close: "M10.59 12 4.54 5.96l1.42-1.42L12 10.59l6.04-6.05 1.42 1.42L13.41 12l6.05 6.04-1.42 1.42L12 13.41l-6.04 6.05-1.42-1.42L10.59 12z",
@@ -203,6 +204,77 @@
     bell: `<path d="M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/>`
   };
   const menuIcon = (name) => `<svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true">${LINE[name] || ""}</svg>`;
+
+  function stripTrackingParams(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== "string") return rawUrl;
+    try {
+      const parsed = new URL(rawUrl, location.origin);
+      const trackingKeys = [
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+        "fbclid", "gclid", "msclkid", "mc_eid", "igshid", "si", "ref", "ref_src",
+        "twclid", "spref", "yclid", "_hsenc", "_hsmi"
+      ];
+      let changed = false;
+      trackingKeys.forEach((key) => {
+        if (parsed.searchParams.has(key)) {
+          parsed.searchParams.delete(key);
+          changed = true;
+        }
+      });
+      Array.from(parsed.searchParams.keys()).forEach((key) => {
+        if (/^utm_/i.test(key)) {
+          parsed.searchParams.delete(key);
+          changed = true;
+        }
+      });
+      return changed ? (rawUrl.indexOf("://") < 0 && rawUrl.startsWith("/") ? parsed.pathname + parsed.search + parsed.hash : parsed.toString()) : rawUrl;
+    } catch (err) {
+      return rawUrl;
+    }
+  }
+
+  function applyPrivacyProtections() {
+    const s = (STATE && STATE.settings) || {};
+    if (s.privacyWebRTC) {
+      if (typeof window !== "undefined" && window.RTCPeerConnection && !window._origRTCPeerConnection) {
+        window._origRTCPeerConnection = window.RTCPeerConnection;
+        window.RTCPeerConnection = function (config, constraints) {
+          config = config || {};
+          if (Array.isArray(config.iceServers)) {
+            config.iceServers = config.iceServers.filter((srv) => {
+              const urls = Array.isArray(srv.urls) ? srv.urls : [srv.urls || srv.url];
+              return !urls.some((u) => typeof u === "string" && /^stuns?:/i.test(u));
+            });
+          }
+          config.iceTransportPolicy = "relay";
+          return new window._origRTCPeerConnection(config, constraints);
+        };
+        window.RTCPeerConnection.prototype = window._origRTCPeerConnection.prototype;
+      }
+    } else if (typeof window !== "undefined" && window._origRTCPeerConnection) {
+      window.RTCPeerConnection = window._origRTCPeerConnection;
+      delete window._origRTCPeerConnection;
+    }
+
+    if (s.privacyAntiFingerprint) {
+      if (typeof navigator !== "undefined" && navigator.getBattery && !navigator._origGetBattery) {
+        navigator._origGetBattery = navigator.getBattery;
+        navigator.getBattery = function () {
+          return Promise.resolve({
+            charging: true,
+            chargingTime: 0,
+            dischargingTime: Infinity,
+            level: 1.0,
+            addEventListener: function () {},
+            removeEventListener: function () {}
+          });
+        };
+      }
+    } else if (typeof navigator !== "undefined" && navigator._origGetBattery) {
+      navigator.getBattery = navigator._origGetBattery;
+      delete navigator._origGetBattery;
+    }
+  }
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, (c) => ({
@@ -819,7 +891,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all" });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: false, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: false, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto" });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -834,11 +906,18 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       parsed.bookmarks = parsed.bookmarks || {};
       parsed.reposts = parsed.reposts || {};
       parsed.savedPosts = parsed.savedPosts || {};
+      parsed.privacyEmbedShield = parsed.privacyEmbedShield === true;
+      parsed.privacyWebRTC = parsed.privacyWebRTC === true;
+      parsed.privacyNoReferrer = parsed.privacyNoReferrer !== false;
+      parsed.privacyStripTrackers = parsed.privacyStripTrackers !== false;
+      parsed.privacyZeroTrace = parsed.privacyZeroTrace === true;
+      parsed.privacyAntiFingerprint = parsed.privacyAntiFingerprint === true;
       if (!parsed.appearance) parsed.appearance = "lightsout";
       if (parsed.showPictures !== "default" && parsed.showPictures !== "none") parsed.showPictures = "show";
       if (parsed.showBanners !== "default" && parsed.showBanners !== "none") parsed.showBanners = "show";
       if (parsed.notify !== true) parsed.notify = false;
       if (parsed.autoplay !== "wifi" && parsed.autoplay !== "never") parsed.autoplay = "all";
+      if (parsed.networkMode !== "max" && parsed.networkMode !== "direct") parsed.networkMode = "auto";
       parsed.mutedWords = Array.isArray(parsed.mutedWords) ? parsed.mutedWords : [];
       parsed.mutedAccounts = Array.isArray(parsed.mutedAccounts) ? parsed.mutedAccounts : [];
       parsed.repostOff = Array.isArray(parsed.repostOff) ? parsed.repostOff : [];
@@ -878,6 +957,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function saveSettings() {
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
     syncWorkerState();
+    applyPrivacyProtections();
     if (window.ViktorychAccounts && window.ViktorychAccounts.onLocalChange) window.ViktorychAccounts.onLocalChange();
   }
 
@@ -2069,6 +2149,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const chrome = mode === "feed" && !gif
       ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden>${esc(dur || "")}</span>`
       : "";
+    const isYt = youtubeId(post, media);
+    const shieldBadge = STATE.settings && STATE.settings.privacyEmbedShield && isYt
+      ? `<span class="privacy-shield-badge" title="${esc(tr("Third-party embed shield"))}">${icon("shield")}</span>`
+      : "";
     const round = media && media.round ? " round" : "";
     const progress = !gif && post ? videoProgress(post) : 0;
     const bar = mode === "feed" && !gif
@@ -2079,6 +2163,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<div class="tile vplay${round}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}"${frame}>
       ${posterImg(post, media, "vposter")}
       ${bar}
+      ${shieldBadge}
       ${dur ? `<span class="vdur">${esc(dur)}</span>` : ""}
       ${gif ? `<span class="gif-badge">GIF</span>` : ""}
       <button class="play" type="button" data-act="play" aria-label="${tr("Play")}">${icon("play")}</button>
@@ -2338,7 +2423,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   const BLOCKED_IN_RU = /(?:^|\.)(?:pbs\.twimg\.com|video\.twimg\.com|twimg\.com|cdninstagram\.com|fbcdn\.net|cdn\.discordapp\.com|media\.discordapp\.net|i\.ytimg\.com)\b/i;
 
   function isRuVisitor() {
-    return typeof window !== "undefined" && !!window.__VIKTORYCH_IS_RU;
+    const mode = (STATE.settings && STATE.settings.networkMode) || localStorage.getItem("viktorychapp-network-mode") || "auto";
+    if (mode === "max") return true;
+    if (mode === "direct") return false;
+    return typeof window !== "undefined" && (!!window.__VIKTORYCH_IS_RU || !!window.__VIKTORYCH_MAX_BYPASS);
   }
 
   function ruSafeImageUrl(url) {
@@ -2872,8 +2960,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const frame = document.createElement("iframe");
       frame.id = "ytf" + gen;
       if (/youtube-nocookie\.com|youtube\.com/.test(url || "")) {
-        frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
-        frame.referrerPolicy = "strict-origin-when-cross-origin";
+        const strictNoRef = STATE.settings && (STATE.settings.privacyNoReferrer !== false || STATE.settings.privacyEmbedShield);
+        frame.setAttribute("referrerpolicy", strictNoRef ? "no-referrer" : "strict-origin-when-cross-origin");
+        frame.referrerPolicy = strictNoRef ? "no-referrer" : "strict-origin-when-cross-origin";
+      }
+      if (STATE.settings && STATE.settings.privacyEmbedShield) {
+        frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-presentation allow-forms");
       }
       frame.src = url;
       frame.title = (post && (post.title || post.text)) || tr("Video");
@@ -3351,6 +3443,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function autoplayBlockReason() {
+    if (STATE.settings && STATE.settings.privacyEmbedShield) return "privacy-shield";
     const mode = (STATE.settings && STATE.settings.autoplay) || "all";
     const chosen = mode === "wifi" || mode === "never" ? mode : "all";
     if (chosen === "never") return "setting-never";
@@ -8406,6 +8499,7 @@ const here = parseRoute();
   }
 
   function historyPaused(tab) {
+    if (STATE.settings && STATE.settings.privacyZeroTrace) return true;
     const pause = (STATE.settings && STATE.settings.historyPause) || {};
     return tab === "videos" ? !!pause.videos : tab === "articles" ? !!pause.articles : false;
   }
@@ -9560,6 +9654,7 @@ const here = parseRoute();
       else if (section === "notifications") key = tr("Notifications");
       else if (section === "privacy") key = tr("Privacy and safety");
       else if (section === "content") key = tr("Custom tabs");
+      else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
       else key = tr("Settings");
     } else {
@@ -9694,14 +9789,31 @@ const here = parseRoute();
       const privSection = acct ? `<h2>${esc(tr("Private followers and following"))}</h2>
         <p class="phandle">${esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you."))}</p>
         <button class="tab-switch${acct.privateFollows ? " on" : ""}" type="button" role="switch" aria-checked="${acct.privateFollows ? "true" : "false"}" data-act="toggle-private-follows"><span>${esc(tr("Keep lists private"))}</span><i></i></button>` : "";
+      const optToggle = (key, label, desc, defVal) => {
+        const val = STATE.settings && typeof STATE.settings[key] === "boolean" ? STATE.settings[key] : !!defVal;
+        return `<button class="tab-switch${val ? " on" : ""}" type="button" role="switch" aria-checked="${val ? "true" : "false"}" data-act="toggle-privacy-pref" data-key="${key}"><span>${esc(label)}</span><i></i></button>
+        <p class="phandle set-desc">${esc(desc)}</p>`;
+      };
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${privSection}
+        <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
+        ${optToggle("privacyEmbedShield", tr("Third-party embed shield"), tr("Blocks YouTube and external media players from loading automatically, protecting your IP address and cookies until you tap to play."), false)}
+        ${optToggle("privacyWebRTC", tr("WebRTC leak protection"), tr("Prevents browser WebRTC requests from exposing your local network and public IP address to network observers."), false)}
+        ${optToggle("privacyNoReferrer", tr("Strict no-referrer"), tr("Strips referrer headers when opening external links so destination sites cannot see where you came from."), true)}
+        ${optToggle("privacyStripTrackers", tr("Strip tracking parameters"), tr("Automatically cleans tracking identifiers (utm_*, fbclid, gclid, etc.) from copied and shared links."), true)}
+        ${optToggle("privacyZeroTrace", tr("Zero-trace browsing"), tr("Stops saving viewing history, recent searches, and post interactions to this device."), false)}
+        ${optToggle("privacyAntiFingerprint", tr("Fingerprint resistance"), tr("Reduces browser fingerprinting by disabling battery status and sensor enumeration APIs."), false)}
+
         <h2>${esc(tr("Mute and block"))}</h2>
         <p class="phandle">${esc(tr("Muted words, muted accounts, and reposts you turn off stay on this device."))}</p>
         <form class="mute-form" data-mute="word"><label class="search"><input id="mute-word" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Mute a word"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
         ${(STATE.settings.mutedWords || []).map((word) => `<div class="mute-row"><span>${esc(word)}</span><button type="button" data-act="unmute-word" data-word="${esc(word)}">${esc(tr("Remove"))}</button></div>`).join("")}
         <form class="mute-form" data-mute="account"><label class="search"><input id="mute-account" placeholder="${esc(tr("@handle"))}" aria-label="${esc(tr("Mute an account"))}" maxlength="80"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
         ${(STATE.settings.mutedAccounts || []).map((account) => `<div class="mute-row"><span>${esc(account)}</span><button type="button" data-act="unmute-account" data-account="${esc(account)}">${esc(tr("Remove"))}</button></div>`).join("")}
+
+        <h2>${esc(tr("Local data shredder"))}</h2>
+        <p class="phandle">${esc(tr("Immediately purges all stored accounts, history, bookmarks, and cached files from this device."))}</p>
+        <button class="outline danger" type="button" data-act="shred-local-data">${esc(tr("Clear all local data"))}</button>
       </div>`;
     }
     if (section === "content") {
@@ -9709,6 +9821,19 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("Group accounts into tabs on Home and in Notifications."))}</p>
         ${feedTabs().map((tab) => `<div class="tab-edit-row"><span>${tab.color && !tab.emoji ? `<i class="tab-dot" style="background:${esc(tab.color)}"></i>` : ""}${esc((tab.emoji ? tab.emoji + " " : "") + tab.name)}</span><button class="outline" type="button" data-act="feed-tab-edit" data-id="${esc(tab.id)}">${esc(tr("Edit"))}</button></div>`).join("")}
         <button class="outline" type="button" data-act="feed-tab-new">${esc(tr("New tab"))}</button>
+      </div>`;
+    }
+    if (section === "network") {
+      const mode = (STATE.settings && STATE.settings.networkMode) || "auto";
+      return settingsHead(tr("Digital Resistance & Proxy"), "#/settings") + `<div class="set-block">
+        <h2>${esc(tr("Durov Relay / Anti-Censorship Proxy"))}</h2>
+        <p class="phandle">${esc(tr("Routes blocked media (X/Twitter, Instagram, Discord, YouTube) through Durov Telegram CDN and Edge proxy relays."))}</p>
+        <div class="theme-row" role="group" aria-label="${esc(tr("Durov Relay / Anti-Censorship Proxy"))}">
+          <button class="outline${mode === "auto" ? " on" : ""}" type="button" data-act="set-network-mode" data-mode="auto">${esc(tr("Smart Auto"))}</button>
+          <button class="outline${mode === "max" ? " on" : ""}" type="button" data-act="set-network-mode" data-mode="max">${esc(tr("Max Bypass (Always On)"))}</button>
+          <button class="outline${mode === "direct" ? " on" : ""}" type="button" data-act="set-network-mode" data-mode="direct">${esc(tr("Direct (Off)"))}</button>
+        </div>
+        <p class="phandle" style="margin-top:12px;">${mode === "max" ? esc(tr("Max level active: All media is routed through unblocked Telegram and Cloudflare Edge relays regardless of region.")) : (mode === "auto" ? esc(tr("Smart Auto: Proxy activates automatically only when connecting from restricted regions (Russia) or on connection failure.")) : esc(tr("Direct: All media connects directly with no relay.")))}</p>
       </div>`;
     }
     if (section === "resources") {
@@ -9725,6 +9850,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
+      ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
     </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
@@ -11687,6 +11813,22 @@ if (STATE.histClear) {
     if (act === "stop") return;
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
+    if (act === "set-network-mode") {
+      const mode = el.dataset.mode || "auto";
+      STATE.settings.networkMode = mode;
+      saveSettings();
+      try { localStorage.setItem("viktorychapp-network-mode", mode); } catch (err) {}
+      if (mode === "max") {
+        window.__VIKTORYCH_IS_RU = true;
+      } else if (mode === "direct") {
+        window.__VIKTORYCH_IS_RU = false;
+      }
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: "ru_mode", on: isRuVisitor() });
+      }
+      render();
+      return;
+    }
     if (act === "ui-lang") {
       try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) {}
       if (window.SI18n) window.SI18n.setLang(el.dataset.lang || "en");
@@ -11840,6 +11982,32 @@ if (STATE.histClear) {
       const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
       if (acct && window.ViktorychAccounts.setPrivateFollows) {
         window.ViktorychAccounts.setPrivateFollows(!acct.privateFollows);
+      }
+      return;
+    }
+    if (act === "toggle-privacy-pref") {
+      const key = el.dataset.key;
+      if (key && STATE.settings) {
+        const def = key === "privacyNoReferrer" || key === "privacyStripTrackers";
+        const cur = typeof STATE.settings[key] === "boolean" ? STATE.settings[key] : def;
+        STATE.settings[key] = !cur;
+        saveSettings();
+        applyPrivacyProtections();
+        render();
+      }
+      return;
+    }
+    if (act === "shred-local-data") {
+      if (confirm(tr("Clear all stored data on this device? This will sign you out and reset all settings."))) {
+        try { localStorage.clear(); } catch (e) {}
+        try { sessionStorage.clear(); } catch (e) {}
+        if (typeof caches !== "undefined" && caches.keys) {
+          caches.keys().then((keys) => {
+            return Promise.all(keys.map((k) => caches.delete(k)));
+          }).finally(() => { location.reload(); });
+        } else {
+          location.reload();
+        }
       }
       return;
     }
@@ -12281,7 +12449,9 @@ if (STATE.histClear) {
       const ctx = shareContext();
       const finish = () => { STATE.share = null; render(); };
       if (ctx && typeof navigator.share === "function") {
-        navigator.share({ title: ctx.title, text: ctx.text, url: ctx.permalink }).then(finish).catch(finish);
+        let shareUrl = ctx.permalink;
+        if (STATE.settings && STATE.settings.privacyStripTrackers !== false) shareUrl = stripTrackingParams(shareUrl);
+        navigator.share({ title: ctx.title, text: ctx.text, url: shareUrl }).then(finish).catch(finish);
         return;
       }
       finish();
@@ -12289,7 +12459,8 @@ if (STATE.histClear) {
     }
     if (act === "copy") {
       const ctx = shareContext();
-      const url = el.dataset.copy === "original" && ctx ? ctx.original : (el.dataset.url || (ctx ? ctx.permalink : location.href));
+      let url = el.dataset.copy === "original" && ctx ? ctx.original : (el.dataset.url || (ctx ? ctx.permalink : location.href));
+      if (STATE.settings && STATE.settings.privacyStripTrackers !== false) url = stripTrackingParams(url);
       const write = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(url) : Promise.reject();
       write.catch(() => {
         const area = document.createElement("textarea");
@@ -14969,6 +15140,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     loadStatus();
     STATE.settings = loadSettings();
     applyTheme();
+    applyPrivacyProtections();
     if (window.Stories) window.Stories.start();
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
     loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
