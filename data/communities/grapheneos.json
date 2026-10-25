@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T09:25:15Z",
+  "fetchedAt": "2026-10-25T09:44:31Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "Try",
       "authorUsername": "Try",
       "authorAvatar": "",
-      "score": 8,
-      "comments": 8,
-      "views": 245,
-      "participantCount": 7,
+      "score": 9,
+      "comments": 9,
+      "views": 280,
+      "participantCount": 8,
       "created": 1792649851,
-      "lastPostedAt": 1792920199,
+      "lastPostedAt": 1792921377,
       "category": "Off Topic",
       "categoryColor": "#c55bec",
       "tags": [
@@ -1956,6 +1956,17 @@
           "created": 1792920199,
           "parent": "43009",
           "text": "<p>As I refuse to send web sites as emails, I have so far only found Thunderbird to be able to send and display text emails. The only thing I dislike about it is that once emails have the status \"read\", they are displayed in an unreadably dimmed font in the mail list.</p>"
+        },
+        {
+          "id": "277272",
+          "number": 9,
+          "author": "schweizer",
+          "authorUsername": "schweizer",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792921377,
+          "parent": "43009",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43009-mail-client/8\" class=\"PostMention\" data-id=\"277271\"><i class=\"icon fas fa-reply\"></i>n2o</a> I have so far only found Thunderbird to be able to send and display text emails</p></blockquote>\n\n<p>Fairemail can do this as well. Fairmail has a parser for dmarc reports which I find useful.</p>"
         }
       ]
     },
