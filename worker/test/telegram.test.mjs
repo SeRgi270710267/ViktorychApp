@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Miniflare } from "miniflare";
 import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "../src/telegram.js";
@@ -8,8 +9,8 @@ const BOT = "123456:probe-token";
 function workerOptions(extra) {
   return {
     modules: true,
-    scriptPath: new URL("../src/index.js", import.meta.url).pathname,
-    modulesRoot: new URL("../..", import.meta.url).pathname,
+    scriptPath: fileURLToPath(new URL("../src/index.js", import.meta.url)),
+    modulesRoot: fileURLToPath(new URL("../..", import.meta.url)),
     modulesRules: [{ type: "ESModule", include: ["**/*.js"], fallthrough: true }],
     compatibilityDate: "2026-01-15",
     d1Databases: ["DB"],

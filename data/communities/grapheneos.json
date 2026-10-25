@@ -1,0 +1,2384 @@
+{
+  "name": "grapheneos",
+  "title": "GrapheneOS Discussion",
+  "type": "discourse",
+  "subscribers": 35000,
+  "icon": "https://discuss.grapheneos.org/assets/favicon-snu6s6q2.png",
+  "banner": "https://grapheneos.org/opengraph.png",
+  "about": "The official discussion forum for GrapheneOS, a privacy and security focused mobile OS with Android app compatibility.",
+  "rules": [
+    {
+      "title": "Be civil and constructive",
+      "text": "Respect other community members. Harassment, abuse, or trolling is not tolerated."
+    },
+    {
+      "title": "Relevant to GrapheneOS",
+      "text": "Discussions should be related to GrapheneOS, mobile security, privacy, or supported devices."
+    },
+    {
+      "title": "No AI generated text",
+      "text": "AI generated text is forbidden with the exception of automated translation for non-fluent speakers."
+    },
+    {
+      "title": "No spam or self-promotion",
+      "text": "Unsolicited commercial advertising, affiliate links, and spam are prohibited."
+    }
+  ],
+  "tags": [
+    {
+      "id": "1",
+      "name": "General",
+      "slug": "general",
+      "color": "#c7c7c7",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "3",
+      "name": "Off Topic",
+      "slug": "off-topic",
+      "color": "#c55bec",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "4",
+      "name": "Development",
+      "slug": "development",
+      "color": "#2e52e0",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "5",
+      "name": "GrapheneOS Camera",
+      "slug": "grapheneos-camera",
+      "color": "#d57676",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "6",
+      "name": "Auditor",
+      "slug": "auditor",
+      "color": "#d57676",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "7",
+      "name": "GrapheneOS PDF Viewer",
+      "slug": "grapheneos-pdf-viewer",
+      "color": "#d57676",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "8",
+      "name": "GrapheneOS App Store",
+      "slug": "grapheneos-app-store",
+      "color": "#d57676",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "9",
+      "name": "hardened_malloc",
+      "slug": "hardened-malloc",
+      "color": "#d57676",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "10",
+      "name": "kernel",
+      "slug": "kernel",
+      "color": "#d57676",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "11",
+      "name": "Pixel 3 (obsolete)",
+      "slug": "pixel-3-obsolete",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "12",
+      "name": "Pixel 3 XL (obsolete)",
+      "slug": "pixel-3-xl-obsolete",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "13",
+      "name": "Pixel 3a (obsolete)",
+      "slug": "pixel-3a-obsolete",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "14",
+      "name": "Pixel 3a XL (obsolete)",
+      "slug": "pixel-3a-xl-obsolete",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "15",
+      "name": "Pixel 4 (legacy extended support)",
+      "slug": "pixel-4-legacy-extended-support",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "16",
+      "name": "Pixel 4 XL (legacy extended support)",
+      "slug": "pixel-4-xl-legacy-extended-support",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "17",
+      "name": "Pixel 4a (legacy extended support)",
+      "slug": "pixel-4a-legacy-extended-support",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "18",
+      "name": "Pixel 4a (5G) (extended support)",
+      "slug": "pixel-4a-5g",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "19",
+      "name": "Pixel 5 (extended support)",
+      "slug": "pixel-5",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "20",
+      "name": "Pixel 5a",
+      "slug": "pixel-5a",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "21",
+      "name": "Pixel 6",
+      "slug": "pixel-6",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "22",
+      "name": "Pixel 6 Pro",
+      "slug": "pixel-6-pro",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "23",
+      "name": "Pixel 6a",
+      "slug": "pixel-6a",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "24",
+      "name": "Vanadium",
+      "slug": "vanadium",
+      "color": "#d57676",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "26",
+      "name": "Announcements",
+      "slug": "announcements",
+      "color": "#f00a0a",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "27",
+      "name": "Solved",
+      "slug": "solved",
+      "color": "#2fac16",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "28",
+      "name": "Pixel 7",
+      "slug": "pixel-7",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "29",
+      "name": "Pixel 7 Pro",
+      "slug": "pixel-7-pro",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "30",
+      "name": "Pixel 7a",
+      "slug": "pixel-7a",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "31",
+      "name": "Pixel Tablet",
+      "slug": "pixel-tablet",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "32",
+      "name": "Pixel Fold",
+      "slug": "pixel-fold",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "33",
+      "name": "Pixel 8",
+      "slug": "pixel-8",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "34",
+      "name": "Pixel 8 Pro",
+      "slug": "pixel-8-pro",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "36",
+      "name": "Alpha",
+      "slug": "alpha",
+      "color": "#1117d0",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "37",
+      "name": "Beta",
+      "slug": "beta",
+      "color": "#1117d0",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "39",
+      "name": "Pixel 8a",
+      "slug": "pixel-8a",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "43",
+      "name": "Third party apps and services",
+      "slug": "third-party-apps-and-services",
+      "color": "#994ce6",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "44",
+      "name": "GrapheneOS Info app",
+      "slug": "grapheneos-info-app",
+      "color": "#d57676",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "45",
+      "name": "Pixel 9",
+      "slug": "pixel-9",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "46",
+      "name": "Pixel 9 Pro",
+      "slug": "pixel-9-pro",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "47",
+      "name": "Pixel 9 Pro XL",
+      "slug": "pixel-9-pro-xl",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "48",
+      "name": "Pixel 9 Pro Fold",
+      "slug": "pixel-9-pro-fold",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "49",
+      "name": "Pixel 9a",
+      "slug": "pixel-9a",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "51",
+      "name": "Pixel 10",
+      "slug": "pixel-10",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "52",
+      "name": "Pixel 10 Pro",
+      "slug": "pixel-10-pro",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "53",
+      "name": "Pixel 10 Pro XL",
+      "slug": "pixel-10-pro-xl",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "54",
+      "name": "Pixel 10 Pro Fold",
+      "slug": "pixel-10-pro-fold",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    },
+    {
+      "id": "55",
+      "name": "Pixel 10a",
+      "slug": "pixel-10a",
+      "color": "#7659e8",
+      "icon": "",
+      "description": ""
+    }
+  ],
+  "fetchedAt": "2026-10-25T00:45:34Z",
+  "source": "flarum",
+  "url": "https://discuss.grapheneos.org",
+  "posts": [
+    {
+      "id": "11951",
+      "title": "AI generated text is forbidden with the exception of automated translation",
+      "author": "admin",
+      "authorUsername": "admin",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/CQOi36eSSHdO63Yz.png",
+      "score": 85,
+      "comments": 85,
+      "views": 2555,
+      "participantCount": 73,
+      "created": 1712505756,
+      "lastPostedAt": 1792839990,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": true,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation",
+      "media": [],
+      "text": "<p>Posting AI generated content in our community is only permitted for people who are using an automated translation tool to work around not being fluent in English. Use of a translation tool must be marked in either your user bio or the first post in a thread where you're using it. Use a dedicated translation tool, not a generic text generator like ChatGPT.</p>\n\n<p>AI generated text is still usually very easy for us to spot. Both spammers and malicious trolls are making more and more use of these tools to attack the project. We cannot distinguish people who do not believe they're causing any harm by using these tools from people using them maliciously. Posting walls of verbose text written in the tone of an expert by an AI with no actual understanding involved is harmful to our community. It wastes the time of moderators, developers and community members along with misleading people. People shouldn't have to waste their time responding to machine generated nonsense which comes across as a very serious but very misguided post.</p>\n\n<p>Suspensions for violating this rule will be permanent if the content wasn't marked as AI generated. These AI text generation tools are essentially optimized for generating plausible sounding misinformation and their use will be treated as malicious deception. Multiple accounts have been suspended for clearly using these tools without saying so. Please stop doing this. People invest a lot of time helping others in this community and do not want to waste their time responding to machine generated nonsense.</p>",
+      "replies": [
+        {
+          "id": "74404",
+          "number": 2,
+          "author": "admin",
+          "authorUsername": "admin",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/CQOi36eSSHdO63Yz.png",
+          "score": 0,
+          "created": 1712505759,
+          "parent": "11951",
+          "text": ""
+        },
+        {
+          "id": "74419",
+          "number": 3,
+          "author": "zzz",
+          "authorUsername": "zzz",
+          "authorAvatar": "",
+          "score": 20,
+          "created": 1712514200,
+          "parent": "11951",
+          "text": "<p>Thank you!<br>\nThis is an excellent model for other communities to follow.<br>\nMuch respect for this position.</p>"
+        },
+        {
+          "id": "74430",
+          "number": 4,
+          "author": "VAULT",
+          "authorUsername": "VAULT",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Ib68UrbrFh0uzHnt.png",
+          "score": 15,
+          "created": 1712522761,
+          "parent": "11951",
+          "text": "<p><span class=\"PostMention PostMention--deleted\" data-id=\"74403\"><i class=\"icon fas fa-reply\"></i>[unknown]</span> I never even imagined people would bother to do that... especially here, GOS is amazing!  The world seems so <em>broken</em> now...</p>  "
+        },
+        {
+          "id": "74797",
+          "number": 5,
+          "author": "DeletedUser549",
+          "authorUsername": "DeletedUser549",
+          "authorAvatar": "",
+          "score": 5,
+          "created": 1712811342,
+          "parent": "11951",
+          "text": "<p>I don't really understand why would someone want to attack an operating system project</p> "
+        },
+        {
+          "id": "74801",
+          "number": 6,
+          "author": "router99",
+          "authorUsername": "router99",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/siwFkkailTNbeABD.png",
+          "score": 7,
+          "created": 1712814813,
+          "parent": "11951",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/5\" class=\"PostMention\" data-id=\"74797\"><i class=\"icon fas fa-reply\"></i>DeletedUser549</a> Because if you saw something as a threat, you might want to attack it, too. It's easy to see why state actors would want to behave this way toward GOS.</p>"
+        },
+        {
+          "id": "74924",
+          "number": 7,
+          "author": "Xtreix",
+          "authorUsername": "Xtreix",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/0s3AV08kPNJXfr76.png",
+          "score": 6,
+          "created": 1712860526,
+          "parent": "11951",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/5\" class=\"PostMention\" data-id=\"74797\"><i class=\"icon fas fa-reply\"></i>DeletedUser549</a> In addition to nation state threat actors, there are companies, mainly vendors of falsely secure smartphones, who feel threatened by GOS to offer a much better quality free product that anyone can use.</p>"
+        },
+        {
+          "id": "81662",
+          "number": 8,
+          "author": "Subliminal",
+          "authorUsername": "Subliminal",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1716734714,
+          "parent": "11951",
+          "text": "<p>I did it to summarize important topics in long discussion threads so people could learn from the community in a concise manner. Idk about malicious actors but AI can be a very powerful teaching tool if used correctly. I won't do any more summaries if that's what the community wants though. Thanks</p>"
+        },
+        {
+          "id": "81670",
+          "number": 9,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 10,
+          "created": 1716737949,
+          "parent": "11951",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/8\" class=\"PostMention\" data-id=\"81662\"><i class=\"icon fas fa-reply\"></i>Subliminal</a> I won't do any more summaries if that's what the community wants though.</p></blockquote>\n\n<p>I think this community values precise correctness, which is not a feature of current LLMs.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/8\" class=\"PostMention\" data-id=\"81662\"><i class=\"icon fas fa-reply\"></i>Subliminal</a> AI can be a very powerful teaching tool if used correctly.</p></blockquote>\n\n<p>I think <strong><em>disclosure</em></strong> is an important part of correct use, at least at present.  If, for whatever reason, one is not comfortable disclosing <strong><em>at least</em></strong> which LLM was used to generate specific content, inflicting that content on unknowing readers, viewers, etc., is unethical.</p>"
+        },
+        {
+          "id": "81689",
+          "number": 10,
+          "author": "Subliminal",
+          "authorUsername": "Subliminal",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1716742017,
+          "parent": "11951",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/9\" class=\"PostMention\" data-id=\"81670\"><i class=\"icon fas fa-reply\"></i>de0u</a> when it comes to correctness of the LLM's I think you may be underestimating it's capabilities with newer models at accurately summarizing discussions like what is on this forum. But good point you are making concerning disclosure of which LLM is being used. I had used ChatGPT 4o and did notice that without prompting it for succinctness it will tend to be more verbose than needs to be, which may have led to an undesired amount of text for most people reading and can seem spammy</p>"
+        },
+        {
+          "id": "81695",
+          "number": 11,
+          "author": "Xtreix",
+          "authorUsername": "Xtreix",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/0s3AV08kPNJXfr76.png",
+          "score": 5,
+          "created": 1716743686,
+          "parent": "11951",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/10\" class=\"PostMention\" data-id=\"81689\"><i class=\"icon fas fa-reply\"></i>Subliminal</a> AI-generated text is visible, unnatural and has no place on a discussion forum in my opinion. It's not allowed for the reasons explained by <a href=\"https://discuss.grapheneos.org/u/admin\" class=\"UserMention\">@admin</a> anyway except for translation assistance.</p>"
+        },
+        {
+          "id": "81697",
+          "number": 12,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 9,
+          "created": 1716744323,
+          "parent": "11951",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/10\" class=\"PostMention\" data-id=\"81689\"><i class=\"icon fas fa-reply\"></i>Subliminal</a> When it comes to correctness of the LLM's I think you may be underestimating it's capabilities [...]</p></blockquote>\n\n<p>Or maybe not.  Now that you have \"come clean\", I will say that several days ago I nearly flagged your \"<a href=\"https://discuss.grapheneos.org/d/12898-just-got-a-pixel-and-installed-grapheneos-best-way-to-install-apps/25\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">App Installation Options</a>\" post for moderator investigation because it seemed like AI content: plausible if skimmed (that's what LLMs, or blarney generators, are good at), but not really right.</p>\n\n<p>Aurora can try to install an APK of the wrong architecture type.  That isn't really covered by \"potential for unreliable updates\" -- whatever that even means.  The \"how to use\" text for Obtanium is hardly instructive.</p>\n\n<p>If you find that kind of summary useful, you are free to use it.  But the April 7 policy statement at the top of this thread makes it very clear that the community as a whole does not find that kind of summary welcome.</p>\n\n<p>Meanwhile, aside from this forum, it is generally not clear that it is ethical to \"contribute\" LLM output without disclosing -- every time -- that it is LLM output.  People who want blarney know where to find blarney generators.</p>\n\n<p>Just my opinion!  I do not speak for the GrapheneOS project.</p>"
+        },
+        {
+          "id": "81698",
+          "number": 13,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 6,
+          "created": 1716744657,
+          "parent": "11951",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/12\" class=\"PostMention\" data-id=\"81697\"><i class=\"icon fas fa-reply\"></i>de0u</a> That was one of 2 posts which led us to believe AI generated content was being posted. We didn't issue a suspension but rather gave a warning by doing a 1 day suspension and immediately undoing it so that it would send a suspension email. We currently lack a way to send direct messages since we don't want to have direct messages between users here, only between users and moderators so we have to use suspensions even when we don't want to suspend someone. It's one of the few drawbacks of this forum software but it's still a much better fit than all other options we found.</p>"
+        },
+        {
+          "id": "81703",
+          "number": 14,
+          "author": "Subliminal",
+          "authorUsername": "Subliminal",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1716748999,
+          "parent": "11951",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/12\" class=\"PostMention\" data-id=\"81697\"><i class=\"icon fas fa-reply\"></i>de0u</a> Part of the reason I posted replies with AI analysis was to see how the community would react to LLM's being used in summary. Also, how this community in particular feels about the use of LLM's in general since they will be here with us to stay and are having profound impacts on society. Since I have been using it on my own to get an idea of what is being discussed without having to read the entire forum post, I just posted it to see if others would find it helpful. Someone commented thanking for the summary so I guess someone did. If anything is helpful from this exchange maybe others will use it in the same way I have (for personal use). But, yes I come clean and won't post anymore LLM content. Thanks for your understanding.</p>"
+        },
+        {
+          "id": "81708",
+          "number": 15,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 12,
+          "created": 1716753075,
+          "parent": "11951",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/14\" class=\"PostMention\" data-id=\"81703\"><i class=\"icon fas fa-reply\"></i>Subliminal</a> Part of the reason I posted replies with AI analysis was to see how the community would react to LLM's being used in summary.</p></blockquote>\n\n<p>If every week somebody decides to run the same experiment -- undisclosed -- the result would be pretty annoying.  Nobody here has agreed to serve as involuntary experimental subjects for LLM enthusiasts.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/14\" class=\"PostMention\" data-id=\"81703\"><i class=\"icon fas fa-reply\"></i>Subliminal</a> [LLMs] will be here with us to stay and are having profound impacts on society.</p></blockquote>\n\n<p>Ransomware may be here to stay as well, but that doesn't mean everybody is entitled to experimentally deploy ransomware on unwilling people to measure exactly how each individual recipient feels about it.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/14\" class=\"PostMention\" data-id=\"81703\"><i class=\"icon fas fa-reply\"></i>Subliminal</a> Thanks for your understanding.</p></blockquote>\n\n<p>If people are asking for understanding, I hope people will understand <strong><em>and act on</em></strong> the stated policy.  I appreciate your stated future adherence, but it is important that others understand that re-running this experiment next month would also be unwelcome.</p>\n\n<p>Again, nobody here has agreed to serve as involuntary experimental subjects for LLM enthusiasts.</p>"
+        },
+        {
+          "id": "81709",
+          "number": 16,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 38,
+          "created": 1716754879,
+          "parent": "11951",
+          "text": "<p>OpenAI has stolen our work without respecting the licenses along with the work of many others. They expect copyright to apply to their own output but don't respect it for others. Their tools are plausible nonsense generators optimized for convincing people that it's accurate rather than it being at all accurate. The tools have no actual understanding of the material or reasoning ability. It's certainly good at influencing people and optimizing the spreading of misinformation, which will have a huge impact on everyone, but we're not going to welcome it here.</p>"
+        },
+        {
+          "id": "82191",
+          "number": 18,
+          "author": "popsicleman",
+          "authorUsername": "popsicleman",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1717026510,
+          "parent": "11951",
+          "text": "<p>Modern language processing with artificial-intelligence certainly has its benefits for translation and potentially aiding in frustration of stylometric analysis to attack user anonymity.</p> \n\n<p>Among its most popular use-case involve generating absolute nonsense ad-museum I cannot fault policies discouraging their use.  LLMs cannot discern fact from fiction and those who believe otherwise are mistaken.</p>"
+        },
+        {
+          "id": "100976",
+          "number": 23,
+          "author": "missing-root",
+          "authorUsername": "missing-root",
+          "authorAvatar": "",
+          "score": 9,
+          "created": 1726778965,
+          "parent": "11951",
+          "text": "<p>I was in an \"AI workshop\" today and cant stress enough how important this rule is.</p>\n\n<p>There may be many use cases like code review, documentation etc. But spamming people with garbage text is not cool.</p>"
+        },
+        {
+          "id": "107813",
+          "number": 24,
+          "author": "nullable",
+          "authorUsername": "nullable",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1729822685,
+          "parent": "11951",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/23\" class=\"PostMention\" data-id=\"100976\"><i class=\"icon fas fa-reply\"></i>missing-root</a> reminds me of a video i watched on youtube that's very relevant here.</p>\n\n<p><a href=\"https://en.m.wikipedia.org/wiki/Apophenia\" rel=\"ugc nofollow\">https://en.m.wikipedia.org/wiki/Apophenia</a></p> \n\n<p>Apparently places like Pubmed and the Nation Library of Medicine, are filled with journal publications created by AI (at least in part)</p>\n\n<p>Research studies by all types of \"experts\", (whom i like to dub as Psuedo Experts, ((not Tsudo, sudo or Soodo, or even Suedo))) are being sent out into fields that deal with our health.. so we are basically getting a dose of AI one way or another. sooner than later.</p> \n\n<p>I dont ever recommend channels or products these days but this guy is making a huge youtube calling just from ppl like us. Thanks GOOG .<br>\n<a href=\"https://m.youtube.com/watch?v=oT0jNiPrOEc&amp;pp=ygUVVXBwZXIgZWNoZWxvbiBwdWIgbWVk\" rel=\"ugc nofollow\">https://m.youtube.com/watch?v=oT0jNiPrOEc&amp;pp=ygUVVXBwZXIgZWNoZWxvbiBwdWIgbWVk</a></p>\n"
+        },
+        {
+          "id": "136695",
+          "number": 31,
+          "author": "SirWolf",
+          "authorUsername": "SirWolf",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/FsdGZbrG1SSGcDNZ.png",
+          "score": 2,
+          "created": 1741995476,
+          "parent": "11951",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/11951-ai-generated-text-is-forbidden-with-the-exception-of-automated-translation/24\" class=\"PostMention\" data-id=\"107813\"><i class=\"icon fas fa-reply\"></i>nullable</a> Cool video, but I won't avoid using a word just because it's overused by ChatGPT, when I find it appropriate in a given context. I won't let AI products negatively influence my word choices. And noone should. AI should be fixed, not us.</p>"
+        }
+      ]
+    },
+    {
+      "id": "8330",
+      "title": "App compatibility with GrapheneOS",
+      "author": "akc3n",
+      "authorUsername": "akc3n",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/xKqpBE9P45W2agHY.png",
+      "score": 223,
+      "comments": 223,
+      "views": 4340,
+      "participantCount": 124,
+      "created": 1697782707,
+      "lastPostedAt": 1792776359,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": true,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos",
+      "media": [],
+      "text": "<p>App compatibility is generally excellent on GrapheneOS. Nonetheless some apps may not function immediately, they suffer from bugs like memory corruption which our security features uncover as a byproduct. Others implement flawed security measures like Play Integrity or anti-tampering libraries that can cause issues. This thread lists various troubleshooting steps you can try which may make an affected app work.</p>\n\n<h3>Banking app compatibility with GrapheneOS</h3>\n<blockquote><p><em>A community-sourced effort containing <a href=\"https://privsec.dev/posts/android/banking-applications-compatibility-with-grapheneos/\" rel=\"ugc nofollow\">banking app compatibility</a> information is maintained by us. As we rely on user reports GrapheneOS can't make any guarantees regarding the list's validity.</em></p></blockquote>\n\n<p>To submit, view, and/or track compatibility with banking, government related and various identification apps on GrapheneOS, please use this <a href=\"https://github.com/PrivSec-dev/banking-apps-compat-report\" rel=\"ugc nofollow\">issue-tracker</a>.</p>\n\n<p><em>Quick shout-out to <a href=\"https://discuss.grapheneos.org/u/spring-onion\" class=\"UserMention\">@spring-onion</a> for maintaining and providing support for our banking app sub-project. Thank you for all your hard work and time you put into all this!</em></p>\n\n<h2>Possible solutions and steps to take</h2>\n\n<p>Note: An app may remember the previous conditions it ran under and may continue to show the same error message despite troubleshooting. To rule this out, clear the app's storage. This will cause data loss however, for banking and authentication apps in particular logging back in may require a new activation letter or similar measures.</p>\n\n<h3>1. Exploit protection compatibility mode</h3>\n\n<p>Enable the per-app <a href=\"https://grapheneos.org/usage#bugs-uncovered-by-security-features\" rel=\"ugc nofollow\">exploit protection compatibility mode</a>. Launch app.</p>  \n\n<p><code>Settings</code> ➔ <code>Apps</code> ➔ <code>App in question</code> ➔ <code>Exploit protection</code> ➔ <code>Exploit protection compatibility mode</code></p>\n\n<p>Exploit protection compatibility mode acts as a master toggle for all subsequent settings so if the app starts working again you can then start figuring out which setting(s) specifically it's having trouble with. For banking apps and the likes in particular, the following two settings cause the most problems:</p>\n\n<ul><li>Native code debugging, which can interfere with apps debugging their own code to add a barrier to analyzing their app.</li>\n<li>Secure app spawning, which is often flagged as suspicious by anti-tampering libraries.</li></ul>\n\n<h3>2. Aurora Store</h3>\n\n<p>For apps that are distributed through Google Play only we recommend to use <a href=\"https://grapheneos.org/usage#sandboxed-google-play\" rel=\"ugc nofollow\">Sandboxed Google Play</a> to obtain them. The Aurora Store may prove problematic for multiple reasons:</p>\n\n<ul><li><a href=\"https://gitlab.com/AuroraOSS/AuroraStore/-/blob/master/DISCLAIMER.md\" rel=\"ugc nofollow\">It violates Google Play's terms of service</a> and may cause used Google accounts to be disabled/blocked/blacklisted.</li>\n<li>It may not adhere to the same security standards that the Google Play Store enforces to validate the authenticity of app installations.</li>\n<li>Apps can check their install source and refuse to work if it's not the Google Play Store.</li>\n<li>The Play Store may act as a dependency to some apps.</li></ul>\n\n<h3>3. Play Integrity</h3>\n\n<p>GrapheneOS will notify you if an app uses Play Integrity. App developers who opt in to using the Play Integrity API can filter out and block devices that don't meet the Play Integrity requirements specified by their settings. The 3 main verdicts are:</p>\n\n<p><code>MEETS_BASIC_INTEGRITY</code>, <code>MEETS_DEVICE_INTEGRITY</code>, <code>MEETS_STRONG_INTEGRITY</code></p>\n\n<p>Despite widely praised as one of the most secure operating systems, GrapheneOS isn't certified by Google so it doesn't pass the latter two verdicts.</p>\n<blockquote><p>More often than not there is no direct solution available. You can help by reaching out to the affected apps' developers and explaining them what they can do to resolve it. It involves them whitelisting GrapheneOS through the much more powerful <a href=\"https://grapheneos.org/articles/attestation-compatibility-guide\" rel=\"ugc nofollow\">hardware attestation API</a>. We have <a href=\"https://github.com/PrivSec-dev/banking-apps-compat-report/issues/342\" rel=\"ugc nofollow\">a template on the PrivSec banking repository</a> you can use. It's worded around Play Integrity but can be easily adjusted if necessary. This may seem like a hopeless endeavour at first but there are multiple examples of banking apps and the likes that do explicitly support GrapheneOS.</p></blockquote>\n\n<p>In the meantime there are some edge cases to keep in mind that may apply to your situation:</p>\n\n<p>Some apps are configured in such a way that the Play Integrity check happens in the Google Play Store  (\"This app will not work for your device.\") but not within the app itself. They may ultimately run if you install them through the Aurora Store, which lets you circumvent this type of restriction. eBay is such an example.</p>\n\n<p>In some rare cases an app may be misconfigured and accept receiving no verdict at all as a permitted outcome.  You can bring about this state by blocking the app's usage of the Play Integrity API.</p>\n\n<p><code>Settings ➔ Apps ➔ App in question ➔ Advanced ➔ Play Integrity API ➔ Block usage attempts</code></p>\n\n<h2>4. Miscellaneous fixes</h2>\n\n<p>This is a list of peculiar fixes that apply to a subset of otherwise incompatible apps.</p> \n\n<p>An app may:</p>\n\n<ul><li>only run in the owner profile,</li>\n<li>dislike certain other installed apps which can include apps installed from anywhere but the Google Play Store,</li>\n<li>whitelist certain keyboard apps or require the default one to be active.</li></ul>",
+      "replies": [
+        {
+          "id": "48791",
+          "number": 2,
+          "author": "akc3n",
+          "authorUsername": "akc3n",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/xKqpBE9P45W2agHY.png",
+          "score": 0,
+          "created": 1697783823,
+          "parent": "8330",
+          "text": ""
+        },
+        {
+          "id": "48809",
+          "number": 3,
+          "author": "N1b",
+          "authorUsername": "N1b",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9j21BSOgwOuCIF02.png",
+          "score": 14,
+          "created": 1697794382,
+          "parent": "8330",
+          "text": "<p>Great guide, please leave it pinned for new people to always see.</p> \n\n<p>Also big thanks to all the mods here who spend a lot of time to share their knowledge, be available and organize the threads. This is my go-to tech forum because of the combined expertise and organization, thank you so much for this!</p> "
+        },
+        {
+          "id": "49107",
+          "number": 4,
+          "author": "Hanma1963",
+          "authorUsername": "Hanma1963",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1697914365,
+          "parent": "8330",
+          "text": "<p>Hi, I get a message \"An operating system modification (bootloader unlocking and/or rooting) has been detected on your device. Therefore, for security reasons, logging in cannot be performed.)\". Any workaround in this case? I followed GrapheneOS installation instructions, so bootloader is locked, but it seems like this app detects modification (<a href=\"https://www.oesterreich.gv.at/app-digitales-amt/faq/app_digitales_amt.html#fehler\" rel=\"ugc nofollow\">https://www.oesterreich.gv.at/app-digitales-amt/faq/app_digitales_amt.html#fehler</a>).</p>"
+        },
+        {
+          "id": "49121",
+          "number": 5,
+          "author": "akc3n",
+          "authorUsername": "akc3n",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/xKqpBE9P45W2agHY.png",
+          "score": 0,
+          "created": 1697920081,
+          "parent": "8330",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/4\" class=\"PostMention\" data-id=\"49107\"><i class=\"icon fas fa-reply\"></i>Hanma1963</a> An operating system modification (bootloader unlocking and/or rooting)</p></blockquote>\n\n<p>The error you're experiencing is not uncommon. It signifies that the app detects a non-stock operating system.</p>\n\n<blockquote><p>Any workaround in this case? I followed GrapheneOS installation instructions, so bootloader is locked, but it seems like this app detects modification</p></blockquote>\n\n<p>Could you kindly confirm that you've followed the steps in <em>this</em> guide too? If so, this app is likely not compatible. It is recommended that you contact the developers of the app with the instructions from last step titled <code>Next steps</code>.</p>"
+        },
+        {
+          "id": "49148",
+          "number": 6,
+          "author": "anonymous",
+          "authorUsername": "anonymous",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1697942854,
+          "parent": "8330",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/1\" class=\"PostMention\" data-id=\"48789\"><i class=\"icon fas fa-reply\"></i>akc3n</a> 12 — Please see the <a href=\"https://grapheneos.org/articles/attestation-compatibility-guide\" rel=\"ugc nofollow\">Attestation compatibility guide</a> on using remote attestation in a way that's compatible with GrapheneOS and how you can help.</p></blockquote>\n\n<p>Hello, Is there an API that somehow pings a list of approved Operating systems (to which OS developers can submit a request for their OS too) for apps like Banking apps, Premium apps, Health apps, etc. and uses Hardware attestation / server side checks to prevent tampering? Allowing only Operating systems approved by Google and just One third-party OS isn't Ideal.</p>"
+        },
+        {
+          "id": "49153",
+          "number": 7,
+          "author": "Hanma1963",
+          "authorUsername": "Hanma1963",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1697950703,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/5\" class=\"PostMention\" data-id=\"49121\"><i class=\"icon fas fa-reply\"></i>akc3n</a> Thanks for the answer. I followed the steps in your guide, i hope correctly. Will contact the app's developers.</p>"
+        },
+        {
+          "id": "49157",
+          "number": 8,
+          "author": "other8026",
+          "authorUsername": "other8026",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Fg12HujIhRCeMs3E.png",
+          "score": 1,
+          "created": 1697956277,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/6\" class=\"PostMention\" data-id=\"49148\"><i class=\"icon fas fa-reply\"></i>[deleted]</a> I admit I don't really know how this all works very well, but there's a very detailed article on the GrapheneOS website that covers this topic: <a href=\"https://grapheneos.org/articles/attestation-compatibility-guide\" rel=\"ugc nofollow\">https://grapheneos.org/articles/attestation-compatibility-guide</a></p>"
+        },
+        {
+          "id": "49228",
+          "number": 9,
+          "author": "Rhinos",
+          "authorUsername": "Rhinos",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1697988806,
+          "parent": "8330",
+          "text": "<p>Can these settings only be used for \"normal\" programs or for multiplayer players ? Or are there other settings recommended or necessary ?</p>"
+        },
+        {
+          "id": "49229",
+          "number": 10,
+          "author": "anonymous",
+          "authorUsername": "anonymous",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1697990832,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/9\" class=\"PostMention\" data-id=\"49228\"><i class=\"icon fas fa-reply\"></i>Rhinos</a> These sttings can be used to troubleshoot any application.</p>"
+        },
+        {
+          "id": "49309",
+          "number": 11,
+          "author": "Rhinos",
+          "authorUsername": "Rhinos",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1698041327,
+          "parent": "8330",
+          "text": "<p>Thanks for the info, because I get the game CSR 2 on my Google Pixel Tablet in multiplayer just not run and do not know what it is, I get no error message, nothing, it turns a wheel when I start this and endlessly, that's it !</p>"
+        },
+        {
+          "id": "49750",
+          "number": 12,
+          "author": "DaRon",
+          "authorUsername": "DaRon",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1698200451,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/7\" class=\"PostMention\" data-id=\"49153\"><i class=\"icon fas fa-reply\"></i>Hanma1963</a> hi, i did contact the \"Bürgerservice\" back in June already and this is what i got back (in July).<br>\n\"Wir analysieren aktuell, wie die App „Digitales Amt“ unter Einhaltung der rechtlichen und technischen Vorgaben auch auf Geräten mit anderen Systemen nutzbar werden kann. Wir berücksichtigen dabei gerne Ihre Inputs und bitten noch um etwas Geduld. \"</p>\n\n<p>In short: authorities/app devs will check if there is any possibility (legal and tech wise) to allow it on alternative OS as well.</p>\n\n<p>Yee, i did send them the link to the attestation-compatibility-guide...</p>\n\n<p>Hope that helps</p>"
+        },
+        {
+          "id": "49761",
+          "number": 13,
+          "author": "anonymous",
+          "authorUsername": "anonymous",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1698206140,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/8\" class=\"PostMention\" data-id=\"49157\"><i class=\"icon fas fa-reply\"></i>other8026</a> Yes but just allowing one Third-party OS (GrapheneOS) is not great at all. There should be an list of approved operating systems that can be used by sensitive applications.</p>"
+        },
+        {
+          "id": "50326",
+          "number": 14,
+          "author": "flgx",
+          "authorUsername": "flgx",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1698491609,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/u/akc3n\" class=\"UserMention\">@akc3n</a> FWIW there's a typo in step 2, \"Turning <strong>off</strong> the exploit protection compatibility toggle reduces system security\" should be turning <strong>on</strong></p>"
+        },
+        {
+          "id": "50329",
+          "number": 15,
+          "author": "akc3n",
+          "authorUsername": "akc3n",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/xKqpBE9P45W2agHY.png",
+          "score": 1,
+          "created": 1698493216,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/14\" class=\"PostMention\" data-id=\"50326\"><i class=\"icon fas fa-reply\"></i>flgx</a> thank you :-)</p>"
+        },
+        {
+          "id": "50338",
+          "number": 16,
+          "author": "anonymous",
+          "authorUsername": "anonymous",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1698497236,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/8\" class=\"PostMention\" data-id=\"49157\"><i class=\"icon fas fa-reply\"></i>other8026</a> Its good and detailed but not related to my query.</p>"
+        },
+        {
+          "id": "50349",
+          "number": 17,
+          "author": "other8026",
+          "authorUsername": "other8026",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Fg12HujIhRCeMs3E.png",
+          "score": 0,
+          "created": 1698503763,
+          "parent": "8330",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/16\" class=\"PostMention\" data-id=\"50338\"><i class=\"icon fas fa-reply\"></i>[deleted]</a> I guess I misunderstood then. And now that I see my response again, I linked the same link you quoted so my reply was kind of useless. But as far as I know, the APIs listed in the linked article (Play Integrity and SafetyNet) are the most common ones that apps use. It would be nice if there were a non-Google alternate that apps could use as well, but until one is available app devs would have to add OSes individually.</p>"
+        },
+        {
+          "id": "51200",
+          "number": 18,
+          "author": "WhoTheFuckisAlice",
+          "authorUsername": "WhoTheFuckisAlice",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1699081939,
+          "parent": "8330",
+          "text": "<p>Wonderful...</p> \n\n<p>ok I have here two Apps, where I should can do this BUT</p>\n\n<p>This is only practical when the Apps are installed in the owner Profil BECAUSE<br>\nif not and you have two Passwords with each 128 characters (This little bug that nobody can solve but god mother google herself, who doesn't think it's important to solve the problem) , do you know how many time it will cost to creat a little bug report no one will be solved, because the app dev doesn't give a shit if his app runs on a fringe product like GrapheneOS?</p>\n\n<p>Should I give a try?</p> \n\n<p>Sorry, but this is the reality...</p>"
+        },
+        {
+          "id": "51204",
+          "number": 19,
+          "author": "other8026",
+          "authorUsername": "other8026",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Fg12HujIhRCeMs3E.png",
+          "score": 1,
+          "created": 1699084824,
+          "parent": "8330",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/18\" class=\"PostMention\" data-id=\"51200\"><i class=\"icon fas fa-reply\"></i>WhoTheFuckisAlice</a> two Passwords with each 128 characters</p></blockquote>\n\n<p>Obviously you can do whatever you'd like with your phone, but it's not really necessary considering the secure element forces delays between password guesses if being brute forced. I've read project members say that a 6 digit PIN is enough. The only reason you'd be using such a long password is if you don't trust the secure element.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/18\" class=\"PostMention\" data-id=\"51200\"><i class=\"icon fas fa-reply\"></i>WhoTheFuckisAlice</a> This little bug that nobody can solve but god mother google herself, who doesn't think it's important to solve the problem</p></blockquote>\n\n<p>what little bug?</p>"
+        },
+        {
+          "id": "51241",
+          "number": 20,
+          "author": "WhoTheFuckisAlice",
+          "authorUsername": "WhoTheFuckisAlice",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1699109467,
+          "parent": "8330",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/19\" class=\"PostMention\" data-id=\"51204\"><i class=\"icon fas fa-reply\"></i>other8026</a> Obviously you can do whatever you'd like with your phone, but it's not really necessary considering the secure element forces delays between password guesses if being brute forced. I've read project members say that a 6 digit PIN is enough. The only reason you'd be using such a long password is if you don't trust the secure element.</p></blockquote>\n\n<p>This password is not the key for the encryption of the user data partition in every profile?<br>\nWhy do I still assign passwords when you can solve this so elegantly... every electronic device should have such a secure element. God bless your security management !</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/8330-app-compatibility-with-grapheneos/19\" class=\"PostMention\" data-id=\"51204\"><i class=\"icon fas fa-reply\"></i>other8026</a> what little bug?</p></blockquote>\n\n<p><a href=\"https://discuss.grapheneos.org/d/5731-bug-fingerprint-unlock-disabled-after-profile-change\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#5731</span></a><br>\n<a href=\"https://github.com/GrapheneOS/os-issue-tracker/issues/1611\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/os-issue-tracker/issues/1611</a></p> "
+        }
+      ]
+    },
+    {
+      "id": "41564",
+      "title": "Pixel 11 doesn't yet meet the GrapheneOS security standards and may be skipped",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 562,
+      "comments": 562,
+      "views": 5075,
+      "participantCount": 145,
+      "created": 1788020433,
+      "lastPostedAt": 1792755851,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": true,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped",
+      "media": [],
+      "text": "<p>We have a partial port of GrapheneOS to the Pixel 11 series after a week of work on it. We're unable to complete the port due to lack of support for ARM hardware memory tagging in software, firmware and potentially hardware. It appears Google cut an important security feature to save money.</p>\n\n<p>ARM hardware memory tagging (MTE) is used by GrapheneOS across the entire base OS including the kernel and every standard base OS process. It's only temporarily disabled for a few device-specific processes. It greatly improves protection against nearly all remote exploits and many local exploits.</p>\n\n<p>Pixel 8 launched with hardware MTE support in October 2023. We integrated it into our hardened_malloc project and began using it across the OS later that month. Android and the Pixel OS never started using it by default. Android Advanced Protection Mode in Android 16 enables it for a few processes.</p>\n\n<p>Apple's Memory Integrity Enforcement (MIE) is an always enabled feature on the iPhone 17. It's simply a high quality implementation of MTE using the latest standard extensions. It uses MTE in the most secure mode in the kernel and a large portion of userbase. They did a very good job integrating it.</p>\n\n<p>Apple's MIE and Android 16+ AAPM don't use MTE for user installed apps unless those explicitly opt in. GrapheneOS enables it for more apps automatically and has a toggle for users to opt-in for every user installed app. There's a per-app toggle to opt-out for incompatible apps which is uncommon.</p>\n\n<p>Neither iOS or Android encourage app developers to opt into MTE and other more aggressive security features used in the base OS. Apple's docs warn developers of performance and stability issues. Our approach enables forcing using MTE in the standard allocators regardless.</p>\n\n<p>Pixel 11 does have security improvements including moving to post-quantum secure verified boot (ML-DSA) and replacing Samsung Shannon IMS with AOSP IMS. Titan M3 should significantly improve protection against data extraction in Before First Unlock state. It's too bad they ruined it by cutting MTE.</p>\n\n<p>Pixel 11 series is a lot more expensive for an incremental improvement to the CPU, the same underpowered GPU and reduced RAM for the Pro base models. They finally caught up to the last generation of Qualcomm cellular radio. It's overpriced, the upgrades aren't impressive and losing MTE is appalling.</p>\n\n<p>Compared to the Pixel 11, a Snapdragon 8 Elite Gen 5 has ~40% higher single threaded CPU performance, <sub>80</sub>% higher multi threaded performance, over 100% higher GPU performance and a far better cellular radio. It also finally has MTE. The next gen is what will be in the first Motorola with GrapheneOS.</p>\n\n<p>Pixel 9a and earlier (including Nexus devices) were the Android Open Source Project reference devices. Pixel support was removed from AOSP with Android 16. It's now harder to support Pixels than many other devices and massive progress towards open source firmware and driver libraries was discarded.</p>\n\n<p>Compared to the stock Pixel OS, GrapheneOS ships AOSP patches months earlier and Linux kernel patches many months earlier. However, we rely on them for firmware and most driver updates. We also want to move to new kernel branches earlier. These things can be improved with our Motorola partnership.</p>\n\n<p>We strongly recommend against buying Pixel 11 devices. Pixel 8, 9 and 10 have much better overall security for GrapheneOS. Pixel 10 is cheaper with similar hardware and MTE. Pixel 11's Titan M3 should improve BFU security for users without a strong passphrase, but losing MTE craters AFU security.</p>\n\n<p>We haven't determined what to do about this situation. It may be best for us to skip the Pixel 11 series devices. We can shift our focus entirely to the upcoming Motorola devices instead. Pixel 10a was really a 9th gen Pixel, so hopefully the Pixel 11a does the same with 10th gen and includes MTE.</p>\n\n<hr>\n\n<p><a href=\"https://bsky.app/profile/grapheneos.org/post/3mua32q4ds22e\" rel=\"ugc nofollow\">https://bsky.app/profile/grapheneos.org/post/3mua32q4ds22e</a><br>\n<a href=\"https://grapheneos.social/@GrapheneOS/117179231167297908\" rel=\"ugc nofollow\">https://grapheneos.social/@GrapheneOS/117179231167297908</a><br>\n<a href=\"https://x.com/GrapheneOS/status/2093731615243411862\" rel=\"ugc nofollow\">https://x.com/GrapheneOS/status/2093731615243411862</a></p>",
+      "replies": [
+        {
+          "id": "263773",
+          "number": 2,
+          "author": "AtmosphericIgnition",
+          "authorUsername": "AtmosphericIgnition",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1788021090,
+          "parent": "41564",
+          "text": "<p>Is there a way to tell if the MTE hardware is physically present on the device, or if the firmware has it disabled and not exposed?</p>"
+        },
+        {
+          "id": "263775",
+          "number": 3,
+          "author": "DeletedUser1111",
+          "authorUsername": "DeletedUser1111",
+          "authorAvatar": "",
+          "score": 17,
+          "created": 1788021174,
+          "parent": "41564",
+          "text": "<p>I suggest that this thread should be pinned.</p>"
+        },
+        {
+          "id": "263778",
+          "number": 4,
+          "author": "MetropleX",
+          "authorUsername": "MetropleX",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8YQuNXEQt24PXpWX.png",
+          "score": 5,
+          "created": 1788021296,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/2\" class=\"PostMention\" data-id=\"263773\"><i class=\"icon fas fa-reply\"></i>AtmosphericIgnition</a>  current research points to not being present, however, per the above:</p>\n\n<blockquote><p>We're unable to complete the port due to lack of support for ARM hardware memory tagging in software, firmware and near certainly hardware.</p></blockquote>"
+        },
+        {
+          "id": "263779",
+          "number": 5,
+          "author": "MetropleX",
+          "authorUsername": "MetropleX",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8YQuNXEQt24PXpWX.png",
+          "score": 0,
+          "created": 1788021309,
+          "parent": "41564",
+          "text": ""
+        },
+        {
+          "id": "263783",
+          "number": 6,
+          "author": "xxx",
+          "authorUsername": "xxx",
+          "authorAvatar": "",
+          "score": 9,
+          "created": 1788021435,
+          "parent": "41564",
+          "text": "<p>Bummer! As we have the 10, 10a and the upcoming Moto it saves a lot of work. Shame on google.</p>"
+        },
+        {
+          "id": "263790",
+          "number": 7,
+          "author": "alonely0",
+          "authorUsername": "alonely0",
+          "authorAvatar": "",
+          "score": 16,
+          "created": 1788022474,
+          "parent": "41564",
+          "text": "<p>I would strongly prefer if we kept support for Pixels, given MTE is far from the only benefit of GOS, and we still support older models without it (even if for historical reasons).</p>\n\n<p>We are between a rock and a hard place, but I don't think it's necessarily preferable to bet it all on Motorola having phones with GOS support indefinitely. I'd rather we keep Pixels on the back-burner, even if on a Tier-2 sort of thing.</p>"
+        },
+        {
+          "id": "263797",
+          "number": 9,
+          "author": "Eirikr70",
+          "authorUsername": "Eirikr70",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/HefQXIZTH2ucXbIR.png",
+          "score": 1,
+          "created": 1788023645,
+          "parent": "41564",
+          "text": "<p>I'll still wait for the 11a praying! I might get a 10a then if it doesn't fit the bill!</p>"
+        },
+        {
+          "id": "263801",
+          "number": 11,
+          "author": "legreteco",
+          "authorUsername": "legreteco",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1788024169,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/9\" class=\"PostMention\" data-id=\"263797\"><i class=\"icon fas fa-reply\"></i>Eirikr70</a> the 11a will likely have the Tensor G6 as well, so I'd not bet on it.</p> "
+        },
+        {
+          "id": "263803",
+          "number": 12,
+          "author": "Breyyn",
+          "authorUsername": "Breyyn",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/oxET3o9kjp4waKVp.png",
+          "score": 5,
+          "created": 1788024274,
+          "parent": "41564",
+          "text": "<p>Very disappointed in this, wanted to get a 512GB Base Pixel 11 as the 512GB P10 Pro's in Canada are basically all out of stock everywhere unless paying retail price. Guess I'll have to suck it up and wait for a Moto. Shame on Google.</p>"
+        },
+        {
+          "id": "263804",
+          "number": 13,
+          "author": "GazelleInitial",
+          "authorUsername": "GazelleInitial",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1788024315,
+          "parent": "41564",
+          "text": "<p>Is it that big of a deal?  Most apps are disabled by default on mine for mte</p>"
+        },
+        {
+          "id": "263806",
+          "number": 14,
+          "author": "Sonic",
+          "authorUsername": "Sonic",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/nxl3wCRoyGmvt0mW.png",
+          "score": 30,
+          "created": 1788024435,
+          "parent": "41564",
+          "text": "<p>I believe the GrapheneOS foundation should not compromise on their security requirements. If the Pixel 11 series does not have MTE, then it should not be supported. Users who are not aware of the security regression in the Pixel 11 series might get one rather than an older, more secure model because people typically have the mindset that \"newer is better\".</p>\n\n<p>Please do not compromise on security because of Google. MTE is, to my knowledge, one of the strongest security features of GrapheneOS. It should always be present going forward.</p>"
+        },
+        {
+          "id": "263807",
+          "number": 15,
+          "author": "DeletedUser1111",
+          "authorUsername": "DeletedUser1111",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1788024754,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/13\" class=\"PostMention\" data-id=\"263804\"><i class=\"icon fas fa-reply\"></i>GazelleInitial</a> It's recommended to <a href=\"https://news.ycombinator.com/item?id=49491336\" rel=\"ugc nofollow\">enable MTE by default</a> (from the Owner profile) (last paragraph)</p>"
+        },
+        {
+          "id": "263808",
+          "number": 16,
+          "author": "GazelleInitial",
+          "authorUsername": "GazelleInitial",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1788025110,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/15\" class=\"PostMention\" data-id=\"263807\"><i class=\"icon fas fa-reply\"></i>DeletedUser1111</a> interesting. Done.<br>\nLet's see what I need to disable.</p>"
+        },
+        {
+          "id": "263810",
+          "number": 17,
+          "author": "ClickClickDrone",
+          "authorUsername": "ClickClickDrone",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/PTrM1Mmuj1OdC2uB.png",
+          "score": 14,
+          "created": 1788025538,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/7\" class=\"PostMention\" data-id=\"263790\"><i class=\"icon fas fa-reply\"></i>alonely0</a></p> \n\n<p>MTE is one of the minimum requirements for GrapheneOS going forward, and is a very important security improvement against memory corruption bugs.</p>\n\n<p>It makes no sense to give exceptions to that requirement, and MTE is now one of the standard expected features.</p>"
+        },
+        {
+          "id": "263813",
+          "number": 18,
+          "author": "Eirikr70",
+          "authorUsername": "Eirikr70",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/HefQXIZTH2ucXbIR.png",
+          "score": 3,
+          "created": 1788025877,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/17\" class=\"PostMention\" data-id=\"263810\"><i class=\"icon fas fa-reply\"></i>ClickClickDrone</a> Yes, just a pity that for a moment there will be only fairly expensive phones supporting GrapheneOS.</p>"
+        },
+        {
+          "id": "263814",
+          "number": 19,
+          "author": "Unkn0wn-3nt1ty",
+          "authorUsername": "Unkn0wn-3nt1ty",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1788025880,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/16\" class=\"PostMention\" data-id=\"263808\"><i class=\"icon fas fa-reply\"></i>GazelleInitial</a></p> \n\n<p>As someone whos done this from the start (and changes app iif lacking supporrt for MTE), ive maybe a handful of apps that dont support MTE. Good luck :)</p>"
+        },
+        {
+          "id": "263815",
+          "number": 20,
+          "author": "deltuzirtu",
+          "authorUsername": "deltuzirtu",
+          "authorAvatar": "",
+          "score": 5,
+          "created": 1788026064,
+          "parent": "41564",
+          "text": "<p>Maybe that's a good thing. Better to focus your attention on Motorola devices instead.</p>"
+        },
+        {
+          "id": "263818",
+          "number": 21,
+          "author": "Eagle_Owl",
+          "authorUsername": "Eagle_Owl",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/zHf0VBOdtOKOLq07.png",
+          "score": 3,
+          "created": 1788027404,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/13\" class=\"PostMention\" data-id=\"263804\"><i class=\"icon fas fa-reply\"></i>GazelleInitial</a> <br>\nOn my Pixel phones MTE is enabled for all apps.<br>\nAll apps are working fine.</p>\n\n<p><a href=\"https://discuss.grapheneos.org/u/GrapheneOS\" class=\"UserMention\">@GrapheneOS</a>: Yes, Apple has done a great job with its current CPU A19. But it's a shame that developers don't use it for their own apps. And it's a shame that Apple hasn't taken the opportunity to provide MacBook Neo users with this great protection against malware as well!</p>\n\n<p>No, the decision-makers at Apple are stupid, stingy, and greedy, because they're just giving customers the older A18. As an entry-level model, the MacBook Neo could have been the first \"desktop computer\" with real malware protection (there is nothing to stop MTE aka MIE from being brought to the next M chips).</p>\n\n<p>No, this is not off-topic, because I want to emphasize how important this protection mechanism is in today's world, where criminals have the security vulnerability examined by AI within a few hours immediately after the release of critical security updates and generate exploits fully automatically and thus attack every device on the same day that has not installed the security patch immediately (!).</p>\n\n<p>Conclusion: nowadays you can not longer do without MTE/MIE!</p>"
+        },
+        {
+          "id": "263819",
+          "number": 22,
+          "author": "Iceschillendrig",
+          "authorUsername": "Iceschillendrig",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/4fd0wdkvAFMhua9e.png",
+          "score": 2,
+          "created": 1788027508,
+          "parent": "41564",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/41564-pixel-11-doesnt-yet-meet-the-grapheneos-security-standards-and-may-be-skipped/12\" class=\"PostMention\" data-id=\"263803\"><i class=\"icon fas fa-reply\"></i>Breyyn</a> You can get a refurbished one online for a good price.</p>"
+        }
+      ]
+    },
+    {
+      "id": "9344",
+      "title": "Chat platforms",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 176,
+      "comments": 176,
+      "views": 2870,
+      "participantCount": 82,
+      "created": 1701648085,
+      "lastPostedAt": 1791856361,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": true,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/9344-chat-platforms",
+      "media": [],
+      "text": "<p>GrapheneOS has 2 main official chat platforms alongside the forum. You should consider to go along with the longer and more formal nature of the forum:</p>\n\n<ul><li><a href=\"https://discord.com/invite/grapheneos\" rel=\"ugc nofollow\">Discord server</a></li>\n<li><a href=\"https://matrix.to/#/#community:grapheneos.org\" rel=\"ugc nofollow\">Matrix space</a></li></ul>",
+      "replies": [
+        {
+          "id": "55281",
+          "number": 2,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 0,
+          "created": 1701648088,
+          "parent": "9344",
+          "text": ""
+        },
+        {
+          "id": "55326",
+          "number": 3,
+          "author": "bayesian",
+          "authorUsername": "bayesian",
+          "authorAvatar": "",
+          "score": 14,
+          "created": 1701691003,
+          "parent": "9344",
+          "text": "<p>Why not the simpleX group as well?</p>"
+        },
+        {
+          "id": "55334",
+          "number": 4,
+          "author": "anonymous",
+          "authorUsername": "anonymous",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1701694419,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/3\" class=\"PostMention\" data-id=\"55326\"><i class=\"icon fas fa-reply\"></i>bayesian</a> Its unrealistic for expecting them to be on every single platform.</p>"
+        },
+        {
+          "id": "55369",
+          "number": 5,
+          "author": "Hat",
+          "authorUsername": "Hat",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/55BzIIHrEhTyFYx2.png",
+          "score": 3,
+          "created": 1701717074,
+          "parent": "9344",
+          "text": "<p>An extension could be added to link the main chat Discord and this forum like <a href=\"https://discuss.flarum.org/d/17812-friendsofflarum-webhooks\" rel=\"ugc nofollow\">https://discuss.flarum.org/d/17812-friendsofflarum-webhooks</a> ?</p>"
+        },
+        {
+          "id": "55398",
+          "number": 6,
+          "author": "admin",
+          "authorUsername": "admin",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/CQOi36eSSHdO63Yz.png",
+          "score": 3,
+          "created": 1701743634,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/3\" class=\"PostMention\" data-id=\"55326\"><i class=\"icon fas fa-reply\"></i>bayesian</a> <a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/4\" class=\"PostMention\" data-id=\"55334\"><i class=\"icon fas fa-reply\"></i>[deleted]</a> It doesn't scale enough yet so it's not an option yet even if we had the resources to add another platform which we really don't.</p>"
+        },
+        {
+          "id": "55420",
+          "number": 8,
+          "author": "Nowediff",
+          "authorUsername": "Nowediff",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1701760650,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/1\" class=\"PostMention\" data-id=\"55280\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> Yeah, we got a few chat spots for ya. There's Discord, Telegram, and Matrix. Matrix needs a client and server pick, kinda like email. It's real private but can be slow sometimes. Had some hiccups with Matrix rooms but fixed things up. Discord's new, and Telegram got a makeover, so they're growing fast now.</p>"
+        },
+        {
+          "id": "55910",
+          "number": 9,
+          "author": "grapheine",
+          "authorUsername": "grapheine",
+          "authorAvatar": "",
+          "score": 4,
+          "created": 1702001780,
+          "parent": "9344",
+          "text": "<p>Telegram and discord both require a number to register, right?</p>"
+        },
+        {
+          "id": "55916",
+          "number": 10,
+          "author": "anonymous",
+          "authorUsername": "anonymous",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1702004812,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/9\" class=\"PostMention\" data-id=\"55910\"><i class=\"icon fas fa-reply\"></i>grapheine</a> You can sign up with Email on Discord I think</p>"
+        },
+        {
+          "id": "56084",
+          "number": 11,
+          "author": "ve3jlg",
+          "authorUsername": "ve3jlg",
+          "authorAvatar": "",
+          "score": 6,
+          "created": 1702100542,
+          "parent": "9344",
+          "text": "<p>I've read negative comments about Discord in privacy-related discussion groups. I'll pass for now.</p>"
+        },
+        {
+          "id": "56166",
+          "number": 12,
+          "author": "grapheine",
+          "authorUsername": "grapheine",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1702131269,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/10\" class=\"PostMention\" data-id=\"55916\"><i class=\"icon fas fa-reply\"></i>[deleted]</a> I tried. You can't verify by email, it was requiring a phone number. No thanks.</p> "
+        },
+        {
+          "id": "56168",
+          "number": 13,
+          "author": "treequell",
+          "authorUsername": "treequell",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/J5GaMyLCGPRBF6M2.png",
+          "score": 2,
+          "created": 1702131569,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/12\" class=\"PostMention\" data-id=\"56166\"><i class=\"icon fas fa-reply\"></i>grapheine</a> I was able to create a Discord account with only an email address fine, so it sounds a bit hit and miss.</p>"
+        },
+        {
+          "id": "56178",
+          "number": 14,
+          "author": "other8026",
+          "authorUsername": "other8026",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Fg12HujIhRCeMs3E.png",
+          "score": 4,
+          "created": 1702132884,
+          "parent": "9344",
+          "text": "<p>Same here. I registered on my phone while connected to a well-known VPN and just provided a SimpleLogin email alias to register. I was never asked for a phone number. Stumbled across a thing in the settings that tells you what your account standing is, and my account has an \"all good\" standing.</p>"
+        },
+        {
+          "id": "56231",
+          "number": 15,
+          "author": "grapheine",
+          "authorUsername": "grapheine",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1702165979,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/13\" class=\"PostMention\" data-id=\"56168\"><i class=\"icon fas fa-reply\"></i>treequell</a> sorry! You're right. I was trying to create an account through an invite link for a service provider. I created one through discord.com and was able to verify through email!</p>"
+        },
+        {
+          "id": "56353",
+          "number": 16,
+          "author": "christiee",
+          "authorUsername": "christiee",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1702221352,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/1\" class=\"PostMention\" data-id=\"55280\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> <br>\ni cant use element on phone <br>\nits unreadable due to the menu bar on left</p>"
+        },
+        {
+          "id": "56363",
+          "number": 17,
+          "author": "other8026",
+          "authorUsername": "other8026",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Fg12HujIhRCeMs3E.png",
+          "score": 2,
+          "created": 1702222328,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/16\" class=\"PostMention\" data-id=\"56353\"><i class=\"icon fas fa-reply\"></i>christiee</a> the menu bar with all the circular icons? That one should go away if you tap somewhere else. If it doesn't, that's an issue with Element, not GrapheneOS.</p>"
+        },
+        {
+          "id": "56811",
+          "number": 18,
+          "author": "anonymous",
+          "authorUsername": "anonymous",
+          "authorAvatar": "",
+          "score": 5,
+          "created": 1702461358,
+          "parent": "9344",
+          "text": "<p>Simply comment that, whatever platform you choose, it becomes very difficult to follow a conversation when they respond to you from another because a lot of garbage appears introduced by the manager.<br>\nIn my opinion you should choose a platform and use only one.</p>"
+        },
+        {
+          "id": "56816",
+          "number": 19,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 3,
+          "created": 1702463806,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/18\" class=\"PostMention\" data-id=\"56811\"><i class=\"icon fas fa-reply\"></i>[deleted]</a> It sounds like you're referring to the bridge software being used. Currently, Discord is unique in that the experience there is significantly better. We initially had the bridge set up the way it is right now, but had to go back to the way it's done on other platforms due to some issues.</p>\n\n<p>A community member has created a patch for the bridge software to fix these issues, so Discord is now back to using webhooks for the bridge. I encourage you to give the Discord side a shot (I believe you might already be in there) and see how you like it now.</p>"
+        },
+        {
+          "id": "56818",
+          "number": 20,
+          "author": "anonymous",
+          "authorUsername": "anonymous",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1702464513,
+          "parent": "9344",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/9344-chat-platforms/19\" class=\"PostMention\" data-id=\"56816\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a> It's very convenient to have it on Telegram, but I'll try it ;)</p>"
+        },
+        {
+          "id": "58509",
+          "number": 21,
+          "author": "aiss",
+          "authorUsername": "aiss",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1703398680,
+          "parent": "9344",
+          "text": "<p><a href=\"https://rvlt.gg/\" rel=\"ugc nofollow\">rvlt.gg</a> Open source alternatives to Discord<br>\n<a href=\"https://github.com/oxen-io\" rel=\"ugc nofollow\">session</a> No cell phone number, no e-mail, three-hop network.<br>\nMatrix has no categories. All the information is crowded into one room.<br>\nTelegram. It requires a cell phone number to invade privacy.</p>"
+        }
+      ]
+    },
+    {
+      "id": "40700",
+      "title": "GrapheneOS protections against data extraction from locked devices",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 90,
+      "comments": 90,
+      "views": 1610,
+      "participantCount": 46,
+      "created": 1785038772,
+      "lastPostedAt": 1790987699,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": true,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices",
+      "media": [],
+      "text": "<p>GrapheneOS has strong defenses against data extraction. It heavily builds upon the standard security features provided by Android 17 and the most secure hardware available for Android. Currently, only Pixels provide the hardware security features and updates required by GrapheneOS. That's going to change in 2027 thanks to our partnership with Motorola Mobility and progress being made by Qualcomm.</p>\n\n<p>Disk encryption provides strong protection for data. Even the most sophisticated attackers aren't going to be directly breaking it. They either need to exploit the OS while in After First Unlock state or brute force the PIN/password.</p>\n\n<p>Android 16 QPR2 calls for a secure element implementing rate limiting ramping up delays. It's 4 hours after 10 and 41 days after 15. Only 20 attempts are allowed. For usability, It rejects the most recent 5 unique failed attempts early to avoid wasting attempts on repeated errors. GrapheneOS only supports devices implementing the latest generation secure element rate limiting.</p>\n\n<p><a href=\"https://source.android.com/docs/security/features/authentication/rate-limiting\" rel=\"ugc nofollow\">https://source.android.com/docs/security/features/authentication/rate-limiting</a></p>\n\n<p>The secure element on the supported devices also has insider attack resistance. That's implemented by requiring the Owner user to successfully authenticate before the secure element firmware can be updated. A valid signing key and greater version number aren't enough alone. The purpose of this is preventing any government from bypassing the rate limiting by coercing the creation of a firmware update removing the rate limit.</p>\n\n<p>Pixels have used a secure element with an internal timer implementing rate limiting and insider attack resistance since the Pixel 2 launched near the end of 2017. Here's a post about this from back in 2018:</p>\n\n<p><a href=\"https://android-developers.googleblog.com/2018/05/insider-attack-resistance.html\" rel=\"ugc nofollow\">https://android-developers.googleblog.com/2018/05/insider-attack-resistance.html</a></p>\n\n<p>The secure element and integration into the OS has become far better since then, but it shows this goes back a long way and isn't a new feature.</p>\n\n<p>GrapheneOS also raises the character limit for passwords from 16 to 128. This enables using high entropy diceware passphrases not depending on the secure element rate limiting.</p>\n\n<p>To make a strong passphrase convenient to use without ruining it with biometric unlock, GrapheneOS adds an optional 2nd factor fingerprint PIN. We reduce the allowed fingerprint attempts from 20 to 5 and failure to enter the correct 2nd factor PIN counts towards it. This enables using 6-8 random diceware words as the main unlock method required in Before First Unlock and fingerprint+PIN using a short PIN for convenience. Using a valid fingerprint prompts to enter the 2nd factor PIN which is needed to complete unlocking the screen and hardware keystore.</p>\n\n<p>GrapheneOS greatly improves the exploit protections for the OS with hardened memory allocators and other features. It heavily uses hardware-based security features including hardware memory tagging (MTE) to protect against exploits. A partial overview of those protections is here:</p>\n\n<p><a href=\"https://grapheneos.org/features#exploit-protection\" rel=\"ugc nofollow\">https://grapheneos.org/features#exploit-protection</a></p>\n\n<p>GrapheneOS adds specialized protection against attacks with physical access too. For example, it blocks new USB connections at a software and hardware level by default while locked and disables USB data as soon as there are no active USB connections.</p>\n\n<p>GrapheneOS shipped a locked device auto-reboot timer back in June 2021. It can be set between 10 minutes and 72 hours. We enabled it by default using 72 hours and then lowered it 18 hours. It automatically returns the device to Before First Unlock state due to our memory zeroing as part of tearing down the OS and booting. We got Pixels to add memory zeroing for booting the firmware fastboot mode in April 2024. Apple and Google added a locked device auto-reboot timer in iOS 18.1 and Android 16. For Android, it can be enabled with the Android Advanced Protection Mode. Our implementation is better for multiple reasons but it's a useful feature regardless.</p>\n\n<p>Android uses separate encryption keys for each secondary user and Private Space. GrapheneOS adds support for putting both back into Before First Unlock state without a reboot via end session for secondary users or toggles for either to do it by default. It's still much better for the device to be rebooted to get the main user back at rest, completely clear leftover data from RAM and block secure element updates.</p>\n\n<p>Our duress PIN/password feature is a minor feature fitting into the bigger picture. It wipes the device when it's entered in any OS prompt for the current profile's PIN or password. It will wipe the device when entered into the authentication prompt for changing a sensitive setting or anything else requiring it, not only the lockscreen. It works across every profile including secondary users and Private Spaces, not only the main user. The duress PIN will also wipe the device when entered as a 2nd factor PIN for fingerprint unlock, but not a SIM PIN. It's currently an OS feature but is intended to be implemented in the secure element on future devices built to run GrapheneOS.</p>\n\n<p>Having a duress PIN/password provides protection against coercion. It's designed to work against adversaries fully aware of the feature existing. It's designed to create a dilemma for adversaries unable to tell apart a real unlock PIN/password from a duress PIN/password. The feature existing provides a form of protection against coercion for all GrapheneOS users against adversaries aware of it. Even people who aren't using it benefit from an adversary having to consider it. We want the feature to be widely known. We don't have any features depending on being unknown to adversaries.</p>\n\n<p>There are multiple ways to use the duress PIN/password feature including writing it down on a phone case or a paper kept in a wallet. People should carefully consider how to use it in an actual duress situation where there can be physical or legal consequences for wiping the device. GrapheneOS doesn't require it to protect data from being extracted from the device, but it takes recovering it completely off the table even with the PIN/password for each profile on the device.</p>\n\n<p>GrapheneOS doesn't depend on the duress PIN/password to protect user data. It's one of the tools it provides among the major privacy and security improvements it offers as a whole. Our features page provides an overview of what GrapheneOS offers compared to standard Android 17. It covers most of the major features we provide and many of the minor ones but there's also a lot more beyond it. Our release notes are a lot more exhaustive since we make sure to cover everything when it's added, changed or removed.</p>\n\n<p><a href=\"https://grapheneos.org/features\" rel=\"ugc nofollow\">https://grapheneos.org/features</a><br>\n<a href=\"https://grapheneos.org/releases#changelog\" rel=\"ugc nofollow\">https://grapheneos.org/releases#changelog</a></p>\n",
+      "replies": [
+        {
+          "id": "256470",
+          "number": 2,
+          "author": "skully373",
+          "authorUsername": "skully373",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/piWzj3tLZsYbFwH2.png",
+          "score": 9,
+          "created": 1785042082,
+          "parent": "40700",
+          "text": "<p>Is it in the road map to add the ability to do a long password for BFU unlock and then only PIN for AFU as opposed to requiring a fingerprint and PIN for the 2FA? For some of us, our fingers get wrecked at work and fingerprint unlock often fails. So the ability to require a good password after reboot and just a PIN for regular use during the day would be an awesome feature addition.  Like how an encrypted Linux machine works. Complicated decryption password, convenient unlock password.</p>\n\n<p>Thank you for all your hard work.</p> "
+        },
+        {
+          "id": "256473",
+          "number": 3,
+          "author": "Matth",
+          "authorUsername": "Matth",
+          "authorAvatar": "",
+          "score": 9,
+          "created": 1785044579,
+          "parent": "40700",
+          "text": "<p>Since you might get into legal troubles in some cases, would a feature of adding a minor duress PIN, that does not wipe the device, but simply reboot it, be useful?</p>\n\n<p>I could imagine, where like at a border control, your phone might not be in your possession anymore, so you can’t reboot the device anymore. Giving out this PIN wouldn’t destroy evidence, yet making it much harder to exploit it.</p>"
+        },
+        {
+          "id": "256474",
+          "number": 4,
+          "author": "Notme",
+          "authorUsername": "Notme",
+          "authorAvatar": "",
+          "score": 8,
+          "created": 1785045725,
+          "parent": "40700",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/3\" class=\"PostMention\" data-id=\"256473\"><i class=\"icon fas fa-reply\"></i>Matth</a> your phone might not be in your possession anymore, so you can’t reboot the device anymore</p></blockquote>\n\n<p>There is a feature called auto-reboot exist.</p>\n\n<p><code>GrapheneOS shipped a locked device auto-reboot timer back in June 2021. It can be set between 10 minutes and 72 hours. We enabled it by default using 72 hours and then lowered it 18 hours. It automatically returns the device to Before First Unlock state due to our memory zeroing as part of tearing down the OS and booting.</code><br>\n<strong>Source :  OP.</strong></p>\n"
+        },
+        {
+          "id": "256475",
+          "number": 5,
+          "author": "Notme",
+          "authorUsername": "Notme",
+          "authorAvatar": "",
+          "score": 4,
+          "created": 1785045960,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/3\" class=\"PostMention\" data-id=\"256473\"><i class=\"icon fas fa-reply\"></i>Matth</a> also imagine it. <br>\nPolice:(they are on your face) Gimme passwd. <br>\nYou: (gives PIN)<br>\n <em>The phone reboots.</em> <br>\nYou: 😜<br>\nThe Police: oh well, it rebooted. Let's leave. We can't do anything.</p>\n\n<p>Edit:  Auto-reboot scenario.<br>\nPolice:(they are on your face) Gimme passwd.<br>\n <em>The phone reboots.</em> <br>\nYou: I didn't do anything.🤷</p>"
+        },
+        {
+          "id": "256476",
+          "number": 6,
+          "author": "FunkTastic",
+          "authorUsername": "FunkTastic",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/gkf1ndPwIn0x3LQA.png",
+          "score": 6,
+          "created": 1785046282,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/1\" class=\"PostMention\" data-id=\"256468\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> This thread should be pinned.</p>"
+        },
+        {
+          "id": "256480",
+          "number": 7,
+          "author": "DeletedUser1041",
+          "authorUsername": "DeletedUser1041",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1785049224,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/1\" class=\"PostMention\" data-id=\"256468\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> amazing writeup, thank you. How big of an attack surface is USB PD? I was wondering if there's a way to eliminate that with a toggle someday and just live with 5v charging rather than entirely disabling the charging port which is a more extreme but albeit very effective way to prevent USB PD attacks. To the best of my knowledge even with charging only its still there since it's not a standard data connection but I could be wrong.</p> "
+        },
+        {
+          "id": "256488",
+          "number": 8,
+          "author": "Pocketstar",
+          "authorUsername": "Pocketstar",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/oeU6bR1rRuJjArKE.png",
+          "score": 5,
+          "created": 1785051160,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/5\" class=\"PostMention\" data-id=\"256475\"><i class=\"icon fas fa-reply\"></i>Notme</a> Perhaps it might be a good idea to let them find the little paper with the duress pin stuck in the phone sleeve themselves, if they unlock it with the duress pin without you providing it yourself, it may keep you out of legal trouble? (Check your local laws on destroying evidence)</p>"
+        },
+        {
+          "id": "256489",
+          "number": 9,
+          "author": "FunkTastic",
+          "authorUsername": "FunkTastic",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/gkf1ndPwIn0x3LQA.png",
+          "score": 8,
+          "created": 1785051498,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/8\" class=\"PostMention\" data-id=\"256488\"><i class=\"icon fas fa-reply\"></i>Pocketstar</a> I have more cunning approach. I use both GrapheneOS and iOS, the latter for bank/gov apps. The PIN I use on iOS is set as duress on GrapheneOS. I don't turn away from surveillance cameras when entering it.</p>"
+        },
+        {
+          "id": "256490",
+          "number": 10,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 12,
+          "created": 1785052840,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/7\" class=\"PostMention\" data-id=\"256480\"><i class=\"icon fas fa-reply\"></i>DeletedUser1041</a> You can currently set USB-C to Off to fully disable charging and then set it back to Charging-only or Charging-only while locked when you want to charge it. You can still charge it while it's powered off or in charging, fastboot or recovery with it set to Off. You can also just pause it during boot at the verified boot screen. It's not going to end up stuck without power with no way to charge it.</p>"
+        },
+        {
+          "id": "256491",
+          "number": 11,
+          "author": "ProfessorMonks",
+          "authorUsername": "ProfessorMonks",
+          "authorAvatar": "",
+          "score": 6,
+          "created": 1785054706,
+          "parent": "40700",
+          "text": "<p>Did you write this article to reassert GrapheneOS' protections, in light of the recent headline? <a href=\"https://www.theguardian.com/us-news/2026/jul/23/cop-city-protester-phone\" rel=\"ugc nofollow\">https://www.theguardian.com/us-news/2026/jul/23/cop-city-protester-phone</a></p>\n\n<p>tl;dr - man is interrogated and put under duress to unlock device. He provides duress password which wipes the device.</p> \n\n<p>Interestingly, they put him on a watchlist for protesting a police training center but questioned him on CSAM (presumably as a pretext).</p>"
+        },
+        {
+          "id": "256503",
+          "number": 12,
+          "author": "MyIdentityIsntImportant",
+          "authorUsername": "MyIdentityIsntImportant",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/lC5l5EjKXOV6d9rs.png",
+          "score": 9,
+          "created": 1785060152,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/7\" class=\"PostMention\" data-id=\"256480\"><i class=\"icon fas fa-reply\"></i>DeletedUser1041</a> Just to drop this in here for anyone who might not have thought about it (just like I hadn't in the beginning), even with the USB port completely off, Pixels can be charged via wireless chargers as usual. So maybe getting a cheap-ish wireless charging pad might be worth it to some just for this reason alone.</p>"
+        },
+        {
+          "id": "256509",
+          "number": 15,
+          "author": "Pocketstar",
+          "authorUsername": "Pocketstar",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/oeU6bR1rRuJjArKE.png",
+          "score": 12,
+          "created": 1785062279,
+          "parent": "40700",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/11\" class=\"PostMention\" data-id=\"256491\"><i class=\"icon fas fa-reply\"></i>ProfessorMonks</a> Did you write this article to reassert GrapheneOS' protections, in light of the recent headline? <a href=\"https://www.theguardian.com/us-news/2026/jul/23/cop-city-protester-phone\" rel=\"ugc nofollow\">https://www.theguardian.com/us-news/2026/jul/23/cop-city-protester-phone</a></p>\n\n<p>tl;dr - man is interrogated and put under duress to unlock device. He provides duress password which wipes the device.</p> \n\n<p>Interestingly, they put him on a watchlist for protesting a police training center but questioned him on CSAM (presumably as a pretext).</p></blockquote>\n\n<p>This abuse of law enforcement is but one of many reasons why we have GrapheneOS; in order to protect ourselves against this form of government corruption.<br>\nIt also prevents dissidents (like women in some countries) from getting imprisoned in corrupt countries and it protects whistleblowers. The GrapheneOS developers are the protectors of these lives, I cannot praise them enough for it.</p>"
+        },
+        {
+          "id": "256510",
+          "number": 16,
+          "author": "Handlebar6933",
+          "authorUsername": "Handlebar6933",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1785062486,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/2\" class=\"PostMention\" data-id=\"256470\"><i class=\"icon fas fa-reply\"></i>skully373</a> Yes please! Some of us cannot afford to get the newer ultrasonic fingerprint Pixels, so we often get locked out while in the middle of the street or even when trying to pay for something. In those situations, having a complex password can be a great inconvenience. However, we still want to have the best protection against BFU brute force attacks.</p> "
+        },
+        {
+          "id": "256513",
+          "number": 17,
+          "author": "Handlebar6933",
+          "authorUsername": "Handlebar6933",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1785062799,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/1\" class=\"PostMention\" data-id=\"256468\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> As <a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/2\" class=\"PostMention\" data-id=\"256470\"><i class=\"icon fas fa-reply\"></i>skully373</a> mentioned, separate BFU and AFU credentials would be great for those of us who frequently get locked out of biometric login.</p> "
+        },
+        {
+          "id": "256591",
+          "number": 18,
+          "author": "Hat",
+          "authorUsername": "Hat",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/55BzIIHrEhTyFYx2.png",
+          "score": 1,
+          "created": 1785086007,
+          "parent": "40700",
+          "text": "<p>Could you please explain the data protection measures that apply to unlocked devices? How does it defend itself when plugged into a corrupt device, such as a car or a screen?</p>\n\n<p>For example, the desktop mode automatically launches on Android 17 when the Pixel is plugged in, with the screen controlling the USB.</p>"
+        },
+        {
+          "id": "256607",
+          "number": 19,
+          "author": "DeletedUser1041",
+          "authorUsername": "DeletedUser1041",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1785092860,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/12\" class=\"PostMention\" data-id=\"256503\"><i class=\"icon fas fa-reply\"></i>MyIdentityIsntImportant</a> that's really interesting, thank you.</p> "
+        },
+        {
+          "id": "256643",
+          "number": 27,
+          "author": "ejns",
+          "authorUsername": "ejns",
+          "authorAvatar": "",
+          "score": 4,
+          "created": 1785105125,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/8\" class=\"PostMention\" data-id=\"256488\"><i class=\"icon fas fa-reply\"></i>Pocketstar</a> My plan, for if/when I'm in this scenario, is to not give my unlock code, and tell them a duress pin is set. Now you have a 50/50 shot at unlocking or wiping it if you try to brute force it. Wanna play?</p> \n\n<p>Of course, the rate limit would kick in before it became fun. 🤷‍♂️</p>\n\n\n\n"
+        },
+        {
+          "id": "256650",
+          "number": 28,
+          "author": "Pocketstar",
+          "authorUsername": "Pocketstar",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/oeU6bR1rRuJjArKE.png",
+          "score": 9,
+          "created": 1785109750,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/27\" class=\"PostMention\" data-id=\"256643\"><i class=\"icon fas fa-reply\"></i>ejns</a> <br>\nI know it can be tempting to do this, but it is best practice to provide as little information as possible in order to optimize security, especially when lives depend on it, especially with corruption at play. The less people know the better.<br>\nDenying can be used as evidence as much as admitting can in an interview/interrogation.<br>\nBest not to share any tactics at all with enemies like corrupt law enforcers or worse, playing games with them can introduce all sort of caviats in the law they can use against you or use as psychological operations to break one's mind, furthermore, they can draw a profile of you based on how you play dare with law enforcement. (Which can haunt you in court afterwards, it may not look good in front of a jury)<br>\nSimply give them nothing to work with, the less you provide, the less they can use against you.<br>\nBest to say nothing and ask for a lawyer.<br>\nNo offence, bit I'm just saying this to keep you and others as safe as possible when confronted with folk that are not interested in human rights.</p>"
+        },
+        {
+          "id": "256652",
+          "number": 29,
+          "author": "ejns",
+          "authorUsername": "ejns",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1785112244,
+          "parent": "40700",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/40700-grapheneos-protections-against-data-extraction-from-locked-devices/28\" class=\"PostMention\" data-id=\"256650\"><i class=\"icon fas fa-reply\"></i>Pocketstar</a> Fair enough; you're right. Best not to play games in these situations.</p>"
+        }
+      ]
+    },
+    {
+      "id": "27068",
+      "title": "GrapheneOS security preview releases",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 103,
+      "comments": 103,
+      "views": 1960,
+      "participantCount": 56,
+      "created": 1759594850,
+      "lastPostedAt": 1788339437,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": true,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases",
+      "media": [],
+      "text": "<p>Our security preview releases provide early access to Android Security Bulletin patches prior to the official disclosure. Our current security preview releases provide the current revision of the November 2025 and December 2025 patches for the Android Open Source Project. We recommend enabling this.</p>\n\n<p>The only difference between our regular releases and security preview releases are the future Android Security Bulletin patches being applied with any conflicts resolved. The downside of security preview releases is we cannot provide the sources for the patches until the official disclosure date.</p>\n\n<p>The delay for being able to publish the sources is why we're now going through the significant effort of building 2 variants of each release. Our most recent 3 releases have both a regular and security preview variant:</p>\n\n<p>2025092500 and 2025092501<br>\n2025092700 and 2025092701<br>\n2025100300 and 2025100301</p>\n\n<p>You can enable security preview releases via Settings &gt; System &gt; System update &gt; Receive security preview releases.</p>\n\n<p>Our plan is to keep it off-by-default with a new page added to the Setup Wizard which will have it toggled on as a recommendation. We'll prompt users on existing installs to choose.</p>\n\n<p>We're maintaining the upcoming Android security patches in a private repository where we've resolved the conflicts. Each of our security preview releases is tagged in this private repository. Our plan is to publish what we used once the embargo ends, so it will still be open source, but delayed.</p>\n\n<p>The new security update Android is using provides around 3 months of early access to OEMs with permission to make binary-only releases from the beginning. As far as we know, GrapheneOS is the first to take advantage of this and ship the patches early. Even the stock Pixel OS isn't doing this yet.</p>\n\n<p>During the initial month, many patches are added or changed. By around the end of the month, the patches are finalized with nothing else being added or changed. Our 2025092500 release was made on the day the December 2025 patches were finalized, but we plan to ship the March 2026 patches earlier.</p>\n\n<p>Previously, Android had monthly security patches with a 1 month embargo not permitting early releases. For GrapheneOS users enabling security preview releases, you'll get patches significantly earlier than before. We'd greatly prefer 3 day embargoes over 3 month embargoes but it's not our decision.</p>\n\n<hr>\n\n<p>Android Security Bulletin (ASB) for October 2025 is empty:</p>\n\n<p><a href=\"https://source.android.com/docs/security/bulletin/2025-10-01\" rel=\"ugc nofollow\">https://source.android.com/docs/security/bulletin/2025-10-01</a></p>\n\n<p>However, you can see Samsung has a list of ASB patches for their October 2025 release exclusive to flagships:</p>\n\n<p><a href=\"https://security.samsungmobile.com/securityUpdate.smsb\" rel=\"ugc nofollow\">https://security.samsungmobile.com/securityUpdate.smsb</a></p>\n\n<p>It's a small subset of the December 2025 patches.</p>\n\n<p>Android now discloses patches around 3 months prior to their inclusion in a bulletin requiring them to raise the Android security patch level. However, OEMs are allowed to ship the patches as soon as they're receive. We're doing this in our security preview release, but with the full set of patches.</p>\n\n<p>Our initial security preview release on September 25th with the November/December patches included 1 Critical severity patch and 54 High severity patches, which is the full subset applicable to Android 16. In the past couple days, 5 patches applicable to Android 16 were added and 1 was retracted.</p>\n\n<p>December 2025 patches from the past couple days have been included and the January 2026 preview is now available.</p>\n\n<p>Our next release coming today provides a choice to use our security preview releases in the initial setup wizard with a notification for existing users. Opting into it is recommended.</p>\n\n<p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#27068</span></a> provides more information on our security preview releases. The reason we're providing both regular and security preview releases is because we're required to wait to the embargo end date to publish the source code for the patches in the future bulletins.</p>\n",
+      "replies": [
+        {
+          "id": "177097",
+          "number": 2,
+          "author": "userofgos",
+          "authorUsername": "userofgos",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/VHnAok9JwqO2ReCw.png",
+          "score": 19,
+          "created": 1759597509,
+          "parent": "27068",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/1\" class=\"PostMention\" data-id=\"177089\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> As far as we know, GrapheneOS is the first to take advantage of this and ship the patches early. Even the stock Pixel OS isn't doing this yet.</p></blockquote>\n\n<p>Incredible work! Appreciate your dedication to the security of our devices.</p>"
+        },
+        {
+          "id": "177099",
+          "number": 3,
+          "author": "Vuraze",
+          "authorUsername": "Vuraze",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/eeVxb9rL3w3D6Vq9.png",
+          "score": 1,
+          "created": 1759597911,
+          "parent": "27068",
+          "text": "<p>I was told that the embargo may end soon if someone was able to reverse engineer the security patches and release it with the source code, effectively showing Google how silly this whole thing is. Is that true, and has anyone done that yet?</p>"
+        },
+        {
+          "id": "177101",
+          "number": 4,
+          "author": "userofgos",
+          "authorUsername": "userofgos",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/VHnAok9JwqO2ReCw.png",
+          "score": 1,
+          "created": 1759599186,
+          "parent": "27068",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/3\" class=\"PostMention\" data-id=\"177099\"><i class=\"icon fas fa-reply\"></i>Vuraze</a> This post from GrapheneOS on X maybe insightful: <a href=\"https://xcancel.com/GrapheneOS/status/1964754118653952027\" rel=\"ugc nofollow\">https://xcancel.com/GrapheneOS/status/1964754118653952027</a></p>\n\n<p>Here's a snippet from that thread:</p>\n\n<blockquote><p>We can't break the embargo ourselves but if someone posted the patches publicly we would be able to ship them months early, as would others. The patches are broadly distributed to OEMs where most of their engineers have access. Companies like NSO can easily obtain access. It's not a safe system.</p></blockquote>"
+        },
+        {
+          "id": "177111",
+          "number": 5,
+          "author": "Panda-na",
+          "authorUsername": "Panda-na",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1759603820,
+          "parent": "27068",
+          "text": "<p>Thank you for your hard work! I've enabled the Security Preview Release, having no issues.</p> \n\n<p>One question though. With all of these longer embargoes, fewer people will be able to review the code. Can this be an easier way for Google to implement anti-privacy practices in Android? And also, is this maybe some sort of way to help law enforcement break into Android phones, since problably most Android phones out there (even new flagships) is not updated with the newest CVE's, but maybe Cellebrite can get a hold of the patches? Making their work substantially easier?</p> \n\n<p>Are you checking the code of these CVE's to ensure that it is in our best interest? Maybe I'm completely wrong here, if so, I'm sorry, I'm just curious.</p> "
+        },
+        {
+          "id": "177114",
+          "number": 6,
+          "author": "NetRunner88",
+          "authorUsername": "NetRunner88",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/SzE4QRXJGnHKw7AB.png",
+          "score": 3,
+          "created": 1759605066,
+          "parent": "27068",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/1\" class=\"PostMention\" data-id=\"177089\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> <br>\nA-W-E-S-O-M-E</p>"
+        },
+        {
+          "id": "177200",
+          "number": 7,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1759630820,
+          "parent": "27068",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/3\" class=\"PostMention\" data-id=\"177099\"><i class=\"icon fas fa-reply\"></i>Vuraze</a> I was told that the embargo may end soon if someone was able to reverse engineer the security patches and release it with the source code, effectively showing Google how silly this whole thing is. Is that true, and has anyone done that yet?</p></blockquote>\n\n<p>If that had already happened, then the post from the project account which began this thread would not have been necessary.</p>\n\n<p>As for what Google <strong><em>might</em></strong> do if people are energetic enough about reverse engineering, that can be discovered only if somebody does.</p>"
+        },
+        {
+          "id": "177201",
+          "number": 8,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 14,
+          "created": 1759631006,
+          "parent": "27068",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/3\" class=\"PostMention\" data-id=\"177099\"><i class=\"icon fas fa-reply\"></i>Vuraze</a> If people reverse engineer exactly what a patch does and publicly post about it, then that's public information not under an embargo. If people write a patch to fix it, that can be included.</p>\n\n<p>We already fixed one issue in the regular releases because a patch was publicly available elsewhere. We plan to do more of that by checking the external projects.</p>"
+        },
+        {
+          "id": "177202",
+          "number": 9,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 6,
+          "created": 1759631268,
+          "parent": "27068",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/5\" class=\"PostMention\" data-id=\"177111\"><i class=\"icon fas fa-reply\"></i>Panda-na</a> One question though. With all of these longer embargoes, fewer people will be able to review the code.</p></blockquote>\n\n<p>Because code that to fix a vulnerability replaces a truly tiny fraction of the code base, the vast majorit of the code is continuously as reviewable as it ever was.  Code that is <strong><em>temporarily</em></strong> non-generally-reviewable during each embargo period will be reviewable after the embargo is over.  The net decrease in reviewability is tiny.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/5\" class=\"PostMention\" data-id=\"177111\"><i class=\"icon fas fa-reply\"></i>Panda-na</a> Can this be an easier way for Google to implement anti-privacy practices in Android?</p></blockquote>\n\n<p>How?</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/5\" class=\"PostMention\" data-id=\"177111\"><i class=\"icon fas fa-reply\"></i>Panda-na</a> And also, is this maybe some sort of way to help law enforcement break into Android phones, since problably most Android phones out there (even new flagships) is not updated with the newest CVE's, but maybe Cellebrite can get a hold of the patches? Making their work substantially easier?</p></blockquote>\n\n<p>Cellebrite can already get into the vast majority of phones.  It is genuinely quite likely that they are capable of analyzing binaries, especially since they seem to be pretty good at breaking into WhatsApp.</p>"
+        },
+        {
+          "id": "177209",
+          "number": 10,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 7,
+          "created": 1759633944,
+          "parent": "27068",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/5\" class=\"PostMention\" data-id=\"177111\"><i class=\"icon fas fa-reply\"></i>Panda-na</a> Are you checking the code of these CVE's to ensure that it is in our best interest? Maybe I'm completely wrong here, if so, I'm sorry, I'm just curious.</p></blockquote>\n\n<p>I am having trouble following this line of questioning.</p>\n\n<ol><li><p>It is already the case that the GrapheneOS team ships firmware updates from Google for the cellular modem, Wi-Fi, Bluetooth, and the GPU.  The firmware is in binary form.  I don't expect the GrapheneOS team is frequently decompiling the firmware to determine what is being changed between releases.</p></li>\n\n<li><p>Before the current \"security preview\" setup, the GrapheneOS team has been shipping truly gigantic amounts of AOSP code from Google, with truly sweeping changes in at least the quarterly updates.  They have been taking some amount of care with this, but clearly not infinite care, because both Google and various external security researchers keep finding bugs that the GrapheneOS team hasn't found.</p></li></ol>\n\n<p>Given that imperfect situation, meaning a mixture of difficult-to-inspect binary blobs and impossible-to-fully-inspect source code, it's not clear why the new situation would present significant new concerns.  Some of the \"security preview\" fixes will be in binary blobs, and some of them will be in source code.  The ones that are in source code will be publicly disclosed at the end of each embargo period.</p>\n\n<p>Honestly perhaps the biggest threat posed to GrapheneOS users by the new scheme is that the GrapheneOS team will be maintaining two versions of the OS at the same time, which plausibly will stretch the development team thinner.</p>\n\n<p>Please note that I do not speak for the GrapheneOS project.</p>"
+        },
+        {
+          "id": "177255",
+          "number": 11,
+          "author": "ryrona",
+          "authorUsername": "ryrona",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1759652888,
+          "parent": "27068",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/1\" class=\"PostMention\" data-id=\"177089\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> Our plan is to publish what we used once the embargo ends, so it will still be open source, but delayed.</p></blockquote>\n\n<p>Does this mean it will be published in such a way that the release can be reproduced, like regular reproducible builds? Because being able to confirm the binary release corresponds to source code 3 months late is still way way better than not being able to confirm it at all.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/8\" class=\"PostMention\" data-id=\"177201\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> If people reverse engineer exactly what a patch does and publicly post about it, then that's public information not under an embargo. If people write a patch to fix it, that can be included.</p></blockquote>\n\n<p>I tried asking a few times in the alpha testing channel on Matrix, but I try here too:</p>\n\n<p>Are we legally permitted to reverse engineer the OS images containing the embargoed patches? Ie are you legally allowed to allow reverse engineering of the OS images containing the embargoed patches, or the license terms for the embargoed patches that prohibit you from publishing them in source form also forces you to prohibit reverse engineering the binary releases of them?</p>\n\n<p>Are you able to provide the exact terms you have been granted access to the embargoed patches under and are able to publish them in binary form under? So we can verify the legality if reverse engineering them, both for our own sake, and for GrapheneOS sake? Or are the terms also under NDA?</p>"
+        },
+        {
+          "id": "177268",
+          "number": 12,
+          "author": "dhhdjbd",
+          "authorUsername": "dhhdjbd",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1759657311,
+          "parent": "27068",
+          "text": "<p>I think this should be a pinned post please?</p> \n\n<p>and i am wondering if default off is the correct approach / or if there is some option like a notification to inform users about this, considering 3 month late patches at worst seem significant</p> "
+        },
+        {
+          "id": "177280",
+          "number": 13,
+          "author": "de0u",
+          "authorUsername": "de0u",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1759668768,
+          "parent": "27068",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/11\" class=\"PostMention\" data-id=\"177255\"><i class=\"icon fas fa-reply\"></i>ryrona</a> Are we legally permitted to reverse engineer the OS images containing the embargoed patches?</p></blockquote>\n\n<p>I think that may be a question for an attorney.  For example, I believe I have heard that EU residents have reverse engineering rights that U.S. residents do not.</p>"
+        },
+        {
+          "id": "177303",
+          "number": 14,
+          "author": "Upstate1618",
+          "authorUsername": "Upstate1618",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1759679306,
+          "parent": "27068",
+          "text": "<p>Once we have early access to qpr, can we get an OS release earlier than aosp source release? Can we also get monthly aisp release?</p>"
+        },
+        {
+          "id": "177308",
+          "number": 15,
+          "author": "raccoondad",
+          "authorUsername": "raccoondad",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/ELV1G8apED3EhQ3i.png",
+          "score": 6,
+          "created": 1759680988,
+          "parent": "27068",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/1\" class=\"PostMention\" data-id=\"177089\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> your commitment to user choice and open source software is not overlooked, thank you GOS!</p>"
+        },
+        {
+          "id": "177314",
+          "number": 16,
+          "author": "ryrona",
+          "authorUsername": "ryrona",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1759685157,
+          "parent": "27068",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/13\" class=\"PostMention\" data-id=\"177280\"><i class=\"icon fas fa-reply\"></i>de0u</a> I think that may be a question for an attorney.  For example, I believe I have heard that EU residents have reverse engineering rights that U.S. residents do not.</p></blockquote>\n\n<p>No, I do not have the capability to involve an attorney, and I am not interested in if there is rights I have that override contracts or license terms.</p>\n\n<p>I am asking: What license is the GrapheneOS builds with the embargoed patches released under? Eg, if one of the patches were for a GPL-2 licensed component, those patches would also automatically be GPL-2 licensed, and reverse engineering them is expressively allowed, in fact, the publisher would have to give the patches to me. GrapheneOS account already confirmed no patch is for GPL-2 licensed code. If one of the patches is for a Apache-2.0 licensed component, the same is not true. If the component is purely compiled from Apache-2.0 licensed code, the binary is also licensed that way, but if some of the code is proprietary, so might the binary be.</p>\n\n<p>So I am asking, what license are the patches provided as? Proprietary? What license does the binaries have? Proprietary? Who owns the proprietary code and thus binaries? Google? In that case, under what license terms are the patches or binaries provided? Same as stock OS builds? Special license for builds with embargoed code?</p>"
+        },
+        {
+          "id": "177327",
+          "number": 17,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 12,
+          "created": 1759688649,
+          "parent": "27068",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/11\" class=\"PostMention\" data-id=\"177255\"><i class=\"icon fas fa-reply\"></i>ryrona</a></p> \n\n<blockquote><p>Does this mean it will be published in such a way that the release can be reproduced, like regular reproducible builds? Because being able to confirm the binary release corresponds to source code 3 months late is still way way better than not being able to confirm it at all.</p></blockquote>\n\n<p>Yes, it will be possible to reproduce the builds after the fact as can be done with the regular releases at launch. We've implemented the security preview releases by using the same sources we used for the regular releases and running a script which applies patches we've saved in a repository for the preview patches with the conflicts resolved by us in advance and a script to apply them. It also patches it into being a security preview release by renaming the channel metadata. We're tagging the security preview releases in this repository, so we can make a public variant of the repository where we push the same stuff once the embargo ends.</p>\n\n<blockquote><p>Are we legally permitted to reverse engineer the OS images containing the embargoed patches? Ie are you legally allowed to allow reverse engineering of the OS images containing the embargoed patches, or the license terms for the embargoed patches that prohibit you from publishing them in source form also forces you to prohibit reverse engineering the binary releases of them?</p></blockquote>\n\n<p>These patches are under the Apache 2 license and other permissive licenses. We're not allowed to publish them until the embargo ends due to the required NDA. We're restricted by NDA, not software licensing. There's no special license applied to the preview patches. It's open source code but shipped under an NDA disallowing publishing it before Google does.</p>\n\n<blockquote><p>Are you able to provide the exact terms you have been granted access to the embargoed patches under and are able to publish them in binary form under? So we can verify the legality if reverse engineering them, both for our own sake, and for GrapheneOS sake? Or are the terms also under NDA?</p></blockquote>\n\n<p>The terms with our OEM partner are not really under NDA, and neither is which OEM we're working with, but we don't want to publish which OEM we're working with until an official announcement with them. We'd also prefer if they make the announcement and we spread it because it would look better.</p>"
+        },
+        {
+          "id": "177328",
+          "number": 18,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 0,
+          "created": 1759688658,
+          "parent": "27068",
+          "text": ""
+        },
+        {
+          "id": "177329",
+          "number": 19,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 4,
+          "created": 1759688811,
+          "parent": "27068",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/16\" class=\"PostMention\" data-id=\"177314\"><i class=\"icon fas fa-reply\"></i>ryrona</a> The only GPL2 projects are external ones so we could use the upstream patches instead, which we already switched to doing for one of the patches and can potentially do for a few more. It's possible Android could share patches still not disclosed by external projects but it doesn't really happen in practice for GPLv2 code since there's hardly any of it beyond the Java standard libraries. The Linux kernel is out-of-scope for these patch previews since the kernel drivers are vendor patches and mainline patches are already public when they're included as things which must be fixed. The mainline patches are really meant to come from updating the LTS revision and Android has been moving towards requiring LTS revision updates but very slowly.</p>"
+        },
+        {
+          "id": "177339",
+          "number": 20,
+          "author": "ryrona",
+          "authorUsername": "ryrona",
+          "authorAvatar": "",
+          "score": 4,
+          "created": 1759691407,
+          "parent": "27068",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/27068-grapheneos-security-preview-releases/17\" class=\"PostMention\" data-id=\"177327\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> We're restricted by NDA, not software licensing. There's no special license applied to the preview patches. It's open source code but shipped under an NDA disallowing publishing it before Google does.</p></blockquote>\n\n<p>Okay. Thank you. That answers my question. I didn't sign any NDA, so the NDA doesn't apply to me. And Apache-2 license requires that any derivative work that is of different license terms must have this fact prominently displayed, which does not appear to be the case, so the compiled binaries are purely Apache-2 or other permissively licensed code, which expressively allows anyone to reproduce the work in source or binary form, which means reverse engineering is expressively permitted :)</p>"
+        }
+      ]
+    },
+    {
+      "id": "11",
+      "title": "GrapheneOS Code of Conduct",
+      "author": "Hulk",
+      "authorUsername": "Hulk",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/YlfyCuR42zvikf2M.png",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1654854013,
+      "lastPostedAt": 1654854013,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": true,
+      "locked": true,
+      "url": "https://discuss.grapheneos.org/d/11-grapheneos-code-of-conduct",
+      "media": [],
+      "text": "<p>GrapheneOS community members are committed to preserving and fostering a diverse, welcoming society. Below is our community code of conduct, which applies to our forums, chat rooms, issue trackers, and any other GrapheneOS-supported communication group, as well as any private communication initiated in the context of these spaces. Simply put, community discussions should be the following:</p>\n<ul><li>Respectful and kind</li>\n<li>About GrapheneOS</li>\n<li>About features and code, not the individuals involved</li></ul>\n\n<h3>Be respectful and constructive.</h3>\n\n<p>Treat everyone with respect. Build on each other's ideas. Each of us has the right to enjoy our experience and participate without fear of harassment, discrimination, or condescension, whether blatant or subtle. Remember that GrapheneOS project is a geographically distributed community and that you may not be communicating with someone in their primary language. We all get frustrated when working on hard problems, but we cannot allow that frustration to turn into personal attacks.</p>\n\n<h3>Harassment is not tolerated, including, but not limited to the following:</h3>\n\n<ul><li>Harassing comments</li>\n<li>Intimidation</li>\n<li>Encouraging a person to engage in self-harm</li>\n<li>Sustained disruption or derailing of threads, channels, lists, and similar forums</li>\n<li>Offensive or violent comments, jokes, or otherwise</li>\n<li>Inappropriate sexual content</li>\n<li>Unwelcome sexual or otherwise aggressive attention</li>\n<li>Continued one-on-one communication after requests to cease</li>\n<li>Distribution or threat of distribution of people's personally identifying information, also known as \"doxing.\"</li></ul>\n\n<p>Participants warned to stop any harassing behavior are expected to comply immediately. Failure to do so will result in an escalation of consequences.</p>\n\n<h3>Acknowledgments</h3>\n\n<p>This Code of Conduct is adapted from the Chromium Code of Conduct, based on the Geek Feminism Code of Conduct, the Django Code of Conduct, and the Geek Feminism Wiki \"Effective codes of conduct\" guide.</p>",
+      "replies": [
+        {
+          "id": "140",
+          "number": 2,
+          "author": "akc3n",
+          "authorUsername": "akc3n",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/xKqpBE9P45W2agHY.png",
+          "score": 0,
+          "created": 1654863358,
+          "parent": "11",
+          "text": ""
+        },
+        {
+          "id": "141",
+          "number": 3,
+          "author": "akc3n",
+          "authorUsername": "akc3n",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/xKqpBE9P45W2agHY.png",
+          "score": 0,
+          "created": 1654863366,
+          "parent": "11",
+          "text": ""
+        }
+      ]
+    },
+    {
+      "id": "42908",
+      "title": "What music streaming services are you using on GOS?",
+      "author": "WelcomeMilk89",
+      "authorUsername": "WelcomeMilk89",
+      "authorAvatar": "",
+      "score": 36,
+      "comments": 36,
+      "views": 945,
+      "participantCount": 27,
+      "created": 1792297664,
+      "lastPostedAt": 1792889053,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
+      "media": [],
+      "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
+      "replies": [
+        {
+          "id": "275668",
+          "number": 2,
+          "author": "Developer-Dude",
+          "authorUsername": "Developer-Dude",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/0e3xKlZFGMMPY9z2.png",
+          "score": 1,
+          "created": 1792297785,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/1\" class=\"PostMention\" data-id=\"275667\"><i class=\"icon fas fa-reply\"></i>WelcomeMilk89</a> you gotta check out Musify. Its amazing<br>\n<a href=\"https://github.com/gokadzev/Musify\" rel=\"ugc nofollow\">https://github.com/gokadzev/Musify</a></p>"
+        },
+        {
+          "id": "275673",
+          "number": 3,
+          "author": "dryfter",
+          "authorUsername": "dryfter",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/yrF3TPBIpC7APhhS.png",
+          "score": 0,
+          "created": 1792300983,
+          "parent": "42908",
+          "text": "<p>I was on Apple Music when I switched from iPhone. Then I switched to Qobuz due to their stance on AI music, only to find it's literally overrun by AI music. I just switched to Deezer (despite my feelings about ownership) and I'm loving it.</p>\n\n<p>As far as streaming without subscriptions, I use <a href=\"https://github.com/shapeshed/aerial\" rel=\"ugc nofollow\">Aerial</a> for internet radio.</p> "
+        },
+        {
+          "id": "275700",
+          "number": 4,
+          "author": "KitsuneNoBaka",
+          "authorUsername": "KitsuneNoBaka",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1792311921,
+          "parent": "42908",
+          "text": "<p>storage</p>"
+        },
+        {
+          "id": "275703",
+          "number": 5,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792313324,
+          "parent": "42908",
+          "text": "<p>I use <a href=\"https://www.extreamsd.com/index.php/products/usb-audio-player-pro\" rel=\"ugc nofollow\">UAPP (Universal Audio Player Pro)</a>. Supports local file playback &amp; streaming through Tidal and/or Qobuz. It also supports streaming from a self hosted DLNA server as well. You can add local playback &amp; Tidal/Qobuz tracks into the same playlists so you don't have to jump between apps/services for different albums/tracks. Only issue is it is proprietary but considering GrapheneOS has storage scopes that isn't a huge issue. I haven't been able to find <strong>any</strong> open-source music player that will play tracks bit-perfectly with USB DACs so I wouldn't recommend them as all your music will get resampled through Android's crappy audio stack You can either obtain UAPP through Google Play or <a href=\"https://www.extreamsd.com/index.php/direct-purchase\" rel=\"ugc nofollow\">direct purchase on their website</a>.</p>"
+        },
+        {
+          "id": "275704",
+          "number": 6,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792314113,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a> The DLNA server would probably be easier than running Navidrome as I heard that can be a pain to keep reliable especially on a laptop. You could also look into Roon for a complete solution as it has it's own mobile apps and integrates with high end AVRs and things like that but for the most straight forward way to run at home if you're wanting to \"stream\" your purchased files would be the DLNA server on your thinkpad with Tailscale (for external/not at home on the go access) and use UAPP on your phone, you'll get the added benefit of optionally streaming Tidal or Qobuz and integrate them into the same playlists as your purchased file also.</p>"
+        },
+        {
+          "id": "275723",
+          "number": 7,
+          "author": "AcclaimSublevel19",
+          "authorUsername": "AcclaimSublevel19",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792318478,
+          "parent": "42908",
+          "text": "<p>I've got a combination of streaming from my self-hosted Jellyfin instance via Finamp and from YouTube music via the excellent <a href=\"https://github.com/vivizzz007/vivi-music\" rel=\"ugc nofollow\">VIVI Music</a>. I have YouTube for discovery and then I download songs to my Jellyfin library.</p>"
+        },
+        {
+          "id": "275731",
+          "number": 8,
+          "author": "FunkTastic",
+          "authorUsername": "FunkTastic",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/gkf1ndPwIn0x3LQA.png",
+          "score": 0,
+          "created": 1792319294,
+          "parent": "42908",
+          "text": "<p>Youtube via NewPipe :)</p>\n"
+        },
+        {
+          "id": "275734",
+          "number": 9,
+          "author": "Buffering",
+          "authorUsername": "Buffering",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792319676,
+          "parent": "42908",
+          "text": "<p>YouTube via Grayjay.</p> "
+        },
+        {
+          "id": "275780",
+          "number": 10,
+          "author": "pynosh",
+          "authorUsername": "pynosh",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792331775,
+          "parent": "42908",
+          "text": "<p>I'm using Symfonium with Navidrome.</p> "
+        },
+        {
+          "id": "275795",
+          "number": 11,
+          "author": "MineralWater",
+          "authorUsername": "MineralWater",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792339414,
+          "parent": "42908",
+          "text": "<p>I use YouTube via the Echo App (or you can use Vivi and/ or Metrolist).</p> \n\n<p>These apps act like a streaming app, and they use what is on YouTube for free. So nothing illegal about using them.</p> \n\n<p>I don't listen to music often, so a paid service makes no sense to me.</p> \n\n<p>You can also use the Radio Caprice App from the play store, it's an radio app with channels that only play music without interruption and zero advertisement between or before songs. They have a channel for almost all genres you can think of.</p> \n\n"
+        },
+        {
+          "id": "275796",
+          "number": 12,
+          "author": "nuclear6476",
+          "authorUsername": "nuclear6476",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792339441,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a></p> \n\n<p>The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.<br>\n<a href=\"https://github.com/moss-apps/Flick\" rel=\"ugc nofollow\">https://github.com/moss-apps/Flick</a><br>\n<a href=\"https://github.com/Kdroidwin/MusicBeatSP\" rel=\"ugc nofollow\">https://github.com/Kdroidwin/MusicBeatSP</a></p>\n\n<p>Additionally, reTONE—which is scheduled for release soon—is likely not open source, but it appears it will be available for free without data collection or ads.<br>\n<a href=\"https://retone.iidapiano.store/\" rel=\"ugc nofollow\">https://retone.iidapiano.store/</a></p>\n"
+        },
+        {
+          "id": "275869",
+          "number": 13,
+          "author": "mar2112",
+          "authorUsername": "mar2112",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792356618,
+          "parent": "42908",
+          "text": "<p>MPD from my server.</p>"
+        },
+        {
+          "id": "275878",
+          "number": 14,
+          "author": "Jddjjddjsh",
+          "authorUsername": "Jddjjddjsh",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792361196,
+          "parent": "42908",
+          "text": "<p>I like Metrolist because it is only music and it has great UI.</p> "
+        },
+        {
+          "id": "275883",
+          "number": 15,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792363180,
+          "parent": "42908",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/12\" class=\"PostMention\" data-id=\"275796\"><i class=\"icon fas fa-reply\"></i>nuclear6476</a> The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.</p></blockquote>\n\n<p>Well there you go, I'll have to check these out. Thanks :)</p>"
+        },
+        {
+          "id": "275937",
+          "number": 16,
+          "author": "skully373",
+          "authorUsername": "skully373",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/piWzj3tLZsYbFwH2.png",
+          "score": 1,
+          "created": 1792384067,
+          "parent": "42908",
+          "text": "<p>Did you ever try Tidal? It's pretty great for a paid service. Huge library and awesome sound quality. I just wish Pixels handled LDAC better.</p>"
+        },
+        {
+          "id": "275943",
+          "number": 17,
+          "author": "schweizer",
+          "authorUsername": "schweizer",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792387216,
+          "parent": "42908",
+          "text": "<p>What makes you think Spotify is a shady company? They do not sell customer data and they are in public ownership. The income flows vastly into the music industry. It is not that buying CDs would support artists more. It is the labels that take a huge share. Switching the streaming service does not solve that problem.</p>\n\n<p>For me there are two features why i do not use my digitalized CD recordings any more:</p>\n<ul><li>Spotify connect lets me start music directly on the player. No interrupted bluetooth connections.</li>\n<li>I can do jams with family and friends.</li></ul>\n"
+        },
+        {
+          "id": "275955",
+          "number": 18,
+          "author": "four",
+          "authorUsername": "four",
+          "authorAvatar": "",
+          "score": 4,
+          "created": 1792391681,
+          "parent": "42908",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> What makes you think Spotify is a shady company?</p></blockquote>\n\n<p>I wouldn't say they're more shady than other surveillance capitalism companies, but any surveillance capitalism company is shady as hell.</p> \n\n<ul><li><p>They collect everything you do in the app. Searches, skips, interactions. They make inferences about your age, interests, preferences, and scans for other devices on your Wi-Fi.</p> </li>\n\n<li><p>They take data from marketing and ad partners and their inferences about you. And Spotify shares your data with those ad partners.</p> </li>\n<li><p>Personalized ads are enabled by default. If you opt out, you still get ads based on context of what you're listening to.</p></li>\n<li><p>Your listen history Is kept for the length of your account.</p> </li>\n<li><p>Your data including voice recordings, if you use them, can be used to train machine learning models and there's no opt-out.</p> </li>\n<li><p>They were fined by Sweden's data protection authority in 2023</p></li></ul>\n\n\n<p>Is this an inaccurate summary of their <a href=\"https://www.spotify.com/us/legal/privacy-policy/\" rel=\"ugc nofollow\">privacy practices</a> and history?</p>"
+        },
+        {
+          "id": "275962",
+          "number": 20,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 8,
+          "created": 1792393790,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> Well first off, excluding YouTube Music they pay the least to their artists out of all the streaming services.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> It is not that buying CDs would support artists more. It is the labels that take a huge share.</p></blockquote>\n\n<p>This is naive. Yes the labels take a huge share however I <em>personally</em> know many artists who receive a bigger portion of the income with CDs/Vinyl than they do on streaming services.10,000 streams a month equal around 10 cents (<strong>if</strong> you're lucky), a couple hundred CD &amp; vinyl sales are in the dollars. Additionally not every artist are with a major label and only sell CD's through direct purchase meaning they receive majority of the cost you pay for an album (minus printing &amp; payment/store-front processing fees).</p>\n\n<p>Yes CDs/vinyl  sales are smaller than streaming but the artists that have noticed a incline in CD sales are noticing a more of a profit hence why you see so many independent artists are heavily pushing physical media sales to their audience. The more people cop on to this the better for them.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> They do not sell customer data</p></blockquote>\n\n<p>Completely untrue. They aggregate with many major advertising &amp; marketing platforms</p>"
+        },
+        {
+          "id": "275966",
+          "number": 21,
+          "author": "AKRAKU",
+          "authorUsername": "AKRAKU",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/OZTjv8P30Ni9NyAD.png",
+          "score": 1,
+          "created": 1792394850,
+          "parent": "42908",
+          "text": "<p>I won't never get why people jump on GOS and still willing to pay 18€/month to services live Quobuz. After jumping here I found Riplay on Accrescent store and beside some bug I can live with (that will be fixed soon since dev is active on the project) I'm loving it! The algorithm is way better than the one on Spotify or Apple Music and is making me rediscover a lot of music I used to listen during the past and almost forgot about.</p>"
+        }
+      ]
+    },
+    {
+      "id": "43073",
+      "title": "How to Convince People to Use GrapheneOS",
+      "author": "Reboot",
+      "authorUsername": "Reboot",
+      "authorAvatar": "",
+      "score": 19,
+      "comments": 19,
+      "views": 525,
+      "participantCount": 15,
+      "created": 1792855754,
+      "lastPostedAt": 1792888716,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
+      "media": [],
+      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
+      "replies": []
+    },
+    {
+      "id": "43076",
+      "title": "Obtainium requires DCL via memory now?",
+      "author": "gvprtskvni",
+      "authorUsername": "gvprtskvni",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792878767,
+      "lastPostedAt": 1792888419,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43076-obtainium-requires-dcl-via-memory-now",
+      "media": [],
+      "text": "<p>After the latest update Obtainium keeps crashing and apparently requires DCL via memory when it worked with full exploit protections previously. Anyone else experiencing this?</p>",
+      "replies": []
+    },
+    {
+      "id": "42598",
+      "title": "Odysseus - Make your GrapheneOS a dumbphone",
+      "author": "flourishdev",
+      "authorUsername": "flourishdev",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/qesnOmK6y79oChLA.png",
+      "score": 21,
+      "comments": 21,
+      "views": 245,
+      "participantCount": 7,
+      "created": 1791233260,
+      "lastPostedAt": 1792887287,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42598-odysseus-make-your-grapheneos-a-dumbphone",
+      "media": [],
+      "text": "\n<p>Hello, I made Odysseus.</p>\n\n<p>Odysseus is an open source, tiny device owner app that helps you get the benefits of a smartphone without the distraction. Once set up, you will have a user profile that does not have a browser and cannot install apps.</p>\n\n<p><strong>Why I made it</strong><br>\nI noticed a lot of people want to use a \"dumbphone\" (no browser or app installs) but don't want to sacrifice the privacy that GrapheneOS gives them. Traditional \"dumbphones\" are terrible for privacy, security, and usability. I use it myself and it has greatly improved my relationship with my phone.</p>\n\n<p><strong>What it does</strong><br>\nOdysseus has 1 exported component, no permissions, no network access, and under 200 lines of Kotlin. Builds are reproducible. It creates a second \"daily\" user without the optional system apps, then blocks the Private Space and debugging in that user. The full list of what it does is in SECURITY.md.</p>\n\n<p><strong>AI</strong><br>\nI designed and tested Odysseus. AI wrote all of the code. The security reviews so far were also done by AI. If you see any issues, please let me know.</p>\n\n<p><strong>ADB</strong><br>\nSetup uses ADB once, to run the one command that makes Odysseus the device owner. After that, you should turn developer options off. Right now this is the only way to set a device owner on GrapheneOS.</p>\n\n<p>I hope that in the future you will be able to use Odysseus without enabling developer options and debugging through QR Code provisioning during setup.</p>\n\n<p><strong>Links and info</strong><br>\nThis is a non-standard way to use GrapheneOS. The daily user doesn't get Vanadium, and GrapheneOS doesn't recommend removing default apps or using device owners to restrict functionality (you can see specific statements by them in SECURITY.md). The risks are covered in SECURITY.md.<br>\nSee a lot more information about setup and limitations in the README.</p> \n\n<p>If you have any documentation improvement ideas or any ideas at all, please let me know.</p>\n\n<p><a href=\"https://github.com/flourish-today/Odysseus\" rel=\"ugc nofollow\">https://github.com/flourish-today/Odysseus</a></p>",
+      "replies": []
+    },
+    {
+      "id": "43077",
+      "title": "Is this site affiliated with GrapheneOS?",
+      "author": "e2eep",
+      "authorUsername": "e2eep",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792879839,
+      "lastPostedAt": 1792886566,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43077-is-this-site-affiliated-with-grapheneos",
+      "media": [],
+      "text": "<p>I found https[://]threecats[.]au at the top of the search results today when trying to search for a GrapheneOS feature.<br>\nThey have pasted a GrapheneOS announcement<br>\nhttps[://]threecats[.]au/two-factor-pin-fingerprint-unlock-grapheneos on their site<br>\nThey were crawled around this year</p>\n\n<p>They could just be a legitimate preinstalled GrapheneOS seller like NitroKey's NitroPhone, but their site has plagarised from GrapheneOS and appeared near the top of the search results</p>",
+      "replies": []
+    },
+    {
+      "id": "43080",
+      "title": "grapheneos typing character before another backwards",
+      "author": "mandan",
+      "authorUsername": "mandan",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792882745,
+      "lastPostedAt": 1792884296,
+      "category": "Pixel 9a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 9a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
+      "media": [],
+      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
+      "replies": []
+    },
+    {
+      "id": "43061",
+      "title": "Parakeet (Molly fork with newer Signal security fixes) + my other privacy apps",
+      "author": "LionNest",
+      "authorUsername": "LionNest",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792809777,
+      "lastPostedAt": 1792883857,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43061-parakeet-molly-fork-with-newer-signal-security-fixes-my-other-privacy-apps",
+      "media": [],
+      "text": "<p>I build a handful of privacy apps for GrapheneOS in my spare time, and this week the main one got some real security work, so I figured I'd share.</p>\n\n<p>Parakeet is my fork of Molly. Molly hasn't had a release since July and is still on Signal 8.19.2, so I started pulling Signal's security fixes in myself. The big one was the RingRTC hot mic bug (CVE-2026-113380), where someone on a call could keep your mic on after you hang up. Molly still ships the vulnerable version, so I rebuilt their RingRTC with Signal's fix. I also backported 19 of Signal's other hardening commits from 8.19.2 to 8.33.1, mostly stricter checks on images, attachments, mentions and call messages. On top of that it has no Google push, screen security always on, and disappearing messages by default. It's still 8.19.2 underneath, so no new Signal features, just the fixes. It syncs with Molly every 6 hours and drops each patch once Molly catches up.</p>\n\n<p>The other stuff, if any of it's useful to you:</p>\n\n<p>Molevad VPN is my fork of the open-source Mullvad app with on-device tracker and SDK domain blocking added. DAITA still works.</p>\n\n<p>Dodo Bird identifies birds by their songs and calls, fully offline with no internet permission, around 10,000 species with pictures. Built on BirdNET Live.</p>\n\n<p>HawkEye logs every plane that flies over you, pings you as it passes, and ranks the regulars. Built on the airplanes.live app.</p>\n\n<p>Everything's free and open source, and you can keep it updated with Obtainium or ObtainX: <a href=\"https://gitlab.com/LionNest\" rel=\"ugc nofollow\">https://gitlab.com/LionNest</a></p>\n\n<p>None of it is affiliated with Signal, Molly, Mullvad or the original projects. Happy to answer questions or hear if something breaks.</p>",
+      "replies": []
+    },
+    {
+      "id": "43075",
+      "title": "Easy Notes flagged as a Trojan on Accrescent",
+      "author": "Nemko",
+      "authorUsername": "Nemko",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792873134,
+      "lastPostedAt": 1792883510,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43075-easy-notes-flagged-as-a-trojan-on-accrescent",
+      "media": [],
+      "text": "<p>Hi everyone,<br>\nWhen downloading Easy Notes from Accrescent, my antivirus flags it as a Trojan.<br>\nHas anyone else experienced this? Could it be a false positive?<br>\n<img src=\"https://ibb.co/d4vZkMDf\" alt=\"gdata\"></p>",
+      "replies": []
+    },
+    {
+      "id": "43079",
+      "title": "GrapheneOS Messaging version 17 released",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792880687,
+      "lastPostedAt": 1792880687,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43079-grapheneos-messaging-version-17-released",
+      "media": [],
+      "text": "<p>GrapheneOS Messaging version 17 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/Messaging/releases/tag/17\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/Messaging/releases/tag/17</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>",
+      "replies": []
+    },
+    {
+      "id": "43078",
+      "title": "Potential System UI Leak/Bug when exiting Guest Profile",
+      "author": "SYS",
+      "authorUsername": "SYS",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792880611,
+      "lastPostedAt": 1792880611,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43078-potential-system-ui-leakbug-when-exiting-guest-profile",
+      "media": [],
+      "text": "<p>I noticed a strange behavior in GrapheneOS regarding the \"Exit profile\" notification in the Guest User profile.<br>\nWhen I am in the Guest Profile and click the Settings icon inside the \"Exit profile\" notification multiple times, and then proceed to end the session, the Main Profile opens up with the System UI already launched/exposed.<br>\nThis seems like a UI leak or a potential bypass from the Guest profile to the Main profile's System UI. Has anyone else experienced this, or is this a known issue?</p>",
+      "replies": []
+    },
+    {
+      "id": "37",
+      "title": "Molly.im",
+      "author": "Nuttso",
+      "authorUsername": "Nuttso",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/veKvuOzMhuVpoSFY.png",
+      "score": 314,
+      "comments": 314,
+      "views": 3430,
+      "participantCount": 98,
+      "created": 1655036856,
+      "lastPostedAt": 1792880598,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/37-mollyim",
+      "media": [],
+      "text": "<p>Hi everyone</p>\n\n<p>this thread is about <a href=\"https://molly.im/\" rel=\"ugc nofollow\">molly.im</a> the hardened signal fork. Feel free to post any questions or future ideas.</p>\n",
+      "replies": []
+    },
+    {
+      "id": "43065",
+      "title": "Aurora Store fork that fixes “not available in your country” for anonymous use",
+      "author": "LionNest",
+      "authorUsername": "LionNest",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792832859,
+      "lastPostedAt": 1792878682,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43065-aurora-store-fork-that-fixes-not-available-in-your-country-for-anonymous-use",
+      "media": [],
+      "text": "<p>I got tired of Aurora Store telling me apps were \"not available in your country\" when I'm sitting in the country they're made for, so I dug into why and made a fork that deals with it.</p>\n\n<p>The short version: when you use Aurora anonymously, Google decides your country from the shared anonymous account Aurora hands you, not from your IP or VPN. Aurora picks one of those accounts and if it happens to be from the wrong country, region-locked apps (banking apps, some betting apps like Kalshi or Novig, etc.) just fail. Changing your VPN doesn't help.</p>\n\n<p>What Aurora Light does differently:</p>\n\n<ul><li>When an app says \"not available in your country\", it keeps pulling fresh anonymous sessions (up to 10, spaced out so the token server doesn't throw \"server busy\") until it gets one from the right country</li>\n<li>It remembers the session that worked for that app and uses it first for installs and updates, so next time it just works on the first tap. If that session expires it forgets it and hunts again on its own</li>\n<li>Upstream picks one token dispenser at random and gives up on the first error. This tries the others before failing</li>\n<li>It sends your phone's real time zone and carrier code to Google. Upstream sends a fixed Hawaii time zone and a broken carrier code, which doesn't help with country checks</li>\n<li>Anonymous only. No Google sign-in at all, so there's no account to get banned</li>\n<li>One tap to route it through Orbot (or Twig) on the default SOCKS port</li>\n<li>Updates come from GitLab releases through Obtainium/ObtainX, not Aurora's own update feed</li></ul>\n\n<p>It's not magic: it can only find a right-country session if one exists in the anonymous pool, so some apps might still need a few tries. But for me it went from \"never works\" to \"works on the first tap after the first time.\"</p>\n\n<p>It's built on Aurora Store 4.8.4 and I check for new Aurora releases every week to merge their fixes in. Big credit to the Aurora team, this is their app with some changes on top, and it's not affiliated with them.</p>\n\n<p><a href=\"https://gitlab.com/LionNest/aurora-light\" rel=\"ugc nofollow\">https://gitlab.com/LionNest/aurora-light</a></p>\n\n<p>Happy to answer questions, and let me know if a region-locked app still won't install for you.</p>",
+      "replies": []
+    },
+    {
+      "id": "23152",
+      "title": "LuxTrust Mobile 4.18.0 Fails to Launch on GrapheneOS (Pixel 6a)",
+      "author": "stubble1861",
+      "authorUsername": "stubble1861",
+      "authorAvatar": "",
+      "score": 22,
+      "comments": 22,
+      "views": 490,
+      "participantCount": 14,
+      "created": 1750004107,
+      "lastPostedAt": 1792874200,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/23152-luxtrust-mobile-4180-fails-to-launch-on-grapheneos-pixel-6a",
+      "media": [],
+      "text": "<p>Hi all, I appreciate that this a very niche issue but it seems that the latest update of the LuxTrust mobile app. It crashes after starting and shows a weird message \"<em>Error code: LT_ROOTED_DEVICE: LuxTrust mobile app has stopped working because the configuration of your device may compromise data security</em>.\".</p> \n\n<p>The app logs shows a series of \"<em>W libc: Access denied finding property</em>\" messages:</p> \n\n<ul><li>ro.debuggable</li>\n<li>ro.secure</li>\n<li>ro.boot.serialno</li>\n<li>qemu.*</li>\n<li>vendor.*</li>\n<li>init.svc.*</li></ul>\n\n<p>Are there any workarounds besides downgrading? I downloaded the previous version but need to get the phone with their support to get it validated.</p>\n",
+      "replies": []
+    }
+  ]
+}

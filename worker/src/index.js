@@ -7,6 +7,7 @@ import { socialKeysForPost } from "../../shared/social-keys.js";
 import { buildPlaylist, keptVideoKey, parseRange, safeTelegramPath } from "./telegram.js";
 import { handleDrive, DRIVE_SCHEMA } from "./drive.js";
 import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
+import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -43,6 +44,8 @@ function json(status, body, extra) {
 }
 
 function withCors(request, env, response) {
+  const url = new URL(request.url);
+  if (isPublicFederationRoute(url.pathname)) return response;
   const origin = request.headers.get("Origin");
   if (!origin) {
     if (response.headers.get("x-robots-tag")) return response;
@@ -152,8 +155,12 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_reposts (public_id TEXT NOT NULL, post_key TEXT NOT NULL, kind TEXT NOT NULL, comment TEXT NOT NULL DEFAULT '', snapshot TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (public_id, post_key))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_reposts_recent ON account_reposts(public_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_follows (follower_id TEXT NOT NULL, target_id TEXT NOT NULL, snapshot TEXT NOT NULL DEFAULT '', created_at INTEGER NOT NULL, PRIMARY KEY (follower_id, target_id))"),
-      env.DB.prepare("CREATE INDEX IF NOT EXISTS account_follows_target ON account_follows(target_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS account_follows_target ON account_follows(target_id, created_at DESC)"),
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friend_requests (sender_id TEXT NOT NULL, receiver_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (sender_id, receiver_id))"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
+      env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
+      env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -620,6 +627,9 @@ async function handleProfileGet(request, env, handle) {
   account.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", row.public_id);
   account.followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", "app:" + row.public_id);
   account.viewerFollows = !!(viewer && viewer.public_id !== row.public_id && await followExists(env, viewer.public_id, "app:" + row.public_id));
+  account.friendsCount = await friendCount(env, row.public_id);
+  account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
+  account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await mutualFriendCount(env, viewer.public_id, row.public_id) : 0;
   return json(200, { account, reposts: await listReposts(env, row.public_id) });
 }
 
@@ -3027,6 +3037,197 @@ async function handleFollowGet(request, env, url) {
   return json(200, body);
 }
 
+
+async function friendCount(env, publicId) {
+  try {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends WHERE user_id = ?").bind(publicId).first();
+    return (row && Number(row.n)) || 0;
+  } catch (err) {
+    return 0;
+  }
+}
+
+async function mutualFriendCount(env, userA, userB) {
+  if (!userA || !userB || userA === userB) return 0;
+  try {
+    const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM account_friends f1 JOIN account_friends f2 ON f1.friend_id = f2.friend_id WHERE f1.user_id = ? AND f2.user_id = ?").bind(userA, userB).first();
+    return (row && Number(row.n)) || 0;
+  } catch (err) {
+    return 0;
+  }
+}
+
+async function getFriendStatus(env, viewerId, targetId) {
+  if (!viewerId || !targetId) return "none";
+  if (viewerId === targetId) return "self";
+  try {
+    const isFriend = await env.DB.prepare("SELECT friend_id FROM account_friends WHERE user_id = ? AND friend_id = ?").bind(viewerId, targetId).first();
+    if (isFriend) return "friends";
+    const sent = await env.DB.prepare("SELECT receiver_id FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(viewerId, targetId).first();
+    if (sent) return "sent";
+    const received = await env.DB.prepare("SELECT sender_id FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(targetId, viewerId).first();
+    if (received) return "received";
+    return "none";
+  } catch (err) {
+    return "none";
+  }
+}
+
+function cleanFriendTargetId(raw) {
+  const s = String(raw || "").trim();
+  if (s.indexOf("app:") === 0) return s.slice(4);
+  return /^\d{12}$/.test(s) ? s : null;
+}
+
+async function handleFriendsGet(request, env, url) {
+  const viewer = await sessionAccount(env, request);
+  if (!viewer) return json(401, { error: "unauthorized" });
+
+  const tab = String(url.searchParams.get("tab") || "").trim();
+  const rawId = url.searchParams.get("id") || ("app:" + viewer.public_id);
+  const targetId = cleanFriendTargetId(rawId);
+  if (!targetId) return json(400, { error: "bad_target" });
+
+  if (tab === "requests") {
+    const incomingRows = await env.DB.prepare("SELECT sender_id, created_at FROM account_friend_requests WHERE receiver_id = ? ORDER BY created_at DESC LIMIT 100").bind(viewer.public_id).all();
+    const outgoingRows = await env.DB.prepare("SELECT receiver_id, created_at FROM account_friend_requests WHERE sender_id = ? ORDER BY created_at DESC LIMIT 100").bind(viewer.public_id).all();
+
+    const incomingCards = await followCards(env, request, ((incomingRows && incomingRows.results) || []).map((r) => r.sender_id));
+    for (let i = 0; i < incomingCards.length; i++) {
+      const card = incomingCards[i];
+      const sId = cleanFriendTargetId(card.id);
+      card.mutualFriendsCount = await mutualFriendCount(env, viewer.public_id, sId);
+      card.friendStatus = "received";
+    }
+
+    const outgoingCards = await followCards(env, request, ((outgoingRows && outgoingRows.results) || []).map((r) => r.receiver_id));
+    for (let i = 0; i < outgoingCards.length; i++) {
+      const card = outgoingCards[i];
+      const rId = cleanFriendTargetId(card.id);
+      card.mutualFriendsCount = await mutualFriendCount(env, viewer.public_id, rId);
+      card.friendStatus = "sent";
+    }
+
+    return json(200, {
+      incoming: incomingCards,
+      outgoing: outgoingCards,
+      requestsCount: incomingCards.length
+    });
+  }
+
+  const targetAccount = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(targetId).first();
+  if (!targetAccount) return json(404, { error: "not_found" });
+
+  const isOwner = !!(viewer && viewer.public_id === targetAccount.public_id);
+  const isPrivate = !!(targetAccount && targetAccount.private_follows === 1);
+
+  const friendsCount = await friendCount(env, targetId);
+  const status = await getFriendStatus(env, viewer.public_id, targetId);
+  const mutualCount = await mutualFriendCount(env, viewer.public_id, targetId);
+
+  if (tab === "friends") {
+    if (!isOwner && isPrivate && status !== "friends") {
+      return json(200, {
+        id: "app:" + targetId,
+        friendsCount,
+        status,
+        mutualCount,
+        isPrivate: true,
+        friends: []
+      });
+    }
+    const friendRows = await env.DB.prepare("SELECT friend_id, created_at FROM account_friends WHERE user_id = ? ORDER BY created_at DESC LIMIT 300").bind(targetId).all();
+    const ids = ((friendRows && friendRows.results) || []).map((r) => r.friend_id);
+    const cards = await followCards(env, request, ids);
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const fId = cleanFriendTargetId(card.id);
+      card.mutualFriendsCount = await mutualFriendCount(env, viewer.public_id, fId);
+      card.friendStatus = await getFriendStatus(env, viewer.public_id, fId);
+    }
+    return json(200, {
+      id: "app:" + targetId,
+      friendsCount,
+      status,
+      mutualCount,
+      isPrivate: false,
+      friends: cards
+    });
+  }
+
+  return json(200, {
+    id: "app:" + targetId,
+    friendsCount,
+    status,
+    mutualCount
+  });
+}
+
+async function handleFriendAction(request, env, action) {
+  const viewer = await sessionAccount(env, request);
+  if (!viewer) return json(401, { error: "unauthorized" });
+
+  const body = await readJson(request, 2048);
+  if (body.error) return json(400, { error: "bad_json" });
+
+  const targetId = cleanFriendTargetId(body.targetId || body.id);
+  if (!targetId || targetId === viewer.public_id) {
+    return json(400, { error: "bad_target" });
+  }
+
+  const targetRow = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(targetId).first();
+  if (!targetRow) return json(404, { error: "not_found" });
+
+  const now = Date.now();
+
+  if (action === "request") {
+    const alreadyFriends = await env.DB.prepare("SELECT user_id FROM account_friends WHERE user_id = ? AND friend_id = ?").bind(viewer.public_id, targetId).first();
+    if (alreadyFriends) {
+      return json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) });
+    }
+    const reverse = await env.DB.prepare("SELECT sender_id FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(targetId, viewer.public_id).first();
+    if (reverse) {
+      await env.DB.prepare("DELETE FROM account_friend_requests WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)").bind(targetId, viewer.public_id, viewer.public_id, targetId).run();
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now),
+        env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(targetId, viewer.public_id, now)
+      ]);
+      return json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) });
+    }
+    const paced = await rateHit(env, "freq:" + viewer.public_id, 40, 10 * 60 * 1000);
+    if (!paced.ok) return limited(paced);
+
+    await env.DB.prepare("INSERT INTO account_friend_requests (sender_id, receiver_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now).run();
+    return json(200, { ok: true, status: "sent", friendsCount: await friendCount(env, viewer.public_id) });
+  }
+
+  if (action === "accept") {
+    await env.DB.prepare("DELETE FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(targetId, viewer.public_id).run();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now),
+      env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(targetId, viewer.public_id, now)
+    ]);
+    return json(200, { ok: true, status: "friends", friendsCount: await friendCount(env, viewer.public_id) });
+  }
+
+  if (action === "decline") {
+    await env.DB.prepare("DELETE FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(targetId, viewer.public_id).run();
+    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+  }
+
+  if (action === "cancel") {
+    await env.DB.prepare("DELETE FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(viewer.public_id, targetId).run();
+    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+  }
+
+  if (action === "remove") {
+    await env.DB.prepare("DELETE FROM account_friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)").bind(viewer.public_id, targetId, targetId, viewer.public_id).run();
+    return json(200, { ok: true, status: "none", friendsCount: await friendCount(env, viewer.public_id) });
+  }
+
+  return json(400, { error: "bad_action" });
+}
+
 async function route(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -3092,6 +3293,12 @@ async function route(request, env) {
   if (path === "/v1/follows" && request.method === "DELETE") return handleFollowDelete(request, env);
   if (path === "/v1/follows/import" && request.method === "POST") return handleFollowImport(request, env);
   if (path === "/v1/handle" && request.method === "GET") return handleHandle(env, url);
+  if (path === "/v1/friends" && request.method === "GET") return handleFriendsGet(request, env, url);
+  if (path === "/v1/friends/request" && request.method === "POST") return handleFriendAction(request, env, "request");
+  if (path === "/v1/friends/accept" && request.method === "POST") return handleFriendAction(request, env, "accept");
+  if (path === "/v1/friends/decline" && request.method === "POST") return handleFriendAction(request, env, "decline");
+  if (path === "/v1/friends/cancel" && request.method === "POST") return handleFriendAction(request, env, "cancel");
+  if (path === "/v1/friends/remove" && request.method === "POST") return handleFriendAction(request, env, "remove");
   const profile = path.match(/^\/v1\/profile\/([^/]+)$/);
   if (profile && request.method === "GET") {
     const viewer = await sessionAccount(env, request);
@@ -3106,14 +3313,19 @@ async function route(request, env) {
   if (path === "/v1/communities" || path.startsWith("/v1/communities/") || path === "/v1/owner/communities" || path.startsWith("/v1/owner/communities/")) {
     return handleCommunityRoute(request, env, path, url, { json, sessionAccount, rateHit, limited, readJson, requireOwnerHidden, dispatchWorkflows, presentAccount });
   }
+  if (path === "/.well-known/webfinger" || path === "/.well-known/nostr.json" || path.startsWith("/ap/") || path.startsWith("/v1/federation/")) {
+    return handleFederationRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
   return json(404, { error: "not_found" });
 }
 
 export default {
   async fetch(request, env) {
     try {
+      const url = new URL(request.url);
+      const path = url.pathname;
       const origin = request.headers.get("Origin");
-      if (origin && allowedOrigins(env).indexOf(origin) < 0) return json(403, { error: "origin" });
+      if (origin && !isPublicFederationRoute(path) && allowedOrigins(env).indexOf(origin) < 0) return json(403, { error: "origin" });
       const response = await route(request, env);
       return withCors(request, env, response);
     } catch (err) {
