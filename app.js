@@ -124,7 +124,14 @@
     caret: "M7 9.2 12 14.2 17 9.2l1.2 1.2L12 16.6 5.8 10.4z",
     tick: "M9.2 16.2 4.5 11.5l1.4-1.4 3.3 3.3 7.9-7.9 1.4 1.4z",
     article: "M6 3.5C6 2.67 6.67 2 7.5 2h6.3L18 6.2V20.5c0 .83-.67 1.5-1.5 1.5h-9c-.83 0-1.5-.67-1.5-1.5v-17zM13 3.5V7h3.5L13 3.5zM8.5 11h7v1.6h-7V11zm0 3.4h7v1.6h-7v-1.6zm0 3.4h4.5V19H8.5v-1.2z",
-    sliders: "M3 6h8v2H3V6zm12 0h6v2h-6V6zM3 11h4v2H3v-2zm8 0h10v2H11v-2zM3 16h10v2H3v-2zm14 0h4v2h-4v-2zM9 4h2v6H9V4zm6 5h2v6h-2V9zM11 14h2v6h-2v-6z"
+    sliders: "M3 6h8v2H3V6zm12 0h6v2h-6V6zM3 11h4v2H3v-2zm8 0h10v2H11v-2zM3 16h10v2H3v-2zm14 0h4v2h-4v-2zM9 4h2v6H9V4zm6 5h2v6h-2V9zM11 14h2v6h-2v-6z",
+    folder: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
+    folderOpen: "M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z",
+    arrowUp: "M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z",
+    arrowDown: "M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z",
+    eye: "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z",
+    eyeOff: "M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78 3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z",
+    trash: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
   };
 
   const STATE = {
@@ -157,6 +164,8 @@
     repostMenu: null,
     quoteTarget: "",
     composeSeed: "",
+    navEditingFolder: null,
+    navNewFolderOpen: false,
     shared: {},
     sharedState: {},
     chain: {},
@@ -967,9 +976,62 @@
     return "t" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  const DEFAULT_NAV_CUSTOM = {
+    folders: [
+      { id: "media", name: tr("Media"), items: ["music", "shorts", "tv", "games"] },
+      { id: "library", name: tr("Library"), items: ["history", "communities", "subscriptions", "vault"] }
+    ],
+    order: ["home", "explore", "notifications", "messages", "feeds", "lists", "folder:media", "folder:library", "settings"],
+    hidden: []
+  };
+
+  const ALL_NAV_IDS = [
+    "home", "explore", "notifications", "messages", "feeds", "lists",
+    "history", "music", "shorts", "games", "tv", "communities",
+    "subscriptions", "vault", "settings"
+  ];
+
+  function cleanNavCustom(custom) {
+    if (!custom || typeof custom !== "object") {
+      return JSON.parse(JSON.stringify(DEFAULT_NAV_CUSTOM));
+    }
+    const folders = Array.isArray(custom.folders) ? custom.folders.map((f) => ({
+      id: String(f.id || ("f_" + Math.random().toString(36).slice(2, 8))),
+      name: String(f.name || tr("Folder")),
+      items: Array.isArray(f.items) ? f.items.filter((it) => typeof it === "string" && ALL_NAV_IDS.includes(it)) : []
+    })) : [];
+    const hidden = Array.isArray(custom.hidden) ? custom.hidden.filter((h) => typeof h === "string") : [];
+    let order = Array.isArray(custom.order) ? custom.order.filter((o) => typeof o === "string") : [];
+
+    const accounted = new Set();
+    folders.forEach((f) => f.items.forEach((it) => accounted.add(it)));
+    order.forEach((o) => {
+      if (!o.startsWith("folder:")) accounted.add(o);
+    });
+
+    folders.forEach((f) => {
+      const key = "folder:" + f.id;
+      if (!order.includes(key)) order.push(key);
+    });
+
+    const validFolderKeys = new Set(folders.map((f) => "folder:" + f.id));
+    order = order.filter((o) => {
+      if (o.startsWith("folder:")) return validFolderKeys.has(o);
+      return ALL_NAV_IDS.includes(o) && !folders.some((f) => f.items.includes(o));
+    });
+
+    ALL_NAV_IDS.forEach((id) => {
+      if (!accounted.has(id) && !hidden.includes(id)) {
+        order.push(id);
+      }
+    });
+
+    return { folders, order, hidden };
+  }
+
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: true, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto" });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: true, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null) });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1026,6 +1088,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         parsed.seenDefaults = configured.slice();
         parsed.initialized = true;
       } else mergeDefaultFollows(parsed, configured);
+      parsed.navCustom = cleanNavCustom(parsed.navCustom);
       return parsed;
     } catch (err) {
       return fresh();
@@ -3014,6 +3077,16 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
           if (!body || body.ok || !body.detail || !el.isConnected) return;
           const span = el.querySelector(".vfallback span");
           if (span) span.textContent = body.detail;
+          if (typeof window.showTikTokCaptcha === "function" && (body.code === "limited" || body.code === "play" || body.code === "captcha" || /captcha|verify|block|limit/i.test(body.detail))) {
+            window.showTikTokCaptcha({
+              handle: post.handle || "tiktok",
+              url: post.url || ("https://www.tiktok.com/@" + encodeURIComponent(post.handle || "tiktok")),
+              onRetry: () => {
+                const retryBtn = el.querySelector(".vretry");
+                if (retryBtn) retryBtn.click();
+              }
+            });
+          }
         }).catch(() => {});
       }
     }
@@ -6349,18 +6422,171 @@ const here = parseRoute();
     return `<span class="nav-badge">${count > 20 ? "20+" : String(count)}</span>`;
   }
 
-  function navItem(href, name, label, on, aria, tip) {
+  function navItem(href, name, label, on, aria, tip, extraClass) {
     const onName = name + tr("On");
     const glyph = icon(on && PATH[onName] && (name === "home" || name.indexOf("mu") === 0) ? onName : name);
     const badge = name === "bell" ? bellBadgeHtml() : "";
     const accessible = aria || label;
     const tooltipText = tip || (name === "muBack" ? tr("Back") : label);
     const tight = name === "muBack" ? " nav-back" : "";
-    return `<a class="nav-item${on ? " on" : ""}${tight}" href="${href}" aria-label="${esc(accessible)}" data-tooltip="${esc(tooltipText)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${esc(label)}</span></a>`;
+    const extra = extraClass ? ` ${extraClass}` : "";
+    return `<a class="nav-item${on ? " on" : ""}${tight}${extra}" href="${href}" aria-label="${esc(accessible)}" data-tooltip="${esc(tooltipText)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${esc(label)}</span></a>`;
   }
 
   function wordmarkSvg(cls) {
     return markSvg("app", cls);
+  }
+
+  function navItemDef(id) {
+    switch (id) {
+      case "home":
+        return { id: "home", href: "#/", icon: "home", label: tr("Home"), active: (r) => r.name === "home" };
+      case "explore":
+        return { id: "explore", href: "#/explore", icon: "search", label: tr("Explore"), active: (r) => r.name === "explore" };
+      case "notifications":
+        return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
+      case "messages":
+        return { id: "messages", href: "#/messages", icon: "mail", label: tr("Messages"), active: (r) => r.name === "messages" };
+      case "feeds":
+        return { id: "feeds", href: "#/feeds", icon: "spark", label: tr("Feeds"), active: (r) => r.name === "feeds" };
+      case "lists":
+        return { id: "lists", href: "#/lists", icon: "lists", label: tr("Lists"), active: (r) => r.name === "lists" || r.name === "list" };
+      case "history":
+        return { id: "history", href: "#/history", icon: "clock", label: tr("History"), active: (r) => r.name === "history" };
+      case "music":
+        return { id: "music", href: "#/music", icon: "muNote", label: tr("Music"), active: (r) => false };
+      case "shorts":
+        return { id: "shorts", href: "#/shorts", icon: "shorts", label: tr("Shorts"), active: (r) => r.name === "shorts", visible: () => !!(window.ViktorychShorts && window.ViktorychShorts.visible()) };
+      case "games":
+        return { id: "games", href: "#/games", icon: "games", label: tr("Games"), active: (r) => r.name === "games" };
+      case "tv":
+        return { id: "tv", href: "#/tv", icon: "tv", label: tr("TV"), active: (r) => r.name === "tv" };
+      case "communities":
+        return { id: "communities", href: "#/communities", icon: "communities", label: tr("Communities"), active: (r) => r.name === "communities" };
+      case "subscriptions":
+        return { id: "subscriptions", href: subsHash((STATE.settings && STATE.settings.subsGroup) || ""), icon: "subs", label: tr("Subscriptions"), active: (r) => r.name === "subscriptions" };
+      case "vault":
+        return { id: "vault", href: "#/vault", icon: "vault", label: tr("Vault"), active: (r) => r.name === "vault", visible: () => !!(window.ViktorychVault && window.ViktorychVault.visible()) };
+      case "settings":
+        return { id: "settings", href: "#/settings", icon: "more", label: tr("More"), active: (r) => r.name === "settings" };
+      default:
+        return null;
+    }
+  }
+
+  function getNavCustom() {
+    return cleanNavCustom(STATE.settings && STATE.settings.navCustom);
+  }
+
+  function saveNavCustom(custom) {
+    if (!STATE.settings) STATE.settings = {};
+    STATE.settings.navCustom = cleanNavCustom(custom);
+    saveSettings();
+  }
+
+  function folderDisplayName(folder) {
+    if (!folder) return "";
+    if (folder.id === "media" || folder.name === "Media") return tr("Media");
+    if (folder.id === "library" || folder.name === "Library") return tr("Library");
+    return folder.name || tr("Folder");
+  }
+
+  function getNavOpenFolders() {
+    try {
+      const raw = localStorage.getItem("viktorychapp-nav-open-folders");
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return {};
+  }
+
+  function toggleNavFolder(folderId) {
+    const map = getNavOpenFolders();
+    map[folderId] = !map[folderId];
+    try {
+      localStorage.setItem("viktorychapp-nav-open-folders", JSON.stringify(map));
+    } catch (e) {}
+    render();
+  }
+
+  function renderNavLinks(route) {
+    const custom = getNavCustom();
+    const openFolders = getNavOpenFolders();
+    const hiddenSet = new Set(custom.hidden || []);
+    const folderMap = new Map();
+    custom.folders.forEach((f) => folderMap.set(f.id, f));
+
+    let html = "";
+    custom.order.forEach((entry) => {
+      if (entry.startsWith("folder:")) {
+        const fId = entry.slice(7);
+        const folder = folderMap.get(fId);
+        if (!folder) return;
+        const visibleItems = (folder.items || []).filter((itId) => {
+          if (hiddenSet.has(itId)) return false;
+          const def = navItemDef(itId);
+          if (!def) return false;
+          if (def.visible && !def.visible()) return false;
+          return true;
+        });
+        if (!visibleItems.length) return;
+
+        const hasActiveChild = visibleItems.some((itId) => {
+          const def = navItemDef(itId);
+          return def && def.active(route);
+        });
+
+        const isOpen = openFolders[folder.id] === undefined ? hasActiveChild : !!openFolders[folder.id];
+        const dispName = folderDisplayName(folder);
+        const isEditing = STATE.navEditingFolder === folder.id;
+        const tipText = `${dispName} (${visibleItems.length}) - ${isOpen ? tr("Collapse folder") : tr("Expand folder")}`;
+
+        html += `<div class="nav-folder-wrapper${isOpen ? " open" : ""}" data-folder-id="${esc(folder.id)}">
+          <div class="nav-folder-head${isOpen ? " open" : ""}${hasActiveChild ? " has-active" : ""}">
+            <button type="button" class="nav-item nav-folder-btn${isOpen ? " open" : ""}" data-act="toggle-nav-folder" data-folder-id="${esc(folder.id)}" aria-label="${esc(dispName)}" data-tooltip="${esc(tipText)}">
+              <span class="nav-ico">
+                ${icon(isOpen ? "folderOpen" : "folder")}
+                ${hasActiveChild && !isOpen ? `<span class="nav-dot"></span>` : ""}
+              </span>
+              <span class="nav-label">${esc(dispName)}</span>
+              <span class="nav-folder-count">${visibleItems.length}</span>
+              <span class="nav-folder-caret">${icon("caret")}</span>
+            </button>
+            <button type="button" class="icon-btn nav-folder-rename-btn" data-act="rename-nav-folder" data-folder-id="${esc(folder.id)}" aria-label="${tr("Rename folder")}" data-tooltip="${tr("Rename folder")}">
+              ${icon("pencil")}
+            </button>
+          </div>
+          ${isEditing ? `
+            <form class="nav-folder-rename-form" data-act="save-folder-rename" data-folder-id="${esc(folder.id)}">
+              <input type="text" class="nav-folder-rename-input" id="nav-folder-rename-input" value="${esc(folder.name)}" maxlength="30" placeholder="${tr("Folder name")}" required autofocus />
+              <button type="submit" class="icon-btn" aria-label="${tr("Save")}" data-tooltip="${tr("Save")}">${icon("tick")}</button>
+              <button type="button" class="icon-btn" data-act="cancel-folder-rename" aria-label="${tr("Cancel")}" data-tooltip="${tr("Cancel")}">${icon("close")}</button>
+            </form>
+          ` : ""}
+          <div class="nav-folder-children${isOpen ? " open" : ""}">
+            ${visibleItems.map((itId) => {
+              const def = navItemDef(itId);
+              if (!def) return "";
+              const on = def.active(route);
+              return navItem(def.href, def.icon, def.label, on, null, null, "nav-folder-child");
+            }).join("")}
+          </div>
+        </div>`;
+      } else {
+        if (hiddenSet.has(entry)) return;
+        const def = navItemDef(entry);
+        if (!def) return;
+        if (def.visible && !def.visible()) return;
+        const on = def.active(route);
+        html += navItem(def.href, def.icon, def.label, on);
+      }
+    });
+
+    html += `<button type="button" class="nav-item nav-customize-btn" data-act="open-nav-customize" aria-label="${tr("Customize sidebar")}" data-tooltip="${tr("Customize sidebar")}">
+      <span class="nav-ico">${icon("sliders")}</span>
+      <span class="nav-label">${tr("Customize sidebar")}</span>
+    </button>`;
+
+    return html;
   }
 
   function brandLink() {
@@ -6371,21 +6597,7 @@ const here = parseRoute();
     const name = route.name;
     const music = name === "music" && window.SIntelMusic;
     const brand = music ? window.SIntelMusic.brand() : brandLink();
-    const links = music ? window.SIntelMusic.links(route, navItem) : `${navItem("#/", "home", tr("Home"), name === "home")}
-        ${navItem("#/explore", "search", tr("Explore"), name === "explore")}
-        ${navItem("#/notifications", "bell", tr("Notifications"), name === "notifications")}
-        ${navItem("#/messages", "mail", tr("Messages"), name === "messages")}
-        ${navItem("#/feeds", "spark", tr("Feeds"), name === "feeds")}
-        ${navItem("#/lists", "lists", tr("Lists"), name === "lists" || name === "list")}
-        ${navItem("#/history", "clock", tr("History"), name === "history")}
-        ${navItem("#/music", "muNote", tr("Music"), false)}
-        ${window.ViktorychShorts && window.ViktorychShorts.visible() ? navItem("#/shorts", "shorts", tr("Shorts"), name === "shorts") : ""}
-        ${navItem("#/games", "games", tr("Games"), name === "games")}
-        ${navItem("#/tv", "tv", tr("TV"), name === "tv")}
-        ${navItem("#/communities", "communities", tr("Communities"), name === "communities")}
-        ${navItem(subsHash(STATE.settings.subsGroup), "subs", tr("Subscriptions"), name === "subscriptions")}
-        ${window.ViktorychVault && window.ViktorychVault.visible() ? navItem("#/vault", "vault", tr("Vault"), name === "vault") : ""}
-        ${navItem("#/settings", "more", tr("More"), name === "settings")}`;
+    const links = music ? window.SIntelMusic.links(route, navItem) : renderNavLinks(route);
     const post = music
       ? `<button class="post-btn" data-act="music-add" aria-label="${tr("Add song")}" data-tooltip="${tr("Add song")}"><span class="post-label">${tr("Add song")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
       : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}" data-tooltip="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
@@ -10109,6 +10321,95 @@ const here = parseRoute();
     return `<div class="modal-back remove-back" data-act="close-remove"><div class="modal remove-sheet" role="dialog" aria-modal="true" aria-labelledby="remove-title" data-act="stop"><div class="remove-grab" aria-hidden="true"></div><h2 id="remove-title">${esc(title)}</h2><p>${esc(body)}</p><button type="button" class="remove-go" data-act="confirm-remove">${esc(go)}</button><button type="button" class="remove-cancel" data-act="close-remove">${tr("Cancel")}</button></div></div>`;
   }
 
+  function navCustomizeModal() {
+    const custom = getNavCustom();
+    const hiddenSet = new Set(custom.hidden || []);
+    const folderMap = new Map();
+    custom.folders.forEach((f) => folderMap.set(f.id, f));
+
+    const rows = custom.order.map((entry, index) => {
+      if (entry.startsWith("folder:")) {
+        const fId = entry.slice(7);
+        const folder = folderMap.get(fId);
+        if (!folder) return "";
+        const dispName = folderDisplayName(folder);
+        const folderItems = (folder.items || []).map((itId, subIdx) => {
+          const def = navItemDef(itId);
+          if (!def) return "";
+          const isHidden = hiddenSet.has(itId);
+          return `<div class="nav-cust-folder-subrow${isHidden ? " is-hidden" : ""}">
+            <span class="nav-cust-icon">${icon(def.icon)}</span>
+            <span class="nav-cust-name">${esc(def.label)}</span>
+            <div class="nav-cust-actions">
+              <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="-1" aria-label="${tr("Move up")}"${subIdx === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
+              <button class="icon-btn" type="button" data-act="nav-subitem-move" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" data-dir="1" aria-label="${tr("Move down")}"${subIdx === folder.items.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
+              <button class="outline" type="button" data-act="nav-remove-from-folder" data-folder-id="${esc(folder.id)}" data-id="${esc(itId)}" style="height:28px;padding:0 8px;font-size:12px;">${tr("Remove from folder")}</button>
+              <button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(itId)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>
+            </div>
+          </div>`;
+        }).join("");
+
+        return `<div class="nav-cust-folder-box">
+          <div class="nav-cust-folder-head">
+            <span class="nav-cust-icon">${icon("folder")}</span>
+            <span class="nav-cust-name">${esc(dispName)} <span class="muted small">(${folder.items.length})</span></span>
+            <div class="nav-cust-actions">
+              <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="-1" aria-label="${tr("Move up")}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
+              <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="1" aria-label="${tr("Move down")}"${index === custom.order.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
+              <button class="icon-btn" type="button" data-act="nav-prompt-rename" data-folder-id="${esc(folder.id)}" aria-label="${tr("Rename folder")}" data-tooltip="${tr("Rename folder")}">${icon("pencil")}</button>
+              <button class="icon-btn danger" type="button" data-act="nav-delete-folder" data-folder-id="${esc(folder.id)}" aria-label="${tr("Delete folder")}" data-tooltip="${tr("Delete folder")}">${icon("trash")}</button>
+            </div>
+          </div>
+          <div class="nav-cust-folder-items">
+            ${folderItems || `<div class="muted small" style="padding:4px 8px;">${tr("This folder is empty.")}</div>`}
+          </div>
+        </div>`;
+      } else {
+        const def = navItemDef(entry);
+        if (!def) return "";
+        const isHidden = hiddenSet.has(entry);
+        return `<div class="nav-cust-item-row${isHidden ? " is-hidden" : ""}">
+          <span class="nav-cust-icon">${icon(def.icon)}</span>
+          <span class="nav-cust-name">${esc(def.label)}</span>
+          <div class="nav-cust-actions">
+            <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="-1" aria-label="${tr("Move up")}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
+            <button class="icon-btn" type="button" data-act="nav-order-move" data-idx="${index}" data-dir="1" aria-label="${tr("Move down")}"${index === custom.order.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
+            <select class="nav-move-select" data-act="nav-select-folder" data-id="${esc(entry)}">
+              <option value="">${tr("Move to folder")}...</option>
+              ${custom.folders.map((f) => `<option value="${esc(f.id)}">${esc(folderDisplayName(f))}</option>`).join("")}
+            </select>
+            <button class="icon-btn" type="button" data-act="nav-toggle-vis" data-id="${esc(entry)}" aria-label="${isHidden ? tr("Hidden") : tr("Visible")}" data-tooltip="${isHidden ? tr("Hidden") : tr("Visible")}">${icon(isHidden ? "eyeOff" : "eye")}</button>
+          </div>
+        </div>`;
+      }
+    }).join("");
+
+    return `<div class="modal-back" data-act="close-modal"><div class="modal nav-customize-modal" role="dialog" aria-label="${tr("Customize sidebar")}" data-act="stop">
+      <div class="modal-head">
+        <button class="icon-btn" type="button" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button>
+        <h2>${tr("Customize sidebar")}</h2>
+        <button class="outline" type="button" data-act="nav-reset-default" style="height:32px;padding:0 12px;font-size:13px;">${tr("Reset to default")}</button>
+        <button class="save" type="button" data-act="close-modal">${tr("Done")}</button>
+      </div>
+      <div class="modal-body">
+        <div class="nav-customize-intro">
+          <p class="muted">${tr("Reorder items and organize them into folders.")}</p>
+          <button class="outline primary" type="button" data-act="nav-open-new-folder" style="height:32px;padding:0 12px;font-size:13px;display:flex;align-items:center;gap:6px;">${icon("plus")} ${tr("New folder")}</button>
+        </div>
+        ${STATE.navNewFolderOpen ? `
+          <form class="nav-new-folder-form" data-act="nav-create-folder-submit">
+            <input type="text" id="nav-new-folder-input" class="nav-folder-rename-input" placeholder="${tr("Folder name")}" maxlength="30" required autofocus />
+            <button type="submit" class="save" style="height:32px;padding:0 14px;">${tr("Save")}</button>
+            <button type="button" class="outline" data-act="nav-close-new-folder" style="height:32px;padding:0 10px;">${tr("Cancel")}</button>
+          </form>
+        ` : ""}
+        <div class="nav-cust-list">
+          ${rows}
+        </div>
+      </div>
+    </div></div>`;
+  }
+
   function modal() {
     if (STATE.removeFeed) return removeFeedDialog();
 if (STATE.histClear) {
@@ -10228,6 +10529,7 @@ if (STATE.histClear) {
         </div>
       </div></div>`;
     }
+    if (STATE.modal === "nav-customize") return navCustomizeModal();
     if (STATE.modal === "tabs") {
       const pinned = STATE.settings.lists.filter((list) => list.pinned);
       const rows = pinned.map((list, index) => `<div class="acct-row tab-manage-row"><span class="color-chip" style="background:${esc(list.bannerColor || COLORS[0])}"></span><span class="who-copy"><span class="name">${esc(list.name)}</span><span class="handle">${trn("members", (list.members || []).length)}</span></span><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="-1" aria-label="${esc(tr("Move {name} left", { name: list.name }))}"${index === 0 ? " disabled" : ""}>${icon("chevL")}</button><button class="icon-btn" type="button" data-act="tab-move" data-id="${esc(list.id)}" data-dir="1" aria-label="${esc(tr("Move {name} right", { name: list.name }))}"${index === pinned.length - 1 ? " disabled" : ""}>${icon("chevR")}</button><button class="outline" type="button" data-act="tab-unpin" data-id="${esc(list.id)}">${tr("Unpin")}</button></div>`).join("");
@@ -12141,7 +12443,140 @@ if (STATE.histClear) {
       render();
       return;
     }
-    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; render(); return; }
+    if (act === "toggle-nav-folder") {
+      toggleNavFolder(el.dataset.folderId);
+      return;
+    }
+    if (act === "rename-nav-folder") {
+      STATE.navEditingFolder = el.dataset.folderId;
+      render();
+      const input = document.getElementById("nav-folder-rename-input");
+      if (input) { input.focus(); input.select(); }
+      return;
+    }
+    if (act === "cancel-folder-rename") {
+      STATE.navEditingFolder = null;
+      render();
+      return;
+    }
+    if (act === "open-nav-customize") {
+      STATE.modal = "nav-customize";
+      STATE.navNewFolderOpen = false;
+      render();
+      return;
+    }
+    if (act === "nav-open-new-folder") {
+      STATE.navNewFolderOpen = true;
+      render();
+      const input = document.getElementById("nav-new-folder-input");
+      if (input) input.focus();
+      return;
+    }
+    if (act === "nav-close-new-folder") {
+      STATE.navNewFolderOpen = false;
+      render();
+      return;
+    }
+    if (act === "nav-reset-default") {
+      saveNavCustom(DEFAULT_NAV_CUSTOM);
+      render();
+      toast(tr("Reset to default"));
+      return;
+    }
+    if (act === "nav-order-move") {
+      const idx = Number(el.dataset.idx);
+      const dir = Number(el.dataset.dir);
+      const custom = getNavCustom();
+      const target = idx + dir;
+      if (target >= 0 && target < custom.order.length) {
+        const tmp = custom.order[idx];
+        custom.order[idx] = custom.order[target];
+        custom.order[target] = tmp;
+        saveNavCustom(custom);
+        render();
+      }
+      return;
+    }
+    if (act === "nav-subitem-move") {
+      const folderId = el.dataset.folderId;
+      const itemId = el.dataset.id;
+      const dir = Number(el.dataset.dir);
+      const custom = getNavCustom();
+      const folder = custom.folders.find((f) => f.id === folderId);
+      if (folder) {
+        const idx = folder.items.indexOf(itemId);
+        const target = idx + dir;
+        if (idx !== -1 && target >= 0 && target < folder.items.length) {
+          const tmp = folder.items[idx];
+          folder.items[idx] = folder.items[target];
+          folder.items[target] = tmp;
+          saveNavCustom(custom);
+          render();
+        }
+      }
+      return;
+    }
+    if (act === "nav-remove-from-folder") {
+      const folderId = el.dataset.folderId;
+      const itemId = el.dataset.id;
+      const custom = getNavCustom();
+      const folder = custom.folders.find((f) => f.id === folderId);
+      if (folder) {
+        folder.items = folder.items.filter((it) => it !== itemId);
+        const fKey = "folder:" + folderId;
+        const fIdx = custom.order.indexOf(fKey);
+        if (fIdx !== -1) custom.order.splice(fIdx + 1, 0, itemId);
+        else custom.order.push(itemId);
+        saveNavCustom(custom);
+        render();
+      }
+      return;
+    }
+    if (act === "nav-prompt-rename") {
+      const folderId = el.dataset.folderId;
+      const custom = getNavCustom();
+      const folder = custom.folders.find((f) => f.id === folderId);
+      if (folder) {
+        const next = window.prompt(tr("Folder name"), folder.name);
+        if (next && next.trim()) {
+          folder.name = next.trim().slice(0, 30);
+          saveNavCustom(custom);
+          render();
+        }
+      }
+      return;
+    }
+    if (act === "nav-delete-folder") {
+      const folderId = el.dataset.folderId;
+      const custom = getNavCustom();
+      const folderIdx = custom.folders.findIndex((f) => f.id === folderId);
+      if (folderIdx !== -1) {
+        const folder = custom.folders[folderIdx];
+        const fKey = "folder:" + folderId;
+        const ordIdx = custom.order.indexOf(fKey);
+        if (ordIdx !== -1) {
+          custom.order.splice(ordIdx, 1, ...(folder.items || []));
+        }
+        custom.folders.splice(folderIdx, 1);
+        saveNavCustom(custom);
+        render();
+      }
+      return;
+    }
+    if (act === "nav-toggle-vis") {
+      const itemId = el.dataset.id;
+      const custom = getNavCustom();
+      const idx = custom.hidden.indexOf(itemId);
+      if (idx !== -1) {
+        custom.hidden.splice(idx, 1);
+      } else {
+        custom.hidden.push(itemId);
+      }
+      saveNavCustom(custom);
+      render();
+      return;
+    }
+    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return; }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
       const feed = feedById(id) || catalogAccount("x", el.dataset.handle || "");
@@ -13302,6 +13737,44 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   });
 
   document.addEventListener("submit", (event) => {
+    const folderRenameForm = event.target.closest && event.target.closest("form[data-act='save-folder-rename']");
+    if (folderRenameForm) {
+      event.preventDefault();
+      const folderId = folderRenameForm.dataset.folderId;
+      const input = folderRenameForm.querySelector(".nav-folder-rename-input");
+      const val = input ? input.value.trim().slice(0, 30) : "";
+      if (val) {
+        const custom = getNavCustom();
+        const folder = custom.folders.find((f) => f.id === folderId);
+        if (folder) {
+          folder.name = val;
+          saveNavCustom(custom);
+        }
+      }
+      STATE.navEditingFolder = null;
+      render();
+      return;
+    }
+    const newFolderForm = event.target.closest && event.target.closest("form[data-act='nav-create-folder-submit']");
+    if (newFolderForm) {
+      event.preventDefault();
+      const input = newFolderForm.querySelector("#nav-new-folder-input");
+      const val = input ? input.value.trim().slice(0, 30) : "";
+      if (val) {
+        const custom = getNavCustom();
+        const newId = "f_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        custom.folders.push({
+          id: newId,
+          name: val,
+          items: []
+        });
+        custom.order.push("folder:" + newId);
+        saveNavCustom(custom);
+      }
+      STATE.navNewFolderOpen = false;
+      render();
+      return;
+    }
     if (event.target.closest && event.target.closest("form.hist-search")) {
       event.preventDefault();
       const input = event.target.querySelector("#hist-q");
@@ -13370,6 +13843,23 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   });
 
   document.addEventListener("change", (event) => {
+    const navSel = event.target && event.target.closest && event.target.closest("select[data-act='nav-select-folder']");
+    if (navSel) {
+      const folderId = navSel.value;
+      const itemId = navSel.dataset.id;
+      if (folderId && itemId) {
+        const custom = getNavCustom();
+        const targetFolder = custom.folders.find((f) => f.id === folderId);
+        if (targetFolder) {
+          custom.order = custom.order.filter((it) => it !== itemId);
+          custom.folders.forEach((f) => { f.items = f.items.filter((it) => it !== itemId); });
+          targetFolder.items.push(itemId);
+          saveNavCustom(custom);
+          render();
+        }
+      }
+      return;
+    }
     if (event.target.id === "translate-to" && window.FeedsTranslate) {
       window.FeedsTranslate.setTarget(event.target.value);
       return;
@@ -14622,7 +15112,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!STATE.viewer || !STATE.viewer.video) return;
         const files = (list || []).filter((row) => row && row.kind !== "iframe" && row.url);
         const file = files[index];
-        if (!file) { showCover(); return; }
+        if (!file) {
+          if (post && post.platform === "tiktok" && typeof window.showTikTokCaptcha === "function") {
+            window.showTikTokCaptcha({
+              handle: post.handle || "tiktok",
+              url: post.url || ("https://www.tiktok.com/@" + encodeURIComponent(post.handle || "tiktok")),
+              onRetry: () => sourcesFor(post || {}, media, 0).then((l) => playAt(l, 0)).catch(() => showCover())
+            });
+          }
+          showCover();
+          return;
+        }
         const fail = () => playAt(list, index + 1);
         if (file.telegram && file.kind === "hls") {
           loadTelegramHls().then((Hls) => {

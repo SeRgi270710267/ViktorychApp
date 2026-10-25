@@ -515,6 +515,96 @@
       '<ul class="shorts-account-list" id="shorts-added"></ul></div></div>';
   }
 
+  var captchaActive = null;
+
+  function openCaptchaModal(opts) {
+    opts = opts || {};
+    captchaActive = opts;
+    var modal = document.getElementById("tiktok-captcha-modal");
+    if (!modal && typeof document !== "undefined" && document.body) {
+      var wrap = document.createElement("div");
+      wrap.innerHTML = captchaModalHtml();
+      if (wrap.firstElementChild) {
+        document.body.appendChild(wrap.firstElementChild);
+        modal = document.getElementById("tiktok-captcha-modal");
+      }
+    }
+    if (!modal) return;
+    modal.onclick = function (e) {
+      if (e.target && e.target.id === "tiktok-captcha-modal") {
+        closeCaptchaModal();
+        return;
+      }
+      var captchaBtn = e.target.closest ? e.target.closest("[data-captcha]") : null;
+      if (captchaBtn) {
+        e.preventDefault();
+        var ckind = captchaBtn.getAttribute("data-captcha");
+        if (ckind === "close") closeCaptchaModal();
+        else if (ckind === "retry") retryCaptchaAction();
+      }
+    };
+    var handle = String(opts.handle || "tiktok").replace(/^@/, "");
+    var url = opts.url || ("https://www.tiktok.com/@" + encodeURIComponent(handle));
+    var handleEl = document.getElementById("tt-captcha-handle");
+    if (handleEl) handleEl.textContent = "@" + handle;
+    var linkEl = document.getElementById("tt-captcha-link");
+    if (linkEl) {
+      linkEl.href = url;
+      linkEl.onclick = function (e) {
+        try {
+          var pop = window.open(url, "tt_verify", "width=580,height=720,menubar=no,toolbar=no,location=yes,status=no");
+          if (pop) {
+            e.preventDefault();
+            pop.focus();
+          }
+        } catch (err) {}
+      };
+    }
+    modal.hidden = false;
+  }
+
+  function closeCaptchaModal() {
+    var modal = document.getElementById("tiktok-captcha-modal");
+    if (modal) modal.hidden = true;
+    captchaActive = null;
+  }
+
+  function retryCaptchaAction() {
+    var active = captchaActive;
+    closeCaptchaModal();
+    if (active && typeof active.onRetry === "function") {
+      active.onRetry();
+    }
+  }
+
+  if (typeof window !== "undefined") {
+    window.showTikTokCaptcha = openCaptchaModal;
+  }
+
+  function captchaModalHtml() {
+    return '<div class="tiktok-captcha-modal" id="tiktok-captcha-modal" hidden role="dialog" aria-modal="true" aria-labelledby="tt-captcha-title">' +
+      '<div class="tiktok-captcha-card">' +
+      '<div class="tiktok-captcha-head">' +
+      '<div class="tiktok-captcha-badge">' +
+      '<svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/></svg>' +
+      '<span id="tt-captcha-title">' + hooks.esc(tr("TikTok Verification")) + '</span>' +
+      '</div>' +
+      '<button type="button" class="tiktok-captcha-x" data-captcha="close" aria-label="' + hooks.esc(tr("Close")) + '">×</button>' +
+      '</div>' +
+      '<div class="tiktok-captcha-body">' +
+      '<p class="tiktok-captcha-desc" id="tt-captcha-desc">' + hooks.esc(tr("TikTok requires a quick verification or reached a temporary limit. Complete the challenge to continue.")) + '</p>' +
+      '<div class="tiktok-captcha-target">' +
+      '<span class="tiktok-captcha-handle" id="tt-captcha-handle">@tiktok</span>' +
+      '</div>' +
+      '<div class="tiktok-captcha-actions">' +
+      '<a class="tiktok-captcha-btn solve" id="tt-captcha-link" href="#" target="_blank" rel="noopener noreferrer">' +
+      '<span>' + hooks.esc(tr("Open TikTok to Solve")) + '</span>' +
+      '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.58 5H14V3zM5 5h6V3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2v6H5V5z"/></svg>' +
+      '</a>' +
+      '<button type="button" class="tiktok-captcha-btn retry" data-captcha="retry">' + hooks.esc(tr("I’ve completed it — Continue")) + '</button>' +
+      '</div></div></div></div>';
+  }
+
   function mhead() {
     return '<div class="mhead"><button class="m-ava" data-act="drawer" type="button" aria-label="' + hooks.esc(tr("Menu")) + '"><span class="ava initials">Y</span></button>' +
       '<a class="m-logo" href="#/" aria-label="' + hooks.esc(hooks.productName()) + '">' + hooks.logo() + "</a>" +
@@ -531,7 +621,7 @@
         : '<article class="shorts-slide"><div class="shorts-stage"><div class="shorts-offline"><h2>' + hooks.esc(tr("No posts yet")) + "</h2></div></div></article>";
     }
     return '<div class="shorts-page"><div class="shorts-top">' + mhead() + tabs(live) + "</div>" +
-      '<div class="shorts-feed" id="shorts-feed">' + slides + "</div>" + accountSheet() + "</div>";
+      '<div class="shorts-feed" id="shorts-feed">' + slides + "</div>" + accountSheet() + captchaModalHtml() + "</div>";
   }
 
   function destroyHls() {
@@ -1248,7 +1338,7 @@
     if (video) video.muted = !sound;
   }
 
-  function showLiveMessage(handle, text, retry) {
+  function showLiveMessage(handle, text, retry, verify) {
     var root = liveRoot();
     if (!root || root.getAttribute("data-handle") !== handle) return;
     var cover = root.querySelector(".shorts-live-cover");
@@ -1261,6 +1351,18 @@
       var old = root.querySelector("[data-shorts='retry-live']");
       if (old) old.remove();
     }
+    var oldVerify = root.querySelector("[data-shorts='open-captcha']");
+    if (verify) {
+      if (!oldVerify && cover) {
+        var vbtn = document.createElement("button");
+        vbtn.type = "button";
+        vbtn.className = "shorts-live-verify";
+        vbtn.setAttribute("data-shorts", "open-captcha");
+        vbtn.setAttribute("data-handle", handle);
+        vbtn.textContent = tr("Solve verification");
+        cover.appendChild(vbtn);
+      }
+    } else if (oldVerify) oldVerify.remove();
     if (cover) cover.hidden = false;
     var video = root.querySelector("video");
     if (video) {
@@ -1532,7 +1634,20 @@
       var badge = root.querySelector(".shorts-live-tag");
       if (badge) badge.hidden = !info.live;
       if (info.blocked) {
-        showLiveMessage(handle, tr("TikTok blocked this live."));
+        showLiveMessage(handle, tr("TikTok blocked this live."), false, true);
+        openCaptchaModal({
+          handle: handle,
+          url: "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live",
+          onRetry: function () {
+            var base = apiBase();
+            if (base && hooks.token()) {
+              fetch(base + "/v1/owner/live/" + encodeURIComponent(handle) + "?clear=1", { headers: authHeaders() }).catch(function () {});
+            }
+            refreshLive(handle).then(function () {
+              startLive(handle);
+            });
+          }
+        });
         return;
       }
       if (!info.live) {
@@ -1641,6 +1756,19 @@
         var poster = slideEl && slideEl.querySelector(".shorts-poster");
         if (poster) poster.style.display = "block";
         backingNote(slideEl, playbackNote(err));
+        if (post && post.platform === "tiktok" && err && (err.code === "limited" || err.code === "play")) {
+          var postHandle = post.handle || "tiktok";
+          openCaptchaModal({
+            handle: postHandle,
+            url: post.url || ("https://www.tiktok.com/@" + encodeURIComponent(postHandle)),
+            onRetry: function () {
+              video.dataset.tgArm = "";
+              armStored(video, post, "auto");
+              var playPromise = video.play();
+              if (playPromise && playPromise.catch) playPromise.catch(function () {});
+            }
+          });
+        }
       });
       return;
     }
@@ -1978,6 +2106,18 @@
   }
 
   function onPageClick(event) {
+    if (event.target && event.target.id === "tiktok-captcha-modal") {
+      closeCaptchaModal();
+      return;
+    }
+    var captchaBtn = event.target.closest ? event.target.closest("[data-captcha]") : null;
+    if (captchaBtn) {
+      event.preventDefault();
+      var ckind = captchaBtn.getAttribute("data-captcha");
+      if (ckind === "close") closeCaptchaModal();
+      else if (ckind === "retry") retryCaptchaAction();
+      return;
+    }
     if (event.target && event.target.id === "shorts-accounts") {
       closeAccounts();
       return;
@@ -1991,6 +2131,24 @@
     } else if (kind === "close-accounts") {
       event.preventDefault();
       closeAccounts();
+    } else if (kind === "open-captcha") {
+      event.preventDefault();
+      var cHandle = button.getAttribute("data-handle") || "tiktok";
+      openCaptchaModal({
+        handle: cHandle,
+        url: "https://www.tiktok.com/@" + encodeURIComponent(cHandle) + (onLiveRoute() ? "/live" : ""),
+        onRetry: function () {
+          if (onLiveRoute()) {
+            var base = apiBase();
+            if (base && hooks.token()) {
+              fetch(base + "/v1/owner/live/" + encodeURIComponent(cHandle) + "?clear=1", { headers: authHeaders() }).catch(function () {});
+            }
+            refreshLive(cHandle).then(function () { startLive(cHandle); });
+          } else {
+            playActive();
+          }
+        }
+      });
     } else if (kind === "toggle-lock") {
       event.preventDefault();
       toggleLock();
@@ -2110,6 +2268,8 @@
     isLocked: isLocked,
     isUnlocked: isUnlocked,
     setLocked: setLocked,
-    toggleLock: toggleLock
+    toggleLock: toggleLock,
+    showCaptcha: openCaptchaModal,
+    closeCaptcha: closeCaptchaModal
   };
 })();
