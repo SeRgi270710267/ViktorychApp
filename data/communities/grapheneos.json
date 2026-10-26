@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-25T23:29:06Z",
+  "fetchedAt": "2026-10-26T00:13:13Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,149 @@
       ]
     },
     {
+      "id": "43094",
+      "title": "Graphene OS for Normies and Newbies",
+      "author": "YiyaK",
+      "authorUsername": "YiyaK",
+      "authorAvatar": "",
+      "score": 5,
+      "comments": 5,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792955202,
+      "lastPostedAt": 1792973317,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
+      "media": [],
+      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
+      "replies": [
+        {
+          "id": "277397",
+          "number": 2,
+          "author": "YiyaK",
+          "authorUsername": "YiyaK",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792957582,
+          "parent": "43094",
+          "text": "<p>In the beginning after installation, I would GO SLOW. I wasted a lot of time over the past couple of weeks installing, uninstalling, and rearranging things. Graphene provides everything needed for a functional user experience, right from the beginning.</p>  \n\n<p>I took some some time to read (and reread) the user guide. A lot of stuff there was over my head, but a lot wasn't, and I learned where things are and what they do. Graphene is a highly customizable OS - I just need to keep reminding myself that, as a normie, I don't need a lot of that customization. But now I know where to find out how to go about it is I decide I do at some later time.</p> \n\n<p>I downloaded almost everything initially from the Graphene app store. I left the Google options alone at first, and still haven't bothered with the note feature.</p>\n\n<p>Also, I downloaded the f-droid store from their website: <a href=\"https://f-droid.org/\" rel=\"ugc nofollow\">https://f-droid.org/</a> to have more app options and to reload some of my favorites.</p> \n\n<p>The keyboard was driving me crazy - I need Swipe typing capability - so I downloaded the FUTO keyboard from the Obtainium store.  I'm still figuring Obtainium out, BTW.</p>\n\n<p>I downloaded the Signal messaging app from the f-droid store. It's also available directly from their website: <a href=\"https://f-droid.org/\" rel=\"ugc nofollow\">https://f-droid.org/</a></p>\n\n<p>That was enough customization for day one - the open source basics I know and was already using, set up to Graphene OS.</p> \n\n<p>I started here in the Graphene forum on day one, also. Lots of helpful folks here, though some suggestions and answers to my questions are a bit techie for me. I'm learning, though!</p> "
+        },
+        {
+          "id": "277405",
+          "number": 3,
+          "author": "YiyaK",
+          "authorUsername": "YiyaK",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792960039,
+          "parent": "43094",
+          "text": "<p>Another thing I struggled with was whether or not I needed a VPN - I wasn't really sure what a VPN did. Found an excellent summary at the IVPN site, here: <a href=\"https://www.ivpn.net/en/\" rel=\"ugc nofollow\">https://www.ivpn.net/en/</a> <br>\nScroll down to the \"Do I really need a VPN\"  section.</p>\n\n<p>I decided that I don't want my internet/cellular provider tracking which websites I visit, don't want websites tracking my IP address when I visit them, and, in the rare event I use public WiFi, want to keep that private too.</p>\n\n<p>I'm using the free Proton VPN service for now - it meets my basic needs.</p> "
+        },
+        {
+          "id": "277416",
+          "number": 4,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "",
+          "score": 5,
+          "created": 1792964321,
+          "parent": "43094",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies/3\" class=\"PostMention\" data-id=\"277405\"><i class=\"icon fas fa-reply\"></i>YiyaK</a> When evaluating whether or not to use a VPN, it might be useful to consult sources other than VPN providers.</p>\n\n<p>Occasionally I encourage Naomi Brockwell's content (NBTV.media), because explanations are fairly clear and, though I haven't watched a lot of them, I haven't seen advice that seems genuinely bad.  As it happens, she recently did a piece on potential issues with some VPNs... <a href=\"https://www.nbtv.media/episodes/is-the-government-running-a-dragnet-on-vpn-users\" rel=\"ugc nofollow\">https://www.nbtv.media/episodes/is-the-government-running-a-dragnet-on-vpn-users</a></p>\n\n<p>(I have no affiliation, financial or otherwise with NBTV.)</p>"
+        },
+        {
+          "id": "277435",
+          "number": 5,
+          "author": "YiyaK",
+          "authorUsername": "YiyaK",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792973317,
+          "parent": "43094",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies/4\" class=\"PostMention\" data-id=\"277416\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> I get what you're saying about sources and I read a bit before going to the site. I thought they had a clear explanation about both what a VPN can and can't do.</p> "
+        }
+      ]
+    },
+    {
+      "id": "8274",
+      "title": "How do I prevent apps from knowing when I screenshot?",
+      "author": "antsyboy",
+      "authorUsername": "antsyboy",
+      "authorAvatar": "",
+      "score": 37,
+      "comments": 37,
+      "views": 840,
+      "participantCount": 24,
+      "created": 1697589169,
+      "lastPostedAt": 1792973012,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
+      "media": [],
+      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
+      "replies": []
+    },
+    {
+      "id": "42352",
+      "title": "I finally have call screening working!",
+      "author": "ashley05",
+      "authorUsername": "ashley05",
+      "authorAvatar": "",
+      "score": 17,
+      "comments": 17,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1790472746,
+      "lastPostedAt": 1792972297,
+      "category": "Pixel 9",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 9"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42352-i-finally-have-call-screening-working",
+      "media": [],
+      "text": "<p>I have Call Screen working with Google's stock Phone app (Google Dialer) on GrapheneOS.</p>\n\n<p>Setup: Pixel 9, GrapheneOS 2026091900 (Android 17). Google Phone v218 (19664958), the same \"-pixel\" build that ships on stock Pixel firmware. I've tested it unlocked, and again after relocking with my own keys (avbroot).</p>\n\n<p>To develop and test without recompiling, I used root (Magisk) to install the Dialer as a privileged system app with these permissions allowlisted:</p>\n\n<ul><li>CAPTURE_AUDIO_OUTPUT</li>\n<li>MODIFY_AUDIO_ROUTING</li>\n<li>MODIFY_PHONE_STATE</li>\n<li>CAPTURE_VOICE_COMMUNICATION_OUTPUT</li>\n<li>CONTROL_INCALL_EXPERIENCE</li>\n<li>READ_PRIVILEGED_PHONE_STATE</li></ul>\n\n<p>It also needed:</p>\n\n<ul><li>com.google.android.dialer.support.jar from the stock image, installed as a library;</li>\n<li>Speech Services by Google set as the TTS and voice recognition engine, with the English (US) language pack downloaded;</li>\n<li>the US Call Screen feature flag forced on through the Dialer's local flag overrides;</li>\n<li>an exemption from GrapheneOS's dynamic code loading restrictions, because I installed it as a system app. A Play-installed Dialer shouldn't need that.</li></ul>\n\n<p>What works:</p>\n\n<ul><li>Call Screen, manual and automatic, with the live transcript and caller prompts</li>\n<li>Hold for Me</li>\n<li>Direct My Call</li>\n<li>Call Notes recording (both sides) and on-device transcription</li></ul>\n\n<p>What doesn't work natively: Take a Message, Call Notes summaries and Scam Detection. These depend on AICore (Gemini Nano). Google's server refuses the model download on GrapheneOS, both unlocked and relocked with my own keys. I got them working with Public Compute Services, an open-source Xposed module that supplies the model manifests so the models can download. But it needs root and Xposed, so it's not something for a GrapheneOS release.</p>\n\n<p>Still, getting Call Screen and the other non-AI features working with the stock Dialer is a very good start.</p>\n\n<p>Other things that are possible with root (I'm not proposing these for GrapheneOS at this time):</p>\n\n<ul><li>the Dialer's region checks can be overridden;</li>\n<li>the \"this call is being recorded\" announcement can be replaced with silence (I find this annoying and it is unnecessary in my single-party-consent location);</li>\n<li>the Call Screen prompts are plain audio files, so they can be replaced with your own recordings. (I think that would be fun to re-record in my own voice)</li></ul>\n\n<p>I'm waiting on more RAM and storage so I can build GrapheneOS from source. After some investigation and a lot of testing, I expect to have a patch to propose in 2–4 weeks.</p>\n\n<p>What I'm thinking of proposing is the same approach GrapheneOS uses for Android Auto. GrapheneOS would recognize the genuine Google Dialer by its signing certificate and offer opt-in toggles that grant only the permissions Call Screen needs. From my analysis so far, the minimum looks like CAPTURE_AUDIO_OUTPUT, MODIFY_AUDIO_ROUTING and MODIFY_PHONE_STATE. I still need to verify that on a source build. The Dialer would stay a normal app from Play, or from the GrapheneOS App Store if that's preferred.</p>\n\n<p>For the features that need AICore, there is FOSS code that shows how to get them working. But porting that into GrapheneOS in a secure and acceptable way is a major project, and some way off.</p>\n\n<p>A note on call recording: GrapheneOS doesn't make CAPTURE_AUDIO_OUTPUT available to apps installed from Play or sideloaded, so third-party recorder apps can't capture both sides of a call. GrapheneOS's own Phone app can record, but only while it's the default phone app. That means you can't combine it with Google's Call Screen. I personally miss having an always-on and working phone call recording application.</p> \n\n<p>I'd suggest making call-audio capture a per-app, opt-in permission. Ideally it would be a narrower GrapheneOS permission that covers only the call audio sources, rather than the full CAPTURE_AUDIO_OUTPUT. Then recording could be handled separately from whichever dialer you use for screening (related: #7128, #7205).</p>\n\n<p>*AI fixed my \"Zoolander school spelling,\" the formatting, and checked and corrected the exactly correct names of modules and permissions so that this was posted without technical errors.</p> ",
+      "replies": []
+    },
+    {
+      "id": "43098",
+      "title": "VVM and iPhone messaging work now.",
+      "author": "Qsecofr",
+      "authorUsername": "Qsecofr",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1792970965,
+      "lastPostedAt": 1792970965,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43098-vvm-and-iphone-messaging-work-now",
+      "media": [],
+      "text": "<p>When we started out we were unable to activate VVM and iphones kept trying to send us RCS messages.  We couldn't participate in group messages with iPhone users.</p>\n\n<p>I switched away from Pure talk (at&amp;t mvno) to US Mobile (Verizon).</p> \n\n<p>VVM came online right away and group messaging with iPhone users appears to be working.</p> \n\n <p>I did use a physical sim.</p>  \n\n<p>We are so glad these features are working now and hope this info helps some others.</p> ",
+      "replies": []
+    },
+    {
       "id": "42926",
       "title": "Browser-Fingerprinting over multiple profiles",
       "author": "magic-carpet-ride",
@@ -1879,175 +2022,6 @@
       "url": "https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles",
       "media": [],
       "text": "<p>Hello,</p>\n\n<p>i've discovered a hackernews article with the headline \"Fingerprints are the new cookies\"<br>\n( <a href=\"https://news.ycombinator.com/item?id=50048642\" rel=\"ugc nofollow\">https://news.ycombinator.com/item?id=50048642</a> ).</p>\n\n<p>The linked site does some browser fingerprints via javascript and shows it as a tag.<br>\nTested it today with my multi-profile setup (one profile with vpn and one without).<br>\nI've opened the site in Vanadium and Ironfox, noted the tags, switched profile, opened it again.<br>\nBoth browsers had the same fingerprint after switching profiles.</p>\n\n<p>I didn't had that on the radar and now i'm looking for ways to get rid of that.</p>\n\n<p>Any Suggestions?</p>\n\n\n<p>Also, thank you for this important work and awesome Project.<br>\nI've switched a few month ago and don't regret it for a second.</p>",
-      "replies": [
-        {
-          "id": "276197",
-          "number": 2,
-          "author": "cone-grill-dumping",
-          "authorUsername": "cone-grill-dumping",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792469984,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/1\" class=\"PostMention\" data-id=\"275855\"><i class=\"icon fas fa-reply\"></i>magic-carpet-ride</a> <br>\nVanadium is not a fingerprint-resistant browser, Ironfox might have some fingerprint resistance but is not a complete anonymity solution. Tor Browser (as noted by the Graphene OS project) is the browser with the best fingerprint resistance, Graphene OS has also recommended Brave in the past but I recommend using it with a VPN to achieve anonymity.</p>\n\n<p>In my experience it's best to have a browser where you do your everyday stuff and identify yourself (Vanadium is great for this), and one that hides your identity (like Brave + VPN, Mullvad Browser + VPN, or Tor Browser). Some people have also noted some success in using multiple browsers for different things, but given most Android browsers kinda suck for security or privacy I think two is a good number.</p> \n\n<p>Note that Firefox browsers are less secure than Chromium and increase attack surface. Also that Brave, unlike Tor, does not hide your timezone or system language.</p>"
-        },
-        {
-          "id": "276310",
-          "number": 3,
-          "author": "mmmm",
-          "authorUsername": "mmmm",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792507602,
-          "parent": "42926",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/2\" class=\"PostMention\" data-id=\"276197\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> recommend using it with a VPN to achieve anonymity.</p></blockquote>\n\n<p>That will not achieve anonymity. That will hide your IP from websites and prevent your ISP from seeing where you go. Good enough in most cases perhaps, but that's not anonymous. The only real way to achieve a modicum of anonymity is with Tor, and that's only with very careful use.</p> "
-        },
-        {
-          "id": "276846",
-          "number": 4,
-          "author": "cone-grill-dumping",
-          "authorUsername": "cone-grill-dumping",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792744854,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/3\" class=\"PostMention\" data-id=\"276310\"><i class=\"icon fas fa-reply\"></i>mmmm</a> <br>\nI would reread my post where I clearly pointed out that Graphene OS recommends Tor Browser for anonymity above all else. Brave is recommended if you're a VPN user.</p>\n\n<p>I'm not a VPN user, so I didn't tell users how to get an anonymous VPN. What I did do is point to a resource that explains fingerprinting and tells users not to use JavaScript, as it increases fingerprinting risk. From my understanding, Tor Browser on safest, or Brave without scripts + an anonymous VPN are the two best options. I didn't say what is best for that user because it is not my threat model, and therefore not my place to sway their thinking. Tor is also not the only anonymity tool, and I try to avoid absolutes when advising others</p>"
-        },
-        {
-          "id": "276967",
-          "number": 5,
-          "author": "mmmm",
-          "authorUsername": "mmmm",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792780041,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/4\" class=\"PostMention\" data-id=\"276846\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> I read your post. And recommending brave and a VPN for anonymity is not a great idea.</p> "
-        },
-        {
-          "id": "277007",
-          "number": 6,
-          "author": "Reboot",
-          "authorUsername": "Reboot",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792789926,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/2\" class=\"PostMention\" data-id=\"276197\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> Regarding Tor Browser, as someone mentioned already, you should be careful.<br>\n<a href=\"https://rknf404.github.io/chromium-hardening-guide/BROWSER_SELECTION/#tor-browser-tor-browser\" rel=\"ugc nofollow\">https://rknf404.github.io/chromium-hardening-guide/BROWSER_SELECTION/#tor-browser-tor-browser</a><br>\n<a href=\"https://nitter.meowing.monster/GrapheneOS/status/1945622753148584427#m\" rel=\"ugc nofollow\">https://nitter.meowing.monster/GrapheneOS/status/1945622753148584427#m</a></p>\n\n<p>Also using multiple browsers is <a href=\"https://rknf404.github.io/chromium-hardening-guide/BROWSER_SELECTION/#using-multiple-browsers\" rel=\"ugc nofollow\">not ideal</a>, and Mullvad Browser <a href=\"https://rknf404.github.io/chromium-hardening-guide/BROWSER_SELECTION/#mullvad-mullvad-browser\" rel=\"ugc nofollow\">neither</a>.</p>"
-        },
-        {
-          "id": "277024",
-          "number": 7,
-          "author": "cone-grill-dumping",
-          "authorUsername": "cone-grill-dumping",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792799757,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/6\" class=\"PostMention\" data-id=\"277007\"><i class=\"icon fas fa-reply\"></i>Reboot</a> <br>\nRecommending a non-anonymous browser and one intended for anonymity is not insane advice. You wouldn't log into your bank on Tor Browser would ya?</p>\n\n<p>That website is specifically recommending against using multiple browsers for clear web activities, which I agree with the website on. Every security researcher I've seen has recommended the use of an everyday browser alongside Tor Browser (for obvious reasons)</p>\n\n<p>I already touched on how bad Firefox security is. Tor Browser is (unfortunately) the best attempt on any platform at fingerprint resistance (which was the entire point of this discussion). Ideally you'd run Tor Browser in a VM of some kind, like Whonix, to mitigate attack surface</p>"
-        },
-        {
-          "id": "277031",
-          "number": 8,
-          "author": "cone-grill-dumping",
-          "authorUsername": "cone-grill-dumping",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792801670,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/5\" class=\"PostMention\" data-id=\"276967\"><i class=\"icon fas fa-reply\"></i>mmmm</a> <br>\nIf you use a fingerprint resistant browser, with scripts disabled, and an anonymous VPN; that's a totally valid way to achieve a good amount of anonymity.</p>\n\n<p>Tech doesn't create anonymity, your usage does. I personally don't recommend browsers plus VPNs because Tor does a lot of the work for you. However, there are people who want to use Chromium for security, and I was pointing out Graphene OS's recommendations because that is a valid approach if done correctly</p>"
-        },
-        {
-          "id": "277078",
-          "number": 9,
-          "author": "Reboot",
-          "authorUsername": "Reboot",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792826214,
-          "parent": "42926",
-          "text": "\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/7\" class=\"PostMention\" data-id=\"277024\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> like Whonix, to mitigate attack surface</p></blockquote>\n\n<p>Whonix isn't good:<br>\n<a href=\"https://nitter.meowing.monster/GrapheneOS/status/1945611285451706610#m\" rel=\"ugc nofollow\">https://nitter.meowing.monster/GrapheneOS/status/1945611285451706610#m</a><br>\n<a href=\"https://nitter.meowing.monster/GrapheneOS/status/1861466149478715700#m\" rel=\"ugc nofollow\">https://nitter.meowing.monster/GrapheneOS/status/1861466149478715700#m</a><br>\n<a href=\"https://discuss.grapheneos.org/d/12764-thoughts-on-security-of-kicksecure-debian-based-linux-distribution/67\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#12764</span><span class=\"UrlLink-post\"><i class=\"icon fas fa-comment UrlLink-postIcon\" aria-hidden=\"true\"></i>67</span></a><br>\n<a href=\"https://discuss.grapheneos.org/d/12764-thoughts-on-security-of-kicksecure-debian-based-linux-distribution/35\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#12764</span><span class=\"UrlLink-post\"><i class=\"icon fas fa-comment UrlLink-postIcon\" aria-hidden=\"true\"></i>35</span></a></p>\n"
-        },
-        {
-          "id": "277090",
-          "number": 10,
-          "author": "mmmm",
-          "authorUsername": "mmmm",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792832497,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/8\" class=\"PostMention\" data-id=\"277031\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> The VPN inherently knows all. It can't possibly be anonymous. Sure you can use one for hiding your traffic from you ISP or who you are from the websites you visit, but nontheless, the VPN provider takes the role. You can trust them, that's fine. But you're in no way anonymous, even if you pay via anon means and do all the other trickery, and use a no logs VPN or whatever, it's not anonymous. Suggesting it is anonymous is definitely not good advice.</p> \n\n"
-        },
-        {
-          "id": "277204",
-          "number": 11,
-          "author": "cone-grill-dumping",
-          "authorUsername": "cone-grill-dumping",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792871725,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/9\" class=\"PostMention\" data-id=\"277078\"><i class=\"icon fas fa-reply\"></i>Reboot</a> <br>\nWhonix is really the best we have at the moment unfortunately, and the concept of sandboxing the Tor daemon in another VM is sound. If you're really concerned you can route any OS through the Whonix gateway for added anonymity</p>\n\n<p>The Tor Browser bundle isn't really secure either, Whonix is a definitive step up from just running Tor Browser on bare metal. It's even a step up from running it in a VM, since Whonix leverages virtualization to ensure that if the Workstation is hacked your IP won't be leaked</p>"
-        },
-        {
-          "id": "277205",
-          "number": 12,
-          "author": "cone-grill-dumping",
-          "authorUsername": "cone-grill-dumping",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792872413,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/10\" class=\"PostMention\" data-id=\"277090\"><i class=\"icon fas fa-reply\"></i>mmmm</a> <br>\nWe need to talk about threat model in relation to OP's situation, as they're looking to beat browser fingerprinting. IP is part of your fingerprint. I recommended ways to be anonymous to WEBSITES, which is what OP was looking for.</p> \n\n<p>You're also bringing up trust and fingerprinting web traffic. You do realize exit relays can track your web traffic too right? You also have to trust Tor to not have their infrastructure compromised, which has happened. Tor is not a magic bullet, and we need to be able to recommend other options for users</p>"
-        },
-        {
-          "id": "277210",
-          "number": 13,
-          "author": "mmmm",
-          "authorUsername": "mmmm",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792874084,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/12\" class=\"PostMention\" data-id=\"277205\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> <br>\nLook, that's not the issue. The issue is this claim you made:</p> \n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/2\" class=\"PostMention\" data-id=\"276197\"><i class=\"icon fas fa-reply\"></i>cone-grill-dumping</a> Graphene OS has also recommended Brave in the past but I recommend using it with a VPN to achieve anonymity.</p></blockquote>\n\n<p>This is a dangerous claim because; no matter what extensions you add or how you pay for the VPN, or even what the VPN claims, this is not a path to any kind of anonymity. Yet you claim it is. You even recommend it. It is not the case though.</p> \n\n<p>You're moving the goal posts.</p> \n\n<p>I have stated already that Tor is not fool proof, mentioning several times it still needs care and attention. Regardless, it's the only way to achieve a modicum of anonymity. A VPN does no such thing, aside from protecting your IP from your ISP and your IP from websites visited. That's great if that's what one wants, many do - myself included. But it's not anonymous. You are not browsing the web anonymously, as in the meaning of the word anonymous.</p> "
-        },
-        {
-          "id": "277431",
-          "number": 14,
-          "author": "cone-grill-dumping",
-          "authorUsername": "cone-grill-dumping",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792968991,
-          "parent": "42926",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles/13\" class=\"PostMention\" data-id=\"277210\"><i class=\"icon fas fa-reply\"></i>mmmm</a> <br>\nI don't think that pointing out that I'm focusing on what OP needs and using layman language is moving the goal post.</p> \n\n<p>Here's the definition of anonymous from Merriam Webster:</p>\n<ol><li>of unknown authorship or origin</li>\n<li>not named or identified</li>\n<li>lacking individuality, distinction, or recognizability<br>\nThere are VPNs out there that, under certain threat models, would serve to protect OP. We can presume OP is not a high value target, so the money, legal resources, or hacking expertise to deanonymize OP would probably be too great to put to use. Thus, OP remains anonymous -- paying with cash leaves no payment info, leaving no identifying information, leaving no name. If anything, Tor can harm certain threat models by making people stand out too much as compared to a VPN like Mullvad or I-VPN.</li> </ol>\n\n<p>Tor is great because it requires no info to use and handles the browser fingerprinting threat, but it is highly fingerprintable to local network operators and guard nodes. Tor Browser is also insecure, which is why we're even needing this discussion.</p> \n\n<p>Using the word anonymous was loaded, I'll admit. I have a bad habit of compromising correctness for being able to be understood by laymans. I don't think it was necessarily wrong, but loaded. I also feel that VPNs can be a useful tool to protect anonymity in some threat models, especially if you disable javascript and use a common browser. My mindset isn't that tools are inherently anonymous or private, but rather that they protect anonymity and privacy. Your choices online devalue your privacy and anonymity. However explaining that to OP in a post about browser fingerprinting felt like too much at the time</p>\n\n<p>I'm open to having conversations about anonymizing technology and in what circumstances they work. We need other options than Tor, especially since no option is a true panacea</p>"
-        }
-      ]
-    },
-    {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 36,
-      "comments": 36,
-      "views": 805,
-      "participantCount": 23,
-      "created": 1697589169,
-      "lastPostedAt": 1792968665,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
       "replies": []
     },
     {
@@ -2175,30 +2149,6 @@
       "replies": []
     },
     {
-      "id": "43094",
-      "title": "Graphene OS for Normies and Newbies",
-      "author": "YiyaK",
-      "authorUsername": "YiyaK",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792955202,
-      "lastPostedAt": 1792964321,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
-      "media": [],
-      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
-      "replies": []
-    },
-    {
       "id": "43096",
       "title": "How to bypass google sign-in to use certain apps with AndroidAuto ",
       "author": "stonewll123",
@@ -2269,54 +2219,6 @@
       "url": "https://discuss.grapheneos.org/d/43009-mail-client",
       "media": [],
       "text": "<p>Which would you prefer between FairMail and K9 mail clients?</p>",
-      "replies": []
-    },
-    {
-      "id": "42154",
-      "title": "New messaging app",
-      "author": "ojzula",
-      "authorUsername": "ojzula",
-      "authorAvatar": "",
-      "score": 8,
-      "comments": 8,
-      "views": 280,
-      "participantCount": 8,
-      "created": 1789897701,
-      "lastPostedAt": 1792960153,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42154-new-messaging-app",
-      "media": [],
-      "text": "<p>When new messaging app willa be addee to beta ? <br>\nCheers</p>\n",
-      "replies": []
-    },
-    {
-      "id": "43048",
-      "title": "More native code debugging attempts recently",
-      "author": "cupcake-alibi",
-      "authorUsername": "cupcake-alibi",
-      "authorAvatar": "",
-      "score": 10,
-      "comments": 10,
-      "views": 280,
-      "participantCount": 8,
-      "created": 1792786787,
-      "lastPostedAt": 1792960092,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
-      "media": [],
-      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
       "replies": []
     }
   ]
