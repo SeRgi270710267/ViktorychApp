@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T18:02:27Z",
+  "fetchedAt": "2026-10-26T18:43:40Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -582,6 +582,56 @@
       "repliesTotal": 1
     },
     {
+      "id": "4273",
+      "title": "Feature request: wildcard in numbers' blocklist and implement allowlist.",
+      "author": "DeletedUser622",
+      "authorUsername": "DeletedUser622",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1680515378,
+      "lastPostedAt": 1793040181,
+      "category": "Development",
+      "categoryColor": "#2e52e0",
+      "tags": [
+        "Development"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/4273-feature-request-wildcard-in-numbers-blocklist-and-implement-allowlist",
+      "media": [],
+      "text": "Hi,\n\nIt would be nice to have an option to enter a partial phone number into the dialer's blocklist. And to have an allowlist, so a user could only allow incoming calls from specific range of numbers.\n\nThank you.",
+      "replies": [],
+      "repliesTotal": 6
+    },
+    {
+      "id": "43107",
+      "title": "Install into system partition",
+      "author": "redacted_handle",
+      "authorUsername": "redacted_handle",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1793025420,
+      "lastPostedAt": 1793038185,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43107-install-into-system-partition",
+      "media": [],
+      "text": "Is there a way to install anything into system space without unlock the device or is this not possible?\n\nIs there a way to install anything surviving to a wipe without unlock it?\n\nThanks",
+      "replies": [],
+      "repliesTotal": 3
+    },
+    {
       "id": "43073",
       "title": "How to Convince People to Use GrapheneOS",
       "author": "Reboot",
@@ -681,31 +731,6 @@
       "text": "Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.\n\nFirst, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.\n\nThen the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!). When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.\n\nOk there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!",
       "replies": [],
       "repliesTotal": 9
-    },
-    {
-      "id": "43107",
-      "title": "Install into system partition",
-      "author": "redacted_handle",
-      "authorUsername": "redacted_handle",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1793025420,
-      "lastPostedAt": 1793034364,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43107-install-into-system-partition",
-      "media": [],
-      "text": "Is there a way to install anything into system space without unlock the device or is this not possible?\n\nIs there a way to install anything surviving to a wipe without unlock it?\n\nThanks",
-      "replies": [],
-      "repliesTotal": 2
     },
     {
       "id": "43100",
@@ -939,31 +964,6 @@
       "text": "I was looking for a way to let DeepL give me the pronunciation of a word and activated Talkback in accessibility services, from this moment on every element I touch on the screen gets a green frame and I can do nothing more, no gesture navigation, phone is locked after pressing the power button to reboot the phone but I can't reboot or unlock.\n\nWhat to do now to stop this?",
       "replies": [],
       "repliesTotal": 15
-    },
-    {
-      "id": "4273",
-      "title": "Feature request: wildcard in numbers' blocklist and implement allowlist.",
-      "author": "DeletedUser622",
-      "authorUsername": "DeletedUser622",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1680515378,
-      "lastPostedAt": 1793025273,
-      "category": "Development",
-      "categoryColor": "#2e52e0",
-      "tags": [
-        "Development"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/4273-feature-request-wildcard-in-numbers-blocklist-and-implement-allowlist",
-      "media": [],
-      "text": "Hi,\n\nIt would be nice to have an option to enter a partial phone number into the dialer's blocklist. And to have an allowlist, so a user could only allow incoming calls from specific range of numbers.\n\nThank you.",
-      "replies": [],
-      "repliesTotal": 4
     },
     {
       "id": "40673",
