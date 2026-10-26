@@ -214,6 +214,10 @@ img { max-width: 100%; }
 .nav-scroll:focus-within::-webkit-scrollbar-thumb {
   background: var(--line);
 }
+/* Keep every nav row at its natural height. Otherwise the flex column shrinks
+   the rows when an open folder makes the sidebar taller than the viewport,
+   which squashes icons, labels and their spacing instead of scrolling. */
+.nav-scroll > * { flex: 0 0 auto; }
 .logo, .nav-item, .icon-btn, .more-btn, .m-ava, .m-icon {
   border: 0;
   background: transparent;
