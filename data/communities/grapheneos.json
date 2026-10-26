@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T22:13:36Z",
+  "fetchedAt": "2026-10-26T22:38:42Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -582,6 +582,83 @@
       "repliesTotal": 1
     },
     {
+      "id": "43111",
+      "title": "Sensor permissions: the final word?",
+      "author": "WelcomeMilk89",
+      "authorUsername": "WelcomeMilk89",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1793051197,
+      "lastPostedAt": 1793053526,
+      "category": "Pixel 8",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 8"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43111-sensor-permissions-the-final-word",
+      "media": [],
+      "text": "Went through a few discussions from some time ago here and it feels like no real solid answer has been clearly given when it comes to revoking sensor permissions or not.\n\nThe PrivacyGear site states \"revoke sensor permissions for all apps that clearly don't need them.\" But I don't think it's ever been clearly stated in simple terms what apps really need them. Can someone please explain to me like I'm 5 what apps do and do not need them? My thought as of now is that if sensors are automatically granted as a default, there's a reason for that, right? So, if that is the case, why are some people reluctant to give permission to sensors? Is there a presumed (or verified) security issue with having them running on some apps?\n\nThanks for clearing this up. Again, all of the older discussions, even with GOS guide explanations, seem incredibly vague and nebulous to not very technical users like me who don't know the jargon.",
+      "replies": [],
+      "repliesTotal": 2
+    },
+    {
+      "id": "36234",
+      "title": "Pixel 6 Pro - Hardware? How screwed am I? ",
+      "author": "JdawGraphene",
+      "authorUsername": "JdawGraphene",
+      "authorAvatar": "",
+      "score": 10,
+      "comments": 10,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1781001348,
+      "lastPostedAt": 1793053302,
+      "category": "Pixel 6",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 6"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/36234-pixel-6-pro-hardware-how-screwed-am-i",
+      "media": [],
+      "text": "Hello folks, having a living nightmare at the moment. P6pro, is being rather difficult.\n\nThe screen froze a few times and I had to hard power it off. It then decided to not boot past the google logo or else the graphene logo.\n\nWhat I managed to do was get one boot for long enough to back up the media manually to my PC.\n\nIt crashed soon after. I still have media on the work profile and notes in certain apps that I really need.\n\nWhat works, fastboot, recovery, adb.\n\nI side loaded the most recent OTA from adb in recovery and it worked and didnt give any errors.\n\nHowever it will still usually - not boot.\n\nIf I put the phone in the freezer, I can almost get it working. I can get to the screen where I enter my password and it works for a few seconds then screen freezes again and it shits itself and have to hard power off.\n\nSeeing as the OTA wrote fine and the phone does boot on the rare occacsion when its cold it has me thinking its hardware related.\n\nHow, if at all can I save the data from this phone. Thank you all.\n\nI was hoping getting another 6pro and taking that I need from that to get it functional again. Thoughts much appreciated.",
+      "replies": [],
+      "repliesTotal": 10
+    },
+    {
+      "id": "42959",
+      "title": "Identifying which app is using sandboxed Google Play services",
+      "author": "Aiwo",
+      "authorUsername": "Aiwo",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792444235,
+      "lastPostedAt": 1793053134,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42959-identifying-which-app-is-using-sandboxed-google-play-services",
+      "media": [],
+      "text": "Hello everyone,\n\nI have tried to riddle my main profile of all apps that depend on Google Play Services, but for a week or two now I often have the \"Sandboxed Google Play Services\" notification, even if my other profiles are not active.\n\nI would like to find out which app exactly triggers this notification, without going through the guess work of trying each app one by one, but have not found a way or a thread about this. I am running the latest version of GOS (updated this morning).\n\nDoes anyone know if this is possible ? Feel free to ask any complimentary question if necessary.",
+      "replies": [],
+      "repliesTotal": 6
+    },
+    {
       "id": "43110",
       "title": "Delete added system notification sounds?",
       "author": "40z5uu6txt",
@@ -605,32 +682,6 @@
       "text": "I added a bunch of system notification sounds but can't seem to figure out how to delete them. To add them, you would go to the \"Notification sound picker\", scroll to the bottom to add a sound from your files, and then it would appear. But there doesn't seem to be a way to delete them or even rename them. Is this possible on GrapheneOS?",
       "replies": [],
       "repliesTotal": 2
-    },
-    {
-      "id": "43111",
-      "title": "Sensor permissions: the final word?",
-      "author": "WelcomeMilk89",
-      "authorUsername": "WelcomeMilk89",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1793051197,
-      "lastPostedAt": 1793051197,
-      "category": "Pixel 8",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 8"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43111-sensor-permissions-the-final-word",
-      "media": [],
-      "text": "Went through a few discussions from some time ago here and it feels like no real solid answer has been clearly given when it comes to revoking sensor permissions or not.\n\nThe PrivacyGear site states \"revoke sensor permissions for all apps that clearly don't need them.\" But I don't think it's ever been clearly stated in simple terms what apps really need them. Can someone please explain to me like I'm 5 what apps do and do not need them? My thought as of now is that if sensors are automatically granted as a default, there's a reason for that, right? So, if that is the case, why are some people reluctant to give permission to sensors? Is there a presumed (or verified) security issue with having them running on some apps?\n\nThanks for clearing this up. Again, all of the older discussions, even with GOS guide explanations, seem incredibly vague and nebulous to not very technical users like me who don't know the jargon.",
-      "replies": [],
-      "repliesTotal": 1
     },
     {
       "id": "41765",
@@ -1372,58 +1423,6 @@
       "text": "How can I make donations to @GrapheneOS I don't use any Debit or Credit or UPI app\n\nEasiest way to Donate i'll say someone else to Donate for me",
       "replies": [],
       "repliesTotal": 7
-    },
-    {
-      "id": "43097",
-      "title": "App with accessibility permissions needed in Private Space",
-      "author": "flashcard5",
-      "authorUsername": "flashcard5",
-      "authorAvatar": "",
-      "score": 9,
-      "comments": 9,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792963268,
-      "lastPostedAt": 1793011280,
-      "category": "Pixel 10 Pro XL",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 10 Pro XL"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space",
-      "media": [],
-      "text": "Hi all,\n\nI have Action Notch installed, however some banking apps are complaining because it doesn't want it to be installed as well.\n\nSo I tried to move the banking apps in Private Space, but they complain again, this time because they think the phone is rooted.\n\nUnless there is a way to fix that (if so, how?) then I tried the other way, having Action Notch in the Private Space.\n\nAction Notch asks for accessibility permissions, which I'm fine giving, but when I click to toggle it on, it doesn't work, it stays off.\n\nIs there a setting or something I'm missing ?\n\nAny help to make that (having both apps) work would be very helpful.\n\nThanks",
-      "replies": [],
-      "repliesTotal": 9
-    },
-    {
-      "id": "43103",
-      "title": "Vanadium save passwords without Google autofill?",
-      "author": "rndm2000",
-      "authorUsername": "rndm2000",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1793010289,
-      "lastPostedAt": 1793010289,
-      "category": "Vanadium",
-      "categoryColor": "#d57676",
-      "tags": [
-        "General",
-        "Vanadium"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43103-vanadium-save-passwords-without-google-autofill",
-      "media": [],
-      "text": "Can Vanadium save passwords without using Google autofill? Does it work if you don't have Google Play or Play services?\n\nIs it a necessary evil since Vanadium is a chromium browser?\n\nAre the passwords saved locally or by Google?",
-      "replies": [],
-      "repliesTotal": 1
     }
   ]
 }
