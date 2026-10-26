@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T05:38:31Z",
+  "fetchedAt": "2026-10-26T06:02:06Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,75 +1858,17 @@
       ]
     },
     {
-      "id": "43092",
-      "title": "Viber",
-      "author": "redacted_handle",
-      "authorUsername": "redacted_handle",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792936160,
-      "lastPostedAt": 1792988865,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43092-viber",
-      "media": [],
-      "text": "<p>Hi!<br>\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.<br>\nIs there a way to not show the call log and activate the account?</p>",
-      "replies": [
-        {
-          "id": "277322",
-          "number": 2,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792936575,
-          "parent": "43092",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43092-viber/1\" class=\"PostMention\" data-id=\"277321\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> please try <a href=\"https://discuss.grapheneos.org/d/624-viber-how-to-activate-on-gos-android-13/5\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">this</a>.</p>"
-        },
-        {
-          "id": "277375",
-          "number": 3,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792952526,
-          "parent": "43092",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43092-viber/2\" class=\"PostMention\" data-id=\"277322\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> there is nothing near my question</p>"
-        },
-        {
-          "id": "277448",
-          "number": 4,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792988865,
-          "parent": "43092",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43092-viber/3\" class=\"PostMention\" data-id=\"277375\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> My bad, I misread what your issue is. Seems you're asking for kind of a \"call logs scopes\" feature. Currently, GrapheneOS doesn't have that.<br>\nYou could try using Viber in an always running in background secondary profile which will have separate call logs, but I imagine it won't be very convenient for a realtime communication app.</p>"
-        }
-      ]
-    },
-    {
       "id": "42154",
       "title": "New messaging app",
       "author": "ojzula",
       "authorUsername": "ojzula",
       "authorAvatar": "",
-      "score": 9,
-      "comments": 9,
+      "score": 10,
+      "comments": 10,
       "views": 280,
       "participantCount": 8,
       "created": 1789897701,
-      "lastPostedAt": 1792988562,
+      "lastPostedAt": 1792994065,
       "category": "General",
       "categoryColor": "#c7c7c7",
       "tags": [
@@ -1937,6 +1879,179 @@
       "url": "https://discuss.grapheneos.org/d/42154-new-messaging-app",
       "media": [],
       "text": "<p>When new messaging app willa be addee to beta ? <br>\nCheers</p>\n",
+      "replies": [
+        {
+          "id": "269141",
+          "number": 2,
+          "author": "Kamika242",
+          "authorUsername": "Kamika242",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
+          "score": 6,
+          "created": 1789903821,
+          "parent": "42154",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/1\" class=\"PostMention\" data-id=\"269114\"><i class=\"icon fas fa-reply\"></i>ojzula</a></p> \n\n<p>When the time has come. At the moment, no one knows.</p>"
+        },
+        {
+          "id": "269146",
+          "number": 3,
+          "author": "xxx",
+          "authorUsername": "xxx",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1789905131,
+          "parent": "42154",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/1\" class=\"PostMention\" data-id=\"269114\"><i class=\"icon fas fa-reply\"></i>ojzula</a> Don't know. I use the alpha since day one and it works.</p>"
+        },
+        {
+          "id": "269160",
+          "number": 4,
+          "author": "wizoatk",
+          "authorUsername": "wizoatk",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/vJ0kJ1awATgnekca.png",
+          "score": 3,
+          "created": 1789911937,
+          "parent": "42154",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/1\" class=\"PostMention\" data-id=\"269114\"><i class=\"icon fas fa-reply\"></i>ojzula</a></p> \n\n<p>Personally, I expect a new version 14 released relatively soon instead.  Lots of activity 2 days ago.</p>\n\n<p><a href=\"https://github.com/GrapheneOS/Messaging/commits/main/\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/Messaging/commits/main/</a></p>\n\n"
+        },
+        {
+          "id": "269162",
+          "number": 5,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
+          "score": 1,
+          "created": 1789914021,
+          "parent": "42154",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/4\" class=\"PostMention\" data-id=\"269160\"><i class=\"icon fas fa-reply\"></i>wizoatk</a></p> \n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/4\" class=\"PostMention\" data-id=\"269160\"><i class=\"icon fas fa-reply\"></i>wizoatk</a> Lots of activity</p></blockquote>\n\n<p>Thanks for teaching about this magical Github button in one of your recent posts.<br>\n<a href=\"https://ibb.co/WNZNVDYm\" rel=\"ugc nofollow\">https://ibb.co/WNZNVDYm</a><br>\nI just missed its existence for years.</p> \n"
+        },
+        {
+          "id": "277384",
+          "number": 6,
+          "author": "Fauxkie",
+          "authorUsername": "Fauxkie",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792954492,
+          "parent": "42154",
+          "text": "<p>Is this a good place to request features to the new messaging app?</p>\n"
+        },
+        {
+          "id": "277392",
+          "number": 7,
+          "author": "otterfoghornrainfall",
+          "authorUsername": "otterfoghornrainfall",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792956299,
+          "parent": "42154",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/6\" class=\"PostMention\" data-id=\"277384\"><i class=\"icon fas fa-reply\"></i>Fauxkie</a> You can discuss the ideas here, but the devs won't see them. That happens on GitHub.</p> "
+        },
+        {
+          "id": "277407",
+          "number": 8,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1792960153,
+          "parent": "42154",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/6\" class=\"PostMention\" data-id=\"277384\"><i class=\"icon fas fa-reply\"></i>Fauxkie</a> Is this a good place to request features to the new messaging app?</p></blockquote>\n\n<p>It's a fine place.  It is typically more productive for discussion to happen on the discussion forum before issues are posted on GitHub, though that is not a requirement.</p>"
+        },
+        {
+          "id": "277447",
+          "number": 9,
+          "author": "Fauxkie",
+          "authorUsername": "Fauxkie",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792988562,
+          "parent": "42154",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/7\" class=\"PostMention\" data-id=\"277392\"><i class=\"icon fas fa-reply\"></i>otterfoghornrainfall</a> Tell me do y'all think different inboxs, for different SIMs seems like a good feature?</p>"
+        },
+        {
+          "id": "277452",
+          "number": 10,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792994065,
+          "parent": "42154",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/9\" class=\"PostMention\" data-id=\"277447\"><i class=\"icon fas fa-reply\"></i>Fauxkie</a> Something that some people have asked for is compartmentalizing SIMs via profiles.  So one SIM could be wired to the owner profile (calls and messages) and another SIM could be wired to a secondary user profile.</p>\n\n<p>I mention that not because I think it would be easy, but because I can imagine it might be complicated to have Messaging both support separate \"boxes\" for different SIMs and to have Messaging in some profiles to be left out of messages in other profiles.</p>\n\n<p>Also, I have a question about multiple \"boxes\":  let's say I have a primary SIM for when I'm home, and I travel somewhere and get a temporary tourist SIM, and I send a message from the tourist SIM to somebody I know from back home.  Do users <strong><em>want</em></strong> that message to go into a separate box for the separate SIM?</p>"
+        }
+      ]
+    },
+    {
+      "id": "43099",
+      "title": "Alternatives for word/pages and excel/numbers",
+      "author": "indifel",
+      "authorUsername": "indifel",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792980312,
+      "lastPostedAt": 1792993563,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43099-alternatives-for-wordpages-and-excelnumbers",
+      "media": [],
+      "text": "<p>Hi gang,</p>\n\n<p>I am in the process of switching from ios to graphene os.<br>\nThe last two things I am after is a good reminders app and an alternative to pages and numbers from apple that isn't google or microsoft.</p>\n\n<p>I may have missed something, but it seems libre office is for linux? not mobile?</p>\n\n<p>I am a proton subscriber but their offering doesn't work for offline usage.</p>\n\n<p>I would very music appreciate some suggestions.</p>\n\n<p>Many thanks! :)</p>",
+      "replies": []
+    },
+    {
+      "id": "43092",
+      "title": "Viber",
+      "author": "redacted_handle",
+      "authorUsername": "redacted_handle",
+      "authorAvatar": "",
+      "score": 5,
+      "comments": 5,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792936160,
+      "lastPostedAt": 1792993330,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43092-viber",
+      "media": [],
+      "text": "<p>Hi!<br>\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.<br>\nIs there a way to not show the call log and activate the account?</p>",
+      "replies": []
+    },
+    {
+      "id": "43080",
+      "title": "grapheneos typing character before another backwards",
+      "author": "mandan",
+      "authorUsername": "mandan",
+      "authorAvatar": "",
+      "score": 10,
+      "comments": 10,
+      "views": 280,
+      "participantCount": 8,
+      "created": 1792882745,
+      "lastPostedAt": 1792993251,
+      "category": "Pixel 9a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 9a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
+      "media": [],
+      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
       "replies": []
     },
     {
@@ -2010,30 +2125,6 @@
       "url": "https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released",
       "media": [],
       "text": "<p>GrapheneOS TalkBack version 23 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/TalkBack/releases/tag/23\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/TalkBack/releases/tag/23</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>\n",
-      "replies": []
-    },
-    {
-      "id": "43099",
-      "title": "Alternatives for word/pages and excel/numbers",
-      "author": "indifel",
-      "authorUsername": "indifel",
-      "authorAvatar": "",
-      "score": 3,
-      "comments": 3,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792980312,
-      "lastPostedAt": 1792982479,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43099-alternatives-for-wordpages-and-excelnumbers",
-      "media": [],
-      "text": "<p>Hi gang,</p>\n\n<p>I am in the process of switching from ios to graphene os.<br>\nThe last two things I am after is a good reminders app and an alternative to pages and numbers from apple that isn't google or microsoft.</p>\n\n<p>I may have missed something, but it seems libre office is for linux? not mobile?</p>\n\n<p>I am a proton subscriber but their offering doesn't work for offline usage.</p>\n\n<p>I would very music appreciate some suggestions.</p>\n\n<p>Many thanks! :)</p>",
       "replies": []
     },
     {
@@ -2181,30 +2272,6 @@
       "url": "https://discuss.grapheneos.org/d/42352-i-finally-have-call-screening-working",
       "media": [],
       "text": "<p>I have Call Screen working with Google's stock Phone app (Google Dialer) on GrapheneOS.</p>\n\n<p>Setup: Pixel 9, GrapheneOS 2026091900 (Android 17). Google Phone v218 (19664958), the same \"-pixel\" build that ships on stock Pixel firmware. I've tested it unlocked, and again after relocking with my own keys (avbroot).</p>\n\n<p>To develop and test without recompiling, I used root (Magisk) to install the Dialer as a privileged system app with these permissions allowlisted:</p>\n\n<ul><li>CAPTURE_AUDIO_OUTPUT</li>\n<li>MODIFY_AUDIO_ROUTING</li>\n<li>MODIFY_PHONE_STATE</li>\n<li>CAPTURE_VOICE_COMMUNICATION_OUTPUT</li>\n<li>CONTROL_INCALL_EXPERIENCE</li>\n<li>READ_PRIVILEGED_PHONE_STATE</li></ul>\n\n<p>It also needed:</p>\n\n<ul><li>com.google.android.dialer.support.jar from the stock image, installed as a library;</li>\n<li>Speech Services by Google set as the TTS and voice recognition engine, with the English (US) language pack downloaded;</li>\n<li>the US Call Screen feature flag forced on through the Dialer's local flag overrides;</li>\n<li>an exemption from GrapheneOS's dynamic code loading restrictions, because I installed it as a system app. A Play-installed Dialer shouldn't need that.</li></ul>\n\n<p>What works:</p>\n\n<ul><li>Call Screen, manual and automatic, with the live transcript and caller prompts</li>\n<li>Hold for Me</li>\n<li>Direct My Call</li>\n<li>Call Notes recording (both sides) and on-device transcription</li></ul>\n\n<p>What doesn't work natively: Take a Message, Call Notes summaries and Scam Detection. These depend on AICore (Gemini Nano). Google's server refuses the model download on GrapheneOS, both unlocked and relocked with my own keys. I got them working with Public Compute Services, an open-source Xposed module that supplies the model manifests so the models can download. But it needs root and Xposed, so it's not something for a GrapheneOS release.</p>\n\n<p>Still, getting Call Screen and the other non-AI features working with the stock Dialer is a very good start.</p>\n\n<p>Other things that are possible with root (I'm not proposing these for GrapheneOS at this time):</p>\n\n<ul><li>the Dialer's region checks can be overridden;</li>\n<li>the \"this call is being recorded\" announcement can be replaced with silence (I find this annoying and it is unnecessary in my single-party-consent location);</li>\n<li>the Call Screen prompts are plain audio files, so they can be replaced with your own recordings. (I think that would be fun to re-record in my own voice)</li></ul>\n\n<p>I'm waiting on more RAM and storage so I can build GrapheneOS from source. After some investigation and a lot of testing, I expect to have a patch to propose in 2–4 weeks.</p>\n\n<p>What I'm thinking of proposing is the same approach GrapheneOS uses for Android Auto. GrapheneOS would recognize the genuine Google Dialer by its signing certificate and offer opt-in toggles that grant only the permissions Call Screen needs. From my analysis so far, the minimum looks like CAPTURE_AUDIO_OUTPUT, MODIFY_AUDIO_ROUTING and MODIFY_PHONE_STATE. I still need to verify that on a source build. The Dialer would stay a normal app from Play, or from the GrapheneOS App Store if that's preferred.</p>\n\n<p>For the features that need AICore, there is FOSS code that shows how to get them working. But porting that into GrapheneOS in a secure and acceptable way is a major project, and some way off.</p>\n\n<p>A note on call recording: GrapheneOS doesn't make CAPTURE_AUDIO_OUTPUT available to apps installed from Play or sideloaded, so third-party recorder apps can't capture both sides of a call. GrapheneOS's own Phone app can record, but only while it's the default phone app. That means you can't combine it with Google's Call Screen. I personally miss having an always-on and working phone call recording application.</p> \n\n<p>I'd suggest making call-audio capture a per-app, opt-in permission. Ideally it would be a narrower GrapheneOS permission that covers only the call audio sources, rather than the full CAPTURE_AUDIO_OUTPUT. Then recording could be handled separately from whichever dialer you use for screening (related: #7128, #7205).</p>\n\n<p>*AI fixed my \"Zoolander school spelling,\" the formatting, and checked and corrected the exactly correct names of modules and permissions so that this was posted without technical errors.</p> ",
-      "replies": []
-    },
-    {
-      "id": "43098",
-      "title": "VVM and iPhone messaging work now.",
-      "author": "Qsecofr",
-      "authorUsername": "Qsecofr",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792970965,
-      "lastPostedAt": 1792970965,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43098-vvm-and-iphone-messaging-work-now",
-      "media": [],
-      "text": "<p>When we started out we were unable to activate VVM and iphones kept trying to send us RCS messages.  We couldn't participate in group messages with iPhone users.</p>\n\n<p>I switched away from Pure talk (at&amp;t mvno) to US Mobile (Verizon).</p> \n\n<p>VVM came online right away and group messaging with iPhone users appears to be working.</p> \n\n <p>I did use a physical sim.</p>  \n\n<p>We are so glad these features are working now and hope this info helps some others.</p> ",
       "replies": []
     }
   ]
