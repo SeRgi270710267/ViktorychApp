@@ -32,16 +32,16 @@ from x_guard import assert_not_x_api, open_url  # noqa: E402
 UA = user_agent()
 FX = "https://api.fxtwitter.com"
 IV_SEEDS = (
-    "https://invidious.f5.si",
-    "https://inv.nadeko.net",
+    "https://yt.chocolatemoo53.com",
+    "https://invidious.tiekoetter.com",
     "https://invidious.nerdvpn.de",
-    "https://yt.artemislena.eu",
+    "https://inv.nadeko.net",
 )
 PIPED_SEEDS = (
-    "https://pipedapi.kavin.rocks",
-    "https://pipedapi.adminforge.de",
+    "https://pipedapi.ducks.party",
     "https://api.piped.private.coffee",
-    "https://pipedapi.leptons.xyz",
+    "https://pipedapi.adminforge.de",
+    "https://pipedapi.kavin.rocks",
 )
 NITTER_HOSTS = (
     "https://nitter.meowing.monster",

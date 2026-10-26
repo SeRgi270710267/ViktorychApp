@@ -2456,11 +2456,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const narrow = (window.innerWidth || 390) < 700;
     const itags = narrow ? ["18", "22"] : ["22", "18"];
     const ru = isRuVisitor();
+    const base = accountsApi();
+    const relay = base ? [{ kind: "hls", url: base.replace(/\/$/, "") + "/v1/yt/manifest?id=" + encodeURIComponent(id) }] : [];
     return healthyIv().then((bases) => {
       const tgOut = [];
       pushTelegram(tgOut, "social/youtube/" + id + "/video/0");
       pushTelegram(tgOut, "social/youtube/" + id + "/video");
-      const out = [];
+      const out = relay.slice();
       let chain = Promise.resolve();
       bases.slice(0, 3).forEach((base) => {
         chain = chain.then(() => {
@@ -4182,8 +4184,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   const COMMENT_TTL = 2 * 60 * 1000;
   const FX = "https://api.fxtwitter.com";
   const NITTER_RSS = ["https://nitter.meowing.monster", "https://nitter.kareem.one", "https://nitter.jaydenha.uk"];
-  const IV_SEEDS = ["https://invidious.f5.si", "https://inv.nadeko.net", "https://invidious.nerdvpn.de", "https://yt.artemislena.eu"];
-  const PIPED_SEEDS = ["https://pipedapi.kavin.rocks", "https://pipedapi.adminforge.de", "https://api.piped.private.coffee", "https://pipedapi.leptons.xyz"];
+  const IV_SEEDS = ["https://yt.chocolatemoo53.com", "https://invidious.tiekoetter.com", "https://invidious.nerdvpn.de", "https://inv.nadeko.net"];
+  const PIPED_SEEDS = ["https://pipedapi.ducks.party", "https://api.piped.private.coffee", "https://pipedapi.adminforge.de", "https://pipedapi.kavin.rocks"];
   const LIVE = { mem: {}, flight: {}, dbp: null, iv: null, dead: {}, videosDown: false, fxDown: false, status: null, statusP: null, statusLoaded: false };
   const TRIED = {};
   const SUB_COUNTS = {};
