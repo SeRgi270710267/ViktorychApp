@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T00:13:13Z",
+  "fetchedAt": "2026-10-26T00:42:06Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,152 @@
       ]
     },
     {
+      "id": "43048",
+      "title": "More native code debugging attempts recently",
+      "author": "cupcake-alibi",
+      "authorUsername": "cupcake-alibi",
+      "authorAvatar": "",
+      "score": 12,
+      "comments": 12,
+      "views": 280,
+      "participantCount": 8,
+      "created": 1792786787,
+      "lastPostedAt": 1792973768,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
+      "media": [],
+      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
+      "replies": [
+        {
+          "id": "277023",
+          "number": 2,
+          "author": "pixel---fold",
+          "authorUsername": "pixel---fold",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792799496,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/1\" class=\"PostMention\" data-id=\"276996\"><i class=\"icon fas fa-reply\"></i>cupcake-alibi</a> first one I had was today. Never seen one before and funny enough it was from the proton lumo assistant.</p> \n\n<p>Trying at the moment to run s couple of searches on this.</p> \n\n<p>Anybody else?</p> "
+        },
+        {
+          "id": "277027",
+          "number": 3,
+          "author": "TrustExecutor",
+          "authorUsername": "TrustExecutor",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792800509,
+          "parent": "43048",
+          "text": "<p>I got one from PipePipe. I've never had one of these before what I can recall.</p>"
+        },
+        {
+          "id": "277318",
+          "number": 4,
+          "author": "pixel---fold",
+          "authorUsername": "pixel---fold",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792934786,
+          "parent": "43048",
+          "text": "<p>Anybody else using Proton Lumo's AI that got the error message from the APP?</p>\n"
+        },
+        {
+          "id": "277370",
+          "number": 5,
+          "author": "cupcake-alibi",
+          "authorUsername": "cupcake-alibi",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792951736,
+          "parent": "43048",
+          "text": "<p>These apps attempted native code debugging on my Pixel:</p>\n<ul><li>PipePipe</li>\n<li>Read You</li>\n<li>Proton Mail</li>\n<li>Proton Calendar</li>\n<li>AntennaPod</li></ul>"
+        },
+        {
+          "id": "277374",
+          "number": 6,
+          "author": "SplatterGames",
+          "authorUsername": "SplatterGames",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/HgsNUM2MIBghgcb7.png",
+          "score": 0,
+          "created": 1792952500,
+          "parent": "43048",
+          "text": "<p>maybe it's just a coincidence, but Immich crashed in the background today due to MTE errors. Not really related to the NCD issues, but the timing is weird, considering I NEVER see any crashes at all.</p>"
+        },
+        {
+          "id": "277381",
+          "number": 7,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792953831,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/4\" class=\"PostMention\" data-id=\"277318\"><i class=\"icon fas fa-reply\"></i>pixel---fold</a> Yeah, I tried it and got the same issue. Emailed Proton support and got this exchange:</p>\n\n<blockquote><p>Lumo fails to launch without \"Native Code Debugging\" permitted in settings. This is a sensitive permission that preferably wouldn't be required for the app to launch.</p>\n\n<p>This is the official Android app from the Play Store.</p></blockquote>\n\n\n<blockquote><p>Hi,</p>\n\n<p>Thanks for reaching out.</p> \n\n<p>This ensures automatic integrity validation and reduces the risk of modified builds being flagged by antivirus tools.<br>\nKind regards,<br>\nIbro<br>\nProton Customer Support</p></blockquote>\n\n\n<blockquote><p>Hi,</p>\n\n<p>This response is a vague rationalization.</p>\n\n<p>Other Android apps by Proton do not require ptrace to function, so do these apps not need integrity verification or to hide from AV tools that builds are modified?<br>\nWhat component's integrity is being verified? For the app's native code, the OS and Play Store are responsible for verifying that against the certificate. ptrace access is also not necessary to cryptographically verify remotely hosted code.</p>\n\n<p>Best regards,<br>\nNoah</p></blockquote>\n\n\n<blockquote><p>Hi Noah,</p>\n\n<p>Other Proton apps don’t have integrity protection. The reason our app may be flagged by antivirus software is that we rely heavily on WebView for much of the app’s functionality, which can sometimes be perceived as suspicious behavior. This is less common in traditional apps, which typically don’t rely on WebView to the same extent.<br>\nKind regards,<br>\nIbro<br>\nProton Customer Support</p></blockquote>"
+        },
+        {
+          "id": "277383",
+          "number": 8,
+          "author": "dryfter",
+          "authorUsername": "dryfter",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/yrF3TPBIpC7APhhS.png",
+          "score": 0,
+          "created": 1792954395,
+          "parent": "43048",
+          "text": "<p>I have not noticed this with any apps I use. Arguably, I don't have very many Google Play Apps installed, so that could be why. I'll try to test the ones I have installed out later today.</p>"
+        },
+        {
+          "id": "277404",
+          "number": 9,
+          "author": "MyIdentityIsntImportant",
+          "authorUsername": "MyIdentityIsntImportant",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/lC5l5EjKXOV6d9rs.png",
+          "score": 2,
+          "created": 1792959255,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/2\" class=\"PostMention\" data-id=\"277023\"><i class=\"icon fas fa-reply\"></i>pixel---fold</a> Install the <em>nogms</em> variant of Lump from Proton's GitHub instead of using the Play Store version. The <em>nogms</em> version doesn't need or use native code debugging.</p>\n\n<p>Good luck.</p> "
+        },
+        {
+          "id": "277406",
+          "number": 10,
+          "author": "GazelleInitial",
+          "authorUsername": "GazelleInitial",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792960092,
+          "parent": "43048",
+          "text": "<p>Does anyone revoke system wide DCL?  Considering it, but if i'm just going to whitelist apps that error - what's the point?</p>"
+        },
+        {
+          "id": "277436",
+          "number": 11,
+          "author": "pixel---fold",
+          "authorUsername": "pixel---fold",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792973624,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/7\" class=\"PostMention\" data-id=\"277381\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a></p> \n\n<p>Thank you so much for posting this. I thought about reaching out to them, but you beat me to it.</p>"
+        },
+        {
+          "id": "277437",
+          "number": 12,
+          "author": "pixel---fold",
+          "authorUsername": "pixel---fold",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792973768,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/9\" class=\"PostMention\" data-id=\"277404\"><i class=\"icon fas fa-reply\"></i>MyIdentityIsntImportant</a> thanks for the tip. Going to try that out.</p>"
+        }
+      ]
+    },
+    {
       "id": "43094",
       "title": "Graphene OS for Normies and Newbies",
       "author": "YiyaK",
@@ -1879,52 +2025,7 @@
       "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
       "media": [],
       "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
-      "replies": [
-        {
-          "id": "277397",
-          "number": 2,
-          "author": "YiyaK",
-          "authorUsername": "YiyaK",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792957582,
-          "parent": "43094",
-          "text": "<p>In the beginning after installation, I would GO SLOW. I wasted a lot of time over the past couple of weeks installing, uninstalling, and rearranging things. Graphene provides everything needed for a functional user experience, right from the beginning.</p>  \n\n<p>I took some some time to read (and reread) the user guide. A lot of stuff there was over my head, but a lot wasn't, and I learned where things are and what they do. Graphene is a highly customizable OS - I just need to keep reminding myself that, as a normie, I don't need a lot of that customization. But now I know where to find out how to go about it is I decide I do at some later time.</p> \n\n<p>I downloaded almost everything initially from the Graphene app store. I left the Google options alone at first, and still haven't bothered with the note feature.</p>\n\n<p>Also, I downloaded the f-droid store from their website: <a href=\"https://f-droid.org/\" rel=\"ugc nofollow\">https://f-droid.org/</a> to have more app options and to reload some of my favorites.</p> \n\n<p>The keyboard was driving me crazy - I need Swipe typing capability - so I downloaded the FUTO keyboard from the Obtainium store.  I'm still figuring Obtainium out, BTW.</p>\n\n<p>I downloaded the Signal messaging app from the f-droid store. It's also available directly from their website: <a href=\"https://f-droid.org/\" rel=\"ugc nofollow\">https://f-droid.org/</a></p>\n\n<p>That was enough customization for day one - the open source basics I know and was already using, set up to Graphene OS.</p> \n\n<p>I started here in the Graphene forum on day one, also. Lots of helpful folks here, though some suggestions and answers to my questions are a bit techie for me. I'm learning, though!</p> "
-        },
-        {
-          "id": "277405",
-          "number": 3,
-          "author": "YiyaK",
-          "authorUsername": "YiyaK",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792960039,
-          "parent": "43094",
-          "text": "<p>Another thing I struggled with was whether or not I needed a VPN - I wasn't really sure what a VPN did. Found an excellent summary at the IVPN site, here: <a href=\"https://www.ivpn.net/en/\" rel=\"ugc nofollow\">https://www.ivpn.net/en/</a> <br>\nScroll down to the \"Do I really need a VPN\"  section.</p>\n\n<p>I decided that I don't want my internet/cellular provider tracking which websites I visit, don't want websites tracking my IP address when I visit them, and, in the rare event I use public WiFi, want to keep that private too.</p>\n\n<p>I'm using the free Proton VPN service for now - it meets my basic needs.</p> "
-        },
-        {
-          "id": "277416",
-          "number": 4,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 5,
-          "created": 1792964321,
-          "parent": "43094",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies/3\" class=\"PostMention\" data-id=\"277405\"><i class=\"icon fas fa-reply\"></i>YiyaK</a> When evaluating whether or not to use a VPN, it might be useful to consult sources other than VPN providers.</p>\n\n<p>Occasionally I encourage Naomi Brockwell's content (NBTV.media), because explanations are fairly clear and, though I haven't watched a lot of them, I haven't seen advice that seems genuinely bad.  As it happens, she recently did a piece on potential issues with some VPNs... <a href=\"https://www.nbtv.media/episodes/is-the-government-running-a-dragnet-on-vpn-users\" rel=\"ugc nofollow\">https://www.nbtv.media/episodes/is-the-government-running-a-dragnet-on-vpn-users</a></p>\n\n<p>(I have no affiliation, financial or otherwise with NBTV.)</p>"
-        },
-        {
-          "id": "277435",
-          "number": 5,
-          "author": "YiyaK",
-          "authorUsername": "YiyaK",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792973317,
-          "parent": "43094",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies/4\" class=\"PostMention\" data-id=\"277416\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> I get what you're saying about sources and I read a bit before going to the site. I thought they had a clear explanation about both what a VPN can and can't do.</p> "
-        }
-      ]
+      "replies": []
     },
     {
       "id": "8274",
@@ -2195,30 +2296,6 @@
       "url": "https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed",
       "media": [],
       "text": "<p>I am about to buy some flight tickets and one option is via Ryanair. I know that the app became mandatory for checking in. But as I use my phone without google play services, I would consider booking otherwise, if the app needs it.</p>\n\n<p>Does someone know if it will require play services? Anything more? Would also block connections via a firewall app.</p>\n\n<p>Ideally of course, someone knows a way how to avoid it completely by saying \"phone is broken, battery empty, don't have a phone...\"</p>",
-      "replies": []
-    },
-    {
-      "id": "43009",
-      "title": "Mail client ",
-      "author": "Try",
-      "authorUsername": "Try",
-      "authorAvatar": "",
-      "score": 12,
-      "comments": 12,
-      "views": 315,
-      "participantCount": 9,
-      "created": 1792649851,
-      "lastPostedAt": 1792960768,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43009-mail-client",
-      "media": [],
-      "text": "<p>Which would you prefer between FairMail and K9 mail clients?</p>",
       "replies": []
     }
   ]
