@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T13:14:28Z",
+  "fetchedAt": "2026-10-26T13:54:24Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,17 +1858,99 @@
       ]
     },
     {
+      "id": "43104",
+      "title": "Unable to set default Wallet app from Private Space",
+      "author": "deltuzirtu",
+      "authorUsername": "deltuzirtu",
+      "authorAvatar": "",
+      "score": 3,
+      "comments": 3,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1793012454,
+      "lastPostedAt": 1793022672,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43104-unable-to-set-default-wallet-app-from-private-space",
+      "media": [],
+      "text": "<p>It just doesn't let me select anything. Which means I have to open and log in to the bank app each time. Is there any way to fix this?</p>",
+      "replies": [
+        {
+          "id": "277486",
+          "number": 2,
+          "author": "deltuzirtu",
+          "authorUsername": "deltuzirtu",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1793012468,
+          "parent": "43104",
+          "text": ""
+        },
+        {
+          "id": "277488",
+          "number": 3,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
+          "score": 0,
+          "created": 1793013530,
+          "parent": "43104",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43104-unable-to-set-default-wallet-app-from-private-space/1\" class=\"PostMention\" data-id=\"277485\"><i class=\"icon fas fa-reply\"></i>deltuzirtu</a> I've tried a couple of times testing for feasibility of doing this but unfortunately no success. Maybe some other user have gotten it to work though.</p>"
+        },
+        {
+          "id": "277507",
+          "number": 4,
+          "author": "Theowarren",
+          "authorUsername": "Theowarren",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1793022672,
+          "parent": "43104",
+          "text": "<p>Has anyone else experienced this? It would be useful to know if there’s a workaround without having to move the wallet app.</p>"
+        }
+      ]
+    },
+    {
+      "id": "43094",
+      "title": "Graphene OS for Normies and Newbies",
+      "author": "YiyaK",
+      "authorUsername": "YiyaK",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792955202,
+      "lastPostedAt": 1793021963,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
+      "media": [],
+      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
+      "replies": []
+    },
+    {
       "id": "43100",
       "title": "GrapheneOS TalkBack version 23 released",
       "author": "GrapheneOS",
       "authorUsername": "GrapheneOS",
       "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-      "score": 6,
-      "comments": 6,
-      "views": 210,
-      "participantCount": 6,
+      "score": 8,
+      "comments": 8,
+      "views": 280,
+      "participantCount": 8,
       "created": 1792982355,
-      "lastPostedAt": 1793020083,
+      "lastPostedAt": 1793021167,
       "category": "Announcements",
       "categoryColor": "#f00a0a",
       "tags": [
@@ -1879,63 +1961,32 @@
       "url": "https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released",
       "media": [],
       "text": "<p>GrapheneOS TalkBack version 23 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/TalkBack/releases/tag/23\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/TalkBack/releases/tag/23</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>\n",
-      "replies": [
-        {
-          "id": "277444",
-          "number": 2,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
-          "score": 16,
-          "created": 1792983201,
-          "parent": "43100",
-          "text": "<p>Thank you so much to these 2!</p>\n\n<blockquote><p>The work to modernize our fork of TalkBack was started by a blind GrapheneOS user who has spent <strong>several years</strong> contributing to GrapheneOS and was completed by one of our newly hired app developers.</p></blockquote>"
-        },
-        {
-          "id": "277465",
-          "number": 3,
-          "author": "Pocketstar",
-          "authorUsername": "Pocketstar",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/oeU6bR1rRuJjArKE.png",
-          "score": 7,
-          "created": 1793003477,
-          "parent": "43100",
-          "text": "<p>My girlfriend is also blind, therefore she will greatly benefit by the Talkback update, we really appreciate the accessibility support, thank you so much!</p>"
-        },
-        {
-          "id": "277467",
-          "number": 4,
-          "author": "Norman",
-          "authorUsername": "Norman",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/BeaePExTAguwEFzu.png",
-          "score": 6,
-          "created": 1793004109,
-          "parent": "43100",
-          "text": "<p>This is massive for accessibility, huge props to the GOS team especially the blind GOS user putting in all the time and effort to modernize it!</p>"
-        },
-        {
-          "id": "277484",
-          "number": 5,
-          "author": "GazelleInitial",
-          "authorUsername": "GazelleInitial",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1793011464,
-          "parent": "43100",
-          "text": "<p>Love anything that improves accessibility. Kudos on this work.</p>"
-        },
-        {
-          "id": "277502",
-          "number": 6,
-          "author": "BendyNevis",
-          "authorUsername": "BendyNevis",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1793020083,
-          "parent": "43100",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released/1\" class=\"PostMention\" data-id=\"277442\"><i class=\"icon fas fa-reply\"></i>GrapheneOS</a> <br>\nTalkBack has bricked my phone</p> \n\n<p>I've been using Graphene for 2 years <br>\nPixel tablet and pixel 9 for daily use. Have also Graphene installed successfully on Pixel 5 and Pixel 7Pro, so quite familiar with the operating system</p> \n\n<p>I installed graphene on a pixel 7 Pro a couple of days ago. The installation was quick, but trying to install apps has been near impossible <br>\nI put it down to server/weather problems</p> \n\n<p>This phone ran Graphene without issues in the past, I only I reverted it to access a bank account that wasn't accessible on Graphene</p> \n\n<p>I saw the comment about TalkBack on Bluesky and remembered that there had been a notification saying that there was an issue with it <br>\nI opened it in order to provide some feedback</p> \n\n<p>Talkback has taken over the screen. <br>\nTouch and swipe are inoperable outside of the TalkBack app. <br>\nI am unable to switch off the phone via the power button <br>\n or access options via the power and volume controls</p> \n\n<p>I'm hoping that I can regain control after the battery has drained and I switch it back on</p> \n\n"
-        }
-      ]
+      "replies": []
+    },
+    {
+      "id": "40673",
+      "title": "Secondary Profile can't connect to the internet unless through a VPN",
+      "author": "House_Wins",
+      "authorUsername": "House_Wins",
+      "authorAvatar": "",
+      "score": 5,
+      "comments": 5,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1784928912,
+      "lastPostedAt": 1793021148,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/40673-secondary-profile-cant-connect-to-the-internet-unless-through-a-vpn",
+      "media": [],
+      "text": "<p>So I have had this issue since I installed GrapheneOS, sometimes when I leave my house and I'm no longer connected to a WiFi I noticed my phone has no internet. It shows that I'm connected to my network provider and have signal bars, even shows 5G. When I turn on my VPN it works (kill switch is off in this profile), I am using a private DNS but in my VPN I have the DNS option off.</p> \n\n<p>So I really don't understand why this is happening, maybe my phone can't get an IP for whatever reason? Only way to fix it is to restart the phone once or twice. The wrench with the circle button doesn't fix it. Admin profile is used as control center to install apps only. Also I have a VPN running all the time in the admin profile and just use my secondary.</p> \n\n<p>Latest version of GrapheneOS.<br>\nAll packages up to date.<br>\nPixel 10 pro xl.</p>",
+      "replies": []
     },
     {
       "id": "43073",
@@ -2037,31 +2088,6 @@
       "replies": []
     },
     {
-      "id": "40673",
-      "title": "Secondary Profile can't connect to the internet unless through a VPN",
-      "author": "House_Wins",
-      "authorUsername": "House_Wins",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1784928912,
-      "lastPostedAt": 1793017054,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/40673-secondary-profile-cant-connect-to-the-internet-unless-through-a-vpn",
-      "media": [],
-      "text": "<p>So I have had this issue since I installed GrapheneOS, sometimes when I leave my house and I'm no longer connected to a WiFi I noticed my phone has no internet. It shows that I'm connected to my network provider and have signal bars, even shows 5G. When I turn on my VPN it works (kill switch is off in this profile), I am using a private DNS but in my VPN I have the DNS option off.</p> \n\n<p>So I really don't understand why this is happening, maybe my phone can't get an IP for whatever reason? Only way to fix it is to restart the phone once or twice. The wrench with the circle button doesn't fix it. Admin profile is used as control center to install apps only. Also I have a VPN running all the time in the admin profile and just use my secondary.</p> \n\n<p>Latest version of GrapheneOS.<br>\nAll packages up to date.<br>\nPixel 10 pro xl.</p>",
-      "replies": []
-    },
-    {
       "id": "43007",
       "title": "Donate from India",
       "author": "mumbai",
@@ -2083,30 +2109,6 @@
       "url": "https://discuss.grapheneos.org/d/43007-donate-from-india",
       "media": [],
       "text": "<p>How can I make donations to <a href=\"https://discuss.grapheneos.org/u/GrapheneOS\" class=\"UserMention\">@GrapheneOS</a> I don't use any <strong>Debit or Credit or UPI app</strong><br>\nEasiest way to Donate i'll say someone else to Donate for me</p>",
-      "replies": []
-    },
-    {
-      "id": "43104",
-      "title": "Unable to set default Wallet app from Private Space",
-      "author": "deltuzirtu",
-      "authorUsername": "deltuzirtu",
-      "authorAvatar": "",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1793012454,
-      "lastPostedAt": 1793013530,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43104-unable-to-set-default-wallet-app-from-private-space",
-      "media": [],
-      "text": "<p>It just doesn't let me select anything. Which means I have to open and log in to the bank app each time. Is there any way to fix this?</p>",
       "replies": []
     },
     {
@@ -2205,30 +2207,6 @@
       "url": "https://discuss.grapheneos.org/d/19051-using-a-separate-hotspot-instead-of-e-sim",
       "media": [],
       "text": "<p>I saw a video with Naomi on Youtube where she uses a separate hotspot that itself has a SIM in it rather than having the SIM in the phone itself. Although this approach does appear more inconvenient than an internal SIM, doesn't it solve some of the issues with SIM privacy if you connect via WiFI to the mobile hotspot (for example, the \"SIMO Solis Lite 4G LTE WiFi Mobile Hotspot\").</p>\n\n<p>I haven't yet taken the plunge to buy a Pixel phone and install GrapheneOS, but once I understand these issues better, I do plan to.</p>",
-      "replies": []
-    },
-    {
-      "id": "42598",
-      "title": "Odysseus - Make your GrapheneOS a dumbphone",
-      "author": "flourishdev",
-      "authorUsername": "flourishdev",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/qesnOmK6y79oChLA.png",
-      "score": 22,
-      "comments": 22,
-      "views": 280,
-      "participantCount": 8,
-      "created": 1791233260,
-      "lastPostedAt": 1793009153,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42598-odysseus-make-your-grapheneos-a-dumbphone",
-      "media": [],
-      "text": "\n<p>Hello, I made Odysseus.</p>\n\n<p>Odysseus is an open source, tiny device owner app that helps you get the benefits of a smartphone without the distraction. Once set up, you will have a user profile that does not have a browser and cannot install apps.</p>\n\n<p><strong>Why I made it</strong><br>\nI noticed a lot of people want to use a \"dumbphone\" (no browser or app installs) but don't want to sacrifice the privacy that GrapheneOS gives them. Traditional \"dumbphones\" are terrible for privacy, security, and usability. I use it myself and it has greatly improved my relationship with my phone.</p>\n\n<p><strong>What it does</strong><br>\nOdysseus has 1 exported component, no permissions, no network access, and under 200 lines of Kotlin. Builds are reproducible. It creates a second \"daily\" user without the optional system apps, then blocks the Private Space and debugging in that user. The full list of what it does is in SECURITY.md.</p>\n\n<p><strong>AI</strong><br>\nI designed and tested Odysseus. AI wrote all of the code. The security reviews so far were also done by AI. If you see any issues, please let me know.</p>\n\n<p><strong>ADB</strong><br>\nSetup uses ADB once, to run the one command that makes Odysseus the device owner. After that, you should turn developer options off. Right now this is the only way to set a device owner on GrapheneOS.</p>\n\n<p>I hope that in the future you will be able to use Odysseus without enabling developer options and debugging through QR Code provisioning during setup.</p>\n\n<p><strong>Links and info</strong><br>\nThis is a non-standard way to use GrapheneOS. The daily user doesn't get Vanadium, and GrapheneOS doesn't recommend removing default apps or using device owners to restrict functionality (you can see specific statements by them in SECURITY.md). The risks are covered in SECURITY.md.<br>\nSee a lot more information about setup and limitations in the README.</p> \n\n<p>If you have any documentation improvement ideas or any ideas at all, please let me know.</p>\n\n<p><a href=\"https://github.com/flourish-today/Odysseus\" rel=\"ugc nofollow\">https://github.com/flourish-today/Odysseus</a></p>",
       "replies": []
     }
   ]
