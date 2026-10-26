@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T16:49:45Z",
+  "fetchedAt": "2026-10-26T17:03:01Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -582,6 +582,31 @@
       "repliesTotal": 1
     },
     {
+      "id": "43073",
+      "title": "How to Convince People to Use GrapheneOS",
+      "author": "Reboot",
+      "authorUsername": "Reboot",
+      "authorAvatar": "",
+      "score": 52,
+      "comments": 52,
+      "views": 875,
+      "participantCount": 25,
+      "created": 1792855754,
+      "lastPostedAt": 1793033506,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
+      "media": [],
+      "text": "Hi, fellow GrapheneOS users.\n\nI've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).\n\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).\n\nCan you help me explain in simple, non-technical words why to do it, why does digital security matter?\n\nThey don't use IPhones so it won't be as hard (but neither do they use Pixels).\n\nAt least to convince security-wise not privacy-wise.\n\nI already convinced them to use Signal to talk to me (which I consider a win).\n\nThere is a similar thread, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.\n\nI also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.\n\nThank you.",
+      "replies": [],
+      "repliesTotal": 52
+    },
+    {
       "id": "43100",
       "title": "GrapheneOS TalkBack version 23 released",
       "author": "GrapheneOS",
@@ -656,31 +681,6 @@
       "text": "Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.\n\nIs anyone else experiencing this, too?\n\nCould this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?",
       "replies": [],
       "repliesTotal": 23
-    },
-    {
-      "id": "43073",
-      "title": "How to Convince People to Use GrapheneOS",
-      "author": "Reboot",
-      "authorUsername": "Reboot",
-      "authorAvatar": "",
-      "score": 51,
-      "comments": 51,
-      "views": 840,
-      "participantCount": 24,
-      "created": 1792855754,
-      "lastPostedAt": 1793028887,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
-      "media": [],
-      "text": "Hi, fellow GrapheneOS users.\n\nI've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).\n\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).\n\nCan you help me explain in simple, non-technical words why to do it, why does digital security matter?\n\nThey don't use IPhones so it won't be as hard (but neither do they use Pixels).\n\nAt least to convince security-wise not privacy-wise.\n\nI already convinced them to use Signal to talk to me (which I consider a win).\n\nThere is a similar thread, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.\n\nI also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.\n\nThank you.",
-      "replies": [],
-      "repliesTotal": 51
     },
     {
       "id": "42918",
