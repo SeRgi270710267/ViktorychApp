@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T07:19:43Z",
+  "fetchedAt": "2026-10-26T07:59:13Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,55 @@
       ]
     },
     {
+      "id": "43101",
+      "title": "Cant load Android system after booting with low/zero battery",
+      "author": "carbonated_user",
+      "authorUsername": "carbonated_user",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1793000263,
+      "lastPostedAt": 1793000263,
+      "category": "Pixel 6a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 6a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43101-cant-load-android-system-after-booting-with-lowzero-battery",
+      "media": [],
+      "text": "<p>After my Pixel 6a ran out of battery yesterday I accidentally plugged it into a faulty USB cable that did not give the phone enough(/steady) power to boot, even though the phone thought it was getting power and auto booted automatically. I noticed about 5min later (which would be probably 10 failed boot cycles) and stopped the endless cycle to let it charge up. At approx. 15-20% charge I tried to boot the phone again but just as the lock screen appears it restarts into recovery mode and says \"cannot load android system. your data may be corrupt.\"</p>\n\n<p>A) Is there anyway to save it or do I need to bite the bullet and do a factory reset? (the important stuff is backed up)</p>\n\n<p>B) How exactly did this (probably) happen? Did the phone attempt an auto update since it thought it was charging, that then corrupted for being interrupted mid update? Is it just the boot sequence getting interrupted that's corrupting the data?</p>\n\n<p>C) How do I prevent this in the future? There's probably a setting to stop it auto booting when charging, I just haven't looked into it. Anything else?</p>",
+      "replies": []
+    },
+    {
+      "id": "41738",
+      "title": "Ryanair app, play services needed?",
+      "author": "becomeparmesan",
+      "authorUsername": "becomeparmesan",
+      "authorAvatar": "",
+      "score": 8,
+      "comments": 8,
+      "views": 210,
+      "participantCount": 6,
+      "created": 1788619688,
+      "lastPostedAt": 1792999838,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed",
+      "media": [],
+      "text": "<p>I am about to buy some flight tickets and one option is via Ryanair. I know that the app became mandatory for checking in. But as I use my phone without google play services, I would consider booking otherwise, if the app needs it.</p>\n\n<p>Does someone know if it will require play services? Anything more? Would also block connections via a firewall app.</p>\n\n<p>Ideally of course, someone knows a way how to avoid it completely by saying \"phone is broken, battery empty, don't have a phone...\"</p>",
+      "replies": []
+    },
+    {
       "id": "43007",
       "title": "Donate from India",
       "author": "mumbai",
@@ -1879,63 +1928,7 @@
       "url": "https://discuss.grapheneos.org/d/43007-donate-from-india",
       "media": [],
       "text": "<p>How can I make donations to <a href=\"https://discuss.grapheneos.org/u/GrapheneOS\" class=\"UserMention\">@GrapheneOS</a> I don't use any <strong>Debit or Credit or UPI app</strong><br>\nEasiest way to Donate i'll say someone else to Donate for me</p>",
-      "replies": [
-        {
-          "id": "276615",
-          "number": 2,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792643365,
-          "parent": "43007",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43007-donate-from-india/1\" class=\"PostMention\" data-id=\"276614\"><i class=\"icon fas fa-reply\"></i>mumbai</a> You can also donate with crypto. Please see all available ways to donate here: <a href=\"https://grapheneos.org/donate\" rel=\"ugc nofollow\">https://grapheneos.org/donate</a></p>"
-        },
-        {
-          "id": "276617",
-          "number": 3,
-          "author": "mumbai",
-          "authorUsername": "mumbai",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792643836,
-          "parent": "43007",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43007-donate-from-india/2\" class=\"PostMention\" data-id=\"276615\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> I had already see all the options.<br>\nAnd I don't own a crypto currency<br>\nHow can I get one privately without a mess</p>"
-        },
-        {
-          "id": "276623",
-          "number": 4,
-          "author": "h34p",
-          "authorUsername": "h34p",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792646693,
-          "parent": "43007",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43007-donate-from-india/1\" class=\"PostMention\" data-id=\"276614\"><i class=\"icon fas fa-reply\"></i>mumbai</a> how would you pay back the donation if someone else donates for you?</p> "
-        },
-        {
-          "id": "276627",
-          "number": 5,
-          "author": "mumbai",
-          "authorUsername": "mumbai",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792648712,
-          "parent": "43007",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43007-donate-from-india/4\" class=\"PostMention\" data-id=\"276623\"><i class=\"icon fas fa-reply\"></i>h34p</a> I'll give them cash <strong>inr</strong> to The payer/shopkeeper/someone I know<br>\nThe problem is that when ask someone to pay for me they will look at you as i'm doing something wrong<br>\nThat's why I need easiest way to pay like Upi</p>"
-        },
-        {
-          "id": "277459",
-          "number": 6,
-          "author": "mumbai",
-          "authorUsername": "mumbai",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792997903,
-          "parent": "43007",
-          "text": "<p>Will debit card will work for donations?</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43096",
@@ -2180,54 +2173,6 @@
       "url": "https://discuss.grapheneos.org/d/33125-unable-to-activate-esim",
       "media": [],
       "text": "<p>I did a fresh install of GrapheneOS, enabled \"eSIM support\", and rebooted.<br>\nWent to Settings &gt; Network &amp; Internet &gt; SIMs &gt; Setup an eSIM.<br>\nScanned the eSIM QR code, and then a screen popped up saying \"SIM not activated. Something went wrong while trying to activate your SIM.\".<br>\nThe same thing happens if I try to enter the eSIM activation code manually.<br>\nIf I go to Reset options &gt; Reset mobile network settings, check \"Erase eSIMs\", and then click reset, a dialog appears saying \"Can't erase eSIMs\".</p>\n\n<p>I then enabled developer options and checked the log when trying to activate (output at end of post).</p>\n\n<p>So I installed Google Play Services and Play Store via the Graphene OS app store.<br>\nLogged in, tried activating eSIM again, same error.<br>\nI then enabled all permissions for Play Services &amp; Store and tried activating again. Same error.</p>\n\n<p>I've tried with multiple different eSIM activation codes on two different carriers, and used different WiFI networks during setup.<br>\nDSDS is enabled in the <code>*#*#4636#*#*</code> menu.</p>\n\n<p>Any advice is appreciated.</p>\n\n<pre><code>2026-03-13 16:41:52.140 16779-16779 ProxyAndro...gerBackend com.google.android.euicc             W  Too many Flogger logs received before configuration. Dropping old logs.\n2026-03-13 16:41:52.140 16779-16779 EuiccGoogle             com.google.android.euicc             I  [2] GetAcFromQrScannerFragment.onActivityResult: onActivityResult: request code = 1, result code = -1.\n2026-03-13 16:41:52.142  2405-2735  EuiccController         com.android.phone                    D   getDownloadableSubscriptionMetadata callingPackage: com.google.android.euicc\n2026-03-13 16:41:52.143  2477-11375 SudConfigProvider       com.android.settings                 D  method: isEnhancedSetupDesignMetricsEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.143  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: E msg.what=101\n2026-03-13 16:41:52.143  2405-2668  EuiccConnector          com.android.phone                    D  processMsg: ConnectedState\n2026-03-13 16:41:52.144  2477-11375 SudConfigProvider       com.android.settings                 D  method: isEnhancedSetupDesignMetricsEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.145  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: X\n2026-03-13 16:41:52.146  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.146 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.147 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: ensureSlotIsEuiccAndActive: slotId = 0, forceDeactivateSim = false\n2026-03-13 16:41:52.147  2477-11375 SudConfigProvider       com.android.settings                 D  method: isForceTwoPaneEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: Passed in slotId=0; euiccIsActive=false; targetSlotIsRemovable=false; forceDeactivateSim=false, multiSimEnabled=true, euiccSlotPresent=true, allowSlotSwitchInMultiPsimEsimMode=false.\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             E  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: Slot switch is not allowed in multiSim mode, ignore switch request\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.onGetDownloadableSubscriptionMetadata: onGetDownloadableSubscriptionMetadataInternal: slotId = 0, forceDeactivateSim = false, ensureSlotIsEuiccAndActive = EuiccOperationResult{errorCode=131083, switchedToEsim=false, slotMappings=[]}.\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccErrorMapper.mapErrorCode: Mapping for error code: 131083\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccErrorMapper.mapErrorCode: Mapping error code: 131083 to: 33554432\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.onGetDownloadableSubscriptionMetadata: onGetDownloadableSubscriptionMetadata errorCode: 33554432\n2026-03-13 16:41:52.150  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: E msg.what=6\n2026-03-13 16:41:52.150  2405-2668  EuiccConnector          com.android.phone                    D  processMsg: ConnectedState\n2026-03-13 16:41:52.152  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: X\n2026-03-13 16:41:52.152  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.153 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.153 16779-26176 EuiccGoogle             com.google.android.euicc             I  [281] WindowInsetsCompat$TypeImpl30.isEsimOnlyDevice: Device Hardware SKU: GZC4K\n2026-03-13 16:41:52.153  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.153 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.154  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.154 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.154  2477-11375 SudConfigProvider       com.android.settings                 D  method: isKeyboardFocusEnhancementEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.155  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.155 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.156  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.156 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.156 16779-16779 SetupLibrary            com.google.android.euicc             I  [GlifLayout] Using setup design GlifLoadingLayout to init for QrDownloadActivity\n2026-03-13 16:41:52.156 16779-26176 EuiccGoogle             com.google.android.euicc             I  [281] ClearcutServerLog$$ExternalSyntheticLambda15.call: NetworkUtil\n2026-03-13 16:41:52.156 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.156 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.156 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.usagereporting.internal.UsageReportingClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n2026-03-13 16:41:52.156 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.157 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.157 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.usagereporting.internal.UsageReportingClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n2026-03-13 16:41:52.157 16779-26176 EuiccGoogle             com.google.android.euicc             E  [281] ClearcutServerLog$$ExternalSyntheticLambda15.call: Cannot connect to GMS API client. (Fix with AI)\n                                                                                                    com.google.android.gms.common.api.ApiException: 17: API: UsageReporting.API is not available on this device. Connection failed with: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n                                                                                                    \tat com.google.android.gms.clearcut.internal.batcher.DropLargestEventBatchReductionAlgorithm.fromStatus(PG:13)\n                                                                                                    \tat com.google.android.gms.common.api.internal.ApiCallRunner$TaskRunner.reportFailure(PG:3)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.failEnqueuedMethods(PG:48)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.failAllEnqueuedMethods(PG:10)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.onConnectionFailed(PG:164)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.onConnectionFailed(PG:174)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.connect(PG:163)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.enqueue(PG:51)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager.handleMessage(PG:844)\n                                                                                                    \tat android.os.Handler.dispatchMessage(Handler.java:128)\n                                                                                                    \tat android.os.Looper.dispatchMessage(Looper.java:333)\n                                                                                                    \tat android.os.Looper.loopOnce(Looper.java:263)\n                                                                                                    \tat android.os.Looper.loop(Looper.java:367)\n                                                                                                    \tat android.os.HandlerThread.run(HandlerThread.java:139)\n2026-03-13 16:41:52.157 16779-16779 SetupLibrary            com.google.android.euicc             W  [GlifLoadingLayout] Can not find the resource entry for loading_animation_custom_default\n2026-03-13 16:41:52.157 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.157 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.157 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.clearcut.internal.ClearcutLoggerClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}</code></pre>",
-      "replies": []
-    },
-    {
-      "id": "43100",
-      "title": "GrapheneOS TalkBack version 23 released",
-      "author": "GrapheneOS",
-      "authorUsername": "GrapheneOS",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-      "score": 2,
-      "comments": 2,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792982355,
-      "lastPostedAt": 1792983201,
-      "category": "Announcements",
-      "categoryColor": "#f00a0a",
-      "tags": [
-        "Announcements"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released",
-      "media": [],
-      "text": "<p>GrapheneOS TalkBack version 23 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/TalkBack/releases/tag/23\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/TalkBack/releases/tag/23</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>\n",
-      "replies": []
-    },
-    {
-      "id": "43073",
-      "title": "How to Convince People to Use GrapheneOS",
-      "author": "Reboot",
-      "authorUsername": "Reboot",
-      "authorAvatar": "",
-      "score": 40,
-      "comments": 40,
-      "views": 840,
-      "participantCount": 24,
-      "created": 1792855754,
-      "lastPostedAt": 1792980036,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
-      "media": [],
-      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
       "replies": []
     }
   ]
