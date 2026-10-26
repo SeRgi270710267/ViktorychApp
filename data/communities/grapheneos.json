@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T12:40:26Z",
+  "fetchedAt": "2026-10-26T13:02:43Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "Reboot",
       "authorUsername": "Reboot",
       "authorAvatar": "",
-      "score": 46,
-      "comments": 46,
+      "score": 47,
+      "comments": 47,
       "views": 840,
       "participantCount": 24,
       "created": 1792855754,
-      "lastPostedAt": 1793018322,
+      "lastPostedAt": 1793019725,
       "category": "General",
       "categoryColor": "#c7c7c7",
       "tags": [
@@ -2090,6 +2090,31 @@
           "text": "<p>Not yet. But not yet is not never. As long as you're not pestering them. One day, when something happens that scares them, it's good for them to know who to go to. Someday someone will ask you about that secure phone thing you talked about.</p> "
         }
       ]
+    },
+    {
+      "id": "43027",
+      "title": "Wi-Fi reconnect on restart doesn't work",
+      "author": "Onlyfun",
+      "authorUsername": "Onlyfun",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792709856,
+      "lastPostedAt": 1793018520,
+      "category": "Pixel 8",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 8"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43027-wi-fi-reconnect-on-restart-doesnt-work",
+      "media": [],
+      "text": "<p>That's it in the title. It's probably not a common issue since my other p8 reconnects as expected. But still asking if anybody seen this to happen? Any remedy?</p>",
+      "replies": []
     },
     {
       "id": "5182",
@@ -2358,30 +2383,6 @@
       "url": "https://discuss.grapheneos.org/d/15368-lets-compare-hashes-for-apps-not-in-appverifiers-database",
       "media": [],
       "text": "<p>Many GOS users who are not using Google Play store, FDroid and Aurora, using AppVerifier for checking the integrity of their downloaded apks, usually with Obtanium (like me). The problem is some apps are neither in the AppVerifier's database or their hash is nowhere published on the internet. But maybe we can have a workaround.</p>\n\n<p>If you're in the same shoes, feel free to post any of your apps hash for comparing with each other. If more people share the same app's hash, the better. Also, Google Play users warmly welcome to do the same, in fact, as they have the biggest security, that would be a big help.</p>",
-      "replies": []
-    },
-    {
-      "id": "35949",
-      "title": "Volkswagen App",
-      "author": "aaron94",
-      "authorUsername": "aaron94",
-      "authorAvatar": "",
-      "score": 156,
-      "comments": 156,
-      "views": 1960,
-      "participantCount": 56,
-      "created": 1780149160,
-      "lastPostedAt": 1793008481,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/35949-volkswagen-app",
-      "media": [],
-      "text": "<p>The Volkswagen App to control your car doesn't work anymore.<br>\nIt is not possible to login.<br>\nI have the play services running and i can see that the app is using the integrity api.<br>\nI also allowed the compat mode.</p>\n\n<p>The issue is introduced by VW, but maybe someone has an idea how to get it working again.</p>",
       "replies": []
     }
   ]
