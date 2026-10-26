@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -457,6 +458,33 @@ def added_names(cfg: dict | None = None) -> list[str]:
     return [name for name in names if name and name not in removed]
 
 
+def discourse_forums() -> list[dict]:
+    """Forums mirrored by discourse_sync.py; they are owned by that job, not by Reddit."""
+    rows: list[dict] = []
+    try:
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from discourse_sync import DISCOURSE_FORUMS
+        for cfg in DISCOURSE_FORUMS:
+            if isinstance(cfg, dict) and community_name(cfg.get("name") or ""):
+                rows.append(cfg)
+    except Exception:
+        pass
+    return rows
+
+
+def discourse_row(cfg: dict) -> dict:
+    name = community_name(cfg.get("name") or "")
+    return {
+        "name": name,
+        "title": cfg.get("title") or name,
+        "type": "discourse",
+        "subscribers": int(cfg.get("subscribers") or 35000),
+        "icon": cfg.get("icon") or "",
+        "banner": cfg.get("banner") or "",
+        "about": cfg.get("about") or ""
+    }
+
+
 def write_index(names: list[str], docs: dict[str, dict]) -> None:
     existing = {}
     index_path = OUT / "index.json"
@@ -469,6 +497,13 @@ def write_index(names: list[str], docs: dict[str, dict]) -> None:
         except Exception:
             pass
 
+    forums = discourse_forums()
+    discourse = {community_name(cfg.get("name") or "") for cfg in forums}
+    # A configured forum stays in the index even before its own sync has run.
+    for cfg in forums:
+        row = discourse_row(cfg)
+        if row["name"]:
+            existing.setdefault(row["name"], row)
     for p in OUT.glob("*.json"):
         if p.name == "index.json":
             continue
@@ -476,7 +511,7 @@ def write_index(names: list[str], docs: dict[str, dict]) -> None:
             d = json.loads(p.read_text(encoding="utf-8"))
             if isinstance(d, dict) and d.get("name"):
                 d_name = d["name"]
-                if d.get("type") == "discourse" or d_name == "grapheneos":
+                if d.get("type") == "discourse" or d_name in discourse:
                     existing[d_name] = {
                         "name": d_name,
                         "title": d.get("title") or d_name,
@@ -1360,6 +1395,22 @@ def selftest() -> int:
     check("rss-bridge.org/bridge01" in by_adapter["rss_bridge"][0] and "RedditBridge" in by_adapter["rss_bridge"][0], "RSS-Bridge uses the public Reddit bridge")
     check(cfg["embeds"] == ["https://vxreddit.com", "https://rxddit.com"], "embed mirrors are vxreddit and rxddit")
     check(expand_template("http://example.com/r/{name}", cfg, "teslamotors") == [], "public fallbacks are https only")
+
+    global OUT
+    saved_out = OUT
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            OUT = Path(temp)
+            (OUT / "index.json").write_text(json.dumps({"communities": [{"name": "teslamotors", "title": "Tesla Motors"}]}), encoding="utf-8")
+            write_index(["teslamotors"], {"teslamotors": {"name": "teslamotors", "title": "Tesla Motors", "posts": []}})
+            names = [row["name"] for row in json.loads((OUT / "index.json").read_text(encoding="utf-8"))["communities"]]
+            check("teslamotors" in names and "grapheneos" in names, "a Reddit-only run keeps a configured Discourse forum in the index")
+            (OUT / "index.json").unlink()
+            write_index(["teslamotors"], {})
+            names = [row["name"] for row in json.loads((OUT / "index.json").read_text(encoding="utf-8"))["communities"]]
+            check("grapheneos" in names, "a fresh index still lists a configured Discourse forum")
+    finally:
+        OUT = saved_out
     print("reddit sync selftest ok")
     return 0
 

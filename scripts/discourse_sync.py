@@ -15,6 +15,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -351,6 +352,19 @@ def sync_discourse_standard(cfg: dict) -> dict:
     }
 
 
+def index_meta(cfg: dict) -> dict:
+    """Index row for a configured forum, used even when the forum is unreachable."""
+    return {
+        "name": cfg["name"],
+        "title": cfg.get("title") or cfg["name"],
+        "type": "discourse",
+        "subscribers": int(cfg.get("subscribers") or 0),
+        "icon": cfg.get("icon") or "",
+        "banner": cfg.get("banner") or "",
+        "about": cfg.get("about") or ""
+    }
+
+
 def update_index(community_meta: dict):
     OUT.mkdir(parents=True, exist_ok=True)
     index_path = OUT / "index.json"
@@ -364,30 +378,23 @@ def update_index(community_meta: dict):
         doc["communities"] = []
 
     name = community_meta["name"]
+    row = {
+        "name": name,
+        "title": community_meta.get("title") or name,
+        "type": community_meta.get("type") or "discourse",
+        "subscribers": int(community_meta.get("subscribers") or 0),
+        "icon": community_meta.get("icon") or "",
+        "banner": community_meta.get("banner") or "",
+        "about": community_meta.get("about") or ""
+    }
     found = False
     for i, c in enumerate(doc["communities"]):
         if c.get("name") == name:
-            doc["communities"][i] = {
-                "name": name,
-                "title": community_meta["title"],
-                "type": community_meta.get("type", "discourse"),
-                "subscribers": community_meta["subscribers"],
-                "icon": community_meta["icon"],
-                "banner": community_meta.get("banner", ""),
-                "about": community_meta.get("about", "")
-            }
+            doc["communities"][i] = row
             found = True
             break
     if not found:
-        doc["communities"].append({
-            "name": name,
-            "title": community_meta["title"],
-            "type": community_meta.get("type", "discourse"),
-            "subscribers": community_meta["subscribers"],
-            "icon": community_meta["icon"],
-            "banner": community_meta.get("banner", ""),
-            "about": community_meta.get("about", "")
-        })
+        doc["communities"].append(row)
 
     index_path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -409,10 +416,15 @@ def run_sync() -> bool:
                 update_index(doc)
                 print(f"[discourse_sync] Successfully mirrored {len(doc['posts'])} topics for {cfg['name']}.")
             else:
-                print(f"[discourse_sync] Warning: No topics returned for {cfg['name']}.", file=sys.stderr)
+                print(f"[discourse_sync] Warning: No topics returned for {cfg['name']}. Keeping it in the index.", file=sys.stderr)
+                update_index(index_meta(cfg))
                 all_ok = False
         except Exception as exc:
             print(f"[discourse_sync] Error syncing {cfg['name']}: {exc}", file=sys.stderr)
+            try:
+                update_index(index_meta(cfg))
+            except Exception:
+                pass
             all_ok = False
     return all_ok
 
@@ -430,6 +442,17 @@ def selftest() -> int:
         "subscribers": 1000
     }
     assert sample_cfg["name"] == "grapheneos_test"
+    global OUT
+    saved_out = OUT
+    try:
+        with tempfile.TemporaryDirectory() as temp:
+            OUT = Path(temp)
+            update_index(index_meta(sample_cfg))
+            rows = json.loads((OUT / "index.json").read_text(encoding="utf-8"))["communities"]
+            assert [row["name"] for row in rows] == ["grapheneos_test"], rows
+            assert rows[0]["type"] == "discourse" and rows[0]["subscribers"] == 1000, rows
+    finally:
+        OUT = saved_out
     print("discourse_sync selftest ok")
     return 0
 

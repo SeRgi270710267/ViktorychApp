@@ -13,8 +13,10 @@
     } catch (_) {}
   }
 
+  var INDEX_TTL = 5 * 60 * 1000;
   var state = {
     index: null,
+    indexAt: 0,
     docs: {},
     internal: {},
     tab: "top",
@@ -186,39 +188,47 @@
     ]
   };
 
-  function loadIndex() {
-    if (state.index && state.index.communities && state.index.communities.length) {
+  /* Built-in communities always stay in the hub. A stale, partial, or empty index
+     (service worker cache, a sync run between Reddit and Discourse, a failed
+     Worker read) must never make one of them disappear. */
+  function mergeBuiltins(doc) {
+    var rows = doc && Array.isArray(doc.communities) ? doc.communities.slice() : [];
+    var seen = {};
+    rows.forEach(function (row) {
+      if (row && row.name) seen[String(row.name).toLowerCase()] = true;
+    });
+    DEFAULT_INDEX.communities.forEach(function (row) {
+      if (!seen[String(row.name).toLowerCase()]) rows.push(row);
+    });
+    return { communities: rows };
+  }
+
+  function indexStale() {
+    return !state.indexAt || Date.now() - state.indexAt > INDEX_TTL;
+  }
+
+  function loadIndex(force) {
+    if (!force && state.index && state.index.communities && state.index.communities.length) {
       return Promise.resolve(state.index);
     }
     if (state.indexPromise) return state.indexPromise;
+    function adopt(doc) {
+      state.index = mergeBuiltins(doc);
+      state.indexAt = Date.now();
+      state.indexPromise = null;
+      return state.index;
+    }
     var url = basePath() + "data/communities/index.json";
     state.indexPromise = fetch(url, { cache: "no-cache" }).then(function (res) {
       if (!res.ok) throw new Error("index " + res.status);
       return res.json();
-    }).then(function (doc) {
-      if (doc && Array.isArray(doc.communities) && doc.communities.length) {
-        state.index = doc;
-      } else {
-        state.index = DEFAULT_INDEX;
-      }
-      state.indexPromise = null;
-      return state.index;
-    }).catch(function () {
+    }).then(adopt).catch(function () {
       return fetch("data/communities/index.json", { cache: "no-cache" }).then(function (res2) {
         if (!res2.ok) throw new Error("index fallback " + res2.status);
         return res2.json();
-      }).then(function (doc2) {
-        if (doc2 && Array.isArray(doc2.communities) && doc2.communities.length) {
-          state.index = doc2;
-        } else {
-          state.index = DEFAULT_INDEX;
-        }
-        state.indexPromise = null;
-        return state.index;
-      }).catch(function () {
-        state.index = DEFAULT_INDEX;
-        state.indexPromise = null;
-        return state.index;
+      }).then(adopt).catch(function () {
+        /* Keep whatever is already rendered instead of replacing it with an empty list. */
+        return adopt(state.index);
       });
     });
     return state.indexPromise;
@@ -512,7 +522,15 @@
   /* Communities Hub / Explore Page (X.com 1-to-1 Style) */
   function listPage() {
     var index = state.index;
-    if (!index || !index.communities || state.loadingIndex) {
+    if (index && index.communities && index.communities.length && indexStale() && !state.loadingIndex) {
+      /* Revalidate in the background so a stale hub cache repairs itself on this visit. */
+      state.loadingIndex = true;
+      loadIndex(true).finally(function () {
+        state.loadingIndex = false;
+        render();
+      });
+    }
+    if (!index || !index.communities || !index.communities.length) {
       if (!state.loadingIndex) {
         state.loadingIndex = true;
         loadIndex().finally(function () {
