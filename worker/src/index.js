@@ -11,6 +11,7 @@ import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } fro
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
+import { handleYtRoute } from "./ythls.js";
 import { fresh, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
 
 const encoder = new TextEncoder();
@@ -3602,6 +3603,9 @@ async function route(request, env) {
   }
   if (path === "/v1/media" && (request.method === "GET" || request.method === "HEAD")) {
     return handlePublicMediaProxy(request, env, url);
+  }
+  if (path === "/v1/yt/manifest" || path === "/v1/yt/media") {
+    return handleYtRoute(request, env, url);
   }
   if (path === "/v1/health" && request.method === "GET") {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });
