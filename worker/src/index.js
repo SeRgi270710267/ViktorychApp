@@ -11,6 +11,7 @@ import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } fro
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
+import { fresh, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -2369,6 +2370,155 @@ async function maybeDispatchDiscord(env) {
   return dispatchWorkflows(env, ["discord-live.yml"]);
 }
 
+const WATCH_JOB_PREFIX = "owner/live-jobs/";
+const WATCH_MARK_PREFIX = "owner/live-watch/";
+const WATCH_UPLOAD_PREFIX = "owner/live-upload/";
+const WATCH_CHANNELS_KEY = "owner/tiktok-backup-channels.json";
+const WATCH_CHANNEL = /^-100\d{4,16}$/;
+
+async function readJsonObject(env, key) {
+  if (!env.DATA) return null;
+  try {
+    const object = await env.DATA.get(key);
+    if (!object) return null;
+    const parsed = JSON.parse(await object.text());
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+async function writeJsonObject(env, key, body) {
+  if (!env.DATA) return false;
+  try {
+    await env.DATA.put(key, JSON.stringify(body));
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+async function dispatchWorkflow(env, file, inputs) {
+  const token = String(env.GITHUB_DISPATCH_TOKEN || "").trim();
+  if (!token) return false;
+  try {
+    const res = await fetch("https://api.github.com/repos/ViktorychGroup/ViktorychApp/actions/workflows/" + file + "/dispatches", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + token,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "viktorych-accounts",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ ref: "main", inputs: inputs || {} })
+    });
+    return res.status === 204 || res.ok;
+  } catch (err) {
+    return false;
+  }
+}
+
+// One page load is enough when the live page carries the room id. The
+// profile page is the second chance, the same fallback the owner route uses.
+async function watchLiveOne(env, handle, prev) {
+  const page = await fetchPublic("https://www.tiktok.com/@" + handle + "/live");
+  const pageKind = challengeKind(page.status, page.text);
+  if (pageKind) return { blocked: true, kind: pageKind };
+  let roomId = parseRoomId(page.text);
+  if (!roomId) {
+    const profile = await fetchPublic("https://www.tiktok.com/@" + handle);
+    const profileKind = challengeKind(profile.status, profile.text);
+    if (profileKind) return { blocked: true, kind: profileKind };
+    roomId = parseRoomId(profile.text);
+  }
+  if (!roomId) return { live: false, roomId: "" };
+  const room = await fetchRoom(roomId);
+  const roomKind = challengeKind(room.status, room.text);
+  if (roomKind) return { blocked: true, kind: roomKind, roomId };
+  let parsed = {};
+  try { parsed = JSON.parse(room.text || "{}"); } catch (err) { parsed = {}; }
+  const picked = pickStreams(parsed);
+  return { live: !!picked.live, roomId, picked, prev };
+}
+
+async function watchTikTokLive(env, nowMs) {
+  if (!env.DATA || !String(env.GITHUB_DISPATCH_TOKEN || "").trim()) return;
+  const doc = await readOwnerDoc(env);
+  if (!doc) return;
+  const minute = new Date(Number(nowMs) || Date.now()).getUTCMinutes();
+  const handles = watchHandles(doc, 4, minute);
+  if (!handles.length) return;
+  const channelDoc = await readJsonObject(env, WATCH_CHANNELS_KEY);
+  const extras = Array.isArray(channelDoc && channelDoc.channels)
+    ? channelDoc.channels.filter((value) => WATCH_CHANNEL.test(String(value || "").trim())).length
+    : 0;
+  const channels = Math.max(1, Math.min(1 + extras, 12));
+  const live = doc.live && typeof doc.live === "object" ? doc.live : {};
+  let uploader = false;
+
+  for (let i = 0; i < handles.length; i++) {
+    const handle = handles[i];
+    const prev = live[handle] && typeof live[handle] === "object" ? live[handle] : {};
+    const markKey = WATCH_MARK_PREFIX + handle + ".json";
+    const mark = await readJsonObject(env, markKey);
+    const blocks = Math.max(0, Number(mark && mark.blocks) || 0);
+    const pause = Math.min(30, 2 * Math.pow(2, Math.min(blocks, 4))) * 60 * 1000;
+    if (mark && mark.blockedAt && fresh(mark.blockedAt, nowMs, pause)) continue;
+
+    const seen = await watchLiveOne(env, handle, prev);
+    if (seen.blocked) {
+      const next = Object.assign({}, mark || {}, {
+        handle,
+        blockedAt: stamp(),
+        blocks: blocks + 1,
+        status: seen.kind || "blocked",
+        roomId: seen.roomId || (mark && mark.roomId) || ""
+      });
+      await writeJsonObject(env, markKey, next);
+      continue;
+    }
+    if (blocks) await writeJsonObject(env, markKey, Object.assign({}, mark, { blocks: 0, blockedAt: "" }));
+
+    const info = liveInfo(handle, prev, seen.roomId || "", seen.picked || { live: false });
+    const quiet = !fresh(prev.checkedAt, nowMs, 5 * 60 * 1000);
+    if (prev.live !== info.live || String(prev.roomId || "") !== String(info.roomId || "") || quiet) {
+      await rememberLive(env, handle, info);
+    }
+
+    const job = await readJsonObject(env, WATCH_JOB_PREFIX + handle + ".json");
+    const active = job && job.active && typeof job.active === "object" ? job.active : {};
+
+    if (!info.live) {
+      // The last segments of a live still need an uploader after it ends.
+      if (Number(active.segments || 0) > 0 || active.captureDone) uploader = true;
+      continue;
+    }
+
+    uploader = true;
+    const choice = watchDecision(job, mark, seen.roomId, nowMs);
+    if (choice.action !== "record" && choice.action !== "part") continue;
+    const ok = await dispatchWorkflow(env, "tiktok-record.yml", {
+      handle,
+      part: String(choice.part || 1),
+      room: String(seen.roomId || "")
+    });
+    if (ok) {
+      await writeJsonObject(env, markKey, { handle, roomId: seen.roomId, part: choice.part || 1, at: stamp() });
+    } else {
+      await writeJsonObject(env, markKey, Object.assign({}, mark || {}, { handle, failedAt: stamp() }));
+    }
+  }
+
+  if (!uploader) return;
+  for (let slot = 0; slot < channels; slot++) {
+    const beat = await readJsonObject(env, WATCH_UPLOAD_PREFIX + slot + ".json");
+    if (!uploaderStale(beat, nowMs)) continue;
+    await dispatchWorkflow(env, "tiktok-live-upload.yml", { slot: String(slot) });
+  }
+}
+
+
 async function requireOwner(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return { error: json(401, { error: "unauthorized" }) };
@@ -3445,9 +3595,14 @@ export default {
       return json(500, { error: "unavailable" });
     }
   },
-  async scheduled(_event, env, ctx) {
-    const job = maybeDispatchDiscord(env);
-    if (ctx && ctx.waitUntil) ctx.waitUntil(job);
-    else await job;
+  async scheduled(event, env, ctx) {
+    const at = Number(event && event.scheduledTime) || Date.now();
+    const jobs = [watchTikTokLive(env, at)];
+    // The cron runs every minute for TikTok. The Discord mirror keeps its
+    // fifteen minute rhythm.
+    if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
+    const all = Promise.allSettled(jobs);
+    if (ctx && ctx.waitUntil) ctx.waitUntil(all);
+    else await all;
   }
 };

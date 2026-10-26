@@ -3023,7 +3023,7 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
     worker_src = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
     wrangler = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
     discord_fn = worker_src.split("async function maybeDispatchDiscord", 1)[1].split("async function ", 1)[0]
-    check('crons = ["*/15 * * * *"]' in wrangler and "discord-live.yml" in worker_src and "in_progress" in worker_src and "If-None-Match" in worker_src and "stale-while-revalidate=86400" in worker_src and "console" not in discord_fn, "the worker cron dispatches Discord only when idle and serves ETag pages")
+    check('crons = ["* * * * *"]' in wrangler and "discord-live.yml" in worker_src and "in_progress" in worker_src and "If-None-Match" in worker_src and "stale-while-revalidate=86400" in worker_src and "console" not in discord_fn, "the worker cron watches TikTok every minute and dispatches Discord only when idle while pages serve ETags")
     check("messages/" in live_script and "/p/" in live_script and "def r2_put" in live_script and "def restore_from" in live_script and "upload_discord" in live_script, "live history is paged and stored in R2")
     saved_token = os.environ.pop("CLOUDFLARE_API_TOKEN", None)
     try:
