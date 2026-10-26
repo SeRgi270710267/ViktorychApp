@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T06:41:50Z",
+  "fetchedAt": "2026-10-26T07:19:43Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,137 @@
       ]
     },
     {
+      "id": "43007",
+      "title": "Donate from India",
+      "author": "mumbai",
+      "authorUsername": "mumbai",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792643046,
+      "lastPostedAt": 1792997903,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43007-donate-from-india",
+      "media": [],
+      "text": "<p>How can I make donations to <a href=\"https://discuss.grapheneos.org/u/GrapheneOS\" class=\"UserMention\">@GrapheneOS</a> I don't use any <strong>Debit or Credit or UPI app</strong><br>\nEasiest way to Donate i'll say someone else to Donate for me</p>",
+      "replies": [
+        {
+          "id": "276615",
+          "number": 2,
+          "author": "thmf",
+          "authorUsername": "thmf",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792643365,
+          "parent": "43007",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43007-donate-from-india/1\" class=\"PostMention\" data-id=\"276614\"><i class=\"icon fas fa-reply\"></i>mumbai</a> You can also donate with crypto. Please see all available ways to donate here: <a href=\"https://grapheneos.org/donate\" rel=\"ugc nofollow\">https://grapheneos.org/donate</a></p>"
+        },
+        {
+          "id": "276617",
+          "number": 3,
+          "author": "mumbai",
+          "authorUsername": "mumbai",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792643836,
+          "parent": "43007",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43007-donate-from-india/2\" class=\"PostMention\" data-id=\"276615\"><i class=\"icon fas fa-reply\"></i>thmf</a> I had already see all the options.<br>\nAnd I don't own a crypto currency<br>\nHow can I get one privately without a mess</p>"
+        },
+        {
+          "id": "276623",
+          "number": 4,
+          "author": "h34p",
+          "authorUsername": "h34p",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792646693,
+          "parent": "43007",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43007-donate-from-india/1\" class=\"PostMention\" data-id=\"276614\"><i class=\"icon fas fa-reply\"></i>mumbai</a> how would you pay back the donation if someone else donates for you?</p> "
+        },
+        {
+          "id": "276627",
+          "number": 5,
+          "author": "mumbai",
+          "authorUsername": "mumbai",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792648712,
+          "parent": "43007",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43007-donate-from-india/4\" class=\"PostMention\" data-id=\"276623\"><i class=\"icon fas fa-reply\"></i>h34p</a> I'll give them cash <strong>inr</strong> to The payer/shopkeeper/someone I know<br>\nThe problem is that when ask someone to pay for me they will look at you as i'm doing something wrong<br>\nThat's why I need easiest way to pay like Upi</p>"
+        },
+        {
+          "id": "277459",
+          "number": 6,
+          "author": "mumbai",
+          "authorUsername": "mumbai",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792997903,
+          "parent": "43007",
+          "text": "<p>Will debit card will work for donations?</p>"
+        }
+      ]
+    },
+    {
+      "id": "43096",
+      "title": "How to bypass google sign-in to use certain apps with AndroidAuto ",
+      "author": "stonewll123",
+      "authorUsername": "stonewll123",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1792962351,
+      "lastPostedAt": 1792997595,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services",
+        "Pixel 10a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43096-how-to-bypass-google-sign-in-to-use-certain-apps-with-androidauto",
+      "media": [],
+      "text": "<p>Howdy,<br>\nI am a somewhat new user to GrapheneOS, stable release, Pixel 10a. My threat model is \"trying to minimize crumbs now because I know I will be a surveillance target in the near future.\" Since discovering Aurora, I have used a google-free owner profile for almost everything, with a work profile that has play services during the day for critical app notifications, and another profile for androidauto, which has very limited apps. However, also since discovering Aurora, I see androidauto connects just fine but will not display the apps I want.</p> \n\n<p>Because so little of this driving profile is actually personal, I am happy to let play services run for that one for the rare occasions I use it. However, I cannot figure out how to get the apps I need without signing in to play store on that profile. Thoughts? I imagine the straightforward way to do this is have the owner profile install the google apps and import them to the driving profile, then use other more private techniques on the everyday profile, which is not owner. However, I would prefer a workaround if possible, so I don't have to rebuild my entire phone. I see that there are websites that claim to snatch APKs from google play in a browser—but I don't really trust these, and I generally know that obtanium does something like that—but it does not seem to work for play store.</p>\n\n<p>Appreciate any suggestions.</p>",
+      "replies": []
+    },
+    {
+      "id": "43028",
+      "title": "Battery drain regression: GNSS daemon wakes every 60 min in idle (apps: 0)",
+      "author": "Fatlib",
+      "authorUsername": "Fatlib",
+      "authorAvatar": "",
+      "score": 6,
+      "comments": 6,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792728157,
+      "lastPostedAt": 1792997090,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved",
+        "Pixel 10 Pro"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43028-battery-drain-regression-gnss-daemon-wakes-every-60-min-in-idle-apps-0",
+      "media": [],
+      "text": "<h2>Device information</h2>\n<ul><li>Device: Pixel 10 Pro</li>\n<li>GrapheneOS version: 2026102101 (installed via OTA, <sub>hours</sub> before report)</li>\n<li>Android version: Android 17</li>\n<li>No developer options modified since bootloader unlock at unboxing</li></ul>\n\n<h2>Issue description</h2>\n<p>Battery life dropped by <sub>50</sub>% after the 2nd GrapheneOS update on this device.<br>\nBefore the update: <sub>6</sub> days per 50% usable capacity (battery kept between 30–80%).<br>\nAfter the update: <sub>3</sub> days with identical usage pattern and app set.</p>\n\n<h2>Usage pattern (minimal)</h2>\n<ul><li>Owner profile only, no sandboxed Google Play</li>\n<li>Apps: Droid-ify, VLC, Material Files, Organic Maps, Signal, Proton Mail</li>\n<li>Bluetooth only active during music playback, otherwise OFF</li>\n<li>Organic Maps not used for 2+ weeks</li>\n<li>Screen-on time: <sub>2h</sub> 13min across <sub>5</sub>.5 days (<sub>97</sub>% standby)</li></ul>\n\n<h2>Root cause analysis (adb)</h2>\n<p><code>adb shell dumpsys batterystats | grep -i gnss</code> reveals:</p>\n\n<ol><li>GNSS hardware wakes every <sub>60</sub> minutes at minute :17–:19 — exact 1h raster,<br>\n   independent of charging/screen state</li>\n<li>2h 55m GNSS time with NO app attribution (gnss: 128 apps: 0, duration: 2h 54m 53s)</li>\n<li>Only 17m attributed to apps (gnss: 12.4 apps: 12.4, duration: 16m 56s)</li>\n<li>wake_reason: \"Abort: Pending Wakeup Sources: gnss_ipc\" — system-level wakeup<br>\n   via IPC, not app-initiated</li>\n<li>Processes involved: gnssd, android.hardware.gnss-service.pixel</li>\n<li>Kernel wake locks: gnss (30s, 6x), gnss_ipc (27s 954ms, 55x), gnss_boot (1s, 4x)</li></ol>\n\n<p>Total GNSS hardware time: 3h 11m over a <sub>117h</sub> cycle (<sub>2</sub>.7% of cycle time),<br>\n<sub>90</sub>% of it unattributed to any app UID.</p>\n\n<h2>Steps to reproduce</h2>\n<ol><li>GrapheneOS 2026102101 on Pixel 10 Pro</li>\n<li>Minimal app set, no Google Play</li>\n<li>Idle-heavy usage (phone mostly stationary)</li>\n<li><code>adb shell dumpsys batterystats | grep -i gnss</code> shows hourly GNSS wakeups, apps: 0</li></ol>\n\n<h2>Related issues</h2>\n<ul><li>#6125 — Pixel 9: \"High battery drain during idle\" — same signature: high GNSS<br>\n  time in idle, apps: 0, gnss_ipc wake reasons; factory reset did not help</li></ul>\n\n<h2>Workarounds attempted</h2>\n<ul><li>All location permissions revoked for all apps</li>\n<li>Organic Maps background location disabled + force stop</li>\n<li>Location services fully disabled (Settings &gt; Location) — currently testing</li></ul>\n\n<p>Evidence:</p>\n\n<p>jan@HP-EliteBook-840-G6:~$ adb shell dumpsys batterystats | grep -i gnss<br>\n  10-12 16:57:09.610 036 -gps -state=1000:\"gnss\"<br>\n  10-12 17:10:27.243 035 +gps +state=1000:\"gnss\"<br>\n  10-12 17:10:27.393 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 17:10:27.434 035 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 17:10:40.294 035 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\" +cellular_high_tx_power<br>\n  10-12 18:10:49.450 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 19:10:48.461 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 21:10:46.536 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 22:10:47.563 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 23:10:45.617 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 00:10:50.537 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 01:10:48.864 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 02:10:46.899 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 03:11:03.969 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 04:11:05.209 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 04:12:08.985 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 05:10:49.469 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 06:11:13.452 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 07:10:59.436 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 08:16:53.512 077 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 08:39:24.702 080 -gps -state=1000:\"gnss\"<br>\n  10-13 09:16:54.403 078 +gps +state=1000:\"gnss\"<br>\n  10-13 09:17:03.017 078 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 12:17:06.421 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 13:17:20.559 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 14:17:08.615 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 15:17:08.190 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 16:17:07.483 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 17:17:14.503 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 18:17:09.965 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 19:17:09.974 059 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 20:17:35.682 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 21:17:19.721 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 22:17:13.802 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 23:17:06.801 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 00:17:22.819 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 01:17:29.085 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 02:17:11.120 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 03:17:13.205 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 04:17:09.175 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 05:17:11.272 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 06:17:24.136 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 07:17:08.215 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 08:17:14.253 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 09:17:14.314 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 10:17:11.840 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 11:17:14.868 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 11:41:20.062 050 -gps -state=1000:\"gnss\"<br>\n  10-14 12:17:14.515 049 +gps -mobile_radio +state=1000:\"gnss\"<br>\n  10-14 12:17:15.839 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 12:17:31.434 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 13:18:39.340 047 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\" -job=1000:\"android/com.android.server.notification.NotificationHistoryJobService\"<br>\n  10-14 13:18:41.639 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 14:17:36.685 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 15:17:35.293 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 15:32:17.657 045 -gps -state=1000:\"gnss\"<br>\n  10-14 16:17:35.394 044 +gps +state=1000:\"gnss\"<br>\n  10-14 16:17:40.326 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 17:17:51.518 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 18:17:49.508 043 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 19:17:47.516 042 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 20:17:46.796 041 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 21:17:47.814 041 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 22:17:47.679 040 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 23:17:49.707 040 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 00:17:52.645 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 01:17:46.821 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 02:17:46.794 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 03:17:47.086 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 04:17:47.093 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 05:17:47.124 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 06:17:52.063 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 07:17:50.191 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 08:17:51.148 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 09:17:49.212 036 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 13:19:39.619 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 15:32:53.688 079 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 16:17:46.802 079 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 17:17:47.782 078 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 18:18:32.350 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-15 18:18:37.341 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-15 18:19:33.476 073 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 19:17:46.489 073 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 20:17:51.674 072 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 21:17:49.811 071 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 22:17:48.606 071 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 23:18:06.668 070 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 23:53:34.944 069 -gps -state=1000:\"gnss\"<br>\n  10-16 00:18:06.517 069 +gps +state=1000:\"gnss\"<br>\n  10-16 00:18:20.604 069 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 01:01:36.449 068 -gps -state=1000:\"gnss\"<br>\n  10-16 01:18:20.482 068 +gps +state=1000:\"gnss\"<br>\n  10-16 01:18:44.551 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 02:20:06.690 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 03:18:52.727 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 04:18:52.844 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 05:18:53.857 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 06:18:59.876 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 07:18:53.895 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 08:18:58.005 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 09:19:01.985 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 10:18:52.895 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 11:19:00.005 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 12:18:53.046 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 13:19:00.064 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 14:18:54.217 063 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 15:18:52.751 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 16:18:52.707 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 17:18:52.728 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 18:18:59.315 059 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 19:18:48.284 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 20:19:05.447 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 21:18:56.464 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 22:18:55.468 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 23:18:54.844 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 23:42:07.545 055 -gps -state=1000:\"gnss\"<br>\n  10-17 00:18:54.774 055 +gps +state=1000:\"gnss\"<br>\n  10-17 00:19:04.773 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 01:19:10.907 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 02:19:10.932 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 03:19:13.854 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 04:19:22.799 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 05:19:11.891 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 06:19:16.924 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 07:19:10.902 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 08:19:12.023 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 09:19:16.062 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 10:19:14.086 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 11:19:15.118 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 12:19:13.144 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 13:19:13.194 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 14:19:12.060 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 15:19:14.110 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 16:19:13.134 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 17:19:10.442 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 18:19:08.386 046 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-17 18:19:10.493 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 19:19:19.691 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 19:19:25.408 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 20:19:12.542 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 21:19:13.534 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 00:19:13.395 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 04:19:25.009 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 05:21:12.947 036 charge=1812 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 06:20:22.982 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 02:19:08.413 077 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 06:19:08.665 076 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 14:19:08.779 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 17:19:08.548 071 +wifi_radio wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 18:19:13.140 070 wake_reason=0:\"Abort: Pending Wakeup Sources: umts_ipc0 gnss_ipc\"<br>\n  10-19 18:19:15.153 070 -cellular_high_tx_power wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 18:39:58.264 068 -gps -state=1000:\"gnss\"<br>\n  10-19 18:40:39.893 068 +gps +state=1000:\"gnss\"<br>\n  10-19 20:09:37.094 065 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 20:10:04.405 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 20:40:59.530 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 21:40:58.568 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 22:40:59.587 064 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 23:40:58.641 064 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 00:41:11.672 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 01:40:58.723 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 02:40:59.722 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 03:41:33.767 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 04:40:58.808 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 05:41:00.838 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 06:40:59.864 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 07:41:00.635 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 08:41:02.681 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 09:41:00.747 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 10:41:03.793 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 11:40:58.791 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 12:40:58.845 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 13:40:57.832 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 14:41:05.861 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 15:41:00.154 058 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 16:41:01.153 058 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 17:41:06.208 057 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 18:40:58.499 056 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 19:23:17.481 055 -gps -state=1000:\"gnss\"<br>\n  10-20 19:40:58.736 054 +gps +state=1000:\"gnss\"<br>\n  10-20 19:40:59.131 054 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 19:41:04.402 054 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 20:43:04.516 053 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 21:41:13.844 052 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 22:41:12.844 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 22:57:23.541 051 -gps -state=1000:\"gnss\"<br>\n  10-20 23:41:13.114 051 +gps +state=1000:\"gnss\"<br>\n  10-20 23:41:13.265 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 23:41:13.274 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 23:41:22.758 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 00:41:31.927 050 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 01:41:29.519 049 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 02:41:30.547 049 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 03:41:29.628 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 04:41:30.658 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 05:41:28.639 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 06:41:30.675 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 07:41:28.713 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 08:41:36.746 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 09:41:40.778 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 10:41:41.819 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 11:41:29.851 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 12:41:27.904 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 13:41:27.938 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 14:41:28.959 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 15:41:28.192 044 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 16:41:29.250 043 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:41:43.592 042 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:41:59.552 042 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:43:39.941 042 -gps -state=1000:\"gnss\"<br>\n  10-21 18:41:59.362 041 +gps +state=1000:\"gnss\"<br>\n  10-21 18:42:06.546 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 19:42:17.579 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 20:42:10.716 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 21:42:11.799 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 22:42:20.838 039 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 23:42:26.853 039 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 00:42:10.771 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 01:42:14.911 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 02:42:11.605 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 03:42:16.613 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 04:42:14.666 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 05:42:10.586 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 06:42:16.812 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 07:42:14.738 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 08:42:14.823 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 09:42:16.040 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 10:42:12.110 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 11:42:15.110 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 12:42:12.164 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 13:42:15.259 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 14:42:16.202 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 15:42:57.688 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 15:44:00.646 040 charge=1962 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 16:42:56.390 050 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 20:05:36.065 079 -gps -state=1000:\"gnss\"<br>\n  10-22 20:08:25.166 079 +gps +state=1000:\"gnss\"<br>\n  10-22 21:08:50.366 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 21:53:15.658 078 -gps -state=1000:\"gnss\"<br>\n  10-22 22:08:50.221 079 +gps +state=1000:\"gnss\"<br>\n  10-22 22:08:55.574 079 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 22:11:56.087 079 -gps -state=1000:\"gnss\"<br>\n  10-22 23:08:55.831 080 +gps +state=1000:\"gnss\"<br>\n  10-22 23:09:03.496 080 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 00:09:12.450 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 01:09:20.370 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 02:09:10.512 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 02:20:45.903 078 -gps -state=1000:\"gnss\"<br>\n    gnss: 140 apps: 12.4 duration: 3h 11m 50s 62ms <br>\n      gnss: 12.4 apps: 12.4 duration: 16m 56s 289ms <br>\n      gnss: 128 apps: 0 duration: 2h 54m 53s 773ms <br>\n      audio=1.61 (3m 51s 824ms) audio:fg=0.000118 (17ms) audio:bg=1.61 (3m 51s 784ms) audio:cached=0.000159 (23ms) sensors=0.0159 sensors:bg=0.0159 gnss=12.4 (3h 11m 50s 63ms) gnss:bg=12.4 (3h 11m 50s 63ms) wifi=0.00296 wifi:bg=0.00296 wakelock=0.230 (51s 542ms) wakelock:bg=0.230 (51s 542ms)<br>\n      (on battery, screen on) audio=1.61 (3m 51s 453ms) audio:fg=0.000118 (17ms) audio:bg=1.61 (3m 51s 413ms) audio:cached=0.000159 (23ms) sensors=0.0115 sensors:bg=0.0115 gnss=12.4 (3h 11m 50s 63ms) gnss:bg=12.4 (3h 11m 50s 63ms) wifi=0.000673 wifi:bg=0.000673 wakelock=0.0271 (9s 804ms) wakelock:bg=0.0271 (9s 804ms)<br>\n  Kernel Wake lock gnss: 30s 126ms (6 times) realtime<br>\n  Kernel Wake lock gnss_ipc: 27s 954ms (55 times) realtime<br>\n  Kernel Wake lock gnss_boot: 1s 461ms (4 times) realtime<br>\n  Wake lock 1000 <em>location</em>:GnssLocationProvider: 42ms (4 times) max=21 actual=46 realtime<br>\n    Wake lock <em>location</em>:GnssLocationProvider: 42ms partial (4 times) max=21 actual=46, 46ms background partial (4 times) max=21 realtime<br>\n    Wake lock GnssVisibilityControl realtime<br>\n    Proc android.hardware.gnss-service:<br>\n    Proc gnssd:<br>\n    Proc android.hardware.gnss-service.pixel:<br>\njan@HP-EliteBook-840-G6:~$</p> ",
+      "replies": []
+    },
+    {
       "id": "14004",
       "title": "Phasing out 32-bit-only app support for older devices too",
       "author": "GrapheneOS",
@@ -1879,217 +2010,7 @@
       "url": "https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too",
       "media": [],
       "text": "<p>We're planning on phasing out support for 32-bit apps on 5th/6th generation Pixels where they're still supported. They were already phased out by Android for 7th generation Pixels and later, and by ARM for 2nd generation ARMv9 Cortex cores onwards. Since 7th/8th generation Pixel users are doing fine without them, we want to bring the improved security to users on 6th generation Pixels which still have a lot of support ahead of them. It will also save a significant amount of build time and bandwidth, particularly when we can move to 64-bit-only builds of Vanadium.</p>\n\n<p>The main benefit is dropping all the 32-bit ABI support from the kernel including a bunch of awful legacy cruft for emulating legacy ARM features no longer supported by hardware.</p>\n\n<p>The next release will add a clear warning to each launch of 32-bit-only apps. In nearly all cases, people just need to switch to proper builds of apps which aren't 32-bit-only such as the ones distributed by certain 3rd party mirror sites where users accidentally ended up on 32-bit-only builds.</p>\n\n<p>It hasn't been possible to install 32-bit-only apps from the Play Store on 64-bit-capable devices since August 2021 and they blocked uploading either new apps or app updates without 64-bit support since August 2019.</p>",
-      "replies": [
-        {
-          "id": "88208",
-          "number": 2,
-          "author": "Panda-na",
-          "authorUsername": "Panda-na",
-          "authorAvatar": "",
-          "score": 3,
-          "created": 1720341568,
-          "parent": "14004",
-          "text": "<p>I like the work that you do with removing old stuff, good work! 👍</p> \n\n<p>But one thing. You write that there will be a warning when launching a 32-bit app. But I would think that if people use a 32-bit app, that means that they have made a conscious choice and sideloaded that app for a specific usecase. Most probably that app is not in daily use.</p> \n\n<p>Would it not be better to have a kind of \"32-bit app checker\" that runs once a week or something and displays a list of apps that will not be working with future releases?</p> \n\n<p>Maybe apps like these are specific apps for themes or widgets or similar. Those apps wil not be launched by the user, they will run 24/7. Maybe warning at OS startup?</p> \n\n<p>Just a few thoughts 😊 I don't think this will impact me at all, so I'm happy either way. But those that are crazy about theme-ing and customization will probably not like this change (especially if they don't get a warning 😅).</p> "
-        },
-        {
-          "id": "88253",
-          "number": 3,
-          "author": "GrapheneOS",
-          "authorUsername": "GrapheneOS",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-          "score": 2,
-          "created": 1720366880,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/2\" class=\"PostMention\" data-id=\"88208\"><i class=\"icon fas fa-reply\"></i>Panda-na</a></p> \n\n<blockquote><p>But one thing. You write that there will be a warning when launching a 32-bit app. But I would think that if people use a 32-bit app, that means that they have made a conscious choice and sideloaded that app for a specific usecase. Most probably that app is not in daily use.</p></blockquote>\n\n<p>In almost every case people are accidentally using 32-bit-only builds of apps because they obtained the apps from a mirror or third party repository and ended up with a 32-bit-only build instead of the 64-bit-only build. We want to quickly phase out support for these apps so warning at each launch is the best approach. Warning less frequently would be reasonable if we didn't plan to remove support for 32-bit-only apps in the near future. No one can use these on 7th/8th generation Pixels since support for them was disabled upstream on 7th gen Pixels from launch and 8th gen Pixels do not support 32-bit at a hardware level.</p>\n\n<blockquote><p>Maybe apps like these are specific apps for themes or widgets or similar. Those apps wil not be launched by the user, they will run 24/7. Maybe warning at OS startup?</p></blockquote>\n\n<p>They're either apps with 64-bit builds available or in rare cases games which haven't been developed in before around 2018. The deprecation of 32-bit-only apps started in 2017.</p>\n\n<blockquote><p>Just a few thoughts 😊 I don't think this will impact me at all, so I'm happy either way. But those that are crazy about theme-ing and customization will probably not like this change (especially if they don't get a warning 😅).</p></blockquote>\n\n<p>It's not related to themes/customization. It's highly unlikely there are any apps relevant to that impacted by this. They'll either be apps where people are accidentally using 32-bit-only builds where 64-bit support is available or rare cases like abandoned games. People on 7th/8th gen Pixels already don't have 32-bit-only app support since that's standard on new Android devices, and we've heard nearly zero complaints about it.</p>\n\n<p>Running ancient apps with no security updates is generally not a good idea particularly since most require network access. Most of the old games required online services which aren't available any more so the examples of these apps which are still relevant are few.</p>"
-        },
-        {
-          "id": "88308",
-          "number": 4,
-          "author": "matchboxbananasynergy",
-          "authorUsername": "matchboxbananasynergy",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
-          "score": 0,
-          "created": 1720382024,
-          "parent": "14004",
-          "text": ""
-        },
-        {
-          "id": "88323",
-          "number": 5,
-          "author": "Skyway",
-          "authorUsername": "Skyway",
-          "authorAvatar": "",
-          "score": 3,
-          "created": 1720393619,
-          "parent": "14004",
-          "text": "<p>Is there a way to check apps to see which are 32 bit before the update with warning ?</p>"
-        },
-        {
-          "id": "88516",
-          "number": 6,
-          "author": "DeletedUser161",
-          "authorUsername": "DeletedUser161",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1720520406,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/5\" class=\"PostMention\" data-id=\"88323\"><i class=\"icon fas fa-reply\"></i>Skyway</a> <br>\nSimple enough. You can just open the apk file in an archiver and find the lib folder (if there are no, it means there are no native libraries and for such apk there is no idea what architecture or bitness) in it there will be more folders: arm64-v8a - ARM 64 bit, armeabi-v7a - ARM 32 bit. (Native libraries can be for several architectures at once or only for one).</p>\n\n<p>Another option is to use <a href=\"https://github.com/MuntashirAkon/AppManager/releases/latest\" rel=\"ugc nofollow\">App Manager</a>: open any application and in the \"App Info\" clade in the \"More Info\" section there will be \"Primary ABI\" with the value arm64-v8a - ARM 64 bit, armeabi-v7a - ARM 32 bit.</p>\n\n<p>All this can be checked for example with apk files of Matrix <a href=\"https://github.com/element-hq/element-android/releases/latest\" rel=\"ugc nofollow\">Element Client</a> (the names already indicate architecture and bitness).</p>"
-        },
-        {
-          "id": "88706",
-          "number": 7,
-          "author": "GrapheneOS",
-          "authorUsername": "GrapheneOS",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-          "score": 4,
-          "created": 1720628802,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/5\" class=\"PostMention\" data-id=\"88323\"><i class=\"icon fas fa-reply\"></i>Skyway</a> The first release with the warning is now available in both the Beta and Alpha channels.</p>"
-        },
-        {
-          "id": "88851",
-          "number": 8,
-          "author": "LegalPusher",
-          "authorUsername": "LegalPusher",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1720709971,
-          "parent": "14004",
-          "text": "<p>I am extremely disappointed by this announcement. I use medical apps with no permissions for which the 64bit equivalents require a subscription through Google Play, are infested with ads and spyware, or both.</p>\n\n<p>I also have been moving my notes away from PalmNote (some going back 24 years). (It exports to xml but I've only been able to import into Markor by copy and paste.)</p>\n\n<p>I was hoping I would have until updates end for the 6a. I've ironically had more luck finding equivalent apps for the ipad at work - their app store is bad, but Google Play is a nightmare.</p>"
-        },
-        {
-          "id": "88870",
-          "number": 9,
-          "author": "matchboxbananasynergy",
-          "authorUsername": "matchboxbananasynergy",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
-          "score": 0,
-          "created": 1720720345,
-          "parent": "14004",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/8\" class=\"PostMention\" data-id=\"88851\"><i class=\"icon fas fa-reply\"></i>LegalPusher</a> I also have been moving my notes away from PalmNote (some going back 24 years). (It exports to xml but I've only been able to import into Markor by copy and paste.)</p></blockquote>\n\n<p>Markor at the very least should have a 64-bit version. Is there some reason you think it doesn't?</p>"
-        },
-        {
-          "id": "88873",
-          "number": 10,
-          "author": "LegalPusher",
-          "authorUsername": "LegalPusher",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1720721296,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/9\" class=\"PostMention\" data-id=\"88870\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a> <br>\nMarkor is what I am importing into. PalmNote is what I am exporting from.<br>\n<a href=\"https://apkpure.com/palmnote/spazee.pnote\" rel=\"ugc nofollow\">This PalmNote, no longer available on Play Store as it is 32bit.</a></p>"
-        },
-        {
-          "id": "88878",
-          "number": 11,
-          "author": "LegalPusher",
-          "authorUsername": "LegalPusher",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1720722748,
-          "parent": "14004",
-          "text": "<p>Of course, I should have moved over my notes to a new app long ago, but I thought I was fine until updates for the 6a (the last 32bit Pixel) ended next year. Even then, that's just a matter of going through the xml file on my computer.</p> \n\n<p>MediCalc and iSilo are bigger problems for me. I also have a nautical charts app that for the new 64bit version would require an annual subscription to access the same unchanged maps.</p>"
-        },
-        {
-          "id": "88881",
-          "number": 12,
-          "author": "matchboxbananasynergy",
-          "authorUsername": "matchboxbananasynergy",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
-          "score": 7,
-          "created": 1720723146,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/11\" class=\"PostMention\" data-id=\"88878\"><i class=\"icon fas fa-reply\"></i>LegalPusher</a> I understand where you're coming from, and we did consider these niche use cases. I will pass your feedback on to the rest of the team for the further discussion, however this is already something that is over for the majority of our supported devices. With 5a almost out of the way, it only leaves the 6th gen devices.</p>\n\n<p>Doing this would not only help GrapheneOS be able to make builds faster and reducing the size that people have to download, but will also bring security benefits to people on these devices.</p>\n\n<p>While it's unfortunate that these apps are now charging for something that was once free, using apps that are not receiving updates is an issue, aside from them being 32-bit, which is another issue in and of itself.</p>\n\n<p>Even if we don't make this change, you would have needed to migrate from those apps to using something else when you eventually moved away from your 6th gen device. I understand that's not nearly as soon as this change would be, but still.</p>"
-        },
-        {
-          "id": "88928",
-          "number": 13,
-          "author": "GrapheneOS",
-          "authorUsername": "GrapheneOS",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-          "score": 3,
-          "created": 1720736465,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/8\" class=\"PostMention\" data-id=\"88851\"><i class=\"icon fas fa-reply\"></i>LegalPusher</a> It's not going to be immediately phased out. There's going to be a transition period. If there are more people still using 32-bit-only apps than expected without a clear migration path away from them, we can make the transition period longer than a month.</p>\n\n<p>The reason we're adding the warning is so users have a lot of time to migrate to currently maintained apps. 32-bit-only apps were deprecated in 2017, were blocked for new apps and app updates by the Play Store in 2019 and it stopped serving them to 64-bit-capable devices in 2021 which means there's no change in compatibility for apps from the Play Store itself.</p>\n\n<p>Users will have to migrate away from these apps one way or another since 7th gen Pixels dropped support for 32-bit apps and 2nd gen ARMv9 Cortex cores used by the Pixel 8 lack hardware support for 32-bit.</p>"
-        },
-        {
-          "id": "89528",
-          "number": 14,
-          "author": "xxx",
-          "authorUsername": "xxx",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1721124197,
-          "parent": "14004",
-          "text": "<p>I got a warning on P6  with Obtainium.</p>\n\n<p>I tried the version from f-droid.</p>\n\n<p>\"This app only supports 32bit...\"</p>"
-        },
-        {
-          "id": "89547",
-          "number": 15,
-          "author": "Carlos-Anso",
-          "authorUsername": "Carlos-Anso",
-          "authorAvatar": "",
-          "score": 4,
-          "created": 1721136572,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/14\" class=\"PostMention\" data-id=\"89528\"><i class=\"icon fas fa-reply\"></i>xxx</a> <br>\nAre you only using the izzyondroid fdroid repo?<br>\nIzzyondroid fdroid repo often supplies only the 32bit versions of apps. <br>\nThey scrape the obtainium apks from github.  You can update to the 64bit version available on github <a href=\"https://github.com/ImranR98/Obtainium/releases/download/v1.1.14/app-arm64-v8a-release.apk\" rel=\"ugc nofollow\">https://github.com/ImranR98/Obtainium/releases/download/v1.1.14/app-arm64-v8a-release.apk</a> and get further updates from there using obtainium.</p>\n\n"
-        },
-        {
-          "id": "89554",
-          "number": 16,
-          "author": "xxx",
-          "authorUsername": "xxx",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1721138247,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/15\" class=\"PostMention\" data-id=\"89547\"><i class=\"icon fas fa-reply\"></i>Carlos-Anso</a></p> \n\n<p>I only tried the f-droid. (F-droid basic w. Izzy) Perhaps you're right. My goal is to ditch f-droid. But the ntfy apk seems to be unsigned on github? So it's pretty useless. Sorry for offtopic.</p> \n"
-        },
-        {
-          "id": "89555",
-          "number": 17,
-          "author": "matchboxbananasynergy",
-          "authorUsername": "matchboxbananasynergy",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
-          "score": 3,
-          "created": 1721138276,
-          "parent": "14004",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/14\" class=\"PostMention\" data-id=\"89528\"><i class=\"icon fas fa-reply\"></i>xxx</a> You likely downloaded the wrong version or got it from a mirror providing the 32-bit version, and that's an issue cause you were obviously not aware until you were warned.</p>\n\n<p>Using a 32-bit app means not benefitting from features like hardened_malloc etc.</p>"
-        },
-        {
-          "id": "89559",
-          "number": 18,
-          "author": "xxx",
-          "authorUsername": "xxx",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1721138526,
-          "parent": "14004",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/17\" class=\"PostMention\" data-id=\"89555\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a> got it from a mirror providing the 32-bit version</p></blockquote>\n\n<p>Will try again. Thank you both.</p>"
-        },
-        {
-          "id": "89703",
-          "number": 19,
-          "author": "d4er",
-          "authorUsername": "d4er",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1721210855,
-          "parent": "14004",
-          "text": "<p>Can't find any fdroid apps that are 32bit, any apps out there pls? Wanna see how this will work.</p>"
-        },
-        {
-          "id": "90294",
-          "number": 20,
-          "author": "Scott",
-          "authorUsername": "Scott",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1721499117,
-          "parent": "14004",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/19\" class=\"PostMention\" data-id=\"89703\"><i class=\"icon fas fa-reply\"></i>d4er</a> Can't find any fdroid apps that are 32bit, any apps out there pls? Wanna see how this will work.</p></blockquote>\n\n<p><a href=\"https://apt.izzysoft.de/fdroid/\" rel=\"ugc nofollow\">https://apt.izzysoft.de/fdroid/</a> packages many 32bit apps. For example \"Rain\" weather app</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43048",
@@ -2307,80 +2228,6 @@
       "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
       "media": [],
       "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": []
-    },
-    {
-      "id": "43028",
-      "title": "Battery drain regression: GNSS daemon wakes every 60 min in idle (apps: 0)",
-      "author": "Fatlib",
-      "authorUsername": "Fatlib",
-      "authorAvatar": "",
-      "score": 5,
-      "comments": 5,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792728157,
-      "lastPostedAt": 1792978812,
-      "category": "Pixel 10 Pro",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 10 Pro"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43028-battery-drain-regression-gnss-daemon-wakes-every-60-min-in-idle-apps-0",
-      "media": [],
-      "text": "<h2>Device information</h2>\n<ul><li>Device: Pixel 10 Pro</li>\n<li>GrapheneOS version: 2026102101 (installed via OTA, <sub>hours</sub> before report)</li>\n<li>Android version: Android 17</li>\n<li>No developer options modified since bootloader unlock at unboxing</li></ul>\n\n<h2>Issue description</h2>\n<p>Battery life dropped by <sub>50</sub>% after the 2nd GrapheneOS update on this device.<br>\nBefore the update: <sub>6</sub> days per 50% usable capacity (battery kept between 30–80%).<br>\nAfter the update: <sub>3</sub> days with identical usage pattern and app set.</p>\n\n<h2>Usage pattern (minimal)</h2>\n<ul><li>Owner profile only, no sandboxed Google Play</li>\n<li>Apps: Droid-ify, VLC, Material Files, Organic Maps, Signal, Proton Mail</li>\n<li>Bluetooth only active during music playback, otherwise OFF</li>\n<li>Organic Maps not used for 2+ weeks</li>\n<li>Screen-on time: <sub>2h</sub> 13min across <sub>5</sub>.5 days (<sub>97</sub>% standby)</li></ul>\n\n<h2>Root cause analysis (adb)</h2>\n<p><code>adb shell dumpsys batterystats | grep -i gnss</code> reveals:</p>\n\n<ol><li>GNSS hardware wakes every <sub>60</sub> minutes at minute :17–:19 — exact 1h raster,<br>\n   independent of charging/screen state</li>\n<li>2h 55m GNSS time with NO app attribution (gnss: 128 apps: 0, duration: 2h 54m 53s)</li>\n<li>Only 17m attributed to apps (gnss: 12.4 apps: 12.4, duration: 16m 56s)</li>\n<li>wake_reason: \"Abort: Pending Wakeup Sources: gnss_ipc\" — system-level wakeup<br>\n   via IPC, not app-initiated</li>\n<li>Processes involved: gnssd, android.hardware.gnss-service.pixel</li>\n<li>Kernel wake locks: gnss (30s, 6x), gnss_ipc (27s 954ms, 55x), gnss_boot (1s, 4x)</li></ol>\n\n<p>Total GNSS hardware time: 3h 11m over a <sub>117h</sub> cycle (<sub>2</sub>.7% of cycle time),<br>\n<sub>90</sub>% of it unattributed to any app UID.</p>\n\n<h2>Steps to reproduce</h2>\n<ol><li>GrapheneOS 2026102101 on Pixel 10 Pro</li>\n<li>Minimal app set, no Google Play</li>\n<li>Idle-heavy usage (phone mostly stationary)</li>\n<li><code>adb shell dumpsys batterystats | grep -i gnss</code> shows hourly GNSS wakeups, apps: 0</li></ol>\n\n<h2>Related issues</h2>\n<ul><li>#6125 — Pixel 9: \"High battery drain during idle\" — same signature: high GNSS<br>\n  time in idle, apps: 0, gnss_ipc wake reasons; factory reset did not help</li></ul>\n\n<h2>Workarounds attempted</h2>\n<ul><li>All location permissions revoked for all apps</li>\n<li>Organic Maps background location disabled + force stop</li>\n<li>Location services fully disabled (Settings &gt; Location) — currently testing</li></ul>\n\n<p>Evidence:</p>\n\n<p>jan@HP-EliteBook-840-G6:~$ adb shell dumpsys batterystats | grep -i gnss<br>\n  10-12 16:57:09.610 036 -gps -state=1000:\"gnss\"<br>\n  10-12 17:10:27.243 035 +gps +state=1000:\"gnss\"<br>\n  10-12 17:10:27.393 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 17:10:27.434 035 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 17:10:40.294 035 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\" +cellular_high_tx_power<br>\n  10-12 18:10:49.450 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 19:10:48.461 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 21:10:46.536 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 22:10:47.563 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 23:10:45.617 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 00:10:50.537 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 01:10:48.864 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 02:10:46.899 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 03:11:03.969 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 04:11:05.209 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 04:12:08.985 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 05:10:49.469 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 06:11:13.452 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 07:10:59.436 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 08:16:53.512 077 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 08:39:24.702 080 -gps -state=1000:\"gnss\"<br>\n  10-13 09:16:54.403 078 +gps +state=1000:\"gnss\"<br>\n  10-13 09:17:03.017 078 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 12:17:06.421 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 13:17:20.559 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 14:17:08.615 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 15:17:08.190 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 16:17:07.483 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 17:17:14.503 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 18:17:09.965 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 19:17:09.974 059 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 20:17:35.682 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 21:17:19.721 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 22:17:13.802 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 23:17:06.801 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 00:17:22.819 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 01:17:29.085 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 02:17:11.120 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 03:17:13.205 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 04:17:09.175 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 05:17:11.272 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 06:17:24.136 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 07:17:08.215 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 08:17:14.253 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 09:17:14.314 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 10:17:11.840 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 11:17:14.868 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 11:41:20.062 050 -gps -state=1000:\"gnss\"<br>\n  10-14 12:17:14.515 049 +gps -mobile_radio +state=1000:\"gnss\"<br>\n  10-14 12:17:15.839 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 12:17:31.434 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 13:18:39.340 047 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\" -job=1000:\"android/com.android.server.notification.NotificationHistoryJobService\"<br>\n  10-14 13:18:41.639 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 14:17:36.685 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 15:17:35.293 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 15:32:17.657 045 -gps -state=1000:\"gnss\"<br>\n  10-14 16:17:35.394 044 +gps +state=1000:\"gnss\"<br>\n  10-14 16:17:40.326 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 17:17:51.518 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 18:17:49.508 043 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 19:17:47.516 042 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 20:17:46.796 041 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 21:17:47.814 041 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 22:17:47.679 040 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 23:17:49.707 040 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 00:17:52.645 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 01:17:46.821 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 02:17:46.794 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 03:17:47.086 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 04:17:47.093 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 05:17:47.124 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 06:17:52.063 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 07:17:50.191 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 08:17:51.148 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 09:17:49.212 036 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 13:19:39.619 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 15:32:53.688 079 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 16:17:46.802 079 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 17:17:47.782 078 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 18:18:32.350 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-15 18:18:37.341 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-15 18:19:33.476 073 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 19:17:46.489 073 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 20:17:51.674 072 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 21:17:49.811 071 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 22:17:48.606 071 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 23:18:06.668 070 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 23:53:34.944 069 -gps -state=1000:\"gnss\"<br>\n  10-16 00:18:06.517 069 +gps +state=1000:\"gnss\"<br>\n  10-16 00:18:20.604 069 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 01:01:36.449 068 -gps -state=1000:\"gnss\"<br>\n  10-16 01:18:20.482 068 +gps +state=1000:\"gnss\"<br>\n  10-16 01:18:44.551 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 02:20:06.690 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 03:18:52.727 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 04:18:52.844 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 05:18:53.857 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 06:18:59.876 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 07:18:53.895 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 08:18:58.005 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 09:19:01.985 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 10:18:52.895 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 11:19:00.005 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 12:18:53.046 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 13:19:00.064 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 14:18:54.217 063 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 15:18:52.751 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 16:18:52.707 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 17:18:52.728 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 18:18:59.315 059 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 19:18:48.284 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 20:19:05.447 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 21:18:56.464 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 22:18:55.468 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 23:18:54.844 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 23:42:07.545 055 -gps -state=1000:\"gnss\"<br>\n  10-17 00:18:54.774 055 +gps +state=1000:\"gnss\"<br>\n  10-17 00:19:04.773 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 01:19:10.907 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 02:19:10.932 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 03:19:13.854 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 04:19:22.799 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 05:19:11.891 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 06:19:16.924 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 07:19:10.902 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 08:19:12.023 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 09:19:16.062 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 10:19:14.086 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 11:19:15.118 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 12:19:13.144 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 13:19:13.194 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 14:19:12.060 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 15:19:14.110 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 16:19:13.134 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 17:19:10.442 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 18:19:08.386 046 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-17 18:19:10.493 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 19:19:19.691 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 19:19:25.408 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 20:19:12.542 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 21:19:13.534 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 00:19:13.395 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 04:19:25.009 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 05:21:12.947 036 charge=1812 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 06:20:22.982 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 02:19:08.413 077 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 06:19:08.665 076 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 14:19:08.779 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 17:19:08.548 071 +wifi_radio wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 18:19:13.140 070 wake_reason=0:\"Abort: Pending Wakeup Sources: umts_ipc0 gnss_ipc\"<br>\n  10-19 18:19:15.153 070 -cellular_high_tx_power wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 18:39:58.264 068 -gps -state=1000:\"gnss\"<br>\n  10-19 18:40:39.893 068 +gps +state=1000:\"gnss\"<br>\n  10-19 20:09:37.094 065 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 20:10:04.405 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 20:40:59.530 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 21:40:58.568 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 22:40:59.587 064 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 23:40:58.641 064 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 00:41:11.672 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 01:40:58.723 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 02:40:59.722 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 03:41:33.767 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 04:40:58.808 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 05:41:00.838 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 06:40:59.864 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 07:41:00.635 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 08:41:02.681 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 09:41:00.747 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 10:41:03.793 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 11:40:58.791 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 12:40:58.845 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 13:40:57.832 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 14:41:05.861 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 15:41:00.154 058 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 16:41:01.153 058 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 17:41:06.208 057 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 18:40:58.499 056 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 19:23:17.481 055 -gps -state=1000:\"gnss\"<br>\n  10-20 19:40:58.736 054 +gps +state=1000:\"gnss\"<br>\n  10-20 19:40:59.131 054 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 19:41:04.402 054 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 20:43:04.516 053 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 21:41:13.844 052 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 22:41:12.844 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 22:57:23.541 051 -gps -state=1000:\"gnss\"<br>\n  10-20 23:41:13.114 051 +gps +state=1000:\"gnss\"<br>\n  10-20 23:41:13.265 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 23:41:13.274 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 23:41:22.758 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 00:41:31.927 050 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 01:41:29.519 049 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 02:41:30.547 049 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 03:41:29.628 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 04:41:30.658 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 05:41:28.639 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 06:41:30.675 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 07:41:28.713 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 08:41:36.746 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 09:41:40.778 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 10:41:41.819 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 11:41:29.851 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 12:41:27.904 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 13:41:27.938 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 14:41:28.959 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 15:41:28.192 044 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 16:41:29.250 043 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:41:43.592 042 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:41:59.552 042 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:43:39.941 042 -gps -state=1000:\"gnss\"<br>\n  10-21 18:41:59.362 041 +gps +state=1000:\"gnss\"<br>\n  10-21 18:42:06.546 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 19:42:17.579 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 20:42:10.716 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 21:42:11.799 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 22:42:20.838 039 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 23:42:26.853 039 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 00:42:10.771 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 01:42:14.911 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 02:42:11.605 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 03:42:16.613 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 04:42:14.666 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 05:42:10.586 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 06:42:16.812 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 07:42:14.738 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 08:42:14.823 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 09:42:16.040 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 10:42:12.110 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 11:42:15.110 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 12:42:12.164 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 13:42:15.259 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 14:42:16.202 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 15:42:57.688 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 15:44:00.646 040 charge=1962 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 16:42:56.390 050 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 20:05:36.065 079 -gps -state=1000:\"gnss\"<br>\n  10-22 20:08:25.166 079 +gps +state=1000:\"gnss\"<br>\n  10-22 21:08:50.366 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 21:53:15.658 078 -gps -state=1000:\"gnss\"<br>\n  10-22 22:08:50.221 079 +gps +state=1000:\"gnss\"<br>\n  10-22 22:08:55.574 079 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 22:11:56.087 079 -gps -state=1000:\"gnss\"<br>\n  10-22 23:08:55.831 080 +gps +state=1000:\"gnss\"<br>\n  10-22 23:09:03.496 080 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 00:09:12.450 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 01:09:20.370 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 02:09:10.512 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 02:20:45.903 078 -gps -state=1000:\"gnss\"<br>\n    gnss: 140 apps: 12.4 duration: 3h 11m 50s 62ms <br>\n      gnss: 12.4 apps: 12.4 duration: 16m 56s 289ms <br>\n      gnss: 128 apps: 0 duration: 2h 54m 53s 773ms <br>\n      audio=1.61 (3m 51s 824ms) audio:fg=0.000118 (17ms) audio:bg=1.61 (3m 51s 784ms) audio:cached=0.000159 (23ms) sensors=0.0159 sensors:bg=0.0159 gnss=12.4 (3h 11m 50s 63ms) gnss:bg=12.4 (3h 11m 50s 63ms) wifi=0.00296 wifi:bg=0.00296 wakelock=0.230 (51s 542ms) wakelock:bg=0.230 (51s 542ms)<br>\n      (on battery, screen on) audio=1.61 (3m 51s 453ms) audio:fg=0.000118 (17ms) audio:bg=1.61 (3m 51s 413ms) audio:cached=0.000159 (23ms) sensors=0.0115 sensors:bg=0.0115 gnss=12.4 (3h 11m 50s 63ms) gnss:bg=12.4 (3h 11m 50s 63ms) wifi=0.000673 wifi:bg=0.000673 wakelock=0.0271 (9s 804ms) wakelock:bg=0.0271 (9s 804ms)<br>\n  Kernel Wake lock gnss: 30s 126ms (6 times) realtime<br>\n  Kernel Wake lock gnss_ipc: 27s 954ms (55 times) realtime<br>\n  Kernel Wake lock gnss_boot: 1s 461ms (4 times) realtime<br>\n  Wake lock 1000 <em>location</em>:GnssLocationProvider: 42ms (4 times) max=21 actual=46 realtime<br>\n    Wake lock <em>location</em>:GnssLocationProvider: 42ms partial (4 times) max=21 actual=46, 46ms background partial (4 times) max=21 realtime<br>\n    Wake lock GnssVisibilityControl realtime<br>\n    Proc android.hardware.gnss-service:<br>\n    Proc gnssd:<br>\n    Proc android.hardware.gnss-service.pixel:<br>\njan@HP-EliteBook-840-G6:~$</p> ",
-      "replies": []
-    },
-    {
-      "id": "43094",
-      "title": "Graphene OS for Normies and Newbies",
-      "author": "YiyaK",
-      "authorUsername": "YiyaK",
-      "authorAvatar": "",
-      "score": 5,
-      "comments": 5,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792955202,
-      "lastPostedAt": 1792973317,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
-      "media": [],
-      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
-      "replies": []
-    },
-    {
-      "id": "8274",
-      "title": "How do I prevent apps from knowing when I screenshot?",
-      "author": "antsyboy",
-      "authorUsername": "antsyboy",
-      "authorAvatar": "",
-      "score": 37,
-      "comments": 37,
-      "views": 840,
-      "participantCount": 24,
-      "created": 1697589169,
-      "lastPostedAt": 1792973012,
-      "category": "Solved",
-      "categoryColor": "#2fac16",
-      "tags": [
-        "General",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
-      "media": [],
-      "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
       "replies": []
     }
   ]
