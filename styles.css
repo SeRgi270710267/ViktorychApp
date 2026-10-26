@@ -513,7 +513,9 @@ html[data-nav="icons"] .nav-folder-rename-form {
 }
 html[data-nav="icons"] .nav-folder-children-inner {
   align-items: center;
-  margin: 4px 0 6px;
+  /* Auto side margins keep the child pill on the same vertical axis as the
+     folder icon (and every other rail icon) instead of hugging the left edge. */
+  margin: 4px auto 6px;
   padding: 6px 0;
   width: 58px;
   border-left: 0;
@@ -2125,7 +2127,7 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   .nav-folder-count, .nav-folder-caret, .nav-folder-rename-btn, .nav-folder-rename-form { display: none !important; }
   .nav-folder-children-inner {
     align-items: center;
-    margin: 4px 0 6px;
+    margin: 4px auto 6px;
     padding: 6px 0;
     width: 58px;
     border-left: 0;
