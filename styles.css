@@ -387,9 +387,11 @@ html[data-theme="default"] .m-logo { color: #000; }
   align-items: flex-start;
   min-height: 0;
   overflow: hidden;
-  margin: 0 0 2px 22px;
-  padding-left: 8px;
-  border-left: 2px solid var(--line);
+  /* No extra inset: the child rows keep the same horizontal padding as the
+     top-level rows, so every icon stays in one vertical column when the
+     folder opens (Discord-style alignment) instead of stepping inward. */
+  margin: 0 0 2px;
+  padding-left: 0;
 }
 /* Strip the vertical box pieces while closed so the measured height starts
    from a true zero. */
@@ -398,8 +400,6 @@ html[data-theme="default"] .m-logo { color: #000; }
   margin-bottom: 0;
   padding-top: 0;
   padding-bottom: 0;
-  border-top-width: 0;
-  border-bottom-width: 0;
 }
 .nav-folder-child {
   font-size: 20px;
