@@ -83,8 +83,8 @@
 
   // Full product: brand.name plus brand.app (ViktorychApp), brand.music
   // (ViktorychMusic), or brand.search (ViktorychSearch). Tight labels use
-  // brand.short: pwa (ViktrychApp), musicShort (ViktrychMusic), and
-  // searchShort (ViktrychSearch). A rebrand edits those pack values.
+  // brand.short: pwa (ViktorychApp), musicShort (ViktorychMusic), and
+  // searchShort (ViktorychSearch). A rebrand edits those pack values.
   // No separator, so a space or a translated suffix belongs in the pack value.
   function productName(kind) {
     var tight = kind === "pwa" || kind === "musicShort" || kind === "searchShort";
