@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T17:08:21Z",
+  "fetchedAt": "2026-10-26T17:39:04Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -582,6 +582,56 @@
       "repliesTotal": 1
     },
     {
+      "id": "43092",
+      "title": "Viber",
+      "author": "redacted_handle",
+      "authorUsername": "redacted_handle",
+      "authorAvatar": "",
+      "score": 11,
+      "comments": 11,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792936160,
+      "lastPostedAt": 1793036238,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43092-viber",
+      "media": [],
+      "text": "Hi!\n\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.\n\nIs there a way to not show the call log and activate the account?",
+      "replies": [],
+      "repliesTotal": 11
+    },
+    {
+      "id": "43094",
+      "title": "Graphene OS for Normies and Newbies",
+      "author": "YiyaK",
+      "authorUsername": "YiyaK",
+      "authorAvatar": "",
+      "score": 9,
+      "comments": 9,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1792955202,
+      "lastPostedAt": 1793034988,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
+      "media": [],
+      "text": "Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.\n\nFirst, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.\n\nThen the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!). When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.\n\nOk there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!",
+      "replies": [],
+      "repliesTotal": 9
+    },
+    {
       "id": "43107",
       "title": "Install into system partition",
       "author": "redacted_handle",
@@ -605,31 +655,6 @@
       "text": "Is there a way to install anything into system space without unlock the device or is this not possible?\n\nIs there a way to install anything surviving to a wipe without unlock it?\n\nThanks",
       "replies": [],
       "repliesTotal": 2
-    },
-    {
-      "id": "43092",
-      "title": "Viber",
-      "author": "redacted_handle",
-      "authorUsername": "redacted_handle",
-      "authorAvatar": "",
-      "score": 8,
-      "comments": 8,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792936160,
-      "lastPostedAt": 1793034226,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43092-viber",
-      "media": [],
-      "text": "Hi!\n\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.\n\nIs there a way to not show the call log and activate the account?",
-      "replies": [],
-      "repliesTotal": 8
     },
     {
       "id": "43073",
@@ -835,31 +860,6 @@
       "text": "Anybody seen this happen? P8 is stuck on sep 19 date, which is the same update it had. It does switch date when it's on, but if battery dies it's back to sep 19. Also can't update to recent due to Chain validation failed.\n\nAnother p8 is not responding to Tap to Check for updates. But seems to update automatically without issues.",
       "replies": [],
       "repliesTotal": 12
-    },
-    {
-      "id": "43094",
-      "title": "Graphene OS for Normies and Newbies",
-      "author": "YiyaK",
-      "authorUsername": "YiyaK",
-      "authorAvatar": "",
-      "score": 8,
-      "comments": 8,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792955202,
-      "lastPostedAt": 1793026544,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
-      "media": [],
-      "text": "Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.\n\nFirst, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.\n\nThen the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!). When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.\n\nOk there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!",
-      "replies": [],
-      "repliesTotal": 8
     },
     {
       "id": "41145",
