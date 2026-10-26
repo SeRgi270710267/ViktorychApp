@@ -8,6 +8,18 @@
     return fn ? fn(key, vars) : key;
   }
 
+  /* The #toast element is a DOM node, so window.toast is not a function here.
+     Paint the toast directly instead of calling it. */
+  function notify(message) {
+    if (typeof document === "undefined" || !document.getElementById) return;
+    var el = document.getElementById("toast");
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = message;
+    if (notify._t) clearTimeout(notify._t);
+    notify._t = setTimeout(function () { el.hidden = true; }, 1800);
+  }
+
   function esc(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -224,6 +236,8 @@
     var def = {
       pinnedIds: DEFAULT_PINNED.slice(),
       customOrder: [],
+      hiddenIds: [],
+      disabledTypes: [],
       unit: "C"
     };
     if (typeof localStorage !== "undefined") {
@@ -234,6 +248,8 @@
           if (parsed && typeof parsed === "object") {
             if (!Array.isArray(parsed.pinnedIds)) parsed.pinnedIds = def.pinnedIds;
             if (!Array.isArray(parsed.customOrder)) parsed.customOrder = [];
+            if (!Array.isArray(parsed.hiddenIds)) parsed.hiddenIds = [];
+            if (!Array.isArray(parsed.disabledTypes)) parsed.disabledTypes = [];
             if (parsed.unit !== "C" && parsed.unit !== "F") parsed.unit = "C";
             prefsState = parsed;
             return prefsState;
@@ -298,10 +314,68 @@
     }
     savePrefs(prefs);
     refreshUI();
-    if (typeof window !== "undefined" && window.toast) {
-      window.toast(nowPinned ? tr("Pill pinned") : tr("Pill unpinned"));
-    }
+    notify(nowPinned ? tr("Pill pinned") : tr("Pill unpinned"));
     return nowPinned;
+  }
+
+  /* Hidden pills stay in the registry but never render, so a user can switch a
+     single pill off without losing its pin state or order. */
+  function isHidden(pillId) {
+    var prefs = loadPrefs();
+    return prefs.hiddenIds.indexOf(String(pillId || "")) !== -1;
+  }
+
+  function setHidden(pillId, hidden) {
+    var prefs = loadPrefs();
+    var id = String(pillId || "");
+    if (!id) return false;
+    var idx = prefs.hiddenIds.indexOf(id);
+    if (hidden && idx === -1) {
+      prefs.hiddenIds.push(id);
+    } else if (!hidden && idx !== -1) {
+      prefs.hiddenIds.splice(idx, 1);
+    } else {
+      return hidden ? true : false;
+    }
+    savePrefs(prefs);
+    refreshUI();
+    notify(hidden ? tr("Pill hidden") : tr("Pill shown"));
+    return hidden;
+  }
+
+  function toggleHidden(pillId) {
+    return setHidden(pillId, !isHidden(pillId));
+  }
+
+  /* Whole categories (weather / matches / radio) can be switched off. A
+     disabled category is not rendered and its loader stops doing work. */
+  var PILL_TYPES = ["weather", "soccer", "space"];
+
+  function isTypeDisabled(type) {
+    var prefs = loadPrefs();
+    return prefs.disabledTypes.indexOf(String(type || "")) !== -1;
+  }
+
+  function setTypeDisabled(type, disabled) {
+    var key = String(type || "");
+    if (PILL_TYPES.indexOf(key) === -1) return false;
+    var prefs = loadPrefs();
+    var idx = prefs.disabledTypes.indexOf(key);
+    if (disabled && idx === -1) {
+      prefs.disabledTypes.push(key);
+    } else if (!disabled && idx !== -1) {
+      prefs.disabledTypes.splice(idx, 1);
+    } else {
+      return !!disabled;
+    }
+    savePrefs(prefs);
+    refreshUI();
+    notify(disabled ? tr("Pills turned off") : tr("Pills turned on"));
+    return !!disabled;
+  }
+
+  function toggleTypeDisabled(type) {
+    return setTypeDisabled(type, !isTypeDisabled(type));
   }
 
   function reorderPill(pillId, direction) {
@@ -331,20 +405,20 @@
     prefsState = {
       pinnedIds: DEFAULT_PINNED.slice(),
       customOrder: [],
+      hiddenIds: [],
+      disabledTypes: [],
       unit: "C"
     };
     savePrefs(prefsState);
     refreshUI();
-    if (typeof window !== "undefined" && window.toast) {
-      window.toast(tr("Reset to default"));
-    }
+    notify(tr("Reset to default"));
   }
 
   /* Add Custom Place */
   function addPlace(cityName, cb) {
     var name = String(cityName || "").trim();
     if (!name) {
-      if (typeof window !== "undefined" && window.toast) window.toast(tr("Enter a city name"));
+      notify(tr("Enter a city name"));
       return;
     }
 
@@ -492,9 +566,7 @@
     savePrefs(prefs);
 
     refreshUI();
-    if (typeof window !== "undefined" && window.toast) {
-      window.toast(tr("Place added") + ": " + newPlace.name);
-    }
+    notify(tr("Place added") + ": " + newPlace.name);
   }
 
   function removePlace(placeId) {
@@ -519,9 +591,7 @@
 
       if (activeWeatherModalId === placeId) closeWeatherModal();
       refreshUI();
-      if (typeof window !== "undefined" && window.toast) {
-        window.toast(tr("Place removed") + ": " + (removed ? removed.name : placeId));
-      }
+      notify(tr("Place removed") + ": " + (removed ? removed.name : placeId));
     }
   }
 
@@ -552,37 +622,45 @@
   function pillsHtml() {
     var list = loadPlaces();
     var u = getUnit();
+    if (isTypeDisabled("weather")) return "";
     return list.map(function (place) {
-      var pinned = isPinned("weather:" + place.id);
+      var id = "weather:" + place.id;
+      if (isHidden(id)) return "";
+      var pinned = isPinned(id);
       return '<div class="sp-row-item" role="listitem">' + renderPill(place, u, pinned) + '</div>';
     }).join("");
   }
 
-  /* Unified Pill Registry: combines Spaces, Soccer & Weather with Pinning & Ordering */
-  function getAllPills() {
+  /* Unified Pill Registry: combines Spaces, Soccer & Weather with Pinning, Ordering, Hiding & Category switches */
+  function getAllPills(includeHidden) {
     var pills = [];
     var u = getUnit();
+    var showHidden = !!includeHidden;
 
     // 1. Weather Pills
     var places = loadPlaces();
-    places.forEach(function (place) {
-      var id = "weather:" + place.id;
-      var pinned = isPinned(id);
-      pills.push({
-        id: id,
-        type: "weather",
-        title: place.name,
-        badgeText: formatTemp(place.temp, u),
-        isPinned: pinned,
-        html: '<div class="sp-row-item" role="listitem">' + renderPill(place, u, pinned) + '</div>'
+    if (!isTypeDisabled("weather")) {
+      places.forEach(function (place) {
+        var id = "weather:" + place.id;
+        if (!showHidden && isHidden(id)) return;
+        var pinned = isPinned(id);
+        pills.push({
+          id: id,
+          type: "weather",
+          title: place.name,
+          badgeText: formatTemp(place.temp, u),
+          isPinned: pinned,
+          html: '<div class="sp-row-item" role="listitem">' + renderPill(place, u, pinned) + '</div>'
+        });
       });
-    });
+    }
 
     // 2. Soccer Pills
-    if (root.SoccerScores && root.SoccerScores.loadTeams) {
+    if (!isTypeDisabled("soccer") && root.SoccerScores && root.SoccerScores.loadTeams) {
       var teams = root.SoccerScores.loadTeams();
       teams.forEach(function (team) {
         var id = "soccer:" + team.id;
+        if (isHidden(id)) return;
         var pinned = isPinned(id);
         var renderFn = root.SoccerScores.renderPill || (root.SoccerScoresLogic && root.SoccerScoresLogic.renderPill);
         var rendered = renderFn ? renderFn(team) : "";
@@ -598,18 +676,20 @@
     }
 
     // 3. Space Pills
-    if (root.Spaces && root.Spaces.homePillsHtml) {
+    if (!isTypeDisabled("space") && root.Spaces && root.Spaces.homePillsHtml) {
       var id = "space:superintelmusic";
-      var pinned = isPinned(id);
-      var spaceHtml = root.Spaces.homePillsHtml();
-      pills.push({
-        id: id,
-        type: "space",
-        title: tr("Radio"),
-        badgeText: tr("LIVE"),
-        isPinned: pinned,
-        html: spaceHtml
-      });
+      if (showHidden || !isHidden(id)) {
+        var pinned = isPinned(id);
+        var spaceHtml = root.Spaces.homePillsHtml();
+        pills.push({
+          id: id,
+          type: "space",
+          title: tr("Radio"),
+          badgeText: tr("LIVE"),
+          isPinned: pinned,
+          html: spaceHtml
+        });
+      }
     }
 
     return pills;
@@ -735,8 +815,15 @@
   }
 
   /* Manage Pills Modal HTML */
+  function typeLabel(type) {
+    if (type === "weather") return tr("Weather");
+    if (type === "soccer") return tr("Matches");
+    return tr("Radio");
+  }
+
   function renderManageModalHtml() {
     var all = getAllPills();
+    var hiddenItems = getAllPills(true).filter(function (p) { return isHidden(p.id); });
     var prefs = loadPrefs();
     var order = prefs.customOrder || [];
 
@@ -764,6 +851,7 @@
         + '<button class="manage-arrow-btn" type="button" data-act="pill-move" data-id="' + esc(item.id) + '" data-dir="-1" aria-label="' + esc(tr("Move left")) + '"' + (idx === 0 ? " disabled" : "") + '>←</button>'
         + '<button class="manage-arrow-btn" type="button" data-act="pill-move" data-id="' + esc(item.id) + '" data-dir="1" aria-label="' + esc(tr("Move right")) + '"' + (idx === pinnedItems.length - 1 ? " disabled" : "") + '>→</button>'
         + '<button class="manage-pin-btn is-active" type="button" data-act="pill-unpin" data-id="' + esc(item.id) + '">📌 ' + esc(tr("Unpin pill")) + '</button>'
+        + '<button class="manage-hide-btn" type="button" data-act="pill-hide" data-id="' + esc(item.id) + '" aria-label="' + esc(tr("Hide pill")) + '" title="' + esc(tr("Hide pill")) + '">' + esc(tr("Hide")) + '</button>'
         + '</div>'
         + '</div>';
     }).join("") : '<div style="padding:12px 18px;color:var(--sub);font-size:13px">' + esc(tr("Available Pills")) + '</div>';
@@ -777,9 +865,35 @@
         + '</div>'
         + '<div class="manage-pill-actions">'
         + '<button class="manage-pin-btn" type="button" data-act="pill-pin" data-id="' + esc(item.id) + '">📌 ' + esc(tr("Pin pill")) + '</button>'
+        + '<button class="manage-hide-btn" type="button" data-act="pill-hide" data-id="' + esc(item.id) + '" aria-label="' + esc(tr("Hide pill")) + '" title="' + esc(tr("Hide pill")) + '">' + esc(tr("Hide")) + '</button>'
         + '</div>'
         + '</div>';
     }).join("") : '';
+
+    var hiddenRows = hiddenItems.length ? hiddenItems.map(function (item) {
+      return '<div class="manage-pill-item is-hidden">'
+        + '<div class="manage-pill-info">'
+        + '<span class="manage-pill-type-tag is-' + esc(item.type) + '">' + esc(item.type) + '</span>'
+        + '<span class="manage-pill-name">' + esc(item.title) + '</span>'
+        + '</div>'
+        + '<div class="manage-pill-actions">'
+        + '<button class="manage-pin-btn" type="button" data-act="pill-show" data-id="' + esc(item.id) + '" aria-label="' + esc(tr("Show pill")) + '">' + esc(tr("Show")) + '</button>'
+        + '</div>'
+        + '</div>';
+    }).join("") : "";
+
+    var typeRows = PILL_TYPES.map(function (type) {
+      var off = isTypeDisabled(type);
+      return '<div class="manage-pill-item">'
+        + '<div class="manage-pill-info">'
+        + '<span class="manage-pill-type-tag is-' + esc(type) + '">' + esc(type) + '</span>'
+        + '<span class="manage-pill-name">' + esc(typeLabel(type)) + '</span>'
+        + '</div>'
+        + '<div class="manage-pill-actions">'
+        + '<button class="manage-toggle-btn' + (off ? " is-off" : " is-on") + '" type="button" data-act="type-toggle" data-type="' + esc(type) + '" aria-pressed="' + (off ? "false" : "true") + '">' + (off ? esc(tr("Off")) : esc(tr("On"))) + '</button>'
+        + '</div>'
+        + '</div>';
+    }).join("");
 
     var chipsHtml = popularPlaces.map(function (city) {
       return '<button class="wx-place-chip" type="button" data-act="quick-add" data-city="' + esc(city) + '">+ ' + esc(city) + '</button>';
@@ -797,6 +911,9 @@
       + '<div class="wx-section-heading">' + esc(tr("Pinned Pills")) + ' (' + pinnedItems.length + ')</div>'
       + '<div class="manage-pills-list">' + pinnedRows + '</div>'
       + (unpinnedRows ? '<div class="wx-section-heading">' + esc(tr("Available Pills")) + '</div><div class="manage-pills-list">' + unpinnedRows + '</div>' : '')
+      + (hiddenRows ? '<div class="wx-section-heading">' + esc(tr("Hidden Pills")) + ' (' + hiddenItems.length + ')</div><div class="manage-pills-list">' + hiddenRows + '</div>' : '')
+      + '<div class="wx-section-heading">' + esc(tr("Pill types")) + '</div>'
+      + '<div class="manage-pills-list">' + typeRows + '</div>'
       + '<div class="wx-section-heading">' + esc(tr("Add Place")) + '</div>'
       + '<form class="wx-add-form" data-act="add-form">'
       + '<input id="wx-add-input" class="wx-add-input" type="text" placeholder="' + esc(tr("Enter city or place name...")) + '" autocomplete="off" />'
@@ -946,6 +1063,15 @@
         } else if (mAct === "pill-pin" || mAct === "pill-unpin") {
           event.preventDefault();
           togglePin(pId);
+        } else if (mAct === "pill-hide") {
+          event.preventDefault();
+          setHidden(pId, true);
+        } else if (mAct === "pill-show") {
+          event.preventDefault();
+          setHidden(pId, false);
+        } else if (mAct === "type-toggle") {
+          event.preventDefault();
+          toggleTypeDisabled(mActBtn.getAttribute("data-type"));
         } else if (mAct === "pill-move") {
           event.preventDefault();
           var dir = parseInt(mActBtn.getAttribute("data-dir") || "0", 10);
@@ -983,6 +1109,7 @@
 
   function afterRender(route) {
     if (route && route.name === "home") {
+      if (isTypeDisabled("weather")) return;
       if (typeof window !== "undefined" && typeof window.fetch === "function" && typeof navigator !== "undefined" && navigator.onLine) {
         var list = loadPlaces();
         var updated = false;
@@ -1023,6 +1150,12 @@
     savePrefs: savePrefs,
     isPinned: isPinned,
     togglePin: togglePin,
+    isHidden: isHidden,
+    setHidden: setHidden,
+    toggleHidden: toggleHidden,
+    isTypeDisabled: isTypeDisabled,
+    setTypeDisabled: setTypeDisabled,
+    toggleTypeDisabled: toggleTypeDisabled,
     reorderPill: reorderPill,
     resetPrefs: resetPrefs,
     setUnit: setUnit,
@@ -1049,6 +1182,10 @@
     savePrefs: savePrefs,
     isPinned: isPinned,
     togglePin: togglePin,
+    isHidden: isHidden,
+    setHidden: setHidden,
+    isTypeDisabled: isTypeDisabled,
+    setTypeDisabled: setTypeDisabled,
     reorderPill: reorderPill,
     renderPill: renderPill,
     pillsHtml: pillsHtml,

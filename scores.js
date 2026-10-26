@@ -9,6 +9,18 @@
     return fn ? fn(key, vars) : key;
   }
 
+  /* The #toast element is a DOM node, so window.toast is not a function here.
+     Paint the toast directly instead of calling it. */
+  function notify(message) {
+    if (typeof document === "undefined" || !document.getElementById) return;
+    var el = document.getElementById("toast");
+    if (!el) return;
+    el.hidden = false;
+    el.textContent = message;
+    if (notify._t) clearTimeout(notify._t);
+    notify._t = setTimeout(function () { el.hidden = true; }, 1800);
+  }
+
   function esc(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -298,9 +310,12 @@
 
   /* Generate only the list items so they can sit in the exact same .sp-row as the purple Space pill */
   function pillsHtml() {
+    if (root.WeatherPills && root.WeatherPills.isTypeDisabled && root.WeatherPills.isTypeDisabled("soccer")) return "";
     var list = loadTeams();
     if (!list.length) return "";
     return list.map(function (team) {
+      var id = "soccer:" + team.id;
+      if (root.WeatherPills && root.WeatherPills.isHidden && root.WeatherPills.isHidden(id)) return "";
       return '<div class="sp-row-item" role="listitem">' + renderPill(team) + '</div>';
     }).join("");
   }
@@ -500,9 +515,7 @@
       data.minute = Math.min(90, data.minute + 1);
     }
     refreshUI();
-    if (typeof window !== "undefined" && window.toast) {
-      window.toast(tr("Score updated"));
-    }
+    notify(tr("Score updated"));
   }
 
   function simulateGoal(teamId) {
@@ -528,9 +541,7 @@
       teamKey: scoringTeamKey
     });
     refreshUI();
-    if (typeof window !== "undefined" && window.toast) {
-      window.toast(tr("Score updated"));
-    }
+    notify(tr("Score updated"));
   }
 
   function resetTeam(teamId) {
@@ -554,9 +565,25 @@
   }
 
   /* Auto Ticker for Live Games */
+  function soccerOff() {
+    return !!(root.WeatherPills && root.WeatherPills.isTypeDisabled && root.WeatherPills.isTypeDisabled("soccer"));
+  }
+
+  function stopAutoTicker() {
+    if (autoTickTimer) {
+      clearInterval(autoTickTimer);
+      autoTickTimer = null;
+    }
+  }
+
   function startAutoTicker() {
     if (autoTickTimer || typeof window === "undefined") return;
+    if (soccerOff()) return;
     autoTickTimer = setInterval(function () {
+      if (soccerOff()) {
+        stopAutoTicker();
+        return;
+      }
       var list = loadTeams();
       var changed = false;
       for (var i = 0; i < list.length; i++) {
@@ -700,7 +727,8 @@
   function afterRender(route) {
     cleanDuplicateRows();
     if (route && route.name === "home") {
-      startAutoTicker();
+      if (soccerOff()) stopAutoTicker();
+      else startAutoTicker();
     }
   }
 

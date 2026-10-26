@@ -117,9 +117,34 @@ W.removePlace("tokyo");
 assert.strictEqual(W.getPlace("tokyo"), null, "Tokyo was removed");
 assert.strictEqual(W.isPinned("weather:tokyo"), false, "Tokyo is no longer pinned");
 
-// 9. Test Reset Defaults
+// 9. Test Hiding A Single Pill
+W.setHidden("weather:tula", true);
+assert.strictEqual(W.isHidden("weather:tula"), true, "Tula pill can be hidden");
+let hiddenRow = W.unifiedRowHtml();
+assert.ok(!hiddenRow.includes("wx-pill-tula"), "Hidden pill is not rendered in the row");
+assert.ok(hiddenRow.includes("wx-pill-barcelona"), "Other weather pills still render");
+assert.ok(hiddenRow.includes("sp-pill-manage-btn"), "Manage button stays so pills can be restored");
+W.setHidden("weather:tula", false);
+hiddenRow = W.unifiedRowHtml();
+assert.ok(hiddenRow.includes("wx-pill-tula"), "Showing the pill again renders it");
+
+// 10. Test Disabling A Pill Category
+W.setTypeDisabled("soccer", true);
+assert.strictEqual(W.isTypeDisabled("soccer"), true, "Match pills can be switched off");
+let offRow = W.unifiedRowHtml();
+assert.ok(!offRow.includes("sc-pill-arsenal-tula"), "Disabled match pills are not rendered");
+assert.ok(offRow.includes("wx-pill-tula"), "Weather pills still render when matches are off");
+W.setTypeDisabled("soccer", false);
+offRow = W.unifiedRowHtml();
+assert.ok(offRow.includes("sc-pill-arsenal-tula"), "Re-enabled match pills render again");
+
+// 11. Test Reset Defaults
+W.setHidden("soccer:arsenal-tula", true);
+W.setTypeDisabled("weather", true);
 W.resetPrefs();
 assert.strictEqual(W.isPinned("weather:tula"), true, "Tula restored to pinned defaults");
 assert.strictEqual(W.isPinned("soccer:fc-barcelona"), true, "Barca restored to pinned defaults");
+assert.strictEqual(W.isHidden("soccer:arsenal-tula"), false, "Reset clears hidden pills");
+assert.strictEqual(W.isTypeDisabled("weather"), false, "Reset clears disabled categories");
 
 console.log("weather and pill pinning tests ok");

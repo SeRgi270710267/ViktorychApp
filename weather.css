@@ -615,6 +615,38 @@
   border-color: #f59e0b;
 }
 
+/* Hide / show a single pill, and the per-category On/Off switch */
+.manage-hide-btn,
+.manage-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.2));
+  color: var(--muted, rgba(255, 255, 255, 0.7));
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.manage-hide-btn:hover,
+.manage-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text, #fff);
+}
+.manage-toggle-btn.is-on {
+  background: rgba(34, 197, 94, 0.18);
+  border-color: #22c55e;
+  color: #4ade80;
+}
+.manage-toggle-btn.is-off {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted, rgba(255, 255, 255, 0.55));
+}
+.manage-pill-item.is-hidden {
+  opacity: 0.72;
+}
+
 /* Add Place Form */
 .wx-add-form {
   display: flex;
