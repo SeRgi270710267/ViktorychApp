@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T01:39:35Z",
+  "fetchedAt": "2026-10-26T02:01:37Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,265 @@
       ]
     },
     {
+      "id": "43073",
+      "title": "How to Convince People to Use GrapheneOS",
+      "author": "Reboot",
+      "authorUsername": "Reboot",
+      "authorAvatar": "",
+      "score": 40,
+      "comments": 40,
+      "views": 840,
+      "participantCount": 24,
+      "created": 1792855754,
+      "lastPostedAt": 1792980036,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
+      "media": [],
+      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
+      "replies": [
+        {
+          "id": "277147",
+          "number": 2,
+          "author": "Kamika242",
+          "authorUsername": "Kamika242",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
+          "score": 19,
+          "created": 1792857090,
+          "parent": "43073",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> I want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p></blockquote>\n\n<p>You can't. Either there is a basic interest or not. You can simply talk about GrapheneOS and it's benefis, but you can't persuade anyone to do switch.<br>\nAll you can do is to assist people who already have the own intention to switch.</p>"
+        },
+        {
+          "id": "277149",
+          "number": 3,
+          "author": "tango",
+          "authorUsername": "tango",
+          "authorAvatar": "",
+          "score": 4,
+          "created": 1792857192,
+          "parent": "43073",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a></p> \n\n<p>Hi,</p> \n\n<p>Its quite difficult really as most people are either too busy to be bothered or they literally dont have a clue, apart from basic security (strong passwords / updates etc). I would reckon it takes most people quite a while before they jump to GOS. If only they realised sooner how simple it is to get started and the huge security benefits from using it.</p>\n\n<p>In my opinion the best way is to lend them a good book and hope that they find it interesting enough to keep learning. There are 2 books that come to mind and they are \"Data and Goliath by Bruce Schneier\" and also \"Privacy is Power by Carissa Veliz\". Hope that helps a bit.</p> "
+        },
+        {
+          "id": "277156",
+          "number": 4,
+          "author": "router99",
+          "authorUsername": "router99",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/siwFkkailTNbeABD.png",
+          "score": 1,
+          "created": 1792858813,
+          "parent": "43073",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> the combination of herd behavior and not caring much about privacy means people generally aren't interested. It has to be popularized in media for most people to care.</p> "
+        },
+        {
+          "id": "277158",
+          "number": 5,
+          "author": "Kamika242",
+          "authorUsername": "Kamika242",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
+          "score": 5,
+          "created": 1792859541,
+          "parent": "43073",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>Not even that. Think about how many scandals Meta, Facebook, WhatsApp* and all the others had during the years, most people don't care, they are afraid of losing (imaginary) friends when they quit specific services and anyway, \"Everyone has WhatsApp and ... and I couldn't live without!\". That's what I hear again and again.</p>\n\n<p>*deputy examples</p>"
+        },
+        {
+          "id": "277160",
+          "number": 6,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1792859833,
+          "parent": "43073",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>I doubt they would care even then. Maybe they will start using GrapheneOS is that is the defacto default most phones are sold with, but it would not be because they care, but exactly because they don't.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> I want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p></blockquote>\n\n<p>Buy them a new phone which is better than what they use, and install GrapheneOS on it before giving it to them. Now they are using GrapheneOS.</p>"
+        },
+        {
+          "id": "277167",
+          "number": 7,
+          "author": "penglix",
+          "authorUsername": "penglix",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792861249,
+          "parent": "43073",
+          "text": "<p>Maybe this argument will help you convince them: They can save money and lots of it. I booked hotels through booking.com and was able to get a much better price for exactly the same hotel and same room and everything than my parents who used a standard iPhone. I don't know why exactly that was. But I presume that it was because they weren't able to find out much about me, since I was using Vanadium on GrapheneOS.</p> "
+        },
+        {
+          "id": "277173",
+          "number": 8,
+          "author": "Byku",
+          "authorUsername": "Byku",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1792862989,
+          "parent": "43073",
+          "text": "<p>Honestly I think it is pointless if the person isn't already interested in the subject. Maybe someone who is pissed off with the bloat and ads on their phone would appreciate having GrapheneOS installed. In practice though I've seen people using terrible Android-based phones where entries in god damn settings redirected you to ads/shops and the person still maintained how they like how easy to use their phone is. Even ones who claim to be privacy conscious just buy and iPhone, don't change any settings and call it a day. So I wouldn't bother.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>The closest thing that ever happened was circa 2013-2015, probably due to Snowden leaks. It was the only time I actually heard the subject being brought up during casual conversations with my friends. Of course no one did anything.</p>"
+        },
+        {
+          "id": "277174",
+          "number": 9,
+          "author": "MrChunky",
+          "authorUsername": "MrChunky",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792863206,
+          "parent": "43073",
+          "text": "<p>You're all right about not being able to changing people's minds, but we could brainstorm and refine positive talking points with each other. Just briefly mentioning a security feature and a 1 sentence highlight of what it does, such as sandboxed Google play can prevent chosen apps from having access to my microphone, could pique people's interest.</p> "
+        },
+        {
+          "id": "277180",
+          "number": 10,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792864535,
+          "parent": "43073",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/8\" class=\"PostMention\" data-id=\"277173\"><i class=\"icon fas fa-reply\"></i>Byku</a> The closest thing that ever happened was circa 2013-2015, probably due to Snowden leaks.</p></blockquote>\n\n<p>I wonder if it might be possible to dust off an old <a href=\"https://en.wikipedia.org/wiki/Citizenfour\" rel=\"ugc nofollow\">Citizen Four</a> DVD?  Maybe used book stores have <a href=\"https://en.wikipedia.org/wiki/Permanent_Record_%28autobiography%29\" rel=\"ugc nofollow\">Permanent Record</a>?  I think many people have a vague understanding of what happened but don't know any details, and the details are important.</p>"
+        },
+        {
+          "id": "277182",
+          "number": 11,
+          "author": "subfloor9963",
+          "authorUsername": "subfloor9963",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792864653,
+          "parent": "43073",
+          "text": "<p>You can't help people who don't want to be helped. It is simple as that. Sure, you can talk about grapheneos to your peers. But, at the end of the day, it's their choice.</p> "
+        },
+        {
+          "id": "277184",
+          "number": 12,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
+          "score": 2,
+          "created": 1792865714,
+          "parent": "43073",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> make sure to explain that GrapheneOS is for anybody. It isn't complicated to use since go no bloat at all. They can use it like a normal phone, but with outstanding security and privacy out of the box. Their important apps will probably just work.</p> "
+        },
+        {
+          "id": "277185",
+          "number": 13,
+          "author": "MrChunky",
+          "authorUsername": "MrChunky",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792865765,
+          "parent": "43073",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/11\" class=\"PostMention\" data-id=\"277182\"><i class=\"icon fas fa-reply\"></i>subfloor9963</a> of course. However, there's a difference between immediately making someone convert (not possible) and slowly over time exposing someone to the benefits enough that they eventually start questioning their own decisions (very possible, but not instant gratification).</p> "
+        },
+        {
+          "id": "277198",
+          "number": 14,
+          "author": "longshots",
+          "authorUsername": "longshots",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792870160,
+          "parent": "43073",
+          "text": "<p>+1 to the answers above. As we all know, there's no-one more radical than a convert. Be happy with your conversion because they may not like the sacrifices that need to be made.</p>"
+        },
+        {
+          "id": "277212",
+          "number": 15,
+          "author": "mmmm",
+          "authorUsername": "mmmm",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792875066,
+          "parent": "43073",
+          "text": "<p>You could introduce it as an entirely new, but android compatible OS. I mean - that's what it is really. Frame it like this: iOS for iPhone, android for other phones, GrapheneOS for pixels (and soon Motorola). You could suggest that with ios you end up locked in. You could suggest android is spyware, as in anything you do on an android phone is essentially visible to the manufacturer of the phone and Google. You could frame grapheneOS as a solution to those two problems. There is no lock in and there is no surveillance built in. You could explain it in a way that suggests the phone becomes what you want it to be instead of what the company who sold the phone wants it to be.</p> \n\n<p>One thing that I have done to make other people more aware (read: scared) is to talk about the keyboard. Anything that is typed potentially can be read. Not so with GrapheneOS and the right selection of keyboard and the correct settings. <br>\nPeople are often not worried about abstract (to them) ideas. But if people understand that anything they type has potential to be seen then they think in different terms.</p> "
+        },
+        {
+          "id": "277217",
+          "number": 16,
+          "author": "Winston",
+          "authorUsername": "Winston",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
+          "score": 1,
+          "created": 1792880086,
+          "parent": "43073",
+          "text": "<p>As others said, dont even try. Dont shy away from letting it be known that you are running a secure os and that you have some advantages as far as privacy and security go, but trying to convince someone is a fools errand. Just let them know if they ever want to be more sovereign digitally to hit you up... Nothing else is needed on your part. And honestly who cares, they are fine; just do your own thing and you can assist if ever needed.</p> "
+        },
+        {
+          "id": "277218",
+          "number": 17,
+          "author": "Winston",
+          "authorUsername": "Winston",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
+          "score": 2,
+          "created": 1792880398,
+          "parent": "43073",
+          "text": "<p>My favorite is normies coping by saying \"its impossible to get away from it, so who cares\". I just laugh and say 'its definitely possible to be private and secure, you just have to put in a little effort. Its even possible to be invisible, youre just a loser!' ....but thats just me.</p> "
+        },
+        {
+          "id": "277222",
+          "number": 18,
+          "author": "Winston",
+          "authorUsername": "Winston",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
+          "score": 1,
+          "created": 1792881046,
+          "parent": "43073",
+          "text": "<p>Sorry for the spam, but i'll add a caveat: if its your girl/immediate family (kids), then yeah definitely just buy her a pixel with gos and they are with you (google enabled)(and as long as youre not going down a psychotic rabbit hole). My earlier posts were in regards to loved ones like parents, siblings, extended family &amp; friends. Your immediate people are to be secured (still convenient and as normal as possible), everyone else who cares.</p> "
+        },
+        {
+          "id": "277231",
+          "number": 19,
+          "author": "YiyaK",
+          "authorUsername": "YiyaK",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1792888716,
+          "parent": "43073",
+          "text": "<p>I can't even get a significant fraction of the people in my life to use Signal, let alone spend many hundreds of dollars  to buy a Pixel to convert to Graphene!</p> "
+        },
+        {
+          "id": "277234",
+          "number": 20,
+          "author": "MrChunky",
+          "authorUsername": "MrChunky",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792892721,
+          "parent": "43073",
+          "text": "<p>Not yet. But not yet is not never. As long as you're not pestering them. One day, when something happens that scares them, it's good for them to know who to go to. Someday someone will ask you about that secure phone thing you talked about.</p> "
+        }
+      ]
+    },
+    {
+      "id": "43028",
+      "title": "Battery drain regression: GNSS daemon wakes every 60 min in idle (apps: 0)",
+      "author": "Fatlib",
+      "authorUsername": "Fatlib",
+      "authorAvatar": "",
+      "score": 5,
+      "comments": 5,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792728157,
+      "lastPostedAt": 1792978812,
+      "category": "Pixel 10 Pro",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 10 Pro"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43028-battery-drain-regression-gnss-daemon-wakes-every-60-min-in-idle-apps-0",
+      "media": [],
+      "text": "<h2>Device information</h2>\n<ul><li>Device: Pixel 10 Pro</li>\n<li>GrapheneOS version: 2026102101 (installed via OTA, <sub>hours</sub> before report)</li>\n<li>Android version: Android 17</li>\n<li>No developer options modified since bootloader unlock at unboxing</li></ul>\n\n<h2>Issue description</h2>\n<p>Battery life dropped by <sub>50</sub>% after the 2nd GrapheneOS update on this device.<br>\nBefore the update: <sub>6</sub> days per 50% usable capacity (battery kept between 30–80%).<br>\nAfter the update: <sub>3</sub> days with identical usage pattern and app set.</p>\n\n<h2>Usage pattern (minimal)</h2>\n<ul><li>Owner profile only, no sandboxed Google Play</li>\n<li>Apps: Droid-ify, VLC, Material Files, Organic Maps, Signal, Proton Mail</li>\n<li>Bluetooth only active during music playback, otherwise OFF</li>\n<li>Organic Maps not used for 2+ weeks</li>\n<li>Screen-on time: <sub>2h</sub> 13min across <sub>5</sub>.5 days (<sub>97</sub>% standby)</li></ul>\n\n<h2>Root cause analysis (adb)</h2>\n<p><code>adb shell dumpsys batterystats | grep -i gnss</code> reveals:</p>\n\n<ol><li>GNSS hardware wakes every <sub>60</sub> minutes at minute :17–:19 — exact 1h raster,<br>\n   independent of charging/screen state</li>\n<li>2h 55m GNSS time with NO app attribution (gnss: 128 apps: 0, duration: 2h 54m 53s)</li>\n<li>Only 17m attributed to apps (gnss: 12.4 apps: 12.4, duration: 16m 56s)</li>\n<li>wake_reason: \"Abort: Pending Wakeup Sources: gnss_ipc\" — system-level wakeup<br>\n   via IPC, not app-initiated</li>\n<li>Processes involved: gnssd, android.hardware.gnss-service.pixel</li>\n<li>Kernel wake locks: gnss (30s, 6x), gnss_ipc (27s 954ms, 55x), gnss_boot (1s, 4x)</li></ol>\n\n<p>Total GNSS hardware time: 3h 11m over a <sub>117h</sub> cycle (<sub>2</sub>.7% of cycle time),<br>\n<sub>90</sub>% of it unattributed to any app UID.</p>\n\n<h2>Steps to reproduce</h2>\n<ol><li>GrapheneOS 2026102101 on Pixel 10 Pro</li>\n<li>Minimal app set, no Google Play</li>\n<li>Idle-heavy usage (phone mostly stationary)</li>\n<li><code>adb shell dumpsys batterystats | grep -i gnss</code> shows hourly GNSS wakeups, apps: 0</li></ol>\n\n<h2>Related issues</h2>\n<ul><li>#6125 — Pixel 9: \"High battery drain during idle\" — same signature: high GNSS<br>\n  time in idle, apps: 0, gnss_ipc wake reasons; factory reset did not help</li></ul>\n\n<h2>Workarounds attempted</h2>\n<ul><li>All location permissions revoked for all apps</li>\n<li>Organic Maps background location disabled + force stop</li>\n<li>Location services fully disabled (Settings &gt; Location) — currently testing</li></ul>\n\n<p>Evidence:</p>\n\n<p>jan@HP-EliteBook-840-G6:~$ adb shell dumpsys batterystats | grep -i gnss<br>\n  10-12 16:57:09.610 036 -gps -state=1000:\"gnss\"<br>\n  10-12 17:10:27.243 035 +gps +state=1000:\"gnss\"<br>\n  10-12 17:10:27.393 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 17:10:27.434 035 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 17:10:40.294 035 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\" +cellular_high_tx_power<br>\n  10-12 18:10:49.450 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 19:10:48.461 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 21:10:46.536 034 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 22:10:47.563 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-12 23:10:45.617 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 00:10:50.537 033 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 01:10:48.864 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 02:10:46.899 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 03:11:03.969 032 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 04:11:05.209 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 04:12:08.985 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 05:10:49.469 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 06:11:13.452 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 07:10:59.436 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 08:16:53.512 077 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 08:39:24.702 080 -gps -state=1000:\"gnss\"<br>\n  10-13 09:16:54.403 078 +gps +state=1000:\"gnss\"<br>\n  10-13 09:17:03.017 078 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 12:17:06.421 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 13:17:20.559 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 14:17:08.615 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 15:17:08.190 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 16:17:07.483 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 17:17:14.503 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 18:17:09.965 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 19:17:09.974 059 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 20:17:35.682 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 21:17:19.721 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 22:17:13.802 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-13 23:17:06.801 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 00:17:22.819 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 01:17:29.085 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 02:17:11.120 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 03:17:13.205 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 04:17:09.175 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 05:17:11.272 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 06:17:24.136 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 07:17:08.215 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 08:17:14.253 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 09:17:14.314 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 10:17:11.840 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 11:17:14.868 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 11:41:20.062 050 -gps -state=1000:\"gnss\"<br>\n  10-14 12:17:14.515 049 +gps -mobile_radio +state=1000:\"gnss\"<br>\n  10-14 12:17:15.839 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 12:17:31.434 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 13:18:39.340 047 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\" -job=1000:\"android/com.android.server.notification.NotificationHistoryJobService\"<br>\n  10-14 13:18:41.639 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 14:17:36.685 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 15:17:35.293 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 15:32:17.657 045 -gps -state=1000:\"gnss\"<br>\n  10-14 16:17:35.394 044 +gps +state=1000:\"gnss\"<br>\n  10-14 16:17:40.326 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 17:17:51.518 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 18:17:49.508 043 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 19:17:47.516 042 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 20:17:46.796 041 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 21:17:47.814 041 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 22:17:47.679 040 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-14 23:17:49.707 040 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 00:17:52.645 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 01:17:46.821 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 02:17:46.794 039 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 03:17:47.086 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 04:17:47.093 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 05:17:47.124 038 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 06:17:52.063 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 07:17:50.191 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 08:17:51.148 037 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 09:17:49.212 036 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 13:19:39.619 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 15:32:53.688 079 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 16:17:46.802 079 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 17:17:47.782 078 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 18:18:32.350 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-15 18:18:37.341 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-15 18:19:33.476 073 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 19:17:46.489 073 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 20:17:51.674 072 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 21:17:49.811 071 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 22:17:48.606 071 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 23:18:06.668 070 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-15 23:53:34.944 069 -gps -state=1000:\"gnss\"<br>\n  10-16 00:18:06.517 069 +gps +state=1000:\"gnss\"<br>\n  10-16 00:18:20.604 069 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 01:01:36.449 068 -gps -state=1000:\"gnss\"<br>\n  10-16 01:18:20.482 068 +gps +state=1000:\"gnss\"<br>\n  10-16 01:18:44.551 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 02:20:06.690 068 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 03:18:52.727 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 04:18:52.844 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 05:18:53.857 067 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 06:18:59.876 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 07:18:53.895 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 08:18:58.005 066 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 09:19:01.985 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 10:18:52.895 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 11:19:00.005 065 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 12:18:53.046 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 13:19:00.064 064 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 14:18:54.217 063 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 15:18:52.751 061 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 16:18:52.707 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 17:18:52.728 060 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 18:18:59.315 059 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 19:18:48.284 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 20:19:05.447 058 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 21:18:56.464 057 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 22:18:55.468 056 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 23:18:54.844 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-16 23:42:07.545 055 -gps -state=1000:\"gnss\"<br>\n  10-17 00:18:54.774 055 +gps +state=1000:\"gnss\"<br>\n  10-17 00:19:04.773 055 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 01:19:10.907 054 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 02:19:10.932 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 03:19:13.854 053 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 04:19:22.799 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 05:19:11.891 052 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 06:19:16.924 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 07:19:10.902 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 08:19:12.023 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 09:19:16.062 050 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 10:19:14.086 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 11:19:15.118 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 12:19:13.144 049 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 13:19:13.194 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 14:19:12.060 048 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 15:19:14.110 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 16:19:13.134 047 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 17:19:10.442 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 18:19:08.386 046 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-17 18:19:10.493 046 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 19:19:19.691 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 19:19:25.408 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 20:19:12.542 045 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-17 21:19:13.534 044 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 00:19:13.395 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 04:19:25.009 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 05:21:12.947 036 charge=1812 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-18 06:20:22.982 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 02:19:08.413 077 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 06:19:08.665 076 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 14:19:08.779 073 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 17:19:08.548 071 +wifi_radio wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 18:19:13.140 070 wake_reason=0:\"Abort: Pending Wakeup Sources: umts_ipc0 gnss_ipc\"<br>\n  10-19 18:19:15.153 070 -cellular_high_tx_power wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 18:39:58.264 068 -gps -state=1000:\"gnss\"<br>\n  10-19 18:40:39.893 068 +gps +state=1000:\"gnss\"<br>\n  10-19 20:09:37.094 065 wake_reason=0:\"Abort: Pending Wakeup Sources: gnss_ipc\"<br>\n  10-19 20:10:04.405 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 20:40:59.530 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 21:40:58.568 065 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 22:40:59.587 064 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-19 23:40:58.641 064 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 00:41:11.672 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 01:40:58.723 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 02:40:59.722 063 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 03:41:33.767 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 04:40:58.808 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 05:41:00.838 062 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 06:40:59.864 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 07:41:00.635 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 08:41:02.681 061 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 09:41:00.747 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 10:41:03.793 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 11:40:58.791 060 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 12:40:58.845 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 13:40:57.832 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 14:41:05.861 059 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 15:41:00.154 058 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 16:41:01.153 058 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 17:41:06.208 057 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 18:40:58.499 056 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 19:23:17.481 055 -gps -state=1000:\"gnss\"<br>\n  10-20 19:40:58.736 054 +gps +state=1000:\"gnss\"<br>\n  10-20 19:40:59.131 054 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 19:41:04.402 054 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 20:43:04.516 053 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 21:41:13.844 052 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 22:41:12.844 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 22:57:23.541 051 -gps -state=1000:\"gnss\"<br>\n  10-20 23:41:13.114 051 +gps +state=1000:\"gnss\"<br>\n  10-20 23:41:13.265 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 23:41:13.274 051 -wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-20 23:41:22.758 051 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 00:41:31.927 050 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 01:41:29.519 049 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 02:41:30.547 049 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 03:41:29.628 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 04:41:30.658 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 05:41:28.639 048 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 06:41:30.675 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 07:41:28.713 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 08:41:36.746 047 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 09:41:40.778 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 10:41:41.819 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 11:41:29.851 046 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 12:41:27.904 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 13:41:27.938 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 14:41:28.959 045 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 15:41:28.192 044 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 16:41:29.250 043 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:41:43.592 042 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:41:59.552 042 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 17:43:39.941 042 -gps -state=1000:\"gnss\"<br>\n  10-21 18:41:59.362 041 +gps +state=1000:\"gnss\"<br>\n  10-21 18:42:06.546 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 19:42:17.579 041 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 20:42:10.716 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 21:42:11.799 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 22:42:20.838 039 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-21 23:42:26.853 039 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 00:42:10.771 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 01:42:14.911 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 02:42:11.605 038 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 03:42:16.613 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 04:42:14.666 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 05:42:10.586 037 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 06:42:16.812 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 07:42:14.738 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 08:42:14.823 036 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 09:42:16.040 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 10:42:12.110 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 11:42:15.110 035 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 12:42:12.164 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 13:42:15.259 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 14:42:16.202 034 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 15:42:57.688 040 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 15:44:00.646 040 charge=1962 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 16:42:56.390 050 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 20:05:36.065 079 -gps -state=1000:\"gnss\"<br>\n  10-22 20:08:25.166 079 +gps +state=1000:\"gnss\"<br>\n  10-22 21:08:50.366 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 21:53:15.658 078 -gps -state=1000:\"gnss\"<br>\n  10-22 22:08:50.221 079 +gps +state=1000:\"gnss\"<br>\n  10-22 22:08:55.574 079 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-22 22:11:56.087 079 -gps -state=1000:\"gnss\"<br>\n  10-22 23:08:55.831 080 +gps +state=1000:\"gnss\"<br>\n  10-22 23:09:03.496 080 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 00:09:12.450 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 01:09:20.370 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 02:09:10.512 078 +wake_lock=1000:\"<em>location</em>:GnssLocationProvider\"<br>\n  10-23 02:20:45.903 078 -gps -state=1000:\"gnss\"<br>\n    gnss: 140 apps: 12.4 duration: 3h 11m 50s 62ms <br>\n      gnss: 12.4 apps: 12.4 duration: 16m 56s 289ms <br>\n      gnss: 128 apps: 0 duration: 2h 54m 53s 773ms <br>\n      audio=1.61 (3m 51s 824ms) audio:fg=0.000118 (17ms) audio:bg=1.61 (3m 51s 784ms) audio:cached=0.000159 (23ms) sensors=0.0159 sensors:bg=0.0159 gnss=12.4 (3h 11m 50s 63ms) gnss:bg=12.4 (3h 11m 50s 63ms) wifi=0.00296 wifi:bg=0.00296 wakelock=0.230 (51s 542ms) wakelock:bg=0.230 (51s 542ms)<br>\n      (on battery, screen on) audio=1.61 (3m 51s 453ms) audio:fg=0.000118 (17ms) audio:bg=1.61 (3m 51s 413ms) audio:cached=0.000159 (23ms) sensors=0.0115 sensors:bg=0.0115 gnss=12.4 (3h 11m 50s 63ms) gnss:bg=12.4 (3h 11m 50s 63ms) wifi=0.000673 wifi:bg=0.000673 wakelock=0.0271 (9s 804ms) wakelock:bg=0.0271 (9s 804ms)<br>\n  Kernel Wake lock gnss: 30s 126ms (6 times) realtime<br>\n  Kernel Wake lock gnss_ipc: 27s 954ms (55 times) realtime<br>\n  Kernel Wake lock gnss_boot: 1s 461ms (4 times) realtime<br>\n  Wake lock 1000 <em>location</em>:GnssLocationProvider: 42ms (4 times) max=21 actual=46 realtime<br>\n    Wake lock <em>location</em>:GnssLocationProvider: 42ms partial (4 times) max=21 actual=46, 46ms background partial (4 times) max=21 realtime<br>\n    Wake lock GnssVisibilityControl realtime<br>\n    Proc android.hardware.gnss-service:<br>\n    Proc gnssd:<br>\n    Proc android.hardware.gnss-service.pixel:<br>\njan@HP-EliteBook-840-G6:~$</p> ",
+      "replies": []
+    },
+    {
       "id": "43048",
       "title": "More native code debugging attempts recently",
       "author": "cupcake-alibi",
@@ -1879,129 +2138,7 @@
       "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
       "media": [],
       "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
-      "replies": [
-        {
-          "id": "277023",
-          "number": 2,
-          "author": "pixel---fold",
-          "authorUsername": "pixel---fold",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792799496,
-          "parent": "43048",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/1\" class=\"PostMention\" data-id=\"276996\"><i class=\"icon fas fa-reply\"></i>cupcake-alibi</a> first one I had was today. Never seen one before and funny enough it was from the proton lumo assistant.</p> \n\n<p>Trying at the moment to run s couple of searches on this.</p> \n\n<p>Anybody else?</p> "
-        },
-        {
-          "id": "277027",
-          "number": 3,
-          "author": "TrustExecutor",
-          "authorUsername": "TrustExecutor",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792800509,
-          "parent": "43048",
-          "text": "<p>I got one from PipePipe. I've never had one of these before what I can recall.</p>"
-        },
-        {
-          "id": "277318",
-          "number": 4,
-          "author": "pixel---fold",
-          "authorUsername": "pixel---fold",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792934786,
-          "parent": "43048",
-          "text": "<p>Anybody else using Proton Lumo's AI that got the error message from the APP?</p>\n"
-        },
-        {
-          "id": "277370",
-          "number": 5,
-          "author": "cupcake-alibi",
-          "authorUsername": "cupcake-alibi",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792951736,
-          "parent": "43048",
-          "text": "<p>These apps attempted native code debugging on my Pixel:</p>\n<ul><li>PipePipe</li>\n<li>Read You</li>\n<li>Proton Mail</li>\n<li>Proton Calendar</li>\n<li>AntennaPod</li></ul>"
-        },
-        {
-          "id": "277374",
-          "number": 6,
-          "author": "SplatterGames",
-          "authorUsername": "SplatterGames",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/HgsNUM2MIBghgcb7.png",
-          "score": 0,
-          "created": 1792952500,
-          "parent": "43048",
-          "text": "<p>maybe it's just a coincidence, but Immich crashed in the background today due to MTE errors. Not really related to the NCD issues, but the timing is weird, considering I NEVER see any crashes at all.</p>"
-        },
-        {
-          "id": "277381",
-          "number": 7,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792953831,
-          "parent": "43048",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/4\" class=\"PostMention\" data-id=\"277318\"><i class=\"icon fas fa-reply\"></i>pixel---fold</a> Yeah, I tried it and got the same issue. Emailed Proton support and got this exchange:</p>\n\n<blockquote><p>Lumo fails to launch without \"Native Code Debugging\" permitted in settings. This is a sensitive permission that preferably wouldn't be required for the app to launch.</p>\n\n<p>This is the official Android app from the Play Store.</p></blockquote>\n\n\n<blockquote><p>Hi,</p>\n\n<p>Thanks for reaching out.</p> \n\n<p>This ensures automatic integrity validation and reduces the risk of modified builds being flagged by antivirus tools.<br>\nKind regards,<br>\nIbro<br>\nProton Customer Support</p></blockquote>\n\n\n<blockquote><p>Hi,</p>\n\n<p>This response is a vague rationalization.</p>\n\n<p>Other Android apps by Proton do not require ptrace to function, so do these apps not need integrity verification or to hide from AV tools that builds are modified?<br>\nWhat component's integrity is being verified? For the app's native code, the OS and Play Store are responsible for verifying that against the certificate. ptrace access is also not necessary to cryptographically verify remotely hosted code.</p>\n\n<p>Best regards,<br>\nNoah</p></blockquote>\n\n\n<blockquote><p>Hi Noah,</p>\n\n<p>Other Proton apps don’t have integrity protection. The reason our app may be flagged by antivirus software is that we rely heavily on WebView for much of the app’s functionality, which can sometimes be perceived as suspicious behavior. This is less common in traditional apps, which typically don’t rely on WebView to the same extent.<br>\nKind regards,<br>\nIbro<br>\nProton Customer Support</p></blockquote>"
-        },
-        {
-          "id": "277383",
-          "number": 8,
-          "author": "dryfter",
-          "authorUsername": "dryfter",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/yrF3TPBIpC7APhhS.png",
-          "score": 0,
-          "created": 1792954395,
-          "parent": "43048",
-          "text": "<p>I have not noticed this with any apps I use. Arguably, I don't have very many Google Play Apps installed, so that could be why. I'll try to test the ones I have installed out later today.</p>"
-        },
-        {
-          "id": "277404",
-          "number": 9,
-          "author": "MyIdentityIsntImportant",
-          "authorUsername": "MyIdentityIsntImportant",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/lC5l5EjKXOV6d9rs.png",
-          "score": 3,
-          "created": 1792959255,
-          "parent": "43048",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/2\" class=\"PostMention\" data-id=\"277023\"><i class=\"icon fas fa-reply\"></i>pixel---fold</a> Install the <em>nogms</em> variant of Lump from Proton's GitHub instead of using the Play Store version. The <em>nogms</em> version doesn't need or use native code debugging.</p>\n\n<p>Good luck.</p> "
-        },
-        {
-          "id": "277406",
-          "number": 10,
-          "author": "GazelleInitial",
-          "authorUsername": "GazelleInitial",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792960092,
-          "parent": "43048",
-          "text": "<p>Does anyone revoke system wide DCL?  Considering it, but if i'm just going to whitelist apps that error - what's the point?</p>"
-        },
-        {
-          "id": "277436",
-          "number": 11,
-          "author": "pixel---fold",
-          "authorUsername": "pixel---fold",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792973624,
-          "parent": "43048",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/7\" class=\"PostMention\" data-id=\"277381\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a></p> \n\n<p>Thank you so much for posting this. I thought about reaching out to them, but you beat me to it.</p>"
-        },
-        {
-          "id": "277437",
-          "number": 12,
-          "author": "pixel---fold",
-          "authorUsername": "pixel---fold",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792973768,
-          "parent": "43048",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/9\" class=\"PostMention\" data-id=\"277404\"><i class=\"icon fas fa-reply\"></i>MyIdentityIsntImportant</a> thanks for the tip. Going to try that out.</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43094",
@@ -2247,55 +2384,6 @@
       "url": "https://discuss.grapheneos.org/d/27948-disappearing-contacts",
       "media": [],
       "text": "<p>Hi guys, i'm experiencing a bug where my contacts just randomly disappear.</p>\n\n<p>First i thought i simply didn't save them, but today i noticed that my GFs number isn't saved any more, so  now i'm quite sure XD<br>\nIt doesn't appear to have a specific order, for example the older ones first, or the newer ones, it appears to be random, but i can't really tell</p>\n\n<p>Anyone that had the same issue? I did a quick search in the forum, but didn't find anything that sounds like this (only questions about syncing contacts)</p>\n\n<p>Any idea where to start debugging?<br>\nI suppose the easiest and best is to re flash the phone, but still thought it might be a good thing for the devs to know</p>\n\n<p>chears</p>\n\n\n",
-      "replies": []
-    },
-    {
-      "id": "43096",
-      "title": "How to bypass google sign-in to use certain apps with AndroidAuto ",
-      "author": "stonewll123",
-      "authorUsername": "stonewll123",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1792962351,
-      "lastPostedAt": 1792962351,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services",
-        "Pixel 10a"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43096-how-to-bypass-google-sign-in-to-use-certain-apps-with-androidauto",
-      "media": [],
-      "text": "<p>Howdy,<br>\nI am a somewhat new user to GrapheneOS, stable release, Pixel 10a. My threat model is \"trying to minimize crumbs now because I know I will be a surveillance target in the near future.\" Since discovering Aurora, I have used a google-free owner profile for almost everything, with a work profile that has play services during the day for critical app notifications, and another profile for androidauto, which has very limited apps. However, also since discovering Aurora, I see androidauto connects just fine but will not display the apps I want.</p> \n\n<p>Because so little of this driving profile is actually personal, I am happy to let play services run for that one for the rare occasions I use it. However, I cannot figure out how to get the apps I need without signing in to play store on that profile. Thoughts? I imagine the straightforward way to do this is have the owner profile install the google apps and import them to the driving profile, then use other more private techniques on the everyday profile, which is not owner. However, I would prefer a workaround if possible, so I don't have to rebuild my entire phone. I see that there are websites that claim to snatch APKs from google play in a browser—but I don't really trust these, and I generally know that obtanium does something like that—but it does not seem to work for play store.</p>\n\n<p>Appreciate any suggestions.</p>",
-      "replies": []
-    },
-    {
-      "id": "41738",
-      "title": "Ryanair app, play services needed?",
-      "author": "becomeparmesan",
-      "authorUsername": "becomeparmesan",
-      "authorAvatar": "",
-      "score": 7,
-      "comments": 7,
-      "views": 175,
-      "participantCount": 5,
-      "created": 1788619688,
-      "lastPostedAt": 1792960880,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/41738-ryanair-app-play-services-needed",
-      "media": [],
-      "text": "<p>I am about to buy some flight tickets and one option is via Ryanair. I know that the app became mandatory for checking in. But as I use my phone without google play services, I would consider booking otherwise, if the app needs it.</p>\n\n<p>Does someone know if it will require play services? Anything more? Would also block connections via a firewall app.</p>\n\n<p>Ideally of course, someone knows a way how to avoid it completely by saying \"phone is broken, battery empty, don't have a phone...\"</p>",
       "replies": []
     }
   ]
