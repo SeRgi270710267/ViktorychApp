@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T03:28:28Z",
+  "fetchedAt": "2026-10-26T04:09:31Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,240 @@
       ]
     },
     {
+      "id": "42908",
+      "title": "What music streaming services are you using on GOS?",
+      "author": "WelcomeMilk89",
+      "authorUsername": "WelcomeMilk89",
+      "authorAvatar": "",
+      "score": 41,
+      "comments": 41,
+      "views": 1050,
+      "participantCount": 30,
+      "created": 1792297664,
+      "lastPostedAt": 1792985720,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
+      "media": [],
+      "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
+      "replies": [
+        {
+          "id": "275668",
+          "number": 2,
+          "author": "Developer-Dude",
+          "authorUsername": "Developer-Dude",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/0e3xKlZFGMMPY9z2.png",
+          "score": 1,
+          "created": 1792297785,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/1\" class=\"PostMention\" data-id=\"275667\"><i class=\"icon fas fa-reply\"></i>WelcomeMilk89</a> you gotta check out Musify. Its amazing<br>\n<a href=\"https://github.com/gokadzev/Musify\" rel=\"ugc nofollow\">https://github.com/gokadzev/Musify</a></p>"
+        },
+        {
+          "id": "275673",
+          "number": 3,
+          "author": "dryfter",
+          "authorUsername": "dryfter",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/yrF3TPBIpC7APhhS.png",
+          "score": 0,
+          "created": 1792300983,
+          "parent": "42908",
+          "text": "<p>I was on Apple Music when I switched from iPhone. Then I switched to Qobuz due to their stance on AI music, only to find it's literally overrun by AI music. I just switched to Deezer (despite my feelings about ownership) and I'm loving it.</p>\n\n<p>As far as streaming without subscriptions, I use <a href=\"https://github.com/shapeshed/aerial\" rel=\"ugc nofollow\">Aerial</a> for internet radio.</p> "
+        },
+        {
+          "id": "275700",
+          "number": 4,
+          "author": "KitsuneNoBaka",
+          "authorUsername": "KitsuneNoBaka",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1792311921,
+          "parent": "42908",
+          "text": "<p>storage</p>"
+        },
+        {
+          "id": "275703",
+          "number": 5,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792313324,
+          "parent": "42908",
+          "text": "<p>I use <a href=\"https://www.extreamsd.com/index.php/products/usb-audio-player-pro\" rel=\"ugc nofollow\">UAPP (Universal Audio Player Pro)</a>. Supports local file playback &amp; streaming through Tidal and/or Qobuz. It also supports streaming from a self hosted DLNA server as well. You can add local playback &amp; Tidal/Qobuz tracks into the same playlists so you don't have to jump between apps/services for different albums/tracks. Only issue is it is proprietary but considering GrapheneOS has storage scopes that isn't a huge issue. I haven't been able to find <strong>any</strong> open-source music player that will play tracks bit-perfectly with USB DACs so I wouldn't recommend them as all your music will get resampled through Android's crappy audio stack You can either obtain UAPP through Google Play or <a href=\"https://www.extreamsd.com/index.php/direct-purchase\" rel=\"ugc nofollow\">direct purchase on their website</a>.</p>"
+        },
+        {
+          "id": "275704",
+          "number": 6,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792314113,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a> The DLNA server would probably be easier than running Navidrome as I heard that can be a pain to keep reliable especially on a laptop. You could also look into Roon for a complete solution as it has it's own mobile apps and integrates with high end AVRs and things like that but for the most straight forward way to run at home if you're wanting to \"stream\" your purchased files would be the DLNA server on your thinkpad with Tailscale (for external/not at home on the go access) and use UAPP on your phone, you'll get the added benefit of optionally streaming Tidal or Qobuz and integrate them into the same playlists as your purchased file also.</p>"
+        },
+        {
+          "id": "275723",
+          "number": 7,
+          "author": "AcclaimSublevel19",
+          "authorUsername": "AcclaimSublevel19",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792318478,
+          "parent": "42908",
+          "text": "<p>I've got a combination of streaming from my self-hosted Jellyfin instance via Finamp and from YouTube music via the excellent <a href=\"https://github.com/vivizzz007/vivi-music\" rel=\"ugc nofollow\">VIVI Music</a>. I have YouTube for discovery and then I download songs to my Jellyfin library.</p>"
+        },
+        {
+          "id": "275731",
+          "number": 8,
+          "author": "FunkTastic",
+          "authorUsername": "FunkTastic",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/gkf1ndPwIn0x3LQA.png",
+          "score": 0,
+          "created": 1792319294,
+          "parent": "42908",
+          "text": "<p>Youtube via NewPipe :)</p>\n"
+        },
+        {
+          "id": "275734",
+          "number": 9,
+          "author": "Buffering",
+          "authorUsername": "Buffering",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792319676,
+          "parent": "42908",
+          "text": "<p>YouTube via Grayjay.</p> "
+        },
+        {
+          "id": "275780",
+          "number": 10,
+          "author": "pynosh",
+          "authorUsername": "pynosh",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792331775,
+          "parent": "42908",
+          "text": "<p>I'm using Symfonium with Navidrome.</p> "
+        },
+        {
+          "id": "275795",
+          "number": 11,
+          "author": "MineralWater",
+          "authorUsername": "MineralWater",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792339414,
+          "parent": "42908",
+          "text": "<p>I use YouTube via the Echo App (or you can use Vivi and/ or Metrolist).</p> \n\n<p>These apps act like a streaming app, and they use what is on YouTube for free. So nothing illegal about using them.</p> \n\n<p>I don't listen to music often, so a paid service makes no sense to me.</p> \n\n<p>You can also use the Radio Caprice App from the play store, it's an radio app with channels that only play music without interruption and zero advertisement between or before songs. They have a channel for almost all genres you can think of.</p> \n\n"
+        },
+        {
+          "id": "275796",
+          "number": 12,
+          "author": "nuclear6476",
+          "authorUsername": "nuclear6476",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792339441,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/5\" class=\"PostMention\" data-id=\"275703\"><i class=\"icon fas fa-reply\"></i>liachra</a></p> \n\n<p>The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.<br>\n<a href=\"https://github.com/moss-apps/Flick\" rel=\"ugc nofollow\">https://github.com/moss-apps/Flick</a><br>\n<a href=\"https://github.com/Kdroidwin/MusicBeatSP\" rel=\"ugc nofollow\">https://github.com/Kdroidwin/MusicBeatSP</a></p>\n\n<p>Additionally, reTONE—which is scheduled for release soon—is likely not open source, but it appears it will be available for free without data collection or ads.<br>\n<a href=\"https://retone.iidapiano.store/\" rel=\"ugc nofollow\">https://retone.iidapiano.store/</a></p>\n"
+        },
+        {
+          "id": "275869",
+          "number": 13,
+          "author": "mar2112",
+          "authorUsername": "mar2112",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792356618,
+          "parent": "42908",
+          "text": "<p>MPD from my server.</p>"
+        },
+        {
+          "id": "275878",
+          "number": 14,
+          "author": "Jddjjddjsh",
+          "authorUsername": "Jddjjddjsh",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792361196,
+          "parent": "42908",
+          "text": "<p>I like Metrolist because it is only music and it has great UI.</p> "
+        },
+        {
+          "id": "275883",
+          "number": 15,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792363180,
+          "parent": "42908",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/12\" class=\"PostMention\" data-id=\"275796\"><i class=\"icon fas fa-reply\"></i>nuclear6476</a> The open-source apps Flick and MusicBeatSP claim to support direct playback via a USB DAC.</p></blockquote>\n\n<p>Well there you go, I'll have to check these out. Thanks :)</p>"
+        },
+        {
+          "id": "275937",
+          "number": 16,
+          "author": "skully373",
+          "authorUsername": "skully373",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/piWzj3tLZsYbFwH2.png",
+          "score": 1,
+          "created": 1792384067,
+          "parent": "42908",
+          "text": "<p>Did you ever try Tidal? It's pretty great for a paid service. Huge library and awesome sound quality. I just wish Pixels handled LDAC better.</p>"
+        },
+        {
+          "id": "275943",
+          "number": 17,
+          "author": "schweizer",
+          "authorUsername": "schweizer",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792387216,
+          "parent": "42908",
+          "text": "<p>What makes you think Spotify is a shady company? They do not sell customer data and they are in public ownership. The income flows vastly into the music industry. It is not that buying CDs would support artists more. It is the labels that take a huge share. Switching the streaming service does not solve that problem.</p>\n\n<p>For me there are two features why i do not use my digitalized CD recordings any more:</p>\n<ul><li>Spotify connect lets me start music directly on the player. No interrupted bluetooth connections.</li>\n<li>I can do jams with family and friends.</li></ul>\n"
+        },
+        {
+          "id": "275955",
+          "number": 18,
+          "author": "four",
+          "authorUsername": "four",
+          "authorAvatar": "",
+          "score": 5,
+          "created": 1792391681,
+          "parent": "42908",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> What makes you think Spotify is a shady company?</p></blockquote>\n\n<p>I wouldn't say they're more shady than other surveillance capitalism companies, but any surveillance capitalism company is shady as hell.</p> \n\n<ul><li><p>They collect everything you do in the app. Searches, skips, interactions. They make inferences about your age, interests, preferences, and scans for other devices on your Wi-Fi.</p> </li>\n\n<li><p>They take data from marketing and ad partners and their inferences about you. And Spotify shares your data with those ad partners.</p> </li>\n<li><p>Personalized ads are enabled by default. If you opt out, you still get ads based on context of what you're listening to.</p></li>\n<li><p>Your listen history Is kept for the length of your account.</p> </li>\n<li><p>Your data including voice recordings, if you use them, can be used to train machine learning models and there's no opt-out.</p> </li>\n<li><p>They were fined by Sweden's data protection authority in 2023</p></li></ul>\n\n\n<p>Is this an inaccurate summary of their <a href=\"https://www.spotify.com/us/legal/privacy-policy/\" rel=\"ugc nofollow\">privacy practices</a> and history?</p>"
+        },
+        {
+          "id": "275962",
+          "number": 20,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 9,
+          "created": 1792393790,
+          "parent": "42908",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> Well first off, excluding YouTube Music they pay the least to their artists out of all the streaming services.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> It is not that buying CDs would support artists more. It is the labels that take a huge share.</p></blockquote>\n\n<p>This is naive. Yes the labels take a huge share however I <em>personally</em> know many artists who receive a bigger portion of the income with CDs/Vinyl than they do on streaming services.10,000 streams a month equal around 10 cents (<strong>if</strong> you're lucky), a couple hundred CD &amp; vinyl sales are in the dollars. Additionally not every artist are with a major label and only sell CD's through direct purchase meaning they receive majority of the cost you pay for an album (minus printing &amp; payment/store-front processing fees).</p>\n\n<p>Yes CDs/vinyl  sales are smaller than streaming but the artists that have noticed a incline in CD sales are noticing a more of a profit hence why you see so many independent artists are heavily pushing physical media sales to their audience. The more people cop on to this the better for them.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos/17\" class=\"PostMention\" data-id=\"275943\"><i class=\"icon fas fa-reply\"></i>schweizer</a> They do not sell customer data</p></blockquote>\n\n<p>Completely untrue. They aggregate with many major advertising &amp; marketing platforms</p>"
+        },
+        {
+          "id": "275966",
+          "number": 21,
+          "author": "AKRAKU",
+          "authorUsername": "AKRAKU",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/OZTjv8P30Ni9NyAD.png",
+          "score": 1,
+          "created": 1792394850,
+          "parent": "42908",
+          "text": "<p>I won't never get why people jump on GOS and still willing to pay 18€/month to services live Quobuz. After jumping here I found Riplay on Accrescent store and beside some bug I can live with (that will be fixed soon since dev is active on the project) I'm loving it! The algorithm is way better than the one on Spotify or Apple Music and is making me rediscover a lot of music I used to listen during the past and almost forgot about.</p>"
+        }
+      ]
+    },
+    {
       "id": "33125",
       "title": "Unable to activate eSIM",
       "author": "Foyer9054",
@@ -1880,217 +2114,7 @@
       "url": "https://discuss.grapheneos.org/d/33125-unable-to-activate-esim",
       "media": [],
       "text": "<p>I did a fresh install of GrapheneOS, enabled \"eSIM support\", and rebooted.<br>\nWent to Settings &gt; Network &amp; Internet &gt; SIMs &gt; Setup an eSIM.<br>\nScanned the eSIM QR code, and then a screen popped up saying \"SIM not activated. Something went wrong while trying to activate your SIM.\".<br>\nThe same thing happens if I try to enter the eSIM activation code manually.<br>\nIf I go to Reset options &gt; Reset mobile network settings, check \"Erase eSIMs\", and then click reset, a dialog appears saying \"Can't erase eSIMs\".</p>\n\n<p>I then enabled developer options and checked the log when trying to activate (output at end of post).</p>\n\n<p>So I installed Google Play Services and Play Store via the Graphene OS app store.<br>\nLogged in, tried activating eSIM again, same error.<br>\nI then enabled all permissions for Play Services &amp; Store and tried activating again. Same error.</p>\n\n<p>I've tried with multiple different eSIM activation codes on two different carriers, and used different WiFI networks during setup.<br>\nDSDS is enabled in the <code>*#*#4636#*#*</code> menu.</p>\n\n<p>Any advice is appreciated.</p>\n\n<pre><code>2026-03-13 16:41:52.140 16779-16779 ProxyAndro...gerBackend com.google.android.euicc             W  Too many Flogger logs received before configuration. Dropping old logs.\n2026-03-13 16:41:52.140 16779-16779 EuiccGoogle             com.google.android.euicc             I  [2] GetAcFromQrScannerFragment.onActivityResult: onActivityResult: request code = 1, result code = -1.\n2026-03-13 16:41:52.142  2405-2735  EuiccController         com.android.phone                    D   getDownloadableSubscriptionMetadata callingPackage: com.google.android.euicc\n2026-03-13 16:41:52.143  2477-11375 SudConfigProvider       com.android.settings                 D  method: isEnhancedSetupDesignMetricsEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.143  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: E msg.what=101\n2026-03-13 16:41:52.143  2405-2668  EuiccConnector          com.android.phone                    D  processMsg: ConnectedState\n2026-03-13 16:41:52.144  2477-11375 SudConfigProvider       com.android.settings                 D  method: isEnhancedSetupDesignMetricsEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.145  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: X\n2026-03-13 16:41:52.146  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.146 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.147 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: ensureSlotIsEuiccAndActive: slotId = 0, forceDeactivateSim = false\n2026-03-13 16:41:52.147  2477-11375 SudConfigProvider       com.android.settings                 D  method: isForceTwoPaneEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: Passed in slotId=0; euiccIsActive=false; targetSlotIsRemovable=false; forceDeactivateSim=false, multiSimEnabled=true, euiccSlotPresent=true, allowSlotSwitchInMultiPsimEsimMode=false.\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             E  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: Slot switch is not allowed in multiSim mode, ignore switch request\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.onGetDownloadableSubscriptionMetadata: onGetDownloadableSubscriptionMetadataInternal: slotId = 0, forceDeactivateSim = false, ensureSlotIsEuiccAndActive = EuiccOperationResult{errorCode=131083, switchedToEsim=false, slotMappings=[]}.\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccErrorMapper.mapErrorCode: Mapping for error code: 131083\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccErrorMapper.mapErrorCode: Mapping error code: 131083 to: 33554432\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.onGetDownloadableSubscriptionMetadata: onGetDownloadableSubscriptionMetadata errorCode: 33554432\n2026-03-13 16:41:52.150  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: E msg.what=6\n2026-03-13 16:41:52.150  2405-2668  EuiccConnector          com.android.phone                    D  processMsg: ConnectedState\n2026-03-13 16:41:52.152  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: X\n2026-03-13 16:41:52.152  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.153 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.153 16779-26176 EuiccGoogle             com.google.android.euicc             I  [281] WindowInsetsCompat$TypeImpl30.isEsimOnlyDevice: Device Hardware SKU: GZC4K\n2026-03-13 16:41:52.153  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.153 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.154  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.154 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.154  2477-11375 SudConfigProvider       com.android.settings                 D  method: isKeyboardFocusEnhancementEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.155  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.155 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.156  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.156 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.156 16779-16779 SetupLibrary            com.google.android.euicc             I  [GlifLayout] Using setup design GlifLoadingLayout to init for QrDownloadActivity\n2026-03-13 16:41:52.156 16779-26176 EuiccGoogle             com.google.android.euicc             I  [281] ClearcutServerLog$$ExternalSyntheticLambda15.call: NetworkUtil\n2026-03-13 16:41:52.156 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.156 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.156 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.usagereporting.internal.UsageReportingClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n2026-03-13 16:41:52.156 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.157 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.157 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.usagereporting.internal.UsageReportingClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n2026-03-13 16:41:52.157 16779-26176 EuiccGoogle             com.google.android.euicc             E  [281] ClearcutServerLog$$ExternalSyntheticLambda15.call: Cannot connect to GMS API client. (Fix with AI)\n                                                                                                    com.google.android.gms.common.api.ApiException: 17: API: UsageReporting.API is not available on this device. Connection failed with: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n                                                                                                    \tat com.google.android.gms.clearcut.internal.batcher.DropLargestEventBatchReductionAlgorithm.fromStatus(PG:13)\n                                                                                                    \tat com.google.android.gms.common.api.internal.ApiCallRunner$TaskRunner.reportFailure(PG:3)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.failEnqueuedMethods(PG:48)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.failAllEnqueuedMethods(PG:10)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.onConnectionFailed(PG:164)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.onConnectionFailed(PG:174)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.connect(PG:163)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.enqueue(PG:51)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager.handleMessage(PG:844)\n                                                                                                    \tat android.os.Handler.dispatchMessage(Handler.java:128)\n                                                                                                    \tat android.os.Looper.dispatchMessage(Looper.java:333)\n                                                                                                    \tat android.os.Looper.loopOnce(Looper.java:263)\n                                                                                                    \tat android.os.Looper.loop(Looper.java:367)\n                                                                                                    \tat android.os.HandlerThread.run(HandlerThread.java:139)\n2026-03-13 16:41:52.157 16779-16779 SetupLibrary            com.google.android.euicc             W  [GlifLoadingLayout] Can not find the resource entry for loading_animation_custom_default\n2026-03-13 16:41:52.157 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.157 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.157 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.clearcut.internal.ClearcutLoggerClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}</code></pre>",
-      "replies": [
-        {
-          "id": "219376",
-          "number": 2,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
-          "score": 0,
-          "created": 1773444493,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/1\" class=\"PostMention\" data-id=\"219375\"><i class=\"icon fas fa-reply\"></i>Foyer9054</a></p> \n\n<p>Dial this number to enter a secret menu<br>\n<code>*#*#4636#*#*</code><br>\nUnder phone information &gt; enable DSDS</p>\n\n<p>Use a good internet connection. Do this in the owner profile.</p>\n\n<p>Try another reboot possibly.</p>\n\n<p>More info:<br>\n<a href=\"https://grapheneos.org/usage#esim-support\" rel=\"ugc nofollow\">https://grapheneos.org/usage#esim-support</a></p>\n\n"
-        },
-        {
-          "id": "219377",
-          "number": 3,
-          "author": "Foyer9054",
-          "authorUsername": "Foyer9054",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1773444720,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/2\" class=\"PostMention\" data-id=\"219376\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a></p> \n\n<p>DSDS was enabled when I tried the steps in my post. I just edited it to add that.<br>\nEverything done in the owner profile.</p>"
-        },
-        {
-          "id": "219427",
-          "number": 4,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
-          "score": 0,
-          "created": 1773467013,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/3\" class=\"PostMention\" data-id=\"219377\"><i class=\"icon fas fa-reply\"></i>Foyer9054</a></p> \n\n<p>bump.</p>\n\n<p>Another option is to activate the esim on stock then come back to GOS.</p>\n\n<p>Sorry mate, I don't know. I just did a GOS esim yesterday for someone.</p>"
-        },
-        {
-          "id": "219440",
-          "number": 5,
-          "author": "DeletedUser683",
-          "authorUsername": "DeletedUser683",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773475913,
-          "parent": "33125",
-          "text": "<p>Any chance it's a russians mobile provider esim and you try to register it with a roaming tower cell? Because now it's not possible to register esim with roaming cell tower with them.</p> "
-        },
-        {
-          "id": "219470",
-          "number": 6,
-          "author": "Foyer9054",
-          "authorUsername": "Foyer9054",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773487015,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/5\" class=\"PostMention\" data-id=\"219440\"><i class=\"icon fas fa-reply\"></i>DeletedUser683</a></p> \n\n<p>I'm in the UK. It doesn't look like the eSIM activation request ever actually leaves the phone based on the log, and the error screen pops up pretty much instantly.</p> "
-        },
-        {
-          "id": "219511",
-          "number": 7,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 0,
-          "created": 1773506584,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/6\" class=\"PostMention\" data-id=\"219470\"><i class=\"icon fas fa-reply\"></i>Foyer9054</a> <br>\nThis similar thread from yesterday</p>\n\n<p><a href=\"https://discuss.grapheneos.org/d/33097-sim-manager-crashes-when-trying-to-add-an-esim\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal UrlLink--discussion\"><span class=\"UrlLink-discussion\">#33097</span></a></p>"
-        },
-        {
-          "id": "219512",
-          "number": 8,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 0,
-          "created": 1773506696,
-          "parent": "33125",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/1\" class=\"PostMention\" data-id=\"219375\"><i class=\"icon fas fa-reply\"></i>Foyer9054</a> enabled developer options</p></blockquote>\n\n<p>This was the culprit for the user. You should not run your main phone with these enabled. And no Adb either.</p>"
-        },
-        {
-          "id": "219550",
-          "number": 9,
-          "author": "Foyer9054",
-          "authorUsername": "Foyer9054",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1773518183,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/8\" class=\"PostMention\" data-id=\"219512\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a></p> \n\n<p>Looks like a different issue, thanks for linking it though. Dev options were off for the steps I performed above (including turning it off again after attempting with Play services/store installed).</p>\n\n<p>In case anyone else has the same issue, I've since reflashed stock Android and the same issue occurs \"SIM not activated\" (but there were no error logs like above).<br>\nI believe now it is a carrier/hardware issue, unrelated to GrapheneOS.</p>\n\n<p>Google support and my carrier were unable to find a solution. I'm giving it a few more days as they each said they would investigate more and get back to me. Not expecting anything though.<br>\nI'll probably send the phone back and get a replacement.</p>"
-        },
-        {
-          "id": "219841",
-          "number": 10,
-          "author": "SolarSciencePup",
-          "authorUsername": "SolarSciencePup",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773638664,
-          "parent": "33125",
-          "text": "<p>Same here. Installed last Saturday, the activation kept failing, tried on Boost Mobile, airalo, and the eSIM test profiles, all of them failed. After re flashing stock it still errors \"SIM not activated\". Dev options off, tried with and without DSDS. On GrapheneOS it wouldn't let me turn on the eSIM or delete the eSIM in addition to not letting me install one. Can't say for stock android if deletion and/or toggling eSIMs works. Also Pixel 9 Pro XL.</p>"
-        },
-        {
-          "id": "219924",
-          "number": 11,
-          "author": "aceblack",
-          "authorUsername": "aceblack",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773679467,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/10\" class=\"PostMention\" data-id=\"219841\"><i class=\"icon fas fa-reply\"></i>SolarSciencePup</a> <br>\nhey same problem here, when i try to activate an esim it says “sim not activated”. whent back to stock and still the same. I actually bought another one today and tested it in stock first and worked, but when i got graphene on it it gives me the same problem. Now I have 2 9 pro XL’s ahhaha. Help!!</p>"
-        },
-        {
-          "id": "220019",
-          "number": 12,
-          "author": "SolarSciencePup",
-          "authorUsername": "SolarSciencePup",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1773732698,
-          "parent": "33125",
-          "text": "<p>If anyone still has the a Pixel 9 Pro XL with this issue that has GrapheneOS installed and has not been factory reset or reflashed and is comfortable searching a bugreport, it could potentially be possible to find the command that bricked the eUICC (eSIM chip) during setup. <br>\nIf you find anything you should submit it to the GitHub issue here <br>\n<a href=\"https://github.com/GrapheneOS/os-issue-tracker/issues/7415\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/os-issue-tracker/issues/7415</a></p>\n\n<p><strong>Never share a bugreport unless you are sure that the information being shared does not contain personally identifiable information (PII) and never trust the raw output of a LLM without checking it for PII first, even if it claims it is sure that the output contains no PII, double check it.</strong></p>"
-        },
-        {
-          "id": "220224",
-          "number": 13,
-          "author": "aceblack",
-          "authorUsername": "aceblack",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773798675,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/12\" class=\"PostMention\" data-id=\"220019\"><i class=\"icon fas fa-reply\"></i>SolarSciencePup</a> <br>\nyes that would be very helpful, have you found a solution yet?</p>"
-        },
-        {
-          "id": "220253",
-          "number": 14,
-          "author": "SolarSciencePup",
-          "authorUsername": "SolarSciencePup",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773817206,
-          "parent": "33125",
-          "text": "<p>Not yet, later tonight I will try and reflash various radio and modem firmware and see if that fixes it.<br>\nAlso, if people could respond with if the March Pixel drop was installed on the stock os before flashing GrapheneOS that would be of great help, it is possible that Google modified firmware on one of the chips that has broken support for GrapheneOS, possibly some kind of anti rollback protection that means that GOS can't communicate with it as it is on a future firmware version.<br>\nThe eUICC system seems unable to properly pull profiles and data from GSMA, however the EID, IMEIs and satellite SOS eSIM can all be read so they aren't corrupted and the eUICC is not bricked so there is a chance that this bug is recoverable.<br>\nAdditional info(to avoid confusion): <br>\neUICC: the chip used to host and store the eSIM<br>\neSIM: profiles installed onto the eUICC<br>\nSatellite SOS eSIM: a profile preinstalled onto Google Pixels supporting the satellite SOS feature, contains a subscription to Skylo which provides connectivity when the satellite SOS feature is activated, this eSIM is believed to be locked so that it cannot be removed by the user but possibly may be removed by Google&amp;Skylo through remote SIM provisioning.</p>"
-        },
-        {
-          "id": "220308",
-          "number": 15,
-          "author": "Foyer9054",
-          "authorUsername": "Foyer9054",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773830592,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/14\" class=\"PostMention\" data-id=\"220253\"><i class=\"icon fas fa-reply\"></i>SolarSciencePup</a></p> \n\n<p>I don't know the exact build version of the stock OS before I installed GrapheneOS, but it was fully up to date around March 12, so it was likely running the most recent build: CP1A.260305.018 (14887507).</p>\n\n<p>I never tried installing an eSIM on the stock OS so don't know if it was broken there before installing GrapheneOS, or if the GrapheneOS install caused it. But your suggestions of the cause of the issue sound plausible.</p>"
-        },
-        {
-          "id": "220502",
-          "number": 16,
-          "author": "aceblack",
-          "authorUsername": "aceblack",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773872352,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/14\" class=\"PostMention\" data-id=\"220253\"><i class=\"icon fas fa-reply\"></i>SolarSciencePup</a> <br>\nyes very likely something with the software form gos</p>"
-        },
-        {
-          "id": "220503",
-          "number": 17,
-          "author": "aceblack",
-          "authorUsername": "aceblack",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1773872462,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/15\" class=\"PostMention\" data-id=\"220308\"><i class=\"icon fas fa-reply\"></i>Foyer9054</a> <br>\nI don’t know if you have read my post on the forum but to be sure the problem was not hardware related. I bought a brand new 9 pro xl and installed on stock an esim. everything worked perfectly fine. After gos installation it failed, then I flashes back to stock and it did not work either. So i do not think it is hardware related.</p>"
-        },
-        {
-          "id": "220511",
-          "number": 18,
-          "author": "redacted_handle",
-          "authorUsername": "redacted_handle",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
-          "score": 1,
-          "created": 1773874200,
-          "parent": "33125",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/14\" class=\"PostMention\" data-id=\"220253\"><i class=\"icon fas fa-reply\"></i>SolarSciencePup</a>  <a href=\"https://discuss.grapheneos.org/d/33125-unable-to-activate-esim/15\" class=\"PostMention\" data-id=\"220308\"><i class=\"icon fas fa-reply\"></i>Foyer9054</a></p> \n\n<p>Physical sims are problem free except for hardware failure.<br>\nActivating the sim on stock OS then flashing GOS is an option (i think 1 or both of you did this then it stopped working. You might need your carrier's app like googleFi )</p>"
-        },
-        {
-          "id": "220623",
-          "number": 19,
-          "author": "DeletedUser728",
-          "authorUsername": "DeletedUser728",
-          "authorAvatar": "",
-          "score": 3,
-          "created": 1773916469,
-          "parent": "33125",
-          "text": "<p>Rather for search purposes. If someone experiences issues with esim activation, remember it requires access to few domains (even Google ones may be involved).</p>\n\n<p>If you're doing it while being on restrictive network environment (like with DNS filtering, be it WiFi router or private DNS with \"no Google\"-like blacklists), you will face expected issues.</p> "
-        },
-        {
-          "id": "221795",
-          "number": 20,
-          "author": "shawnsc",
-          "authorUsername": "shawnsc",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1774271914,
-          "parent": "33125",
-          "text": "<p>Same exact problem, same exact Pixel 9 Pro XL. I tried two different carriers/esim providers, with/without google play services, DSDS activated and updating the os. Only thing I have not tried is reverting to stock android or changing phone. I am operating on unrestricted home wifi. Has anyone come up with a solution or workaround?</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43100",
@@ -2358,30 +2382,6 @@
       "url": "https://discuss.grapheneos.org/d/41145-download-official-whatsapp-to-continue",
       "media": [],
       "text": "<p><strong>How it started</strong><br>\nI forgot my GrapheneOS password, and wiped the device.</p>\n\n<p><strong>What is set up</strong><br>\nAdmin profile running FOSS apps and supported 3rd party apps. Google Play Store has not even touched this profile.<br>\n2nd Profile was for testing whether apps work with Google Play Store &amp; Services if needed...Revolut and WhatsApp were the only two I was looking at on this profile after the wipe.</p>\n\n<p><strong>What is wrong</strong><br>\nWhatsApp can't log in for some strange reason no matter where I get it. I tried the official APK from the website, I have tried Aurora store, I have tried the Google Play Store. Several reboots with a fresh profile, Google Play Store &amp; Services set up first, then download WhatsApp from the Play Store and still I get presented with the same message when I tried to log in with my number:</p>\n\n<p>Download official Whatsapp to continue</p>\n\n<p>Prior to the fresh install of GrapheneOS it was working, now I can't even log into it. I have WhatsApp running on a secondary iPhone as backup and there it obviously works fine. My account was flagged for some reason for bot use when I tried to set it up the first time after the wipe on GrapheneOS, so no dual account was at play at this point in time.</p>\n\n<p>I suspect GrapheneOS is widely being targeted, but I know too little what is going on in the Dev space of this.</p>\n\n<p>Any advice or ideas on how to fix this or get WhatsApp working again?</p>\n",
-      "replies": []
-    },
-    {
-      "id": "42908",
-      "title": "What music streaming services are you using on GOS?",
-      "author": "WelcomeMilk89",
-      "authorUsername": "WelcomeMilk89",
-      "authorAvatar": "",
-      "score": 40,
-      "comments": 40,
-      "views": 1015,
-      "participantCount": 29,
-      "created": 1792297664,
-      "lastPostedAt": 1792967805,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
-      "media": [],
-      "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
       "replies": []
     }
   ]
