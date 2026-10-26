@@ -4219,7 +4219,13 @@ def story_checks() -> None:
     check("communities.js" in workflow and "communities.css" in workflow and "data/communities" in workflow and "reddit.yml" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")
     check(('"#/communities", "communities"' in nav_fn or 'href: "#/communities"' in nav_fn) and 'parts[0] === "communities"' in app and "ViktorychCommunities" in app and "takeCompose" in app, "Communities opens from the left nav and reuses compose")
     check("Only on ViktorychApp" in communities_js and "data-cm=\"filter\"" in communities_js and "parentId" in communities_js, "a community thread mixes Reddit and ViktorychApp replies")
+    index_doc = json.loads((ROOT / "data" / "communities" / "index.json").read_text(encoding="utf-8"))
+    index_names = [row.get("name") for row in index_doc.get("communities") or [] if isinstance(row, dict)]
+    check("teslamotors" in index_names and "grapheneos" in index_names, "the Communities index lists the built-in subreddit and Discourse forum")
+    check("mergeBuiltins" in communities_js and "INDEX_TTL" in communities_js and "grapheneos" in communities_js, "the client keeps built-in communities and revalidates a stale index")
     reddit_py = (ROOT / "scripts" / "reddit_sync.py").read_text(encoding="utf-8")
+    discourse_py = (ROOT / "scripts" / "discourse_sync.py").read_text(encoding="utf-8")
+    check("discourse_forums" in reddit_py and 'd_name == "grapheneos"' not in reddit_py and "index_meta" in discourse_py, "the sync keeps every configured Discourse forum in the index")
     reddit_wf = (ROOT / ".github" / "workflows" / "reddit.yml").read_text(encoding="utf-8")
     check("trying public feeds" in reddit_py and "leaving communities unchanged" not in reddit_py and "client_credentials" in reddit_py and "reddit.com/.json" not in reddit_py and 'cron: "*/20 * * * *"' in reddit_wf and "echo \"$REDDIT_CLIENT" not in reddit_wf and "echo ${{ secrets" not in reddit_wf, "the Reddit mirror tries public feeds without secrets and runs every 20 minutes")
     check("handleCommunityRoute" in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8") and "community_posts" in (ROOT / "worker" / "src" / "communities.js").read_text(encoding="utf-8") and "oauth.reddit.com" not in (ROOT / "worker" / "src" / "communities.js").read_text(encoding="utf-8"), "internal community posts stay in the accounts Worker")
