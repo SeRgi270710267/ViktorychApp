@@ -1,0 +1,41 @@
+name: Backup Warmup
+
+# Render's free web service sleeps after ~15 minutes without traffic and can
+# take a minute to wake up. A short ping keeps sign-in failover responsive.
+# If you prefer an external uptime pinger, disable this workflow.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup-warmup
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the backup accounts API
+        env:
+          BACKUP_API: ${{ vars.ACCOUNTS_BACKUP_API || 'https://viktorych-backup.onrender.com' }}
+        run: |
+          set -u
+          url="${BACKUP_API%/}/v1/health"
+          echo "Pinging $url"
+          for attempt in 1 2 3; do
+            if curl -fsS --max-time 120 -o /tmp/health.json "$url"; then
+              cat /tmp/health.json
+              echo
+              exit 0
+            fi
+            echo "attempt $attempt failed, retrying..."
+            sleep 20
+          done
+          echo "Backup API did not answer. Check the Render dashboard."
+          exit 1

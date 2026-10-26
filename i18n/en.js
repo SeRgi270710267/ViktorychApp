@@ -771,6 +771,7 @@ SI18n.addPack("en", {
   "That claim code is not valid.": "That claim code is not valid.",
   "Too many attempts. Try again later.": "Too many attempts. Try again later.",
   "Could not sign in.": "Could not sign in.",
+  "Sign-in is temporarily unavailable. Try again in a few minutes.": "Sign-in is temporarily unavailable. Try again in a few minutes.",
   "Leave without saving the account number?": "Leave without saving the account number?",
   "Not affiliated with X.": "Not affiliated with X.",
   "Profile photo": "Profile photo",

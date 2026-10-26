@@ -771,6 +771,7 @@ SI18n.addPack("es", {
   "That claim code is not valid.": "Ese código no es válido.",
   "Too many attempts. Try again later.": "Demasiados intentos. Prueba más tarde.",
   "Could not sign in.": "No se pudo iniciar sesión.",
+  "Sign-in is temporarily unavailable. Try again in a few minutes.": "El inicio de sesión no está disponible temporalmente. Inténtalo de nuevo en unos minutos.",
   "Leave without saving the account number?": "¿Salir sin guardar el número de cuenta?",
   "Not affiliated with X.": "No está afiliado a X.",
   "Profile photo": "Foto del perfil",
