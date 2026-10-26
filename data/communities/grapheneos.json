@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T15:57:13Z",
+  "fetchedAt": "2026-10-26T16:19:39Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1941,7 +1941,7 @@
           "author": "other8026",
           "authorUsername": "other8026",
           "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/Fg12HujIhRCeMs3E.png",
-          "score": 0,
+          "score": 1,
           "created": 1793020899,
           "parent": "43100",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released/6\" class=\"PostMention\" data-id=\"277502\"><i class=\"icon fas fa-reply\"></i>BendyNevis</a> Try holding down the power button for a long time to force a shutdown.</p>"
@@ -1952,7 +1952,7 @@
           "author": "int_32",
           "authorUsername": "int_32",
           "authorAvatar": "",
-          "score": 1,
+          "score": 2,
           "created": 1793021167,
           "parent": "43100",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released/6\" class=\"PostMention\" data-id=\"277502\"><i class=\"icon fas fa-reply\"></i>BendyNevis</a> This sounds like TalkBack’s navigation mode. It changes touch controls across the phone: tap once to select an item, then double-tap to activate it. Use two fingers to scroll.</p>\n\n<p>Try holding both volume buttons together for a few seconds to turn TalkBack off, if that shortcut is enabled. Otherwise, use those gestures to go to Settings → Accessibility → TalkBack and turn off “Use TalkBack”.</p>\n\n<p>Do double-taps and two-finger swipes work for you?</p>"
