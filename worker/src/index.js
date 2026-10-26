@@ -10,6 +10,7 @@ import { handleCommunityRoute, COMMUNITY_SCHEMA } from "./communities.js";
 import { handleFederationRoute, FEDERATION_SCHEMA, isPublicFederationRoute } from "./federation.js";
 import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from "./identities.js";
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
+import { handleXProxy } from "./xproxy.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -3341,6 +3342,10 @@ async function route(request, env) {
         "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
       }
     });
+  }
+  // The X mirror only reads R2, so it answers before the schema check.
+  if (path === "/v1/x" || path.startsWith("/v1/x/")) {
+    return handleXProxy(request, env, url);
   }
   await ensureSchema(env);
   if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {

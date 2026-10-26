@@ -60,6 +60,10 @@ Avatars and banners are not stored in D1. The browser crops an avatar to 400×40
 
 On the free plan that is at most 210 KB of R2 per account (60 KB + 150 KB). The shared R2 allowance is 10 GB, together with the public music bucket, so a thousand accounts with both photos are about 210 MB. D1 keeps a short key instead of a data URL that used to be up to about 150 KB plus 280 KB of text. The account row itself is a few kilobytes. The sync payload, including history, is capped at 350 KB, and the D1 database allowance used here is 500 MB. A full account is about 0.6 MB, almost all of it in R2. A typical account is a few kilobytes in D1 and at most 210 KB in R2.
 
+## X mirror
+
+`GET /v1/x/2/profile/<handle>/statuses` and `GET /v1/x/2/profile/<handle>/articles` fetch the same JSON `api.fxtwitter.com` serves, from the Cloudflare edge instead of a GitHub Actions IP. One copy stays in the private R2 bucket at `x-cache/<handle>/<variant>-<hash>.json` for four minutes, and up to thirty hours as a fallback. A second run inside that window is served from R2, and a short fxtwitter outage returns the last good copy with `x-cache: stale` instead of an error. Only the two profile paths are accepted, so this is not an open proxy. `X_PROXY_TOKEN`, when set as a Worker secret, must match the `X-Viktorych-Token` header. The feed sync (`scripts/update_feeds.py`) tries this route before the direct fxtwitter source and sends the token only here.
+
 ## Drive
 
 Drive is a private file store for the owner account only. The Photos section uses the same vault, the same trash, and the same storage total. Albums are drive rows with no plaintext name. The browser encrypts each file with AES-256-GCM. A random file key is wrapped by a master key from the owner’s passphrase (PBKDF2-SHA256, 600000 iterations). The passphrase and the master key stay on the device. The Worker stores wrapped keys and ciphertext in D1 and sends each chunk to the backup channel with `sendDocument`. Those rows are not `telegram_files`, and `GET /tg/…` does not serve them.

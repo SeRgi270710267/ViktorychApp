@@ -221,6 +221,9 @@ jobs:
           # only for /instagram/stories. The value is masked and never printed.
           INSTAGRAM_COOKIE: ${{ secrets.IG_SESSION }}
           IG_COOKIE: ${{ secrets.IG_SESSION }}
+          # Optional. Enables the /twitter/user lane that the X feeds use as a
+          # last fallback when fxtwitter and Nitter both fail.
+          TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
       rssbridge:
         image: rssbridge/rss-bridge
         ports:
@@ -343,6 +346,10 @@ jobs:
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}
           TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
+          # The cached Worker mirror. X_PROXY_BASE overrides the built-in
+          # workers.dev URL; X_PROXY_TOKEN is optional and only sent there.
+          X_PROXY_BASE: ${{ vars.X_PROXY_BASE }}
+          X_PROXY_TOKEN: ${{ secrets.X_PROXY_TOKEN }}
           VK_SERVICE_TOKEN: ${{ secrets.VK_SERVICE_TOKEN }}
           DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_USER_TOKEN: ${{ secrets.DISCORD_USER_TOKEN }}

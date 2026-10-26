@@ -34,11 +34,6 @@ HANDLE = {
     "vk": re.compile(r"^[A-Za-z0-9_.]{1,32}$"),
     "telegram": re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$"),
 }
-NITTER = [
-    "https://nitter.meowing.monster/{handle}/rss",
-    "https://nitter.kareem.one/{handle}/rss",
-    "https://nitter.jaydenha.uk/{handle}/rss",
-]
 
 
 class Reject(Exception):
@@ -313,13 +308,15 @@ def entry_for(spec: dict) -> dict:
     feed_id = platform + ":" + handle
     profile = {"name": handle, "url": spec["url"]}
     if platform == "x":
+        from update_feeds import x_fallback_rows
+
         return {
             "id": feed_id,
             "platform": "x",
             "handle": handle,
             "adapter": "fxtwitter",
             "source_urls": ["{fxtwitterBase}/2/profile/{handle}/statuses"],
-            "fallbacks": [{"adapter": "nitter_rss", "source_urls": list(NITTER)}],
+            "fallbacks": x_fallback_rows({}),
             "limit": 6,
             "profile": profile,
         }

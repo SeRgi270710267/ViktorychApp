@@ -1,6 +1,11 @@
 {
   "rsshubBase": "http://localhost:1200",
   "fxtwitterBase": "https://api.fxtwitter.com",
+  "xProxy": true,
+  "xWorkers": 4,
+  "xMirrors": {
+    "rsshub": ["{rsshubBase}/twitter/user/{handle}"]
+  },
   "output": "feeds.json",
   "cap": 300,
   "autoAdd": {
