@@ -4219,6 +4219,8 @@ def story_checks() -> None:
     check("communities.js" in workflow and "communities.css" in workflow and "data/communities" in workflow and "reddit.yml" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")
     check(('"#/communities", "communities"' in nav_fn or 'href: "#/communities"' in nav_fn) and 'parts[0] === "communities"' in app and "ViktorychCommunities" in app and "takeCompose" in app, "Communities opens from the left nav and reuses compose")
     check("Only on ViktorychApp" in communities_js and "data-cm=\"filter\"" in communities_js and "parentId" in communities_js, "a community thread mixes Reddit and ViktorychApp replies")
+    communities_css = (ROOT / "communities.css").read_text(encoding="utf-8")
+    check("isForum" in communities_js and "Open on forum" in communities_js and "Nothing is sent to the forum." in communities_js and "cm-type-badge" in communities_css, "a mirrored Discourse forum is labelled and linked as a forum, not as a subreddit")
     index_doc = json.loads((ROOT / "data" / "communities" / "index.json").read_text(encoding="utf-8"))
     index_names = [row.get("name") for row in index_doc.get("communities") or [] if isinstance(row, dict)]
     check("teslamotors" in index_names and "grapheneos" in index_names, "the Communities index lists the built-in subreddit and Discourse forum")
