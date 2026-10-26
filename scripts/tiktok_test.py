@@ -12,12 +12,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from datetime import datetime, timedelta, timezone
 
 from tiktok_sync import (  # noqa: E402
+    POST_CAP,
     apply_fetch_identity,
     audience_of,
     backoff_seconds,
     checked_recent,
     choose_format,
     entry_to_post,
+    fetch_playlist,
+    merge_handle_posts,
     place,
     publish_iso,
     sync_handles,
@@ -126,6 +129,87 @@ def main() -> int:
     stale = {"checkedAt": (moment - timedelta(seconds=300)).strftime("%Y-%m-%dT%H:%M:%SZ")}
     assert checked_recent(fresh, 240, moment) is True
     assert checked_recent(stale, 240, moment) is False
+    merged = merge_handle_posts(
+        [
+            {"statusId": "11", "date": "2026-01-02T00:00:00Z", "handle": "pepsi", "text": "old winter post"},
+            {"statusId": "12", "date": "2025-06-01T00:00:00Z", "handle": "pepsi", "text": "very old post"},
+        ],
+        [
+            {"statusId": "13", "date": "2026-03-01T00:00:00Z", "handle": "pepsi", "text": "new post"},
+            {"statusId": "11", "date": "2026-01-02T00:00:00Z", "handle": "pepsi", "text": "old winter post", "stats": {"views": 9}},
+        ],
+    )
+    ids = [row["statusId"] for row in merged]
+    assert ids == ["13", "11", "12"]
+    assert merged[1]["stats"]["views"] == 9
+    forced = merge_handle_posts(
+        [{"statusId": "41", "date": "2020-01-01T00:00:00Z", "handle": "pepsi"}],
+        [dict({"statusId": "4" + str(n), "date": "2026-04-01T00:00:00Z", "handle": "pepsi"}) for n in range(POST_CAP + 2)],
+    )
+    assert len(forced) == POST_CAP
+    assert all(row.get("statusId") for row in forced)
+    saved_post = {
+        "statusId": "13",
+        "id": "tiktok:pepsi:13",
+        "platform": "tiktok",
+        "handle": "pepsi",
+        "date": "2026-03-01T00:00:00Z",
+    }
+    backward = {
+        "posts": [dict(saved_post, statusId="12", date="2025-06-01T00:00:00Z")],
+        "feeds": [{"id": "tiktok:pepsi", "platform": "tiktok", "handle": "pepsi"}],
+        "backfills": {"pepsi": {"done": True, "at": "2026-10-20T00:00:00Z", "posts": 8}},
+    }
+    entries = [
+        {
+            "id": "13",
+            "timestamp": 1791742719,
+            "description": "new post",
+            "uploader": "pepsi",
+            "formats": [h264],
+        },
+        {
+            "id": "14",
+            "timestamp": 1791829119,
+            "description": "newest",
+            "uploader": "pepsi",
+            "formats": [h264],
+        },
+    ]
+    import tiktok_sync as sync_module
+
+    def fake_playlist(handle, playlistend=None):
+        assert playlistend == 8  # the handle is already fully backfilled
+        assert handle == "pepsi"
+        return (entries, {"uploader_id": "pepsi-id", "uploader": "pepsi"})
+
+    real_refresh = sync_module.refresh_one
+    sync_module.refresh_one = lambda handle, prev: {"handle": handle, "live": False, "viewers": 0, "title": "", "roomId": "", "lastLiveAt": "", "checkedAt": "2026-10-23T00:00:00Z", "detail": "offline"}
+    try:
+        sync_module.fetch_playlist = fake_playlist
+        fresh_doc = sync_module.build_doc(["pepsi"], backward, posts_ok=True, config={}, accounts={"added": [], "removed": []})
+    finally:
+        sync_module.fetch_playlist = fetch_playlist
+        sync_module.refresh_one = real_refresh
+    assert fresh_doc["backfills"]["pepsi"]["done"] is True
+    ids = [row["statusId"] for row in fresh_doc["posts"]]
+    assert "14" in ids and "13" in ids
+    assert "12" in ids  # older stored posts survive every sync
+    assert fresh_doc["posts"][0]["statusId"] == "14"
+    never_seen = dict(backward)
+    never_seen["backfills"] = {}
+
+    def fake_full(handle, playlistend=None):
+        assert playlistend is None  # a handle never seen before gets a full backfill
+        return ([dict(row) for row in entries], None)
+
+    sync_module.fetch_playlist = fake_full
+    try:
+        seeded = sync_module.build_doc(["pepsi"], {"posts": [], "feeds": []}, posts_ok=True, config={}, accounts={"added": [], "removed": []})
+    finally:
+        sync_module.fetch_playlist = fetch_playlist
+        sync_module.refresh_one = real_refresh
+    assert seeded["backfills"]["pepsi"]["done"] is True
     print("tiktok normalize ok")
     return 0
 

@@ -22,7 +22,7 @@ from pathlib import Path
 
 from adapters.common import post_shell, trusted_time
 
-TRACKED = ["gabii_g5"]
+TRACKED = ["gabii_g5", "pepsi"]
 HANDLE_RE = re.compile(r"^[A-Za-z0-9._]{2,24}$")
 ROOT = Path(__file__).resolve().parents[1]
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -611,7 +611,7 @@ def patch_extractor():
     TikTokBaseIE._parse_aweme_video_web = patched
 
 
-def fetch_playlist(handle: str) -> tuple[list[dict] | None, dict | None]:
+def fetch_playlist(handle: str, playlistend: int | None = None) -> tuple[list[dict] | None, dict | None]:
     """Public posts, plus the playlist info the sync already downloads.
 
     The list is None when TikTok blocks the runner. The playlist info can
@@ -643,19 +643,30 @@ def fetch_playlist(handle: str) -> tuple[list[dict] | None, dict | None]:
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": True,
-        "playlistend": 8,
         "retries": 0,
         "extractor_retries": 0,
         "fragment_retries": 0,
         "socket_timeout": 20,
         "logger": Quiet(),
     }
-    try:
-        with YoutubeDL(opts) as ydl:
-            info = ydl.extract_info("https://www.tiktok.com/@" + handle, download=False)
-    except Exception:
-        print("[tiktok] " + BLOCKED)
-        return None, None
+    # playlistend=None walks every page of the public profile playlist (full
+    # backfill). Routine syncs only pull the newest posts.
+    if playlistend is not None:
+        opts["playlistend"] = int(playlistend)
+    info: dict | None = None
+    pauses = (120.0, 300.0)
+    for attempt in range(len(pauses) + 1):
+        try:
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info("https://www.tiktok.com/@" + handle, download=False)
+        except Exception:
+            info = None
+        if isinstance(info, dict):
+            break
+        if attempt < len(pauses):
+            pause = pauses[attempt] + random.uniform(0.0, 45.0)
+            print("[tiktok] " + BLOCKED + ", retrying " + handle + " in " + str(int(pause)) + "s")
+            time.sleep(pause)
     if not isinstance(info, dict):
         print("[tiktok] " + BLOCKED)
         return None, None
@@ -882,14 +893,52 @@ def _tiktok_row(config: dict, handle: str) -> dict | None:
     return None
 
 
-def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config: dict | None = None, accounts: dict | None = None) -> dict:
+RECENT_PLAYLIST = 8
+POST_CAP = 4000
+
+
+def merge_handle_posts(old: list[dict], built: list[dict]) -> list[dict]:
+    """Keep every post of a handle across syncs instead of dropping old ones.
+
+    A fresh fetch replaces a stored row with the same id; rows are returned
+    newest first and capped so one long backfill cannot grow forever.
+    """
+    by_id: dict[str, dict] = {}
+    for row in old or []:
+        if not isinstance(row, dict):
+            continue
+        ident = str(row.get("statusId") or "")
+        if ident:
+            by_id.setdefault(ident, row)
+    for row in built or []:
+        if not isinstance(row, dict):
+            continue
+        ident = str(row.get("statusId") or "")
+        if not ident:
+            continue
+        by_id[ident] = row
+    rows = list(by_id.values())
+    rows.sort(key=lambda row: str(row.get("date") or ""), reverse=True)
+    return rows[:POST_CAP]
+
+
+def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config: dict | None = None, accounts: dict | None = None, force_full: set[str] | None = None) -> dict:
     previous = previous if isinstance(previous, dict) else {}
     prev_live = previous.get("live") if isinstance(previous.get("live"), dict) else {}
     feeds = []
     posts = []
     if posts_ok:
+        force_full = force_full or set()
+        prev_posts: dict[str, list[dict]] = {}
+        for row in previous.get("posts") or []:
+            if isinstance(row, dict) and row.get("handle"):
+                prev_posts.setdefault(str(row["handle"]), []).append(row)
+        backfills = previous.get("backfills") if isinstance(previous.get("backfills"), dict) else {}
         for handle in handles:
-            entries, info = fetch_playlist(handle)
+            state = backfills.get(handle) if isinstance(backfills.get(handle), dict) else {}
+            never = not prev_posts.get(handle)
+            full = handle in force_full or never or not state.get("done")
+            entries, info = fetch_playlist(handle, None if full else RECENT_PLAYLIST)
             if entries is None:
                 old_posts = [row for row in (previous.get("posts") or []) if row.get("handle") == handle]
                 old_feeds = [row for row in (previous.get("feeds") or []) if row.get("handle") == handle]
@@ -900,6 +949,12 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
             if isinstance(info, dict):
                 apply_fetch_identity(config, accounts, handle, info)
             active = active_handle(config, accounts, handle)
+            seen_rows: dict[str, dict] = {}
+            for row in (prev_posts.get(handle) or []) + (prev_posts.get(active) or []):
+                ident = str(row.get("statusId") or "") if isinstance(row, dict) else ""
+                if ident and ident not in seen_rows:
+                    seen_rows[ident] = row
+            old = list(seen_rows.values())
             built = []
             avatar = ""
             name = active
@@ -914,14 +969,27 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
                     name = post["author"]
             if not built and not avatar:
                 print("[tiktok] no public posts for " + handle)
-            else:
-                print("[tiktok] " + str(len(built)) + " posts for " + handle)
+            merged = merge_handle_posts(old, built)
+            if full:
+                backfills[active] = {"done": True, "at": now_iso(), "posts": len(merged)}
+                if len(merged) >= POST_CAP:
+                    print("[tiktok] " + handle + " hit the " + str(POST_CAP) + " post cap")
+            if built or avatar:
+                print(
+                    "[tiktok] " + handle + ": " + str(len(merged)) + " posts stored"
+                    + (" from a full backfill" if full else " from the newest posts")
+                )
             feeds.append(feed_row(active, name, avatar))
-            posts.extend(built)
+            posts.extend(merged)
+            if full:
+                # Pace consecutive full walks; TikTok rate limits the next
+                # profile right after a long crawl.
+                time.sleep(45.0 + random.uniform(0.0, 30.0))
         handles = sync_handles(config, accounts)
     else:
         feeds = list(previous.get("feeds") or [])
         posts = list(previous.get("posts") or [])
+        backfills = previous.get("backfills") if isinstance(previous.get("backfills"), dict) else {}
     health = previous.get("tiktokHealth") if isinstance(previous.get("tiktokHealth"), dict) else {"recent": []}
     if not isinstance(health.get("recent"), list):
         health["recent"] = []
@@ -950,6 +1018,7 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
         "posts": posts,
         "live": live,
         "tiktokHealth": health,
+        "backfills": backfills,
         "health": {"ok": True, "detail": ""},
     }
 
@@ -969,6 +1038,13 @@ def place(doc: dict, mode: str, feeds_path: Path, owner_path: Path) -> None:
     posts = [row for row in (data.get("posts") or []) if not (isinstance(row, dict) and row.get("platform") == "tiktok")]
     feeds.extend(doc.get("feeds") or [])
     posts.extend(doc.get("posts") or [])
+    # feeds.json is the public artifact: keep only the newest short posts so a
+    # full backfill cannot bloat it. owner/tiktok.json keeps the whole archive.
+    posts.sort(key=lambda row: str(row.get("date") or "") if isinstance(row, dict) else "", reverse=True)
+    tiktok_posts = [row for row in posts if isinstance(row, dict) and row.get("platform") == "tiktok"]
+    if len(tiktok_posts) > 300:
+        keep_dates = {row.get("date") for row in tiktok_posts[:300]}
+        posts = [row for row in posts if not (isinstance(row, dict) and row.get("platform") == "tiktok" and row.get("date") not in keep_dates)]
     data["feeds"] = feeds
     data["posts"] = posts
     feeds_path.write_text(json.dumps(data, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -1009,6 +1085,24 @@ def publish_live_catalogs(feeds: Path, owner: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     live_only = "--live-only" in args
+    force_full: set[str] = set()
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token.startswith("--full="):
+            from account_identity import norm_handle
+
+            name = norm_handle(token.split("=", 1)[1])
+            if name:
+                force_full.add(name)
+        elif token == "--full" and index + 1 < len(args) and not args[index + 1].startswith("--"):
+            from account_identity import norm_handle
+
+            name = norm_handle(args[index + 1])
+            if name:
+                force_full.add(name)
+            index += 1
+        index += 1
     from account_identity import begin_run, commit_file
 
     begin_run()
@@ -1035,7 +1129,7 @@ def main(argv: list[str] | None = None) -> int:
             print("[tiktok] owner data is not uploaded yet")
             return 0
         mode = read_audience()
-        doc = build_doc(handles, previous, posts_ok=not live_only, config=config, accounts=accounts)
+        doc = build_doc(handles, previous, posts_ok=not live_only, config=config, accounts=accounts, force_full=force_full)
         doc["audience"] = mode
         if live_only:
             doc["feeds"] = previous.get("feeds") or []
