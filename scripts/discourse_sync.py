@@ -59,25 +59,172 @@ DISCOURSE_FORUMS = [
 ]
 
 
-def clean_html(raw_html: str) -> str:
-    """Safely sanitize forum HTML while preserving basic formatting."""
+# Feed size and comment depth. The hub stays small; each topic's comments live in
+# their own file under data/communities/<name>/<topic>.json and are fetched on demand.
+TOPIC_LIMIT = 40
+TOPIC_PAGE = 20
+REPLY_PAGE = 50
+REPLY_PAGE_LIMIT = 6  # up to 300 comments per topic
+FETCH_PACE = 0.15
+
+
+def html_to_text(raw_html: str) -> str:
+    """Turn forum HTML into the plain text the feed renders."""
     if not raw_html:
         return ""
-    text = str(raw_html).strip()
-    # Normalize common tags
-    return text
+    text = str(raw_html)
+    text = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", text)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)<li\b[^>]*>", "• ", text)
+    text = re.sub(r"(?i)</(p|div|li|blockquote|h[1-6]|tr|pre)>", "\n", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html.unescape(text)
+    text = text.replace("\r\n", "\n").replace("\u00a0", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
-def _fetch(url: str, timeout: int = 20) -> dict | None:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            if resp.status == 200:
-                body = resp.read()
-                return json.loads(body.decode("utf-8", errors="replace"))
-    except Exception as exc:
-        print(f"[discourse_sync] warning: failed {url}: {exc}", file=sys.stderr)
+def _fetch(url: str, timeout: int = 20, tries: int = 2) -> dict | None:
+    last_error = None
+    for attempt in range(tries):
+        req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                if resp.status == 200:
+                    body = resp.read()
+                    return json.loads(body.decode("utf-8", errors="replace"))
+        except Exception as exc:
+            last_error = exc
+            if attempt + 1 < tries:
+                time.sleep(0.6)
+    print(f"[discourse_sync] warning: failed {url}: {last_error}", file=sys.stderr)
     return None
+
+
+def _flarum_pages(base_url: str, path: str, limit: int, max_pages: int) -> list[dict]:
+    """Page a Flarum collection until it ends or the page budget is spent."""
+    separator = "&" if "?" in path else "?"
+    pages = []
+    for page in range(max_pages):
+        url = f"{base_url}/api/{path}{separator}page[limit]={limit}&page[offset]={page * limit}"
+        data = _fetch(url)
+        if not data:
+            break
+        rows = data.get("data") or []
+        if not rows:
+            break
+        pages.append(data)
+        if len(rows) < limit:
+            break
+        time.sleep(FETCH_PACE)
+    return pages
+
+
+def _post_page(base_url: str, discussion_id: str, offset: int) -> dict | None:
+    return _fetch(
+        f"{base_url}/api/posts?filter[discussion]={discussion_id}"
+        f"&page[limit]={REPLY_PAGE}&page[offset]={offset}"
+    )
+
+
+def fetch_replies(base_url: str, discussion_id: str) -> tuple[list[dict], bool] | None:
+    """All readable comments of one topic, newest page order preserved.
+
+    Returns None when the first page could not be fetched, so the previous
+    comment file is kept instead of being replaced with an empty one.
+    """
+    first = _post_page(base_url, discussion_id, 0)
+    if first is None:
+        return None
+
+    replies: list[dict] = []
+    complete = not (first.get("links") or {}).get("next")
+    data = first
+    page = 0
+    while True:
+        users = {}
+        for inc in data.get("included", []):
+            if inc.get("type") == "users":
+                u_attrs = inc.get("attributes") or {}
+                users[str(inc.get("id"))] = {
+                    "username": u_attrs.get("username", "anonymous"),
+                    "displayName": u_attrs.get("displayName") or u_attrs.get("username", "anonymous"),
+                }
+        for post in data.get("data") or []:
+            attrs = post.get("attributes") or {}
+            number = attrs.get("number")
+            if number is not None and number <= 1:
+                continue
+            u_ref = (post.get("relationships", {}).get("user", {}).get("data") or {})
+            u_info = users.get(str(u_ref.get("id") or "")) or {"username": "anonymous", "displayName": "anonymous"}
+            text = html_to_text(attrs.get("contentHtml") or "")
+            if not text:
+                # Deleted or hidden posts come back without content; they are not comments.
+                continue
+            created_iso = attrs.get("createdAt") or ""
+            created_ts = int(time.time())
+            if created_iso:
+                try:
+                    created_ts = int(datetime.fromisoformat(created_iso.replace("Z", "+00:00")).timestamp())
+                except Exception:
+                    pass
+            replies.append({
+                "id": str(post.get("id")),
+                "number": number,
+                "author": u_info["displayName"] or u_info["username"],
+                "authorUsername": u_info["username"],
+                "score": attrs.get("likesCount", 0) or 0,
+                "created": created_ts,
+                "parent": discussion_id,
+                "text": text,
+            })
+        page += 1
+        if complete or page >= REPLY_PAGE_LIMIT:
+            break
+        time.sleep(FETCH_PACE)
+        nxt = _post_page(base_url, discussion_id, page * REPLY_PAGE)
+        if nxt is None:
+            # A dropped page is not a reason to wipe the topic: keep what we have,
+            # but mark it partial so the client offers the forum link.
+            break
+        data = nxt
+        complete = not (data.get("links") or {}).get("next")
+
+    return replies, complete
+
+
+def write_comments(name: str, discussion_id: str, total: int, replies: list[dict], complete: bool) -> None:
+    folder = OUT / name
+    folder.mkdir(parents=True, exist_ok=True)
+    doc = {
+        "id": discussion_id,
+        "total": max(int(total or 0), len(replies)),
+        "loaded": len(replies),
+        "complete": bool(complete),
+        "replies": replies,
+    }
+    path = folder / f"{discussion_id}.json"
+    text = json.dumps(doc, ensure_ascii=False, separators=(",", ":")) + "\n"
+    try:
+        if path.read_text(encoding="utf-8") == text:
+            return
+    except OSError:
+        pass
+    path.write_text(text, encoding="utf-8")
+
+
+def prune_comments(name: str, keep_ids: set[str]) -> None:
+    folder = OUT / name
+    if not folder.is_dir():
+        return
+    for path in folder.glob("*.json"):
+        if path.stem not in keep_ids:
+            try:
+                path.unlink()
+            except OSError:
+                pass
 
 
 def sync_flarum(cfg: dict) -> dict:
@@ -100,155 +247,118 @@ def sync_flarum(cfg: dict) -> dict:
             "description": attrs.get("description", "")
         }
 
-    # 2. Fetch discussions
-    disc_data = _fetch(f"{base_url}/api/discussions?include=user,lastPostedUser,tags,firstPost") or {}
+    # 2. Fetch discussions (two pages of 20 at most)
+    disc_pages = _flarum_pages(
+        base_url,
+        "discussions?include=user,lastPostedUser,tags,firstPost",
+        TOPIC_PAGE,
+        max(1, (TOPIC_LIMIT + TOPIC_PAGE - 1) // TOPIC_PAGE),
+    )
     included_users = {}
     included_posts = {}
-    for inc in disc_data.get("included", []):
-        itype = inc.get("type")
-        iid = str(inc.get("id"))
-        if itype == "users":
-            u_attrs = inc.get("attributes", {})
-            included_users[iid] = {
-                "username": u_attrs.get("username", "anonymous"),
-                "displayName": u_attrs.get("displayName") or u_attrs.get("username", "anonymous"),
-                "avatarUrl": u_attrs.get("avatarUrl") or ""
-            }
-        elif itype == "posts":
-            p_attrs = inc.get("attributes", {})
-            included_posts[iid] = {
-                "id": iid,
-                "createdAt": p_attrs.get("createdAt"),
-                "contentHtml": p_attrs.get("contentHtml", ""),
-                "likesCount": p_attrs.get("likesCount", 0)
-            }
-
-    topics = []
-    for disc in disc_data.get("data", []):
-        d_id = str(disc.get("id"))
-        attrs = disc.get("attributes", {})
-        rels = disc.get("relationships", {})
-
-        # User
-        user_id = str((rels.get("user", {}).get("data") or {}).get("id") or "")
-        user = included_users.get(user_id) or {"username": "GrapheneOS", "displayName": "GrapheneOS", "avatarUrl": ""}
-
-        # Tags
-        tag_list = []
-        cat_name = "General"
-        cat_color = "#71767b"
-        for t_ref in (rels.get("tags", {}).get("data") or []):
-            t_obj = tags_map.get(str(t_ref.get("id")))
-            if t_obj:
-                tag_list.append(t_obj["name"])
-                if cat_name == "General":
-                    cat_name = t_obj["name"]
-                    cat_color = t_obj["color"]
-
-        # First post
-        first_post_id = str((rels.get("firstPost", {}).get("data") or {}).get("id") or "")
-        first_post = included_posts.get(first_post_id) or {}
-        text = first_post.get("contentHtml") or attrs.get("firstPostExcerpt") or ""
-
-        # Created timestamp
-        created_iso = attrs.get("createdAt") or ""
-        created_ts = int(time.time())
-        if created_iso:
-            try:
-                dt = datetime.fromisoformat(created_iso.replace("Z", "+00:00"))
-                created_ts = int(dt.timestamp())
-            except Exception:
-                pass
-
-        last_posted_iso = attrs.get("lastPostedAt") or ""
-        last_posted_ts = created_ts
-        if last_posted_iso:
-            try:
-                dt = datetime.fromisoformat(last_posted_iso.replace("Z", "+00:00"))
-                last_posted_ts = int(dt.timestamp())
-            except Exception:
-                pass
-
-        slug = attrs.get("slug") or d_id
-        topic_url = f"{base_url}/d/{slug}"
-
-        topics.append({
-            "id": d_id,
-            "title": attrs.get("title", ""),
-            "author": user["displayName"] or user["username"],
-            "authorUsername": user["username"],
-            "authorAvatar": user["avatarUrl"],
-            "score": attrs.get("commentCount", 0),
-            "comments": attrs.get("commentCount", 0),
-            "views": attrs.get("participantCount", 1) * 35,  # estimated views if not directly reported
-            "participantCount": attrs.get("participantCount", 1),
-            "created": created_ts,
-            "lastPostedAt": last_posted_ts,
-            "category": cat_name,
-            "categoryColor": cat_color,
-            "tags": tag_list,
-            "pinned": bool(attrs.get("isSticky")),
-            "locked": bool(attrs.get("isLocked")),
-            "url": topic_url,
-            "media": [],
-            "text": text,
-            "replies": []
-        })
-
-    # 3. For the top 8 topics, fetch replies
-    for topic in topics[:8]:
-        d_id = topic["id"]
-        posts_data = _fetch(f"{base_url}/api/posts?filter[discussion]={d_id}&include=user")
-        if not posts_data:
-            continue
-        post_users = {}
-        for inc in posts_data.get("included", []):
-            if inc.get("type") == "users":
-                u_id = str(inc.get("id"))
+    for disc_data in disc_pages:
+        for inc in disc_data.get("included", []):
+            itype = inc.get("type")
+            iid = str(inc.get("id"))
+            if itype == "users":
                 u_attrs = inc.get("attributes", {})
-                post_users[u_id] = {
+                included_users[iid] = {
                     "username": u_attrs.get("username", "anonymous"),
                     "displayName": u_attrs.get("displayName") or u_attrs.get("username", "anonymous"),
                     "avatarUrl": u_attrs.get("avatarUrl") or ""
                 }
+            elif itype == "posts":
+                p_attrs = inc.get("attributes", {})
+                included_posts[iid] = {
+                    "id": iid,
+                    "createdAt": p_attrs.get("createdAt"),
+                    "contentHtml": p_attrs.get("contentHtml", ""),
+                    "likesCount": p_attrs.get("likesCount", 0)
+                }
 
-        replies = []
-        for p in posts_data.get("data", []):
-            p_attrs = p.get("attributes", {})
-            p_id = str(p.get("id"))
-            p_num = p_attrs.get("number", 1)
-            if p_num == 1:
-                # First post; update OP text if detailed html is available
-                if p_attrs.get("contentHtml"):
-                    topic["text"] = p_attrs.get("contentHtml")
-                continue
+    topics = []
+    for disc_data in disc_pages:
+        for disc in disc_data.get("data", []):
+            d_id = str(disc.get("id"))
+            attrs = disc.get("attributes", {})
+            rels = disc.get("relationships", {})
 
-            u_ref = (p.get("relationships", {}).get("user", {}).get("data") or {})
-            u_id = str(u_ref.get("id") or "")
-            u_info = post_users.get(u_id) or {"username": "anonymous", "displayName": "anonymous", "avatarUrl": ""}
+            # User
+            user_id = str((rels.get("user", {}).get("data") or {}).get("id") or "")
+            user = included_users.get(user_id) or {"username": "GrapheneOS", "displayName": "GrapheneOS", "avatarUrl": ""}
 
-            p_iso = p_attrs.get("createdAt") or ""
-            p_ts = int(time.time())
-            if p_iso:
+            # Tags
+            tag_list = []
+            cat_name = "General"
+            cat_color = "#71767b"
+            for t_ref in (rels.get("tags", {}).get("data") or []):
+                t_obj = tags_map.get(str(t_ref.get("id")))
+                if t_obj:
+                    tag_list.append(t_obj["name"])
+                    if cat_name == "General":
+                        cat_name = t_obj["name"]
+                        cat_color = t_obj["color"]
+
+            # First post
+            first_post_id = str((rels.get("firstPost", {}).get("data") or {}).get("id") or "")
+            first_post = included_posts.get(first_post_id) or {}
+            text = html_to_text(first_post.get("contentHtml") or attrs.get("firstPostExcerpt") or "")
+
+            # Created timestamp
+            created_iso = attrs.get("createdAt") or ""
+            created_ts = int(time.time())
+            if created_iso:
                 try:
-                    dt = datetime.fromisoformat(p_iso.replace("Z", "+00:00"))
-                    p_ts = int(dt.timestamp())
+                    dt = datetime.fromisoformat(created_iso.replace("Z", "+00:00"))
+                    created_ts = int(dt.timestamp())
                 except Exception:
                     pass
 
-            replies.append({
-                "id": p_id,
-                "number": p_num,
-                "author": u_info["displayName"] or u_info["username"],
-                "authorUsername": u_info["username"],
-                "authorAvatar": u_info["avatarUrl"],
-                "score": p_attrs.get("likesCount", 0),
-                "created": p_ts,
-                "parent": d_id,
-                "text": p_attrs.get("contentHtml") or ""
+            last_posted_iso = attrs.get("lastPostedAt") or ""
+            last_posted_ts = created_ts
+            if last_posted_iso:
+                try:
+                    dt = datetime.fromisoformat(last_posted_iso.replace("Z", "+00:00"))
+                    last_posted_ts = int(dt.timestamp())
+                except Exception:
+                    pass
+
+            slug = attrs.get("slug") or d_id
+            topic_url = f"{base_url}/d/{slug}"
+
+            topics.append({
+                "id": d_id,
+                "title": attrs.get("title", ""),
+                "author": user["displayName"] or user["username"],
+                "authorUsername": user["username"],
+                "authorAvatar": user["avatarUrl"],
+                "score": attrs.get("commentCount", 0),
+                "comments": attrs.get("commentCount", 0),
+                "views": attrs.get("participantCount", 1) * 35,  # estimated views if not directly reported
+                "participantCount": attrs.get("participantCount", 1),
+                "created": created_ts,
+                "lastPostedAt": last_posted_ts,
+                "category": cat_name,
+                "categoryColor": cat_color,
+                "tags": tag_list,
+                "pinned": bool(attrs.get("isSticky")),
+                "locked": bool(attrs.get("isLocked")),
+                "url": topic_url,
+                "media": [],
+                "text": text,
+                "replies": []
             })
 
-        topic["replies"] = replies
+    # 3. Comments for every mirrored topic, in their own on-demand file.
+    for topic in topics:
+        loaded = fetch_replies(base_url, topic["id"])
+        if loaded is None:
+            continue
+        replies, complete = loaded
+        topic["repliesTotal"] = int(topic["comments"] or 0)
+        write_comments(name, topic["id"], topic["comments"], replies, complete)
+        time.sleep(FETCH_PACE)
+    prune_comments(name, {topic["id"] for topic in topics})
 
     doc = {
         "name": name,
@@ -414,6 +524,8 @@ def run_sync() -> bool:
                 out_path = OUT / f"{cfg['name']}.json"
                 out_path.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
                 update_index(doc)
+                if cfg.get("api_type") != "flarum":
+                    prune_comments(cfg["name"], {str(post.get("id")) for post in doc["posts"]})
                 print(f"[discourse_sync] Successfully mirrored {len(doc['posts'])} topics for {cfg['name']}.")
             else:
                 print(f"[discourse_sync] Warning: No topics returned for {cfg['name']}. Keeping it in the index.", file=sys.stderr)
@@ -451,6 +563,16 @@ def selftest() -> int:
             rows = json.loads((OUT / "index.json").read_text(encoding="utf-8"))["communities"]
             assert [row["name"] for row in rows] == ["grapheneos_test"], rows
             assert rows[0]["type"] == "discourse" and rows[0]["subscribers"] == 1000, rows
+
+            # Comments become plain text and travel in their own per-topic file.
+            assert html_to_text("<p>Hello <b>world</b><br>second line</p>") == "Hello world\nsecond line", html_to_text("<p>x</p>")
+            assert html_to_text("a &amp; b") == "a & b", html_to_text("a &amp; b")
+            write_comments("grapheneos_test", "42", 3, [{"id": "1", "text": "hi"}], True)
+            saved = json.loads((OUT / "grapheneos_test" / "42.json").read_text(encoding="utf-8"))
+            assert saved["total"] == 3 and saved["loaded"] == 1 and saved["complete"] is True, saved
+            write_comments("grapheneos_test", "43", 0, [], True)
+            prune_comments("grapheneos_test", {"42"})
+            assert sorted(p.name for p in (OUT / "grapheneos_test").glob("*.json")) == ["42.json"]
     finally:
         OUT = saved_out
     print("discourse_sync selftest ok")

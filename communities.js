@@ -25,6 +25,8 @@
     search: "",
     showAdd: false,
     downvotes: getDownvotes(),
+    comments: {},
+    commentPromises: {},
     loading: {}
   };
 
@@ -304,6 +306,34 @@
     return state.docPromises[name];
   }
 
+  /* Comments live in one file per topic: the hub stays light, and a thread
+     fetches its whole page of comments on demand instead of a partial preview. */
+  function commentKey(name, id) {
+    return name + "/" + id;
+  }
+  function loadComments(name, id, force) {
+    var key = commentKey(name, id);
+    if (!force && state.comments[key]) return Promise.resolve(state.comments[key]);
+    if (!force && state.commentPromises[key]) return state.commentPromises[key];
+    var url = basePath() + "data/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(id) + ".json";
+    state.commentPromises[key] = fetch(url, { cache: "no-cache" }).then(function (res) {
+      if (!res.ok) throw new Error("comments " + res.status);
+      return res.json();
+    }).then(function (doc) {
+      var data = doc && doc.replies ? doc : { replies: [] };
+      data.at = Date.now();
+      state.comments[key] = data;
+      delete state.commentPromises[key];
+      return data;
+    }).catch(function () {
+      /* Keep the thread usable: fall back to any comments shipped in the doc. */
+      state.comments[key] = { replies: [], missing: true, at: Date.now() };
+      delete state.commentPromises[key];
+      return state.comments[key];
+    });
+    return state.commentPromises[key];
+  }
+
   function loadInternal(name) {
     if (!signedIn()) {
       state.internal[name] = null;
@@ -385,14 +415,22 @@
     });
     return items;
   }
-  function repliesFor(name, parentId, doc) {
-    var reddit = [];
-    (doc.posts || []).forEach(function (post) {
+  function inlineReplies(doc, parentId) {
+    var out = [];
+    ((doc && doc.posts) || []).forEach(function (post) {
       (post.replies || []).forEach(function (reply) {
-        if (reply.parent === parentId && !hidden(reply.author, reply.text, "reddit")) {
-          reddit.push({ source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply });
-        }
+        if (reply.parent === parentId) out.push(reply);
       });
+    });
+    return out;
+  }
+  function repliesFor(name, parentId, doc) {
+    var cached = state.comments[commentKey(name, parentId)];
+    var list = cached && !cached.missing ? (cached.replies || []) : inlineReplies(doc, parentId);
+    var reddit = list.filter(function (reply) {
+      return !hidden(reply.author, reply.text, "reddit");
+    }).map(function (reply) {
+      return { source: "reddit", id: reply.id, created: (Number(reply.created) || 0) * 1000, reply: reply };
     });
     var internal = internalPosts(name).filter(function (post) { return post.parentId === parentId; }).map(function (post) {
       return { source: "app", id: post.id, created: Number(post.createdAt) || 0, post: post };
@@ -823,26 +861,40 @@
     else if (reddit && reddit.kind === "post") focus = redditCard(name, reddit.post, true);
     else if (reddit && reddit.kind === "reply") {
       focus = '<article class="cm-reddit-comment">' +
-        '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + svgSnoo + '</span><span class="cm-comment-line"></span></div>' +
+        '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + (isForum(name) ? svgCommunities : svgSnoo) + '</span><span class="cm-comment-line"></span></div>' +
         '<div class="cm-comment-body">' +
           '<div class="cm-comment-byline"><span class="cm-comment-author">' + (isForum(name) ? "" : "u/") + esc(cleanAuthor(reddit.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo((Number(reddit.reply.created) || 0) * 1000)) + '</span></div>' +
-          '<div class="cm-comment-text">' + esc(reddit.reply.text || "") + '</div>' +
+          '<div class="cm-comment-text">' + esc(cleanRedditText(reddit.reply.text)) + '</div>' +
         '</div>' +
       '</article>';
     }
 
     if (!focus) return head(communityLabel(name), "#/communities/" + name) + '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + "</h2></div>";
 
-    var kids = repliesFor(name, id, doc).map(function (item) {
+    /* A topic thread loads its own comment page; a reply focus reuses whatever
+       the topic file already brought in. */
+    var isTopic = !!(reddit && reddit.kind === "post" && !(internal && signedIn()));
+    var comments = state.comments[commentKey(name, id)];
+    var commentsLoading = isTopic && isForum(name) && !comments;
+    if (commentsLoading) {
+      loadComments(name, id).then(function () {
+        var current = (location.hash || "").split("?")[0];
+        if (current.indexOf("/communities/" + name + "/" + id) >= 0) render();
+      });
+    }
+    var totalComments = isTopic ? (Number(reddit.post.comments) || 0) : 0;
+
+    var kidItems = repliesFor(name, id, doc);
+    var kids = kidItems.map(function (item) {
       if (item.source === "reddit") {
         var replyScore = Number(item.reply.score) || 0;
         var rV = voteState(name, item.reply.id);
         var rTotal = replyScore + (rV.up ? 1 : 0) + (rV.down ? -1 : 0);
         return '<article class="cm-reddit-comment reply-card" data-post="' + esc(item.reply.id) + '">' +
-          '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + svgSnoo + '</span><span class="cm-comment-line"></span></div>' +
+          '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + (isForum(name) ? svgCommunities : svgSnoo) + '</span><span class="cm-comment-line"></span></div>' +
           '<div class="cm-comment-body">' +
             '<div class="cm-comment-byline"><span class="cm-comment-author">' + (isForum(name) ? "" : "u/") + esc(cleanAuthor(item.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo(item.created)) + '</span></div>' +
-            '<div class="cm-comment-text">' + esc(item.reply.text || "") + '</div>' +
+            '<div class="cm-comment-text">' + esc(cleanRedditText(item.reply.text)) + '</div>' +
             '<div class="cm-comment-actions">' +
               votePill(name, item.reply.id, rTotal, rV, true) +
               '<button class="cm-reddit-action-btn" type="button" data-cm="focus-reply">' + svgComment + '<span>' + esc(tr("Reply")) + '</span></button>' +
@@ -895,11 +947,30 @@
         '</form>'
       : '<div class="cm-footer-note"><p>' + esc(tr("Sign in to post here.")) + '</p></div>';
 
+    var headCount = totalComments;
+    if (isTopic && comments && comments.complete && !kidItems.length) headCount = 0;
+    var commentsHead = '<div class="cm-thread-replies-head">' + esc(tr("Comments")) +
+      (headCount ? ' <span class="cm-thread-count">' + esc(count(headCount)) + '</span>' : "") + '</div>';
+    var commentsNote = "";
+    var commentsBody = kids;
+    if (isTopic && commentsLoading) {
+      commentsBody = '<div class="reply-empty">' + esc(tr("Loading comments…")) + '</div>';
+    } else if (isTopic && comments && comments.missing && !kidItems.length) {
+      commentsBody = '<div class="reply-empty"><p>' + esc(tr("Couldn't load the comments.")) + '</p>' +
+        '<button class="retry" type="button" data-cm="retry-comments" data-sub="' + esc(name) + '" data-post="' + esc(id) + '">' + esc(tr("Retry")) + '</button></div>';
+    } else if (isTopic && !kidItems.length) {
+      commentsBody = '<div class="reply-empty">' + esc(tr("No comments yet.")) + '</div>';
+    } else if (isTopic && comments && comments.complete === false && kidItems.length) {
+      var shownTotal = Number(comments.total) || totalComments || kidItems.length;
+      commentsNote = '<p class="cm-thread-note">' + esc(tr("Showing {shown} of {total}", { shown: kidItems.length, total: shownTotal })) + '</p>';
+    }
+
     return head(communityLabel(name), "#/communities/" + name) +
       focus +
       chips(name) +
-      '<div class="cm-thread-replies-head">' + esc(tr("Comments")) + '</div>' +
-      kids +
+      commentsHead +
+      commentsNote +
+      commentsBody +
       box;
   }
 
@@ -1035,6 +1106,17 @@
         delete state.internal[el.dataset.sub];
         loadInternal(el.dataset.sub).then(render);
       });
+      return;
+    }
+    if (act === "retry-comments") {
+      event.preventDefault();
+      event.stopPropagation();
+      var cSub = el.dataset.sub;
+      var cPost = el.dataset.post;
+      if (cSub && cPost) {
+        delete state.comments[commentKey(cSub, cPost)];
+        loadComments(cSub, cPost, true).finally(render);
+      }
       return;
     }
     if (act === "retry") {
