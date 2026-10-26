@@ -85,15 +85,34 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restore the ffmpeg build
+        if: steps.secrets.outputs.present == 'true'
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ffmpeg-dist
+          key: ffmpeg-linux64-gpl-v1
+
+      - name: Restore the pip cache
+        if: steps.secrets.outputs.present == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py312-media-${{ github.run_id }}
+          restore-keys: |
+            pip-${{ runner.os }}-py312-media-
+            pip-${{ runner.os }}-py312-
+
       - name: Install ffmpeg
         if: steps.secrets.outputs.present == 'true'
         timeout-minutes: 8
         run: |
           set -euo pipefail
-          mkdir -p /tmp/ffmpeg-dist
-          curl -fsSL --retry 5 --retry-all-errors -o /tmp/ffmpeg.tar.xz \
-            https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
-          tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-dist
+          if [ -z "$(find /tmp/ffmpeg-dist -type f -path '*/bin/ffmpeg' 2>/dev/null | head -n 1)" ]; then
+            mkdir -p /tmp/ffmpeg-dist
+            curl -fsSL --retry 5 --retry-all-errors -o /tmp/ffmpeg.tar.xz \
+              https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz
+            tar -xJf /tmp/ffmpeg.tar.xz -C /tmp/ffmpeg-dist
+          fi
           bin=$(find /tmp/ffmpeg-dist -type f -path '*/bin/ffmpeg' | head -n 1)
           probe=$(find /tmp/ffmpeg-dist -type f -path '*/bin/ffprobe' | head -n 1)
           test -n "$bin"
@@ -106,6 +125,13 @@ jobs:
       - name: Install yt-dlp and gallery-dl
         if: steps.secrets.outputs.present == 'true'
         run: python3 -m pip install --disable-pip-version-check 'yt-dlp==2026.10.21' 'gallery-dl==1.32.17'
+
+      - name: Save the pip cache
+        if: steps.secrets.outputs.present == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py312-media-${{ github.run_id }}
 
       - name: Download new posts from added accounts
         if: steps.secrets.outputs.present == 'true'
