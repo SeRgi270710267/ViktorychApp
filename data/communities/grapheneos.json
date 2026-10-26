@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T17:03:01Z",
+  "fetchedAt": "2026-10-26T17:08:21Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -582,6 +582,56 @@
       "repliesTotal": 1
     },
     {
+      "id": "43107",
+      "title": "Install into system partition",
+      "author": "redacted_handle",
+      "authorUsername": "redacted_handle",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1793025420,
+      "lastPostedAt": 1793034364,
+      "category": "Off Topic",
+      "categoryColor": "#c55bec",
+      "tags": [
+        "Off Topic"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43107-install-into-system-partition",
+      "media": [],
+      "text": "Is there a way to install anything into system space without unlock the device or is this not possible?\n\nIs there a way to install anything surviving to a wipe without unlock it?\n\nThanks",
+      "replies": [],
+      "repliesTotal": 2
+    },
+    {
+      "id": "43092",
+      "title": "Viber",
+      "author": "redacted_handle",
+      "authorUsername": "redacted_handle",
+      "authorAvatar": "",
+      "score": 8,
+      "comments": 8,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792936160,
+      "lastPostedAt": 1793034226,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43092-viber",
+      "media": [],
+      "text": "Hi!\n\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.\n\nIs there a way to not show the call log and activate the account?",
+      "replies": [],
+      "repliesTotal": 8
+    },
+    {
       "id": "43073",
       "title": "How to Convince People to Use GrapheneOS",
       "author": "Reboot",
@@ -735,31 +785,6 @@
       "repliesTotal": 3
     },
     {
-      "id": "43092",
-      "title": "Viber",
-      "author": "redacted_handle",
-      "authorUsername": "redacted_handle",
-      "authorAvatar": "",
-      "score": 7,
-      "comments": 7,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1792936160,
-      "lastPostedAt": 1793027393,
-      "category": "Third party apps and services",
-      "categoryColor": "#994ce6",
-      "tags": [
-        "Third party apps and services"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43092-viber",
-      "media": [],
-      "text": "Hi!\n\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.\n\nIs there a way to not show the call log and activate the account?",
-      "replies": [],
-      "repliesTotal": 7
-    },
-    {
       "id": "42926",
       "title": "Browser-Fingerprinting over multiple profiles",
       "author": "magic-carpet-ride",
@@ -888,31 +913,6 @@
       "text": "I was looking for a way to let DeepL give me the pronunciation of a word and activated Talkback in accessibility services, from this moment on every element I touch on the screen gets a green frame and I can do nothing more, no gesture navigation, phone is locked after pressing the power button to reboot the phone but I can't reboot or unlock.\n\nWhat to do now to stop this?",
       "replies": [],
       "repliesTotal": 15
-    },
-    {
-      "id": "43107",
-      "title": "Install into system partition",
-      "author": "redacted_handle",
-      "authorUsername": "redacted_handle",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1793025420,
-      "lastPostedAt": 1793025420,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43107-install-into-system-partition",
-      "media": [],
-      "text": "Is there a way to install anything into system space without unlock the device or is this not possible?\n\nIs there a way to install anything surviving to a wipe without unlock it?\n\nThanks",
-      "replies": [],
-      "repliesTotal": 1
     },
     {
       "id": "4273",
