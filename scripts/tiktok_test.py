@@ -191,6 +191,7 @@ def main() -> int:
     finally:
         sync_module.fetch_playlist = fetch_playlist
         sync_module.refresh_one = real_refresh
+
     assert fresh_doc["backfills"]["pepsi"]["done"] is True
     ids = [row["statusId"] for row in fresh_doc["posts"]]
     assert "14" in ids and "13" in ids
@@ -200,16 +201,29 @@ def main() -> int:
     never_seen["backfills"] = {}
 
     def fake_full(handle, playlistend=None):
-        assert playlistend is None  # a handle never seen before gets a full backfill
+        stages.append(playlistend)
         return ([dict(row) for row in entries], None)
 
+    stages: list = []
     sync_module.fetch_playlist = fake_full
+    real_sleep = sync_module.time.sleep
+    sync_module.time.sleep = lambda seconds: None
     try:
-        seeded = sync_module.build_doc(["pepsi"], {"posts": [], "feeds": []}, posts_ok=True, config={}, accounts={"added": [], "removed": []})
+        # Stage 1 of the ladder: a partial walk is banked but not done.
+        first = sync_module.build_doc(["pepsi"], {"posts": [], "feeds": []}, posts_ok=True, config={}, accounts={"added": [], "removed": []})
+        assert stages[-1] == sync_module.BACKFILL_LADDER[0]
+        assert first["backfills"]["pepsi"]["done"] is False
+        assert first["backfills"]["pepsi"]["stage"] == 1
+        # Climbing the ladder ends in a full walk marked done.
+        doc = first
+        for step in range(len(sync_module.BACKFILL_LADDER) - 1):
+            doc = sync_module.build_doc(["pepsi"], doc, posts_ok=True, config={}, accounts={"added": [], "removed": []})
+        assert stages[-1] is None
+        assert doc["backfills"]["pepsi"]["done"] is True
     finally:
+        sync_module.time.sleep = real_sleep
         sync_module.fetch_playlist = fetch_playlist
         sync_module.refresh_one = real_refresh
-    assert seeded["backfills"]["pepsi"]["done"] is True
     print("tiktok normalize ok")
     return 0
 

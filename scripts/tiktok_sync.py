@@ -896,6 +896,11 @@ def _tiktok_row(config: dict, handle: str) -> dict | None:
 RECENT_PLAYLIST = 8
 POST_CAP = 4000
 
+# A fresh handle is backed up in growing passes: each successful stage banks
+# its posts through merge_handle_posts, so a blocked walk loses nothing and
+# resumes from the saved stage on the next sync instead of starting over.
+BACKFILL_LADDER = [150, 600, 2000, None]
+
 
 def merge_handle_posts(old: list[dict], built: list[dict]) -> list[dict]:
     """Keep every post of a handle across syncs instead of dropping old ones.
@@ -937,8 +942,12 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
         for handle in handles:
             state = backfills.get(handle) if isinstance(backfills.get(handle), dict) else {}
             never = not prev_posts.get(handle)
-            full = handle in force_full or never or not state.get("done")
-            entries, info = fetch_playlist(handle, None if full else RECENT_PLAYLIST)
+            forced = handle in force_full
+            stage = state.get("stage")
+            if not isinstance(stage, int) or not 0 <= stage < len(BACKFILL_LADDER):
+                stage = 0 if (never or forced or not state.get("done")) else -1
+            final_stage = stage == len(BACKFILL_LADDER) - 1
+            entries, info = fetch_playlist(handle, None if final_stage else (RECENT_PLAYLIST if stage < 0 else BACKFILL_LADDER[stage]))
             if entries is None:
                 old_posts = [row for row in (previous.get("posts") or []) if row.get("handle") == handle]
                 old_feeds = [row for row in (previous.get("feeds") or []) if row.get("handle") == handle]
@@ -970,19 +979,24 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
             if not built and not avatar:
                 print("[tiktok] no public posts for " + handle)
             merged = merge_handle_posts(old, built)
-            if full:
-                backfills[active] = {"done": True, "at": now_iso(), "posts": len(merged)}
-                if len(merged) >= POST_CAP:
-                    print("[tiktok] " + handle + " hit the " + str(POST_CAP) + " post cap")
+            walked = stage >= 0 and entries is not None
+            if walked:
+                if final_stage:
+                    backfills[active] = {"done": True, "at": now_iso(), "posts": len(merged)}
+                    if len(merged) >= POST_CAP:
+                        print("[tiktok] " + handle + " hit the " + str(POST_CAP) + " post cap")
+                else:
+                    backfills[active] = {"done": False, "stage": stage + 1, "at": now_iso(), "posts": len(merged)}
             if built or avatar:
-                print(
-                    "[tiktok] " + handle + ": " + str(len(merged)) + " posts stored"
-                    + (" from a full backfill" if full else " from the newest posts")
+                label = "the newest posts" if stage < 0 else (
+                    "backfill stage " + str(stage + 1) + "/" + str(len(BACKFILL_LADDER))
+                    if not final_stage else "a full backfill"
                 )
+                print("[tiktok] " + handle + ": " + str(len(merged)) + " posts stored from " + label)
             feeds.append(feed_row(active, name, avatar))
             posts.extend(merged)
-            if full:
-                # Pace consecutive full walks; TikTok rate limits the next
+            if walked:
+                # Pace consecutive walks; TikTok rate limits the next
                 # profile right after a long crawl.
                 time.sleep(45.0 + random.uniform(0.0, 30.0))
         handles = sync_handles(config, accounts)
