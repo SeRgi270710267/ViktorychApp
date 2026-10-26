@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T07:59:13Z",
+  "fetchedAt": "2026-10-26T08:38:58Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,102 @@
       ]
     },
     {
+      "id": "43100",
+      "title": "GrapheneOS TalkBack version 23 released",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 3,
+      "comments": 3,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1792982355,
+      "lastPostedAt": 1793003477,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released",
+      "media": [],
+      "text": "<p>GrapheneOS TalkBack version 23 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/TalkBack/releases/tag/23\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/TalkBack/releases/tag/23</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>\n",
+      "replies": [
+        {
+          "id": "277444",
+          "number": 2,
+          "author": "Johnnyloans",
+          "authorUsername": "Johnnyloans",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
+          "score": 8,
+          "created": 1792983201,
+          "parent": "43100",
+          "text": "<p>Thank you so much to these 2!</p>\n\n<blockquote><p>The work to modernize our fork of TalkBack was started by a blind GrapheneOS user who has spent <strong>several years</strong> contributing to GrapheneOS and was completed by one of our newly hired app developers.</p></blockquote>"
+        },
+        {
+          "id": "277465",
+          "number": 3,
+          "author": "Pocketstar",
+          "authorUsername": "Pocketstar",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/oeU6bR1rRuJjArKE.png",
+          "score": 0,
+          "created": 1793003477,
+          "parent": "43100",
+          "text": "<p>My girlfriend is also blind, therefore she will greatly benefit by the Talkback update, we really appreciate the accessibility support, thank you so much!</p>"
+        }
+      ]
+    },
+    {
+      "id": "43080",
+      "title": "grapheneos typing character before another backwards",
+      "author": "mandan",
+      "authorUsername": "mandan",
+      "authorAvatar": "",
+      "score": 11,
+      "comments": 11,
+      "views": 315,
+      "participantCount": 9,
+      "created": 1792882745,
+      "lastPostedAt": 1793001780,
+      "category": "Pixel 9a",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 9a"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
+      "media": [],
+      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
+      "replies": []
+    },
+    {
+      "id": "43073",
+      "title": "How to Convince People to Use GrapheneOS",
+      "author": "Reboot",
+      "authorUsername": "Reboot",
+      "authorAvatar": "",
+      "score": 41,
+      "comments": 41,
+      "views": 840,
+      "participantCount": 24,
+      "created": 1792855754,
+      "lastPostedAt": 1793001720,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
+      "media": [],
+      "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
+      "replies": []
+    },
+    {
       "id": "43101",
       "title": "Cant load Android system after booting with low/zero battery",
       "author": "carbonated_user",
@@ -2099,80 +2195,6 @@
       "url": "https://discuss.grapheneos.org/d/43092-viber",
       "media": [],
       "text": "<p>Hi!<br>\nunfortunately, I now must use Viber for work. I downloaded it, started the setup and this damn app demands access to call logs. It is either I allow, either activation fails.<br>\nIs there a way to not show the call log and activate the account?</p>",
-      "replies": []
-    },
-    {
-      "id": "43080",
-      "title": "grapheneos typing character before another backwards",
-      "author": "mandan",
-      "authorUsername": "mandan",
-      "authorAvatar": "",
-      "score": 10,
-      "comments": 10,
-      "views": 280,
-      "participantCount": 8,
-      "created": 1792882745,
-      "lastPostedAt": 1792993251,
-      "category": "Pixel 9a",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 9a"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43080-grapheneos-typing-character-before-another-backwards",
-      "media": [],
-      "text": "<p>Greetings, have and odd occurence of wondering if its me or programing for the last month. As I type on the pixel 9a using stock keyboard ( sticking with it for security), every sentence will have a word where a letter randomly types back behind a letter and then pushes that letter onwards. How is that even possible in a system of 1's and 0's?.</p>\n\n<p>'The' ends up 'teh'. keep typing and its 'Te cat sat on a math.</p>\n\n<p>Thank you,<br>\nMandan</p>",
-      "replies": []
-    },
-    {
-      "id": "42908",
-      "title": "What music streaming services are you using on GOS?",
-      "author": "WelcomeMilk89",
-      "authorUsername": "WelcomeMilk89",
-      "authorAvatar": "",
-      "score": 41,
-      "comments": 41,
-      "views": 1050,
-      "participantCount": 30,
-      "created": 1792297664,
-      "lastPostedAt": 1792985720,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
-      "media": [],
-      "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
-      "replies": []
-    },
-    {
-      "id": "33125",
-      "title": "Unable to activate eSIM",
-      "author": "Foyer9054",
-      "authorUsername": "Foyer9054",
-      "authorAvatar": "",
-      "score": 173,
-      "comments": 173,
-      "views": 2415,
-      "participantCount": 69,
-      "created": 1773444210,
-      "lastPostedAt": 1792983961,
-      "category": "Pixel 9 Pro XL",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 9 Pro XL"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/33125-unable-to-activate-esim",
-      "media": [],
-      "text": "<p>I did a fresh install of GrapheneOS, enabled \"eSIM support\", and rebooted.<br>\nWent to Settings &gt; Network &amp; Internet &gt; SIMs &gt; Setup an eSIM.<br>\nScanned the eSIM QR code, and then a screen popped up saying \"SIM not activated. Something went wrong while trying to activate your SIM.\".<br>\nThe same thing happens if I try to enter the eSIM activation code manually.<br>\nIf I go to Reset options &gt; Reset mobile network settings, check \"Erase eSIMs\", and then click reset, a dialog appears saying \"Can't erase eSIMs\".</p>\n\n<p>I then enabled developer options and checked the log when trying to activate (output at end of post).</p>\n\n<p>So I installed Google Play Services and Play Store via the Graphene OS app store.<br>\nLogged in, tried activating eSIM again, same error.<br>\nI then enabled all permissions for Play Services &amp; Store and tried activating again. Same error.</p>\n\n<p>I've tried with multiple different eSIM activation codes on two different carriers, and used different WiFI networks during setup.<br>\nDSDS is enabled in the <code>*#*#4636#*#*</code> menu.</p>\n\n<p>Any advice is appreciated.</p>\n\n<pre><code>2026-03-13 16:41:52.140 16779-16779 ProxyAndro...gerBackend com.google.android.euicc             W  Too many Flogger logs received before configuration. Dropping old logs.\n2026-03-13 16:41:52.140 16779-16779 EuiccGoogle             com.google.android.euicc             I  [2] GetAcFromQrScannerFragment.onActivityResult: onActivityResult: request code = 1, result code = -1.\n2026-03-13 16:41:52.142  2405-2735  EuiccController         com.android.phone                    D   getDownloadableSubscriptionMetadata callingPackage: com.google.android.euicc\n2026-03-13 16:41:52.143  2477-11375 SudConfigProvider       com.android.settings                 D  method: isEnhancedSetupDesignMetricsEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.143  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: E msg.what=101\n2026-03-13 16:41:52.143  2405-2668  EuiccConnector          com.android.phone                    D  processMsg: ConnectedState\n2026-03-13 16:41:52.144  2477-11375 SudConfigProvider       com.android.settings                 D  method: isEnhancedSetupDesignMetricsEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.145  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: X\n2026-03-13 16:41:52.146  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.146 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.147 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: ensureSlotIsEuiccAndActive: slotId = 0, forceDeactivateSim = false\n2026-03-13 16:41:52.147  2477-11375 SudConfigProvider       com.android.settings                 D  method: isForceTwoPaneEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: Passed in slotId=0; euiccIsActive=false; targetSlotIsRemovable=false; forceDeactivateSim=false, multiSimEnabled=true, euiccSlotPresent=true, allowSlotSwitchInMultiPsimEsimMode=false.\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             E  [287] EuiccServiceImpl.ensureSlotIsEuiccAndActive$ar$ds: Slot switch is not allowed in multiSim mode, ignore switch request\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.onGetDownloadableSubscriptionMetadata: onGetDownloadableSubscriptionMetadataInternal: slotId = 0, forceDeactivateSim = false, ensureSlotIsEuiccAndActive = EuiccOperationResult{errorCode=131083, switchedToEsim=false, slotMappings=[]}.\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccErrorMapper.mapErrorCode: Mapping for error code: 131083\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccErrorMapper.mapErrorCode: Mapping error code: 131083 to: 33554432\n2026-03-13 16:41:52.149 16779-26304 EuiccGoogle             com.google.android.euicc             I  [287] EuiccServiceImpl.onGetDownloadableSubscriptionMetadata: onGetDownloadableSubscriptionMetadata errorCode: 33554432\n2026-03-13 16:41:52.150  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: E msg.what=6\n2026-03-13 16:41:52.150  2405-2668  EuiccConnector          com.android.phone                    D  processMsg: ConnectedState\n2026-03-13 16:41:52.152  2405-2668  EuiccConnector          com.android.phone                    D  handleMessage: X\n2026-03-13 16:41:52.152  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.153 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.153 16779-26176 EuiccGoogle             com.google.android.euicc             I  [281] WindowInsetsCompat$TypeImpl30.isEsimOnlyDevice: Device Hardware SKU: GZC4K\n2026-03-13 16:41:52.153  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.153 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.154  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.154 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.154  2477-11375 SudConfigProvider       com.android.settings                 D  method: isKeyboardFocusEnhancementEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.155  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.155 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.156  2477-11375 SudConfigProvider       com.android.settings                 D  method: isGlifExpressiveEnabled, caller: com.google.android.euicc\n2026-03-13 16:41:52.156 16779-16779 PartnerConfigHelper     com.google.android.euicc             I  isGlifExpressiveStyleEnabled is false\n2026-03-13 16:41:52.156 16779-16779 SetupLibrary            com.google.android.euicc             I  [GlifLayout] Using setup design GlifLoadingLayout to init for QrDownloadActivity\n2026-03-13 16:41:52.156 16779-26176 EuiccGoogle             com.google.android.euicc             I  [281] ClearcutServerLog$$ExternalSyntheticLambda15.call: NetworkUtil\n2026-03-13 16:41:52.156 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.156 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.156 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.usagereporting.internal.UsageReportingClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n2026-03-13 16:41:52.156 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.157 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.157 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.usagereporting.internal.UsageReportingClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n2026-03-13 16:41:52.157 16779-26176 EuiccGoogle             com.google.android.euicc             E  [281] ClearcutServerLog$$ExternalSyntheticLambda15.call: Cannot connect to GMS API client. (Fix with AI)\n                                                                                                    com.google.android.gms.common.api.ApiException: 17: API: UsageReporting.API is not available on this device. Connection failed with: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}\n                                                                                                    \tat com.google.android.gms.clearcut.internal.batcher.DropLargestEventBatchReductionAlgorithm.fromStatus(PG:13)\n                                                                                                    \tat com.google.android.gms.common.api.internal.ApiCallRunner$TaskRunner.reportFailure(PG:3)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.failEnqueuedMethods(PG:48)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.failAllEnqueuedMethods(PG:10)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.onConnectionFailed(PG:164)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.onConnectionFailed(PG:174)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.connect(PG:163)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager$ClientConnection.enqueue(PG:51)\n                                                                                                    \tat com.google.android.gms.common.api.internal.GoogleApiManager.handleMessage(PG:844)\n                                                                                                    \tat android.os.Handler.dispatchMessage(Handler.java:128)\n                                                                                                    \tat android.os.Looper.dispatchMessage(Looper.java:333)\n                                                                                                    \tat android.os.Looper.loopOnce(Looper.java:263)\n                                                                                                    \tat android.os.Looper.loop(Looper.java:367)\n                                                                                                    \tat android.os.HandlerThread.run(HandlerThread.java:139)\n2026-03-13 16:41:52.157 16779-16779 SetupLibrary            com.google.android.euicc             W  [GlifLoadingLayout] Can not find the resource entry for loading_animation_custom_default\n2026-03-13 16:41:52.157 16779-16824 GEuiccLpa               com.google.android.euicc             D  replaced getText() with empty string: %1$s is having trouble with Google Play services. Please try again.\n2026-03-13 16:41:52.157 16779-16824 GooglePlayServicesUtil  com.google.android.euicc             W  com.google.android.euicc requires the Google Play Store, but it is missing.\n2026-03-13 16:41:52.157 16779-16824 GoogleApiManager        com.google.android.euicc             W  The service for com.google.android.gms.clearcut.internal.ClearcutLoggerClientImpl is not available: ConnectionResult{statusCode=SERVICE_INVALID, resolution=null, message=null, clientMethodKey=null}</code></pre>",
       "replies": []
     }
   ]
