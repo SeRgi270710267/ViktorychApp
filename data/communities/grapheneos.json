@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T12:12:11Z",
+  "fetchedAt": "2026-10-26T12:40:26Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "Reboot",
       "authorUsername": "Reboot",
       "authorAvatar": "",
-      "score": 43,
-      "comments": 43,
+      "score": 46,
+      "comments": 46,
       "views": 840,
       "participantCount": 24,
       "created": 1792855754,
-      "lastPostedAt": 1793016399,
+      "lastPostedAt": 1793018322,
       "category": "General",
       "categoryColor": "#c7c7c7",
       "tags": [
@@ -2092,6 +2092,81 @@
       ]
     },
     {
+      "id": "5182",
+      "title": "Apps installation are very slow",
+      "author": "Matt",
+      "authorUsername": "Matt",
+      "authorAvatar": "",
+      "score": 5,
+      "comments": 5,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1684875111,
+      "lastPostedAt": 1793017590,
+      "category": "Pixel 4a (5G) (extended support)",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 4a (5G) (extended support)",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/5182-apps-installation-are-very-slow",
+      "media": [],
+      "text": "<p>Apps installation from both Play Store, as well as the manual install is very slow. I read on the forum that it recompiles or optimizes it. Can we disable this option and get a faster install without prior optimization of apps?</p>",
+      "replies": []
+    },
+    {
+      "id": "40673",
+      "title": "Secondary Profile can't connect to the internet unless through a VPN",
+      "author": "House_Wins",
+      "authorUsername": "House_Wins",
+      "authorAvatar": "",
+      "score": 4,
+      "comments": 4,
+      "views": 105,
+      "participantCount": 3,
+      "created": 1784928912,
+      "lastPostedAt": 1793017054,
+      "category": "Solved",
+      "categoryColor": "#2fac16",
+      "tags": [
+        "General",
+        "Solved"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/40673-secondary-profile-cant-connect-to-the-internet-unless-through-a-vpn",
+      "media": [],
+      "text": "<p>So I have had this issue since I installed GrapheneOS, sometimes when I leave my house and I'm no longer connected to a WiFi I noticed my phone has no internet. It shows that I'm connected to my network provider and have signal bars, even shows 5G. When I turn on my VPN it works (kill switch is off in this profile), I am using a private DNS but in my VPN I have the DNS option off.</p> \n\n<p>So I really don't understand why this is happening, maybe my phone can't get an IP for whatever reason? Only way to fix it is to restart the phone once or twice. The wrench with the circle button doesn't fix it. Admin profile is used as control center to install apps only. Also I have a VPN running all the time in the admin profile and just use my secondary.</p> \n\n<p>Latest version of GrapheneOS.<br>\nAll packages up to date.<br>\nPixel 10 pro xl.</p>",
+      "replies": []
+    },
+    {
+      "id": "43007",
+      "title": "Donate from India",
+      "author": "mumbai",
+      "authorUsername": "mumbai",
+      "authorAvatar": "",
+      "score": 7,
+      "comments": 7,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792643046,
+      "lastPostedAt": 1793016914,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43007-donate-from-india",
+      "media": [],
+      "text": "<p>How can I make donations to <a href=\"https://discuss.grapheneos.org/u/GrapheneOS\" class=\"UserMention\">@GrapheneOS</a> I don't use any <strong>Debit or Credit or UPI app</strong><br>\nEasiest way to Donate i'll say someone else to Donate for me</p>",
+      "replies": []
+    },
+    {
       "id": "43104",
       "title": "Unable to set default Wallet app from Private Space",
       "author": "deltuzirtu",
@@ -2186,32 +2261,6 @@
       "url": "https://discuss.grapheneos.org/d/43097-app-with-accessibility-permissions-needed-in-private-space",
       "media": [],
       "text": "<p>Hi all,<br>\nI have Action Notch installed, however some banking apps are complaining because it doesn't want it to be installed as well.<br>\nSo I tried to move the banking apps in Private Space, but they complain again, this time because they think the phone is rooted.<br>\nUnless there is a way to fix that (if so, how?) then I tried the other way, having Action Notch in the Private Space.<br>\nAction Notch asks for accessibility permissions, which I'm fine giving, but when I click to toggle it on, it doesn't work, it stays off.<br>\nIs there a setting or something I'm missing ? <br>\nAny help to make that (having both apps) work would be very helpful.<br>\nThanks</p>",
-      "replies": []
-    },
-    {
-      "id": "5182",
-      "title": "Apps installation are very slow",
-      "author": "Matt",
-      "authorUsername": "Matt",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1684875111,
-      "lastPostedAt": 1793010751,
-      "category": "Pixel 4a (5G) (extended support)",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 4a (5G) (extended support)",
-        "Solved"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/5182-apps-installation-are-very-slow",
-      "media": [],
-      "text": "<p>Apps installation from both Play Store, as well as the manual install is very slow. I read on the forum that it recompiles or optimizes it. Can we disable this option and get a faster install without prior optimization of apps?</p>",
       "replies": []
     },
     {
@@ -2333,54 +2382,6 @@
       "url": "https://discuss.grapheneos.org/d/35949-volkswagen-app",
       "media": [],
       "text": "<p>The Volkswagen App to control your car doesn't work anymore.<br>\nIt is not possible to login.<br>\nI have the play services running and i can see that the app is using the integrity api.<br>\nI also allowed the compat mode.</p>\n\n<p>The issue is introduced by VW, but maybe someone has an idea how to get it working again.</p>",
-      "replies": []
-    },
-    {
-      "id": "42908",
-      "title": "What music streaming services are you using on GOS?",
-      "author": "WelcomeMilk89",
-      "authorUsername": "WelcomeMilk89",
-      "authorAvatar": "",
-      "score": 42,
-      "comments": 42,
-      "views": 1050,
-      "participantCount": 30,
-      "created": 1792297664,
-      "lastPostedAt": 1793008388,
-      "category": "Off Topic",
-      "categoryColor": "#c55bec",
-      "tags": [
-        "Off Topic"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42908-what-music-streaming-services-are-you-using-on-gos",
-      "media": [],
-      "text": "<p>Been using a DAP loaded with thousands of songs on it for a while, but thinking about streaming music again soon. Before I switched to GOS I was using Spotify then eventually Qobuz, but now I don't want anything to do with subscription services like that (especially with shady companies like Spotify) so I was thinking of downloading the  Symfonium app on my phone and using it via Navidrome (which I'm looking to setup on my thinkpad.) Just wondering what you guys use or recommend. I'm a total noob with self-hosting BTW, but I'm learning.v</p>",
-      "replies": []
-    },
-    {
-      "id": "42926",
-      "title": "Browser-Fingerprinting over multiple profiles",
-      "author": "magic-carpet-ride",
-      "authorUsername": "magic-carpet-ride",
-      "authorAvatar": "",
-      "score": 15,
-      "comments": 15,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792352495,
-      "lastPostedAt": 1793006021,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles",
-      "media": [],
-      "text": "<p>Hello,</p>\n\n<p>i've discovered a hackernews article with the headline \"Fingerprints are the new cookies\"<br>\n( <a href=\"https://news.ycombinator.com/item?id=50048642\" rel=\"ugc nofollow\">https://news.ycombinator.com/item?id=50048642</a> ).</p>\n\n<p>The linked site does some browser fingerprints via javascript and shows it as a tag.<br>\nTested it today with my multi-profile setup (one profile with vpn and one without).<br>\nI've opened the site in Vanadium and Ironfox, noted the tags, switched profile, opened it again.<br>\nBoth browsers had the same fingerprint after switching profiles.</p>\n\n<p>I didn't had that on the radar and now i'm looking for ways to get rid of that.</p>\n\n<p>Any Suggestions?</p>\n\n\n<p>Also, thank you for this important work and awesome Project.<br>\nI've switched a few month ago and don't regret it for a second.</p>",
       "replies": []
     }
   ]
