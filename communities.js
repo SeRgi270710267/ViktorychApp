@@ -93,6 +93,47 @@
     return !!(account && account.owner);
   }
 
+  function indexRow(name) {
+    var rows = (state.index && state.index.communities) || [];
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i] && String(rows[i].name || "").toLowerCase() === name) return rows[i];
+    }
+    return null;
+  }
+  /* Mirrored Discourse/Flarum forums share the community name space with subreddits,
+     but they are not Reddit: label and link them as their own forum. */
+  function isForum(name) {
+    var row = indexRow(name);
+    if (row && row.type === "discourse") return true;
+    var builtins = DEFAULT_INDEX.communities || [];
+    for (var i = 0; i < builtins.length; i++) {
+      if (builtins[i] && builtins[i].name === name && builtins[i].type === "discourse") return true;
+    }
+    var doc = state.docs && state.docs[name];
+    return !!(doc && (doc.type === "discourse" || doc.source === "discourse" || doc.source === "flarum"));
+  }
+  function communityTitle(name) {
+    var doc = state.docs && state.docs[name];
+    var row = indexRow(name);
+    return String((doc && doc.title) || (row && row.title) || name);
+  }
+  function communityLabel(name) {
+    return isForum(name) ? communityTitle(name) : "r/" + name;
+  }
+  function forumUrl(name) {
+    var doc = state.docs && state.docs[name];
+    var url = String((doc && doc.url) || (indexRow(name) || {}).url || "");
+    return /^https:\/\//.test(url) ? url : "";
+  }
+  function forumHost(name) {
+    var url = forumUrl(name);
+    if (!url) return "";
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch (err) { return ""; }
+  }
+  function forumBadge(name) {
+    return isForum(name) ? '<span class="cm-type-badge">' + esc(tr("Forum")) + "</span>" : "";
+  }
+
   function count(n) {
     var value = Number(n) || 0;
     if (value >= 1000000) return (value / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -363,11 +404,12 @@
     return items;
   }
 
-  function chips() {
+  function chips(name) {
     var chip = function (id, label) {
       return '<button class="cm-chip' + (state.filter === id ? " on" : "") + '" type="button" data-cm="filter" data-filter="' + id + '">' + esc(label) + "</button>";
     };
-    return '<div class="cm-filter-bar" role="tablist">' + chip("all", tr("All")) + chip("reddit", tr("Reddit")) + chip("app", tr("ViktorychApp")) + "</div>";
+    var sourceLabel = isForum(name || currentSub()) ? tr("Forum") : tr("Reddit");
+    return '<div class="cm-filter-bar" role="tablist">' + chip("all", tr("All")) + chip("reddit", sourceLabel) + chip("app", tr("ViktorychApp")) + "</div>";
   }
   function tabs() {
     var tab = function (id, label) {
@@ -437,7 +479,7 @@
     '</span>';
   }
 
-  /* Reddit Post Card — Authentic Reddit Layout + X.com Theme */
+  /* Mirrored post card — Reddit layout for subreddits, forum layout for Discourse */
   function redditCard(name, post, isThread) {
     var href = "#/communities/" + encodeURIComponent(name) + "/" + encodeURIComponent(post.id);
     var bag = state.internal[name] || {};
@@ -446,16 +488,21 @@
     var total = (Number(post.score) || 0) + extra + (v.down ? -1 : 0);
     var cleanTxt = cleanRedditText(post.text);
     var authorClean = cleanAuthor(post.author);
+    var forum = isForum(name);
     var redditHref = post.url || ("https://www.reddit.com/r/" + encodeURIComponent(name) + "/comments/" + encodeURIComponent(String(post.id).replace(/^t3_/, "")));
+    var sourceHref = forum ? (post.url || forumUrl(name)) : redditHref;
+    var sourceLabel = forum ? tr("Open on forum") : tr("Open on Reddit");
+    var subLabel = forum ? communityTitle(name) : "r/" + name;
+    var authorLabel = forum ? esc(authorClean) : "u/" + esc(authorClean);
 
     return '<article class="cm-reddit-card' + (isThread ? " cm-thread-focus" : "") + '" data-post="' + esc(post.id) + '">' +
       voteGutter(name, post.id, total, v) +
       '<div class="cm-reddit-main">' +
         '<div class="cm-reddit-byline">' +
-          '<span class="cm-reddit-snoo">' + svgSnoo + '</span>' +
-          '<a class="cm-reddit-sub" href="#/communities/' + encodeURIComponent(name) + '">r/' + esc(name) + '</a>' +
+          '<span class="cm-reddit-snoo">' + (forum ? svgCommunities : svgSnoo) + '</span>' +
+          '<a class="cm-reddit-sub" href="#/communities/' + encodeURIComponent(name) + '">' + esc(subLabel) + '</a>' + forumBadge(name) +
           '<span>•</span>' +
-          '<span class="cm-reddit-author">u/' + esc(authorClean) + '</span>' +
+          '<span class="cm-reddit-author">' + authorLabel + '</span>' +
           '<span>•</span>' +
           '<span class="cm-reddit-time">' + esc(timeAgo((Number(post.created) || 0) * 1000)) + '</span>' +
           (post.flair ? '<span class="cm-reddit-flair">' + esc(post.flair) + '</span>' : "") +
@@ -467,7 +514,7 @@
           votePill(name, post.id, total, v, false) +
           '<a class="cm-reddit-action-btn" href="' + href + '">' + svgComment + '<span>' + esc(count(post.comments)) + " " + esc(tr("Comments")) + '</span></a>' +
           '<button class="cm-reddit-action-btn" type="button" data-cm="share" data-href="' + href + '">' + svgShare + '<span>' + esc(tr("Share")) + '</span></button>' +
-          '<a class="cm-reddit-action-btn reddit-link" href="' + esc(redditHref) + '" target="_blank" rel="noopener noreferrer">' + svgSnoo + '<span>' + esc(tr("Open on Reddit")) + '</span> ' + svgExternal + '</a>' +
+          (sourceHref ? '<a class="cm-reddit-action-btn reddit-link" href="' + esc(sourceHref) + '" target="_blank" rel="noopener noreferrer">' + (forum ? svgCommunities : svgSnoo) + '<span>' + esc(sourceLabel) + '</span> ' + svgExternal + '</a>' : "") +
         '</div>' +
       '</div>' +
     '</article>';
@@ -580,11 +627,11 @@
         '</div>' +
         '<div class="cm-spotlight-body">' +
           '<div class="cm-spotlight-top">' +
-            (top.icon ? '<img class="cm-spotlight-avatar" src="' + esc(top.icon) + '" alt="">' : '<div class="cm-spotlight-avatar">' + svgSnoo + '</div>') +
+            (top.icon ? '<img class="cm-spotlight-avatar" src="' + esc(top.icon) + '" alt="">' : '<div class="cm-spotlight-avatar">' + (isForum(top.name) ? svgCommunities : svgSnoo) + '</div>') +
             joinBtn(top.name, topJoined) +
           '</div>' +
           '<a href="#/communities/' + encodeURIComponent(top.name) + '" style="text-decoration:none;color:inherit;">' +
-            '<h2 class="cm-spotlight-title">r/' + esc(top.name) + '</h2>' +
+            '<h2 class="cm-spotlight-title">' + (isForum(top.name) ? esc(top.title || top.name) : "r/" + esc(top.name)) + forumBadge(top.name) + '</h2>' +
             '<p class="cm-spotlight-desc">' + esc(top.about || (top.title || ("r/" + top.name))) + '</p>' +
             '<div class="cm-facepile-wrap">' +
               '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
@@ -602,11 +649,11 @@
         '<a class="cm-card-cover"' + bannerStyle + ' href="#/communities/' + encodeURIComponent(row.name) + '"></a>' +
         '<div class="cm-card-body">' +
           '<div class="cm-card-row">' +
-            (row.icon ? '<img class="cm-card-avatar" alt="" src="' + esc(row.icon) + '">' : '<div class="cm-card-avatar">' + svgSnoo + '</div>') +
+            (row.icon ? '<img class="cm-card-avatar" alt="" src="' + esc(row.icon) + '">' : '<div class="cm-card-avatar">' + (isForum(row.name) ? svgCommunities : svgSnoo) + '</div>') +
             joinBtn(row.name, isJoined) +
           '</div>' +
           '<a href="#/communities/' + encodeURIComponent(row.name) + '" style="text-decoration:none;color:inherit;">' +
-            '<h3 class="cm-card-title">r/' + esc(row.name) + '</h3>' +
+            '<h3 class="cm-card-title">' + (isForum(row.name) ? esc(row.title || row.name) : "r/" + esc(row.name)) + forumBadge(row.name) + '</h3>' +
             '<p class="cm-card-desc">' + esc(row.about || row.title || ("r/" + row.name)) + '</p>' +
             '<div class="cm-facepile-wrap">' +
               '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
@@ -647,24 +694,28 @@
           render();
         });
       }
-      return head("r/" + name, "#/communities") + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
+      return head(communityLabel(name), "#/communities") + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
     }
 
     if (doc.missing) {
-      return head("r/" + name, "#/communities") +
+      return head(communityLabel(name), "#/communities") +
         '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + '</h2>' +
         '<button class="retry" type="button" data-cm="retry" data-sub="' + esc(name) + '">' + esc(tr("Retry")) + '</button></div>';
     }
 
     var bag = state.internal[name];
     var joined = bag && bag.joined;
+    var forum = isForum(name);
+    var title = communityTitle(name);
+    var sourceUrl = forumUrl(name);
+    var host = forumHost(name);
     var bannerImg = doc.banner
       ? '<img class="cm-hero-banner" alt="" src="' + esc(doc.banner) + '">'
       : '<div class="cm-hero-banner"></div>';
 
     var avatarImg = doc.icon
       ? '<img class="cm-hero-avatar" alt="" src="' + esc(doc.icon) + '">'
-      : '<div class="cm-hero-avatar">' + svgSnoo + '</div>';
+      : '<div class="cm-hero-avatar">' + (forum ? svgCommunities : svgSnoo) + '</div>';
 
     var shareBtn = '<button class="cm-icon-btn" type="button" data-cm="share" aria-label="' + esc(tr("Share")) + '">' + svgShare + '</button>';
     var removeBtn = owner() ? '<button class="cm-icon-btn" type="button" data-cm="remove" data-sub="' + esc(name) + '" aria-label="' + esc(tr("Remove")) + '">' + svgTrash + '</button>' : "";
@@ -677,11 +728,16 @@
       ? '<details class="cm-rules-box"><summary class="cm-rules-summary"><span>' + esc(tr("Community rules")) + '</span><span>▾</span></summary><div class="cm-rules-content">' + rulesList + '</div></details>'
       : "";
 
+    var composeLabel = forum
+      ? tr("Post into {name}", { name: title })
+      : tr("Post into r/{name}", { name: name });
+    var memberLabel = forum ? tr("Members") : tr("Reddit subscribers");
+    var footerNote = forum ? tr("Nothing is sent to the forum.") : tr("Nothing is sent to Reddit.");
     var composer = signedIn()
       ? '<form class="cm-composer" data-cm="inline-post" data-sub="' + esc(name) + '">' +
           face(session().account || {}) +
           '<div class="cm-composer-main">' +
-            '<textarea class="cm-composer-area" name="text" placeholder="' + esc(tr("Post into r/{name}", { name: name })) + '" aria-label="' + esc(tr("Post into r/{name}", { name: name })) + '"></textarea>' +
+            '<textarea class="cm-composer-area" name="text" placeholder="' + esc(composeLabel) + '" aria-label="' + esc(composeLabel) + '"></textarea>' +
             '<div class="cm-composer-bottom">' +
               '<button type="submit" class="cm-composer-btn">' + esc(tr("Post")) + '</button>' +
             '</div>' +
@@ -694,7 +750,7 @@
       ? '<div class="empty"><p>' + esc(tr("Sign in to post here.")) + "</p></div>"
       : (items.length ? "" : '<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2></div>");
 
-    return head("r/" + name, "#/communities", shareBtn) +
+    return head(communityLabel(name), "#/communities", shareBtn) +
       '<section class="cm-hero">' +
         bannerImg +
         '<div class="cm-hero-body">' +
@@ -706,10 +762,11 @@
               joinBtn(name, joined) +
             '</div>' +
           '</div>' +
-          '<h1 class="cm-hero-title">r/' + esc(name) + '</h1>' +
+          '<h1 class="cm-hero-title">' + (forum ? esc(title) : "r/" + esc(name)) + forumBadge(name) + '</h1>' +
           '<div class="cm-hero-meta">' +
             '<div class="cm-facepile"><span class="cm-face-dot d1"></span><span class="cm-face-dot d2"></span><span class="cm-face-dot d3"></span></div>' +
-            '<span><b>' + esc(count(doc.subscribers || 2800000)) + '</b> ' + esc(tr("Reddit subscribers")) + '</span>' +
+            '<span><b>' + esc(count(doc.subscribers || (forum ? 0 : 2800000))) + '</b> ' + esc(memberLabel) + '</span>' +
+            (host ? '<span class="cm-sep">·</span><a class="cm-forum-link" href="' + esc(sourceUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(host) + ' ' + svgExternal + '</a>' : "") +
             (bag && bag.members ? '<span class="cm-sep">·</span><span><b>' + esc(count(bag.members)) + '</b> ' + esc(tr("ViktorychApp members")) + '</span>' : "") +
           '</div>' +
           (doc.about ? '<p class="cm-hero-about">' + esc(doc.about) + '</p>' : "") +
@@ -717,11 +774,11 @@
         '</div>' +
       '</section>' +
       tabs() +
-      chips() +
+      chips(name) +
       composer +
       empty +
       items.map(function (item) { return card(name, item); }).join("") +
-      '<p class="cm-footer-note">' + esc(tr("Nothing is sent to Reddit.")) + '</p>';
+      '<p class="cm-footer-note">' + esc(footerNote) + '</p>';
   }
 
   function findReddit(doc, id) {
@@ -754,7 +811,7 @@
       return head(tr("Communities"), "#/communities/" + name) + '<div class="reply-empty">' + esc(tr("Loading")) + "</div>";
     }
     if (doc.missing) {
-      return head("r/" + name, "#/communities") +
+      return head(communityLabel(name), "#/communities") +
         '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + '</h2>' +
         '<button class="retry" type="button" data-cm="retry" data-sub="' + esc(name) + '">' + esc(tr("Retry")) + '</button></div>';
     }
@@ -768,13 +825,13 @@
       focus = '<article class="cm-reddit-comment">' +
         '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + svgSnoo + '</span><span class="cm-comment-line"></span></div>' +
         '<div class="cm-comment-body">' +
-          '<div class="cm-comment-byline"><span class="cm-comment-author">u/' + esc(cleanAuthor(reddit.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo((Number(reddit.reply.created) || 0) * 1000)) + '</span></div>' +
+          '<div class="cm-comment-byline"><span class="cm-comment-author">' + (isForum(name) ? "" : "u/") + esc(cleanAuthor(reddit.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo((Number(reddit.reply.created) || 0) * 1000)) + '</span></div>' +
           '<div class="cm-comment-text">' + esc(reddit.reply.text || "") + '</div>' +
         '</div>' +
       '</article>';
     }
 
-    if (!focus) return head("r/" + name, "#/communities/" + name) + '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + "</h2></div>";
+    if (!focus) return head(communityLabel(name), "#/communities/" + name) + '<div class="empty"><h2>' + esc(tr("That community wasn't found.")) + "</h2></div>";
 
     var kids = repliesFor(name, id, doc).map(function (item) {
       if (item.source === "reddit") {
@@ -784,7 +841,7 @@
         return '<article class="cm-reddit-comment reply-card" data-post="' + esc(item.reply.id) + '">' +
           '<div class="cm-comment-gutter"><span class="cm-comment-snoo">' + svgSnoo + '</span><span class="cm-comment-line"></span></div>' +
           '<div class="cm-comment-body">' +
-            '<div class="cm-comment-byline"><span class="cm-comment-author">u/' + esc(cleanAuthor(item.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo(item.created)) + '</span></div>' +
+            '<div class="cm-comment-byline"><span class="cm-comment-author">' + (isForum(name) ? "" : "u/") + esc(cleanAuthor(item.reply.author)) + '</span><span>•</span><span>' + esc(timeAgo(item.created)) + '</span></div>' +
             '<div class="cm-comment-text">' + esc(item.reply.text || "") + '</div>' +
             '<div class="cm-comment-actions">' +
               votePill(name, item.reply.id, rTotal, rV, true) +
@@ -838,9 +895,9 @@
         '</form>'
       : '<div class="cm-footer-note"><p>' + esc(tr("Sign in to post here.")) + '</p></div>';
 
-    return head("r/" + name, "#/communities/" + name) +
+    return head(communityLabel(name), "#/communities/" + name) +
       focus +
-      chips() +
+      chips(name) +
       '<div class="cm-thread-replies-head">' + esc(tr("Comments")) + '</div>' +
       kids +
       box;
