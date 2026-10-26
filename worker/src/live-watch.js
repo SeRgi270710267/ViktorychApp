@@ -80,13 +80,20 @@ export function watchDecision(job, marker, roomId, nowMs) {
     // of recording the same room a second time.
     return { action: "skip", part: 0, why: "captureDone" };
   }
+  if (!active.capturing && fresh(active.dispatchedAt, now, WATCH_RETRY_MS)) {
+    // A dispatch is out but has not opened its capture yet.
+    return { action: "skip", part: 0, why: "waiting" };
+  }
   if (String(active.state || "") === "queued") {
     return { action: "skip", part: 0, why: "queued" };
   }
   if (String(active.state || "") === "blocked") {
     return { action: "record", part, why: "unblocked" };
   }
-  return { action: "skip", part: 0, why: "recording" };
+  // Recording is claimed, a dispatch never opened a capture, or the row is
+  // otherwise unlabeled. A fresh attempt is the only way this live gets its
+  // copy, and the mark above already throttles how often it repeats.
+  return { action: "record", part, why: "retry" };
 }
 
 // The uploader writes owner/live-upload/<slot>.json on every pass.

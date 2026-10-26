@@ -29,6 +29,7 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 BLOCKED = "TikTok blocked the runner"
 BACKOFF_MINUTES = (5, 15, 60, 180, 360)
 FRESH_SECONDS = 4 * 60
+ROOM_INFO_URL = "https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id="
 
 
 def audience_of(config_text: str) -> str:
@@ -397,40 +398,8 @@ def record_block(health: dict, handle: str, kind: str) -> None:
     health["recent"] = kept[-80:]
 
 
-def refresh_one(handle: str, previous: dict | None) -> dict:
+def row_from_pick(handle: str, previous: dict, room: str, picked: dict) -> dict:
     previous = previous if isinstance(previous, dict) else {}
-    if backoff_active(previous) or checked_recent(previous):
-        return dict(previous)
-    room = str(previous.get("roomId") or "")
-    if not checked_recent(previous, 5 * 60):
-        room = ""
-    if not room:
-        status, body, retry = http_get("https://www.tiktok.com/@" + handle + "/live")
-        kind = challenge_kind(status, body)
-        if kind:
-            return apply_backoff(blank_live(handle, previous, BLOCKED, blocked=True), previous, retry_after_seconds(retry), kind)
-        if status == 0:
-            return blank_live(handle, previous, BLOCKED, blocked=True)
-        room = str(node_json("room", body).get("roomId") or "")
-        if not room:
-            status, body, retry = http_get("https://www.tiktok.com/@" + handle)
-            kind = challenge_kind(status, body)
-            if kind:
-                return apply_backoff(blank_live(handle, previous, BLOCKED, blocked=True), previous, retry_after_seconds(retry), kind)
-            if status == 0:
-                return blank_live(handle, previous, BLOCKED, blocked=True)
-            room = str(node_json("room", body).get("roomId") or "")
-    if not room:
-        return blank_live(handle, previous, "TikTok did not include a room id")
-    status, info, retry = http_get("https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=" + urllib.parse.quote(room))
-    kind = challenge_kind(status, info)
-    if kind or status == 0:
-        row = blank_live(handle, previous, BLOCKED, blocked=True)
-        row["roomId"] = room
-        if kind:
-            return apply_backoff(row, previous, retry_after_seconds(retry), kind)
-        return row
-    picked = node_json("pick", info)
     live = bool(picked.get("live"))
     return {
         "handle": handle,
@@ -446,6 +415,71 @@ def refresh_one(handle: str, previous: dict | None) -> dict:
         "backoffUntil": "",
         "backoffStep": 0,
     }
+
+
+def room_probe(handle: str, previous: dict) -> dict | None:
+    """One webcast call with the stored room id while pages are blocked.
+
+    The room API answers long after www.tiktok.com starts returning 403 to
+    datacenter addresses, so a clean answer is a real row the lane can act
+    on. None means there is no room id or the room API did not answer
+    cleanly either.
+    """
+    previous = previous if isinstance(previous, dict) else {}
+    room = str(previous.get("roomId") or "")
+    if not room:
+        return None
+    status, info, _retry = http_get(ROOM_INFO_URL + urllib.parse.quote(room))
+    kind = challenge_kind(status, info)
+    if kind or status == 0:
+        return None
+    picked = node_json("pick", info)
+    return row_from_pick(handle, previous, room, picked if isinstance(picked, dict) else {})
+
+
+def refresh_one(handle: str, previous: dict | None) -> dict:
+    previous = previous if isinstance(previous, dict) else {}
+    if backoff_active(previous) or checked_recent(previous):
+        return dict(previous)
+    room = str(previous.get("roomId") or "")
+    if not checked_recent(previous, 5 * 60):
+        room = ""
+    if not room:
+        status, body, retry = http_get("https://www.tiktok.com/@" + handle + "/live")
+        kind = challenge_kind(status, body)
+        if kind:
+            # Blocked pages do not have to end detection. The stored room id
+            # may still answer the room API, which is rarely blocked.
+            probe = room_probe(handle, previous)
+            if probe is not None:
+                return probe
+            return apply_backoff(blank_live(handle, previous, BLOCKED, blocked=True), previous, retry_after_seconds(retry), kind)
+        if status == 0:
+            return blank_live(handle, previous, BLOCKED, blocked=True)
+        room = str(node_json("room", body).get("roomId") or "")
+        if not room:
+            status, body, retry = http_get("https://www.tiktok.com/@" + handle)
+            kind = challenge_kind(status, body)
+            if kind:
+                probe = room_probe(handle, previous)
+                if probe is not None:
+                    return probe
+                return apply_backoff(blank_live(handle, previous, BLOCKED, blocked=True), previous, retry_after_seconds(retry), kind)
+            if status == 0:
+                return blank_live(handle, previous, BLOCKED, blocked=True)
+            room = str(node_json("room", body).get("roomId") or "")
+    if not room:
+        return blank_live(handle, previous, "TikTok did not include a room id")
+    status, info, retry = http_get(ROOM_INFO_URL + urllib.parse.quote(room))
+    kind = challenge_kind(status, info)
+    if kind or status == 0:
+        row = blank_live(handle, previous, BLOCKED, blocked=True)
+        row["roomId"] = room
+        if kind:
+            return apply_backoff(row, previous, retry_after_seconds(retry), kind)
+        return row
+    picked = node_json("pick", info)
+    return row_from_pick(handle, previous, room, picked if isinstance(picked, dict) else {})
 
 
 def patch_extractor():

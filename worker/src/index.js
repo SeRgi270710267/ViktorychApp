@@ -2419,23 +2419,57 @@ async function dispatchWorkflow(env, file, inputs) {
   }
 }
 
+// Blocked pages still leave one free probe: the stored room id almost
+// always answers the webcast room API long after www.tiktok.com returns
+// 403 to datacenter addresses. Null when there was no room id or the
+// room API itself did not answer cleanly.
+async function roomProbe(prev) {
+  const roomId = String((prev && prev.roomId) || "");
+  if (!/^[1-9][0-9]{5,24}$/.test(roomId)) return null;
+  let room = null;
+  try { room = await fetchRoom(roomId); } catch (err) { return null; }
+  const kind = challengeKind(room.status, room.text);
+  if (kind) return null;
+  let parsed = {};
+  try { parsed = JSON.parse(room.text || "{}"); } catch (err) { parsed = {}; }
+  const picked = pickStreams(parsed);
+  return { live: !!picked.live, roomId, picked, prev };
+}
+
 // One page load is enough when the live page carries the room id. The
 // profile page is the second chance, the same fallback the owner route uses.
 async function watchLiveOne(env, handle, prev) {
-  const page = await fetchPublic("https://www.tiktok.com/@" + handle + "/live");
+  let page = null;
+  try { page = await fetchPublic("https://www.tiktok.com/@" + handle + "/live"); }
+  catch (err) { return null; }
   const pageKind = challengeKind(page.status, page.text);
-  if (pageKind) return { blocked: true, kind: pageKind };
+  if (pageKind) {
+    const probe = await roomProbe(prev);
+    if (probe) return probe;
+    return { blocked: true, kind: pageKind };
+  }
   let roomId = parseRoomId(page.text);
   if (!roomId) {
-    const profile = await fetchPublic("https://www.tiktok.com/@" + handle);
+    let profile = null;
+    try { profile = await fetchPublic("https://www.tiktok.com/@" + handle); }
+    catch (err) { return null; }
     const profileKind = challengeKind(profile.status, profile.text);
-    if (profileKind) return { blocked: true, kind: profileKind };
+    if (profileKind) {
+      const probe = await roomProbe(prev);
+      if (probe) return probe;
+      return { blocked: true, kind: profileKind };
+    }
     roomId = parseRoomId(profile.text);
   }
   if (!roomId) return { live: false, roomId: "" };
-  const room = await fetchRoom(roomId);
+  let room = null;
+  try { room = await fetchRoom(roomId); } catch (err) { return null; }
   const roomKind = challengeKind(room.status, room.text);
-  if (roomKind) return { blocked: true, kind: roomKind, roomId };
+  if (roomKind) {
+    const probe = await roomProbe(prev);
+    if (probe) return probe;
+    return { blocked: true, kind: roomKind, roomId };
+  }
   let parsed = {};
   try { parsed = JSON.parse(room.text || "{}"); } catch (err) { parsed = {}; }
   const picked = pickStreams(parsed);
@@ -2467,6 +2501,7 @@ async function watchTikTokLive(env, nowMs) {
     if (mark && mark.blockedAt && fresh(mark.blockedAt, nowMs, pause)) continue;
 
     const seen = await watchLiveOne(env, handle, prev);
+    if (!seen) continue;
     if (seen.blocked) {
       const next = Object.assign({}, mark || {}, {
         handle,

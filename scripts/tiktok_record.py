@@ -631,6 +631,29 @@ def room_pick(room: str) -> tuple[dict, str]:
     return picked if isinstance(picked, dict) else {}, ""
 
 
+def pick_retry(room: str, picker=None, attempts: int = 3, pause: int = 4) -> tuple:
+    """Short retries of one room pick.
+
+    The webcast room API answers most single 403/503 bursts and node
+    hiccups, so the recorder must not mark a live blocked on the first
+    failed pick. The outcome is "ok", "hard" when the room API itself is
+    blocked (a 403, 429, 503, or captcha), or "network" when the answer
+    says nothing about the live at all.
+    """
+    pick = picker or room_pick
+    kind = ""
+    for attempt in range(max(1, int(attempts))):
+        try:
+            picked, kind = pick(str(room))
+        except Exception:
+            picked, kind = {}, ""
+        if not kind and picked:
+            return picked, "", "ok"
+        if attempt + 1 < max(1, int(attempts)):
+            time.sleep(max(0, int(pause)))
+    return {}, str(kind or ""), "hard" if str(kind or "") not in ("0", "") else "network"
+
+
 def probe_bitrate(url: str) -> int:
     if not url or shutil.which("ffprobe") is None:
         return 0
@@ -892,12 +915,18 @@ def cmd_record(handle: str, part: str, room: str) -> int:
     if not room_id:
         log("no room %s" % name)
         return 0
-    picked, kind = room_pick(room_id)
-    if kind:
+    picked, kind, outcome = pick_retry(room_id)
+    if outcome == "hard":
         active.update({"state": "blocked", "roomId": room_id, "blocked": True, "capturing": False, "captureDone": True, "needsPart": False})
         job["active"] = active
         save_job(job)
         log("blocked %s" % name)
+        return 0
+    if outcome != "ok":
+        # A dropped or throttled call says nothing about the live. Leave the
+        # job state alone so the next dispatch retries instead of showing
+        # blocked while the pages answer again.
+        log("pick %s did not answer %s" % (name, kind or "empty"))
         return 0
     source = record_source(picked)
     if not picked.get("live") or not source["url"]:
@@ -1203,6 +1232,19 @@ def selftest() -> int:
     hd = record_source({"hls": "https://cdn.example/hd.m3u8", "quality": "hd", "qualityNote": "best available"})
     check(hd["url"].endswith("hd.m3u8") and hd["qualityNote"] == "best available", "a missing origin keeps the best available URL and notes it")
     check("libx264" not in hd["url"], "the recording URL is the one TikTok offered")
+
+    calls = {"n": 0}
+    def flaky(room):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return {}, "503"
+        return {"live": True, "quality": "origin"}, ""
+    retried = pick_retry("7699647509498710800", picker=flaky, attempts=3, pause=0)
+    check(retried[2] == "ok" and retried[0].get("live") is True, "a transient block is retried instead of marking the live blocked")
+    stuck = pick_retry("7699647509498710800", picker=lambda room: ({}, "403"), attempts=2, pause=0)
+    check(stuck[2] == "hard" and stuck[1] == "403", "a persistently blocked room API still ends as blocked")
+    net = pick_retry("7699647509498710800", picker=lambda room: ({}, "0"), attempts=2, pause=0)
+    check(net[2] == "network", "a network miss stays out of the blocked state")
 
     cached_hd = {"url": "https://cdn.example/old-hd.m3u8", "quality": "hd"}
     fresh_origin = {"url": "https://cdn.example/new-origin.m3u8", "quality": "origin"}
