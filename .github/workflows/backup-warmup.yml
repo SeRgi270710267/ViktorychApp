@@ -2,11 +2,20 @@ name: Backup Warmup
 
 # Render's free web service sleeps after ~15 minutes without traffic and can
 # take a minute to wake up. A short ping keeps sign-in failover responsive.
-# If you prefer an external uptime pinger, disable this workflow.
+#
+# Render gives a workspace 750 instance-hours per month. Waking the service
+# around the clock would use ~730 of them, leaving almost nothing for deploys
+# and other free services; going over suspends services until the next month.
+# So we only keep it warm during active hours: 05:00-21:50 UTC, which is
+# 08:00-00:50 at UTC+3. That is ~510 hours/month and leaves real headroom.
+# Outside this window the first request pays a 30-60s cold start.
+#
+# To change the window, edit the hour range below (cron is always in UTC).
+# "*/10 * * * *" would keep it warm around the clock at ~730 hours/month.
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/10 5-21 * * *"
   workflow_dispatch:
 
 permissions:
