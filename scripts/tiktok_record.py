@@ -372,6 +372,10 @@ def plan(lives: list, added: list, jobs: dict, now: str, cap: int = 12, channels
         saved = [row for row in (job.get("saved") or []) if isinstance(row, dict) and str(row.get("roomId") or "") == room]
         if saved and not active.get("needsPart"):
             continue
+        if str(active.get("roomId") or "") == room and active.get("captureDone") and not active.get("needsPart"):
+            # The recorder finished. The uploader has not marked the room saved
+            # yet; starting another capture would overwrite the same segments.
+            continue
         if occupies(active, now) and str(active.get("roomId") or "") == room:
             continue
         started = str((active or {}).get("startedAt") or item.get("startedAt") or item.get("lastLiveAt") or "")
@@ -873,6 +877,10 @@ def cmd_record(handle: str, part: str, room: str) -> int:
     active = job.get("active") if isinstance(job.get("active"), dict) else {}
     part_n = int(part or active.get("part") or 1)
     room_id = str(room or active.get("roomId") or "")
+    if room_id and str(active.get("roomId") or "") == room_id:
+        # A queued duplicate must not restart at part 1 after the first part
+        # already wrote its segments.
+        part_n = max(part_n, int(active.get("part") or 1))
     run_id = str(os.environ.get("GITHUB_RUN_ID") or "")
     if active.get("capturing") and str(active.get("runId") or "") not in {"", run_id} and fresh_iso(str(active.get("heartbeat") or ""), now_iso(), HEARTBEAT_SECONDS):
         log("already recording %s" % name)
@@ -934,7 +942,7 @@ def cmd_record(handle: str, part: str, room: str) -> int:
     sent = set()
     meta = {
         "objectKey": base + "/" + str(part_n),
-        "buf": "%s%s/%s/%s" % (BUF_PREFIX, name, room_id, part_n),
+        "buf": "%s%s/%s/%s/%s" % (BUF_PREFIX, active["channelSlot"], name, room_id, part_n),
         "channelSlot": active["channelSlot"],
         "seconds": seconds,
     }
@@ -1049,16 +1057,29 @@ def cmd_upload(slot: str) -> int:
     pace = {"last": 0.0}
     idle_since = 0.0
     deadline = time.time() + (340 * 60)
-    held = set()
+    dead = set()
+    retry = {}
+    slot_prefix = BUF_PREFIX + str(index) + "/"
+
+    def handle_prefixes(handle: str) -> list:
+        # New buffers carry the channel slot in the key so one uploader does
+        # not list every other channel's backlog. Old flat keys still drain.
+        return [slot_prefix + handle + "/", BUF_PREFIX + handle + "/"]
+
     while time.time() < deadline:
         touch_upload(index)
-        names = [key for key in list_prefix(BUF_PREFIX) if key.endswith(".json")]
+        names = [key for key in list_prefix(slot_prefix) if key.endswith(".json")]
+        if not names:
+            names = [key for key in list_prefix(BUF_PREFIX) if key.endswith(".json") and not re.match(r"^" + re.escape(BUF_PREFIX) + r"\d+/", key)]
         pending = []
         for key in names:
             meta = load_json_bytes(r2_get(key))
             if int(meta.get("channelSlot") or 0) != index:
                 continue
             if meta.get("held"):
+                dead.add(key)
+                continue
+            if retry.get(key, 0.0) > time.time():
                 continue
             pending.append((key, meta))
         pending.sort(key=lambda item: (str(item[1].get("objectKey") or ""), int(item[1].get("index") or 0)))
@@ -1073,8 +1094,8 @@ def cmd_upload(slot: str) -> int:
                 active = job.get("active") if isinstance(job.get("active"), dict) else {}
                 if active.get("capturing") or active.get("needsPart"):
                     busy = True
-                prefix = "%s%s/" % (BUF_PREFIX, handle)
-                left = [key for key in names if key.startswith(prefix)]
+                prefixes = handle_prefixes(handle)
+                left = [key for key in names if any(key.startswith(prefix) for prefix in prefixes) and key not in dead]
                 if ready_to_save(active, len(left)):
                     mark_saved_room(job)
                     save_job(job)
@@ -1101,7 +1122,7 @@ def cmd_upload(slot: str) -> int:
         if meta.get("oversize") or int(meta.get("size") or 0) >= SMALL_BYTES:
             meta["held"] = True
             r2_put(key, json.dumps(meta).encode("utf-8"))
-            held.add(key)
+            dead.add(key)
             log("oversize held")
             continue
         local = Path(tempfile.mkdtemp(prefix="tiktok-up-")) / Path(media_key).name
@@ -1135,8 +1156,18 @@ def cmd_upload(slot: str) -> int:
             r2_delete(media_key)
             r2_delete(key)
         except RuntimeError:
-            log("upload failed; the segment stays buffered")
-            time.sleep(5)
+            attempts = int(meta.get("attempts") or 0) + 1
+            meta["attempts"] = attempts
+            if attempts >= 20:
+                meta["held"] = True
+                dead.add(key)
+                log("segment held after %s attempts" % attempts)
+            r2_put(key, json.dumps(meta).encode("utf-8"))
+            # Move on instead of retrying the same head forever. A bad channel
+            # or one rejected file must not stop the rest of the live.
+            retry[key] = time.time() + 300
+            log("upload failed; trying the next buffered segment")
+            time.sleep(2)
         finally:
             shutil.rmtree(local.parent, ignore_errors=True)
     return 0
@@ -1229,6 +1260,18 @@ def selftest() -> int:
     saved_job["saved"] = [{"roomId": "7699647509498710801", "key": key_base("b_name", "7699647509498710801"), "parts": 1, "quality": "origin"}]
     skipped = plan([lives[1]], added, {"b_name": saved_job}, now, cap=12, channels=1)
     check(skipped["dispatch"] == [], "a room that is already saved is not recorded again")
+    waiting_job = blank_job("b_name")
+    waiting_job["active"] = {
+        "state": "recording",
+        "roomId": "7699647509498710801",
+        "captureDone": True,
+        "needsPart": False,
+        "capturing": False,
+        "segments": 4,
+        "part": 1,
+    }
+    waiting = plan([lives[1]], added, {"b_name": waiting_job}, now, cap=12, channels=1)
+    check(waiting["dispatch"] == [], "a finished capture waits for its upload instead of recording again")
     blocked = plan([{
         "handle": "a_name",
         "live": True,
