@@ -11,7 +11,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import cairosvg
+try:
+    import cairosvg
+except Exception:  # raster regeneration needs cairo; BRAND_RASTER=0 skips it
+    cairosvg = None
 
 from wordmark import (
     GAP,
@@ -174,16 +177,16 @@ def raster(svg: str, size: int) -> bytes:
 
 def generate() -> None:
     app = lockup("V", "iktorychApp", "ViktorychApp")
-    app_short = lockup("V", "iktrychApp", "ViktrychApp")
+    app_short = lockup("V", "iktorychApp", "ViktorychApp")
     music = lockup("V", "iktorychMusic", "ViktorychMusic")
-    music_short = lockup("V", "iktrychMusic", "ViktrychMusic")
+    music_short = lockup("V", "iktorychMusic", "ViktorychMusic")
     v_path, v_svg, v_w, v_h = v_mark()
     music_svg = music_mark(v_path, v_w, v_h)
     logo = ROOT / "logo"
     write(logo / "viktorychapp.svg", app)
-    write(logo / "viktrychapp.svg", app_short)
+    write(logo / "viktorychapp-short.svg", app_short)
     write(logo / "viktorychmusic.svg", music)
-    write(logo / "viktrychmusic.svg", music_short)
+    write(logo / "viktorychmusic-short.svg", music_short)
     write(logo / "v.svg", v_svg)
     write(logo / "v-music.svg", music_svg)
     for stale in ("wordmark.svg", "si.svg", "sintelmusic.svg", "preview.png", "si-preview.png"):
@@ -203,6 +206,11 @@ def generate() -> None:
     mw, mh = view_of(music_svg)
     favicon = icon_svg(32, "any", v_art, v_w, v_h, "ViktorychApp")
     write(ROOT / "favicon.svg", favicon.replace(f'width="32" height="32" ', "", 1))
+    # Rasters need cairo. BRAND_RASTER=0 regenerates only the vectors and
+    # marks.js, for hosts without a cairo runtime (Windows dev boxes).
+    skip_raster = __import__("os").environ.get("BRAND_RASTER", "") == "0"
+    if not skip_raster and cairosvg is None:
+        raise RuntimeError("cairo is unavailable; set BRAND_RASTER=0 for vectors only")
     rasters = {
         "icon-192.png": (icon_svg(192, "any", v_art, v_w, v_h, "ViktorychApp"), 192),
         "icon-512.png": (icon_svg(512, "any", v_art, v_w, v_h, "ViktorychApp"), 512),
@@ -213,15 +221,16 @@ def generate() -> None:
         "music-512.png": (icon_svg(512, "any", m_art, mw, mh, "ViktorychMusic"), 512),
         "music-maskable-512.png": (icon_svg(512, "maskable", m_art, mw, mh, "ViktorychMusic"), 512),
     }
-    for name, (svg, size) in rasters.items():
+    for name, (svg, size) in (rasters.items() if not skip_raster else []):
         write(ROOT / "icons" / name, raster(svg, size))
         print(name, f"{view_of(app)[0]/view_of(app)[1]:.2f}" if "icon-192" in name else "")
-    frames = []
-    for size, kind in ((16, "si"), (32, "si"), (48, "any"), (256, "any")):
-        frames.append((size, raster(icon_svg(size, kind, v_art, v_w, v_h, "ViktorychApp"), size)))
-    write(ROOT / "favicon.ico", ico_bytes(frames))
-    for name, w, h in (("narrow", 1080, 1920), ("wide", 1920, 1080)):
-        write(ROOT / "screenshots" / f"{name}.png", png_from_svg(splash_svg(app, w, h), w, h))
+    if not skip_raster:
+        frames = []
+        for size, kind in ((16, "si"), (32, "si"), (48, "any"), (256, "any")):
+            frames.append((size, raster(icon_svg(size, kind, v_art, v_w, v_h, "ViktorychApp"), size)))
+        write(ROOT / "favicon.ico", ico_bytes(frames))
+        for name, w, h in (("narrow", 1080, 1920), ("wide", 1920, 1080)):
+            write(ROOT / "screenshots" / f"{name}.png", png_from_svg(splash_svg(app, w, h), w, h))
     splashes = [
         ("iphone-se", 640, 1136),
         ("iphone-8", 750, 1334),
@@ -239,8 +248,9 @@ def generate() -> None:
         ("ipad-pro-11", 1668, 2388),
         ("ipad-pro-12", 2048, 2732),
     ]
-    for name, w, h in splashes:
-        write(ROOT / "splash" / f"{name}.png", png_from_svg(splash_svg(app, w, h), w, h))
+    if not skip_raster:
+        for name, w, h in splashes:
+            write(ROOT / "splash" / f"{name}.png", png_from_svg(splash_svg(app, w, h), w, h))
     aw, ah = view_of(app)
     mw_, mh_ = view_of(music)
     print(f"app {aw:.0f}x{ah:.0f} at 28px -> {28*aw/ah:.0f}px")

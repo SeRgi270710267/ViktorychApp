@@ -11,7 +11,10 @@ import re
 import struct
 from pathlib import Path
 
-import cairosvg
+try:
+    import cairosvg
+except Exception:  # v-only work does not need cairo
+    cairosvg = None
 import uharfbuzz as hb
 from fontTools.misc.transform import Transform
 from fontTools.pens.boundsPen import BoundsPen
@@ -20,12 +23,18 @@ from fontTools.pens.transformPen import TransformPen
 from fontTools.ttLib import TTFont
 
 ROOT = Path(__file__).resolve().parents[1]
+_BLACK_LOCAL = ROOT / "temp" / "fonts" / "Inter-Black.ttf"
 BLACK_CANDIDATES = [
     Path("/tmp/fonts/Inter-Black.ttf"),
+    _BLACK_LOCAL,
     Path("/usr/share/fonts/truetype/macos/Inter-Bold.ttf"),
 ]
 REGULAR = Path("/usr/share/fonts/truetype/macos/Inter-Regular.ttf")
+if not REGULAR.is_file():
+    REGULAR = ROOT / "temp" / "fonts" / "Inter-Regular.ttf"
 SUB_FONT = Path("/usr/share/fonts/truetype/macos/Inter-Bold.ttf")
+if not SUB_FONT.is_file():
+    SUB_FONT = ROOT / "temp" / "fonts" / "Inter-Black.ttf"
 HEAVY = "SI"
 LIGHT = "ntelApp"
 HEAVY_SCALE = 1.1
