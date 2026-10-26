@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T15:37:03Z",
+  "fetchedAt": "2026-10-26T15:45:22Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,240 @@
       ]
     },
     {
+      "id": "43048",
+      "title": "More native code debugging attempts recently",
+      "author": "cupcake-alibi",
+      "authorUsername": "cupcake-alibi",
+      "authorAvatar": "",
+      "score": 23,
+      "comments": 23,
+      "views": 490,
+      "participantCount": 14,
+      "created": 1792786787,
+      "lastPostedAt": 1793029254,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
+      "media": [],
+      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
+      "replies": [
+        {
+          "id": "277023",
+          "number": 2,
+          "author": "pixel---fold",
+          "authorUsername": "pixel---fold",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792799496,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/1\" class=\"PostMention\" data-id=\"276996\"><i class=\"icon fas fa-reply\"></i>cupcake-alibi</a> first one I had was today. Never seen one before and funny enough it was from the proton lumo assistant.</p> \n\n<p>Trying at the moment to run s couple of searches on this.</p> \n\n<p>Anybody else?</p> "
+        },
+        {
+          "id": "277027",
+          "number": 3,
+          "author": "TrustExecutor",
+          "authorUsername": "TrustExecutor",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792800509,
+          "parent": "43048",
+          "text": "<p>I got one from PipePipe. I've never had one of these before what I can recall.</p>"
+        },
+        {
+          "id": "277318",
+          "number": 4,
+          "author": "pixel---fold",
+          "authorUsername": "pixel---fold",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792934786,
+          "parent": "43048",
+          "text": "<p>Anybody else using Proton Lumo's AI that got the error message from the APP?</p>\n"
+        },
+        {
+          "id": "277370",
+          "number": 5,
+          "author": "cupcake-alibi",
+          "authorUsername": "cupcake-alibi",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792951736,
+          "parent": "43048",
+          "text": "<p>These apps attempted native code debugging on my Pixel:</p>\n<ul><li>PipePipe</li>\n<li>Read You</li>\n<li>Proton Mail</li>\n<li>Proton Calendar</li>\n<li>AntennaPod</li></ul>"
+        },
+        {
+          "id": "277374",
+          "number": 6,
+          "author": "SplatterGames",
+          "authorUsername": "SplatterGames",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/HgsNUM2MIBghgcb7.png",
+          "score": 0,
+          "created": 1792952500,
+          "parent": "43048",
+          "text": "<p>maybe it's just a coincidence, but Immich crashed in the background today due to MTE errors. Not really related to the NCD issues, but the timing is weird, considering I NEVER see any crashes at all.</p>"
+        },
+        {
+          "id": "277381",
+          "number": 7,
+          "author": "NoahRaketic",
+          "authorUsername": "NoahRaketic",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1792953831,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/4\" class=\"PostMention\" data-id=\"277318\"><i class=\"icon fas fa-reply\"></i>pixel---fold</a> Yeah, I tried it and got the same issue. Emailed Proton support and got this exchange:</p>\n\n<blockquote><p>Lumo fails to launch without \"Native Code Debugging\" permitted in settings. This is a sensitive permission that preferably wouldn't be required for the app to launch.</p>\n\n<p>This is the official Android app from the Play Store.</p></blockquote>\n\n\n<blockquote><p>Hi,</p>\n\n<p>Thanks for reaching out.</p> \n\n<p>This ensures automatic integrity validation and reduces the risk of modified builds being flagged by antivirus tools.<br>\nKind regards,<br>\nIbro<br>\nProton Customer Support</p></blockquote>\n\n\n<blockquote><p>Hi,</p>\n\n<p>This response is a vague rationalization.</p>\n\n<p>Other Android apps by Proton do not require ptrace to function, so do these apps not need integrity verification or to hide from AV tools that builds are modified?<br>\nWhat component's integrity is being verified? For the app's native code, the OS and Play Store are responsible for verifying that against the certificate. ptrace access is also not necessary to cryptographically verify remotely hosted code.</p>\n\n<p>Best regards,<br>\nNoah</p></blockquote>\n\n\n<blockquote><p>Hi Noah,</p>\n\n<p>Other Proton apps don’t have integrity protection. The reason our app may be flagged by antivirus software is that we rely heavily on WebView for much of the app’s functionality, which can sometimes be perceived as suspicious behavior. This is less common in traditional apps, which typically don’t rely on WebView to the same extent.<br>\nKind regards,<br>\nIbro<br>\nProton Customer Support</p></blockquote>"
+        },
+        {
+          "id": "277383",
+          "number": 8,
+          "author": "dryfter",
+          "authorUsername": "dryfter",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/yrF3TPBIpC7APhhS.png",
+          "score": 0,
+          "created": 1792954395,
+          "parent": "43048",
+          "text": "<p>I have not noticed this with any apps I use. Arguably, I don't have very many Google Play Apps installed, so that could be why. I'll try to test the ones I have installed out later today.</p>"
+        },
+        {
+          "id": "277404",
+          "number": 9,
+          "author": "MyIdentityIsntImportant",
+          "authorUsername": "MyIdentityIsntImportant",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/lC5l5EjKXOV6d9rs.png",
+          "score": 3,
+          "created": 1792959255,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/2\" class=\"PostMention\" data-id=\"277023\"><i class=\"icon fas fa-reply\"></i>pixel---fold</a> Install the <em>nogms</em> variant of Lump from Proton's GitHub instead of using the Play Store version. The <em>nogms</em> version doesn't need or use native code debugging.</p>\n\n<p>Good luck.</p> "
+        },
+        {
+          "id": "277406",
+          "number": 10,
+          "author": "GazelleInitial",
+          "authorUsername": "GazelleInitial",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792960092,
+          "parent": "43048",
+          "text": "<p>Does anyone revoke system wide DCL?  Considering it, but if i'm just going to whitelist apps that error - what's the point?</p>"
+        },
+        {
+          "id": "277436",
+          "number": 11,
+          "author": "pixel---fold",
+          "authorUsername": "pixel---fold",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792973624,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/7\" class=\"PostMention\" data-id=\"277381\"><i class=\"icon fas fa-reply\"></i>NoahRaketic</a></p> \n\n<p>Thank you so much for posting this. I thought about reaching out to them, but you beat me to it.</p>"
+        },
+        {
+          "id": "277437",
+          "number": 12,
+          "author": "pixel---fold",
+          "authorUsername": "pixel---fold",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792973768,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/9\" class=\"PostMention\" data-id=\"277404\"><i class=\"icon fas fa-reply\"></i>MyIdentityIsntImportant</a> thanks for the tip. Going to try that out.</p>"
+        },
+        {
+          "id": "277455",
+          "number": 13,
+          "author": "liachra",
+          "authorUsername": "liachra",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1792995465,
+          "parent": "43048",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/10\" class=\"PostMention\" data-id=\"277406\"><i class=\"icon fas fa-reply\"></i>GazelleInitial</a> but if i'm just going to whitelist apps that error - what's the point?</p></blockquote>\n\n<p>You could run apps <em>that you don't trust</em> which require ptrace/DCL in a separate profile.</p>"
+        },
+        {
+          "id": "277471",
+          "number": 14,
+          "author": "hwvc",
+          "authorUsername": "hwvc",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1793005509,
+          "parent": "43048",
+          "text": "<p>I had this yesterday with the default PDF Viewer which is very confusing</p>"
+        },
+        {
+          "id": "277472",
+          "number": 15,
+          "author": "r134a",
+          "authorUsername": "r134a",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/M83QP8VU7vVsG6JH.png",
+          "score": 0,
+          "created": 1793005701,
+          "parent": "43048",
+          "text": "<p>I've noticed this behavior as well for several apps since recently.</p>\n\n<p>It is possible those apps behaved like this in the past and i pressed don't show again then, perhaps a recent update 'forgot' my preferences regarding this?</p>"
+        },
+        {
+          "id": "277487",
+          "number": 16,
+          "author": "0xC0DED0D0",
+          "authorUsername": "0xC0DED0D0",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/N0Y3XDnIam3uDYA6.png",
+          "score": 1,
+          "created": 1793013234,
+          "parent": "43048",
+          "text": "<p>Can confirm. Proton Mail 7.11.10, in this case. Only happened once, so far.</p>\n\n<p>As many are describing the same issue, with various applications, starting simultaneously and seemingly in correlation with a GrapheneOS update (202610210n?) I have these hypotheses:</p>\n\n<ol><li>GrapheneOS failed in blocking native code debugging previously.</li>\n<li>The OS blocked them, but didn't notify. Notifications are working again since last update.</li>\n<li>GrapheneOS is now \"overzealous\" in it's blocking attempts, and warns of false positives.</li></ol>\n\n<p>No idea about probabilities for these, and there could be other non-OS related explanations, but the issue seems in order to be investigated.</p>\n\n<p>I trust that the <a href=\"https://discuss.grapheneos.org/u/GrapheneOS\" class=\"UserMention\">@GrapheneOS</a> team is doing so. 👍</p>"
+        },
+        {
+          "id": "277520",
+          "number": 17,
+          "author": "ryrona",
+          "authorUsername": "ryrona",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1793026198,
+          "parent": "43048",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/14\" class=\"PostMention\" data-id=\"277471\"><i class=\"icon fas fa-reply\"></i>hwvc</a> I had this yesterday with the default PDF Viewer which is very confusing</p></blockquote>\n\n<p>Yeah, that should not happen no matter what. The built-in PDF viewer does not use ptrace or any kind of native code debugging. It is pretty much just a restricted WebView I think, running a JavaScript based PDF renderer.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/16\" class=\"PostMention\" data-id=\"277487\"><i class=\"icon fas fa-reply\"></i>0xC0DED0D0</a> As many are describing the same issue, with various applications, starting simultaneously and seemingly in correlation with a GrapheneOS update (202610210n?) I have these hypotheses:</p>\n\n<p>GrapheneOS failed in blocking native code debugging previously.<br>\nThe OS blocked them, but didn't notify. Notifications are working again since last update.<br>\nGrapheneOS is now \"overzealous\" in it's blocking attempts, and warns of false positives.</p>\n\n<p>No idea about probabilities for these, and there could be other non-OS related explanations, but the issue seems in order to be investigated.</p></blockquote>\n\n<p>I do not recall seeing any commits recently at all that modifies code related to the blocking of native code debugging. There was something related to the execution framework about not preloading something or something like that, but it does not sound obviously related to native code debugging at all.</p>\n\n<p>There is another thing that has happened recently, a new version of Google Play Services was pushed out. Could that be related?</p>\n\n<p>By the way, I have not seen any such notifications myself yet, and judging from this thread, it sounds mostly like it is Proton's apps that started doing this? Which may mean it is just them.</p>"
+        },
+        {
+          "id": "277524",
+          "number": 18,
+          "author": "r134a",
+          "authorUsername": "r134a",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/M83QP8VU7vVsG6JH.png",
+          "score": 0,
+          "created": 1793026647,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/17\" class=\"PostMention\" data-id=\"277520\"><i class=\"icon fas fa-reply\"></i>ryrona</a> I doubt that, i have no play services on my main profile. The apps that gave me native code debugging popup today are jellyfin, proxmox virtual environment &amp; flow. Some more apps did it (since last stable update) but i forgot which ones to be honest, and don't want to give misleading information.</p>"
+        },
+        {
+          "id": "277525",
+          "number": 19,
+          "author": "ryrona",
+          "authorUsername": "ryrona",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1793026749,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/18\" class=\"PostMention\" data-id=\"277524\"><i class=\"icon fas fa-reply\"></i>r134a</a> Okay. Odd. Still, I haven't seen it myself, and haven't seen any related code changes in GrapheneOS.</p>"
+        },
+        {
+          "id": "277527",
+          "number": 20,
+          "author": "ryrona",
+          "authorUsername": "ryrona",
+          "authorAvatar": "",
+          "score": 2,
+          "created": 1793026819,
+          "parent": "43048",
+          "text": "<p>Unless... A recent Vanadium update introduced ptrace or native code debugging, and all affected apps use WebViews in one way or another.</p>"
+        }
+      ]
+    },
+    {
       "id": "43073",
       "title": "How to Convince People to Use GrapheneOS",
       "author": "Reboot",
@@ -1879,217 +2113,7 @@
       "url": "https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos",
       "media": [],
       "text": "<p>Hi, fellow GrapheneOS users.</p>\n\n<p>I've been using GrapheneOS for some time now and I'm very grateful that this project exists (also I donated to the project but this is off-topic).<br>\nI want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p>\n\n<p>Can you help me explain in simple, non-technical words why to do it, why does digital security matter?</p>\n\n<p>They don't use IPhones so it won't be as hard (but neither do they use Pixels).<br>\nAt least to convince security-wise not privacy-wise.</p>\n\n<p>I already convinced them to use Signal to talk to me (which I consider a win).</p>\n\n<p>There is a <a href=\"https://discuss.grapheneos.org/d/27962-how-do-you-promoteencourage-gos-and-de-google-to-your-friendsfamily\" rel=\"noopener\" target=\"_self\" class=\"UrlLink UrlLink--internal\">similar thread</a>, but I don't want to encourage to Degoogle, rather just to use the best mobile operating system.</p>\n\n<p>I also wanna hope that with this thread more people will be able to convince their beloved ones to make the switch.</p>\n\n<p>Thank you.</p>",
-      "replies": [
-        {
-          "id": "277147",
-          "number": 2,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 19,
-          "created": 1792857090,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> I want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p></blockquote>\n\n<p>You can't. Either there is a basic interest or not. You can simply talk about GrapheneOS and it's benefis, but you can't persuade anyone to do switch.<br>\nAll you can do is to assist people who already have the own intention to switch.</p>"
-        },
-        {
-          "id": "277149",
-          "number": 3,
-          "author": "tango",
-          "authorUsername": "tango",
-          "authorAvatar": "",
-          "score": 4,
-          "created": 1792857192,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a></p> \n\n<p>Hi,</p> \n\n<p>Its quite difficult really as most people are either too busy to be bothered or they literally dont have a clue, apart from basic security (strong passwords / updates etc). I would reckon it takes most people quite a while before they jump to GOS. If only they realised sooner how simple it is to get started and the huge security benefits from using it.</p>\n\n<p>In my opinion the best way is to lend them a good book and hope that they find it interesting enough to keep learning. There are 2 books that come to mind and they are \"Data and Goliath by Bruce Schneier\" and also \"Privacy is Power by Carissa Veliz\". Hope that helps a bit.</p> "
-        },
-        {
-          "id": "277156",
-          "number": 4,
-          "author": "router99",
-          "authorUsername": "router99",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/siwFkkailTNbeABD.png",
-          "score": 1,
-          "created": 1792858813,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> the combination of herd behavior and not caring much about privacy means people generally aren't interested. It has to be popularized in media for most people to care.</p> "
-        },
-        {
-          "id": "277158",
-          "number": 5,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 5,
-          "created": 1792859541,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>Not even that. Think about how many scandals Meta, Facebook, WhatsApp* and all the others had during the years, most people don't care, they are afraid of losing (imaginary) friends when they quit specific services and anyway, \"Everyone has WhatsApp and ... and I couldn't live without!\". That's what I hear again and again.</p>\n\n<p>*deputy examples</p>"
-        },
-        {
-          "id": "277160",
-          "number": 6,
-          "author": "ryrona",
-          "authorUsername": "ryrona",
-          "authorAvatar": "",
-          "score": 3,
-          "created": 1792859833,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>I doubt they would care even then. Maybe they will start using GrapheneOS is that is the defacto default most phones are sold with, but it would not be because they care, but exactly because they don't.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> I want to to convince somehow people I care about (family, friends) to switch to GrapheneOS too, but, I don't really know how to do this (I tried).</p></blockquote>\n\n<p>Buy them a new phone which is better than what they use, and install GrapheneOS on it before giving it to them. Now they are using GrapheneOS.</p>"
-        },
-        {
-          "id": "277167",
-          "number": 7,
-          "author": "penglix",
-          "authorUsername": "penglix",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792861249,
-          "parent": "43073",
-          "text": "<p>Maybe this argument will help you convince them: They can save money and lots of it. I booked hotels through booking.com and was able to get a much better price for exactly the same hotel and same room and everything than my parents who used a standard iPhone. I don't know why exactly that was. But I presume that it was because they weren't able to find out much about me, since I was using Vanadium on GrapheneOS.</p> "
-        },
-        {
-          "id": "277173",
-          "number": 8,
-          "author": "Byku",
-          "authorUsername": "Byku",
-          "authorAvatar": "",
-          "score": 3,
-          "created": 1792862989,
-          "parent": "43073",
-          "text": "<p>Honestly I think it is pointless if the person isn't already interested in the subject. Maybe someone who is pissed off with the bloat and ads on their phone would appreciate having GrapheneOS installed. In practice though I've seen people using terrible Android-based phones where entries in god damn settings redirected you to ads/shops and the person still maintained how they like how easy to use their phone is. Even ones who claim to be privacy conscious just buy and iPhone, don't change any settings and call it a day. So I wouldn't bother.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/4\" class=\"PostMention\" data-id=\"277156\"><i class=\"icon fas fa-reply\"></i>router99</a> It has to be popularized in media for most people to care.</p></blockquote>\n\n<p>The closest thing that ever happened was circa 2013-2015, probably due to Snowden leaks. It was the only time I actually heard the subject being brought up during casual conversations with my friends. Of course no one did anything.</p>"
-        },
-        {
-          "id": "277174",
-          "number": 9,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792863206,
-          "parent": "43073",
-          "text": "<p>You're all right about not being able to changing people's minds, but we could brainstorm and refine positive talking points with each other. Just briefly mentioning a security feature and a 1 sentence highlight of what it does, such as sandboxed Google play can prevent chosen apps from having access to my microphone, could pique people's interest.</p> "
-        },
-        {
-          "id": "277180",
-          "number": 10,
-          "author": "de0u",
-          "authorUsername": "de0u",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792864535,
-          "parent": "43073",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/8\" class=\"PostMention\" data-id=\"277173\"><i class=\"icon fas fa-reply\"></i>Byku</a> The closest thing that ever happened was circa 2013-2015, probably due to Snowden leaks.</p></blockquote>\n\n<p>I wonder if it might be possible to dust off an old <a href=\"https://en.wikipedia.org/wiki/Citizenfour\" rel=\"ugc nofollow\">Citizen Four</a> DVD?  Maybe used book stores have <a href=\"https://en.wikipedia.org/wiki/Permanent_Record_%28autobiography%29\" rel=\"ugc nofollow\">Permanent Record</a>?  I think many people have a vague understanding of what happened but don't know any details, and the details are important.</p>"
-        },
-        {
-          "id": "277182",
-          "number": 11,
-          "author": "subfloor9963",
-          "authorUsername": "subfloor9963",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792864653,
-          "parent": "43073",
-          "text": "<p>You can't help people who don't want to be helped. It is simple as that. Sure, you can talk about grapheneos to your peers. But, at the end of the day, it's their choice.</p> "
-        },
-        {
-          "id": "277184",
-          "number": 12,
-          "author": "Novaliss",
-          "authorUsername": "Novaliss",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 3,
-          "created": 1792865714,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> make sure to explain that GrapheneOS is for anybody. It isn't complicated to use since go no bloat at all. They can use it like a normal phone, but with outstanding security and privacy out of the box. Their important apps will probably just work.</p> "
-        },
-        {
-          "id": "277185",
-          "number": 13,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792865765,
-          "parent": "43073",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/11\" class=\"PostMention\" data-id=\"277182\"><i class=\"icon fas fa-reply\"></i>subfloor9963</a> of course. However, there's a difference between immediately making someone convert (not possible) and slowly over time exposing someone to the benefits enough that they eventually start questioning their own decisions (very possible, but not instant gratification).</p> "
-        },
-        {
-          "id": "277198",
-          "number": 14,
-          "author": "longshots",
-          "authorUsername": "longshots",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792870160,
-          "parent": "43073",
-          "text": "<p>+1 to the answers above. As we all know, there's no-one more radical than a convert. Be happy with your conversion because they may not like the sacrifices that need to be made.</p>"
-        },
-        {
-          "id": "277212",
-          "number": 15,
-          "author": "mmmm",
-          "authorUsername": "mmmm",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792875066,
-          "parent": "43073",
-          "text": "<p>You could introduce it as an entirely new, but android compatible OS. I mean - that's what it is really. Frame it like this: iOS for iPhone, android for other phones, GrapheneOS for pixels (and soon Motorola). You could suggest that with ios you end up locked in. You could suggest android is spyware, as in anything you do on an android phone is essentially visible to the manufacturer of the phone and Google. You could frame grapheneOS as a solution to those two problems. There is no lock in and there is no surveillance built in. You could explain it in a way that suggests the phone becomes what you want it to be instead of what the company who sold the phone wants it to be.</p> \n\n<p>One thing that I have done to make other people more aware (read: scared) is to talk about the keyboard. Anything that is typed potentially can be read. Not so with GrapheneOS and the right selection of keyboard and the correct settings. <br>\nPeople are often not worried about abstract (to them) ideas. But if people understand that anything they type has potential to be seen then they think in different terms.</p> "
-        },
-        {
-          "id": "277217",
-          "number": 16,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 1,
-          "created": 1792880086,
-          "parent": "43073",
-          "text": "<p>As others said, dont even try. Dont shy away from letting it be known that you are running a secure os and that you have some advantages as far as privacy and security go, but trying to convince someone is a fools errand. Just let them know if they ever want to be more sovereign digitally to hit you up... Nothing else is needed on your part. And honestly who cares, they are fine; just do your own thing and you can assist if ever needed.</p> "
-        },
-        {
-          "id": "277218",
-          "number": 17,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 2,
-          "created": 1792880398,
-          "parent": "43073",
-          "text": "<p>My favorite is normies coping by saying \"its impossible to get away from it, so who cares\". I just laugh and say 'its definitely possible to be private and secure, you just have to put in a little effort. Its even possible to be invisible, youre just a loser!' ....but thats just me.</p> "
-        },
-        {
-          "id": "277222",
-          "number": 18,
-          "author": "Winston",
-          "authorUsername": "Winston",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/447mUwxwZDQehrBy.png",
-          "score": 1,
-          "created": 1792881046,
-          "parent": "43073",
-          "text": "<p>Sorry for the spam, but i'll add a caveat: if its your girl/immediate family (kids), then yeah definitely just buy her a pixel with gos and they are with you (google enabled)(and as long as youre not going down a psychotic rabbit hole). My earlier posts were in regards to loved ones like parents, siblings, extended family &amp; friends. Your immediate people are to be secured (still convenient and as normal as possible), everyone else who cares.</p> "
-        },
-        {
-          "id": "277231",
-          "number": 19,
-          "author": "YiyaK",
-          "authorUsername": "YiyaK",
-          "authorAvatar": "",
-          "score": 3,
-          "created": 1792888716,
-          "parent": "43073",
-          "text": "<p>I can't even get a significant fraction of the people in my life to use Signal, let alone spend many hundreds of dollars  to buy a Pixel to convert to Graphene!</p> "
-        },
-        {
-          "id": "277234",
-          "number": 20,
-          "author": "MrChunky",
-          "authorUsername": "MrChunky",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792892721,
-          "parent": "43073",
-          "text": "<p>Not yet. But not yet is not never. As long as you're not pestering them. One day, when something happens that scares them, it's good for them to know who to go to. Someday someone will ask you about that secure phone thing you talked about.</p> "
-        }
-      ]
+      "replies": []
     },
     {
       "id": "42918",
@@ -2139,30 +2163,6 @@
       "url": "https://discuss.grapheneos.org/d/43108-obtainium-dcl-crash-after-last-update",
       "media": [],
       "text": "<p>Obtainium crashes immediately after opening. I get the exploit protection notification: Obtainium tried to perform DCL via memory. I've restarted the phone but the issue persists.</p>\n\n<p>I'm not sure if this issue is related to the 2026102100 GOS release or Obtainium version 1.7.2, as I updated both around the same time then started having this DCL issue.</p>\n\n<p>`type: memory_DCL<br>\nosVersion: google/rango/rango:17/CP3A.261005.005/2026102101:user/release-keys<br>\npackage: dev.imranr.obtainium:23603, targetSdk 36</p>\n\n<p>package: dev.imranr.obtainium:23603</p>\n\n<p>DCL denial type: DENY_EXECMEM<code></code>﻿type: logcat<br>\nosVersion: google/rango/rango:17/CP3A.261005.005/2026102101:user/release-keys<br>\npackage: dev.imranr.obtainium:23603, targetSdk 36<br>\nbuffers: main,system,crash,events,kernel<br>\nlevel: verbose</p>\n\n<p>--------- beginning of crash<br>\n10-24 03:25:57.038 18674 18674 F libc    : Fatal signal 6 (SIGABRT), code -1 (SI_QUEUE) in tid 18674 (mranr.obtainium), pid 18674 (mranr.obtainium)<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : Build fingerprint: 'google/rango/rango:17/CP3A.261005.005/2026102101:user/release-keys'<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : Kernel Release: '6.6.144-android15-8-g92137a1ac9ec-4k'<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : Revision: 'MP1.0'<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : ABI: 'arm64'<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : Timestamp: 2026-10-23 23:25:57.456610658-0400<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : Process uptime: 2s<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : Executable: /system/bin/app_process64<br>\n10-24 03:25:57.728 18769 18769 F DEBUG   : Cmdline: dev.imranr.obtainium<br>\n`</p>",
-      "replies": []
-    },
-    {
-      "id": "43048",
-      "title": "More native code debugging attempts recently",
-      "author": "cupcake-alibi",
-      "authorUsername": "cupcake-alibi",
-      "authorAvatar": "",
-      "score": 21,
-      "comments": 21,
-      "views": 455,
-      "participantCount": 13,
-      "created": 1792786787,
-      "lastPostedAt": 1793027441,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
-      "media": [],
-      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
       "replies": []
     },
     {
