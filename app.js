@@ -12117,14 +12117,47 @@ if (STATE.histClear) {
     return head + `<p class="source-checked">${esc(freshLabel(doc.checkedAt))}</p>` + rows;
   }
 
+  /* Lazy route modules (shared/lazy-modules.js): pages that load on demand show
+     a skeleton while their script arrives, then the vklazy event re-renders. */
+  function ensureLazy(name) {
+    if (window.ViktorychLazy && window.ViktorychLazy.ensure) window.ViktorychLazy.ensure(name);
+  }
+  function lazySkeleton(title) {
+    return pageHead(title) + `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`;
+  }
+
   function view(route) {
     if (route.name === "music") return (window.SIntelMusic && window.SIntelMusic.page(route)) || pageHead(productName("music")) + emptyBlock(tr("{music} isn’t available", { music: productName("music") }), tr("Reload the page."));
-    if (route.name === "shorts") return (window.ViktorychShorts && window.ViktorychShorts.visible() && window.ViktorychShorts.page(route)) || pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
-    if (route.name === "drive" && window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
-    if (route.name === "vault" && window.ViktorychVault && window.ViktorychVault.visible()) return window.ViktorychVault.page(route);
-    if (route.name === "games") return (window.ViktorychGames && window.ViktorychGames.page(route)) || pageHead(tr("Games")) + emptyBlock(tr("Games"), tr("Reload the page."));
-    if (route.name === "communities") return (window.ViktorychCommunities && window.ViktorychCommunities.page(route)) || pageHead(tr("Communities")) + emptyBlock(tr("Communities"), tr("Reload the page."));
-    if (route.name === "tv") return (window.ViktorychTV && window.ViktorychTV.page(route)) || pageHead(tr("TV")) + emptyBlock(tr("TV"), tr("Reload the page."));
+    if (route.name === "shorts") {
+      if (window.ViktorychShorts && window.ViktorychShorts.visible()) return window.ViktorychShorts.page(route);
+      if (!window.ViktorychShorts) { ensureLazy("shorts"); return lazySkeleton(tr("Shorts")); }
+      return pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
+    }
+    if (route.name === "drive") {
+      if (window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
+      if (!window.ViktorychDrive) { ensureLazy("drive"); return lazySkeleton(tr("brand.storage")); }
+      return pageHead(tr("brand.storage")) + emptyBlock(tr("brand.storage"), tr("Reload the page."));
+    }
+    if (route.name === "vault") {
+      if (window.ViktorychVault && window.ViktorychVault.visible()) return window.ViktorychVault.page(route);
+      if (!window.ViktorychVault) { ensureLazy("vault"); return lazySkeleton(tr("Vault")); }
+      return pageHead(tr("Vault")) + emptyBlock(tr("Vault"), tr("Reload the page."));
+    }
+    if (route.name === "games") {
+      if (window.ViktorychGames && window.ViktorychGames.page(route)) return window.ViktorychGames.page(route);
+      ensureLazy("games");
+      return lazySkeleton(tr("Games"));
+    }
+    if (route.name === "communities") {
+      if (window.ViktorychCommunities && window.ViktorychCommunities.page(route)) return window.ViktorychCommunities.page(route);
+      ensureLazy("communities");
+      return lazySkeleton(tr("Communities"));
+    }
+    if (route.name === "tv") {
+      if (window.ViktorychTV && window.ViktorychTV.page(route)) return window.ViktorychTV.page(route);
+      ensureLazy("tv");
+      return lazySkeleton(tr("TV"));
+    }
     if (route.name === "status" && route.id && STATE.shared && STATE.shared[String(route.id)]) return statusView(route);
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
@@ -12353,8 +12386,12 @@ if (STATE.histClear) {
     }
     const gen = (STATE.renderGen = (STATE.renderGen || 0) + 1);
     let route = parseRoute();
-    if (route.name === "drive" && !(window.ViktorychDrive && window.ViktorychDrive.visible())) {
-      route = { name: "home", tab: "foryou", query: route.query || new URLSearchParams() };
+    if (route.name === "drive") {
+      if (window.ViktorychDrive && !window.ViktorychDrive.visible()) {
+        route = { name: "home", tab: "foryou", query: route.query || new URLSearchParams() };
+      } else if (!window.ViktorychDrive) {
+        ensureLazy("drive");
+      }
     }
     syncHomeFromQuery(route);
     const currentTab = route.name === "home" ? (route.tab || "foryou") : "";
@@ -16330,7 +16367,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       repo: function () { return GITHUB_REPO; }
     });
   }
-  if (window.ViktorychCommunities) {
+  function bindCommunitiesModule() {
+    if (!window.ViktorychCommunities) return;
     window.ViktorychCommunities.requestRender = function () { render(); };
     window.ViktorychCommunities.toast = toast;
     window.ViktorychCommunities.hidden = function (handle, text, platform) {
@@ -16339,7 +16377,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.ViktorychCommunities.note = function (item) { commitBellNotes(item ? [item] : []); };
     if (window.ViktorychCommunities.pullNotes) window.ViktorychCommunities.pullNotes();
   }
-  if (window.ViktorychShorts && window.ViktorychShorts.bind) {
+  function bindShortsModule() {
+    if (!(window.ViktorychShorts && window.ViktorychShorts.bind)) return;
     window.ViktorychShorts.bind({
       icon: icon,
       esc: esc,
@@ -16356,6 +16395,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       logo: function () { return markSvg("app", "logo-full") + markSvg("appShort", "logo-short"); },
       requestRender: function () { render(); }
     });
+  }
+  bindCommunitiesModule();
+  bindShortsModule();
+  window.addEventListener("vklazy", function (event) {
+    const info = event.detail || {};
+    if (info.name === "shorts") bindShortsModule();
+    if (info.name === "communities") bindCommunitiesModule();
+    if (!info.silent) render();
+  });
+  if (window.ViktorychLazy && window.ViktorychLazy.preload) {
+    window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
   }
   if (window.ViktorychAccounts) {
     window.ViktorychAccounts.requestRender = function () { render(); };

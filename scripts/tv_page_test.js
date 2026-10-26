@@ -58,7 +58,7 @@ assert(html.includes("tv-scoreboard"), "HTML should include match score board");
 console.log("Verifying app.js route handling for tv...");
 const appCode = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
 assert(appCode.includes('if (parts[0] === "tv") return { name: "tv"'), "parseRouteInner must handle tv route");
-assert(appCode.includes('if (route.name === "tv") return (window.ViktorychTV && window.ViktorychTV.page(route))'), "view(route) must handle tv route without falling back to home");
+assert(appCode.includes('if (route.name === "tv") return (window.ViktorychTV && window.ViktorychTV.page(route))') || (appCode.includes('if (route.name === "tv") {') && appCode.includes('window.ViktorychTV.page(route)')), "view(route) must handle tv route without falling back to home");
 assert(appCode.includes('route.name === "tv" || gamePlay'), "shell() wide must include tv");
 assert(appCode.includes('if (route.name === "tv") window.ViktorychTV.mount(route)'), "render() must mount tv");
 
