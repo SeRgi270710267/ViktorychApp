@@ -6440,7 +6440,7 @@ const here = parseRoute();
     const tooltipText = tip || (name === "muBack" ? tr("Back") : label);
     const tight = name === "muBack" ? " nav-back" : "";
     const extra = extraClass ? ` ${extraClass}` : "";
-    return `<a class="nav-item${on ? " on" : ""}${tight}${extra}" href="${href}" aria-label="${esc(accessible)}" data-tooltip="${esc(tooltipText)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label">${esc(label)}</span></a>`;
+    return `<a class="nav-item${on ? " on" : ""}${tight}${extra}" href="${href}" aria-label="${esc(accessible)}" data-tooltip="${esc(tooltipText)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${glyph}${badge}</span><span class="nav-label" title="${esc(label)}">${esc(label)}</span></a>`;
   }
 
   function wordmarkSvg(cls) {
@@ -6509,12 +6509,105 @@ const here = parseRoute();
     return {};
   }
 
+  function navFolderEl(folderId) {
+    if (typeof document === "undefined" || !document.querySelectorAll) return null;
+    const all = document.querySelectorAll(".nav-folder-wrapper");
+    for (let i = 0; i < all.length; i += 1) {
+      if (all[i].dataset && all[i].dataset.folderId === folderId) return all[i];
+    }
+    return null;
+  }
+
+  function animateNavFolder(children, isOpen) {
+    if (!children) return;
+    if (typeof window === "undefined") {
+      children.classList.toggle("open", isOpen);
+      return;
+    }
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      children.style.transition = "none";
+      children.classList.toggle("open", isOpen);
+      children.style.height = isOpen ? "auto" : "0px";
+      void children.offsetHeight;
+      children.style.transition = "";
+      return;
+    }
+    if (isOpen) {
+      children.style.transition = "none";
+      children.classList.add("open");
+      children.style.height = "auto";
+      const target = children.offsetHeight;
+      children.style.height = "0px";
+      void children.offsetHeight;
+      children.style.transition = "";
+      children.style.height = target + "px";
+      const done = (event) => {
+        if (event && event.propertyName !== "height") return;
+        children.removeEventListener("transitionend", done);
+        if (children.classList.contains("open")) children.style.height = "auto";
+      };
+      children.addEventListener("transitionend", done);
+      return;
+    }
+    children.style.transition = "none";
+    const from = children.offsetHeight;
+    children.style.height = from + "px";
+    void children.offsetHeight;
+    children.classList.remove("open");
+    children.style.transition = "";
+    children.style.height = "0px";
+    const done = (event) => {
+      if (event && event.propertyName !== "height") return;
+      children.removeEventListener("transitionend", done);
+      if (!children.classList.contains("open")) children.style.height = "";
+    };
+    children.addEventListener("transitionend", done);
+  }
+
+  /* Paint an open/closed folder in place. The old code re-rendered the whole
+     app on every click, which made the toggle feel unresponsive and reset the
+     sidebar scroll position. */
+  function paintNavFolder(wrapper, isOpen) {
+    if (!wrapper) return;
+    wrapper.classList.toggle("open", isOpen);
+    const head = wrapper.querySelector(".nav-folder-head");
+    if (head) head.classList.toggle("open", isOpen);
+    const btn = wrapper.querySelector(".nav-folder-btn");
+    if (btn) {
+      btn.classList.toggle("open", isOpen);
+      btn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      const ico = btn.querySelector(".nav-ico");
+      const svg = ico && ico.querySelector("svg");
+      if (svg) svg.outerHTML = icon(isOpen ? "folderOpen" : "folder");
+      if (btn.dataset.tooltip) {
+        const name = (btn.querySelector(".nav-label") || {}).textContent || btn.getAttribute("aria-label") || "";
+        const count = btn.querySelector(".nav-folder-count");
+        const n = count ? count.textContent : "";
+        btn.dataset.tooltip = `${name}${n ? ` (${n})` : ""} - ${isOpen ? tr("Collapse folder") : tr("Expand folder")}`;
+      }
+    }
+    const children = wrapper.querySelector(".nav-folder-children");
+    if (children) {
+      children.classList.toggle("open", isOpen);
+      animateNavFolder(children, isOpen);
+    }
+  }
+
   function toggleNavFolder(folderId) {
     const map = getNavOpenFolders();
-    map[folderId] = !map[folderId];
+    const wrapper = navFolderEl(folderId);
+    const currentlyOpen = wrapper
+      ? wrapper.classList.contains("open")
+      : map[folderId] === undefined ? false : !!map[folderId];
+    const next = !currentlyOpen;
+    map[folderId] = next;
     try {
       localStorage.setItem("viktorychapp-nav-open-folders", JSON.stringify(map));
     } catch (e) {}
+    if (wrapper) {
+      paintNavFolder(wrapper, next);
+      return;
+    }
     render();
   }
 
@@ -6549,15 +6642,16 @@ const here = parseRoute();
         const dispName = folderDisplayName(folder);
         const isEditing = STATE.navEditingFolder === folder.id;
         const tipText = `${dispName} (${visibleItems.length}) - ${isOpen ? tr("Collapse folder") : tr("Expand folder")}`;
+        const childrenId = `nav-folder-children-${String(folder.id).replace(/[^A-Za-z0-9_-]/g, "_")}`;
 
         html += `<div class="nav-folder-wrapper${isOpen ? " open" : ""}" data-folder-id="${esc(folder.id)}">
           <div class="nav-folder-head${isOpen ? " open" : ""}${hasActiveChild ? " has-active" : ""}">
-            <button type="button" class="nav-item nav-folder-btn${isOpen ? " open" : ""}" data-act="toggle-nav-folder" data-folder-id="${esc(folder.id)}" aria-label="${esc(dispName)}" data-tooltip="${esc(tipText)}">
+            <button type="button" class="nav-item nav-folder-btn${isOpen ? " open" : ""}" data-act="toggle-nav-folder" data-folder-id="${esc(folder.id)}" aria-label="${esc(dispName)}" aria-expanded="${isOpen ? "true" : "false"}" aria-controls="${childrenId}" data-tooltip="${esc(tipText)}">
               <span class="nav-ico">
                 ${icon(isOpen ? "folderOpen" : "folder")}
-                ${hasActiveChild && !isOpen ? `<span class="nav-dot"></span>` : ""}
+                ${hasActiveChild ? `<span class="nav-dot"></span>` : ""}
               </span>
-              <span class="nav-label">${esc(dispName)}</span>
+              <span class="nav-label" title="${esc(dispName)}">${esc(dispName)}</span>
               <span class="nav-folder-count">${visibleItems.length}</span>
               <span class="nav-folder-caret">${icon("caret")}</span>
             </button>
@@ -6572,13 +6666,15 @@ const here = parseRoute();
               <button type="button" class="icon-btn" data-act="cancel-folder-rename" aria-label="${tr("Cancel")}" data-tooltip="${tr("Cancel")}">${icon("close")}</button>
             </form>
           ` : ""}
-          <div class="nav-folder-children${isOpen ? " open" : ""}">
-            ${visibleItems.map((itId) => {
-              const def = navItemDef(itId);
-              if (!def) return "";
-              const on = def.active(route);
-              return navItem(def.href, def.icon, def.label, on, null, null, "nav-folder-child");
-            }).join("")}
+          <div class="nav-folder-children${isOpen ? " open" : ""}" id="${childrenId}">
+            <div class="nav-folder-children-inner">
+              ${visibleItems.map((itId) => {
+                const def = navItemDef(itId);
+                if (!def) return "";
+                const on = def.active(route);
+                return navItem(def.href, def.icon, def.label, on, null, null, "nav-folder-child");
+              }).join("")}
+            </div>
           </div>
         </div>`;
       } else {
@@ -14334,7 +14430,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }, { passive: true });
   document.addEventListener("click", (event) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const navLink = event.target.closest && event.target.closest(".nav-item, .bottom-nav a");
+    const navLink = event.target.closest && event.target.closest("a.nav-item[href], .bottom-nav a[href]");
     if (navLink) {
       const href = navLink.getAttribute("href") || "";
       if (sameNavSection(parseRoute(), href)) {
