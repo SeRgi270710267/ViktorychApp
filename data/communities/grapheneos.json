@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T11:10:52Z",
+  "fetchedAt": "2026-10-26T11:31:55Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "deltuzirtu",
       "authorUsername": "deltuzirtu",
       "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
       "created": 1793012454,
-      "lastPostedAt": 1793012454,
+      "lastPostedAt": 1793013530,
       "category": "Third party apps and services",
       "categoryColor": "#994ce6",
       "tags": [
@@ -1890,8 +1890,43 @@
           "created": 1793012468,
           "parent": "43104",
           "text": ""
+        },
+        {
+          "id": "277488",
+          "number": 3,
+          "author": "Novaliss",
+          "authorUsername": "Novaliss",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
+          "score": 0,
+          "created": 1793013530,
+          "parent": "43104",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43104-unable-to-set-default-wallet-app-from-private-space/1\" class=\"PostMention\" data-id=\"277485\"><i class=\"icon fas fa-reply\"></i>deltuzirtu</a> I've tried a couple of times testing for feasibility of doing this but unfortunately no success. Maybe some other user have gotten it to work though.</p>"
         }
       ]
+    },
+    {
+      "id": "43048",
+      "title": "More native code debugging attempts recently",
+      "author": "cupcake-alibi",
+      "authorUsername": "cupcake-alibi",
+      "authorAvatar": "",
+      "score": 16,
+      "comments": 16,
+      "views": 420,
+      "participantCount": 12,
+      "created": 1792786787,
+      "lastPostedAt": 1793013234,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
+      "media": [],
+      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
+      "replies": []
     },
     {
       "id": "43100",
@@ -2135,30 +2170,6 @@
       "url": "https://discuss.grapheneos.org/d/42926-browser-fingerprinting-over-multiple-profiles",
       "media": [],
       "text": "<p>Hello,</p>\n\n<p>i've discovered a hackernews article with the headline \"Fingerprints are the new cookies\"<br>\n( <a href=\"https://news.ycombinator.com/item?id=50048642\" rel=\"ugc nofollow\">https://news.ycombinator.com/item?id=50048642</a> ).</p>\n\n<p>The linked site does some browser fingerprints via javascript and shows it as a tag.<br>\nTested it today with my multi-profile setup (one profile with vpn and one without).<br>\nI've opened the site in Vanadium and Ironfox, noted the tags, switched profile, opened it again.<br>\nBoth browsers had the same fingerprint after switching profiles.</p>\n\n<p>I didn't had that on the radar and now i'm looking for ways to get rid of that.</p>\n\n<p>Any Suggestions?</p>\n\n\n<p>Also, thank you for this important work and awesome Project.<br>\nI've switched a few month ago and don't regret it for a second.</p>",
-      "replies": []
-    },
-    {
-      "id": "43048",
-      "title": "More native code debugging attempts recently",
-      "author": "cupcake-alibi",
-      "authorUsername": "cupcake-alibi",
-      "authorAvatar": "",
-      "score": 15,
-      "comments": 15,
-      "views": 385,
-      "participantCount": 11,
-      "created": 1792786787,
-      "lastPostedAt": 1793005701,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
-      "media": [],
-      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
       "replies": []
     },
     {
