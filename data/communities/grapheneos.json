@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T15:01:43Z",
+  "fetchedAt": "2026-10-26T15:04:41Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -2084,7 +2084,7 @@
           "author": "redacted_handle",
           "authorUsername": "redacted_handle",
           "authorAvatar": "",
-          "score": 0,
+          "score": 1,
           "created": 1793026819,
           "parent": "43048",
           "text": "<p>Unless... A recent Vanadium update introduced ptrace or native code debugging, and all affected apps use WebViews in one way or another.</p>"
