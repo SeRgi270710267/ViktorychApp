@@ -12414,7 +12414,26 @@ if (STATE.histClear) {
       if (STATE.snapTop) y = 0;
       else if (STATE.holdY != null) y = STATE.holdY;
       else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
+      /* A render rebuilds the whole shell, which would throw away the pill
+         row's horizontal position (hydration and shard loads re-render while
+         the user scrolls). Read it off the live row before the swap, then
+         paint it back on the new one so the row does not jump to its start. */
+      const pillsRow = document.querySelector(".sp-row");
+      const pillsLeft = pillsRow ? pillsRow.scrollLeft : 0;
       document.getElementById("app").innerHTML = shell(view(route), route);
+      if (pillsLeft) {
+        const restorePills = () => {
+          const paintedRow = document.querySelector(".sp-row");
+          if (paintedRow && paintedRow.scrollLeft !== pillsLeft) paintedRow.scrollLeft = pillsLeft;
+        };
+        restorePills();
+        /* Layout is not necessarily final on the first frame. */
+        if (window.requestAnimationFrame) {
+          window.requestAnimationFrame(() => {
+            if (gen === STATE.renderGen) restorePills();
+          });
+        }
+      }
       if (window.ViktorychShorts) {
         if (route.name === "shorts") window.ViktorychShorts.mount(route);
         else window.ViktorychShorts.unmount();
@@ -16066,6 +16085,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       if (event.touches.length !== 1) return;
       if (event.target.closest && event.target.closest(".story-tray, #stories")) return;
+      /* Sideways drags on the pill row belong to the row's own scrolling, not
+         to the home tab swipe (swiping there switched tabs and re-rendered). */
+      if (event.target.closest && event.target.closest(".sp-row-wrap, .sp-row")) { swipe = null; return; }
       swipe = { x: event.touches[0].clientX, y: event.touches[0].clientY, viewer: false };
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {

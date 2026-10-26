@@ -979,6 +979,10 @@
   function refreshUI() {
     savePlaces();
     if (typeof document === "undefined") return;
+    /* The row is rebuilt below, so remember where the user scrolled to and
+       paint it back, otherwise the pills jump to the start on every update. */
+    var prevRow = document.querySelector(".sp-row");
+    var prevLeft = prevRow ? prevRow.scrollLeft : 0;
     var rowWrap = document.querySelector(".sp-row-wrap");
     if (rowWrap) {
       rowWrap.outerHTML = unifiedRowHtml();
@@ -996,6 +1000,17 @@
       var wSheet = document.getElementById("weather-sheet");
       if (wSheet && !wSheet.hidden) {
         wSheet.innerHTML = renderWeatherModalHtml(activeWeatherModalId);
+      }
+    }
+
+    if (prevLeft) {
+      var restoreRowScroll = function () {
+        var nextRow = document.querySelector(".sp-row");
+        if (nextRow && nextRow.scrollLeft !== prevLeft) nextRow.scrollLeft = prevLeft;
+      };
+      restoreRowScroll();
+      if (typeof window !== "undefined" && window.requestAnimationFrame) {
+        window.requestAnimationFrame(restoreRowScroll);
       }
     }
 
