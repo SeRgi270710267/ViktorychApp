@@ -351,7 +351,9 @@ jobs:
       - name: Refresh feeds
         if: steps.filter.outputs.refresh == 'true'
         # Stop before the runner would sit stuck for hours on one dead source.
-        timeout-minutes: 40
+        # A healthy refresh takes 41-44 minutes, so the backstop has to sit
+        # above that band; at 40 minutes every full refresh timed out.
+        timeout-minutes: 55
         # Timelines, Meta CDN refreshes, and Instagram/Threads comments under 7 days.
         # X replies and YouTube video comments are fetched in the browser.
         # Community post comments are written to fallback/ytpost_<id>.json here.
