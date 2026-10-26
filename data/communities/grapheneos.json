@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T06:02:06Z",
+  "fetchedAt": "2026-10-26T06:41:50Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,264 @@
       ]
     },
     {
+      "id": "14004",
+      "title": "Phasing out 32-bit-only app support for older devices too",
+      "author": "GrapheneOS",
+      "authorUsername": "GrapheneOS",
+      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+      "score": 46,
+      "comments": 46,
+      "views": 700,
+      "participantCount": 20,
+      "created": 1720316342,
+      "lastPostedAt": 1792995942,
+      "category": "Announcements",
+      "categoryColor": "#f00a0a",
+      "tags": [
+        "Announcements"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too",
+      "media": [],
+      "text": "<p>We're planning on phasing out support for 32-bit apps on 5th/6th generation Pixels where they're still supported. They were already phased out by Android for 7th generation Pixels and later, and by ARM for 2nd generation ARMv9 Cortex cores onwards. Since 7th/8th generation Pixel users are doing fine without them, we want to bring the improved security to users on 6th generation Pixels which still have a lot of support ahead of them. It will also save a significant amount of build time and bandwidth, particularly when we can move to 64-bit-only builds of Vanadium.</p>\n\n<p>The main benefit is dropping all the 32-bit ABI support from the kernel including a bunch of awful legacy cruft for emulating legacy ARM features no longer supported by hardware.</p>\n\n<p>The next release will add a clear warning to each launch of 32-bit-only apps. In nearly all cases, people just need to switch to proper builds of apps which aren't 32-bit-only such as the ones distributed by certain 3rd party mirror sites where users accidentally ended up on 32-bit-only builds.</p>\n\n<p>It hasn't been possible to install 32-bit-only apps from the Play Store on 64-bit-capable devices since August 2021 and they blocked uploading either new apps or app updates without 64-bit support since August 2019.</p>",
+      "replies": [
+        {
+          "id": "88208",
+          "number": 2,
+          "author": "Panda-na",
+          "authorUsername": "Panda-na",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1720341568,
+          "parent": "14004",
+          "text": "<p>I like the work that you do with removing old stuff, good work! 👍</p> \n\n<p>But one thing. You write that there will be a warning when launching a 32-bit app. But I would think that if people use a 32-bit app, that means that they have made a conscious choice and sideloaded that app for a specific usecase. Most probably that app is not in daily use.</p> \n\n<p>Would it not be better to have a kind of \"32-bit app checker\" that runs once a week or something and displays a list of apps that will not be working with future releases?</p> \n\n<p>Maybe apps like these are specific apps for themes or widgets or similar. Those apps wil not be launched by the user, they will run 24/7. Maybe warning at OS startup?</p> \n\n<p>Just a few thoughts 😊 I don't think this will impact me at all, so I'm happy either way. But those that are crazy about theme-ing and customization will probably not like this change (especially if they don't get a warning 😅).</p> "
+        },
+        {
+          "id": "88253",
+          "number": 3,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 2,
+          "created": 1720366880,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/2\" class=\"PostMention\" data-id=\"88208\"><i class=\"icon fas fa-reply\"></i>Panda-na</a></p> \n\n<blockquote><p>But one thing. You write that there will be a warning when launching a 32-bit app. But I would think that if people use a 32-bit app, that means that they have made a conscious choice and sideloaded that app for a specific usecase. Most probably that app is not in daily use.</p></blockquote>\n\n<p>In almost every case people are accidentally using 32-bit-only builds of apps because they obtained the apps from a mirror or third party repository and ended up with a 32-bit-only build instead of the 64-bit-only build. We want to quickly phase out support for these apps so warning at each launch is the best approach. Warning less frequently would be reasonable if we didn't plan to remove support for 32-bit-only apps in the near future. No one can use these on 7th/8th generation Pixels since support for them was disabled upstream on 7th gen Pixels from launch and 8th gen Pixels do not support 32-bit at a hardware level.</p>\n\n<blockquote><p>Maybe apps like these are specific apps for themes or widgets or similar. Those apps wil not be launched by the user, they will run 24/7. Maybe warning at OS startup?</p></blockquote>\n\n<p>They're either apps with 64-bit builds available or in rare cases games which haven't been developed in before around 2018. The deprecation of 32-bit-only apps started in 2017.</p>\n\n<blockquote><p>Just a few thoughts 😊 I don't think this will impact me at all, so I'm happy either way. But those that are crazy about theme-ing and customization will probably not like this change (especially if they don't get a warning 😅).</p></blockquote>\n\n<p>It's not related to themes/customization. It's highly unlikely there are any apps relevant to that impacted by this. They'll either be apps where people are accidentally using 32-bit-only builds where 64-bit support is available or rare cases like abandoned games. People on 7th/8th gen Pixels already don't have 32-bit-only app support since that's standard on new Android devices, and we've heard nearly zero complaints about it.</p>\n\n<p>Running ancient apps with no security updates is generally not a good idea particularly since most require network access. Most of the old games required online services which aren't available any more so the examples of these apps which are still relevant are few.</p>"
+        },
+        {
+          "id": "88308",
+          "number": 4,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 0,
+          "created": 1720382024,
+          "parent": "14004",
+          "text": ""
+        },
+        {
+          "id": "88323",
+          "number": 5,
+          "author": "Skyway",
+          "authorUsername": "Skyway",
+          "authorAvatar": "",
+          "score": 3,
+          "created": 1720393619,
+          "parent": "14004",
+          "text": "<p>Is there a way to check apps to see which are 32 bit before the update with warning ?</p>"
+        },
+        {
+          "id": "88516",
+          "number": 6,
+          "author": "DeletedUser161",
+          "authorUsername": "DeletedUser161",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1720520406,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/5\" class=\"PostMention\" data-id=\"88323\"><i class=\"icon fas fa-reply\"></i>Skyway</a> <br>\nSimple enough. You can just open the apk file in an archiver and find the lib folder (if there are no, it means there are no native libraries and for such apk there is no idea what architecture or bitness) in it there will be more folders: arm64-v8a - ARM 64 bit, armeabi-v7a - ARM 32 bit. (Native libraries can be for several architectures at once or only for one).</p>\n\n<p>Another option is to use <a href=\"https://github.com/MuntashirAkon/AppManager/releases/latest\" rel=\"ugc nofollow\">App Manager</a>: open any application and in the \"App Info\" clade in the \"More Info\" section there will be \"Primary ABI\" with the value arm64-v8a - ARM 64 bit, armeabi-v7a - ARM 32 bit.</p>\n\n<p>All this can be checked for example with apk files of Matrix <a href=\"https://github.com/element-hq/element-android/releases/latest\" rel=\"ugc nofollow\">Element Client</a> (the names already indicate architecture and bitness).</p>"
+        },
+        {
+          "id": "88706",
+          "number": 7,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 4,
+          "created": 1720628802,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/5\" class=\"PostMention\" data-id=\"88323\"><i class=\"icon fas fa-reply\"></i>Skyway</a> The first release with the warning is now available in both the Beta and Alpha channels.</p>"
+        },
+        {
+          "id": "88851",
+          "number": 8,
+          "author": "LegalPusher",
+          "authorUsername": "LegalPusher",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1720709971,
+          "parent": "14004",
+          "text": "<p>I am extremely disappointed by this announcement. I use medical apps with no permissions for which the 64bit equivalents require a subscription through Google Play, are infested with ads and spyware, or both.</p>\n\n<p>I also have been moving my notes away from PalmNote (some going back 24 years). (It exports to xml but I've only been able to import into Markor by copy and paste.)</p>\n\n<p>I was hoping I would have until updates end for the 6a. I've ironically had more luck finding equivalent apps for the ipad at work - their app store is bad, but Google Play is a nightmare.</p>"
+        },
+        {
+          "id": "88870",
+          "number": 9,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 0,
+          "created": 1720720345,
+          "parent": "14004",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/8\" class=\"PostMention\" data-id=\"88851\"><i class=\"icon fas fa-reply\"></i>LegalPusher</a> I also have been moving my notes away from PalmNote (some going back 24 years). (It exports to xml but I've only been able to import into Markor by copy and paste.)</p></blockquote>\n\n<p>Markor at the very least should have a 64-bit version. Is there some reason you think it doesn't?</p>"
+        },
+        {
+          "id": "88873",
+          "number": 10,
+          "author": "LegalPusher",
+          "authorUsername": "LegalPusher",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1720721296,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/9\" class=\"PostMention\" data-id=\"88870\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a> <br>\nMarkor is what I am importing into. PalmNote is what I am exporting from.<br>\n<a href=\"https://apkpure.com/palmnote/spazee.pnote\" rel=\"ugc nofollow\">This PalmNote, no longer available on Play Store as it is 32bit.</a></p>"
+        },
+        {
+          "id": "88878",
+          "number": 11,
+          "author": "LegalPusher",
+          "authorUsername": "LegalPusher",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1720722748,
+          "parent": "14004",
+          "text": "<p>Of course, I should have moved over my notes to a new app long ago, but I thought I was fine until updates for the 6a (the last 32bit Pixel) ended next year. Even then, that's just a matter of going through the xml file on my computer.</p> \n\n<p>MediCalc and iSilo are bigger problems for me. I also have a nautical charts app that for the new 64bit version would require an annual subscription to access the same unchanged maps.</p>"
+        },
+        {
+          "id": "88881",
+          "number": 12,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 7,
+          "created": 1720723146,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/11\" class=\"PostMention\" data-id=\"88878\"><i class=\"icon fas fa-reply\"></i>LegalPusher</a> I understand where you're coming from, and we did consider these niche use cases. I will pass your feedback on to the rest of the team for the further discussion, however this is already something that is over for the majority of our supported devices. With 5a almost out of the way, it only leaves the 6th gen devices.</p>\n\n<p>Doing this would not only help GrapheneOS be able to make builds faster and reducing the size that people have to download, but will also bring security benefits to people on these devices.</p>\n\n<p>While it's unfortunate that these apps are now charging for something that was once free, using apps that are not receiving updates is an issue, aside from them being 32-bit, which is another issue in and of itself.</p>\n\n<p>Even if we don't make this change, you would have needed to migrate from those apps to using something else when you eventually moved away from your 6th gen device. I understand that's not nearly as soon as this change would be, but still.</p>"
+        },
+        {
+          "id": "88928",
+          "number": 13,
+          "author": "GrapheneOS",
+          "authorUsername": "GrapheneOS",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
+          "score": 3,
+          "created": 1720736465,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/8\" class=\"PostMention\" data-id=\"88851\"><i class=\"icon fas fa-reply\"></i>LegalPusher</a> It's not going to be immediately phased out. There's going to be a transition period. If there are more people still using 32-bit-only apps than expected without a clear migration path away from them, we can make the transition period longer than a month.</p>\n\n<p>The reason we're adding the warning is so users have a lot of time to migrate to currently maintained apps. 32-bit-only apps were deprecated in 2017, were blocked for new apps and app updates by the Play Store in 2019 and it stopped serving them to 64-bit-capable devices in 2021 which means there's no change in compatibility for apps from the Play Store itself.</p>\n\n<p>Users will have to migrate away from these apps one way or another since 7th gen Pixels dropped support for 32-bit apps and 2nd gen ARMv9 Cortex cores used by the Pixel 8 lack hardware support for 32-bit.</p>"
+        },
+        {
+          "id": "89528",
+          "number": 14,
+          "author": "xxx",
+          "authorUsername": "xxx",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1721124197,
+          "parent": "14004",
+          "text": "<p>I got a warning on P6  with Obtainium.</p>\n\n<p>I tried the version from f-droid.</p>\n\n<p>\"This app only supports 32bit...\"</p>"
+        },
+        {
+          "id": "89547",
+          "number": 15,
+          "author": "Carlos-Anso",
+          "authorUsername": "Carlos-Anso",
+          "authorAvatar": "",
+          "score": 4,
+          "created": 1721136572,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/14\" class=\"PostMention\" data-id=\"89528\"><i class=\"icon fas fa-reply\"></i>xxx</a> <br>\nAre you only using the izzyondroid fdroid repo?<br>\nIzzyondroid fdroid repo often supplies only the 32bit versions of apps. <br>\nThey scrape the obtainium apks from github.  You can update to the 64bit version available on github <a href=\"https://github.com/ImranR98/Obtainium/releases/download/v1.1.14/app-arm64-v8a-release.apk\" rel=\"ugc nofollow\">https://github.com/ImranR98/Obtainium/releases/download/v1.1.14/app-arm64-v8a-release.apk</a> and get further updates from there using obtainium.</p>\n\n"
+        },
+        {
+          "id": "89554",
+          "number": 16,
+          "author": "xxx",
+          "authorUsername": "xxx",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1721138247,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/15\" class=\"PostMention\" data-id=\"89547\"><i class=\"icon fas fa-reply\"></i>Carlos-Anso</a></p> \n\n<p>I only tried the f-droid. (F-droid basic w. Izzy) Perhaps you're right. My goal is to ditch f-droid. But the ntfy apk seems to be unsigned on github? So it's pretty useless. Sorry for offtopic.</p> \n"
+        },
+        {
+          "id": "89555",
+          "number": 17,
+          "author": "matchboxbananasynergy",
+          "authorUsername": "matchboxbananasynergy",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/9DihVSGjlZjFaRRX.png",
+          "score": 3,
+          "created": 1721138276,
+          "parent": "14004",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/14\" class=\"PostMention\" data-id=\"89528\"><i class=\"icon fas fa-reply\"></i>xxx</a> You likely downloaded the wrong version or got it from a mirror providing the 32-bit version, and that's an issue cause you were obviously not aware until you were warned.</p>\n\n<p>Using a 32-bit app means not benefitting from features like hardened_malloc etc.</p>"
+        },
+        {
+          "id": "89559",
+          "number": 18,
+          "author": "xxx",
+          "authorUsername": "xxx",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1721138526,
+          "parent": "14004",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/17\" class=\"PostMention\" data-id=\"89555\"><i class=\"icon fas fa-reply\"></i>matchboxbananasynergy</a> got it from a mirror providing the 32-bit version</p></blockquote>\n\n<p>Will try again. Thank you both.</p>"
+        },
+        {
+          "id": "89703",
+          "number": 19,
+          "author": "d4er",
+          "authorUsername": "d4er",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1721210855,
+          "parent": "14004",
+          "text": "<p>Can't find any fdroid apps that are 32bit, any apps out there pls? Wanna see how this will work.</p>"
+        },
+        {
+          "id": "90294",
+          "number": 20,
+          "author": "Scott",
+          "authorUsername": "Scott",
+          "authorAvatar": "",
+          "score": 1,
+          "created": 1721499117,
+          "parent": "14004",
+          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too/19\" class=\"PostMention\" data-id=\"89703\"><i class=\"icon fas fa-reply\"></i>d4er</a> Can't find any fdroid apps that are 32bit, any apps out there pls? Wanna see how this will work.</p></blockquote>\n\n<p><a href=\"https://apt.izzysoft.de/fdroid/\" rel=\"ugc nofollow\">https://apt.izzysoft.de/fdroid/</a> packages many 32bit apps. For example \"Rain\" weather app</p>"
+        }
+      ]
+    },
+    {
+      "id": "43048",
+      "title": "More native code debugging attempts recently",
+      "author": "cupcake-alibi",
+      "authorUsername": "cupcake-alibi",
+      "authorAvatar": "",
+      "score": 13,
+      "comments": 13,
+      "views": 315,
+      "participantCount": 9,
+      "created": 1792786787,
+      "lastPostedAt": 1792995465,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
+      "media": [],
+      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
+      "replies": []
+    },
+    {
       "id": "42154",
       "title": "New messaging app",
       "author": "ojzula",
@@ -1879,107 +2137,7 @@
       "url": "https://discuss.grapheneos.org/d/42154-new-messaging-app",
       "media": [],
       "text": "<p>When new messaging app willa be addee to beta ? <br>\nCheers</p>\n",
-      "replies": [
-        {
-          "id": "269141",
-          "number": 2,
-          "author": "Kamika242",
-          "authorUsername": "Kamika242",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/j2sEo1nQUjaYxKj4.png",
-          "score": 6,
-          "created": 1789903821,
-          "parent": "42154",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/1\" class=\"PostMention\" data-id=\"269114\"><i class=\"icon fas fa-reply\"></i>ojzula</a></p> \n\n<p>When the time has come. At the moment, no one knows.</p>"
-        },
-        {
-          "id": "269146",
-          "number": 3,
-          "author": "xxx",
-          "authorUsername": "xxx",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1789905131,
-          "parent": "42154",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/1\" class=\"PostMention\" data-id=\"269114\"><i class=\"icon fas fa-reply\"></i>ojzula</a> Don't know. I use the alpha since day one and it works.</p>"
-        },
-        {
-          "id": "269160",
-          "number": 4,
-          "author": "wizoatk",
-          "authorUsername": "wizoatk",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/vJ0kJ1awATgnekca.png",
-          "score": 3,
-          "created": 1789911937,
-          "parent": "42154",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/1\" class=\"PostMention\" data-id=\"269114\"><i class=\"icon fas fa-reply\"></i>ojzula</a></p> \n\n<p>Personally, I expect a new version 14 released relatively soon instead.  Lots of activity 2 days ago.</p>\n\n<p><a href=\"https://github.com/GrapheneOS/Messaging/commits/main/\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/Messaging/commits/main/</a></p>\n\n"
-        },
-        {
-          "id": "269162",
-          "number": 5,
-          "author": "Novaliss",
-          "authorUsername": "Novaliss",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 1,
-          "created": 1789914021,
-          "parent": "42154",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/4\" class=\"PostMention\" data-id=\"269160\"><i class=\"icon fas fa-reply\"></i>wizoatk</a></p> \n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/4\" class=\"PostMention\" data-id=\"269160\"><i class=\"icon fas fa-reply\"></i>wizoatk</a> Lots of activity</p></blockquote>\n\n<p>Thanks for teaching about this magical Github button in one of your recent posts.<br>\n<a href=\"https://ibb.co/WNZNVDYm\" rel=\"ugc nofollow\">https://ibb.co/WNZNVDYm</a><br>\nI just missed its existence for years.</p> \n"
-        },
-        {
-          "id": "277384",
-          "number": 6,
-          "author": "Fauxkie",
-          "authorUsername": "Fauxkie",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792954492,
-          "parent": "42154",
-          "text": "<p>Is this a good place to request features to the new messaging app?</p>\n"
-        },
-        {
-          "id": "277392",
-          "number": 7,
-          "author": "otterfoghornrainfall",
-          "authorUsername": "otterfoghornrainfall",
-          "authorAvatar": "",
-          "score": 1,
-          "created": 1792956299,
-          "parent": "42154",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/6\" class=\"PostMention\" data-id=\"277384\"><i class=\"icon fas fa-reply\"></i>Fauxkie</a> You can discuss the ideas here, but the devs won't see them. That happens on GitHub.</p> "
-        },
-        {
-          "id": "277407",
-          "number": 8,
-          "author": "de0u",
-          "authorUsername": "de0u",
-          "authorAvatar": "",
-          "score": 2,
-          "created": 1792960153,
-          "parent": "42154",
-          "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/6\" class=\"PostMention\" data-id=\"277384\"><i class=\"icon fas fa-reply\"></i>Fauxkie</a> Is this a good place to request features to the new messaging app?</p></blockquote>\n\n<p>It's a fine place.  It is typically more productive for discussion to happen on the discussion forum before issues are posted on GitHub, though that is not a requirement.</p>"
-        },
-        {
-          "id": "277447",
-          "number": 9,
-          "author": "Fauxkie",
-          "authorUsername": "Fauxkie",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792988562,
-          "parent": "42154",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/7\" class=\"PostMention\" data-id=\"277392\"><i class=\"icon fas fa-reply\"></i>otterfoghornrainfall</a> Tell me do y'all think different inboxs, for different SIMs seems like a good feature?</p>"
-        },
-        {
-          "id": "277452",
-          "number": 10,
-          "author": "de0u",
-          "authorUsername": "de0u",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1792994065,
-          "parent": "42154",
-          "text": "<p><a href=\"https://discuss.grapheneos.org/d/42154-new-messaging-app/9\" class=\"PostMention\" data-id=\"277447\"><i class=\"icon fas fa-reply\"></i>Fauxkie</a> Something that some people have asked for is compartmentalizing SIMs via profiles.  So one SIM could be wired to the owner profile (calls and messages) and another SIM could be wired to a secondary user profile.</p>\n\n<p>I mention that not because I think it would be easy, but because I can imagine it might be complicated to have Messaging both support separate \"boxes\" for different SIMs and to have Messaging in some profiles to be left out of messages in other profiles.</p>\n\n<p>Also, I have a question about multiple \"boxes\":  let's say I have a primary SIM for when I'm home, and I travel somewhere and get a temporary tourist SIM, and I send a message from the tourist SIM to somebody I know from back home.  Do users <strong><em>want</em></strong> that message to go into a separate box for the separate SIM?</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43099",
@@ -2177,30 +2335,6 @@
       "replies": []
     },
     {
-      "id": "43048",
-      "title": "More native code debugging attempts recently",
-      "author": "cupcake-alibi",
-      "authorUsername": "cupcake-alibi",
-      "authorAvatar": "",
-      "score": 12,
-      "comments": 12,
-      "views": 280,
-      "participantCount": 8,
-      "created": 1792786787,
-      "lastPostedAt": 1792973768,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently",
-      "media": [],
-      "text": "<p>Recently, I noticed that more apps make native code debugging attempts. I used to get barely any notifications, but for over last weeks I've gotten multiple notifications for multiple apps every day.</p>\n\n<p>Is anyone else experiencing this, too?</p>\n\n<p>Could this be related to apps themselves adding this to their code? Or could it be related to recent GrapheneOS updates?</p>",
-      "replies": []
-    },
-    {
       "id": "43094",
       "title": "Graphene OS for Normies and Newbies",
       "author": "YiyaK",
@@ -2247,31 +2381,6 @@
       "url": "https://discuss.grapheneos.org/d/8274-how-do-i-prevent-apps-from-knowing-when-i-screenshot",
       "media": [],
       "text": "<p>Is there some way I can disable the ability of apps being able to tell when I screenshot? I've tried disabling sensors, but that doesn't seem to help. Is there some other thing I'm missing that could prevent this?</p>\n\n<p>I'm running the latest stable branch of Android 14 on a pixel 7 (not pro) if that matters.</p>",
-      "replies": []
-    },
-    {
-      "id": "42352",
-      "title": "I finally have call screening working!",
-      "author": "ashley05",
-      "authorUsername": "ashley05",
-      "authorAvatar": "",
-      "score": 17,
-      "comments": 17,
-      "views": 175,
-      "participantCount": 5,
-      "created": 1790472746,
-      "lastPostedAt": 1792972297,
-      "category": "Pixel 9",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 9"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/42352-i-finally-have-call-screening-working",
-      "media": [],
-      "text": "<p>I have Call Screen working with Google's stock Phone app (Google Dialer) on GrapheneOS.</p>\n\n<p>Setup: Pixel 9, GrapheneOS 2026091900 (Android 17). Google Phone v218 (19664958), the same \"-pixel\" build that ships on stock Pixel firmware. I've tested it unlocked, and again after relocking with my own keys (avbroot).</p>\n\n<p>To develop and test without recompiling, I used root (Magisk) to install the Dialer as a privileged system app with these permissions allowlisted:</p>\n\n<ul><li>CAPTURE_AUDIO_OUTPUT</li>\n<li>MODIFY_AUDIO_ROUTING</li>\n<li>MODIFY_PHONE_STATE</li>\n<li>CAPTURE_VOICE_COMMUNICATION_OUTPUT</li>\n<li>CONTROL_INCALL_EXPERIENCE</li>\n<li>READ_PRIVILEGED_PHONE_STATE</li></ul>\n\n<p>It also needed:</p>\n\n<ul><li>com.google.android.dialer.support.jar from the stock image, installed as a library;</li>\n<li>Speech Services by Google set as the TTS and voice recognition engine, with the English (US) language pack downloaded;</li>\n<li>the US Call Screen feature flag forced on through the Dialer's local flag overrides;</li>\n<li>an exemption from GrapheneOS's dynamic code loading restrictions, because I installed it as a system app. A Play-installed Dialer shouldn't need that.</li></ul>\n\n<p>What works:</p>\n\n<ul><li>Call Screen, manual and automatic, with the live transcript and caller prompts</li>\n<li>Hold for Me</li>\n<li>Direct My Call</li>\n<li>Call Notes recording (both sides) and on-device transcription</li></ul>\n\n<p>What doesn't work natively: Take a Message, Call Notes summaries and Scam Detection. These depend on AICore (Gemini Nano). Google's server refuses the model download on GrapheneOS, both unlocked and relocked with my own keys. I got them working with Public Compute Services, an open-source Xposed module that supplies the model manifests so the models can download. But it needs root and Xposed, so it's not something for a GrapheneOS release.</p>\n\n<p>Still, getting Call Screen and the other non-AI features working with the stock Dialer is a very good start.</p>\n\n<p>Other things that are possible with root (I'm not proposing these for GrapheneOS at this time):</p>\n\n<ul><li>the Dialer's region checks can be overridden;</li>\n<li>the \"this call is being recorded\" announcement can be replaced with silence (I find this annoying and it is unnecessary in my single-party-consent location);</li>\n<li>the Call Screen prompts are plain audio files, so they can be replaced with your own recordings. (I think that would be fun to re-record in my own voice)</li></ul>\n\n<p>I'm waiting on more RAM and storage so I can build GrapheneOS from source. After some investigation and a lot of testing, I expect to have a patch to propose in 2–4 weeks.</p>\n\n<p>What I'm thinking of proposing is the same approach GrapheneOS uses for Android Auto. GrapheneOS would recognize the genuine Google Dialer by its signing certificate and offer opt-in toggles that grant only the permissions Call Screen needs. From my analysis so far, the minimum looks like CAPTURE_AUDIO_OUTPUT, MODIFY_AUDIO_ROUTING and MODIFY_PHONE_STATE. I still need to verify that on a source build. The Dialer would stay a normal app from Play, or from the GrapheneOS App Store if that's preferred.</p>\n\n<p>For the features that need AICore, there is FOSS code that shows how to get them working. But porting that into GrapheneOS in a secure and acceptable way is a major project, and some way off.</p>\n\n<p>A note on call recording: GrapheneOS doesn't make CAPTURE_AUDIO_OUTPUT available to apps installed from Play or sideloaded, so third-party recorder apps can't capture both sides of a call. GrapheneOS's own Phone app can record, but only while it's the default phone app. That means you can't combine it with Google's Call Screen. I personally miss having an always-on and working phone call recording application.</p> \n\n<p>I'd suggest making call-audio capture a per-app, opt-in permission. Ideally it would be a narrower GrapheneOS permission that covers only the call audio sources, rather than the full CAPTURE_AUDIO_OUTPUT. Then recording could be handled separately from whichever dialer you use for screening (related: #7128, #7205).</p>\n\n<p>*AI fixed my \"Zoolander school spelling,\" the formatting, and checked and corrected the exactly correct names of modules and permissions so that this was posted without technical errors.</p> ",
       "replies": []
     }
   ]
