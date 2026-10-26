@@ -58,6 +58,22 @@ test("a different room does not replace a live capture", () => {
   assert.equal(watchDecision(job, {}, "7699647509498710801", NOW).action, "record");
 });
 
+test("a dispatch that never opened its capture waits, then retries", () => {
+  const job = { active: { state: "recording", roomId: "7699647509498710801", part: 1, capturing: false, captureDone: false, dispatchedAt: ISO(NOW - 30 * 1000) } };
+  assert.equal(watchDecision(job, {}, "7699647509498710801", NOW).why, "waiting");
+  job.active.dispatchedAt = ISO(NOW - 11 * 60 * 1000);
+  const choice = watchDecision(job, {}, "7699647509498710801", NOW);
+  assert.equal(choice.action, "record");
+  assert.equal(choice.part, 1);
+});
+
+test("a blocked pick that left the row unlabeled still retries", () => {
+  const job = { active: { state: "recording", roomId: "7699647509498710801", capturing: false, captureDone: false } };
+  const choice = watchDecision(job, {}, "7699647509498710801", NOW);
+  assert.equal(choice.action, "record");
+  assert.equal(choice.why, "retry");
+});
+
 test("fresh rejects old and future stamps", () => {
   assert.equal(fresh(ISO(NOW - 1000), NOW, 5000), true);
   assert.equal(fresh(ISO(NOW - 6000), NOW, 5000), false);
