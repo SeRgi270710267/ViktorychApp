@@ -1,0 +1,40 @@
+name: Backup Server
+
+on:
+  pull_request:
+    paths:
+      - "backup-server/**"
+      - "worker/src/**"
+      - "render.yaml"
+      - ".github/workflows/backup-server.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "backup-server/**"
+      - "worker/src/**"
+      - "render.yaml"
+      - ".github/workflows/backup-server.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install backup server dependencies
+        run: npm install --prefix backup-server
+
+      - name: Test the shared Cloudflare D1/R2 bindings
+        run: node backup-server/remote.test.mjs
+
+      - name: Test login against a shared database
+        run: node backup-server/remote-integration.test.mjs

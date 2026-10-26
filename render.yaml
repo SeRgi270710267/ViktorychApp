@@ -12,7 +12,28 @@ services:
         value: "10000"
       - key: ALLOWED_ORIGINS
         value: "https://viktorychgroup.github.io"
+      # Shared Cloudflare account. The backup reads and writes the SAME D1
+      # database and R2 bucket as the primary Worker, so logins and sessions
+      # always agree even while the Worker is out of free daily requests.
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      # Optional. When unset the database is looked up by name.
+      - key: D1_DATABASE_ID
+        sync: false
+      - key: D1_DATABASE_NAME
+        value: "viktorych-accounts"
+      - key: R2_BUCKET
+        value: "viktorych-data"
+      # Must be identical to the primary Worker secret.
       - key: ACCOUNT_PEPPER
         sync: false
       - key: OWNER_CLAIM_CODE
         sync: false
+      - key: TURNSTILE_SECRET
+        sync: false
+      - key: PBKDF2_ITERATIONS
+        value: "8000"
+      - key: TIKTOK_AUDIENCE
+        value: "owner"

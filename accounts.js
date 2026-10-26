@@ -265,6 +265,7 @@
     if (code === "invalid_claim") return tr("That claim code is not valid.");
     if (code === "rate_limited") return tr("Too many attempts. Try again later.");
     if (code === "invalid_credentials") return tr("Could not sign in.");
+    if (code === "all_endpoints_failed" || code === "not_configured" || code === "unavailable") return tr("Sign-in is temporarily unavailable. Try again in a few minutes.");
     if (code === "invalid_name") return tr("What should we call you?");
     if (code === "invalid_location") return tr("That location is too long.");
     if (code === "invalid_website") return tr("That website is too long.");

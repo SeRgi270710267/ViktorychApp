@@ -11,6 +11,7 @@ RUN npm install --omit=dev
 COPY worker/ ./worker/
 COPY shared/ ./shared/
 COPY backup-server/server.mjs ./server.mjs
+COPY backup-server/cloudflare.mjs ./cloudflare.mjs
 
 # Default port (Render standard 10000)
 ENV PORT=10000
@@ -19,7 +20,7 @@ ENV DATA_DIR=/data
 
 EXPOSE 10000
 
-# Persistent storage volume
+# Local fallback storage (shared Cloudflare mode stores nothing on disk)
 VOLUME ["/data"]
 
 # Run the backup accounts server

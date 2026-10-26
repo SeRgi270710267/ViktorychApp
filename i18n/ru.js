@@ -771,6 +771,7 @@ SI18n.addPack("ru", {
   "That claim code is not valid.": "Этот код подтверждения неверен.",
   "Too many attempts. Try again later.": "Слишком много попыток. Попробуйте позже.",
   "Could not sign in.": "Не удалось войти.",
+  "Sign-in is temporarily unavailable. Try again in a few minutes.": "Вход временно недоступен. Попробуйте через несколько минут.",
   "Leave without saving the account number?": "Выйти, не сохранив номер аккаунта?",
   "Not affiliated with X.": "Не связано с X.",
   "Profile photo": "Фото профиля",
