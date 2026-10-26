@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T10:44:56Z",
+  "fetchedAt": "2026-10-26T11:10:52Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1858,6 +1858,42 @@
       ]
     },
     {
+      "id": "43104",
+      "title": "Unable to set default Wallet app from Private Space",
+      "author": "deltuzirtu",
+      "authorUsername": "deltuzirtu",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1793012454,
+      "lastPostedAt": 1793012454,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43104-unable-to-set-default-wallet-app-from-private-space",
+      "media": [],
+      "text": "<p>It just doesn't let me select anything. Which means I have to open and log in to the bank app each time. Is there any way to fix this?</p>",
+      "replies": [
+        {
+          "id": "277486",
+          "number": 2,
+          "author": "deltuzirtu",
+          "authorUsername": "deltuzirtu",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1793012468,
+          "parent": "43104",
+          "text": ""
+        }
+      ]
+    },
+    {
       "id": "43100",
       "title": "GrapheneOS TalkBack version 23 released",
       "author": "GrapheneOS",
@@ -1879,52 +1915,7 @@
       "url": "https://discuss.grapheneos.org/d/43100-grapheneos-talkback-version-23-released",
       "media": [],
       "text": "<p>GrapheneOS TalkBack version 23 released:</p>\n\n<p><a href=\"https://github.com/GrapheneOS/TalkBack/releases/tag/23\" rel=\"ugc nofollow\">https://github.com/GrapheneOS/TalkBack/releases/tag/23</a></p>\n\n<p>See the linked release notes for a summary of the improvements over the previous release and a link to the full changelog.</p>\n",
-      "replies": [
-        {
-          "id": "277444",
-          "number": 2,
-          "author": "Johnnyloans",
-          "authorUsername": "Johnnyloans",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/8kISEGEKi8V2AJUh.png",
-          "score": 11,
-          "created": 1792983201,
-          "parent": "43100",
-          "text": "<p>Thank you so much to these 2!</p>\n\n<blockquote><p>The work to modernize our fork of TalkBack was started by a blind GrapheneOS user who has spent <strong>several years</strong> contributing to GrapheneOS and was completed by one of our newly hired app developers.</p></blockquote>"
-        },
-        {
-          "id": "277465",
-          "number": 3,
-          "author": "Pocketstar",
-          "authorUsername": "Pocketstar",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/oeU6bR1rRuJjArKE.png",
-          "score": 3,
-          "created": 1793003477,
-          "parent": "43100",
-          "text": "<p>My girlfriend is also blind, therefore she will greatly benefit by the Talkback update, we really appreciate the accessibility support, thank you so much!</p>"
-        },
-        {
-          "id": "277467",
-          "number": 4,
-          "author": "Norman",
-          "authorUsername": "Norman",
-          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/BeaePExTAguwEFzu.png",
-          "score": 3,
-          "created": 1793004109,
-          "parent": "43100",
-          "text": "<p>This is massive for accessibility, huge props to the GOS team especially the blind GOS user putting in all the time and effort to modernize it!</p>"
-        },
-        {
-          "id": "277484",
-          "number": 5,
-          "author": "GazelleInitial",
-          "authorUsername": "GazelleInitial",
-          "authorAvatar": "",
-          "score": 0,
-          "created": 1793011464,
-          "parent": "43100",
-          "text": "<p>Love anything that improves accessibility. Kudos on this work.</p>"
-        }
-      ]
+      "replies": []
     },
     {
       "id": "43097",
@@ -2192,30 +2183,6 @@
       "url": "https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too",
       "media": [],
       "text": "<p>We're planning on phasing out support for 32-bit apps on 5th/6th generation Pixels where they're still supported. They were already phased out by Android for 7th generation Pixels and later, and by ARM for 2nd generation ARMv9 Cortex cores onwards. Since 7th/8th generation Pixel users are doing fine without them, we want to bring the improved security to users on 6th generation Pixels which still have a lot of support ahead of them. It will also save a significant amount of build time and bandwidth, particularly when we can move to 64-bit-only builds of Vanadium.</p>\n\n<p>The main benefit is dropping all the 32-bit ABI support from the kernel including a bunch of awful legacy cruft for emulating legacy ARM features no longer supported by hardware.</p>\n\n<p>The next release will add a clear warning to each launch of 32-bit-only apps. In nearly all cases, people just need to switch to proper builds of apps which aren't 32-bit-only such as the ones distributed by certain 3rd party mirror sites where users accidentally ended up on 32-bit-only builds.</p>\n\n<p>It hasn't been possible to install 32-bit-only apps from the Play Store on 64-bit-capable devices since August 2021 and they blocked uploading either new apps or app updates without 64-bit support since August 2019.</p>",
-      "replies": []
-    },
-    {
-      "id": "43087",
-      "title": "Cyber security",
-      "author": "Barramundi22",
-      "authorUsername": "Barramundi22",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792919698,
-      "lastPostedAt": 1793003968,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43087-cyber-security",
-      "media": [],
-      "text": "<p>Hello,</p>\n\n <p>Does anyone have tips for finding a cyber security expert? Not for a company but for a individual being targeted.</p>",
       "replies": []
     }
   ]
