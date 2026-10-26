@@ -25,6 +25,7 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS || "https://viktorychgroup.g
 
 const stats = {
   mode: "local",
+  localReason: "",
   d1DatabaseId: "",
   r2Bucket: "",
   startedAt: Date.now(),
@@ -52,7 +53,18 @@ function workerEnv(overrides) {
 async function remoteEnv() {
   const token = String(process.env.CLOUDFLARE_API_TOKEN || "").trim();
   const accountId = String(process.env.CLOUDFLARE_ACCOUNT_ID || "").trim();
-  if (!token || !accountId || String(process.env.BACKUP_REMOTE || "1") === "0") return null;
+  if (String(process.env.BACKUP_REMOTE || "1") === "0") {
+    stats.localReason = "BACKUP_REMOTE=0";
+    return null;
+  }
+  if (!token) {
+    stats.localReason = "CLOUDFLARE_API_TOKEN is missing or empty";
+    return null;
+  }
+  if (!accountId) {
+    stats.localReason = "CLOUDFLARE_ACCOUNT_ID is missing or empty";
+    return null;
+  }
 
   const client = createCloudflareClient({
     token,
@@ -138,6 +150,13 @@ async function main() {
         res.end(JSON.stringify({
           ok: true,
           mode: stats.mode,
+          reason: stats.localReason || null,
+          env: {
+            CLOUDFLARE_ACCOUNT_ID: !!String(process.env.CLOUDFLARE_ACCOUNT_ID || "").trim(),
+            CLOUDFLARE_API_TOKEN: !!String(process.env.CLOUDFLARE_API_TOKEN || "").trim(),
+            ACCOUNT_PEPPER: !!String(process.env.ACCOUNT_PEPPER || "").trim(),
+            BACKUP_REMOTE: process.env.BACKUP_REMOTE || null
+          },
           d1: stats.d1DatabaseId || null,
           r2: stats.r2Bucket || null,
           requests: stats.requests,
