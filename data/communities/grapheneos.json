@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T12:05:54Z",
+  "fetchedAt": "2026-10-26T12:12:11Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "Reboot",
       "authorUsername": "Reboot",
       "authorAvatar": "",
-      "score": 42,
-      "comments": 42,
+      "score": 43,
+      "comments": 43,
       "views": 840,
       "participantCount": 24,
       "created": 1792855754,
-      "lastPostedAt": 1793015692,
+      "lastPostedAt": 1793016399,
       "category": "General",
       "categoryColor": "#c7c7c7",
       "tags": [
@@ -1996,7 +1996,7 @@
           "author": "redacted_handle",
           "authorUsername": "redacted_handle",
           "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/pWp9RYxCPKt60JQi.png",
-          "score": 2,
+          "score": 3,
           "created": 1792865714,
           "parent": "43073",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/43073-how-to-convince-people-to-use-grapheneos/1\" class=\"PostMention\" data-id=\"277145\"><i class=\"icon fas fa-reply\"></i>Reboot</a> make sure to explain that GrapheneOS is for anybody. It isn't complicated to use since go no bloat at all. They can use it like a normal phone, but with outstanding security and privacy out of the box. Their important apps will probably just work.</p> "
@@ -2084,7 +2084,7 @@
           "author": "MrChunky",
           "authorUsername": "MrChunky",
           "authorAvatar": "",
-          "score": 0,
+          "score": 1,
           "created": 1792892721,
           "parent": "43073",
           "text": "<p>Not yet. But not yet is not never. As long as you're not pestering them. One day, when something happens that scares them, it's good for them to know who to go to. Someday someone will ask you about that secure phone thing you talked about.</p> "
