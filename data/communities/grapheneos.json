@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T00:55:29Z",
+  "fetchedAt": "2026-10-26T01:39:35Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1963,7 +1963,7 @@
           "author": "MyIdentityIsntImportant",
           "authorUsername": "MyIdentityIsntImportant",
           "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/lC5l5EjKXOV6d9rs.png",
-          "score": 2,
+          "score": 3,
           "created": 1792959255,
           "parent": "43048",
           "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/2\" class=\"PostMention\" data-id=\"277023\"><i class=\"icon fas fa-reply\"></i>pixel---fold</a> Install the <em>nogms</em> variant of Lump from Proton's GitHub instead of using the Play Store version. The <em>nogms</em> version doesn't need or use native code debugging.</p>\n\n<p>Good luck.</p> "
