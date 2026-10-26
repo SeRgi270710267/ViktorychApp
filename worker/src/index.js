@@ -2419,21 +2419,83 @@ async function dispatchWorkflow(env, file, inputs) {
   }
 }
 
-// Blocked pages still leave one free probe: the stored room id almost
-// always answers the webcast room API long after www.tiktok.com returns
-// 403 to datacenter addresses. Null when there was no room id or the
-// room API itself did not answer cleanly.
-async function roomProbe(prev) {
-  const roomId = String((prev && prev.roomId) || "");
-  if (!/^[1-9][0-9]{5,24}$/.test(roomId)) return null;
-  let room = null;
-  try { room = await fetchRoom(roomId); } catch (err) { return null; }
-  const kind = challengeKind(room.status, room.text);
-  if (kind) return null;
+function roomShaped(parsed) {
+  const data = parsed && typeof parsed === "object" ? parsed.data : null;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return false;
+  const stat = data.status;
+  if (stat !== null && stat !== undefined && typeof stat !== "object" && Number.isFinite(Number(stat))) return true;
+  return !!(data.stream_url && typeof data.stream_url === "object");
+}
+
+async function fetchEnter(roomId) {
+  const upstream = await fetch("https://webcast.tiktok.com/webcast/room/enter/?aid=1988&room_id=" + encodeURIComponent(roomId), {
+    headers: { "user-agent": PLAY_UA, accept: "application/json", "accept-language": "en-US,en;q=0.9" }
+  });
+  const text = await upstream.text();
+  return { status: upstream.status, text, retryAfter: retryAfterSeconds(upstream) };
+}
+
+async function apiLiveRoomId(handle) {
+  let res = null;
+  try {
+    res = await fetchPublic("https://www.tiktok.com/api-live/user/room/?aid=1988&uniqueId=" + encodeURIComponent(handle) + "&sourceType=54");
+  } catch (err) {
+    return "";
+  }
+  if (res.status !== 200 || challengeKind(res.status, res.text)) return "";
   let parsed = {};
-  try { parsed = JSON.parse(room.text || "{}"); } catch (err) { parsed = {}; }
-  const picked = pickStreams(parsed);
-  return { live: !!picked.live, roomId, picked, prev };
+  try { parsed = JSON.parse(res.text || "{}"); } catch (err) { parsed = {}; }
+  const data = parsed && typeof parsed === "object" ? parsed.data : null;
+  const id = data && typeof data === "object" ? String(data.roomId || "") : "";
+  return /^[1-9][0-9]{5,24}$/.test(id) ? id : "";
+}
+
+// Blocked pages still leave free probes: the stored room id almost
+// always answers the webcast room API long after www.tiktok.com returns
+// 403 to datacenter addresses, the enter path on the same host is the
+// second chance, and api-live can hand over the current room id when
+// the cached one went stale mid-live. Null when every lane stayed
+// blocked or unshaped, so an error document can never read as
+// "not live".
+async function roomProbe(prev, handle) {
+  const cached = String((prev && prev.roomId) || "");
+  const verdict = (roomId, res) => {
+    let parsed = {};
+    try { parsed = JSON.parse(res.text || "{}"); } catch (err) { parsed = {}; }
+    const picked = pickStreams(parsed);
+    return { live: !!picked.live, roomId, picked };
+  };
+  let seen = null;
+  if (cached && /^[1-9][0-9]{5,24}$/.test(cached)) {
+    let room = null;
+    try { room = await fetchRoom(cached); } catch (err) { room = null; }
+    if (room && !challengeKind(room.status, room.text)) {
+      seen = Object.assign(verdict(cached, room), { prev });
+      if (seen.live) return seen;
+    } else {
+      let enter = null;
+      try { enter = await fetchEnter(cached); } catch (err) { enter = null; }
+      if (enter && !challengeKind(enter.status, enter.text)) {
+        let parsed = {};
+        try { parsed = JSON.parse(enter.text || "{}"); } catch (err) { parsed = {}; }
+        if (roomShaped(parsed)) {
+          seen = Object.assign(verdict(cached, enter), { prev });
+          if (seen.live) return seen;
+        }
+      }
+    }
+  }
+  // A cached id that answers offline may be a finished stream while a
+  // new live already runs under a new id, so cross-check before
+  // closing the case.
+  const fresh = await apiLiveRoomId(handle || "");
+  if (fresh && fresh !== cached) {
+    let room = null;
+    try { room = await fetchRoom(fresh); } catch (err) { room = null; }
+    if (room && !challengeKind(room.status, room.text)) return Object.assign(verdict(fresh, room), { prev });
+  }
+  if (seen) return seen;
+  return null;
 }
 
 // One page load is enough when the live page carries the room id. The
@@ -2444,7 +2506,7 @@ async function watchLiveOne(env, handle, prev) {
   catch (err) { return null; }
   const pageKind = challengeKind(page.status, page.text);
   if (pageKind) {
-    const probe = await roomProbe(prev);
+    const probe = await roomProbe(prev, handle);
     if (probe) return probe;
     return { blocked: true, kind: pageKind };
   }
@@ -2455,7 +2517,7 @@ async function watchLiveOne(env, handle, prev) {
     catch (err) { return null; }
     const profileKind = challengeKind(profile.status, profile.text);
     if (profileKind) {
-      const probe = await roomProbe(prev);
+      const probe = await roomProbe(prev, handle);
       if (probe) return probe;
       return { blocked: true, kind: profileKind };
     }
@@ -2466,7 +2528,7 @@ async function watchLiveOne(env, handle, prev) {
   try { room = await fetchRoom(roomId); } catch (err) { return null; }
   const roomKind = challengeKind(room.status, room.text);
   if (roomKind) {
-    const probe = await roomProbe(prev);
+    const probe = await roomProbe(prev, handle);
     if (probe) return probe;
     return { blocked: true, kind: roomKind, roomId };
   }
