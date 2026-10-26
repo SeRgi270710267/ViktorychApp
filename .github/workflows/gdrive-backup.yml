@@ -43,6 +43,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restore the pip cache
+        if: steps.token.outputs.present == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py312-gdrive-${{ github.run_id }}
+          restore-keys: |
+            pip-${{ runner.os }}-py312-
       - name: Install rclone
         if: steps.token.outputs.present == 'true'
         run: |
@@ -60,6 +68,13 @@ jobs:
       - name: Install yt-dlp
         if: steps.token.outputs.present == 'true'
         run: python3 -m pip install --disable-pip-version-check -q yt-dlp
+
+      - name: Save the pip cache
+        if: steps.token.outputs.present == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py312-gdrive-${{ github.run_id }}
 
       - name: Back up private files
         if: steps.token.outputs.present == 'true'

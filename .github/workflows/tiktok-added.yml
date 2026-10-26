@@ -22,6 +22,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restore the pip cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py312-tiktok-${{ github.run_id }}
+          restore-keys: |
+            pip-${{ runner.os }}-py312-
+
       - name: Fetch public posts for added accounts
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -34,3 +42,9 @@ jobs:
           fi
           python3 -m pip install --disable-pip-version-check -q yt-dlp
           python3 scripts/tiktok_sync.py
+
+      - name: Save the pip cache
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py312-tiktok-${{ github.run_id }}

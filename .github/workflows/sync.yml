@@ -11,12 +11,18 @@ on:
   workflow_dispatch:
     inputs:
       source:
-        description: manual, or chain from the keepalive job
+        description: manual
         required: false
         default: manual
   push:
     branches:
       - main
+
+# A workflow-level group cancels an older run the moment a newer push or cron
+# slot starts, so a hung feed source cannot hold the pipeline for hours.
+concurrency:
+  group: sync
+  cancel-in-progress: true
 
 # The backup job needs contents: write. The build job narrows that back to read.
 permissions:
@@ -211,29 +217,23 @@ jobs:
       actions: write
     outputs:
       refreshed: ${{ steps.filter.outputs.refresh }}
-    services:
-      rsshub:
-        image: diygod/rsshub
-        ports:
-          - 1200:1200
-        env:
-          # Optional. Empty unless the repository secret is set. RSSHub uses it
-          # only for /instagram/stories. The value is masked and never printed.
-          INSTAGRAM_COOKIE: ${{ secrets.IG_SESSION }}
-          IG_COOKIE: ${{ secrets.IG_SESSION }}
-          # Optional. Enables the /twitter/user lane that the X feeds use as a
-          # last fallback when fxtwitter and Nitter both fail.
-          TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
-      rssbridge:
-        image: rssbridge/rss-bridge
-        ports:
-          - 8080:80
+    # The feed service containers are started inside the build job only when
+    # a feed refresh will run, so push-trigger publishes skip the Docker pull.
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Restore the pip cache
+        if: needs.gate.outputs.go == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py312-${{ github.run_id }}
+          restore-keys: |
+            pip-${{ runner.os }}-py312-
 
       - name: Check interface strings
         run: python3 scripts/check_i18n.py
@@ -271,6 +271,20 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
               f.write(f"refresh={val}\n")
           PY
+
+      - name: Start local feed services
+        if: steps.filter.outputs.refresh == 'true'
+        env:
+          INSTAGRAM_COOKIE: ${{ secrets.IG_SESSION }}
+          IG_COOKIE: ${{ secrets.IG_SESSION }}
+          # Optional. Enables the /twitter/user lane that the X feeds use as a
+          # last fallback when fxtwitter and Nitter both fail.
+          TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
+        run: |
+          docker run -d --rm --name rsshub -p 1200:1200 \
+            -e INSTAGRAM_COOKIE -e IG_COOKIE -e TWITTER_AUTH_TOKEN \
+            diygod/rsshub
+          docker run -d --rm --name rssbridge -p 8080:80 rssbridge/rss-bridge
 
       - name: Wait for local feed services
         if: steps.filter.outputs.refresh == 'true'
@@ -336,6 +350,8 @@ jobs:
 
       - name: Refresh feeds
         if: steps.filter.outputs.refresh == 'true'
+        # Stop before the runner would sit stuck for hours on one dead source.
+        timeout-minutes: 40
         # Timelines, Meta CDN refreshes, and Instagram/Threads comments under 7 days.
         # X replies and YouTube video comments are fetched in the browser.
         # Community post comments are written to fallback/ytpost_<id>.json here.
@@ -412,6 +428,13 @@ jobs:
           python3 scripts/update_feeds.py
           python3 -m pip install --disable-pip-version-check -q yt-dlp
           python3 scripts/tiktok_sync.py
+
+      - name: Save the pip cache
+        if: always() && steps.filter.outputs.refresh == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py312-${{ github.run_id }}
 
       - name: Upload feeds.config.json
         uses: actions/upload-artifact@v4
@@ -771,9 +794,8 @@ jobs:
         id: deploy
         uses: actions/deploy-pages@v4
 
-  # Start the Telegram upload from this run. workflow_run does not fire when
-  # this sync was itself started by the keepalive GITHUB_TOKEN dispatch, so
-  # the backup is started here with workflow_dispatch. That event does fire.
+  # Start the Telegram upload from this run. workflow_run can miss a chained
+  # start, so the backup is started here with workflow_dispatch.
   queue-telegram:
     needs: [gate, build]
     if: needs.gate.outputs.go == 'true' && needs.build.result == 'success' && needs.build.outputs.refreshed == 'true'
@@ -800,23 +822,4 @@ jobs:
           dispatch media-extract.yml '{"ref":"main","inputs":{"cap":"80"}}'
           dispatch reddit.yml '{"ref":"main"}'
 
-  # Restarts the sync if GitHub drops the cron. Sleeping here does not hold
-  # the pages concurrency group, and GITHUB_TOKEN may dispatch this workflow.
-  keepalive:
-    needs: [gate, deploy]
-    if: needs.gate.outputs.go == 'true' && needs.deploy.result == 'success' && needs.build.outputs.refreshed == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - name: Queue the next sync
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-        run: |
-          sleep 1500
-          curl -fsS -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${REPO}/actions/workflows/sync.yml/dispatches" \
-            -d '{"ref":"main","inputs":{"source":"chain"}}'
+

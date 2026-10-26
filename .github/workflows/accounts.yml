@@ -27,6 +27,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
 
       - name: Test the account worker
         working-directory: worker
@@ -42,6 +44,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
 
       - name: Deploy the account worker
         env:
