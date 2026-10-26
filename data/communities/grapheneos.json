@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T14:50:55Z",
+  "fetchedAt": "2026-10-26T15:00:49Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -1863,12 +1863,12 @@
       "author": "cupcake-alibi",
       "authorUsername": "cupcake-alibi",
       "authorAvatar": "",
-      "score": 17,
-      "comments": 17,
+      "score": 20,
+      "comments": 20,
       "views": 455,
       "participantCount": 13,
       "created": 1792786787,
-      "lastPostedAt": 1793026198,
+      "lastPostedAt": 1793026819,
       "category": "General",
       "categoryColor": "#c7c7c7",
       "tags": [
@@ -2055,8 +2055,116 @@
           "created": 1793026198,
           "parent": "43048",
           "text": "<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/14\" class=\"PostMention\" data-id=\"277471\"><i class=\"icon fas fa-reply\"></i>hwvc</a> I had this yesterday with the default PDF Viewer which is very confusing</p></blockquote>\n\n<p>Yeah, that should not happen no matter what. The built-in PDF viewer does not use ptrace or any kind of native code debugging. It is pretty much just a restricted WebView I think, running a JavaScript based PDF renderer.</p>\n\n<blockquote><p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/16\" class=\"PostMention\" data-id=\"277487\"><i class=\"icon fas fa-reply\"></i>0xC0DED0D0</a> As many are describing the same issue, with various applications, starting simultaneously and seemingly in correlation with a GrapheneOS update (202610210n?) I have these hypotheses:</p>\n\n<p>GrapheneOS failed in blocking native code debugging previously.<br>\nThe OS blocked them, but didn't notify. Notifications are working again since last update.<br>\nGrapheneOS is now \"overzealous\" in it's blocking attempts, and warns of false positives.</p>\n\n<p>No idea about probabilities for these, and there could be other non-OS related explanations, but the issue seems in order to be investigated.</p></blockquote>\n\n<p>I do not recall seeing any commits recently at all that modifies code related to the blocking of native code debugging. There was something related to the execution framework about not preloading something or something like that, but it does not sound obviously related to native code debugging at all.</p>\n\n<p>There is another thing that has happened recently, a new version of Google Play Services was pushed out. Could that be related?</p>\n\n<p>By the way, I have not seen any such notifications myself yet, and judging from this thread, it sounds mostly like it is Proton's apps that started doing this? Which may mean it is just them.</p>"
+        },
+        {
+          "id": "277524",
+          "number": 18,
+          "author": "r134a",
+          "authorUsername": "r134a",
+          "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/M83QP8VU7vVsG6JH.png",
+          "score": 0,
+          "created": 1793026647,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/17\" class=\"PostMention\" data-id=\"277520\"><i class=\"icon fas fa-reply\"></i>redacted_handle</a> I doubt that, i have no play services on my main profile. The apps that gave me native code debugging popup today are jellyfin, proxmox virtual environment &amp; flow. Some more apps did it (since last stable update) but i forgot which ones to be honest, and don't want to give misleading information.</p>"
+        },
+        {
+          "id": "277525",
+          "number": 19,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1793026749,
+          "parent": "43048",
+          "text": "<p><a href=\"https://discuss.grapheneos.org/d/43048-more-native-code-debugging-attempts-recently/18\" class=\"PostMention\" data-id=\"277524\"><i class=\"icon fas fa-reply\"></i>r134a</a> Okay. Odd. Still, I haven't seen it myself, and haven't seen any related code changes in GrapheneOS.</p>"
+        },
+        {
+          "id": "277527",
+          "number": 20,
+          "author": "redacted_handle",
+          "authorUsername": "redacted_handle",
+          "authorAvatar": "",
+          "score": 0,
+          "created": 1793026819,
+          "parent": "43048",
+          "text": "<p>Unless... A recent Vanadium update introduced ptrace or native code debugging, and all affected apps use WebViews in one way or another.</p>"
         }
       ]
+    },
+    {
+      "id": "42753",
+      "title": "Date stuck on last update",
+      "author": "Onlyfun",
+      "authorUsername": "Onlyfun",
+      "authorAvatar": "",
+      "score": 12,
+      "comments": 12,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1791791536,
+      "lastPostedAt": 1793026756,
+      "category": "Vanadium",
+      "categoryColor": "#d57676",
+      "tags": [
+        "General",
+        "Vanadium",
+        "Pixel 8"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/42753-date-stuck-on-last-update",
+      "media": [],
+      "text": "<p>Anybody seen this happen? P8 is stuck on sep 19 date, which is the same update it had. It does switch date when it's on, but if battery dies it's back to sep 19. Also can't update to recent due to Chain validation failed.</p>\n\n<p>Another p8 is not responding to Tap to Check for updates. But seems to update automatically without issues.</p> ",
+      "replies": []
+    },
+    {
+      "id": "43094",
+      "title": "Graphene OS for Normies and Newbies",
+      "author": "YiyaK",
+      "authorUsername": "YiyaK",
+      "authorAvatar": "",
+      "score": 8,
+      "comments": 8,
+      "views": 140,
+      "participantCount": 4,
+      "created": 1792955202,
+      "lastPostedAt": 1793026544,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
+      "media": [],
+      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
+      "replies": []
+    },
+    {
+      "id": "41145",
+      "title": "Download official Whatsapp to continue",
+      "author": "Dolfie",
+      "authorUsername": "Dolfie",
+      "authorAvatar": "",
+      "score": 16,
+      "comments": 16,
+      "views": 175,
+      "participantCount": 5,
+      "created": 1786612277,
+      "lastPostedAt": 1793026525,
+      "category": "Third party apps and services",
+      "categoryColor": "#994ce6",
+      "tags": [
+        "Third party apps and services",
+        "Pixel 9 Pro"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/41145-download-official-whatsapp-to-continue",
+      "media": [],
+      "text": "<p><strong>How it started</strong><br>\nI forgot my GrapheneOS password, and wiped the device.</p>\n\n<p><strong>What is set up</strong><br>\nAdmin profile running FOSS apps and supported 3rd party apps. Google Play Store has not even touched this profile.<br>\n2nd Profile was for testing whether apps work with Google Play Store &amp; Services if needed...Revolut and WhatsApp were the only two I was looking at on this profile after the wipe.</p>\n\n<p><strong>What is wrong</strong><br>\nWhatsApp can't log in for some strange reason no matter where I get it. I tried the official APK from the website, I have tried Aurora store, I have tried the Google Play Store. Several reboots with a fresh profile, Google Play Store &amp; Services set up first, then download WhatsApp from the Play Store and still I get presented with the same message when I tried to log in with my number:</p>\n\n<p>Download official Whatsapp to continue</p>\n\n<p>Prior to the fresh install of GrapheneOS it was working, now I can't even log into it. I have WhatsApp running on a secondary iPhone as backup and there it obviously works fine. My account was flagged for some reason for bot use when I tried to set it up the first time after the wipe on GrapheneOS, so no dual account was at play at this point in time.</p>\n\n<p>I suspect GrapheneOS is widely being targeted, but I know too little what is going on in the Dev space of this.</p>\n\n<p>Any advice or ideas on how to fix this or get WhatsApp working again?</p>\n",
+      "replies": []
     },
     {
       "id": "41765",
@@ -2231,30 +2339,6 @@
       "replies": []
     },
     {
-      "id": "43094",
-      "title": "Graphene OS for Normies and Newbies",
-      "author": "YiyaK",
-      "authorUsername": "YiyaK",
-      "authorAvatar": "",
-      "score": 7,
-      "comments": 7,
-      "views": 140,
-      "participantCount": 4,
-      "created": 1792955202,
-      "lastPostedAt": 1793023320,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43094-graphene-os-for-normies-and-newbies",
-      "media": [],
-      "text": "<p>Greetings! As a not very techie but privacy and security conscious recent GOS convert, I was wishing there was a thread for folks like me, but didn't see one, so I'm starting one.</p>\n\n<p>First, the Normie part: I'm a 70+ year old who just wants privacy from big tech and government, and protection from the bad guys. I'm not a programmer. I'm not a high threat profile. I'm just a normal person taking control of my data, privacy and security. Normie = normal person - that's me.</p>\n\n <p>Then the newbie part. I had already gone open source (FOSS) for most of my apps and checked all the \"privacy\" options on my old Android phone. After that was not sufficient, I bought a Pixel 4a5g phone with Calyx OS installed, from Digital Privacy Shop (thanks, Mat!).  When Calyx ran into some issues and stopped updating, I looked for an even more private OS, and, here I am. I even made the switch myself! So, I'm a newbie to Graphene, but not a newbie to degoogle.</p> \n\n<p>Ok there's my intro. Will post what I've gleaned so far and some initial \"tips\" separately. Welcome to Graphene, Newbies and Normies!</p> ",
-      "replies": []
-    },
-    {
       "id": "43073",
       "title": "How to Convince People to Use GrapheneOS",
       "author": "Reboot",
@@ -2300,55 +2384,6 @@
       "url": "https://discuss.grapheneos.org/d/43104-unable-to-set-default-wallet-app-from-private-space",
       "media": [],
       "text": "<p>It just doesn't let me select anything. Which means I have to open and log in to the bank app each time. Is there any way to fix this?</p>",
-      "replies": []
-    },
-    {
-      "id": "14004",
-      "title": "Phasing out 32-bit-only app support for older devices too",
-      "author": "GrapheneOS",
-      "authorUsername": "GrapheneOS",
-      "authorAvatar": "https://discuss.grapheneos.org/assets/avatars/MfOX1riH2uUYEPsk.webp",
-      "score": 48,
-      "comments": 48,
-      "views": 735,
-      "participantCount": 21,
-      "created": 1720316342,
-      "lastPostedAt": 1793019776,
-      "category": "Announcements",
-      "categoryColor": "#f00a0a",
-      "tags": [
-        "Announcements"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/14004-phasing-out-32-bit-only-app-support-for-older-devices-too",
-      "media": [],
-      "text": "<p>We're planning on phasing out support for 32-bit apps on 5th/6th generation Pixels where they're still supported. They were already phased out by Android for 7th generation Pixels and later, and by ARM for 2nd generation ARMv9 Cortex cores onwards. Since 7th/8th generation Pixel users are doing fine without them, we want to bring the improved security to users on 6th generation Pixels which still have a lot of support ahead of them. It will also save a significant amount of build time and bandwidth, particularly when we can move to 64-bit-only builds of Vanadium.</p>\n\n<p>The main benefit is dropping all the 32-bit ABI support from the kernel including a bunch of awful legacy cruft for emulating legacy ARM features no longer supported by hardware.</p>\n\n<p>The next release will add a clear warning to each launch of 32-bit-only apps. In nearly all cases, people just need to switch to proper builds of apps which aren't 32-bit-only such as the ones distributed by certain 3rd party mirror sites where users accidentally ended up on 32-bit-only builds.</p>\n\n<p>It hasn't been possible to install 32-bit-only apps from the Play Store on 64-bit-capable devices since August 2021 and they blocked uploading either new apps or app updates without 64-bit support since August 2019.</p>",
-      "replies": []
-    },
-    {
-      "id": "43027",
-      "title": "Wi-Fi reconnect on restart doesn't work",
-      "author": "Onlyfun",
-      "authorUsername": "Onlyfun",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 70,
-      "participantCount": 2,
-      "created": 1792709856,
-      "lastPostedAt": 1793018520,
-      "category": "Pixel 8",
-      "categoryColor": "#7659e8",
-      "tags": [
-        "General",
-        "Pixel 8"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43027-wi-fi-reconnect-on-restart-doesnt-work",
-      "media": [],
-      "text": "<p>That's it in the title. It's probably not a common issue since my other p8 reconnects as expected. But still asking if anybody seen this to happen? Any remedy?</p>",
       "replies": []
     }
   ]
