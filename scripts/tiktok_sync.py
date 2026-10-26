@@ -30,6 +30,8 @@ BLOCKED = "TikTok blocked the runner"
 BACKOFF_MINUTES = (5, 15, 60, 180, 360)
 FRESH_SECONDS = 4 * 60
 ROOM_INFO_URL = "https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id="
+ROOM_ENTER_URL = "https://webcast.tiktok.com/webcast/room/enter/?aid=1988&room_id="
+API_LIVE_URL = "https://www.tiktok.com/api-live/user/room/?aid=1988&uniqueId="
 
 
 def audience_of(config_text: str) -> str:
@@ -417,24 +419,118 @@ def row_from_pick(handle: str, previous: dict, room: str, picked: dict) -> dict:
     }
 
 
-def room_probe(handle: str, previous: dict) -> dict | None:
-    """One webcast call with the stored room id while pages are blocked.
+def room_shaped(info: bytes) -> bool:
+    """True only for a webcast answer whose status or stream URL is present.
 
-    The room API answers long after www.tiktok.com starts returning 403 to
-    datacenter addresses, so a clean answer is a real row the lane can act
-    on. None means there is no room id or the room API did not answer
-    cleanly either.
+    A fallback lane is never trusted on an error document: an unrecognized
+    shape must read as "no answer", never as "not live".
     """
-    previous = previous if isinstance(previous, dict) else {}
-    room = str(previous.get("roomId") or "")
-    if not room:
-        return None
-    status, info, _retry = http_get(ROOM_INFO_URL + urllib.parse.quote(room))
+    try:
+        parsed = json.loads(info.decode("utf-8") or "{}")
+    except (ValueError, UnicodeDecodeError):
+        return False
+    room = parsed.get("data") if isinstance(parsed, dict) else None
+    if not isinstance(room, dict):
+        return False
+    stat = room.get("status")
+    if isinstance(stat, (int, float)) and not isinstance(stat, bool):
+        return True
+    return isinstance(room.get("stream_url"), dict)
+
+
+def fresh_room_id(handle: str) -> str:
+    """Current room id from the public api-live endpoint, or "" when it
+    does not answer. The verdict is never taken from this call; the id is
+    always re-checked through the trusted room lane."""
+    status, body, _retry = http_get(API_LIVE_URL + urllib.parse.quote(handle) + "&sourceType=54")
+    if status != 200 or challenge_kind(status, body):
+        return ""
+    try:
+        parsed = json.loads(body.decode("utf-8") or "{}")
+    except (ValueError, UnicodeDecodeError):
+        return ""
+    data = parsed.get("data") if isinstance(parsed, dict) else None
+    room = str(data.get("roomId") or "") if isinstance(data, dict) else ""
+    return room if room.isdigit() else ""
+
+
+def room_info_row(handle: str, previous: dict, room: str) -> tuple[dict | None, str, str, int]:
+    """The trusted winner lane, the shape the pipeline has always parsed."""
+    status, info, retry = http_get(ROOM_INFO_URL + urllib.parse.quote(room))
     kind = challenge_kind(status, info)
     if kind or status == 0:
-        return None
+        return None, kind, retry, status
     picked = node_json("pick", info)
-    return row_from_pick(handle, previous, room, picked if isinstance(picked, dict) else {})
+    return row_from_pick(handle, previous, room, picked if isinstance(picked, dict) else {}), "", retry, status
+
+
+def room_enter_row(handle: str, previous: dict, room: str) -> tuple[dict | None, str, str, int]:
+    """Same webcast host, second path. Only shaped answers count."""
+    status, info, retry = http_get(ROOM_ENTER_URL + urllib.parse.quote(room))
+    kind = challenge_kind(status, info)
+    if kind or status == 0:
+        return None, kind, retry, status
+    if not room_shaped(info):
+        return None, "", retry, status
+    picked = node_json("pick", info)
+    return row_from_pick(handle, previous, room, picked if isinstance(picked, dict) else {}), "", retry, status
+
+
+def room_lanes(handle: str, previous: dict, room: str, page_fresh: bool = False) -> tuple[dict | None, str, str]:
+    """Every public room lane once, most trusted first.
+
+    Returns the first row a lane could answer from its own shape, plus the
+    kind and Retry-After of the last blocked answer for the caller's
+    backoff. page_fresh says the room id came from a source fetched in
+    this same call (a scraped page or the api-live lane), which makes an
+    offline answer authoritative. None means every lane stayed blocked,
+    throttled, or unshaped, and the caller still decides blocked only
+    after that.
+    """
+    previous = previous if isinstance(previous, dict) else {}
+    offline = None
+    kind, retry = "", ""
+    if room:
+        verdict, kind, retry, status = room_info_row(handle, previous, room)
+        if verdict is not None and verdict.get("live"):
+            return verdict, "", ""
+        if verdict is None and status == 0:
+            return None, "", ""
+        if verdict is None and kind:
+            verdict, b_kind, b_retry, _status = room_enter_row(handle, previous, room)
+            if verdict is not None:
+                return verdict, "", ""
+            if b_kind:
+                kind, retry = b_kind, b_retry
+        offline = verdict
+    # A cached id that answers offline may be a finished stream while a new
+    # live already runs under a new id. The only anonymous source for the
+    # current id is the api-live lane, so cross-check unless the page
+    # itself just handed us this id.
+    fresh = "" if page_fresh else fresh_room_id(handle)
+    fresh = "" if fresh == str(room or "") else fresh
+    if fresh:
+        note, f_kind, f_retry, _status = room_info_row(handle, previous, fresh)
+        if note is not None:
+            return note, "", ""
+        if f_kind and offline is None:
+            kind, retry = f_kind, f_retry
+    if offline is not None:
+        return offline, kind, retry
+    return None, kind, retry
+
+
+def room_probe(handle: str, previous: dict) -> dict | None:
+    """Room lanes with the stored room id while pages are blocked.
+
+    The webcast room API answers long after www.tiktok.com starts
+    returning 403 to datacenter addresses, so a clean answer is a real row
+    the lane can act on. None means every lane stayed blocked or there
+    was nothing new to check.
+    """
+    previous = previous if isinstance(previous, dict) else {}
+    row, _kind, _retry = room_lanes(handle, previous, str(previous.get("roomId") or ""))
+    return row
 
 
 def refresh_one(handle: str, previous: dict | None) -> dict:
@@ -442,9 +538,11 @@ def refresh_one(handle: str, previous: dict | None) -> dict:
     if backoff_active(previous) or checked_recent(previous):
         return dict(previous)
     room = str(previous.get("roomId") or "")
+    page_fresh = False
     if not checked_recent(previous, 5 * 60):
         room = ""
     if not room:
+        page_fresh = True
         status, body, retry = http_get("https://www.tiktok.com/@" + handle + "/live")
         kind = challenge_kind(status, body)
         if kind:
@@ -469,17 +567,20 @@ def refresh_one(handle: str, previous: dict | None) -> dict:
                 return blank_live(handle, previous, BLOCKED, blocked=True)
             room = str(node_json("room", body).get("roomId") or "")
     if not room:
+        # The pages answered but carried no room id. api-live publishes the
+        # id while a live is running, so this is the last free look.
+        room = fresh_room_id(handle)
+        page_fresh = bool(room)
+    if not room:
         return blank_live(handle, previous, "TikTok did not include a room id")
-    status, info, retry = http_get(ROOM_INFO_URL + urllib.parse.quote(room))
-    kind = challenge_kind(status, info)
-    if kind or status == 0:
-        row = blank_live(handle, previous, BLOCKED, blocked=True)
-        row["roomId"] = room
-        if kind:
-            return apply_backoff(row, previous, retry_after_seconds(retry), kind)
+    row, kind, retry = room_lanes(handle, previous, room, page_fresh=page_fresh)
+    if row is not None:
         return row
-    picked = node_json("pick", info)
-    return row_from_pick(handle, previous, room, picked if isinstance(picked, dict) else {})
+    row = blank_live(handle, previous, BLOCKED, blocked=True)
+    row["roomId"] = room
+    if kind:
+        return apply_backoff(row, previous, retry_after_seconds(retry), kind)
+    return row
 
 
 def patch_extractor():
