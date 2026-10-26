@@ -224,6 +224,38 @@ def main() -> int:
         sync_module.time.sleep = real_sleep
         sync_module.fetch_playlist = fetch_playlist
         sync_module.refresh_one = real_refresh
+
+    # The mirror lane keeps a blocked handle alive without advancing the
+    # ladder, so the backfill still retries from its saved stage.
+    def blocked(handle, playlistend=None):
+        return (None, None)
+
+    lanes = []
+    real_lane = sync_module.lane_entries
+
+    def fake_lane(handle):
+        lanes.append(handle)
+        return [{"id": "15", "timestamp": 1791832719, "description": "mirror lane post", "uploader": "pepsi", "formats": []}]
+
+    sync_module.fetch_playlist = blocked
+    sync_module.lane_entries = fake_lane
+    try:
+        mirrored = sync_module.build_doc(
+            ["pepsi"],
+            dict(backward, backfills={"pepsi": {"done": False, "stage": 2, "at": "2026-10-20T00:00:00Z", "posts": 40}}),
+            posts_ok=True,
+            config={},
+            accounts={"added": [], "removed": []},
+        )
+    finally:
+        sync_module.lane_entries = real_lane
+        sync_module.fetch_playlist = fetch_playlist
+        sync_module.refresh_one = real_refresh
+    assert lanes == ["pepsi"]
+    ids = [row["statusId"] for row in mirrored["posts"]]
+    assert "15" in ids and "12" in ids
+    assert mirrored["backfills"]["pepsi"]["stage"] == 2  # unchanged by the lane
+
     print("tiktok normalize ok")
     return 0
 

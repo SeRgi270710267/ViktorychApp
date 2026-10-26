@@ -674,6 +674,66 @@ def fetch_playlist(handle: str, playlistend: int | None = None) -> tuple[list[di
     return [row for row in entries if isinstance(row, dict)], info
 
 
+def lane_entries(handle: str) -> list[dict] | None:
+    """RSSHub mirror lane when TikTok still blocks the direct walk.
+
+    Uses the rsshubBase the feeds already rotate through. Public pages only:
+    no cookies, no token, no captcha bypass. Returns the newest posts this
+    instance serves (usually a small page), enough to keep a profile alive
+    until the ladder resumes the backfill.
+    """
+    try:
+        config = json.loads((ROOT / "feeds.config.json").read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    base = str(config.get("rsshubBase") or "").strip().rstrip("/")
+    if not base:
+        return None
+    from adapters.common import child_text, clean_text, iter_feed_items, parse_xml, rfc822_to_iso
+
+    request = urllib.request.Request(
+        base + "/tiktok/user/@" + handle,
+        headers={"User-Agent": UA},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=40) as res:
+            text = res.read().decode("utf-8", "replace")
+    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
+        return None
+    try:
+        root = parse_xml(text)
+    except Exception:
+        return None
+    entries = []
+    for item in iter_feed_items(root):
+        link = child_text(item, "link") or child_text(item, "guid") or ""
+        found = re.search(r"/video/(\d+)", link)
+        if not found:
+            continue
+        when = rfc822_to_iso(child_text(item, "pubDate") or child_text(item, "updated"))
+        try:
+            stamp = int(datetime.fromisoformat(when.replace("Z", "+00:00")).timestamp())
+        except ValueError:
+            stamp = 0
+        body = clean_text(
+            re.sub(r"<[^>]+>", " ", child_text(item, "description") or child_text(item, "title") or "")
+        )
+        media = ""
+        for cover in re.findall(r"https://[^\s\"'<>]+", child_text(item, "description")):
+            if cover.startswith("https://") and re.search(r"\.(jpg|jpeg|webp)(\?|$)", cover.lower()):
+                media = cover
+                break
+        entries.append({
+            "id": found.group(1),
+            "timestamp": stamp,
+            "description": body,
+            "uploader": handle,
+            "thumbnail": media,
+            "url": link,
+        })
+    return entries or None
+
+
 def fetch_entries(handle: str) -> list[dict] | None:
     entries, _info = fetch_playlist(handle)
     return entries
@@ -948,6 +1008,12 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
                 stage = 0 if (never or forced or not state.get("done")) else -1
             final_stage = stage == len(BACKFILL_LADDER) - 1
             entries, info = fetch_playlist(handle, None if final_stage else (RECENT_PLAYLIST if stage < 0 else BACKFILL_LADDER[stage]))
+            lane_used = False
+            if entries is None:
+                lane = lane_entries(handle)
+                if lane:
+                    entries, lane_used = lane, True
+                    print("[tiktok] mirror lane for " + handle)
             if entries is None:
                 old_posts = [row for row in (previous.get("posts") or []) if row.get("handle") == handle]
                 old_feeds = [row for row in (previous.get("feeds") or []) if row.get("handle") == handle]
@@ -979,7 +1045,7 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
             if not built and not avatar:
                 print("[tiktok] no public posts for " + handle)
             merged = merge_handle_posts(old, built)
-            walked = stage >= 0 and entries is not None
+            walked = stage >= 0 and entries is not None and not lane_used
             if walked:
                 if final_stage:
                     backfills[active] = {"done": True, "at": now_iso(), "posts": len(merged)}
@@ -988,8 +1054,10 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
                 else:
                     backfills[active] = {"done": False, "stage": stage + 1, "at": now_iso(), "posts": len(merged)}
             if built or avatar:
-                label = "the newest posts" if stage < 0 else (
-                    "backfill stage " + str(stage + 1) + "/" + str(len(BACKFILL_LADDER))
+                label = (
+                    "the mirror lane" if lane_used
+                    else "the newest posts" if stage < 0
+                    else "backfill stage " + str(stage + 1) + "/" + str(len(BACKFILL_LADDER))
                     if not final_stage else "a full backfill"
                 )
                 print("[tiktok] " + handle + ": " + str(len(merged)) + " posts stored from " + label)
