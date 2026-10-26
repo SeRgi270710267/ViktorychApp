@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T21:46:06Z",
+  "fetchedAt": "2026-10-26T21:52:04Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -578,6 +578,32 @@
       "url": "https://discuss.grapheneos.org/d/11-grapheneos-code-of-conduct",
       "media": [],
       "text": "GrapheneOS community members are committed to preserving and fostering a diverse, welcoming society. Below is our community code of conduct, which applies to our forums, chat rooms, issue trackers, and any other GrapheneOS-supported communication group, as well as any private communication initiated in the context of these spaces. Simply put, community discussions should be the following:\n\n• Respectful and kind\n\n• About GrapheneOS\n\n• About features and code, not the individuals involved\n\nBe respectful and constructive.\n\nTreat everyone with respect. Build on each other's ideas. Each of us has the right to enjoy our experience and participate without fear of harassment, discrimination, or condescension, whether blatant or subtle. Remember that GrapheneOS project is a geographically distributed community and that you may not be communicating with someone in their primary language. We all get frustrated when working on hard problems, but we cannot allow that frustration to turn into personal attacks.\n\nHarassment is not tolerated, including, but not limited to the following:\n\n• Harassing comments\n\n• Intimidation\n\n• Encouraging a person to engage in self-harm\n\n• Sustained disruption or derailing of threads, channels, lists, and similar forums\n\n• Offensive or violent comments, jokes, or otherwise\n\n• Inappropriate sexual content\n\n• Unwelcome sexual or otherwise aggressive attention\n\n• Continued one-on-one communication after requests to cease\n\n• Distribution or threat of distribution of people's personally identifying information, also known as \"doxing.\"\n\nParticipants warned to stop any harassing behavior are expected to comply immediately. Failure to do so will result in an escalation of consequences.\n\nAcknowledgments\n\nThis Code of Conduct is adapted from the Chromium Code of Conduct, based on the Geek Feminism Code of Conduct, the Django Code of Conduct, and the Geek Feminism Wiki \"Effective codes of conduct\" guide.",
+      "replies": [],
+      "repliesTotal": 1
+    },
+    {
+      "id": "43111",
+      "title": "Sensor permissions: the final word?",
+      "author": "WelcomeMilk89",
+      "authorUsername": "WelcomeMilk89",
+      "authorAvatar": "",
+      "score": 1,
+      "comments": 1,
+      "views": 35,
+      "participantCount": 1,
+      "created": 1793051197,
+      "lastPostedAt": 1793051197,
+      "category": "Pixel 8",
+      "categoryColor": "#7659e8",
+      "tags": [
+        "General",
+        "Pixel 8"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43111-sensor-permissions-the-final-word",
+      "media": [],
+      "text": "Went through a few discussions from some time ago here and it feels like no real solid answer has been clearly given when it comes to revoking sensor permissions or not.\n\nThe PrivacyGear site states \"revoke sensor permissions for all apps that clearly don't need them.\" But I don't think it's ever been clearly stated in simple terms what apps really need them. Can someone please explain to me like I'm 5 what apps do and do not need them? My thought as of now is that if sensors are automatically granted as a default, there's a reason for that, right? So, if that is the case, why are some people reluctant to give permission to sensors? Is there a presumed (or verified) security issue with having them running on some apps?\n\nThanks for clearing this up. Again, all of the older discussions, even with GOS guide explanations, seem incredibly vague and nebulous to not very technical users like me who don't know the jargon.",
       "replies": [],
       "repliesTotal": 1
     },
@@ -1398,31 +1424,6 @@
       "text": "Can Vanadium save passwords without using Google autofill? Does it work if you don't have Google Play or Play services?\n\nIs it a necessary evil since Vanadium is a chromium browser?\n\nAre the passwords saved locally or by Google?",
       "replies": [],
       "repliesTotal": 1
-    },
-    {
-      "id": "19051",
-      "title": "Using a separate hotspot instead of e-SIM?",
-      "author": "Mike_",
-      "authorUsername": "Mike_",
-      "authorAvatar": "",
-      "score": 4,
-      "comments": 4,
-      "views": 105,
-      "participantCount": 3,
-      "created": 1737036825,
-      "lastPostedAt": 1793009779,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/19051-using-a-separate-hotspot-instead-of-e-sim",
-      "media": [],
-      "text": "I saw a video with Naomi on Youtube where she uses a separate hotspot that itself has a SIM in it rather than having the SIM in the phone itself. Although this approach does appear more inconvenient than an internal SIM, doesn't it solve some of the issues with SIM privacy if you connect via WiFI to the mobile hotspot (for example, the \"SIMO Solis Lite 4G LTE WiFi Mobile Hotspot\").\n\nI haven't yet taken the plunge to buy a Pixel phone and install GrapheneOS, but once I understand these issues better, I do plan to.",
-      "replies": [],
-      "repliesTotal": 4
     }
   ]
 }
