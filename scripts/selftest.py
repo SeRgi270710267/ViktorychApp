@@ -11,6 +11,7 @@ import re
 import shutil
 import sys
 import tempfile
+import urllib.error
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -23,6 +24,7 @@ from adapters.generic_rss import parse as parse_generic  # noqa: E402
 from adapters.nitter_rss import parse as parse_nitter  # noqa: E402
 from adapters.rsshub_instagram import parse as parse_ig  # noqa: E402
 from adapters.rsshub_threads import parse as parse_threads  # noqa: E402
+from adapters.rsshub_x import parse as parse_rsshub_x  # noqa: E402
 from adapters.ig_comments import parse_ig_comments, parse_ig_document  # noqa: E402
 from adapters.rss_comments import parse_comment_rss  # noqa: E402
 from adapters.threads_replies import parse_threads_document, parse_threads_replies  # noqa: E402
@@ -45,7 +47,9 @@ from adapters.x_replies import (  # noqa: E402
     select_subthreads,
 )
 from meta_media import cdn_expiry, extract_cdn_urls, media_groups, needs_refresh  # noqa: E402
-from x_guard import assert_not_x_api, auth_cookie_header, conversation_search  # noqa: E402
+from x_guard import assert_not_x_api, auth_cookie_header, conversation_search, proxy_token_header  # noqa: E402
+from x_fetch import is_retryable, retry_delay, status_of  # noqa: E402
+from update_feeds import ensure_x_lanes, x_fallback_rows, x_source_urls  # noqa: E402
 from share_pages import SITE_NAME as SHARE_SITE  # noqa: E402
 from share_pages import build as build_share_pages  # noqa: E402
 
@@ -376,6 +380,50 @@ def main() -> None:
     check(nit["posts"][0]["media"], "nitter image extracted")
     check(nit["posts"][1]["kind"] == "quote" and nit["posts"][1]["quoted"]["handle"] == "someone", "nitter blockquote quote")
     check(nit["profiles"][0]["avatar"].endswith("elon.jpg"), "nitter channel image")
+
+    hub = parse_rsshub_x(
+        """<?xml version="1.0"?><rss><channel><title>Twitter @NASA</title>
+        <item><title>kept</title><description>kept</description>
+        <link>https://x.com/NASA/status/123</link><pubDate>Wed, 21 Oct 2026 06:10:00 GMT</pubDate></item>
+        <item><title>no id</title><description>no id</description>
+        <link>https://x.com/NASA</link></item>
+        </channel></rss>""",
+        {"id": "x:NASA", "platform": "x", "handle": "NASA"},
+    )
+    check(len(hub["posts"]) == 1 and hub["posts"][0]["statusId"] == "123", "the rsshub x lane keeps only a post with a status id")
+    check(hub["profiles"][0]["handle"] == "NASA" and hub["profiles"][0]["url"] == "https://x.com/NASA", "the rsshub x lane keeps the configured handle")
+
+    mirrors = {"rsshub": ["{rsshubBase}/twitter/user/{handle}"]}
+    lanes = ensure_x_lanes(
+        {"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA"},
+        {"xMirrors": mirrors},
+    )["fallbacks"]
+    check([row["adapter"] for row in lanes] == ["nitter_rss", "rsshub_x"], "an x feed gets the nitter and rsshub lanes")
+    check(
+        lanes[0]["source_urls"] == ["https://nitter.meowing.monster/{handle}/rss", "https://nitter.kareem.one/{handle}/rss", "https://nitter.jaydenha.uk/{handle}/rss"],
+        "the nitter lane keeps the built-in hosts",
+    )
+    again = ensure_x_lanes({"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA", "fallbacks": lanes}, {"xMirrors": mirrors})
+    check([row["adapter"] for row in again["fallbacks"]] == [row["adapter"] for row in lanes], "the lanes are not added twice")
+    retired = x_fallback_rows({"xMirrors": {"nitter": ["https://nitter.one/"], "rsshub": []}})
+    check([row["adapter"] for row in retired] == ["nitter_rss"] and retired[0]["source_urls"] == ["https://nitter.one/{handle}/rss"], "xMirrors is the list the lanes follow")
+
+    feed = {"id": "x:NASA", "platform": "x", "adapter": "fxtwitter", "handle": "NASA", "source_urls": ["{fxtwitterBase}/2/profile/{handle}/statuses"]}
+    mirrored = x_source_urls(feed, {"xProxyBase": "https://mirror.test/v1/x"})
+    check(
+        mirrored[0] == "https://mirror.test/v1/x/2/profile/{handle}/statuses" and mirrored[1] == "{fxtwitterBase}/2/profile/{handle}/statuses",
+        "the cached mirror is tried before fxtwitter",
+    )
+    check(x_source_urls(feed, {"xProxy": False}) == feed["source_urls"], "xProxy false turns the mirror off")
+    direct = x_source_urls(feed, {})
+    check(len(direct) == 2 and direct[0].endswith("/v1/x/2/profile/{handle}/statuses"), "a worker mirror is added by default")
+
+    slow = urllib.error.HTTPError("https://nitter.one/NASA/rss", 429, "slow down", {"Retry-After": "7"}, None)
+    check(is_retryable(slow) and retry_delay(0, slow.headers) == 7, "a rate limit waits as long as the mirror asks")
+    check(not is_retryable(urllib.error.HTTPError("https://nitter.one/NASA/rss", 404, "no", {}, None)), "a missing profile is not retried")
+    check(is_retryable(urllib.error.URLError("reset")) and retry_delay(1, None) >= 2, "a dropped connection retries with backoff")
+    check(not is_retryable(ValueError("refusing api.x.com: the paid X API is not used")), "the paid api refusal is not retried")
+    check(status_of(slow) == 429 and status_of(ValueError("x")) == 0, "the retry status reader is safe")
 
     th = parse_threads((FIX / "rsshub_threads_zuck.xml").read_text(encoding="utf-8"), {"id": "threads:redacted_handle", "platform": "threads", "handle": "redacted_handle"})
     check(len(th["posts"]) == 10, "threads item count")
@@ -785,6 +833,17 @@ def main() -> None:
         check(auth_cookie_header("https://www.instagram.com/p/abc/") == {}, "instagram does not get the X cookie")
     finally:
         os.environ.pop("TWITTER_AUTH_TOKEN", None)
+    os.environ["X_PROXY_TOKEN"] = "mirror-secret"
+    try:
+        check(
+            proxy_token_header("https://viktorych-accounts.viktorych-accounts.workers.dev/v1/x/2/profile/NASA/statuses").get("X-Viktorych-Token") == "mirror-secret",
+            "the cached mirror gets the optional token",
+        )
+        check(proxy_token_header("https://api.fxtwitter.com/2/profile/NASA/statuses") == {}, "fxtwitter never gets the mirror token")
+        check(proxy_token_header("https://evil.example/v1/x/2/profile/NASA/statuses") == {}, "the mirror token stays off an unknown host")
+        check(proxy_token_header("http://127.0.0.1:8787/v1/x/2/profile/NASA/statuses").get("X-Viktorych-Token") == "mirror-secret", "a local worker still gets the token")
+    finally:
+        os.environ.pop("X_PROXY_TOKEN", None)
 
     import json as jsonlib
     import tempfile

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,7 +47,8 @@ from adapters.common import (  # noqa: E402
 )
 from meta_media import refresh_saved  # noqa: E402
 from site_paths import user_agent  # noqa: E402
-from x_guard import assert_not_x_api, auth_cookie_header, open_url  # noqa: E402
+from x_guard import assert_not_x_api, auth_cookie_header, open_url, proxy_token_header  # noqa: E402
+from x_fetch import MAX_ATTEMPTS, host_of, is_retryable, prefetch, retry_delay  # noqa: E402
 
 UA = user_agent()
 
@@ -72,7 +74,95 @@ NITTER_RSS = [
     "https://nitter.kareem.one/{handle}/rss",
     "https://nitter.jaydenha.uk/{handle}/rss",
 ]
+RSSHUB_X = ["{rsshubBase}/twitter/user/{handle}"]
+# The cached Worker mirror. It serves the same fxtwitter API from the edge and
+# keeps a copy, so two runs inside one window share one upstream fetch. An
+# outbound request to this host is optional: an empty value turns it off and
+# the direct fxtwitter source is used instead.
+DEFAULT_X_PROXY = "https://viktorych-accounts.viktorych-accounts.workers.dev/v1/x"
 ADDED_X_KEY = "owner/added-accounts.json"
+
+
+def x_proxy_base(config: dict | None = None) -> str:
+    """The Worker mirror base URL, or "" when it is switched off."""
+    config = config if isinstance(config, dict) else {}
+    if config.get("xProxy") is False:
+        return ""
+    base = (
+        str(config.get("xProxyBase") or "").strip()
+        or (os.environ.get("X_PROXY_BASE") or "").strip()
+        or DEFAULT_X_PROXY
+    ).rstrip("/")
+    if base in ("0", "off", "false"):
+        return ""
+    return base
+
+
+def x_fallback_rows(config: dict | None) -> list:
+    """The shared fallback lanes for an X feed, in the order they are tried.
+
+    xMirrors in feeds.config.json is the one place to retire a dead Nitter
+    host or add another lane; the rows below follow it.
+    """
+    config = config if isinstance(config, dict) else {}
+    mirrors = config.get("xMirrors") if isinstance(config.get("xMirrors"), dict) else {}
+    rows = []
+    nitter = mirrors.get("nitter")
+    if nitter is None:
+        nitter = NITTER_RSS
+    urls = []
+    for item in nitter or []:
+        text = str(item or "").strip()
+        if not text:
+            continue
+        if "{handle}" not in text:
+            text = text.rstrip("/") + "/{handle}/rss"
+        urls.append(text)
+    if urls:
+        rows.append({"adapter": "nitter_rss", "source_urls": urls})
+    rsshub = mirrors.get("rsshub")
+    if rsshub is None:
+        rsshub = RSSHUB_X
+    rss = [str(item or "").strip() for item in rsshub or [] if str(item or "").strip()]
+    if rss:
+        rows.append({"adapter": "rsshub_x", "source_urls": rss})
+    return rows
+
+
+def ensure_x_lanes(feed: dict, config: dict | None) -> dict:
+    """Put the shared mirror lanes on an X feed, then keep any extra lane it lists."""
+    if feed.get("platform") != "x":
+        return feed
+    lanes = x_fallback_rows(config)
+    known = {row.get("adapter") for row in lanes}
+    extra = [
+        dict(row)
+        for row in (feed.get("fallbacks") or [])
+        if isinstance(row, dict) and row.get("adapter") not in known
+    ]
+    feed["fallbacks"] = lanes + extra
+    return feed
+
+
+def x_source_urls(feed: dict, config: dict | None) -> list:
+    """The fxtwitter sources for an X feed, with the cached mirror tried first.
+
+    The mirror speaks the same paths, so the replies and articles URLs built
+    later from the winning source URL stay valid either way.
+    """
+    urls = list(feed.get("source_urls") or [])
+    if feed.get("adapter") != "fxtwitter" or not urls:
+        return urls
+    base = x_proxy_base(config)
+    if not base:
+        return urls
+    head = urls[0]
+    if not isinstance(head, str) or "{fxtwitterBase}" not in head:
+        return urls
+    mirrored = head.replace("{fxtwitterBase}", base)
+    if any(mirrored == item for item in urls):
+        return urls
+    return [mirrored] + urls
 
 
 def empty_added_x() -> dict:
@@ -178,7 +268,7 @@ def added_x_feeds(config: dict, doc: dict | None) -> list:
             "handle": handle,
             "adapter": "fxtwitter",
             "source_urls": ["{fxtwitterBase}/2/profile/{handle}/statuses"],
-            "fallbacks": [{"adapter": "nitter_rss", "source_urls": list(NITTER_RSS)}],
+            "fallbacks": x_fallback_rows(config),
             "limit": 6,
             "profile": {"name": source.get("name") or handle, "url": "https://x.com/" + handle},
             "_privateAdded": True,
@@ -242,8 +332,9 @@ def read_source(url: str) -> str:
     assert_not_x_api(url)
     headers = {"User-Agent": UA, "Accept": "*/*"}
     headers.update(auth_cookie_header(url))
+    headers.update(proxy_token_header(url))
     request = urllib.request.Request(url, headers=headers)
-    with open_url(request, timeout=40) as response:
+    with open_url(request, timeout=25) as response:
         return response.read().decode("utf-8", "replace")
 
 
@@ -296,28 +387,105 @@ def accept_feed(name: str, payload, feed: dict) -> dict:
     return cleaned
 
 
+def _fetch_one(url: str, adapter_name: str, feed: dict, errors: list, attempts: int = MAX_ATTEMPTS):
+    """Read and parse one URL, retrying a rate limit or a server error once."""
+    last = None
+    for attempt in range(max(1, attempts)):
+        try:
+            payload = read_source(url)
+            return payload, accept_feed(adapter_name, payload, feed)
+        except BridgeError as exc:
+            errors.append(f"{url}: {exc}")
+            print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
+            return None, None
+        except (ValueError, KeyError, TypeError) as exc:
+            errors.append(f"{url}: {exc}")
+            print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
+            return None, None
+        except Exception as exc:
+            last = exc
+            errors.append(f"{url}: {exc}")
+            if attempt + 1 < attempts and is_retryable(exc):
+                delay = retry_delay(attempt, getattr(exc, "headers", None))
+                print(f"[retry] {feed.get('id')}: {url}: {exc} in {delay:g}s", file=sys.stderr)
+                time.sleep(delay)
+                continue
+            break
+    if last is not None:
+        print(f"[skip] {feed.get('id')}: {url}: {last}", file=sys.stderr)
+    return None, None
+
+
 def _fetch_sources(urls, adapter_name, feed, config, errors):
     """Try each mirror. A bridge error falls through to the next URL."""
     for source in urls or []:
         url = expand(source, config, feed)
         if not url:
             continue
-        try:
-            payload = read_source(url)
-            result = accept_feed(adapter_name, payload, feed)
-        except BridgeError as exc:
-            errors.append(f"{url}: {exc}")
-            print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
-            continue
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            errors.append(f"{url}: {exc}")
-            continue
-        except Exception as exc:
-            errors.append(f"{url}: {exc}")
-            print(f"[skip] {feed.get('id')}: {url}: {exc}", file=sys.stderr)
-            continue
-        return payload, url, adapter_name, result
+        payload, result = _fetch_one(url, adapter_name, feed, errors)
+        if result is not None:
+            return payload, url, adapter_name, result
     return None, "", adapter_name, None
+
+
+def prefetch_x(feed_rows, config: dict) -> dict:
+    """Fetch the X timelines in a small pool before the serial build loop.
+
+    Only the network step moves here. Identity, health, media, and publish
+    still run in the loop in the order they always did.
+    """
+    if bool(config.get("xPrefetch", True)) is False:
+        return {}
+    jobs = {}
+    for feed in feed_rows or []:
+        if not isinstance(feed, dict) or feed.get("platform") != "x":
+            continue
+        if feed.get("adapter") != "fxtwitter":
+            continue
+        # Repost sources keep the serial pause the loop gives them.
+        if feed.get("origin") == "repost":
+            continue
+        feed_id = str(feed.get("id") or "")
+        if not feed_id:
+            continue
+        jobs[feed_id] = feed
+    if len(jobs) < 2:
+        return {}
+
+    def run(feed: dict):
+        errors: list = []
+        payload, url, adapter, result = _fetch_sources(
+            x_source_urls(feed, config), feed.get("adapter"), feed, config, errors
+        )
+        if result is None and payload is None:
+            for fallback in feed.get("fallbacks") or []:
+                if fallback.get("adapter") == "x_api_v2":
+                    continue
+                payload, url, adapter, result = _fetch_sources(
+                    fallback.get("source_urls") or [],
+                    fallback.get("adapter") or feed.get("adapter"),
+                    feed,
+                    config,
+                    errors,
+                )
+                if result is not None:
+                    break
+        return payload, url, adapter, result, errors
+
+    try:
+        workers = int(config.get("xWorkers") or 4)
+    except (TypeError, ValueError):
+        workers = 4
+    done = prefetch({feed_id: (lambda row=feed: run(row)) for feed_id, feed in jobs.items()}, workers)
+    ready = {}
+    for feed_id, value in done.items():
+        if isinstance(value, BaseException):
+            print(f"[keep] {feed_id}: prefetch: {value}", file=sys.stderr)
+            continue
+        ready[feed_id] = value
+    if ready:
+        print(f"[x] prefetched {len(ready)} of {len(jobs)} timelines")
+    return ready
 
 
 # pbs.twimg.com and video.twimg.com stay hotlinked. Only Meta CDNs expire.
@@ -665,6 +833,10 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             feed_rows.extend(extra_feeds(config))
         except Exception as exc:
             print(f"[people] feeds: {exc}", file=sys.stderr)
+        for row in feed_rows:
+            if isinstance(row, dict):
+                ensure_x_lanes(row, config)
+    prefetched = prefetch_x(feed_rows, config) if not use_fixtures else {}
 
     def note_private(feed: dict) -> None:
         nonlocal private_changed
@@ -684,6 +856,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         adapter = feed.get("adapter")
         result = None
         errors = []
+        from_prefetch = False
         if not use_fixtures and feed.get("platform") == "youtube" and not feed.get("channelId"):
             try:
                 from yt_remote import resolve_channel_id
@@ -739,10 +912,16 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                 collected.extend(old_by_feed.get(feed["id"], []))
                 continue
             if result is None and payload is None:
-                payload, source_url, adapter, result = _fetch_sources(
-                    feed.get("source_urls") or [], feed.get("adapter"), feed, config, errors
-                )
-            if result is None and payload is None:
+                ready = prefetched.get(feed["id"]) if prefetched else None
+                if ready is not None:
+                    payload, source_url, adapter, result, early = ready
+                    errors.extend(early)
+                    from_prefetch = True
+                else:
+                    payload, source_url, adapter, result = _fetch_sources(
+                        x_source_urls(feed, config), feed.get("adapter"), feed, config, errors
+                    )
+            if result is None and payload is None and not from_prefetch:
                 for fallback in feed.get("fallbacks") or []:
                     if fallback.get("adapter") == "x_api_v2":
                         print(f"[skip] {feed['id']}: x_api_v2 is not a live fallback", file=sys.stderr)
@@ -781,12 +960,42 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                 print(f"[keep] {feed.get('id')}: identity: {exc}", file=sys.stderr)
         posts = result.get("posts") or []
         if adapter == "fxtwitter" and not use_fixtures and source_url and feed.get("origin") != "repost":
-            reply_url = source_url + ("&" if "?" in source_url else "?") + "with_replies=1"
-            try:
-                extra = run_adapter("fxtwitter", read_source(reply_url), feed)
-            except Exception as exc:
-                extra = {}
-                print(f"[keep] {feed['id']}: replies: {exc}", file=sys.stderr)
+            reply_url = ""
+            if feed.get("fetchReplies", True):
+                reply_url = source_url + ("&" if "?" in source_url else "?") + "with_replies=1"
+            articles_url = ""
+            if feed.get("fetchArticles", True):
+                bare = source_url.split("?")[0].rstrip("/")
+                if bare.endswith("/statuses"):
+                    articles_url = bare[: -len("/statuses")] + "/articles?count=10"
+                elif bare.endswith("/media"):
+                    articles_url = bare[: -len("/media")] + "/articles?count=10"
+            # The replies page and the articles page do not depend on each
+            # other, so one wait covers both.
+            pages = prefetch(
+                {
+                    name: (lambda target=link: read_source(target))
+                    for name, link in (("replies", reply_url), ("articles", articles_url))
+                    if link
+                },
+                2,
+            )
+
+            def page(name: str) -> str:
+                value = pages.get(name)
+                if isinstance(value, BaseException):
+                    raise value
+                if not isinstance(value, str):
+                    raise RuntimeError("no page")
+                return value
+
+            extra = {}
+            if reply_url:
+                try:
+                    extra = run_adapter("fxtwitter", page("replies"), feed)
+                except Exception as exc:
+                    extra = {}
+                    print(f"[keep] {feed['id']}: replies: {exc}", file=sys.stderr)
             have = {str(post.get("id") or "") for post in posts}
             replies = []
             for post in extra.get("posts") or []:
@@ -798,15 +1007,9 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
                 cap = int(feed.get("limit") or 20)
                 posts.extend(replies[:cap])
                 print(f"[ok] {feed['id']}: {len(replies[:cap])} replies")
-            articles_url = ""
-            bare = source_url.split("?")[0].rstrip("/")
-            if bare.endswith("/statuses"):
-                articles_url = bare[: -len("/statuses")] + "/articles?count=10"
-            elif bare.endswith("/media"):
-                articles_url = bare[: -len("/media")] + "/articles?count=10"
             if articles_url:
                 try:
-                    extra_articles = run_adapter("fxtwitter", read_source(articles_url), feed)
+                    extra_articles = run_adapter("fxtwitter", page("articles"), feed)
                 except Exception as exc:
                     extra_articles = {}
                     print(f"[keep] {feed['id']}: articles: {exc}", file=sys.stderr)
@@ -931,7 +1134,8 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             primary = blank_profile(feed.get("platform") or "", feed.get("handle") or "", feed.get("handle") or "")
         profiles = merge_profiles(profiles, [apply_override(primary, feed)] + [p for p in incoming if p is not primary])
         note_private(feed)
-        print(f"[ok] {feed['id']}: {len(posts)} posts via {adapter}")
+        via = host_of(source_url) if adapter == "fxtwitter" else ""
+        print(f"[ok] {feed['id']}: {len(posts)} posts via {adapter}" + (f" ({via})" if via else ""))
 
     if private_changed and not use_fixtures:
         try:

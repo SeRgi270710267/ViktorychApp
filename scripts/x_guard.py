@@ -1,9 +1,10 @@
 """Keep the sync off the paid X API except one replies fallback.
 
-Live X posts come from fxtwitter and Nitter. TWITTER_AUTH_TOKEN, when set, is
-sent only as a cookie to Nitter and to RSSHub X/Twitter routes. It is never
-sent to api.x.com or api.twitter.com. X_BEARER_TOKEN is read only by
-conversation_search, which calls the recent-search endpoint for one
+Live X posts come from fxtwitter, Nitter, and the cached Worker mirror.
+TWITTER_AUTH_TOKEN, when set, is sent only as a cookie to Nitter and to RSSHub
+X/Twitter routes. X_PROXY_TOKEN, when set, is sent only to the Worker mirror.
+Neither is ever sent to api.x.com or api.twitter.com. X_BEARER_TOKEN is read
+only by conversation_search, which calls the recent-search endpoint for one
 conversation id and nowhere else.
 """
 
@@ -59,6 +60,22 @@ def auth_cookie_header(url: str) -> dict:
         return {}
     cookie = token if "auth_token=" in token else f"auth_token={token}"
     return {"Cookie": cookie}
+
+
+def proxy_token_header(url: str) -> dict:
+    """Optional shared secret for the cached Worker mirror. Empty for everything else."""
+    token = (os.environ.get("X_PROXY_TOKEN") or "").strip()
+    if not token:
+        return {}
+    parts = urllib.parse.urlparse(url)
+    host = (parts.hostname or "").lower()
+    if not parts.path.startswith("/v1/x"):
+        return {}
+    if host in ("localhost", "127.0.0.1", "::1"):
+        return {"X-Viktorych-Token": token}
+    if parts.scheme == "https" and (host.endswith(".workers.dev") or host.endswith(".viktorych.org")):
+        return {"X-Viktorych-Token": token}
+    return {}
 
 
 def open_url(request: urllib.request.Request, timeout: int = 30):

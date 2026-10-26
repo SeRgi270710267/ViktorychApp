@@ -4,3 +4,6 @@ OWNER_CLAIM_CODE=local-dev-claim-code
 ACCOUNT_PEPPER=local-dev-pepper
 ALLOWED_ORIGINS=https://viktorychgroup.github.io,http://127.0.0.1:8080,http://localhost:8080
 PBKDF2_ITERATIONS=1000
+# Optional. When set, /v1/x/... requires this value in the X-Viktorych-Token
+# header. Leave it out to keep the cached X mirror open.
+# X_PROXY_TOKEN=local-dev-mirror-token
