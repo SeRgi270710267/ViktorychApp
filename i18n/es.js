@@ -964,6 +964,8 @@ SI18n.addPack("es", {
   "Categories": "Categorías",
   "All Categories": "Todas las categorías",
   "Nothing is sent to the forum.": "No se envía nada al foro.",
+  "Couldn't load the comments.": "No se pudieron cargar los comentarios.",
+  "Showing {shown} of {total}": "Mostrando {shown} de {total}",
   "Playback speed": "Velocidad de reproducción",
   "Normal": "Normal",
   "Loop": "Bucle",

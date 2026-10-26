@@ -964,6 +964,8 @@ SI18n.addPack("ru", {
   "Categories": "Категории",
   "All Categories": "Все категории",
   "Nothing is sent to the forum.": "На форум ничего не отправляется.",
+  "Couldn't load the comments.": "Не удалось загрузить комментарии.",
+  "Showing {shown} of {total}": "Показано {shown} из {total}",
   "Playback speed": "Скорость воспроизведения",
   "Normal": "Обычная",
   "Loop": "Повтор",

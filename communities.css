@@ -43,6 +43,8 @@
 .cm-forum-link:hover { text-decoration: underline; }
 .cm-forum-link svg { width: 14px; height: 14px; }
 .cm-hero-title .cm-type-badge { font-size: 11px; margin-left: 8px; vertical-align: middle; }
+.cm-thread-count { color: var(--muted); font-weight: 600; font-size: 13px; margin-left: 6px; }
+.cm-thread-note { margin: 0; padding: 10px 16px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); }
 
 /* X.com Join Pill Buttons */
 .cm-btn-join { display: inline-flex; align-items: center; justify-content: center; padding: 7px 18px; border-radius: 9999px; font-size: 14px; font-weight: 700; border: 1px solid transparent; background: var(--fill, #eff3f4); color: var(--on-fill, #0f1419); cursor: pointer; transition: background .15s ease, color .15s ease, border-color .15s ease; font-family: var(--font); flex: none; }
