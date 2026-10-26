@@ -402,7 +402,7 @@
       "description": ""
     }
   ],
-  "fetchedAt": "2026-10-26T21:52:04Z",
+  "fetchedAt": "2026-10-26T22:13:36Z",
   "source": "flarum",
   "url": "https://discuss.grapheneos.org",
   "posts": [
@@ -580,6 +580,31 @@
       "text": "GrapheneOS community members are committed to preserving and fostering a diverse, welcoming society. Below is our community code of conduct, which applies to our forums, chat rooms, issue trackers, and any other GrapheneOS-supported communication group, as well as any private communication initiated in the context of these spaces. Simply put, community discussions should be the following:\n\n• Respectful and kind\n\n• About GrapheneOS\n\n• About features and code, not the individuals involved\n\nBe respectful and constructive.\n\nTreat everyone with respect. Build on each other's ideas. Each of us has the right to enjoy our experience and participate without fear of harassment, discrimination, or condescension, whether blatant or subtle. Remember that GrapheneOS project is a geographically distributed community and that you may not be communicating with someone in their primary language. We all get frustrated when working on hard problems, but we cannot allow that frustration to turn into personal attacks.\n\nHarassment is not tolerated, including, but not limited to the following:\n\n• Harassing comments\n\n• Intimidation\n\n• Encouraging a person to engage in self-harm\n\n• Sustained disruption or derailing of threads, channels, lists, and similar forums\n\n• Offensive or violent comments, jokes, or otherwise\n\n• Inappropriate sexual content\n\n• Unwelcome sexual or otherwise aggressive attention\n\n• Continued one-on-one communication after requests to cease\n\n• Distribution or threat of distribution of people's personally identifying information, also known as \"doxing.\"\n\nParticipants warned to stop any harassing behavior are expected to comply immediately. Failure to do so will result in an escalation of consequences.\n\nAcknowledgments\n\nThis Code of Conduct is adapted from the Chromium Code of Conduct, based on the Geek Feminism Code of Conduct, the Django Code of Conduct, and the Geek Feminism Wiki \"Effective codes of conduct\" guide.",
       "replies": [],
       "repliesTotal": 1
+    },
+    {
+      "id": "43110",
+      "title": "Delete added system notification sounds?",
+      "author": "40z5uu6txt",
+      "authorUsername": "40z5uu6txt",
+      "authorAvatar": "",
+      "score": 2,
+      "comments": 2,
+      "views": 70,
+      "participantCount": 2,
+      "created": 1793043597,
+      "lastPostedAt": 1793052008,
+      "category": "General",
+      "categoryColor": "#c7c7c7",
+      "tags": [
+        "General"
+      ],
+      "pinned": false,
+      "locked": false,
+      "url": "https://discuss.grapheneos.org/d/43110-delete-added-system-notification-sounds",
+      "media": [],
+      "text": "I added a bunch of system notification sounds but can't seem to figure out how to delete them. To add them, you would go to the \"Notification sound picker\", scroll to the bottom to add a sound from your files, and then it would appear. But there doesn't seem to be a way to delete them or even rename them. Is this possible on GrapheneOS?",
+      "replies": [],
+      "repliesTotal": 2
     },
     {
       "id": "43111",
@@ -937,31 +962,6 @@
       "text": "We're planning on phasing out support for 32-bit apps on 5th/6th generation Pixels where they're still supported. They were already phased out by Android for 7th generation Pixels and later, and by ARM for 2nd generation ARMv9 Cortex cores onwards. Since 7th/8th generation Pixel users are doing fine without them, we want to bring the improved security to users on 6th generation Pixels which still have a lot of support ahead of them. It will also save a significant amount of build time and bandwidth, particularly when we can move to 64-bit-only builds of Vanadium.\n\nThe main benefit is dropping all the 32-bit ABI support from the kernel including a bunch of awful legacy cruft for emulating legacy ARM features no longer supported by hardware.\n\nThe next release will add a clear warning to each launch of 32-bit-only apps. In nearly all cases, people just need to switch to proper builds of apps which aren't 32-bit-only such as the ones distributed by certain 3rd party mirror sites where users accidentally ended up on 32-bit-only builds.\n\nIt hasn't been possible to install 32-bit-only apps from the Play Store on 64-bit-capable devices since August 2021 and they blocked uploading either new apps or app updates without 64-bit support since August 2019.",
       "replies": [],
       "repliesTotal": 49
-    },
-    {
-      "id": "43110",
-      "title": "Delete added system notification sounds?",
-      "author": "40z5uu6txt",
-      "authorUsername": "40z5uu6txt",
-      "authorAvatar": "",
-      "score": 1,
-      "comments": 1,
-      "views": 35,
-      "participantCount": 1,
-      "created": 1793043597,
-      "lastPostedAt": 1793043597,
-      "category": "General",
-      "categoryColor": "#c7c7c7",
-      "tags": [
-        "General"
-      ],
-      "pinned": false,
-      "locked": false,
-      "url": "https://discuss.grapheneos.org/d/43110-delete-added-system-notification-sounds",
-      "media": [],
-      "text": "I added a bunch of system notification sounds but can't seem to figure out how to delete them. To add them, you would go to the \"Notification sound picker\", scroll to the bottom to add a sound from your files, and then it would appear. But there doesn't seem to be a way to delete them or even rename them. Is this possible on GrapheneOS?",
-      "replies": [],
-      "repliesTotal": 1
     },
     {
       "id": "42926",
