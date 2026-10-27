@@ -96,13 +96,15 @@ export function watchDecision(job, marker, roomId, nowMs) {
   return { action: "record", part, why: "retry" };
 }
 
-// An uploader is worth a runner only when bytes are waiting, or a capture
-// is still open and has checked in recently. A live flag or a finished
-// capture with no segments must not dispatch one.
+// An uploader is worth a runner only when a capture is open, or a finished
+// part still has segments. A leftover segment count on a dead or blocked row
+// is not a queue: the uploader would start, find nothing, and be called again.
 export function needsUpload(active, nowMs) {
   if (!active || typeof active !== "object") return false;
-  if (Number(active.segments || 0) > 0) return true;
-  return !!active.capturing && fresh(active.heartbeat, nowMs, WATCH_HEARTBEAT_MS);
+  if (String(active.state || "") === "blocked") return false;
+  if (!!active.capturing && fresh(active.heartbeat, nowMs, WATCH_HEARTBEAT_MS)) return true;
+  const segments = Number(active.segments || 0) > 0;
+  return segments && (!!active.captureDone || !!active.needsPart);
 }
 
 // The uploader writes owner/live-upload/<slot>.json on every pass.

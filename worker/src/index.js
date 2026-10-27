@@ -838,7 +838,7 @@ async function handleSyncPut(request, env) {
   return json(200, { payload: body.payload, updatedAt: now });
 }
 
-const DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^discord\/messages\/\d{1,22}\/p\/\d{1,4}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$/;
+const DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^discord\/messages\/\d{1,22}\/p\/\d{1,4}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$|^data\/communities\/[a-z0-9_]{2,21}\/\d{1,20}\.json$/;
 
 function dataKey(pathname) {
   const raw = String(pathname || "").replace(/^\/v1\/data\/?/, "");

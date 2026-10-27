@@ -10,5 +10,6 @@ sync-report.json
 discord/
 .vk-session/
 .feed-http-cache.json
+.communities-r2
 owner/
 .wrangler/
