@@ -249,10 +249,12 @@ def fetch_x(post: dict, cap: int = 500):
                 primary_payload = {}
         author = _parent_handle(primary_payload or {}) or handle
 
-        sub_candidates = [
-            sid for sid, r in all_rows.items()
-            if int((r.get("stats") or {}).get("replies") or r.get("reply_count") or 0) > 0
-        ][:25]
+        sub_candidates = []
+        if not _budget_spent():
+            sub_candidates = [
+                sid for sid, r in all_rows.items()
+                if int((r.get("stats") or {}).get("replies") or r.get("reply_count") or 0) > 0
+            ][:25]
         if sub_candidates:
             sub_urls = [f"https://api.fxtwitter.com/2/conversation/{sid}" for sid in sub_candidates]
             with ThreadPoolExecutor(max_workers=8) as pool:
@@ -611,10 +613,21 @@ def fetch_vk(post: dict):
     return None
 
 
+def _budget_spent() -> bool:
+    try:
+        from update_feeds import over_deadline
+    except Exception:
+        return False
+    return over_deadline()
+
+
 def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> None:
     seen = set()
     missed = {"instagram": 0, "threads": 0}
     for post in posts:
+        if not use_fixtures and _budget_spent():
+            print("[replies] stopped; refresh budget spent", file=sys.stderr)
+            break
         status_id = str(post.get("statusId") or post.get("id") or "")
         platform = post.get("platform") or ""
         if not status_id or status_id in seen:

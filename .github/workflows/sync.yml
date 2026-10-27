@@ -415,6 +415,7 @@ jobs:
       - name: Refresh feeds
         env:
           FEED_DEADLINE_SECONDS: "360"
+          PYTHONUNBUFFERED: "1"
           INSTAGRAM_COOKIE: ${{ secrets.INSTAGRAM_COOKIE }}
           THREADS_COOKIE: ${{ secrets.THREADS_COOKIE }}
           TWITTER_AUTH_TOKEN: ${{ secrets.TWITTER_AUTH_TOKEN }}
@@ -482,13 +483,27 @@ jobs:
                   print("::add-mask::" + match.group(1), flush=True)
           PY
           set +e
-          python3 scripts/update_feeds.py
+          # The job cap is 15 minutes. Stop each command with time left so the
+          # catalog push still runs when a source or yt-dlp ignores its budget.
+          timeout --kill-after=20s 400 python3 scripts/update_feeds.py
           feeds=$?
-          python3 -m pip install --disable-pip-version-check -q 'yt-dlp==2026.10.21'
-          python3 scripts/tiktok_sync.py
-          python3 scripts/r2_catalog.py push
-          if [ "$feeds" -ne 0 ]; then
+          if [ "$feeds" -eq 124 ]; then
+            echo "[refresh] feed updater hit its clock; keeping posts fetched so far"
+          fi
+          timeout --kill-after=20s 60 python3 -m pip install --disable-pip-version-check -q 'yt-dlp==2026.10.21'
+          timeout --kill-after=20s 190 python3 scripts/tiktok_sync.py
+          tiktok=$?
+          if [ "$tiktok" -eq 124 ]; then
+            echo "[refresh] tiktok sync hit its clock"
+          fi
+          timeout --kill-after=20s 90 python3 scripts/r2_catalog.py push
+          push=$?
+          if [ "$feeds" -ne 0 ] && [ "$feeds" -ne 124 ]; then
             echo "[refresh] feed updater exited $feeds; unchanged sources keep their last posts"
+          fi
+          if [ "$push" -ne 0 ]; then
+            echo "[refresh] catalog push exited $push"
+            exit 1
           fi
           exit 0
 
