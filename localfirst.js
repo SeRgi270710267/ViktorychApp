@@ -434,6 +434,20 @@
     });
   }
 
+  function readDoc(category, id) {
+    var api = storageApi();
+    if (!api || typeof indexedDB === "undefined" || !api.openDb || !api.listDocs) return Promise.resolve(null);
+    return api.openDb().then(function (db) {
+      return api.listDocs(db);
+    }).then(function (rows) {
+      var want = String(id);
+      var found = (rows || []).find(function (row) {
+        return row && row.category === category && String(row.id) === want;
+      });
+      return found ? found.body : null;
+    }).catch(function () { return null; });
+  }
+
   function saveDoc(category, id, body, etag) {
     var api = storageApi();
     if (!api || typeof indexedDB === "undefined") return Promise.resolve(null);
@@ -599,6 +613,7 @@
     flush: flush,
     pending: pending,
     paintPending: paintPending,
+    readDoc: readDoc,
     saveDoc: saveDoc,
     warmMedia: warmMedia,
     warmOpens: warmOpens,

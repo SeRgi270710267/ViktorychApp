@@ -1,5 +1,7 @@
 /** Internal posts on a mirrored subreddit. Nothing here calls Reddit. */
 
+import { invalidate, readThrough } from "./edge-cache.js";
+import { logError } from "./log.js";
 import { notifyCommunity, notifyMentions } from "./notifications.js";
 
 export const COMMUNITY_SCHEMA = [
@@ -171,26 +173,56 @@ async function handleOwner(request, env, path, deps) {
   return json(404, { error: "not_found" });
 }
 
-async function readFeed(request, env, name, row, json, rateHit, limited, presentAccount) {
-  const hit = await rateHit(env, "community-read:" + row.public_id, 60, 10 * 60 * 1000);
-  if (!hit.ok) return limited(hit);
+async function publicFeed(env, request, name, presentAccount) {
   const posts = await env.DB.prepare("SELECT id, author_id, parent_id, body, created_at FROM community_posts WHERE community_id = ? AND deleted_at = 0 ORDER BY created_at DESC LIMIT 200").bind(name).all();
-  const member = await env.DB.prepare("SELECT COUNT(*) AS n FROM community_members WHERE community_id = ?").bind(name).first();
-  const joined = await env.DB.prepare("SELECT public_id FROM community_members WHERE community_id = ? AND public_id = ?").bind(name, row.public_id).first();
-  const likes = await env.DB.prepare("SELECT item_id, COUNT(*) AS n FROM community_likes GROUP BY item_id").all();
-  const mine = await env.DB.prepare("SELECT item_id FROM community_likes WHERE public_id = ?").bind(row.public_id).all();
   const authors = {};
   const out = [];
   for (const item of posts.results || []) {
     if (!authors[item.author_id]) authors[item.author_id] = await authorOf(env, request, item.author_id, presentAccount);
     out.push({
       id: item.id,
-      authorId: (authors[item.author_id] && authors[item.author_id].profileLess) ? "" : item.author_id,
+      authorId: item.author_id,
       parentId: item.parent_id || "",
       body: item.body,
       createdAt: item.created_at,
-      author: authors[item.author_id],
-      mine: item.author_id === row.public_id
+      author: authors[item.author_id]
+    });
+  }
+  return JSON.stringify({ posts: out });
+}
+
+async function dropFeed(env, name) {
+  try { await invalidate(env, "f:" + name); }
+  catch (err) { logError("feed", err); }
+}
+
+async function readFeed(request, env, name, row, json, rateHit, limited, presentAccount) {
+  const hit = await rateHit(env, "community-read:" + row.public_id, 60, 10 * 60 * 1000);
+  if (!hit.ok) return limited(hit);
+  let parsed = { posts: [] };
+  try {
+    const text = await readThrough(env, "f:" + name, () => publicFeed(env, request, name, presentAccount));
+    parsed = JSON.parse(text);
+  } catch (err) {
+    logError("feed", err);
+    parsed = JSON.parse(await publicFeed(env, request, name, presentAccount));
+  }
+  const member = await env.DB.prepare("SELECT COUNT(*) AS n FROM community_members WHERE community_id = ?").bind(name).first();
+  const joined = await env.DB.prepare("SELECT public_id FROM community_members WHERE community_id = ? AND public_id = ?").bind(name, row.public_id).first();
+  const likes = await env.DB.prepare("SELECT item_id, COUNT(*) AS n FROM community_likes GROUP BY item_id").all();
+  const mine = await env.DB.prepare("SELECT item_id FROM community_likes WHERE public_id = ?").bind(row.public_id).all();
+  const out = [];
+  for (const item of parsed.posts || []) {
+    const authorId = String(item && item.authorId || "");
+    const profileLess = !!(item && item.author && item.author.profileLess);
+    out.push({
+      id: item.id,
+      authorId: profileLess ? "" : authorId,
+      parentId: item.parentId || "",
+      body: item.body,
+      createdAt: item.createdAt,
+      author: item.author,
+      mine: authorId === row.public_id
     });
   }
   const counts = {};
@@ -242,6 +274,7 @@ async function createPost(request, env, name, row, json, readJson, rateHit, limi
     await env.DB.prepare("INSERT INTO community_notes (id, public_id, payload, created_at, seen) VALUES (?, ?, ?, ?, 0)").bind(noteId, parentAuthor, JSON.stringify(payload), now).run();
   }
   const author = await authorOf(env, request, row.public_id, presentAccount);
+  await dropFeed(env, name);
   if (parentAuthor && parentAuthor !== row.public_id) {
     await notifyCommunity(env, {
       publicId: parentAuthor,
@@ -271,6 +304,7 @@ async function deletePost(env, name, rawId, row, json, rateHit, limited) {
   if (!existing) return json(404, { error: "not_found" });
   if (existing.author_id !== row.public_id && row.owner !== 1) return json(403, { error: "forbidden" });
   await env.DB.prepare("UPDATE community_posts SET deleted_at = ? WHERE id = ?").bind(Date.now(), id).run();
+  await dropFeed(env, name);
   return json(200, { deleted: true });
 }
 

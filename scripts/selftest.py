@@ -1382,7 +1382,7 @@ def main() -> None:
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
     check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a20-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
-    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
+    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
@@ -1420,7 +1420,7 @@ def main() -> None:
     music_catalog = json.loads(music_data)
     check('productName("music")' in music_js and "SuperintelMusic" not in music_js and "SuperintelMusic" not in music_css and "SuperintelMusic" not in music_data and 'aria-label="ViktorychMusic"' in (ROOT / "logo" / "viktorychmusic.svg").read_text(encoding="utf-8"), "the music mode name comes from the language packs")
     check(any(song.get("id") == "america-dont-sit-still" and song.get("artist") == "ViktorychMusic" and song.get("kind") == "hls" and str(song.get("stream") or "").endswith("/index.m3u8") and song.get("stream") not in music_js for song in music_catalog.get("songs") or []), "the lossless release is credited in the catalog and its stream stays out of the script")
-    check('parts[0] === "music"' in app and 'href="#/music"' in app and 'classList.add("music-on")' in music_js and 'classList.remove("music-on")' in music_js and "audio.pause" in music_js, "music mode opens from its route and pauses on the way out")
+    check('parts[0] === "music"' in app and 'href: "#/music"' in app and 'classList.add("music-on")' in music_js and 'classList.remove("music-on")' in music_js and "audio.pause" in music_js, "music mode opens from its route and pauses on the way out")
     check('title === productName("music")' in music_js and '<h1 class="vh">' in music_js and 'const musicHome = route.name === "music"' in app and "tall && !musicHome ? 106" in app, "music home shows the logo without a second title")
     music_row = subprocess.run(["node", "scripts/music_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(music_row.returncode == 0, "SIntelMusic library checks passed\n" + music_row.stdout + music_row.stderr)
@@ -1433,7 +1433,8 @@ def main() -> None:
     check("github.actor == 'owner-account'" in music_workflow and "github.actor == github.repository_owner" not in music_workflow and "OWNER: owner-account" in music_workflow and "REPO: ${{ github.repository }}" in music_workflow, "the music catalog issue is applied only for the human owner")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "groups.yml").is_file(), "subscription group issue form exists")
     check("feeds.config.json" in deployed_paths(), "the deploy publishes feeds.config.json")
-    chips_css = css[css.index(".yt-chips"):css.index(".yt-chips") + 500]
+    chips_at = css.index(".yt-chips {")
+    chips_css = css[chips_at:chips_at + 500]
     check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
     check("var(--fill)" in css[css.index(".yt-chip.on"):css.index(".yt-chip.on") + 160], "the selected subscription chip uses the inverted fill")
     check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups on your account" in app and "Groups saved on your account." in app, "subscription groups filter from the chip bar and save on the account")
@@ -4374,12 +4375,15 @@ def story_checks() -> None:
     check("drive-photos.js" in worker, "the service worker precaches the Photos library")
     nav_fn = app.split("function navItemDef(id)", 1)[1].split("function shownFeeds", 1)[0]
     bottom_fn = app.split("function bottom(route)", 1)[1].split("function listSortOf", 1)[0]
-    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and "#/storage" not in nav_fn and "#/storage" not in bottom_fn, "storage stays out of the main nav")
-    check('href="#/storage"' in app and 'icon("storage")' in app and "ViktorychDrive.visible" in app and 'parts[0] === "storage"' in app and 'bare === "#/drive"' in app, "storage opens from the owner account menu and the old drive route redirects")
+    bottom_ids = app.split("const BOTTOM_NAV_IDS", 1)[1].split("];", 1)[0]
+    bottom_default = app.split("const BOTTOM_NAV_DEFAULT_ON", 1)[1].split("];", 1)[0]
+    side_ids = app.split("const ALL_NAV_IDS", 1)[1].split("];", 1)[0]
+    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and "#/storage" not in bottom_fn and '"storage"' not in side_ids and '"storage"' not in bottom_default and '"storage"' in bottom_ids and 'href: "#/storage"' in nav_fn, "storage stays off the default nav and can be pinned on the bottom bar")
+    check('href: "#/storage"' in nav_fn and 'icon: "storage"' in nav_fn and "ViktorychDrive.visible" in app and "bottomHiddenItems()" in app and 'parts[0] === "storage"' in app and 'bare === "#/drive"' in app, "storage opens from the account menu when it is off the bar, and the old drive route redirects")
     games_js = (ROOT / "games.js").read_text(encoding="utf-8")
     check('games.js", "games.css"' in lazy and 'id="game-host"' in page and "games.js" in worker and "games.css" in worker, "the page and the service worker load Games on demand")
     check("games.js" in deployed_paths() and "games.css" in deployed_paths(), "the sync publishes the Games shell")
-    check(('"#/games", "games"' in nav_fn or 'href: "#/games"' in nav_fn) and ('name === "games"' in nav_fn or 'r.name === "games"' in nav_fn) and 'icon("games")' in app and 'href="#/games"' in app and 'parts[0] === "games"' in app, "Games opens from the left nav and the account menu")
+    check('href: "#/games"' in nav_fn and 'r.name === "games"' in nav_fn and 'icon: "games"' in nav_fn and '"games"' in side_ids and 'parts[0] === "games"' in app, "Games opens from the left nav and the account menu")
     communities_js = (ROOT / "communities.js").read_text(encoding="utf-8")
     check('communities.js", "communities.css"' in lazy and "communities.js" in worker and "communities.css" in worker and 'info.name === "communities"' in app, "the page and the service worker load Communities on demand")
     check("communities.js" in deployed_paths() and "communities.css" in deployed_paths() and "data/communities" in workflow and "reddit.yml" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")
@@ -4728,7 +4732,7 @@ def feed_order_checks() -> None:
     import subprocess
     from datetime import datetime, timezone
 
-    from adapters.common import dedupe_posts, order_ms, parse_time
+    from adapters.common import dedupe_posts, order_ms, parse_time, stamp_activity
 
     moment = datetime(2026, 10, 27, tzinfo=timezone.utc)
     same = datetime(2026, 10, 21, 17, tzinfo=timezone.utc)
@@ -4770,11 +4774,23 @@ def feed_order_checks() -> None:
         "people.json": _Path(2),
     })
     check([key for key, _path in ordered] == ["feeds.json", "people.json", "data/communities/a.json", "archive/2020-01.json"], "the live catalog is uploaded before archive JSON, newest extras first")
+    pinned_first = [
+        {"id": "pin", "platform": "x", "handle": "tabfixture", "kind": "post", "pinned": True, "date": "2020-01-01T00:00:00Z", "pinAt": "2020-01-01T00:00:00Z"},
+        {"id": "repost:tabfixture:2", "platform": "x", "kind": "repost", "handle": "otheracct", "date": "2026-10-20T00:00:00Z", "repostedBy": {"handle": "tabfixture"}},
+        {"id": "3", "platform": "x", "handle": "tabfixture", "kind": "post", "date": "2026-10-27T11:00:00Z"},
+    ]
+    stamp_activity(pinned_first, datetime(2026, 10, 27, 12, tzinfo=timezone.utc))
+    check(pinned_first[0]["id"] == "repost:tabfixture:2" and pinned_first[-1]["id"] == "pin" and pinned_first[-1]["date"] == "", "a pinned row is not treated as the newest post")
+    check(pinned_first[0].get("sortDate", "") > "2026-10-27T11:00:00Z" and pinned_first[0]["sortDate"] < "2026-10-27T12:00:00Z", "a repost listed under a pin is stamped between the fetch and the next real post")
     proc = subprocess.run(["node", str(ROOT / "scripts" / "feed_order_test.mjs")], check=False)
     check(proc.returncode == 0, "feed order fixtures")
+    custom = subprocess.run(["node", str(ROOT / "scripts" / "custom_tab_test.mjs")], check=False)
+    check(custom.returncode == 0, "custom tab freshness fixtures")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("shared/feed-order.js" in (ROOT / "index.html").read_text(encoding="utf-8") and "./shared/feed-order.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "shared/feed-order.js" in deployed_paths() and "python3 scripts/assemble_site.py --site _site" in (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8"), "the feed order helper is published with the shell")
-    check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8"), "new posts merge in place and the Following tab uses the signed-in accounts")
+    order_js = (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8")
+    check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in order_js, "new posts merge in place and the Following tab uses the signed-in accounts")
+    check("function customTabFeeds(" in app and "function timelineFeeds(" in app and "timelineFeeds()" in app and "function hydrateTabSnapshots(" in app and "refreshTab" in order_js, "custom tabs use the same UTC refresh as Following")
 
 
 def gdrive_checks() -> None:
@@ -4844,6 +4860,21 @@ def gdrive_checks() -> None:
     check(len(ordered) == 2 and sizes[ordered[0]["logical"]] == 90 and sizes[ordered[1]["logical"]] == 10, "the larger video is uploaded before the smaller one")
     known = {"v": 1, "files": [{"logical": songs[0]["logical"], "sha256": "ab" * 32, "path": "covers/" + ("ab" * 32) + ".png"}]}
     check(songs[0]["logical"] in gdrive_backup.known_ids(known) and ("ab" * 32) in gdrive_backup.known_hashes(known), "a stored hash and logical id are treated as already uploaded")
+    import cf_pages_prepare
+    import cf_pages_deploy
+    import cf_kv_bind
+    import cf_web_analytics
+    check(cf_pages_prepare.selftest() == 0, "the Pages mirror stays inside the file cap and keeps the shell")
+    check(cf_pages_deploy.selftest() == 0, "a Pages permission failure skips without printing a token")
+    check(cf_kv_bind.selftest() == 0, "a KV permission failure removes only the cache binding")
+    check(cf_web_analytics.selftest() == 0, "the analytics beacon is added only with a public token")
+    sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    smoke = (ROOT / ".github" / "workflows" / "smoke.yml").read_text(encoding="utf-8")
+    check("wrangler pages deploy" in sync and "viktorychapp" in sync and "cf_pages_deploy.py" in sync and "cf_pages_prepare.py" in sync and "shared/mirror.js" in deployed_paths() and "smoke_page.mjs --site _mirror" in sync and "smoke_page.mjs --site _site" in smoke and "smoke_page.mjs --site _mirror" in smoke, "the Pages upload is the generated bundle and the smoke check loads that output")
+    check("ViktorychMirror" in (ROOT / "sw.js").read_text(encoding="utf-8") and 'scope: "./"' in (ROOT / "app.js").read_text(encoding="utf-8"), "the service worker can fail over to the other origin")
+    wrangler_text = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
+    check("head_sampling_rate = 1" in wrangler_text and 'binding = "CACHE"' in wrangler_text and 'crons = ["* * * * *"]' in wrangler_text, "workers logs and the KV cache are configured beside the existing cron")
+    check("backups/d1/" in (ROOT / "worker" / "src" / "d1-backup.js").read_text(encoding="utf-8"), "the daily D1 export keeps its objects under backups/d1/")
 
 
 if __name__ == "__main__":

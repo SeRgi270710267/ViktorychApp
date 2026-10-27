@@ -384,12 +384,18 @@
   function githubRepo() {
     const host = String(location.hostname || "").toLowerCase();
     const suffix = ".github.io";
-    if (host.length <= suffix.length || host.slice(-suffix.length) !== suffix) return "";
-    const owner = host.slice(0, -suffix.length);
-    if (!owner || owner.indexOf(".") !== -1) return "";
-    const seg = pagesDirectory().split("/").filter(Boolean)[0] || "";
-    if (!seg || seg === "s" || seg === "u") return "";
-    return owner + "/" + seg;
+    if (host.length > suffix.length && host.slice(-suffix.length) === suffix) {
+      const owner = host.slice(0, -suffix.length);
+      if (!owner || owner.indexOf(".") !== -1) return "";
+      const seg = pagesDirectory().split("/").filter(Boolean)[0] || "";
+      if (!seg || seg === "s" || seg === "u") return "";
+      return owner + "/" + seg;
+    }
+    const pagesHost = "viktorychapp.pages.dev";
+    if (host === pagesHost || (host.length > pagesHost.length + 1 && host.slice(-(pagesHost.length + 1)) === "." + pagesHost)) {
+      return "ViktorychGroup/ViktorychApp";
+    }
+    return "";
   }
 
   const GITHUB_REPO = githubRepo();
@@ -4472,9 +4478,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return pending;
   }
 
-  function fetchJson(url) {
+  function fetchJson(url, opts) {
+    const fresh = !!(opts && opts.fresh);
     if (window.ViktorychDirect && window.ViktorychDirect.allows(url)) {
-      return window.ViktorychDirect.json(url);
+      return window.ViktorychDirect.json(url, null, fresh ? { fresh: true } : null);
     }
     let signal;
     try {
@@ -4482,13 +4489,30 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         signal = AbortSignal.timeout(8000);
       }
     } catch (e) {}
-    return fetch(url, { cache: "no-cache", signal: signal }).then((res) => {
+    const run = (target) => fetch(target, { cache: "no-cache", signal: signal }).then((res) => {
       if (!res.ok) {
         const err = new Error(String(res.status));
         err.status = res.status;
         throw err;
       }
       return res.json();
+    });
+    return run(url).catch((err) => {
+      const api = window.ViktorychMirror;
+      if (!api || !api.mirrorHost(location.hostname)) throw err;
+      if (err && (err.name === "AbortError" || err.name === "TimeoutError")) throw err;
+      const status = Number(err && err.status) || 0;
+      if (status && !api.failoverStatus(status)) throw err;
+      let parsed = null;
+      try { parsed = new URL(url, location.href); } catch (parseErr) { throw err; }
+      if (parsed.origin !== location.origin) throw err;
+      const root = api.appRoot(location.origin, location.pathname, location.hostname);
+      const rel = api.relativeTo(root, parsed.href);
+      if (!rel || /^(?:v1\/|tg\/|ap\/|\.well-known\/)/.test(rel)) throw err;
+      const nextBase = api.bases(root, "", "").filter((base) => base !== api.normalizeBase(root))[0];
+      const next = nextBase ? api.rewrite(nextBase, rel) : "";
+      if (!next) throw err;
+      return run(next);
     });
   }
 
@@ -7320,8 +7344,11 @@ const here = parseRoute();
     if (tab && tab.indexOf("cat:") === 0) {
       const found = feedTabById(tab.slice(4));
       if (!found || found.showHome === false) return false;
-      return profileMatch(post, found.members || []);
+      const members = found.members || [];
+      if (window.FeedOrder && window.FeedOrder.followsPost) return window.FeedOrder.followsPost(post, members);
+      return profileMatch(post, members);
     }
+    if (customTabOnly(post)) return false;
     if (tabView(tab) !== "reposts") {
       if (STATE.settings.forYouReposts === false && (post.kind === "repost" || post.repostedBy)) return false;
       if (STATE.settings.forYouReplies === false && post.kind === "reply") return false;
@@ -7609,6 +7636,7 @@ const here = parseRoute();
   }
 
   function stampActivity(posts, nowMs) {
+    if (window.FeedOrder && window.FeedOrder.prepareActivity) window.FeedOrder.prepareActivity(posts, nowMs);
     const now = nowMs || Date.now();
     let index = 0;
     const timeOf = (post) => {
@@ -7644,6 +7672,9 @@ const here = parseRoute();
     const wrapped = status && status.tweet && typeof status.tweet === "object" ? status.tweet : status;
     const post = fxFromStatus(wrapped);
     if (!post) return null;
+    if (wrapped.pinned || wrapped.is_pinned || (status && status !== wrapped && (status.pinned || status.is_pinned))) post.pinned = true;
+    const pinAt = wrapped.pinned_at || wrapped.pinnedAt || (status && status !== wrapped ? (status.pinned_at || status.pinnedAt) : "");
+    if (pinAt) post.pinAt = isoDate(pinAt);
     const by = fxPerson(wrapped.reposted_by || wrapped.retweeted_by);
     if (by && by.handle) {
       post.repostedBy = by;
@@ -7709,13 +7740,13 @@ const here = parseRoute();
     return once().then((profile) => (profile && profile.handle ? profile : once()));
   }
 
-  function fxTimeline(handle, kind, cursor) {
+  function fxTimeline(handle, kind, cursor, fresh) {
     if (LIVE.fxDown) return Promise.resolve(null);
     let path = "/2/profile/" + encodeURIComponent(handle) + (kind === "media" ? "/media" : "/statuses");
     const query = ["count=40"];
     if (kind === "replies" || kind === "home") query.push("with_replies=1");
     if (cursor) query.push("cursor=" + encodeURIComponent(cursor));
-    return fetchJson(FX + path + "?" + query.join("&")).then((data) => {
+    return fetchJson(FX + path + "?" + query.join("&"), fresh ? { fresh: true } : null).then((data) => {
       const posts = [];
       let profile = null;
       const h = String(handle || "").toLowerCase();
@@ -10930,6 +10961,7 @@ const here = parseRoute();
           ${faceBtn("banners", "none", tr("None"))}
         </div>
         ${window.FeedsTV ? window.FeedsTV.settingsHtml() : ""}
+        ${window.ViktorychDock && window.ViktorychDock.settingsHtml ? window.ViktorychDock.settingsHtml() : ""}
         <div class="theme-row"><button class="outline${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? " on" : ""}" type="button" data-act="nav-collapse" aria-pressed="${window.FeedsSplit && window.FeedsSplit.read("sidebar") > 0 && window.FeedsSplit.read("sidebar") < 200 ? "true" : "false"}">${esc(tr("Collapse sidebar"))}</button></div>
       </div>`;
     }
@@ -13730,6 +13762,11 @@ if (STATE.histClear) {
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
+    if (act === "dock-pref") {
+      if (window.ViktorychDock && window.ViktorychDock.setPref) window.ViktorychDock.setPref(el.dataset.key, el.dataset.value);
+      render();
+      return;
+    }
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act && act.indexOf("keys-") === 0 && window.OwnerKeys && window.OwnerKeys.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
@@ -15868,9 +15905,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       text: post.text || "",
       title: post.title || "",
       date: post.date || "",
+      sortDate: post.sortDate || "",
       url: post.url || "",
       feedId: post.feedId || "",
       kind: post.kind || "post",
+      pinned: post.pinned ? true : undefined,
+      pinAt: post.pinAt || "",
       media: media,
       stats: post.stats || {}
     };
@@ -16059,6 +16099,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       known[id] = true;
       out.push(post);
     });
+    if (window.FeedOrder && window.FeedOrder.refreshTab) {
+      const have = posts().filter((post) => belongsToFeed(post, feed));
+      const pinMs = window.FeedOrder.parseInstant;
+      have.forEach((post) => {
+        if (!post || !post.pinned || !pinMs) return;
+        const pin = pinMs(post.pinAt);
+        if (pin && (pinMs(post.date) === pin || pinMs(post.sortDate) === pin)) liveDateScrubbed = true;
+      });
+      return window.FeedOrder.refreshTab(have, out).added;
+    }
     if (window.FeedOrder) {
       const have = posts().filter((post) => belongsToFeed(post, feed));
       return window.FeedOrder.freshPosts(have, out, 40);
@@ -16239,7 +16289,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function liveX(feed) {
     const handle = feed.handle;
     if (!handle || LIVE.fxDown) return nitterPosts(handle || "").then((rows) => rows || []);
-    return fxTimeline(handle, "home", "").then((pack) => {
+    return fxTimeline(handle, "home", "", true).then((pack) => {
       const rows = (pack && pack.posts) || [];
       if (rows.length) return rows;
       return nitterPosts(handle).then((fallback) => fallback || []);
@@ -16329,7 +16379,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function liveConfigured(feed, config) {
-    const entry = ((config && config.feeds) || []).find((item) => item && item.id === feed.id) || null;
+    const want = String(feed && feed.id || "").toLowerCase();
+    const entry = ((config && config.feeds) || []).find((item) => item && String(item.id || "").toLowerCase() === want)
+      || (feed && feed.source_urls ? { source_urls: feed.source_urls, adapter: feed.adapter || "", handle: feed.handle || "", platform: feed.platform || "" } : null);
     const urls = httpsSources(config, entry);
     if (!urls.length) return Promise.resolve([]);
     const url = urls[0];
@@ -16370,6 +16422,68 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return feeds().filter((feed) => feed && feed.id && follows.indexOf(feed.id) >= 0);
   }
 
+  function customTabOnly(post) {
+    if (!post || followedPost(post) || postIsPublished(post)) return false;
+    const feed = post.feedId ? feedById(post.feedId) : null;
+    if (feed && feed.id) return false;
+    const handle = String(post.handle || "").replace(/^@/, "");
+    const platform = post.platform || "x";
+    if (handle && findFeed(platform, handle)) return false;
+    const by = post.repostedBy || {};
+    const byHandle = String(by.handle || "").replace(/^@/, "");
+    if (byHandle && findFeed(by.platform || platform, byHandle)) return false;
+    return true;
+  }
+
+  function memberFeed(id) {
+    const text = String(id || "").trim();
+    if (!text) return null;
+    const known = feedById(text) || feeds().find((feed) => feed && String(feed.id || "").toLowerCase() === text.toLowerCase());
+    if (known) return known;
+    const cut = text.indexOf(":");
+    if (cut < 1) return null;
+    const platform = text.slice(0, cut).toLowerCase() === "twitter" ? "x" : text.slice(0, cut).toLowerCase();
+    const rest = text.slice(cut + 1).trim();
+    if (!platform || !rest) return null;
+    if (platform === "rss" && /^https:\/\//i.test(rest)) {
+      return { id: "rss:" + rest, platform: "rss", handle: rest, name: rest, source_urls: [rest] };
+    }
+    const handle = rest.replace(/^@/, "");
+    const found = findFeed(platform, handle);
+    if (found) return found;
+    const row = { id: platform + ":" + handle, platform: platform, handle: handle, name: handle };
+    if (platform === "youtube" && /^UC[\w-]{10,}$/.test(handle)) row.channelId = handle;
+    return row;
+  }
+
+  function customTabFeeds() {
+    const out = [];
+    const seen = {};
+    feedTabs().forEach((tab) => {
+      if (!tab || !tabAlive(tab) || tab.showHome === false) return;
+      (tab.members || []).forEach((member) => {
+        const feed = memberFeed(member);
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+    });
+    return out;
+  }
+
+  function timelineFeeds() {
+    const out = [];
+    const seen = {};
+    followedFeeds().concat(customTabFeeds()).forEach((feed) => {
+      const id = String(feed && feed.id || "").toLowerCase();
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      out.push(feed);
+    });
+    return out;
+  }
+
   function applyLive(items, scroll) {
     if (!items.length) return;
     rememberTimeline(items);
@@ -16384,15 +16498,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function refreshLiveTimeline(apply) {
     if (liveRefreshFlight) return liveRefreshFlight;
     const job = loadCatalog().then((config) => {
-      const selected = followedFeeds();
+      const selected = timelineFeeds();
       liveDateScrubbed = false;
       return mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => [])).then((lists) => {
         let incoming = [];
         lists.forEach((list, index) => {
           const feed = selected[index];
-          stampActivity(list || []);
-          settlePublishTimes(feed, list || []);
-          incoming = incoming.concat(takeFresh(feed, list || []));
+          const rows = list || [];
+          if (window.FeedOrder && window.FeedOrder.prepareActivity) window.FeedOrder.prepareActivity(rows);
+          stampActivity(rows);
+          settlePublishTimes(feed, rows);
+          incoming = incoming.concat(takeFresh(feed, rows));
         });
         if (liveDateScrubbed) render();
         if (!incoming.length) return;
@@ -17805,7 +17921,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function registerSW() {
     if (!("serviceWorker" in navigator) || swStarted) return;
     swStarted = true;
-    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
+    navigator.serviceWorker.register("sw.js", { scope: "./", updateViaCache: "none" }).then((reg) => {
       if (reg && reg.update) reg.update().catch(() => {});
       syncWorkerState();
       if (window.ViktorychUpdate && window.ViktorychUpdate.watch) window.ViktorychUpdate.watch(reg);
@@ -18174,6 +18290,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return rows;
   }
 
+  function hydrateTabSnapshots() {
+    const local = window.ViktorychLocal;
+    if (!local || !local.readDoc || !window.FeedOrder || !window.FeedOrder.refreshTab) return Promise.resolve();
+    const tabs = homeTabIds().filter((id) => id.indexOf("cat:") === 0);
+    if (!tabs.length) return Promise.resolve();
+    return Promise.all(tabs.map((tab) => local.readDoc("feeds", "tab:" + tab).then((body) => {
+      const saved = body && Array.isArray(body.posts) ? body.posts : [];
+      if (!saved.length) return;
+      const known = posts().filter((post) => homeShows(post, { name: "home", tab: tab }));
+      const merged = window.FeedOrder.refreshTab(known, saved);
+      if (!merged.added || !merged.added.length) return;
+      rememberTimeline(merged.added);
+      if (STATE.data) STATE.data = withMemory(STATE.data);
+    }).catch(() => {}))).then(() => {
+      const route = parseRoute();
+      if (route && route.tab && route.tab.indexOf("cat:") === 0) render();
+    });
+  }
+
   function profileSnapshot(feed, live, tab) {
     const src = (live && live.profile) || feed || {};
     const base = (feed && (feed.handle || feed.id)) ? feed : src;
@@ -18448,14 +18583,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         ensureHub();
       }
       if ("serviceWorker" in navigator) navigator.serviceWorker.ready.then(() => pullBellQueue()).catch(() => {});
-      setTimeout(() => {
-        refreshLiveTimeline(false);
-        if (!STATE.liveTimer) {
-          STATE.liveTimer = setInterval(() => {
-            if (document.visibilityState === "visible") refreshLiveTimeline(false);
-          }, LIVE_REFRESH_MS);
-        }
-      }, 8000);
+      hydrateTabSnapshots().then(() => refreshLiveTimeline(false));
+      if (!STATE.liveTimer) {
+        STATE.liveTimer = setInterval(() => {
+          if (document.visibilityState === "visible") refreshLiveTimeline(false);
+        }, LIVE_REFRESH_MS);
+      }
     } catch (err) {
       STATE.loading = false;
       if (window.ViktorychShorts && window.ViktorychShorts.visible()) {

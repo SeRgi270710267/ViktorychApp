@@ -288,6 +288,23 @@ jobs:
           ACCOUNT_DELETION_SALT: ${{ secrets.ACCOUNT_DELETION_SALT }}
         run: python3 scripts/accounts_publish.py --site _site --source . --preserve-remote
 
+      - name: Stamp mirror origins
+        run: python3 scripts/stamp_mirrors.py --site _site
+
+      - name: Add Web Analytics when the existing token can
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python3 scripts/cf_web_analytics.py --site _site
+
+      - name: Keep a copy for the Cloudflare Pages mirror
+        uses: actions/upload-artifact@v4
+        with:
+          name: cf-pages-site
+          path: _site
+          include-hidden-files: true
+          retention-days: 1
+
       - name: Record whether the login wall is on
         uses: actions/upload-artifact@v4
         with:
@@ -763,6 +780,57 @@ jobs:
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/sync_health.py
+
+  # wrangler pages deploy publishes the same shell to viktorychapp.
+  # A missing Pages permission skips this job's upload and leaves GitHub Pages up.
+  pages-mirror:
+    needs: [gate, build]
+    if: needs.gate.outputs.go == 'true'
+    concurrency:
+      group: cf-pages-mirror
+      cancel-in-progress: true
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install wrangler
+        working-directory: worker
+        run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cf-pages-site
+          path: _site
+
+      - name: Chrome
+        run: |
+          if ! command -v google-chrome >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y google-chrome-stable
+          fi
+          google-chrome --version
+
+      - name: Leave large files off the Pages upload
+        run: python3 scripts/cf_pages_prepare.py --site _site --out _mirror
+
+      - name: Load the Pages upload fresh and with old saved data
+        run: node scripts/smoke_page.mjs --site _mirror
+
+      - name: Deploy the Pages mirror
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: python3 scripts/cf_pages_deploy.py --dir "$GITHUB_WORKSPACE/_mirror"
 
   deploy:
     needs: [gate, build, wait-accounts]
