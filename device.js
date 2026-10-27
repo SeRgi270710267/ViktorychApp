@@ -26,8 +26,21 @@
   var LAZY = {
     search: "device-search.js",
     ai: "device-ai.js",
+    ondevice: "ondevice-ai.js",
     media: "device-media.js",
     record: "device-record.js"
+  };
+  var AI_KEYS = ["detect", "spam", "summarize", "compose", "semantic"];
+  var AI_PRESETS = {
+    light: { detect: false, spam: false, summarize: false, compose: false, semantic: false },
+    balanced: { detect: true, spam: true, summarize: true, compose: true, semantic: false },
+    max: { detect: true, spam: true, summarize: true, compose: true, semantic: false }
+  };
+  var AI_MB = 1024 * 1024;
+  var AI_SIZES = {
+    translateLocal: Math.round(52.9 * AI_MB) + Math.round(60.2 * AI_MB),
+    semanticLocal: 23 * AI_MB,
+    webllm: Math.round(1128.82 * AI_MB)
   };
   var STORE_KEY = "viktorychapp-device-performance-v1";
   var STATS_KEY = "viktorychapp-device-stats-v1";
@@ -161,6 +174,24 @@
     };
   }
 
+  function aiPreset(level) {
+    return AI_PRESETS[level] || AI_PRESETS.balanced;
+  }
+
+  function aiFeaturesFor(raw, level) {
+    var base = aiPreset(level);
+    var src = raw && raw.aiFeatures && typeof raw.aiFeatures === "object" ? raw.aiFeatures : {};
+    var out = {};
+    AI_KEYS.forEach(function (id) {
+      out[id] = typeof src[id] === "boolean" ? src[id] : !!base[id];
+    });
+    out.translateLocal = src.translateLocal === true;
+    out.semanticLocal = src.semanticLocal === true;
+    out.dmServer = src.dmServer === true;
+    out.dmAuto = src.dmAuto === true;
+    return out;
+  }
+
   function normalize(raw) {
     raw = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
     var level = levelFor(raw);
@@ -180,6 +211,7 @@
       autoLight: raw.autoLight !== false,
       webllm: raw.webllm === true,
       webllmAccepted: raw.webllmAccepted === true,
+      aiFeatures: aiFeaturesFor(raw, level),
       peerMedia: peer.peerMedia,
       peerUploadCap: peer.peerUploadCap,
       peerShareWhileWatching: peer.peerShareWhileWatching
@@ -195,6 +227,10 @@
     var next = normalize({ level: levelFor({ level: level }) });
     next.webllm = false;
     next.webllmAccepted = false;
+    next.aiFeatures.translateLocal = false;
+    next.aiFeatures.semanticLocal = false;
+    next.aiFeatures.dmServer = !!(prev.aiFeatures && prev.aiFeatures.dmServer);
+    next.aiFeatures.dmAuto = !!(prev.aiFeatures && prev.aiFeatures.dmAuto);
     next.peerMedia = prev.peerMedia;
     next.peerUploadCap = prev.peerUploadCap;
     next.peerShareWhileWatching = prev.peerShareWhileWatching;
@@ -210,6 +246,22 @@
     }
     if (FEATURES.indexOf(key) >= 0) next.toggles[key] = !next.toggles[key];
     return next;
+  }
+
+  function toggleAi(settings, key) {
+    var next = normalize(mergedRaw(settings));
+    var known = AI_KEYS.concat(["translateLocal", "semanticLocal", "dmServer", "dmAuto"]);
+    if (known.indexOf(key) >= 0) next.aiFeatures[key] = !next.aiFeatures[key];
+    return next;
+  }
+
+  function aiFeatureOn(settings, id, signals) {
+    if (AI_KEYS.indexOf(id) < 0) return false;
+    var next = normalize(settings);
+    if (next.autoLight && isWeak(signals) && !aiPreset("light")[id]) return false;
+    if ((id === "summarize" || id === "compose" || id === "semantic") && heavyPaused(next, signals)) return false;
+    if ((id === "summarize" || id === "compose" || id === "semantic") && !next.toggles.ai) return false;
+    return !!next.aiFeatures[id];
   }
 
   function confirmWebllm(settings, accept) {
@@ -235,6 +287,7 @@
       autoLight: next.autoLight,
       webllm: next.webllm === true && next.webllmAccepted === true,
       webllmAccepted: next.webllmAccepted === true,
+      aiFeatures: next.aiFeatures,
       peerMedia: next.peerMedia,
       peerUploadCap: next.peerUploadCap,
       peerShareWhileWatching: next.peerShareWhileWatching
@@ -266,6 +319,11 @@
     ["wifiOnly", "pauseBattery", "autoLight", "webllm", "webllmAccepted"].forEach(function (key) {
       if (typeof next[key] === "boolean") base[key] = next[key];
     });
+    if (next.aiFeatures && typeof next.aiFeatures === "object") {
+      AI_KEYS.concat(["translateLocal", "semanticLocal", "dmServer", "dmAuto"]).forEach(function (id) {
+        if (typeof next.aiFeatures[id] === "boolean") base.aiFeatures[id] = next.aiFeatures[id];
+      });
+    }
     base.profile = profileFor(base.level);
     return base;
   }
@@ -628,6 +686,22 @@
     return '<button class="tab-switch device-switch' + (on ? " on" : "") + '" type="button" role="switch" aria-checked="' + (on ? "true" : "false") + '" data-act="' + (act || "device-toggle") + '" data-key="' + key + '"><span><b>' + esc(title) + '</b><span class="set-sub">' + esc(sub) + "</span></span><i></i></button>";
   }
 
+  function aiSection(settings) {
+    var next = normalize(settings);
+    var row = next.aiFeatures;
+    return "<h2>" + esc(tr("On-device AI")) + "</h2>" +
+      '<p class="phandle">' + esc(tr("Language detection and the spam filter are included. Larger downloads stay off until you turn them on. They wait for Wi-Fi, a battery that is not low, and data saver to be off.")) + "</p>" +
+      flagRow("detect", row.detect, tr("Detect language on this device"), tr("Included. No download. The browser detector is used when it exists."), "device-ai-toggle") +
+      flagRow("spam", row.spam, tr("Hide likely spam"), tr("Included. No download. Replies, messages, and notifications stay hidden behind Show."), "device-ai-toggle") +
+      flagRow("summarize", row.summarize, tr("Summaries on this device"), tr("Included. No download. Long posts, threads, unread messages, and Catch me up use this device first."), "device-ai-toggle") +
+      flagRow("compose", row.compose, tr("Compose help on this device"), tr("Included. No download. Suggestions, grammar, and tone stay here unless you allow a server."), "device-ai-toggle") +
+      flagRow("semantic", row.semantic, tr("Search saved posts by meaning"), tr("Off until you turn it on. The included ranker needs no download."), "device-ai-toggle") +
+      flagRow("semanticLocal", row.semanticLocal, tr("Download a search model"), tr("About {size}, plus a small runtime that is cached after the first download. Apache-2.0. Off until you turn it on.", { size: formatBytes(AI_SIZES.semanticLocal) }), "device-ai-toggle") +
+      flagRow("translateLocal", row.translateLocal, tr("Download a translation model"), tr("About {size} for a language pair. Off until you turn it on. OPUS-MT is CC-BY-4.0.", { size: formatBytes(AI_SIZES.translateLocal) }), "device-ai-toggle") +
+      flagRow("dmAuto", row.dmAuto, tr("Auto-translate direct messages"), tr("Off until you turn it on. Direct messages are translated on this device only."), "device-ai-toggle") +
+      flagRow("dmServer", row.dmServer, tr("Allow server fallback for direct messages"), tr("Off. Message text stays on this device unless you turn this on."), "device-ai-toggle");
+  }
+
   function settingsHtml(settings) {
     var next = normalize(settings);
     var live = effectiveLevel(next, signals());
@@ -646,11 +720,12 @@
       ? '<p class="device-banner">' + esc(tr("Using Light on this device")) + "</p>"
       : "";
     var cap = formatBytes(capBytes(live));
+    var ai = aiSection(next);
     var webllm = "";
     if (next.level === "max") {
       webllm = '<h2>' + esc(tr("On-device model")) + "</h2>" +
-        flagRow("webllm", next.webllmAccepted, tr("Download a model on this device"), tr("Available on Max. It stays off until you accept the download."), "device-webllm") +
-        (warn ? '<div class="device-warn"><p>' + esc(tr("This downloads a large model onto this device. It can take a lot of space and data. The assistant still works without it.")) + '</p><div class="device-actions"><button class="primary" type="button" data-act="device-webllm-yes">' + esc(tr("Download model")) + '</button><button class="outline" type="button" data-act="device-webllm-no">' + esc(tr("Not now")) + "</button></div></div>" : "");
+        flagRow("webllm", next.webllmAccepted, tr("Download a model on this device"), tr("Available on Max. About {size}. It stays off until you accept the download. Built with Llama.", { size: formatBytes(AI_SIZES.webllm) }), "device-webllm") +
+        (warn ? '<div class="device-warn"><p>' + esc(tr("This downloads a large model onto this device. It can take a lot of space and data. The assistant still works without it.")) + " " + esc(tr("Built with Llama. Llama 3.2 is licensed under the Llama 3.2 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.")) + '</p><div class="device-actions"><button class="primary" type="button" data-act="device-webllm-yes">' + esc(tr("Download model")) + '</button><button class="outline" type="button" data-act="device-webllm-no">' + esc(tr("Not now")) + "</button></div></div>" : "");
     }
     var all = loadStats();
     var sum = totals(all);
@@ -680,6 +755,7 @@
       flagRow("autoLight", next.autoLight, tr("Use Light on a weak device"), tr("A device with little memory, few cores, or data saver drops to Light.")) +
       '<p class="phandle">' + esc(tr("Saved media stays under {size} at this level.", { size: cap })) + "</p>" +
       '<a class="set-row" href="#/settings/data"><span class="set-copy"><b>' + esc(tr("Peer-assisted media")) + '</b><span class="set-sub">' + esc(tr("Peer sharing follows the level on this device.")) + "</span></span></a>" +
+      ai +
       webllm +
       '<h2>' + esc(tr("Saved by your device")) + "</h2>" +
       '<p class="phandle">' + esc(tr("These numbers are measured on this device only. They are not saved to your account.")) + "</p>" +
@@ -756,6 +832,7 @@
         } catch (err) { /* persistence is optional */ }
       }
       watchBattery();
+      ensure("ondevice");
     };
     if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 4000 });
     else if (typeof setTimeout === "function") setTimeout(run, 1500);
@@ -790,6 +867,10 @@
     heavyPaused: heavyPaused,
     featureOn: featureOn,
     webllmAllowed: webllmAllowed,
+    AI_KEYS: AI_KEYS,
+    AI_SIZES: AI_SIZES,
+    toggleAi: toggleAi,
+    aiFeatureOn: aiFeatureOn,
     read: read,
     patch: patch,
     persist: persist,

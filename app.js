@@ -356,6 +356,13 @@
     return isShortsLocked() && !isTiktokUnlocked(entity.handle || entity.account);
   }
 
+  function withUnreadTitle(text) {
+    const base = String(text || "").replace(/^\((?:\d+|\d+\+|20\+)\)\s+/, "");
+    const count = bellUnread();
+    if (!count) return base;
+    return "(" + (count > 20 ? "20+" : String(count)) + ") " + base;
+  }
+
   function feeds() {
     let list = (STATE.data && STATE.data.feeds) || [];
     if (isShortsLocked()) {
@@ -1828,7 +1835,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (post.replyingTo) row.replyingTo = { handle: post.replyingTo.handle || "", id: post.replyingTo.id || "" };
       return row;
     }).filter(Boolean);
-    const copy = { updated: doc.updated || "", feeds: doc.feeds || [], posts: posts };
+    const copy = { updated: doc.updated || "", savedAt: doc.savedAt || Date.now(), feeds: doc.feeds || [], posts: posts };
     try {
       let text = JSON.stringify(copy);
       if (text.length > 400000) {
@@ -2126,11 +2133,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     STATE.translateFull[key] = !!full;
     if (window.FeedsTranslate) window.FeedsTranslate.prepare(key);
     const inner = withDiscordEmoji(post, textHtml(post, key, full));
-    if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner);
+    const sum = sample.length > 480
+      ? `<button class="show-more odai-btn" type="button" data-act="odai-summarize" data-key="${esc(key)}" data-scope="post">${tr("Summarize")}</button>`
+      : "";
+    if (window.FeedsTranslate) return window.FeedsTranslate.block(post, key, cls, inner) + sum;
     const offer = offerTranslate(key, sample)
       ? `<button class="show-more translate-link" type="button" data-act="translate" data-key="${esc(key)}">${tr("Translate post")}</button>`
       : "";
-    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${inner}</div>${offer}`;
+    return `<div class="${cls || "post-text"}" data-tr="${esc(key)}">${inner}</div>${offer}${sum}`;
   }
 
   function bioBlock(entity) {
@@ -2490,8 +2500,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const yt = youtubeId(post, media);
     const dur = formatDur(media && media.duration);
     const gif = media && media.type === "animated_gif";
-    const label = watchOn(yt ? "youtube" : platform);
-    const href = originalOf(post, media);
+    const xId = platform === "x" && window.ViktorychEmbed && window.ViktorychEmbed.xStatusId ? window.ViktorychEmbed.xStatusId(post) : "";
+    const label = xId ? tr("Open on X") : watchOn(yt ? "youtube" : platform);
+    const href = xId && window.ViktorychEmbed.xOpenUrl ? window.ViktorychEmbed.xOpenUrl(xId) : originalOf(post, media);
     const mode = preview === "feed" || preview === "subs" ? preview : "";
     const chrome = mode === "feed" && !gif
       ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden>${esc(dur || "")}</span>`
@@ -2589,6 +2600,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function linkCard(link) {
     if (!link || !link.url) return "";
+    const external = window.ViktorychEmbed && window.ViktorychEmbed.xExternal ? window.ViktorychEmbed.xExternal(link.url) : null;
+    if (external && external.kind === "link" && external.openUrl) {
+      const id = arguments[1] && arguments[1].id ? ` data-id="${esc(arguments[1].id)}"` : "";
+      return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(external.openUrl)}"><span class="link-card-copy"><span class="link-title">${esc(tr("Open on X"))}</span></span></a>`;
+    }
     const image = link.image ? `<img class="link-card-img" src="${esc(link.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
     const site = link.site ? `<span class="link-site">${esc(link.site)}</span>` : "";
     const title = `<span class="link-title">${esc(link.title || link.url)}</span>`;
@@ -3335,6 +3351,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function clearPlayer(el) {
     releasePeer(el);
+    if (el._xEmbedStop) {
+      try { el._xEmbedStop(); } catch (err) { /* the embed watch can already be cleared */ }
+      el._xEmbedStop = null;
+    }
     if (el._stall) { clearTimeout(el._stall); el._stall = 0; }
     if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
     el.querySelectorAll("video, audio").forEach((m) => {
@@ -3347,7 +3367,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       try { el._ytPlayer.destroy(); } catch (err) {}
       el._ytPlayer = null;
     }
-    el.querySelectorAll("video, iframe, .html5-video-player, .vshield").forEach((node) => node.remove());
+    el.classList.remove("is-x-embed");
+    el.querySelectorAll("video, iframe, .html5-video-player, .vshield, .ytp-video-click-target, a.x-open").forEach((node) => node.remove());
+    const play = el.querySelector(":scope > .play");
+    if (play && !el.classList.contains("is-failed")) play.hidden = false;
   }
 
   function showVideoCard(el, post, media) {
@@ -3878,6 +3901,128 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     startPlayback(el, { muted: saved.muted, resume: saved.time });
   }
 
+  function xPlaybackPlan(post, media) {
+    const helper = window.ViktorychEmbed;
+    if (!helper || !helper.xPlan || !helper.xRoute) return null;
+    if (youtubeId(post, media)) return null;
+    const blob = [media && media.url, media && media.open, media && media.fallback, media && media.hls, post && post.url, post && post.link && post.link.url].join(" ");
+    const platform = String((post && post.platform) || "");
+    const xish = platform === "x" || /video\.twimg\.com/i.test(blob) || /\/i\/spaces\//i.test(blob) || /\/i\/broadcasts\//i.test(blob) || /platform\.twitter\.com\/embed\/Tweet\.html/i.test(blob);
+    if (!xish) return null;
+    const mode = (STATE.settings && STATE.settings.networkMode) || "auto";
+    const api = accountsApi();
+    const dev = window.ViktorychDevice;
+    const plan = helper.xPlan({
+      post: post,
+      media: media,
+      text: blob,
+      expired: oePast,
+      route: (url) => {
+        let relay = "";
+        try {
+          const host = new URL(url).hostname;
+          if (api && /(^|\.)video\.twimg\.com$/i.test(host)) relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(url);
+        } catch (err) { relay = ""; }
+        return helper.xRoute(url, {
+          networkMode: mode,
+          relay: relay,
+          preferRelay: mode === "auto" && isRuVisitor(),
+          playbackUrl: dev && dev.playbackUrl ? (direct, relayUrl) => dev.playbackUrl(direct, relayUrl, {
+            preferRelay: false,
+            settings: dev.read(),
+            signals: dev.signals()
+          }) : null
+        });
+      }
+    });
+    if (!plan || (!plan.primary && !plan.embedUrl && !plan.openUrl)) return null;
+    return plan;
+  }
+
+  function attachXHls(el, video, url, fail, start) {
+    loadHls().then((Hls) => {
+      if (!el.isConnected || !video.isConnected) return;
+      if (!Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
+      const hls = new Hls(hlsAhead());
+      el._hls = hls;
+      armPeer(el, hls, url);
+      const wait = setTimeout(() => fail(), 3000);
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data && (data.fatal || (data.response && Number(data.response.code) >= 400))) { clearTimeout(wait); fail(); }
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (!el.isConnected || !video.isConnected) return;
+        clearTimeout(wait);
+        lockHlsTop(hls);
+        start();
+      });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+    }).catch(() => fail());
+  }
+
+  function noteXProgress(el, video, post, media, opts) {
+    if (!el || !video || !el.classList.contains("vplay")) return;
+    if (!isFinite(video.duration) || video.duration <= 0) return;
+    const label = clock(Math.max(0, Math.ceil(video.duration - video.currentTime)));
+    const left = el.querySelector(".vleft");
+    if (left && opts && opts.preview) { left.hidden = false; left.textContent = label; }
+    const bar = el.querySelector(".vprog");
+    if (bar && opts && opts.preview) bar.style.width = Math.min(100, (video.currentTime / video.duration) * 100) + "%";
+    if (!opts.loop && !(media && media.type === "animated_gif") && video.currentTime >= 3) {
+      const dur = video.duration;
+      noteVideo(post, { position: video.currentTime, duration: dur, progress: dur > 0 ? video.currentTime / dur : 0, touch: false });
+    }
+  }
+
+  function startXPlayback(el, post, media, plan, opts) {
+    const helper = window.ViktorychEmbed;
+    if (!helper || !helper.runXPlayback) return;
+    opts = opts || {};
+    const gif = !!(opts.gif || (media && media.type === "animated_gif"));
+    const preview = !!opts.preview;
+    notePlay(el, plan.primary ? "x-file" : (plan.embedUrl ? "x-embed" : "x-link"));
+    const link = el.querySelector(".vfallback");
+    if (link) link.hidden = true;
+    const retry = el.querySelector(".vretry");
+    if (retry) retry.hidden = true;
+    helper.runXPlayback(el, {
+      plan: plan,
+      gif: gif,
+      preview: preview,
+      muted: gif || !!opts.muted,
+      loop: gif || !!opts.loop,
+      resume: opts.resume || 0,
+      stallMs: helper.X_STALL_MS || 3000,
+      linkLabel: tr("Open on X"),
+      title: (post && (post.title || post.text)) || tr("Video"),
+      active: opts.active,
+      onFrame: (video) => {
+        if (!el.classList.contains("vplay")) return;
+        markShown(el);
+        if (video.videoWidth > 0) applyFrame(el, video.videoWidth, video.videoHeight, "video");
+      },
+      onTime: (video) => noteXProgress(el, video, post, media, Object.assign({ preview: preview, loop: gif || !!opts.loop }, opts)),
+      onVideo: (video, source) => {
+        armPeer(el, null, source.url);
+        if (!preview && !gif && typeof window.YtPlayer === "function") {
+          el._ytPlayer = new window.YtPlayer(el, { video: video, post: post, media: media });
+        }
+      },
+      onStop: () => {
+        releasePeer(el);
+        if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
+        if (el._ytPlayer && el._ytPlayer.destroy) { try { el._ytPlayer.destroy(); } catch (err) { /* already gone */ } el._ytPlayer = null; }
+      },
+      onFail: (source) => {
+        const dev = window.ViktorychDevice;
+        if (!dev || !dev.rememberFail || !source || !source.origin || source.url !== source.origin) return;
+        dev.rememberFail("media", source.origin, Date.now(), "source");
+      },
+      loadHls: (video, url, fail, start) => attachXHls(el, video, url, fail, start)
+    });
+  }
+
   function startPlayback(el, opts) {
     if (!el) return;
     opts = opts || {};
@@ -3927,6 +4072,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (yt) {
       notePlay(el, "youtube-embed");
       playSource(el, { kind: "iframe", url: embedUrl(yt, previewing, opts) }, post, media, opts, gen, giveUp);
+      return;
+    }
+    const xplan = xPlaybackPlan(post, media);
+    if (xplan) {
+      startXPlayback(el, post, media, xplan, opts);
       return;
     }
     const helper = window.ViktorychEmbed;
@@ -4202,7 +4352,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       video.preload = "none";
     }
     clearPlayer(el);
-    el.classList.remove("is-shown", "is-playing");
+    el.classList.remove("is-shown", "is-playing", "is-x-embed");
     const mute = el.querySelector(".vmute");
     const left = el.querySelector(".vleft");
     if (mute) mute.hidden = true;
@@ -4473,7 +4623,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       </div>
       ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
       ${articleCardHtml(asQuoted)}
-      ${mediaHtml(quoted.media, false, quoted)}
+      ${mediaHtml(asQuoted.media, false, asQuoted)}
     </div>`;
   }
 
@@ -4701,14 +4851,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return pending;
   }
 
-  function fetchJsonNow(url) {
+  function fetchJsonNow(url, opts) {
     let signal;
     try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
         signal = AbortSignal.timeout(8000);
       }
     } catch (e) {}
-    const run = (target) => fetch(target, { cache: "no-cache", signal: signal }).then((res) => {
+    const fresh = !!(opts && opts.fresh);
+    const run = (target) => fetch(target, fresh ? { cache: "no-store", credentials: "omit", signal: signal, headers: { "X-Feed-Refresh": "1" } } : { cache: "no-cache", signal: signal }).then((res) => {
       if (!res.ok) {
         const err = new Error(String(res.status));
         err.status = res.status;
@@ -4738,9 +4889,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function fetchJson(url, opts) {
     const direct = window.ViktorychDirect;
     if (direct && direct.fetchSource && direct.allows && direct.allows(url)) {
-      return direct.fetchSource(url, function () { return fetchJsonNow(url); }, opts && opts.fresh ? { fresh: true } : null);
+      return direct.fetchSource(url, function () { return fetchJsonNow(url, opts); }, opts && opts.fresh ? { fresh: true } : null);
     }
-    return fetchJsonNow(url);
+    return fetchJsonNow(url, opts);
   }
 
   function ivBases() {
@@ -5288,7 +5439,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       group.sort((a, b) => fxEngagement(b) - fxEngagement(a));
       group.slice(1).forEach((loser) => { loser.spam = true; });
     });
-    posts.forEach((post) => { if (fxSpamReason(post, author)) post.spam = true; });
+    posts.forEach((post) => {
+      if (fxSpamReason(post, author)) { post.spam = true; return; }
+      const self = author && String(post.handle || "").toLowerCase() === author;
+      const ai = window.ViktorychOnDeviceAi;
+      if (!self && ai && ai.likelySpam && ai.likelySpam(post.text || "", "reply")) post.spam = true;
+    });
     const clean = posts.filter((post) => !post.spam);
     const flagged = posts.filter((post) => post.spam);
     const selfPosts = clean.filter((post) => author && String(post.handle || "").toLowerCase() === author);
@@ -6550,7 +6706,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function replyTools(post) {
     const bucket = STATE.replies[postKey(post)] || {};
     const label = freshLabel(bucket.fetchedAt);
-    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}</div>${replySortTabs()}`;
+    return `<div class="reply-tools">${label ? `<span class="reply-fresh">${esc(label)}</span>` : ""}<button class="show-more odai-btn" type="button" data-act="odai-thread" data-id="${esc(postKey(post))}" data-scope="post">${tr("Summarize thread")}</button></div>${replySortTabs()}`;
   }
 
   function replyList(post) {
@@ -6588,11 +6744,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return tools + html + more + spam;
   }
 
-  function composer(bridge) {
+  function composer(bridge, post) {
+    const key = post ? postKey(post) : "";
     return `<div class="composer${bridge ? " bridge" : ""}">
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
+        <div class="odai-chips"><button type="button" data-act="odai-suggest" data-key="${esc(key)}" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="reply-draft" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="warm" data-field="reply-draft" data-scope="post">${tr("Tone")}</button></div>
         <div class="composer-bar"><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
       </div>
     </div>`;
@@ -6858,14 +7016,48 @@ const here = parseRoute();
     return { name: "profile", platform, handle, query };
   }
 
+  function noteViewer() {
+    const cfg = (typeof window !== "undefined" && window.VIKTORYCH_ACCOUNTS) || {};
+    return {
+      owner: typeof signedOwner === "function" ? signedOwner() : false,
+      audienceAll: cfg.tiktokAudience === "all",
+      locked: typeof isShortsLocked === "function" ? isShortsLocked() : true,
+      unlocked: function (handle) {
+        return typeof isTiktokUnlocked === "function" ? isTiktokUnlocked(handle) : false;
+      }
+    };
+  }
+
+  function noteHidden(note) {
+    if (!note) return false;
+    const view = noteViewer();
+    if (window.TiktokLock && typeof window.TiktokLock.tiktokNoteHidden === "function") {
+      return window.TiktokLock.tiktokNoteHidden(note, view);
+    }
+    const platform = note.platform || (note.feedId && String(note.feedId).indexOf("tiktok:") === 0 ? "tiktok" : "") || (note.hash && String(note.hash).indexOf("#/tiktok/") === 0 ? "tiktok" : "");
+    if (platform !== "tiktok") return false;
+    if (!view.owner && !view.audienceAll) return true;
+    if (view.locked === false) return false;
+    return typeof isTiktokUnlocked === "function" ? !isTiktokUnlocked(note.handle || note.account) : true;
+  }
+
+  function visibleNotes(list) {
+    if (window.TiktokLock && typeof window.TiktokLock.visibleNotes === "function") {
+      return window.TiktokLock.visibleNotes(list || [], noteViewer());
+    }
+    return (list || []).filter((note) => !noteHidden(note));
+  }
+
   function bellUnread() {
     const read = Math.max(Number(STATE.settings && STATE.settings.bellRead) || 0, Number(notesServer().readUntil) || 0);
-    const notes = shownNotes((STATE.settings && STATE.settings.bellNotes) || []);
-    if (notes.length || ((STATE.settings && STATE.settings.bellNotes) || []).length) {
-      return notes.filter((note) => !note.read && (Number(note.at) || 0) > read).length;
+    const notes = (STATE.settings && STATE.settings.bellNotes) || [];
+    const visibleUnread = visibleNotes(notes).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
+    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
+      const server = Number(notesServer().unread) || 0;
+      const hiddenUnread = notes.filter((note) => noteHidden(note) && !note.read && (Number(note.at) || 0) > read).length;
+      return Math.max(visibleUnread, Math.max(0, server - hiddenUnread));
     }
-    const server = notesServer();
-    return Number(server.unread) > 0 ? Number(server.unread) : 0;
+    return visibleUnread;
   }
 
   function bellBadgeHtml() {
@@ -7639,6 +7831,7 @@ const here = parseRoute();
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
+      <div class="odai-bar"><button type="button" class="show-more" data-act="odai-catch" data-scope="post">${tr("Catch me up")}</button></div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${homeLivePillsRow()}
     </div>`;
@@ -7783,7 +7976,8 @@ const here = parseRoute();
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     );
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
-    return homeHeader(tab) + spaceCard + body + timelineSentinel(list.length, sorted.length);
+    const bar = STATE.homeFreshBar ? `<div class="home-fresh" role="progressbar" aria-label="${esc(tr("Loading"))}"><span></span></div>` : "";
+    return homeHeader(tab) + bar + spaceCard + body + timelineSentinel(list.length, sorted.length);
   }
 
   function pageHead(title, extra, back, action) {
@@ -9203,7 +9397,7 @@ const here = parseRoute();
       ${ancestorBlock(post, chain)}
       ${repostBanner(post)}
       ${article}
-      ${talk == null ? composer(threaded) + replyList(post) : talk}`;
+      ${talk == null ? composer(threaded, post) + replyList(post) : talk}`;
   }
 
   function telegramTalk(post) {
@@ -10626,12 +10820,32 @@ const here = parseRoute();
     const plat = STATE.histPlat || "";
     const present = {};
     (histEnsure()[tab] || []).forEach((row) => { if (row && row.platform) present[row.platform] = true; });
-    return (histEnsure()[tab] || []).filter((row) => {
+    const rows = (histEnsure()[tab] || []).filter((row) => {
       if (!row || !histPost(row)) return false;
       if (plat && present[plat] && row.platform !== plat) return false;
       if (q && histHay(row).indexOf(q) < 0) return false;
       return true;
-    }).slice(0, HIST_CAP);
+    });
+    const ai = window.ViktorychOnDeviceAi;
+    const dev = window.ViktorychDevice;
+    if (tab === "bookmarks" && q && ai && ai.searchSaved && dev && dev.aiFeatureOn && dev.aiFeatureOn(STATE.settings && STATE.settings.devicePerf, "semantic", dev.signals())) {
+      const pool = (histEnsure()[tab] || []).filter((row) => row && histPost(row) && (!plat || !present[plat] || row.platform === plat));
+      const ranked = ai.searchSaved(q, pool.map((row) => histPost(row) || { text: "" }), {
+        settings: STATE.settings && STATE.settings.devicePerf,
+        signals: dev.signals(),
+        onRank: () => {
+          const route = parseRoute();
+          if (route && route.name === "history") render();
+        }
+      });
+      const wanted = {};
+      (ranked.hits || []).forEach((hit) => { if (hit.post && hit.post.id) wanted[hit.post.id] = true; });
+      pool.forEach((row) => {
+        const post = histPost(row);
+        if (post && wanted[post.id] && rows.indexOf(row) < 0) rows.push(row);
+      });
+    }
+    return rows.slice(0, HIST_CAP);
   }
 
   function histDay(at) {
@@ -10771,15 +10985,6 @@ const here = parseRoute();
     return !!(feed && feed.verifiedType && feed.verifiedType !== "none");
   }
 
-  function noteHidden(note) {
-    if (!note) return true;
-    return isLockedTiktok({ platform: note.platform, handle: note.handle });
-  }
-
-  function shownNotes(list) {
-    return (Array.isArray(list) ? list : []).filter((note) => !noteHidden(note));
-  }
-
   function noteIsMention(note) {
     if (!note || noteHidden(note)) return false;
     if (note.mention === true || note.kind === "discord") return true;
@@ -10789,7 +10994,7 @@ const here = parseRoute();
   }
 
   function notesForTab(tab) {
-    const notes = shownNotes((STATE.settings && STATE.settings.bellNotes) || []);
+    const notes = visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     if (!tab) return notes;
     if (tab.kind === "verified") return notes.filter(noteIsVerified);
     if (tab.kind === "mentions") return notes.filter(noteIsMention);
@@ -10853,7 +11058,7 @@ const here = parseRoute();
   function markNoteTabRead(active) {
     if (!STATE.settings) return;
     if (active === "all") {
-      const notes = STATE.settings.bellNotes || [];
+      const notes = visibleNotes(STATE.settings.bellNotes || []);
       const newest = notes.reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
       const until = Math.max(newest, Number(notesServer().readUntil) || 0);
       if (!until || (Number(STATE.settings.bellRead) || 0) >= until && !(notes.some((note) => !note.read))) return;
@@ -10934,11 +11139,25 @@ const here = parseRoute();
     return tr("New post notifications for @{handle}", { handle: who });
   }
 
+  function noteBody(note) {
+    const text = note && note.text ? String(note.text) : "";
+    if (!text) return "";
+    const ai = window.ViktorychOnDeviceAi;
+    if (ai && ai.hiddenSpam && ai.hiddenSpam(text, "notification")) {
+      const key = ai.remember(text);
+      return `<p class="odai-hidden">${esc(tr("Likely spam"))} <button type="button" class="show-more" data-act="odai-show" data-key="${esc(key)}" data-scope="notification">${esc(tr("Show"))}</button></p>`;
+    }
+    const extra = ai && ai.foreign && ai.foreign(text, translateTarget())
+      ? ` <button type="button" class="show-more" data-act="odai-translate" data-key="${esc(ai.remember(text))}" data-scope="notification">${esc(tr("Translate"))}</button>`
+      : "";
+    return `<p>${esc(text)}</p>${extra}`;
+  }
+
   function noteRow(note) {
     const who = note.handle || note.name || "account";
     const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
     const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
-    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
+    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${noteBody(note)}${image}</div></div></a></article>`;
   }
 
   function notificationsView(route) {
@@ -10946,10 +11165,10 @@ const here = parseRoute();
     markNoteTabRead(active);
     const tabs = visibleNoteTabs();
     const current = active === "all" ? null : noteTabById(active);
-    const notes = current ? notesForTab(current) : shownNotes((STATE.settings && STATE.settings.bellNotes) || []);
+    const notes = current ? notesForTab(current) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
+    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button><button type="button" class="show-more odai-btn" data-act="odai-catch" data-scope="notification">${tr("Catch me up")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
     let body = "";
     if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
@@ -11575,6 +11794,7 @@ if (STATE.histClear) {
         <div class="modal-body" style="display:flex;gap:12px">
           <span class="ava initials">Y</span>
           <div style="flex:1"><textarea id="compose-text" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <div class="odai-chips"><button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="compose-text" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="clear" data-field="compose-text" data-scope="post">${tr("Tone")}</button></div>
           <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div>
           <p class="phandle">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p></div>
         </div></div></div>`;
@@ -13985,8 +14205,8 @@ if (STATE.histClear) {
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
       const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
-      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = window.SIntelMusic.titleFor(route);
-      else document.title = routeTitle(route, liveName, personName, discordTitle);
+      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = withUnreadTitle(window.SIntelMusic.titleFor(route));
+      else document.title = withUnreadTitle(routeTitle(route, liveName, personName, discordTitle));
       window.scrollTo(0, y);
       if (explicitY && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
@@ -14114,6 +14334,50 @@ if (STATE.histClear) {
     try { navigator.vibrate(10); } catch (err) { /* haptics are optional */ }
   }
 
+  function odaiCtx() {
+    return {
+      render: render,
+      target: translateTarget,
+      textFor: (key) => (STATE.translateText && STATE.translateText[key]) || "",
+      field: (id) => (id ? document.getElementById(id) : null),
+      seed: (node) => {
+        const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+        if (id && window.FeedsDiscord && window.FeedsDiscord.thread) {
+          const thread = window.FeedsDiscord.thread(id);
+          const rows = (thread && thread.messages) || [];
+          const last = rows.length ? rows[rows.length - 1] : null;
+          if (last && (last.body || last.text)) return last.body || last.text;
+        }
+        const key = node && node.getAttribute ? node.getAttribute("data-key") : "";
+        return (STATE.translateText && STATE.translateText[key]) || (STATE.composeSeed || "");
+      },
+      texts: (act, node) => {
+        if (act === "odai-thread") {
+          const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+          const post = id && findAnyPost ? findAnyPost(id) : null;
+          const rows = post ? replySlice(post).shown || [] : [];
+          return [post && post.text].concat(rows.map((row) => row && row.text)).filter(Boolean);
+        }
+        if (act === "odai-catch") {
+          const route = parseRoute();
+          if (route && route.name === "notifications") {
+            const active = route.tab && route.tab !== "all" ? noteTabById(route.tab) : null;
+            const notes = active ? notesForTab(active) : ((STATE.settings && STATE.settings.bellNotes) || []);
+            return notes.map((note) => note && note.text).filter(Boolean).slice(0, 20);
+          }
+          const sorted = homeSorted(route || { tab: "foryou" });
+          return (sorted || []).slice(0, 12).map((post) => post && post.text).filter(Boolean);
+        }
+        if (act === "odai-unread") {
+          const id = node && node.getAttribute ? node.getAttribute("data-id") : "";
+          if (window.FeedsDiscord && window.FeedsDiscord.unreadText) return window.FeedsDiscord.unreadText(id);
+          return [];
+        }
+        return [];
+      }
+    };
+  }
+
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
@@ -14147,6 +14411,21 @@ if (STATE.histClear) {
       STATE.settings.devicePerf = window.ViktorychDevice.toggle(STATE.settings.devicePerf, el.dataset.key || "");
       saveSettings();
       render();
+      return;
+    }
+    if (act === "device-ai-toggle" && window.ViktorychDevice && window.ViktorychDevice.toggleAi) {
+      STATE.settings.devicePerf = window.ViktorychDevice.toggleAi(STATE.settings.devicePerf, el.dataset.key || "");
+      saveSettings();
+      render();
+      return;
+    }
+    if (act && act.indexOf("odai-") === 0) {
+      const runAi = () => {
+        if (!window.ViktorychOnDeviceAi) return;
+        window.ViktorychOnDeviceAi.onAct(act, el, odaiCtx());
+      };
+      if (window.ViktorychOnDeviceAi) runAi();
+      else if (window.ViktorychDevice && window.ViktorychDevice.ensure) window.ViktorychDevice.ensure("ondevice").then(runAi);
       return;
     }
     if (act === "device-webllm" && window.ViktorychDevice) {
@@ -14475,6 +14754,8 @@ if (STATE.histClear) {
       const selected = route.name === "home" && (route.tab || "foryou") === tab;
       if (!selected) {
         STATE.tabMenu = null;
+        homeRead = (SCROLLS["home:" + tab] || 0) >= 40;
+        refreshHomeTabs([tab]);
         goHash(homeHash(tab));
         return;
       }
@@ -16319,6 +16600,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   let scrollFreeze = false;
   window.addEventListener("scroll", () => {
     if (pageY() <= 4) STATE.snapTop = false;
+    if (parseRoute().name === "home" && pageY() >= 40) homeRead = true;
     if (routing || scrollFreeze || !STATE.scrollKey) return;
     SCROLLS[STATE.scrollKey] = window.scrollY;
     if (window.ViktorychLocal) window.ViktorychLocal.noteScroll(STATE.scrollKey, window.scrollY, SCROLLS);
@@ -16360,6 +16642,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (route.name === "home" && (route.tab || "foryou") === id) return;
       if (id) next = homeHash(id);
     }
+    if (next && parseRoute().name === "home" && /\/status\/|#\/watch\//.test(next)) homeRead = true;
     if (!next || next === (location.hash || "#/") || next === location.hash) return;
     SCROLLS[STATE.scrollKey] = window.scrollY;
     scrollFreeze = true;
@@ -16376,6 +16659,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       scrollFreeze = false;
       window.FeedsDiscord.syncFromHash();
       return;
+    }
+    const nextRoute = parseRoute();
+    if (nextRoute.name === "home") {
+      const nextTab = nextRoute.tab || "foryou";
+      const prevTab = window.HomeFresh && window.HomeFresh.activeTab ? window.HomeFresh.activeTab(prevHash) : "";
+      if (prevTab && prevTab !== nextTab) {
+        homeRead = (SCROLLS["home:" + nextTab] || 0) >= 40;
+        refreshHomeTabs([nextTab]);
+      }
     }
     routing = true;
     scrollFreeze = true;
@@ -16518,7 +16810,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     Promise.resolve(op).catch(() => {});
   }
 
-  const LIVE_REFRESH_MS = 2 * 60 * 1000;
+  const LIVE_REFRESH_MS = 60 * 1000;
 
   function pendingPillPosts() {
     const live = (STATE.pendingLive || []).filter(Boolean);
@@ -16541,7 +16833,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const route = parseRoute();
     let list = Array.isArray(posts) ? posts.filter(Boolean) : [];
     if (route.name !== "home") { el.hidden = true; return; }
-    list = list.filter((post) => homeShows(post, route));
+    list = list.filter((post) => homeShows(post, route) && !noteHidden(post));
     if (!list.length) {
       el.hidden = true;
       if (window.ViktorychLocal) window.ViktorychLocal.savePill([]);
@@ -16736,7 +17028,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function loadCatalog() {
     if (STATE.catalog) return Promise.resolve(STATE.catalog);
     if (STATE.catalogP) return STATE.catalogP;
-    STATE.catalogP = fetch("feeds.config.json", { cache: "no-cache" }).then((res) => (res.ok ? res.json() : null)).then((doc) => {
+    const bootConfig = window.__homeFreshBoot && window.__homeFreshBoot.config;
+    if (bootConfig) window.__homeFreshBoot.config = null;
+    const configRes = bootConfig || fetch(catalogRequestUrl("feeds.config.json"), catalogRequestInit());
+    STATE.catalogP = Promise.resolve(configRes).then((res) => {
+      if (!res || !res.ok || catalogMissing(res)) return null;
+      return res.json();
+    }).then((doc) => {
       STATE.catalog = doc;
       return doc;
     }).catch(() => null);
@@ -16929,7 +17227,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const urls = httpsSources(config, entry);
     if (!urls.length) return Promise.resolve([]);
     const url = urls[0];
-    return fetch(url, { cache: "no-cache", signal: AbortSignal.timeout(8000) }).then((res) => {
+    return fetch(url, { cache: "no-store", credentials: "omit", headers: { "X-Feed-Refresh": "1" }, signal: AbortSignal.timeout(8000) }).then((res) => {
       if (!res.ok) throw new Error(String(res.status));
       return res.text();
     }).then((xml) => {
@@ -17028,50 +17326,284 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return out;
   }
 
-  function applyLive(items, scroll) {
-    if (!items.length) return;
-    rememberTimeline(items);
-    if (STATE.data) STATE.data = withMemory(STATE.data);
-    STATE.pendingLive = [];
-    showPill([]);
-    render(scroll ? { y: 0 } : undefined);
-    ensureVideoOwners();
-      }
+  let homeRead = false;
+  let homeWakeAt = 0;
+  const feedFlights = {};
+
+  function markHome(name) {
+    const row = { name: name, t: (window.performance && performance.now) ? performance.now() : 0 };
+    if (!window.__homeFreshMarks) window.__homeFreshMarks = [];
+    window.__homeFreshMarks.push(row);
+    try { if (window.performance && performance.mark) performance.mark(name); } catch (err) { /* marks are optional */ }
+  }
+
+  function arrivalMode() {
+    const api = window.HomeFresh;
+    if (api && api.arrival) return api.arrival({ scrollY: window.scrollY, read: homeRead });
+    return window.scrollY >= 40 || homeRead ? "pill" : "insert";
+  }
+
+  function currentHomeTab() {
+    const route = parseRoute();
+    if (!route || route.name !== "home") return (window.HomeFresh && window.HomeFresh.activeTab) ? window.HomeFresh.activeTab(location.hash) : "foryou";
+    return route.tab || "foryou";
+  }
+
+  function visibleHomeTabs() {
+    const ids = ["foryou", "following"];
+    const seen = { foryou: true, following: true };
+    ((STATE.settings && STATE.settings.lists) || []).forEach((list) => {
+      if (!list || !list.id || !list.pinned) return;
+      const id = "list:" + list.id;
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    feedTabs().forEach((item) => {
+      if (!item || !item.id || item.showHome === false || !tabAlive(item)) return;
+      const id = "cat:" + item.id;
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    return ids;
+  }
+
+  function feedsForTab(tab) {
+    if (tab === "following") return followedFeeds();
+    if (tab && tab.indexOf("list:") === 0) {
+      const found = (STATE.settings.lists || []).find((item) => item.id === tab.slice(5));
+      const out = [];
+      const seen = {};
+      ((found && found.members) || []).forEach((member) => {
+        const feed = memberFeed(member);
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+      return out;
+    }
+    if (tab && tab.indexOf("cat:") === 0) {
+      const found = feedTabById(tab.slice(4));
+      const out = [];
+      const seen = {};
+      ((found && found.members) || []).forEach((member) => {
+        const feed = memberFeed(member);
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+      return out;
+    }
+    return timelineFeeds();
+  }
+
+  function feedsForTabs(tabs) {
+    const out = [];
+    const seen = {};
+    (tabs || []).forEach((tab) => {
+      feedsForTab(tab).forEach((feed) => {
+        const id = String(feed && feed.id || "").toLowerCase();
+        if (!id || seen[id]) return;
+        seen[id] = true;
+        out.push(feed);
+      });
+    });
+    return out;
+  }
+
+  function visibleOnHome(post) {
+    const route = parseRoute();
+    if (!route || route.name !== "home") return false;
+    return homeShows(post, route);
+  }
+
+  function clearFreshBar() {
+    if (!STATE.homeFreshBar) return;
+    STATE.homeFreshBar = false;
+    if (parseRoute().name === "home") render({ y: window.scrollY });
+  }
+
+  function saveHomeSnapshot() {
+    if (!STATE.data || !Array.isArray(STATE.data.posts)) return;
+    const pending = (STATE.pendingLive || []).filter(Boolean);
+    const posts = (STATE.data.posts || []).concat(pending);
+    if (window.FeedOrder && window.FeedOrder.compare) posts.sort((a, b) => window.FeedOrder.compare(a, b));
+    else posts.sort(byStamp);
+    const doc = Object.assign({}, STATE.data, { posts: posts, savedAt: Date.now() });
+    saveTimelineSnap(doc);
+    const local = window.ViktorychLocal;
+    if (local && local.saveDoc && window.HomeFresh && window.HomeFresh.slimDoc) {
+      local.saveDoc("feeds", "timeline", window.HomeFresh.slimDoc(doc, Date.now()));
+    }
+  }
+
+  function adoptSavedFeed(doc) {
+    if (!doc || !Array.isArray(doc.posts) || !doc.posts.length) return;
+    const current = STATE.data;
+    if (current && window.HomeFresh && !window.HomeFresh.newer(doc, current)) return;
+    const mode = arrivalMode();
+    if (!current || !Array.isArray(current.posts)) {
+      STATE.data = doc;
+      STATE.loading = false;
+      if (mode === "insert") markHome("home-newest-paint");
+      render(mode === "insert" && window.scrollY < 40 ? { y: 0 } : { y: window.scrollY });
+      return;
+    }
+    const merged = mergeCatalog(current, doc, mode === "insert");
+    if (doc.savedAt) merged.doc.savedAt = doc.savedAt;
+    STATE.data = withMemory(merged.doc);
+    if (mode === "insert") {
+      if (merged.added.length) markHome("home-newest-paint");
+      render(window.scrollY < 40 ? { y: 0 } : { y: window.scrollY });
+      return;
+    }
+    if (!merged.added.length) return;
+    const known = {};
+    (STATE.pendingLive || []).forEach((post) => { known[postCatalogKey(post)] = true; });
+    merged.added.forEach((post) => {
+      const id = postCatalogKey(post);
+      if (!id || known[id]) return;
+      known[id] = true;
+      STATE.pendingLive = (STATE.pendingLive || []).concat([post]);
+    });
+    showPill(STATE.pendingLive);
+  }
+
+  function deliverSource(feed, rows) {
+    const list = rows || [];
+    if (window.FeedOrder && window.FeedOrder.prepareActivity) window.FeedOrder.prepareActivity(list);
+    stampActivity(list);
+    settlePublishTimes(feed, list);
+    const incoming = takeFresh(feed, list);
+    if (liveDateScrubbed && parseRoute().name === "home") render({ y: window.scrollY });
+    if (!incoming.length) return;
+    const mode = arrivalMode();
+    const visible = [];
+    const hidden = [];
+    incoming.forEach((post) => {
+      if (visibleOnHome(post)) visible.push(post);
+      else hidden.push(post);
+    });
+    if (hidden.length) {
+      rememberTimeline(hidden);
+      if (STATE.data) STATE.data = withMemory(STATE.data);
+    }
+    if (visible.length && mode === "insert") {
+      rememberTimeline(visible);
+      if (STATE.data) STATE.data = withMemory(STATE.data);
+      if (!(STATE.pendingLive || []).length) showPill([]);
+      markHome("home-newest-paint");
+      render(window.scrollY < 40 ? { y: 0 } : { y: window.scrollY });
+      ensureVideoOwners();
+      return;
+    }
+    if (visible.length) {
+      STATE.pendingLive = (STATE.pendingLive || []).concat(visible);
+      showPill(STATE.pendingLive);
+      if (document.hidden) updateBadge(STATE.pendingLive.length);
+    }
+  }
+
+  function loadFeedFresh(feed, config) {
+    const id = String(feed && feed.id || "").toLowerCase();
+    if (!id) return Promise.resolve([]);
+    if (feedFlights[id]) return feedFlights[id];
+    const job = livePostsForFeed(feed, config).then((rows) => {
+      deliverSource(feed, rows || []);
+      return rows || [];
+    }).catch(() => []).finally(() => { delete feedFlights[id]; });
+    feedFlights[id] = job;
+    return job;
+  }
 
   let liveRefreshFlight = null;
-  function refreshLiveTimeline(apply) {
-    if (liveRefreshFlight) return liveRefreshFlight;
-    const job = loadCatalog().then((config) => {
-      const selected = timelineFeeds();
+  const homeTabJobs = {};
+  function refreshHomeTabs(tabs) {
+    const wanted = (window.HomeFresh && window.HomeFresh.tabsToRefresh)
+      ? window.HomeFresh.tabsToRefresh(tabs && tabs[0], (tabs || []).slice(1))
+      : (tabs || []);
+    const key = (wanted.length ? wanted : [currentHomeTab()]).join("|");
+    if (homeTabJobs[key]) return homeTabJobs[key];
+    const selected = feedsForTabs(wanted.length ? wanted : [currentHomeTab()]);
+    if (!selected.length) return Promise.resolve();
+    const run = (config) => {
       liveDateScrubbed = false;
-      const pending = mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => []));
+      const pending = mapLimit(selected, 4, (feed) => loadFeedFresh(feed, config));
       timelineUsesDevice = true;
       releaseDeviceFeeds();
-      return pending.then((lists) => {
-        let incoming = [];
-        lists.forEach((list, index) => {
-          const feed = selected[index];
-          const rows = list || [];
-          if (window.FeedOrder && window.FeedOrder.prepareActivity) window.FeedOrder.prepareActivity(rows);
-          stampActivity(rows);
-          settlePublishTimes(feed, rows);
-          incoming = incoming.concat(takeFresh(feed, rows));
-        });
-        if (liveDateScrubbed) render();
-        if (!incoming.length) return;
-        return attachParents(incoming).then(() => {
-          const atTop = window.scrollY < 40;
-          if (atTop) applyLive(incoming, true);
-          else {
-            STATE.pendingLive = (STATE.pendingLive || []).concat(incoming);
-            showPill(STATE.pendingLive);
-            if (document.hidden) updateBadge(STATE.pendingLive.length);
-          }
-        });
-      });
-    }).catch(() => {});
+      return pending.then(() => attachParents((STATE.pendingLive || []).slice(0, 4)).then(() => saveHomeSnapshot()));
+    };
+    const job = STATE.catalog ? run(STATE.catalog) : loadCatalog().then(run);
+    homeTabJobs[key] = Promise.resolve(job).catch(() => {}).finally(() => { delete homeTabJobs[key]; });
+    return homeTabJobs[key];
+  }
+
+  function refreshLiveTimeline() {
+    const active = currentHomeTab();
+    const pinned = visibleHomeTabs();
+    const tabs = (window.HomeFresh && window.HomeFresh.tabsToRefresh) ? window.HomeFresh.tabsToRefresh(active, pinned) : [active];
+    if (liveRefreshFlight) return liveRefreshFlight;
+    const job = refreshHomeTabs(tabs).finally(() => { clearFreshBar(); });
     liveRefreshFlight = job.finally(() => { liveRefreshFlight = null; });
     return liveRefreshFlight;
+  }
+
+  function prefetchHomeTabs() {
+    const run = () => {
+      const active = currentHomeTab();
+      const rest = visibleHomeTabs().filter((id) => id !== active);
+      if (rest.length) refreshHomeTabs(rest);
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 1500 });
+    else setTimeout(run, 800);
+  }
+
+  function wakeHome() {
+    const now = Date.now();
+    if (now - homeWakeAt < 2000) return;
+    if (document.visibilityState === "hidden") return;
+    homeWakeAt = now;
+    refreshFeeds(true);
+    refreshLiveTimeline();
+  }
+
+  function emptyCatalog() {
+    return { posts: [], feeds: [] };
+  }
+
+  function missingCatalog() {
+    return { posts: [], feeds: [], missing: true };
+  }
+
+  function catalogMissing(res) {
+    if (!res || !res.ok) return true;
+    try {
+      return !!(res.headers && typeof res.headers.get === "function" && res.headers.get("X-Catalog-Missing") === "1");
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function catalogRequestUrl(key) {
+    const cfg = window.VIKTORYCH_ACCOUNTS || {};
+    const api = String(cfg.api || "").replace(/\/$/, "");
+    if (cfg.gate && api) return api + "/v1/data/" + String(key || "").split("/").map(encodeURIComponent).join("/");
+    return key;
+  }
+
+  function catalogRequestInit() {
+    const headers = { "X-Feed-Refresh": "1" };
+    const cfg = window.VIKTORYCH_ACCOUNTS || {};
+    if (cfg.gate && cfg.api) {
+      try {
+        const saved = JSON.parse(readStored(localStorage, "account-v1") || "null");
+        if (saved && saved.token) headers.Authorization = "Bearer " + saved.token;
+      } catch (err) { /* a missing session still settles empty */ }
+    }
+    return { cache: "no-store", credentials: "omit", headers: headers };
   }
 
   let feedWorker = null;
@@ -17101,25 +17633,36 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   }
 
-  async function fetchFeeds(fresh) {
-    if (!fresh && window.__VIKTORYCH_FEED) {
-      try {
-        const early = await window.__VIKTORYCH_FEED;
-        if (early) {
-          const parsed = await parseFeedOffThread(early);
-          if (parsed && Array.isArray(parsed.posts)) return parsed;
-          return JSON.parse(early);
-        }
-      } catch (err) { /* a live fetch still loads the timeline */ }
-    }
-    const headers = fresh ? { "X-Feed-Refresh": "1" } : {};
-    const init = fresh ? { cache: "no-store", headers: headers } : { credentials: "omit" };
-    const res = await fetch("feeds.json", init);
-    if (!res.ok) throw new Error(String(res.status));
-    const text = await res.text();
+  async function readCatalogBody(text) {
+    if (!text || !String(text).trim()) return missingCatalog();
     const parsed = await parseFeedOffThread(text);
     if (parsed && Array.isArray(parsed.posts)) return parsed;
-    return JSON.parse(text);
+    try {
+      const doc = JSON.parse(text);
+      if (doc && Array.isArray(doc.posts)) return doc;
+    } catch (err) { /* a missing catalog settles empty */ }
+    return missingCatalog();
+  }
+
+  async function fetchFeeds(fresh) {
+    const boot = fresh && window.__homeFreshBoot && window.__homeFreshBoot.feeds;
+    if (boot) window.__homeFreshBoot.feeds = null;
+    try {
+      if (boot) {
+        const res = await boot;
+        if (catalogMissing(res)) return missingCatalog();
+        return await readCatalogBody(await res.text());
+      }
+      if (!fresh && window.__VIKTORYCH_FEED) {
+        const early = await window.__VIKTORYCH_FEED;
+        if (early) return await readCatalogBody(early);
+      }
+      const res = await fetch(catalogRequestUrl("feeds.json"), catalogRequestInit());
+      if (catalogMissing(res)) return missingCatalog();
+      return await readCatalogBody(await res.text());
+    } catch (err) {
+      return missingCatalog();
+    }
   }
 
   function catalogSignature(doc) {
@@ -17189,8 +17732,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   async function refreshFeeds(apply) {
     try {
       const doc = lockDocDates(await fetchFeeds(true));
-      if (!doc || !Array.isArray(doc.posts)) return;
-      const atTop = window.scrollY < 40;
+      if (!doc || !Array.isArray(doc.posts) || doc.missing) return;
+      const includeNew = arrivalMode() === "insert";
+      const atTop = includeNew;
       const feedsChanged = catalogSignature(STATE.data) !== catalogSignature(doc);
       if (!STATE.data) {
         notePublished(doc);
@@ -17203,10 +17747,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (feedsChanged) adoptFeeds(doc);
         render(atTop ? { y: 0 } : undefined);
         scanBellPosts(doc.posts);
+        saveHomeSnapshot();
         ensureVideoOwners();
         return;
       }
-      const includeNew = atTop;
       const merged = mergeCatalog(STATE.data, doc, includeNew);
       STATE.data = withMemory(merged.doc);
       if (feedsChanged) adoptFeeds(doc);
@@ -17217,15 +17761,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!(STATE.pendingLive || []).length) showPill([]);
         STATE.error = null;
         if (apply || merged.added.length || merged.changed || feedsChanged) render({ y: 0 });
+        saveHomeSnapshot();
         ensureVideoOwners();
         return;
       }
       if (merged.changed || feedsChanged) render({ y: window.scrollY });
-      if (!merged.added.length) return;
+      if (!merged.added.length) {
+        if (merged.changed || feedsChanged) saveHomeSnapshot();
+        return;
+      }
       STATE.pendingFeed = doc;
       showPill(merged.added.concat(STATE.pendingLive || []));
       const since = Number(readStored(localStorage, "seen-at") || 0);
-      const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post));
+      const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post) && !noteHidden(post));
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
@@ -17237,6 +17785,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           : Promise.reject();
         Promise.resolve(viaWorker).catch(() => { try { new Notification(title, { body: body, icon: payload.icon, tag: "feeds" }); } catch (err) { /* permission can change */ } });
       }
+      saveHomeSnapshot();
       ensureVideoOwners();
     } catch (err) { /* keep the posts already on screen */ }
   }
@@ -17333,6 +17882,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         box._ytPlayer = null;
       }
       box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>`;
+      const known = post || { platform: view.platform || "", statusId: view.statusId || "", id: view.statusId || view.id || "", url: view.url || "" };
+      const xplan = xPlaybackPlan(known, media);
+      if (xplan) {
+        box._gen = (box._gen || 0) + 1;
+        startXPlayback(box, known, media, xplan, {
+          preview: false,
+          muted: !!(media && media.type === "animated_gif"),
+          loop: !!(media && media.type === "animated_gif"),
+          resume: view.time || 0,
+          active: () => !!(STATE.viewer && STATE.viewer.video)
+        });
+        return;
+      }
       let video;
       const viewerPoster = (media && (media.poster || media.url)) || (post && post.poster) || "";
       if (typeof window.YtPlayer === "function") {
@@ -17518,7 +18080,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.autoEl = null;
     document.querySelectorAll(".vplay.is-playing").forEach((el) => pausePreview(el));
     const clean = src && src.indexOf("about:blank") < 0 ? src : "";
-    STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null };
+    STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null, platform: post.platform || "", statusId: post.statusId || post.id || "", url: post.url || "" };
     paintViewer();
   }
 
@@ -17534,6 +18096,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function closeViewer() {
     const box = document.getElementById("viewer");
     if (box) {
+      box._gen = (box._gen || 0) + 1;
+      if (box._xEmbedStop) {
+        try { box._xEmbedStop(); } catch (err) { /* the embed watch can already be cleared */ }
+        box._xEmbedStop = null;
+      }
       releasePeer(box);
       if (box._hls && box._hls.destroy) {
         try { box._hls.destroy(); } catch (err) {}
@@ -17831,6 +18398,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function paintBellBadge() {
     const count = bellUnread();
     updateBadge(count);
+    document.title = withUnreadTitle(document.title);
     document.querySelectorAll(".nav-badge").forEach((el) => el.remove());
     if (!count || parseRoute().name === "notifications") return;
     const label = count > 20 ? "20+" : String(count);
@@ -18202,7 +18770,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function applyServerNotes(view) {
     if (!view || !STATE.settings) return;
     const until = Number(view.readUntil) || 0;
-    STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], view.items || [], until));
+    STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], visibleNotes(view.items || []), until));
     STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
     if (Array.isArray(view.tabs)) {
       STATE.settings.noteTabs = cleanFeedTabs(mergeLocalTabs(STATE.settings.noteTabs || [], view.tabs));
@@ -18246,7 +18814,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (data.type === "upsert" && Array.isArray(data.items)) {
       const until = Number(data.readUntil) || Number(notesServer().readUntil) || 0;
-      STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], data.items, until));
+      STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], visibleNotes(data.items), until));
       const server = notesServer();
       server.unread = Number(data.unread) || 0;
       if (data.readUntil) server.readUntil = Number(data.readUntil);
@@ -18291,9 +18859,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       if (sent.prefs && STATE.settings) body.prefs = notePrefs();
       if (sent.tab) body.tab = sent.tab;
+      const lockedFlag = isShortsLocked() ? "1" : "0";
       const posting = Object.keys(body).length > 0;
+      if (posting) body.shortsLocked = lockedFlag === "1" ? 1 : 0;
       const since = Number(notesServer().cursor) || 0;
-      const path = "/v1/notifications" + (since ? "?since=" + encodeURIComponent(String(since)) : "");
+      const path = "/v1/notifications?locked=" + lockedFlag + (since ? "&since=" + encodeURIComponent(String(since)) : "");
       const res = await accountCall(path, posting ? { method: "POST", body: body } : { method: "GET" });
       if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
       applyServerNotes(res);
@@ -18410,7 +18980,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!json.endpoint || !json.keys) return;
       await accountCall("/v1/push/subscribe", {
         method: "PUT",
-        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0 }
+        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0 }
       });
     } catch (err) { /* in-app notes still sync */ }
   }
@@ -18440,7 +19010,28 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     updateBadge(0);
   }
 
-  window.ViktorychNotes = { beforeSignOut: beforeSignOut };
+  function onTiktokLockChanged() {
+    if (STATE.settings && STATE.data) {
+      const seen = {};
+      (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
+      (STATE.data.posts || []).forEach((post) => {
+        if (!post) return;
+        const platform = post.platform || (String(post.id || "").indexOf("tiktok:") === 0 ? "tiktok" : "");
+        if (platform !== "tiktok") return;
+        const id = String(canonicalPostId(post) || post.id || "");
+        if (id) seen[id] = true;
+        if (post.id) seen[String(post.id)] = true;
+      });
+      STATE.settings.bellSeen = Object.keys(seen).slice(-500);
+      saveSettings();
+    }
+    syncWorkerState();
+    paintBellBadge();
+    if (parseRoute().name === "notifications") render();
+    pullNotes();
+  }
+
+  window.ViktorychNotes = { beforeSignOut: beforeSignOut, lockChanged: onTiktokLockChanged };
   /* presence.js owns ViktorychPresence. A partial stand-in threw on .wrap and left a black page. */
 
   function commitBellNotes(list) {
@@ -18467,6 +19058,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showLocalNotification(note) {
+    if (noteHidden(note)) return;
     if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
     if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
     if (document.visibilityState === "visible") {
@@ -18489,6 +19081,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showPageNotification(note) {
+    if (noteHidden(note)) return;
     if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
     if (document.visibilityState === "visible") {
       showLocalNotification(note);
@@ -18515,7 +19108,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function deliverBellNotes(notes) {
-    const list = (notes || []).filter((note) => note && note.id);
+    const list = visibleNotes((notes || []).filter((note) => note && note.id));
     if (!list.length) return;
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
     const quiet = presenceDnd();
@@ -18541,6 +19134,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
     const cursor = Math.max(Number(STATE.settings.bellRead) || 0, Number(notesServer().readUntil) || 0);
     const fresh = [];
+    const parked = [];
     let markedOld = false;
     (list || posts()).forEach((post) => {
       if (!post || hiddenPost(post)) return;
@@ -18561,6 +19155,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!hit) return;
       const note = bellNoteFrom(post, hit);
       if (!note.id) return;
+      if (noteHidden(note)) {
+        parked.push(note);
+        return;
+      }
       if (!note.at || note.at <= cursor) {
         seen[note.id] = true;
         markedOld = true;
@@ -18570,7 +19168,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       fresh.push(note);
     });
     if (markedOld) STATE.settings.bellSeen = Object.keys(seen).slice(-500);
-    if (markedOld && !fresh.length) saveSettings();
+    if (markedOld && !fresh.length && !parked.length) saveSettings();
+    if (parked.length) commitBellNotes(parked);
     if (fresh.length) deliverBellNotes(fresh);
   }
 
@@ -18730,17 +19329,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function registerPeriodic() {
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.ready.then((reg) => {
+    const ready = swReg ? Promise.resolve(swReg) : navigator.serviceWorker.ready;
+    ready.then((reg) => {
+      if (!reg) return;
+      swReg = reg;
       const dev = window.ViktorychDevice;
-      if (dev && !dev.featureOn(dev.read(), "sync", dev.signals())) return;
-      const jobs = [];
+      const tags = ["feeds", "notifications", "weather"];
+      if (dev && dev.featureOn && !dev.featureOn(dev.read(), "sync", dev.signals())) {
+        if (reg.periodicSync && reg.periodicSync.unregister) tags.forEach((tag) => { reg.periodicSync.unregister(tag).catch(() => {}); });
+        return;
+      }
       if (reg.periodicSync) {
-        ["feeds", "notifications", "weather"].forEach((tag) => {
-          jobs.push(reg.periodicSync.register(tag, { minInterval: 30 * 60 * 1000 }).catch(() => {}));
+        reg.periodicSync.register("feeds", { minInterval: 15 * 60 * 1000 }).catch(() => {});
+        ["notifications", "weather"].forEach((tag) => {
+          reg.periodicSync.register(tag, { minInterval: 30 * 60 * 1000 }).catch(() => {});
         });
       }
-      if (reg.sync && reg.sync.register) jobs.push(reg.sync.register("feeds").catch(() => {}));
-      return Promise.all(jobs);
+      if (reg.sync && reg.sync.register) reg.sync.register("feeds").catch(() => {});
     }).catch(() => {});
   }
 
@@ -18774,29 +19379,35 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       notifyAll: !!STATE.settings.notify,
       uiLang: window.SI18n ? window.SI18n.getLang() : "en",
       ruMode: isRuVisitor(),
-      shortsLocked: isShortsLocked(),
-      shortsUnlocked: window.ViktorychShorts && window.ViktorychShorts.unlockedHandles ? window.ViktorychShorts.unlockedHandles() : []
+      tiktokLock: {
+        owner: signedOwner(),
+        audienceAll: (window.VIKTORYCH_ACCOUNTS || {}).tiktokAudience === "all",
+        locked: isShortsLocked(),
+        unlocked: (window.ViktorychShorts && typeof window.ViktorychShorts.unlockedList === "function") ? window.ViktorychShorts.unlockedList() : []
+      }
     });
   }
 
   let swStarted = false;
+  let swReg = null;
   function registerSW() {
     if (!("serviceWorker" in navigator) || swStarted) return;
     swStarted = true;
     navigator.serviceWorker.register("sw.js", { scope: "./", updateViaCache: "none" }).then((reg) => {
+      swReg = reg || swReg;
       if (reg && reg.update) reg.update().catch(() => {});
       syncWorkerState();
       if (window.ViktorychUpdate && window.ViktorychUpdate.watch) window.ViktorychUpdate.watch(reg);
-      if (STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted") registerPeriodic();
+      registerPeriodic();
     }).catch(() => {});
     navigator.serviceWorker.addEventListener("message", (event) => {
       const data = event.data || {};
       if (data.type === "storage-offline") setOffline(true);
       if (data.type === "storage-online" && navigator.onLine) setOffline(false);
-      if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
-      if (data.type === "feeds-updated") refreshFeeds(false);
+      if (data.type === "data" && /feeds\.json$/.test(data.url || "")) wakeHome();
+      if (data.type === "feeds-updated") wakeHome();
       if (data.type === "bell-delivered" || data.type === "bell-queue") commitBellNotes(data.notes || []);
-      if (data.type === "push-note") pullNotes();
+      if (data.type === "push-note") { pullNotes(); wakeHome(); }
       if (data.type === "note-open") {
         if (data.hash) location.hash = data.hash;
         if (data.id) queueReadIds([data.id]);
@@ -18815,7 +19426,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.addEventListener("online", () => {
       setOffline(false);
       if (window.ViktorychLocal) window.ViktorychLocal.flush(syncOffline);
+      wakeHome();
     });
+    window.addEventListener("pageshow", () => wakeHome());
     window.addEventListener("offline", () => setOffline(true));
     setOffline(!navigator.onLine);
     const updateGo = document.getElementById("update-go");
@@ -18931,6 +19544,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (document.visibilityState !== "visible") return;
       pullNotes();
       ensureHub();
+      wakeHome();
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "visible") {
@@ -18946,8 +19560,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
         pullBellQueue();
         if (window.ViktorychUpdate && window.ViktorychUpdate.poke) window.ViktorychUpdate.poke();
-        refreshFeeds(false);
-        refreshLiveTimeline(false);
+        wakeHome();
         const route = parseRoute();
         if (route.name === "status" || route.name === "watch") {
           const id = String(route.id || "");
@@ -19306,7 +19919,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (route.name === "notifications" && STATE.settings) {
       local.saveDoc("notifications", "all", {
-        notes: (STATE.settings.bellNotes || []).slice(0, 40).map((note) => ({ id: note.id, text: note.text || "", at: note.at || 0, handle: note.handle || "" })),
+        notes: visibleNotes(STATE.settings.bellNotes || []).slice(0, 40).map((note) => ({ id: note.id, text: note.text || "", at: note.at || 0, handle: note.handle || "" })),
         readThrough: Number(STATE.settings.bellRead) || 0,
         seen: STATE.settings.bellSeen || []
       });
@@ -19329,7 +19942,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     clearTimeout(rememberTimer);
     rememberTimer = setTimeout(() => rememberLocal(route), 350);
   }
-  window.addEventListener("pagehide", () => { try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ } });
+  window.addEventListener("pagehide", () => {
+    try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ }
+    try { saveHomeSnapshot(); } catch (err) { /* the previous snapshot stays */ }
+    try {
+      if (swReg && swReg.sync && swReg.sync.register) swReg.sync.register("feeds");
+    } catch (err) { /* periodic sync still covers installed Chrome and Edge */ }
+  });
 
   async function boot() {
     holdDeviceFeeds();
@@ -19373,6 +19992,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const pill = window.ViktorychLocal ? window.ViktorychLocal.readPill() : [];
     if (pill && pill.length) STATE.pendingFeed = { posts: pill, feeds: (snap && snap.feeds) || [] };
     const painted = window.ViktorychLocal && window.ViktorychLocal.wasRestored();
+    const bootTab = window.HomeFresh && window.HomeFresh.activeTab ? window.HomeFresh.activeTab(location.hash) : "foryou";
+    if ((SCROLLS["home:" + bootTab] || 0) >= 40) homeRead = true;
+    if (snap && window.HomeFresh && window.HomeFresh.stale(snap)) STATE.homeFreshBar = true;
     if (snap) {
       notePublished(snap);
       STATE.data = snap;
@@ -19380,6 +20002,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
+      markHome("home-snapshot-paint");
       scheduleDeviceIndex();
       if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
@@ -19401,11 +20024,42 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const params = new URLSearchParams(location.search);
     try {
       if (params.get("error") === "1") throw new Error("forced");
-      const loaded = lockDocDates(await fetchFeeds(false));
-      notePublished(loaded);
-      STATE.data = loaded;
+      const catalogPromise = fetchFeeds(true).then((doc) => lockDocDates(doc));
+      homeWakeAt = Date.now();
+      if (STATE.data && Array.isArray(STATE.data.posts) && STATE.data.posts.length) {
+        refreshLiveTimeline();
+        prefetchHomeTabs();
+      }
+      let catalogApplied = false;
+      const newerSnap = window.ViktorychLocal && window.ViktorychLocal.readDoc
+        ? window.ViktorychLocal.readDoc("feeds", "timeline").catch(() => null)
+        : Promise.resolve(null);
+      newerSnap.then((doc) => { if (!catalogApplied && doc) adoptSavedFeed(doc); });
+      const loaded = await catalogPromise;
+      catalogApplied = true;
+      const idbDoc = await newerSnap;
+      if (idbDoc) adoptSavedFeed(idbDoc);
+      const keepSaved = !!(loaded && loaded.missing && STATE.data && Array.isArray(STATE.data.posts) && STATE.data.posts.length);
+      if (!keepSaved) {
+        const incoming = loaded && loaded.missing ? emptyCatalog() : loaded;
+        notePublished(incoming);
+        const includeNew = arrivalMode() === "insert";
+        if (!STATE.data || !Array.isArray(STATE.data.posts)) {
+          STATE.data = withMemory(incoming);
+        } else {
+          const merged = mergeCatalog(STATE.data, incoming, includeNew);
+          STATE.data = withMemory(merged.doc);
+          if (!includeNew && merged.added.length) {
+            STATE.pendingFeed = incoming;
+            showPill(merged.added.concat(STATE.pendingLive || []));
+          } else if (includeNew) {
+            STATE.pendingFeed = null;
+            if (!(STATE.pendingLive || []).length) showPill([]);
+          }
+        }
+        saveHomeSnapshot();
+      }
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
-      saveTimelineSnap(STATE.data);
       if (window.ViktorychShorts && window.ViktorychShorts.visible()) await window.ViktorychShorts.pull();
       ensureVideoOwners();
       applyIaPreview(STATE.data);
@@ -19420,10 +20074,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           history.replaceState(null, "", location.pathname + shared);
         }
       }
-      render({ reset: true });
+      const keepY = window.scrollY >= 40 || homeRead;
+      render(keepY ? { y: window.scrollY } : { reset: true });
       scheduleDeviceIndex();
       loadNewestShard().then(() => {
-        if (applyIaPreview(STATE.data)) render({ reset: true });
+        if (applyIaPreview(STATE.data)) render(keepY ? { y: window.scrollY } : { reset: true });
         revealArchive();
       });
       const since = Number(readStored(localStorage, "seen-at") || 0);
@@ -19432,7 +20087,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         seenIds[canonicalPostId(post)] = true;
         if (post && post.id) seenIds[String(post.id)] = true;
       });
-      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post));
+      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post) && !noteHidden(post));
       const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
       if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted" && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
@@ -19449,10 +20104,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         ensureHub();
       }
       if ("serviceWorker" in navigator) navigator.serviceWorker.ready.then(() => pullBellQueue()).catch(() => {});
-      hydrateTabSnapshots().then(() => refreshLiveTimeline(false));
+      hydrateTabSnapshots();
+      if (!snap || !(snap.posts || []).length) {
+        refreshLiveTimeline();
+        prefetchHomeTabs();
+      }
       if (!STATE.liveTimer) {
         STATE.liveTimer = setInterval(() => {
-          if (document.visibilityState === "visible") refreshLiveTimeline(false);
+          if (document.visibilityState === "visible") wakeHome();
         }, LIVE_REFRESH_MS);
       }
     } catch (err) {

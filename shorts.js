@@ -101,6 +101,9 @@
     } else if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) {
       try { window.ViktorychAccounts.requestRender(); } catch (err) {}
     }
+    if (window.ViktorychNotes && window.ViktorychNotes.lockChanged) {
+      try { window.ViktorychNotes.lockChanged(); } catch (err) {}
+    }
   }
   function foldList(list) {
     var next = [];
@@ -118,8 +121,17 @@
     } catch (err) { /* the page still filters its own list */ }
   }
   function setUnlocked(list) {
-    unlockedAccounts = foldList(list);
+    var next = foldList(list);
+    var same = next.length === unlockedAccounts.length && next.every(function (name, i) { return name === unlockedAccounts[i]; });
+    unlockedAccounts = next;
     tellShortsLock();
+    if (same) return;
+    if (window.ViktorychNotes && window.ViktorychNotes.lockChanged) {
+      try { window.ViktorychNotes.lockChanged(); } catch (err) {}
+    }
+  }
+  function unlockedList() {
+    return unlockedAccounts.slice();
   }
   function setAdded(list) {
     addedAccounts = (list || []).filter(function (row) { return row && row.handle; });
@@ -3602,7 +3614,8 @@
     absorb: absorb,
     isLocked: isLocked,
     isUnlocked: isUnlocked,
-    unlockedHandles: function () { return unlockedAccounts.slice(); },
+    unlockedList: unlockedList,
+    unlockedHandles: unlockedList,
     setUnlocked: setUnlocked,
     setAdded: setAdded,
     setLocked: setLocked,
