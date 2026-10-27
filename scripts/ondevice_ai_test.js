@@ -186,7 +186,117 @@ ai.translate("El paquete llegó ayer y la puerta estaba abierta para todos.", Ob
     const page = fs.readFileSync("ondevice-ai.js", "utf8");
     assert.strictEqual(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(page), false);
     assert.strictEqual(page.indexOf("@" + "reader"), -1);
-    console.log("on-device ai tests ok");
+    assert.strictEqual(ai.composeUiOn({ settings: balanced, signals: strong(), device: device }), true);
+    assert.strictEqual(ai.composeUiOn({ settings: device.applyLevel("light"), signals: strong(), device: device }), false);
+    const composeFile = fs.readFileSync("x-compose.js", "utf8");
+    assert.strictEqual(composeFile.indexOf("odai-chips"), -1);
+    assert.ok(composeFile.indexOf("xc-ai-btn") >= 0);
+    assert.ok(composeFile.indexOf("data-kind=\"suggest\"") >= 0);
+    assert.ok(composeFile.indexOf("replyMode") >= 0);
+    let created = 0;
+    let servers = 0;
+    return ai.compose("teh gate was open", Object.assign({}, opts, {
+      kind: "grammar",
+      scope: "post",
+      server: false,
+      timeout: 40,
+      env: {
+        rewriter: {
+          availability: function () { return "unavailable"; },
+          create: function () { created += 1; return new Promise(function () {}); }
+        },
+        server: function () { servers += 1; return "from a server"; }
+      }
+    })).then(function (row) {
+      assert.strictEqual(created, 0);
+      assert.strictEqual(servers, 0);
+      assert.strictEqual(row.via, "rules");
+      assert.ok(row.text.indexOf("The") === 0);
+      device.reset();
+      created = 0;
+      return ai.compose("teh gate was open", Object.assign({}, opts, {
+        kind: "grammar",
+        scope: "post",
+        server: false,
+        timeout: 40,
+        env: {
+          proofreader: {
+            availability: function () { return "available"; },
+            create: function () { created += 1; return new Promise(function () {}); }
+          }
+        }
+      }));
+    }).then(function (row) {
+      assert.strictEqual(created, 1);
+      assert.strictEqual(row.via, "rules");
+      assert.ok(row.text.indexOf("The") === 0);
+      device.reset();
+      return ai.compose("teh gate was open", Object.assign({}, opts, {
+        kind: "grammar",
+        scope: "post",
+        server: false,
+        env: {
+          proofreader: {
+            availability: function () { return "readily"; },
+            create: function () {
+              return { proofread: function () { return { correctedInput: "The gate was open." }; } };
+            }
+          }
+        }
+      }));
+    }).then(function (row) {
+      assert.strictEqual(row.via, "chrome");
+      assert.strictEqual(row.text, "The gate was open.");
+      return ai.compose("The parcel arrived yesterday.", Object.assign({}, opts, {
+        kind: "suggest",
+        scope: "post",
+        server: false,
+        env: {
+          prompt: {
+            availability: function () { return "available"; },
+            create: function () {
+              return { prompt: function () { return "Thanks for the note.\nWhat time did it arrive?"; } };
+            }
+          }
+        }
+      }));
+    }).then(function (row) {
+      assert.strictEqual(row.via, "chrome");
+      assert.strictEqual(row.suggestions.length, 2);
+      assert.ok(row.suggestions[0].indexOf("Thanks") === 0);
+      const formal = ai.applyTone("I can't really stay", "formal");
+      assert.ok(formal.toLowerCase().indexOf("cannot") >= 0);
+      assert.ok(formal.toLowerCase().indexOf("really") < 0);
+      var stored = balanced;
+      var mirror = {
+        read: function () { return stored; },
+        aiFeatureOn: device.aiFeatureOn,
+        featureOn: device.featureOn,
+        signals: function () { return strong(); }
+      };
+      assert.strictEqual(ai.composeUiOn({ device: mirror, signals: strong() }), true);
+      stored = device.applyLevel("light");
+      assert.strictEqual(ai.composeUiOn({ device: mirror, signals: strong() }), false);
+      return ai.compose("teh gate was open", {
+        device: mirror,
+        signals: strong(),
+        kind: "grammar",
+        server: false
+      }).then(function (row) {
+        assert.strictEqual(row.via, "off");
+        stored = balanced;
+        return ai.compose("teh gate was open", {
+          device: mirror,
+          signals: strong(),
+          kind: "grammar",
+          server: false
+        });
+      }).then(function (row) {
+        assert.strictEqual(row.via, "rules");
+        assert.ok(row.text.indexOf("The") === 0);
+        console.log("on-device ai tests ok");
+      });
+    });
   });
 }).catch(function (err) {
   console.error(err);

@@ -6816,12 +6816,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const html = window.ViktorychXCompose.inlineHtml("reply", post);
       if (html) return html;
     }
-    const key = post ? postKey(post) : "";
     return `<div class="composer${bridge ? " bridge" : ""}">
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
-        <div class="odai-chips"><button type="button" data-act="odai-suggest" data-key="${esc(key)}" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="reply-draft" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="warm" data-field="reply-draft" data-scope="post">${tr("Tone")}</button></div>
         <div class="composer-bar"><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
       </div>
     </div>`;
@@ -11895,8 +11893,7 @@ if (STATE.histClear) {
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div></div>
         <div class="modal-body" style="display:flex;gap:12px">
           <span class="ava initials">Y</span>
-          <div style="flex:1"><p class="phandle" id="compose-note">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
-          <div class="odai-chips"><button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="compose-text" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="clear" data-field="compose-text" data-scope="post">${tr("Tone")}</button></div>
+          <div style="flex:1"><p class="xc-note" id="compose-note">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
           <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div></div>
         </div></div></div>`;
     }
