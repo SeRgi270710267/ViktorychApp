@@ -459,11 +459,11 @@ export function mediaHeaders(row, type, size, hasExceptions) {
 
 export async function visibleAvatarUrl(env, request, viewer, handle) {
   const checked = inspectHandle(String(handle || "").replace(/^@/, ""));
-  if (!checked || !checked.skeleton || !env.DB) return "";
+  if (!checked || !checked.skeleton || !env.DB) return null;
   const row = await env.DB.prepare(
     "SELECT public_id, handle, avatar, banner, hide_avatar, avatar_empty, banner_empty, private_follows FROM accounts WHERE skeleton = ?"
   ).bind(checked.skeleton).first();
-  if (!row) return "";
+  if (!row) return null;
   const account = { avatar: "", banner: "", photos: [], banners: [] };
   await applyViewer(env, request, row, account, viewer, !!(viewer && viewer.public_id === row.public_id));
   return account.avatar || "";
