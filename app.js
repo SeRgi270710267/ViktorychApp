@@ -1182,6 +1182,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!list.length) return;
     list.forEach((item) => setFollowed(item, on));
     saveSettings();
+    if (!navigator.onLine) {
+      list.forEach((item) => queueOffline({ type: "follow", id: item, on: !!on, snapshot: followSnapshot(item) }));
+      render();
+      return;
+    }
     const accounts = window.ViktorychAccounts;
     if (accounts && accounts.changeFollow) {
       Promise.all(list.map((item) => accounts.changeFollow(item, on, followSnapshot(item)))).then((results) => {
@@ -1582,7 +1587,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function parseAccountInput(raw) {
     const text = String(raw || "").trim();
     if (!text || text.length > 300) return null;
-    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram|tiktok):(\S+)$/i);
+    const prefixed = text.match(/^(x|threads|instagram|youtube|vk|rss|telegram|tiktok|bsky|mastodon):(\S+)$/i);
     if (prefixed) return { platform: prefixed[1].toLowerCase(), account: text };
     if (/^https?:\/\/(?:www\.|mobile\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]{1,15}(?:\/[A-Za-z0-9_/%?&=.+~-]*)?$/i.test(text)) return { platform: "x", account: text };
     if (/^@?[A-Za-z0-9_]{1,15}$/.test(text)) return { platform: "x", account: text.replace(/^@/, "") };
@@ -1590,6 +1595,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (/instagram\.com\/[A-Za-z0-9._]+/i.test(text)) return { platform: "instagram", account: text };
     if (/(?:youtube\.com|youtu\.be)\//i.test(text)) return { platform: "youtube", account: text };
     if (/vk\.com\/[A-Za-z0-9_.]+/i.test(text)) return { platform: "vk", account: text };
+    if (/^https?:\/\/(?:www\.)?bsky\.app\/profile\/[A-Za-z0-9._:%-]+/i.test(text)) return { platform: "bsky", account: text };
+    if (/^https?:\/\/[A-Za-z0-9.-]+\/@[A-Za-z0-9_]{1,64}\/?$/i.test(text)) return { platform: "mastodon", account: text };
     if (/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/(?:s\/)?[A-Za-z][A-Za-z0-9_]{4,31}(?:\/\d+)?\/?$/i.test(text)) return { platform: "telegram", account: text };
     if (/^@?[A-Za-z][A-Za-z0-9_]{16,32}$/.test(text)) return { platform: "telegram", account: text.replace(/^@/, "") };
     if (/^(?:https?:\/\/)?(?:www\.|m\.)?tiktok\.com\/@[A-Za-z0-9._]{2,24}(?:[/?#].*)?$/i.test(text)) return { platform: "tiktok", account: text };
@@ -1610,7 +1617,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       instagram: /instagram\.com\/([A-Za-z0-9._]+)/i,
       threads: /threads\.(?:com|net)\/@([A-Za-z0-9._]+)/i,
       youtube: /(?:youtube\.com\/(?:@|channel\/|c\/|user\/)?|youtu\.be\/)([A-Za-z0-9._-]+)/i,
-      vk: /vk\.com\/([A-Za-z0-9_.]+)/i
+      vk: /vk\.com\/([A-Za-z0-9_.]+)/i,
+      bsky: /bsky\.app\/profile\/([A-Za-z0-9._:%-]+)/i,
+      mastodon: /\/@([A-Za-z0-9_]{1,64})/i
     };
     const pattern = patterns[parsed.platform];
     const fromUrl = pattern ? text.match(pattern) : null;
@@ -4444,6 +4453,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function fetchJson(url) {
+    if (window.ViktorychDirect && window.ViktorychDirect.allows(url)) {
+      return window.ViktorychDirect.json(url);
+    }
     let signal;
     try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
@@ -8254,6 +8266,117 @@ const here = parseRoute();
     return Promise.resolve();
   }
 
+  function publicJson(url) {
+    const direct = window.ViktorychDirect;
+    if (direct && direct.allows(url)) return direct.json(url);
+    return fetchJson(url);
+  }
+
+  function loadBskyHeader(handle) {
+    const actor = window.ViktorychDirect ? window.ViktorychDirect.splitBsky(handle) : String(handle || "").replace(/^@/, "");
+    const url = window.ViktorychDirect ? window.ViktorychDirect.bskyProfileUrl(actor) : "https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=" + encodeURIComponent(actor);
+    return publicJson(url).then((data) => {
+      if (!data || !data.handle) return null;
+      return {
+        id: "bsky:" + data.handle,
+        platform: "bsky",
+        handle: data.handle,
+        name: data.displayName || data.handle,
+        avatar: data.avatar || "",
+        banner: data.banner || "",
+        bio: data.description || "",
+        followers: data.followersCount,
+        following: data.followsCount,
+        postsCount: data.postsCount,
+        url: "https://bsky.app/profile/" + data.handle
+      };
+    }).catch(() => null);
+  }
+
+  function bskyPost(item) {
+    const post = item && (item.post || item);
+    const record = post && post.record;
+    if (!post || !record) return null;
+    return {
+      id: post.uri || post.cid || "",
+      statusId: post.uri || "",
+      platform: "bsky",
+      kind: "post",
+      author: (post.author && (post.author.displayName || post.author.handle)) || "",
+      handle: (post.author && post.author.handle) || "",
+      avatar: (post.author && post.author.avatar) || "",
+      text: record.text || "",
+      date: record.createdAt || "",
+      url: post.uri ? "https://bsky.app/profile/" + ((post.author && post.author.handle) || "") + "/post/" + String(post.uri).split("/").pop() : ""
+    };
+  }
+
+  function loadBskyLive(row, handle) {
+    const actor = window.ViktorychDirect ? window.ViktorychDirect.splitBsky(handle) : handle;
+    const feedUrl = window.ViktorychDirect ? window.ViktorychDirect.bskyFeedUrl(actor) : "";
+    return Promise.all([loadBskyHeader(actor), feedUrl ? publicJson(feedUrl).catch(() => null) : Promise.resolve(null)]).then((pair) => {
+      row.profile = pair[0] || limitedProfile("bsky", actor);
+      row.posts = ((pair[1] && pair[1].feed) || []).map(bskyPost).filter(Boolean);
+      row.replies = [];
+      row.media = row.posts.filter((post) => post && post.media && post.media.length);
+      row.source = "bsky";
+      row.fetchedAt = Date.now();
+      snapshotProfile("bsky:" + actor, row);
+    });
+  }
+
+  function loadMastodonHeader(handle) {
+    const who = window.ViktorychDirect ? window.ViktorychDirect.splitMastodon(handle) : { instance: "mastodon.social", acct: handle };
+    const url = window.ViktorychDirect ? window.ViktorychDirect.mastodonLookup(who.instance, who.acct) : "https://mastodon.social/api/v1/accounts/lookup?acct=" + encodeURIComponent(who.acct);
+    return publicJson(url).then((data) => {
+      if (!data || !data.id) return null;
+      return {
+        id: "mastodon:" + who.instance + ":" + data.id,
+        platform: "mastodon",
+        handle: data.acct || who.acct,
+        name: data.display_name || data.username || who.acct,
+        avatar: data.avatar || "",
+        banner: data.header || "",
+        bio: data.note || "",
+        followers: data.followers_count,
+        following: data.following_count,
+        postsCount: data.statuses_count,
+        url: data.url || ("https://" + who.instance + "/@" + who.acct),
+        remoteId: data.id,
+        instance: who.instance
+      };
+    }).catch(() => null);
+  }
+
+  function loadMastodonLive(row, handle) {
+    const who = window.ViktorychDirect ? window.ViktorychDirect.splitMastodon(handle) : { instance: "mastodon.social", acct: handle };
+    return loadMastodonHeader(handle).then((profile) => {
+      row.profile = profile || limitedProfile("mastodon", who.acct);
+      if (!profile || !profile.remoteId || !window.ViktorychDirect) {
+        row.posts = [];
+        row.fetchedAt = Date.now();
+        return null;
+      }
+      return publicJson(window.ViktorychDirect.mastodonStatuses(who.instance, profile.remoteId)).then((list) => {
+        row.posts = (list || []).map((item) => ({
+          id: item.id,
+          statusId: item.id,
+          platform: "mastodon",
+          kind: "post",
+          author: profile.name,
+          handle: profile.handle,
+          avatar: profile.avatar,
+          text: item.content || "",
+          date: item.created_at || "",
+          url: item.url || profile.url
+        }));
+        row.source = "mastodon";
+        row.fetchedAt = Date.now();
+        snapshotProfile("mastodon:" + who.instance + ":" + who.acct, row);
+      });
+    });
+  }
+
   function ensureLiveHeader(platform, handle) {
     const key = liveKey(platform, handle);
     const row = STATE.liveUsers[key] || (STATE.liveUsers[key] = blankLive(platform, handle));
@@ -8261,6 +8384,8 @@ const here = parseRoute();
     if (row.headerTask) return row.headerTask;
     const clean = String(handle || "").replace(/^@/, "");
     const job = platform === "youtube" ? loadYtChannel(clean).then((data) => (data && data.authorId ? ytProfileFromChannel(data, clean) : null))
+      : platform === "bsky" ? loadBskyHeader(clean)
+      : platform === "mastodon" ? loadMastodonHeader(clean)
       : platform === "vk" ? Promise.resolve(limitedProfile("vk", clean))
       : platform === "telegram" ? Promise.resolve(limitedProfile("telegram", clean))
       : (platform === "instagram" || platform === "threads") ? Promise.resolve(limitedProfile(platform, clean))
@@ -8283,6 +8408,8 @@ const here = parseRoute();
     row.loading = !row.profile;
     const clean = String(handle || "").replace(/^@/, "");
     const job = platform === "youtube" ? loadYtLive(row, clean)
+      : platform === "bsky" ? loadBskyLive(row, clean)
+      : platform === "mastodon" ? loadMastodonLive(row, clean)
       : platform === "vk" ? loadVkSaved(row, clean)
       : platform === "telegram" ? loadTelegramSaved(row, clean)
       : (platform === "instagram" || platform === "threads") ? loadLimited(row, platform, clean)
@@ -8821,6 +8948,7 @@ const here = parseRoute();
     if (!text || text.length > 120) return;
     const next = [text].concat(recentSearches().filter((item) => item.toLowerCase() !== text.toLowerCase())).slice(0, 8);
     writeStored(localStorage, SEARCH_SUFFIX, JSON.stringify(next));
+    if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("search", "recent", { items: next });
   }
 
   function forgetSearch(q) {
@@ -8902,6 +9030,7 @@ const here = parseRoute();
     });
     trendCache = out;
     trendKey = key;
+    if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("explore", "trends", { items: out });
     return out;
   }
 
@@ -11164,6 +11293,7 @@ if (STATE.histClear) {
       if (act === "like") histUpsert("likes", likedPost, { id: id });
     }
     saveSettings();
+    if (!navigator.onLine) queueOffline({ type: act === "bookmark" ? "bookmark" : "like", id: id, on: !!STATE.settings[bucket][id] });
     if (parseRoute().name !== "shorts") render();
     return !!STATE.settings[bucket][id];
   }
@@ -11405,6 +11535,10 @@ if (STATE.histClear) {
       saveSettings();
       toast(tr("Couldn't save that repost."));
       render();
+      return;
+    }
+    if (!navigator.onLine) {
+      queueOffline({ type: "repost", id: post.id, on: !!on, postKey: postKey, snapshot: snap });
       return;
     }
     const req = on
@@ -13457,6 +13591,7 @@ if (STATE.histClear) {
       if (route.name === "explore") bindExploreSearchFit();
       else clearExploreSearchFit();
       bindNavSplit();
+      scheduleRemember(route);
     };
     const endRoute = () => {
       if (gen !== STATE.renderGen) return;
@@ -13797,6 +13932,12 @@ if (STATE.histClear) {
       STATE.modal = null;
       STATE.composeSeed = "";
       if (window.ViktorychCommunities && window.ViktorychCommunities.takeCompose && window.ViktorychCommunities.takeCompose(seed)) {
+        render();
+        return;
+      }
+      if (!navigator.onLine && seed.trim()) {
+        queueOffline({ type: "reply", id: "compose", on: true, body: seed });
+        if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
         render();
         return;
       }
@@ -15524,6 +15665,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (pageY() <= 4) STATE.snapTop = false;
     if (routing || scrollFreeze || !STATE.scrollKey) return;
     SCROLLS[STATE.scrollKey] = window.scrollY;
+    if (window.ViktorychLocal) window.ViktorychLocal.noteScroll(STATE.scrollKey, window.scrollY, SCROLLS);
     const route = parseRoute();
     if (route.name !== "article") return;
     clearTimeout(STATE.articleScrollTimer);
@@ -15741,7 +15883,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     let list = Array.isArray(posts) ? posts.filter(Boolean) : [];
     if (route.name !== "home") { el.hidden = true; return; }
     list = list.filter((post) => homeShows(post, route));
-    if (!list.length) { el.hidden = true; return; }
+    if (!list.length) {
+      el.hidden = true;
+      if (window.ViktorychLocal) window.ViktorychLocal.savePill([]);
+      return;
+    }
     const faces = [];
     const seen = {};
     list.forEach((post) => {
@@ -15755,6 +15901,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const avatars = faces.map((src) => `<img class="pill-ava" alt="" src="${esc(src)}">`).join("");
     el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
     el.hidden = false;
+    if (window.ViktorychLocal) {
+      window.ViktorychLocal.savePill(list.slice(0, 20).map((post) => ({
+        id: post.id,
+        text: post.text || "",
+        handle: post.handle || "",
+        avatar: post.avatar || "",
+        date: post.date || ""
+      })));
+    }
   }
 
   function memoryPosts() {
@@ -17121,7 +17276,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function bindShell() {
     if (shellBound) return;
     shellBound = true;
-    window.addEventListener("online", () => setOffline(false));
+    window.addEventListener("online", () => {
+      setOffline(false);
+      if (window.ViktorychLocal) window.ViktorychLocal.flush(syncOffline);
+    });
     window.addEventListener("offline", () => setOffline(true));
     setOffline(!navigator.onLine);
     const updateGo = document.getElementById("update-go");
@@ -17353,8 +17511,259 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }, { passive: true });
   }
 
+  let rememberTimer = 0;
+  function queueOffline(action) {
+    if (navigator.onLine || !window.ViktorychLocal) return;
+    window.ViktorychLocal.enqueue(action);
+    toast(tr("Pending"));
+  }
+  function syncOffline(action) {
+    if (!action) return false;
+    if (action.type === "follow" && window.ViktorychAccounts && window.ViktorychAccounts.changeFollow) {
+      window.ViktorychAccounts.changeFollow(action.id, !!action.on, action.snapshot || null);
+    } else if (action.type === "repost") {
+      const on = !!action.on;
+      const req = on
+        ? accountCall("/v1/reposts", { method: "PUT", body: { kind: "repost", post: action.snapshot || {} } })
+        : accountCall("/v1/reposts", { method: "POST", body: { postKey: action.postKey || "" } });
+      Promise.resolve(req).catch(() => {});
+    } else if (action.type === "reply" && window.ViktorychLocal) {
+      window.ViktorychLocal.saveDoc("drafts", "compose", { text: action.body || "" });
+    }
+    return true;
+  }
+  window.ViktorychAppSync = syncOffline;
+  function feedOrderKey(post) {
+    if (window.FeedOrder) return window.FeedOrder.key(post);
+    return canonicalPostId(post);
+  }
+
+  function feedOrderCompare(a, b) {
+    if (window.FeedOrder) return window.FeedOrder.compare(a, b);
+    return byStamp(a, b);
+  }
+
+  function orderedUnique(list) {
+    const local = window.ViktorychLocal;
+    if (local && local.orderPosts) return local.orderPosts(list, feedOrderCompare, feedOrderKey);
+    const seen = {};
+    const unique = [];
+    (list || []).forEach((post) => {
+      const id = feedOrderKey(post);
+      if (!post || !id || seen[id]) return;
+      seen[id] = true;
+      unique.push(post);
+    });
+    unique.sort(feedOrderCompare);
+    return unique;
+  }
+
+  function cacheRow(post) {
+    const row = slimPost(post);
+    if (!row) return null;
+    if (post.sortDate) row.sortDate = post.sortDate;
+    if (post.repostDate) row.repostDate = post.repostDate;
+    if (post.repostedAt) row.repostedAt = post.repostedAt;
+    if (post.kind) row.kind = post.kind;
+    if (post.channelId) row.channelId = post.channelId;
+    if (post.repostedBy) row.repostedBy = { handle: post.repostedBy.handle || "", name: post.repostedBy.name || "", platform: post.repostedBy.platform || "", feedId: post.repostedBy.feedId || "" };
+    if (post.forwardedFrom && typeof post.forwardedFrom === "object") row.forwardedFrom = { handle: post.forwardedFrom.handle || "", name: post.forwardedFrom.name || "" };
+    return row;
+  }
+
+  function homeTabIds() {
+    const ids = ["foryou", "following"];
+    const seen = { foryou: true, following: true };
+    ((STATE.settings && STATE.settings.lists) || []).forEach((list) => {
+      if (!list || !list.id) return;
+      const id = "list:" + list.id;
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    feedTabs().forEach((item) => {
+      if (!item || !item.id || item.showHome === false) return;
+      const id = "cat:" + item.id;
+      if (seen[id]) return;
+      seen[id] = true;
+      ids.push(id);
+    });
+    return ids;
+  }
+
+  function saveFeedTab(local, tab) {
+    const visible = posts().filter((post) => homeShows(post, { name: "home", tab: tab }));
+    const rows = orderedUnique(visible).slice(0, 24).map(cacheRow).filter(Boolean);
+    local.saveDoc("feeds", "tab:" + tab, { tab: tab, order: "utc", posts: rows });
+    return rows;
+  }
+
+  function profileSnapshot(feed, live, tab) {
+    const src = (live && live.profile) || feed || {};
+    const base = (feed && (feed.handle || feed.id)) ? feed : src;
+    let loaded = [];
+    try { if (base && base.handle) loaded = postsFor(base); } catch (err) { loaded = []; }
+    const pages = {};
+    const take = (name, list) => {
+      const rows = orderedUnique(list || []).slice(0, 12).map(cacheRow).filter(Boolean);
+      if (rows.length) pages[name] = rows;
+    };
+    take("posts", (live && live.posts && live.posts.length) ? live.posts : loaded.filter((post) => post.kind !== "reply"));
+    take("replies", (live && live.replies && live.replies.length) ? live.replies : loaded.filter((post) => post.kind === "reply"));
+    take("media", (live && live.media && live.media.length) ? live.media : loaded.filter((post) => (post.media || []).length));
+    take("videos", live && live.videos);
+    take("community", live && live.community);
+    const pinned = ((live && live.posts) || loaded).find((post) => post && post.pinned) || null;
+    return {
+      name: src.name || "",
+      handle: src.handle || (feed && feed.handle) || "",
+      bio: src.bio || (feed && feed.bio) || "",
+      avatar: src.avatar || (feed && feed.avatar) || "",
+      banner: src.banner || (feed && feed.banner) || "",
+      followers: src.followers != null ? src.followers : (feed && feed.followers),
+      following: src.following != null ? src.following : (feed && feed.following),
+      postsCount: src.postsCount != null ? src.postsCount : (feed && feed.postsCount),
+      pinned: pinned ? cacheRow(pinned) : null,
+      tab: tab || "posts",
+      order: "utc",
+      tabs: pages
+    };
+  }
+
+  function snapshotProfile(id, row, feed, tab) {
+    if (!window.ViktorychLocal || !id) return;
+    window.ViktorychLocal.saveDoc("profiles", id, profileSnapshot(feed || (row && row.profile) || {}, row, tab || "posts"));
+  }
+
+  function warmSavedMedia(local, rows) {
+    if (!local || !local.cacheFirstSegment) return;
+    if (!local.prefetchLimit(null, local.prefetchEnabled())) return;
+    (rows || []).slice(0, 8).forEach((post) => {
+      (post.media || []).forEach((item) => {
+        if (!item) return;
+        const hls = item.hls || "";
+        const url = item.url || "";
+        if (/\.m3u8(\?|$)/i.test(hls)) local.cacheFirstSegment(hls);
+        else if (/\.m3u8(\?|$)/i.test(url) || local.isFirstSegment(url)) local.cacheFirstSegment(url);
+      });
+    });
+  }
+
+  function warmOpened(hash) {
+    const local = window.ViktorychLocal;
+    if (!local || !STATE.data) return;
+    const path = String(hash || "").split("?")[0].replace(/^#/, "");
+    const parts = path.split("/").filter(Boolean).map((part) => {
+      try { return decodeURIComponent(part); } catch (err) { return part; }
+    });
+    if (!parts.length || parts[0] === "home" || parts[0] === "following" || parts[0] === "tab" || parts[0] === "cat") {
+      let tab = "foryou";
+      if (parts[0] === "following" || parts[1] === "following") tab = "following";
+      else if (parts[0] === "tab" && parts[1]) tab = "list:" + parts[1];
+      else if (parts[1] === "tab" && parts[2]) tab = "list:" + parts[2];
+      else if (parts[0] === "cat" && parts[1]) tab = "cat:" + parts[1];
+      else if (parts[1] === "cat" && parts[2]) tab = "cat:" + parts[2];
+      const rows = saveFeedTab(local, tab);
+      warmSavedMedia(local, rows);
+      return;
+    }
+    let platform = "";
+    let handle = "";
+    if (parts[0] === "u" && parts[2]) {
+      platform = parts[1] === "twitter" ? "x" : parts[1];
+      handle = parts[2];
+    } else if (parts[0].charAt(0) === "@") {
+      platform = "x";
+      handle = parts[0].slice(1);
+    } else if (["x", "threads", "instagram", "youtube", "vk", "discord", "telegram", "tiktok", "bsky", "mastodon", "app"].indexOf(parts[0]) >= 0 && parts[1] && parts[2] !== "status") {
+      platform = parts[0];
+      handle = parts[1];
+    }
+    if (!platform || !handle) return;
+    const feed = findFeed(platform, handle);
+    const live = STATE.liveUsers && STATE.liveUsers[liveKey(platform, handle)];
+    if (feed || (live && live.profile)) snapshotProfile((platform || "x") + ":" + handle, live, feed, "posts");
+  }
+
+  function rememberLocal(route) {
+    const local = window.ViktorychLocal;
+    if (!local) return;
+    const app = document.getElementById("app");
+    local.capture({
+      hash: location.hash || "#/",
+      html: app ? app.innerHTML : "",
+      scrollKey: STATE.scrollKey,
+      y: window.scrollY,
+      scrolls: SCROLLS
+    });
+    local.noteOpen(location.hash || "#/");
+    local.paintPending();
+    if (app) local.warmMedia(app);
+    if (!route) return;
+    if (route.name === "home" && STATE.data) {
+      let current = [];
+      homeTabIds().forEach((tab) => {
+        const rows = saveFeedTab(local, tab);
+        if (tab === "foryou") local.saveDoc("feeds", "home", { order: "utc", posts: rows });
+        if (tab === (route.tab || "foryou")) current = rows;
+      });
+      warmSavedMedia(local, current);
+    }
+    if ((route.name === "profile" || route.name === "user") && route.handle) {
+      const feed = findFeed(route.platform, route.handle);
+      const live = STATE.liveUsers && STATE.liveUsers[liveKey(route.platform, route.handle)];
+      const tab = route.query && route.query.get ? (route.query.get("tab") || "posts") : "posts";
+      if (feed || (live && live.profile)) snapshotProfile((route.platform || "x") + ":" + route.handle, live, feed, tab);
+    }
+    if (route.name === "status" && route.id) {
+      const post = findPost(route.platform, route.handle, route.id);
+      const bucket = STATE.replies[String(route.id)] || {};
+      if (post) {
+        const chain = ancestorChain(post);
+        const parent = chain.nodes.length ? chain.nodes[chain.nodes.length - 1] : (post.replyParent || null);
+        const replies = orderedUnique(bucket.replies || []).slice(0, 20).map(cacheRow).filter(Boolean);
+        local.saveDoc("threads", String(route.id), {
+          order: "utc",
+          post: cacheRow(post),
+          parent: parent ? cacheRow(parent) : null,
+          quote: post.quoted ? cacheRow(post.quoted) : null,
+          replies: replies
+        });
+      }
+    }
+    if (route.name === "notifications" && STATE.settings) {
+      local.saveDoc("notifications", "all", {
+        notes: (STATE.settings.bellNotes || []).slice(0, 40).map((note) => ({ id: note.id, text: note.text || "", at: note.at || 0, handle: note.handle || "" })),
+        readThrough: Number(STATE.settings.bellRead) || 0,
+        seen: STATE.settings.bellSeen || []
+      });
+    }
+    if (route.name === "explore") {
+      const q = route.query ? route.query.get("q") || "" : "";
+      local.saveDoc("explore", "home", { q: q });
+      if (q) {
+        const found = orderedUnique(posts().filter((post) => post && !hiddenPost(post) && postHay(post).toLowerCase().includes(q.toLowerCase()))).slice(0, 20).map(cacheRow).filter(Boolean);
+        local.saveDoc("search", "q:" + q.toLowerCase().slice(0, 80), { q: q, order: "utc", posts: found });
+      }
+    }
+    if (STATE.composeSeed) local.saveDoc("drafts", "compose", { text: STATE.composeSeed });
+    if (window.ViktorychShorts && window.ViktorychShorts.snapshot) window.ViktorychShorts.snapshot();
+    if (window.SIntelMusic && window.SIntelMusic.snapshot) window.SIntelMusic.snapshot();
+    if (window.FeedsDiscord && window.FeedsDiscord.snapshot) window.FeedsDiscord.snapshot();
+    if (window.ViktorychCommunities && window.ViktorychCommunities.snapshot) window.ViktorychCommunities.snapshot();
+  }
+  function scheduleRemember(route) {
+    clearTimeout(rememberTimer);
+    rememberTimer = setTimeout(() => rememberLocal(route), 350);
+  }
+  window.addEventListener("pagehide", () => { try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ } });
+
   async function boot() {
     syncRuVisitorGeo();
+    if (window.ViktorychLocal) {
+      const savedScrolls = window.ViktorychLocal.readScrolls();
+      if (savedScrolls) Object.assign(SCROLLS, savedScrolls);
+    }
     if (window.ViktorychAccounts && window.ViktorychAccounts.showDeletedIfNeeded && window.ViktorychAccounts.showDeletedIfNeeded()) {
       registerSW();
       applyTheme();
@@ -17381,6 +17790,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
     loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
     const snap = loadTimelineSnap();
+    const pill = window.ViktorychLocal ? window.ViktorychLocal.readPill() : [];
+    if (pill && pill.length) STATE.pendingFeed = { posts: pill, feeds: (snap && snap.feeds) || [] };
+    const painted = window.ViktorychLocal && window.ViktorychLocal.wasRestored();
     if (snap) {
       notePublished(snap);
       STATE.data = snap;
@@ -17388,7 +17800,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
+      if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
+    } else if (painted) {
+      STATE.loading = false;
     } else {
       STATE.loading = true;
       render();
@@ -17464,6 +17879,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         STATE.error = null;
         if (!navigator.onLine) setOffline(true);
         render();
+      } else if (window.ViktorychLocal && window.ViktorychLocal.wasRestored()) {
+        STATE.error = null;
+        if (!navigator.onLine) setOffline(true);
       } else {
         STATE.error = err;
         render({ reset: true });
@@ -17845,6 +18263,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.settings.bottomNav = next.bottomNav;
     STATE.settings.bottomNavCustom = next.bottomNavCustom;
     render();
+  });
+
+  window.addEventListener("viktorych-warm", (event) => {
+    const local = window.ViktorychLocal;
+    if (!local || !local.prefetchLimit(null, local.prefetchEnabled())) return;
+    ((event && event.detail) || []).forEach((hash) => {
+      try { warmOpened(String(hash || "")); } catch (err) { /* a cold tab stays on the last good copy */ }
+    });
   });
 
   initTooltipController();
