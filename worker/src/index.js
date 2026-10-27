@@ -1,4 +1,4 @@
-import { OWNER_HANDLE, inspectHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
+import { bindOwner, inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
 import { parseRoomId, pickStreams, roomStats, isTopQuality } from "../../shared/tiktok-live.js";
 import { describeTikTok, pickPlayUrl } from "../../shared/tiktok-play.js";
 import { cleanHistoryCut, cleanHistoryList } from "../../shared/history-sync.js";
@@ -431,7 +431,7 @@ async function sessionAccount(env, request) {
   if (token.startsWith("emergency-offline-")) {
     return {
       public_id: "emergency_owner",
-      handle: OWNER_HANDLE,
+      handle: ownerHandle(),
       display_name: "Owner",
       avatar: "",
       banner: "",
@@ -585,7 +585,7 @@ async function handleSignup(request, env) {
     return limited({ retry: Math.max(1, Math.ceil((Number(prior.reset_at) - Date.now()) / 1000)) });
   }
   const created = await createAccount(env, request, {
-    handle: checked.owner ? OWNER_HANDLE : checked.handle,
+    handle: checked.owner ? ownerHandle() : checked.handle,
     skeleton: checked.skeleton,
     displayName,
     owner: !!checked.owner,
@@ -626,7 +626,7 @@ async function handleLogin(request, env) {
     const secret = String(env.OWNER_CLAIM_CODE || "");
     if (!ownerRow && secret && claim && timingEqual(claim, secret) && /^\d{16}$/.test(digits)) {
       const created = await createAccount(env, request, {
-        handle: OWNER_HANDLE,
+        handle: ownerHandle(),
         skeleton: ownerSkeleton(),
         displayName: "Owner",
         owner: true,
@@ -970,17 +970,6 @@ async function handleData(request, env, pathname) {
   if (!row) return json(401, { error: "unauthorized" });
   if (!env.DATA) return json(503, { error: "not_configured" });
   let object = await env.DATA.get(key);
-  if (!object) {
-    try {
-      const ghUrl = "https://raw.githubusercontent.com/ViktorychGroup/ViktorychApp/main/" + key;
-      const ghRes = await fetch(ghUrl, { headers: { "User-Agent": "ViktorychApp-Backup" } });
-      if (ghRes && ghRes.ok) {
-        const bodyBytes = await ghRes.arrayBuffer();
-        try { await env.DATA.put(key, bodyBytes); } catch (e) {}
-        object = await env.DATA.get(key);
-      }
-    } catch (e) {}
-  }
   if (!object) return json(404, { error: "not_found" });
   if (key.indexOf("discord/") === 0) return discordData(request, object);
   const text = await object.text();
@@ -3141,6 +3130,33 @@ async function requireOwner(request, env) {
   return { row };
 }
 
+function rememberHandle(found, seen, name) {
+  const clean = String(name || "").trim().replace(/^@/, "");
+  if (!/^[A-Za-z0-9._]{2,24}$/.test(clean)) return;
+  const key = clean.toLowerCase();
+  if (seen.has(key)) return;
+  seen.add(key);
+  found.push(clean);
+}
+
+async function unlockedHandles(env) {
+  const found = [];
+  const seen = new Set();
+  String((env && env.TIKTOK_UNLOCKED) || "").split(/[\s,]+/).forEach((part) => rememberHandle(found, seen, part));
+  const doc = await readJsonObject(env, "owner/tiktok-unlocked.json");
+  const list = doc && (doc.handles || doc.unlocked || []);
+  if (Array.isArray(list)) {
+    list.forEach((item) => rememberHandle(found, seen, typeof item === "string" ? item : item && item.handle));
+  }
+  return found;
+}
+
+async function handleTikTokUnlocked(request, env) {
+  const gate = await requireOwner(request, env);
+  if (gate.error) return gate.error;
+  return json(200, { handles: await unlockedHandles(env) });
+}
+
 async function handleTikTokAccounts(request, env) {
   const gate = await requireOwner(request, env);
   if (gate.error) return gate.error;
@@ -4388,6 +4404,7 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
+  if (path === "/v1/owner/tiktok/unlocked" && request.method === "GET") return handleTikTokUnlocked(request, env);
   if (path === "/v1/owner/tiktok/accounts" && (request.method === "GET" || request.method === "POST")) return handleTikTokAccounts(request, env);
   const ownerAccount = path.match(/^\/v1\/owner\/tiktok\/accounts\/([^/]+)$/);
   if (ownerAccount && request.method === "DELETE") return handleTikTokAccountDelete(request, env, ownerAccount[1]);
@@ -4463,9 +4480,14 @@ async function route(request, env, ctx) {
   return json(404, { error: "not_found" });
 }
 
+function bindRequestOwner(env) {
+  bindOwner(env && env.OWNER_HANDLE);
+}
+
 export default {
   async fetch(request, env, ctx) {
     try {
+      bindRequestOwner(env);
       const url = new URL(request.url);
       const path = url.pathname;
       const origin = request.headers.get("Origin");
@@ -4477,6 +4499,7 @@ export default {
     }
   },
   async scheduled(event, env, ctx) {
+    bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
     const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its

@@ -15,9 +15,8 @@
    shared media index with no account column, so it is left alone. There is
    no invites table. */
 
-import { OWNER_HANDLE, inspectHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
+import { inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
 
-const OWNER_GITHUB = "SeRgi270710267";
 const encoder = new TextEncoder();
 const DAY_MS = 24 * 60 * 60 * 1000;
 const REAUTH_MS = 5 * 60 * 1000;
@@ -125,20 +124,43 @@ export async function userHash(env, publicId) {
   return hmacHex(salt, "account-delete:" + id);
 }
 
-export function ownerProtected(env, row) {
+function timingEqual(left, right) {
+  const a = String(left || "");
+  const b = String(right || "");
+  const length = Math.max(a.length, b.length);
+  let diff = a.length === b.length ? 0 : 1;
+  for (let i = 0; i < length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function ownerIdHashes(env) {
+  const raw = String((env && (env.OWNER_ID_SHA256 || env.OWNER_GITHUB_SHA256)) || "");
+  return raw.split(/[\s,]+/).map((item) => item.trim().toLowerCase()).filter((item) => /^[a-f0-9]{64}$/.test(item));
+}
+
+async function matchesOwnerId(env, value) {
+  const hashes = ownerIdHashes(env);
+  const text = String(value || "");
+  if (!hashes.length || !text) return false;
+  const digest = await sha256Hex(text);
+  return hashes.some((expected) => timingEqual(digest, expected));
+}
+
+export async function ownerProtected(env, row) {
   if (!row) return true;
   if (Number(row.owner) === 1) return true;
   const id = String(row.public_id || row.publicId || "");
   const handle = String(row.handle || "");
   if (id === "emergency_owner") return true;
-  if (handle === OWNER_HANDLE) return true;
+  const configuredHandle = ownerHandle();
+  if (configuredHandle && timingEqual(handle, configuredHandle)) return true;
   const checked = inspectHandle(handle);
   if (checked && checked.owner) return true;
   const skel = String(row.skeleton || "");
-  if (skel && skel === ownerSkeleton()) return true;
-  if (handle === OWNER_GITHUB || id === OWNER_GITHUB) return true;
+  if (skel && ownerSkeleton() && skel === ownerSkeleton()) return true;
+  if (await matchesOwnerId(env, handle) || await matchesOwnerId(env, id)) return true;
   const configured = String((env && env.OWNER_PUBLIC_ID) || "").trim();
-  if (configured && (id === configured || handle === configured)) return true;
+  if (configured && (timingEqual(id, configured) || timingEqual(handle, configured))) return true;
   return false;
 }
 
@@ -354,7 +376,7 @@ async function wipeDatabase(env, job) {
   const handle = String(job.handle || "");
   if (!/^\d{12}$/.test(publicId)) return;
   const still = await env.DB.prepare("SELECT public_id, handle, skeleton, owner FROM accounts WHERE public_id = ?").bind(publicId).first();
-  if (still && ownerProtected(env, still)) {
+  if (still && await ownerProtected(env, still)) {
     const err = new Error("owner_protected");
     err.code = "owner_protected";
     throw err;
@@ -561,14 +583,14 @@ export async function handleAccountReauth(request, env, deps) {
   if (!gate.ok) return deps.limited(gate);
   const session = await deps.sessionAccount(env, request);
   if (!session) return jsonBody(deps, 401, { error: "unauthorized" });
-  if (ownerProtected(env, session)) return jsonBody(deps, 403, { error: "owner_protected" });
+  if (await ownerProtected(env, session)) return jsonBody(deps, 403, { error: "owner_protected" });
   const paced = await deps.rateHit(env, "reauth:" + session.public_id, 8, 60 * 60 * 1000);
   if (!paced.ok) return deps.limited(paced);
   const body = await deps.readJson(request, 2000);
   if (body.error) return jsonBody(deps, 400, { error: body.error });
   const row = await env.DB.prepare("SELECT public_id, handle, skeleton, owner, number_hash, salt FROM accounts WHERE public_id = ?").bind(session.public_id).first();
   if (!row) return jsonBody(deps, 401, { error: "unauthorized" });
-  if (ownerProtected(env, row)) return jsonBody(deps, 403, { error: "owner_protected" });
+  if (await ownerProtected(env, row)) return jsonBody(deps, 403, { error: "owner_protected" });
   const ok = await deps.verifyAccountNumber(env, row, body.accountNumber);
   if (!ok) return jsonBody(deps, 401, { error: "invalid_credentials" });
   const token = "ra1." + b64url(crypto.getRandomValues(new Uint8Array(32)));
@@ -605,12 +627,12 @@ export async function handleAccountDelete(request, env, deps) {
   }
   const session = await deps.sessionAccount(env, request);
   if (!session) return jsonBody(deps, 401, { error: "unauthorized" });
-  if (ownerProtected(env, session)) return jsonBody(deps, 403, { error: "owner_protected" });
+  if (await ownerProtected(env, session)) return jsonBody(deps, 403, { error: "owner_protected" });
   const paced = await deps.rateHit(env, "acct-del:" + session.public_id, 8, 60 * 60 * 1000);
   if (!paced.ok) return deps.limited(paced);
   const row = await env.DB.prepare("SELECT public_id, handle, skeleton, owner, number_hash, salt FROM accounts WHERE public_id = ?").bind(session.public_id).first();
   if (!row) return jsonBody(deps, 401, { error: "unauthorized" });
-  if (ownerProtected(env, row)) return jsonBody(deps, 403, { error: "owner_protected" });
+  if (await ownerProtected(env, row)) return jsonBody(deps, 403, { error: "owner_protected" });
   const typed = String(body.handle || "").trim().replace(/^@/, "");
   if (!typed || typed !== row.handle) return jsonBody(deps, 400, { error: "handle_mismatch" });
   let proven = false;

@@ -484,13 +484,13 @@ def load_sources() -> tuple:
 
 def fetch_tiktok_posts() -> list:
     try:
-        from tiktok_sync import TRACKED, entry_to_post, fetch_entries
+        from tiktok_sync import env_tracked, entry_to_post, fetch_entries
     except Exception:
         print("[gdrive] TikTok list was not available")
         return []
     policy = ia_backup.load_ia_policy()
     posts = []
-    for handle in TRACKED:
+    for handle in env_tracked():
         if handle.lower() in (policy.get("tiktok") or set()):
             continue
         try:

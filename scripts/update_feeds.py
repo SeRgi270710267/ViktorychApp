@@ -1507,6 +1507,17 @@ def main() -> None:
     parser.add_argument("--download-media", action="store_true", help="ignored; Meta CDN URLs stay hotlinked")
     args = parser.parse_args()
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+    if isinstance(config, dict) and config.get("catalogSeed") is True and not args.fixtures:
+        print("[catalog] private catalog was not restored; leaving the seed unpublished")
+        return
+    try:
+        from log_redact import collect, install
+
+        quiet = set()
+        collect(config, quiet)
+        install(quiet)
+    except Exception:
+        pass
     doc = build(config, args.fixtures, args.download_media)
     archive_posts = doc.pop("_archive_posts", [])
     video_ok = doc.pop("_video_ok", None)

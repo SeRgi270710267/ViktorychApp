@@ -163,6 +163,14 @@ def collect(root: Path) -> dict[str, Path]:
     return found
 
 
+def catalog_seed(path: Path) -> bool:
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    return isinstance(doc, dict) and doc.get("catalogSeed") is True
+
+
 def upload(key: str, payload: bytes) -> None:
     account = _account()
     quoted = urllib.parse.quote(key, safe="/")
@@ -353,6 +361,9 @@ def publish(site: Path, source: Path, preserve_remote: bool = False) -> int:
 
             hashes, deletion_salt = load_deletions(api)
             for key in sorted(files):
+                if catalog_seed(files[key]):
+                    print(f"seed skipped {key}")
+                    continue
                 payload = files[key].read_bytes()
                 try:
                     payload = scrub_bytes(key, payload, hashes, deletion_salt)

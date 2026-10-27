@@ -4,8 +4,8 @@ import test from "node:test";
 import { Miniflare } from "miniflare";
 import { cleanHistoryList } from "../../shared/history-sync.js";
 
-const OWNER = "S\u0435\u0420g\u0418";
-const LOOKALIKE = "SePg\u0418";
+const OWNER = "mirathorn";
+const LOOKALIKE = "m\u0456r\u0430t\u043D\u043Ern";
 
 let mf;
 let bindings;
@@ -22,6 +22,7 @@ function workerOptions(extra) {
     bindings: Object.assign({
       ACCOUNT_PEPPER: "pepper-test",
       OWNER_CLAIM_CODE: "claim-test",
+      OWNER_HANDLE: "mirathorn",
       ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080",
       PBKDF2_ITERATIONS: "1000"
     }, extra || {})
@@ -347,7 +348,7 @@ test("owner tiktok data requires the owner session", async () => {
   assert.equal(reader.status, 201);
   const hidden = await call("/v1/owner/tiktok", { ip: "203.0.113.93", token: reader.body.token });
   assert.equal(hidden.status, 403);
-  const liveHidden = await call("/v1/owner/live/gabii_g5", { ip: "203.0.113.94", token: reader.body.token });
+  const liveHidden = await call("/v1/owner/live/lockclip", { ip: "203.0.113.94", token: reader.body.token });
   assert.equal(liveHidden.status, 403);
   const mediaAnon = await call("/v1/owner/media?url=https://v16.tiktokcdn.com/a.m3u8", { ip: "203.0.113.95" });
   assert.equal(mediaAnon.status, 401);
@@ -411,7 +412,7 @@ test("profile location and website round-trip and reject over-long values", asyn
 });
 
 test("tiktok play requires the owner and a real video id", async () => {
-  const anon = await call("/v1/owner/play?id=7695476356548660503&handle=gabii_g5", { ip: "203.0.113.130" });
+  const anon = await call("/v1/owner/play?id=7695476356548660503&handle=lockclip", { ip: "203.0.113.130" });
   assert.equal(anon.status, 401);
   const reader = await call("/v1/signup", {
     method: "POST",
@@ -419,7 +420,7 @@ test("tiktok play requires the owner and a real video id", async () => {
     body: { displayName: "Dee", handle: "dee_t" }
   });
   assert.equal(reader.status, 201);
-  const hidden = await call("/v1/owner/play?id=7695476356548660503&handle=gabii_g5", { ip: "203.0.113.132", token: reader.body.token });
+  const hidden = await call("/v1/owner/play?id=7695476356548660503&handle=lockclip", { ip: "203.0.113.132", token: reader.body.token });
   assert.equal(hidden.status, 403);
   const minted = await call("/v1/signup", {
     method: "POST",
@@ -431,7 +432,7 @@ test("tiktok play requires the owner and a real video id", async () => {
   const hex = [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
   const listed = await bindings.DB.prepare("SELECT public_id FROM accounts WHERE owner = 1").first();
   await bindings.DB.prepare("UPDATE sessions SET public_id = ? WHERE token_hash = ?").bind(listed.public_id, hex).run();
-  const bad = await call("/v1/owner/play?id=nope&handle=gabii_g5", { ip: "203.0.113.134", token: minted.body.token });
+  const bad = await call("/v1/owner/play?id=nope&handle=lockclip", { ip: "203.0.113.134", token: minted.body.token });
   assert.equal(bad.status, 400);
 });
 

@@ -346,8 +346,7 @@
     if (window.ViktorychShorts && typeof window.ViktorychShorts.isUnlocked === "function") {
       return window.ViktorychShorts.isUnlocked(handle);
     }
-    const clean = String(handle || "").toLowerCase().replace(/^@/, "");
-    return clean === "pepsi";
+    return false;
   }
 
   function isLockedTiktok(entity) {
