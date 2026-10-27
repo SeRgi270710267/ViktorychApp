@@ -356,6 +356,13 @@
     return isShortsLocked() && !isTiktokUnlocked(entity.handle || entity.account);
   }
 
+  function withUnreadTitle(text) {
+    const base = String(text || "").replace(/^\((?:\d+|\d+\+|20\+)\)\s+/, "");
+    const count = bellUnread();
+    if (!count) return base;
+    return "(" + (count > 20 ? "20+" : String(count)) + ") " + base;
+  }
+
   function feeds() {
     let list = (STATE.data && STATE.data.feeds) || [];
     if (isShortsLocked()) {
@@ -6991,13 +6998,48 @@ const here = parseRoute();
     return { name: "profile", platform, handle, query };
   }
 
-  function bellUnread() {
-    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
-      const server = notesServer();
-      return Number(server.unread) > 0 ? Number(server.unread) : 0;
+  function noteViewer() {
+    const cfg = (typeof window !== "undefined" && window.VIKTORYCH_ACCOUNTS) || {};
+    return {
+      owner: typeof signedOwner === "function" ? signedOwner() : false,
+      audienceAll: cfg.tiktokAudience === "all",
+      locked: typeof isShortsLocked === "function" ? isShortsLocked() : true,
+      unlocked: function (handle) {
+        return typeof isTiktokUnlocked === "function" ? isTiktokUnlocked(handle) : false;
+      }
+    };
+  }
+
+  function noteHidden(note) {
+    if (!note) return false;
+    const view = noteViewer();
+    if (window.TiktokLock && typeof window.TiktokLock.tiktokNoteHidden === "function") {
+      return window.TiktokLock.tiktokNoteHidden(note, view);
     }
+    const platform = note.platform || (note.feedId && String(note.feedId).indexOf("tiktok:") === 0 ? "tiktok" : "") || (note.hash && String(note.hash).indexOf("#/tiktok/") === 0 ? "tiktok" : "");
+    if (platform !== "tiktok") return false;
+    if (!view.owner && !view.audienceAll) return true;
+    if (view.locked === false) return false;
+    return typeof isTiktokUnlocked === "function" ? !isTiktokUnlocked(note.handle || note.account) : true;
+  }
+
+  function visibleNotes(list) {
+    if (window.TiktokLock && typeof window.TiktokLock.visibleNotes === "function") {
+      return window.TiktokLock.visibleNotes(list || [], noteViewer());
+    }
+    return (list || []).filter((note) => !noteHidden(note));
+  }
+
+  function bellUnread() {
     const read = Number(STATE.settings && STATE.settings.bellRead) || 0;
-    return ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
+    const notes = (STATE.settings && STATE.settings.bellNotes) || [];
+    const visibleUnread = visibleNotes(notes).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
+    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
+      const server = Number(notesServer().unread) || 0;
+      const hiddenUnread = notes.filter((note) => noteHidden(note) && !note.read && (Number(note.at) || 0) > read).length;
+      return Math.max(visibleUnread, Math.max(0, server - hiddenUnread));
+    }
+    return visibleUnread;
   }
 
   function bellBadgeHtml() {
@@ -10916,7 +10958,7 @@ const here = parseRoute();
   }
 
   function notesForTab(tab) {
-    const notes = (STATE.settings && STATE.settings.bellNotes) || [];
+    const notes = visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     if (!tab) return notes;
     if (tab.kind === "verified") return notes.filter(noteIsVerified);
     if (tab.kind === "mentions") return notes.filter(noteIsMention);
@@ -10980,7 +11022,7 @@ const here = parseRoute();
   function markNoteTabRead(active) {
     if (!STATE.settings) return;
     if (active === "all") {
-      const notes = STATE.settings.bellNotes || [];
+      const notes = visibleNotes(STATE.settings.bellNotes || []);
       const newest = notes.reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
       const until = Math.max(newest, Number(notesServer().readUntil) || 0);
       if (!until || (Number(STATE.settings.bellRead) || 0) >= until && !(notes.some((note) => !note.read))) return;
@@ -11050,7 +11092,7 @@ const here = parseRoute();
     markNoteTabRead(active);
     const tabs = visibleNoteTabs();
     const current = active === "all" ? null : noteTabById(active);
-    const notes = current ? notesForTab(current) : ((STATE.settings && STATE.settings.bellNotes) || []);
+    const notes = current ? notesForTab(current) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
     const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
@@ -14071,8 +14113,8 @@ if (STATE.histClear) {
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
       const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
-      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = window.SIntelMusic.titleFor(route);
-      else document.title = routeTitle(route, liveName, personName, discordTitle);
+      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = withUnreadTitle(window.SIntelMusic.titleFor(route));
+      else document.title = withUnreadTitle(routeTitle(route, liveName, personName, discordTitle));
       window.scrollTo(0, y);
       if (explicitY && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
@@ -16602,7 +16644,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const route = parseRoute();
     let list = Array.isArray(posts) ? posts.filter(Boolean) : [];
     if (route.name !== "home") { el.hidden = true; return; }
-    list = list.filter((post) => homeShows(post, route));
+    list = list.filter((post) => homeShows(post, route) && !noteHidden(post));
     if (!list.length) {
       el.hidden = true;
       if (window.ViktorychLocal) window.ViktorychLocal.savePill([]);
@@ -17542,7 +17584,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       STATE.pendingFeed = doc;
       showPill(merged.added.concat(STATE.pendingLive || []));
       const since = Number(readStored(localStorage, "seen-at") || 0);
-      const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post));
+      const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post) && !noteHidden(post));
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
@@ -18167,6 +18209,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function paintBellBadge() {
     const count = bellUnread();
     updateBadge(count);
+    document.title = withUnreadTitle(document.title);
     document.querySelectorAll(".nav-badge").forEach((el) => el.remove());
     if (!count || parseRoute().name === "notifications") return;
     const label = count > 20 ? "20+" : String(count);
@@ -18331,7 +18374,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function applyServerNotes(view) {
     if (!view || !STATE.settings) return;
     const until = Number(view.readUntil) || 0;
-    STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], view.items || [], until));
+    STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], visibleNotes(view.items || []), until));
     STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
     if (Array.isArray(view.tabs)) {
       STATE.settings.noteTabs = cleanFeedTabs(mergeLocalTabs(STATE.settings.noteTabs || [], view.tabs));
@@ -18373,7 +18416,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (data.type === "upsert" && Array.isArray(data.items)) {
       const until = Number(data.readUntil) || Number(notesServer().readUntil) || 0;
-      STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], data.items, until));
+      STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], visibleNotes(data.items), until));
       const server = notesServer();
       server.unread = Number(data.unread) || 0;
       if (data.readUntil) server.readUntil = Number(data.readUntil);
@@ -18415,8 +18458,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         body.bells = cleanBells(STATE.settings.bells);
         body.bellsAt = Number(STATE.settings.bellsAt) || Date.now();
       }
+      const lockedFlag = isShortsLocked() ? "1" : "0";
       const posting = Object.keys(body).length > 0;
-      const res = await accountCall("/v1/notifications", posting ? { method: "POST", body: body } : { method: "GET" });
+      if (posting) body.shortsLocked = lockedFlag === "1" ? 1 : 0;
+      const res = await accountCall("/v1/notifications?locked=" + lockedFlag, posting ? { method: "POST", body: body } : { method: "GET" });
       if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
       applyServerNotes(res);
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
@@ -18524,7 +18569,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!json.endpoint || !json.keys) return;
       await accountCall("/v1/push/subscribe", {
         method: "PUT",
-        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0 }
+        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0, locked: isShortsLocked() ? 1 : 0 }
       });
     } catch (err) { /* in-app notes still sync */ }
   }
@@ -18554,7 +18599,28 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     updateBadge(0);
   }
 
-  window.ViktorychNotes = { beforeSignOut: beforeSignOut };
+  function onTiktokLockChanged() {
+    if (STATE.settings && STATE.data) {
+      const seen = {};
+      (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
+      (STATE.data.posts || []).forEach((post) => {
+        if (!post) return;
+        const platform = post.platform || (String(post.id || "").indexOf("tiktok:") === 0 ? "tiktok" : "");
+        if (platform !== "tiktok") return;
+        const id = String(canonicalPostId(post) || post.id || "");
+        if (id) seen[id] = true;
+        if (post.id) seen[String(post.id)] = true;
+      });
+      STATE.settings.bellSeen = Object.keys(seen).slice(-500);
+      saveSettings();
+    }
+    syncWorkerState();
+    paintBellBadge();
+    if (parseRoute().name === "notifications") render();
+    pullNotes();
+  }
+
+  window.ViktorychNotes = { beforeSignOut: beforeSignOut, lockChanged: onTiktokLockChanged };
   /* presence.js owns ViktorychPresence. A partial stand-in threw on .wrap and left a black page. */
 
   function commitBellNotes(list) {
@@ -18581,6 +18647,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showLocalNotification(note) {
+    if (noteHidden(note)) return;
     if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
     if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
     if (document.visibilityState === "visible") {
@@ -18603,6 +18670,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showPageNotification(note) {
+    if (noteHidden(note)) return;
     if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
     if (document.visibilityState === "visible") {
       showLocalNotification(note);
@@ -18629,7 +18697,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function deliverBellNotes(notes) {
-    const list = (notes || []).filter((note) => note && note.id);
+    const list = visibleNotes((notes || []).filter((note) => note && note.id));
     if (!list.length) return;
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
     const quiet = presenceDnd();
@@ -18655,6 +18723,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
     const cursor = Math.max(Number(STATE.settings.bellRead) || 0, Number(notesServer().readUntil) || 0);
     const fresh = [];
+    const parked = [];
     let markedOld = false;
     (list || posts()).forEach((post) => {
       if (!post || hiddenPost(post)) return;
@@ -18675,6 +18744,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!hit) return;
       const note = bellNoteFrom(post, hit);
       if (!note.id) return;
+      if (noteHidden(note)) {
+        parked.push(note);
+        return;
+      }
       if (!note.at || note.at <= cursor) {
         seen[note.id] = true;
         markedOld = true;
@@ -18684,7 +18757,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       fresh.push(note);
     });
     if (markedOld) STATE.settings.bellSeen = Object.keys(seen).slice(-500);
-    if (markedOld && !fresh.length) saveSettings();
+    if (markedOld && !fresh.length && !parked.length) saveSettings();
+    if (parked.length) commitBellNotes(parked);
     if (fresh.length) deliverBellNotes(fresh);
   }
 
@@ -18893,7 +18967,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       repostOff: STATE.settings.repostOff || [],
       notifyAll: !!STATE.settings.notify,
       uiLang: window.SI18n ? window.SI18n.getLang() : "en",
-      ruMode: isRuVisitor()
+      ruMode: isRuVisitor(),
+      tiktokLock: {
+        owner: signedOwner(),
+        audienceAll: (window.VIKTORYCH_ACCOUNTS || {}).tiktokAudience === "all",
+        locked: isShortsLocked(),
+        unlocked: (window.ViktorychShorts && typeof window.ViktorychShorts.unlockedList === "function") ? window.ViktorychShorts.unlockedList() : []
+      }
     });
   }
 
@@ -19428,7 +19508,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
     if (route.name === "notifications" && STATE.settings) {
       local.saveDoc("notifications", "all", {
-        notes: (STATE.settings.bellNotes || []).slice(0, 40).map((note) => ({ id: note.id, text: note.text || "", at: note.at || 0, handle: note.handle || "" })),
+        notes: visibleNotes(STATE.settings.bellNotes || []).slice(0, 40).map((note) => ({ id: note.id, text: note.text || "", at: note.at || 0, handle: note.handle || "" })),
         readThrough: Number(STATE.settings.bellRead) || 0,
         seen: STATE.settings.bellSeen || []
       });
@@ -19596,7 +19676,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         seenIds[canonicalPostId(post)] = true;
         if (post && post.id) seenIds[String(post.id)] = true;
       });
-      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post));
+      const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post) && !noteHidden(post));
       const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
       if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted" && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
