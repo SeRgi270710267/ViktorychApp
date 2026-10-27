@@ -5196,8 +5196,12 @@ html[data-privacy-cover="dms"] [data-privacy="sensitive"]::before {
   position: absolute;
   inset: 0;
   background: #000;
-  z-index: 5;
+  /* Above the fixed notifications header (z-index 5) so a real cover
+     does not leave the title visible over a black list. isolation on
+     the page keeps this layer off the nav and the menus. */
+  z-index: 40;
 }
+.notes-state { min-height: 160px; }
 html[data-privacy-select="off"] [data-privacy="sensitive"],
 html[data-privacy-select="off"] [data-privacy="sensitive"] * {
   -webkit-user-select: none !important;

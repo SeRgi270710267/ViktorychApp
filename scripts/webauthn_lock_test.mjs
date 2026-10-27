@@ -2,6 +2,7 @@
    Synthetic display name and handle only. Do not print tokens, PINs, or ids. */
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
+import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -20,7 +21,11 @@ function which(name) {
 }
 
 function chromeBin() {
-  return process.env.CHROME || which("google-chrome") || which("google-chrome-stable") || which("chromium") || which("chromium-browser");
+  const named = [process.env.CHROME, process.env.CHROME_PATH, process.env.CHROME_BIN].filter(Boolean);
+  for (const bin of named) {
+    try { statSync(bin); return bin; } catch (err) { /* try the next candidate */ }
+  }
+  return which("chrome") || which("google-chrome") || which("google-chrome-stable") || which("chromium") || which("chromium-browser");
 }
 
 const HARNESS = `<!doctype html>
