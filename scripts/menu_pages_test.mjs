@@ -261,7 +261,16 @@ function ready(view) {
   if (view === "profile") {
     const hash = location.hash || "";
     const on = hash.indexOf("#/@") === 0 || hash.indexOf("#/u/") === 0 || hash.indexOf("#/p/") === 0 || /^#\/(?:x|threads|instagram|rss|youtube|vk|discord|telegram|tiktok|app)\//.test(hash);
-    return on && (main.innerText || "").trim().length > 8;
+    const name = main.querySelector("h1.pname");
+    if (!on || !name) return false;
+    const bar = main.querySelector(".topbar");
+    const nameTop = name.getBoundingClientRect().top;
+    const barBottom = bar ? bar.getBoundingClientRect().bottom : 0;
+    if (nameTop < barBottom - 2) {
+      window.scrollTo(0, 0);
+      return false;
+    }
+    return true;
   }
   return (main.innerText || "").trim().length > 8;
 }
