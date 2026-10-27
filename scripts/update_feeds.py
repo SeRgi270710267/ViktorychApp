@@ -37,6 +37,7 @@ from adapters.common import (  # noqa: E402
     BridgeError,
     canonical_status_id,
     dedupe_posts,
+    feed_sort_key,
     document_is_bridge_error,
     items_are_only_bridge_errors,
     load_document,
@@ -1337,7 +1338,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         # real <published> time. Cutting it to the newest few drops older
         # uploads, and the next live fetch then treats them as new.
         if limit and feed.get("platform") != "youtube":
-            ranked = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)
+            ranked = sorted(posts, key=feed_sort_key)
             articles = [post for post in ranked if post.get("article")]
             rest = [post for post in ranked if not post.get("article")][: int(limit)]
             posts = articles + rest

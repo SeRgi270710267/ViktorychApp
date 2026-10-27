@@ -4050,12 +4050,12 @@ async function handleFollowImport(request, env) {
   if (gate.error) return gate.error;
   const paced = await rateHit(env, "follow-import:" + gate.row.public_id, 8, 60 * 60 * 1000);
   if (!paced.ok) return limited(paced);
-  const body = await readJson(request, 40000);
+  const body = await readJson(request, 500000);
   if (body.error) return json(400, { error: body.error });
   const incoming = Array.isArray(body.ids) ? body.ids : null;
   if (!incoming) return json(400, { error: "bad_follow" });
   const ids = [];
-  for (let i = 0; i < incoming.length && ids.length < 400; i++) {
+  for (let i = 0; i < incoming.length && ids.length < 5000; i++) {
     const id = cleanFollowId(incoming[i]);
     if (!id || id === "app:" + gate.row.public_id || ids.indexOf(id) >= 0) continue;
     if (id.indexOf("app:") === 0) {
@@ -4071,6 +4071,21 @@ async function handleFollowImport(request, env) {
   }
   const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", gate.row.public_id);
   return json(200, { ok: true, followingCount });
+}
+
+async function listFollowIds(env, followerId) {
+  const ids = [];
+  const page = 500;
+  const cap = 5000;
+  for (let offset = 0; ids.length < cap; offset += page) {
+    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC, target_id ASC LIMIT ? OFFSET ?").bind(followerId, page, offset).all();
+    const rows = (listed && listed.results) || [];
+    for (let i = 0; i < rows.length && ids.length < cap; i++) {
+      if (rows[i] && rows[i].target_id) ids.push(rows[i].target_id);
+    }
+    if (rows.length < page) break;
+  }
+  return ids;
 }
 
 async function handleFollowGet(request, env, url) {
@@ -4102,8 +4117,7 @@ async function handleFollowGet(request, env, url) {
     body.isPrivate = isPrivate;
   }
   if (!tab && subject === "app:" + gate.row.public_id) {
-    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC LIMIT 500").bind(gate.row.public_id).all();
-    body.ids = ((listed && listed.results) || []).map((row) => row.target_id);
+    body.ids = await listFollowIds(env, gate.row.public_id);
     return json(200, body);
   }
   if (!tab) return json(200, body);
