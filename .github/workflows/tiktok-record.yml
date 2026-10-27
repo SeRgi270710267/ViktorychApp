@@ -95,4 +95,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+          WORKER_DISPATCH_TOKEN: ${{ secrets.WORKER_DISPATCH_TOKEN }}
+          ACCOUNTS_API: ${{ vars.ACCOUNTS_API }}
         run: python3 scripts/tiktok_record.py --record --handle "${{ inputs.handle }}" --part "${{ inputs.part }}" --room "${{ inputs.room }}"

@@ -137,8 +137,30 @@ def scrub(text: str, secrets) -> str:
     return out
 
 
+class OwnerKeyRejected(RuntimeError):
+    """The owner-pasted token was rejected. The message does not include it."""
+
+
+def owner_token_rejected(token: str, status: int) -> bool:
+    try:
+        from owner_keys import mark_attention, material, using
+    except Exception:
+        return False
+    if not using("telegram") or material("telegram") != token:
+        return False
+    mark_attention("telegram", "unauthorized" if int(status) == 401 else "forbidden")
+    return True
+
+
 def get_bot_tokens() -> list[str]:
     raw = (os.environ.get("TELEGRAM_BOT_TOKENS") or "").strip()
+    owned = ""
+    try:
+        from owner_keys import blocked, material
+        if not blocked("telegram"):
+            owned = material("telegram")
+    except Exception:
+        owned = ""
     tokens: list[str] = []
     if raw:
         for t in re.split(r"[\s,;]+", raw):
@@ -150,6 +172,8 @@ def get_bot_tokens() -> list[str]:
     if single and ":" in single and len(single) >= 20 and "\n" not in single and "\r" not in single:
         if single not in tokens:
             tokens.append(single)
+    if owned and ":" in owned and len(owned) >= 20 and "\n" not in owned and "\r" not in owned:
+        tokens = [owned] + [item for item in tokens if item != owned]
     return tokens
 
 
@@ -1889,6 +1913,9 @@ def send_document(api_base: str, token: str, channel: str, path: Path, caption: 
         if not parsed.get("ok"):
             desc = scrub(str(parsed.get("description") or ""), current_secrets())
             code = parsed.get("error_code")
+            status = int(code or parsed.get("_status") or 0)
+            if status in (401, 403) and owner_token_rejected(token, status):
+                raise OwnerKeyRejected("owner key needs attention")
             reason = f" ({code}: {desc})" if (code or desc) else ""
             raise RuntimeError("telegram rejected a document" + reason)
         result = parsed.get("result") or {}
@@ -2052,7 +2079,17 @@ def upload_path(api_base: str, token: str, channel: str, path: Path, caption: st
             log("[telegram-backup] already saved %s" % stored_key)
             return
     active_token = next_bot(cf, state) or token
-    sent = send_document(api_base, active_token, channel, path, caption, state)
+    try:
+        sent = send_document(api_base, active_token, channel, path, caption, state)
+    except OwnerKeyRejected:
+        bots = [item for item in (cf.get("bots") or []) if item != active_token]
+        cf["bots"] = bots
+        if cf.get("bot") == active_token:
+            cf["bot"] = bots[0] if bots else ""
+        if not bots:
+            raise RuntimeError("telegram rejected the owner key")
+        active_token = next_bot(cf, state) or bots[0]
+        sent = send_document(api_base, active_token, channel, path, caption, state)
     if int(sent.get("file_size") or 0) != path.stat().st_size:
         raise RuntimeError("telegram reported a different size")
     when = int(sent.get("date") or 0)

@@ -93,6 +93,23 @@ def sensitive_allowed() -> bool:
 
 
 def credentials() -> tuple[str, str]:
+    try:
+        from owner_keys import blocked, material
+        if blocked("reddit"):
+            return "", ""
+        owned = material("reddit")
+    except Exception:
+        owned = ""
+    if owned:
+        try:
+            data = json.loads(owned)
+        except json.JSONDecodeError:
+            data = {}
+        client = str((data or {}).get("clientId") or "").strip()
+        secret = str((data or {}).get("clientSecret") or "").strip()
+        if client and secret:
+            return client, secret
+        return "", ""
     return (os.environ.get("REDDIT_CLIENT_ID") or "").strip(), (os.environ.get("REDDIT_CLIENT_SECRET") or "").strip()
 
 
@@ -137,6 +154,13 @@ def access_token(client_id: str, secret: str) -> str:
     })
     honor_limit(status, headers)
     if status != 200:
+        try:
+            from owner_keys import attention_reason, mark_attention, using
+            reason = attention_reason(status, raw)
+            if using("reddit") and (status in (401, 403) or reason):
+                mark_attention("reddit", reason or ("forbidden" if status == 403 else "unauthorized"))
+        except Exception:
+            pass
         return ""
     try:
         parsed = json.loads(raw.decode("utf-8"))
@@ -152,6 +176,14 @@ def api_get(token: str, path: str) -> dict | None:
         "User-Agent": UA,
     })
     honor_limit(status, headers)
+    try:
+        from owner_keys import attention_reason, mark_attention, using
+        reason = attention_reason(status, raw)
+        if using("reddit") and (status in (401, 403) or reason):
+            mark_attention("reddit", reason or ("forbidden" if status == 403 else "unauthorized"))
+            return None
+    except Exception:
+        pass
     if status == 429:
         status, headers, raw = _request(API + path, None, {
             "Authorization": "Bearer " + token,

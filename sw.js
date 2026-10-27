@@ -67,6 +67,7 @@ const SHELL_FILES = [
   "./music.js",
   "./music.css",
   "./accounts.js",
+  "./owner-keys.js",
   "./accounts.css",
   "./accounts.config.js",
   "./shorts.js",

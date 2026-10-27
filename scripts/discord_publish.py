@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE_FILES = (
     "index.html",
     "accounts.js",
+    "owner-keys.js",
     "accounts.css",
     "accounts.config.js",
     "shorts.js",
