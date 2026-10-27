@@ -166,7 +166,7 @@ function page(narrow) {
     cm("cm916", sandbox.frameSpec(1080, 1920, narrow), false),
     cm("cmwide", sandbox.frameSpec(4000, 1000, narrow), true)
   ].join("");
-  return `<!doctype html><html data-theme="dark"><head><meta charset="utf-8"><link rel="stylesheet" href="file://${path.join(ROOT, "styles.css")}"><link rel="stylesheet" href="file://${path.join(ROOT, "communities.css")}"></head><body>
+  return `<!doctype html><html data-theme="dark"><head><meta charset="utf-8"><link rel="stylesheet" href="file://${path.join(ROOT, "styles.css")}"><link rel="stylesheet" href="file://${path.join(ROOT, "communities.css")}"><style>.post{content-visibility:visible}</style></head><body>
 <div id="col" style="width:${narrow ? 360 : 500}px">
 ${tiles}
 ${poster}
