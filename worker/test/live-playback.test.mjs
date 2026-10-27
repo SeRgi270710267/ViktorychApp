@@ -38,7 +38,7 @@ test("previews use the lowest variant and stay off on Save-Data unless asked", (
   assert.equal(previewsAllowed("on", true, "never", "cellular"), true);
   assert.equal(previewsAllowed("auto", false, "wifi", "cellular"), false);
   assert.equal(formatBytes(2 * 1024 * 1024), "2 MB");
-  assert.equal(thumbObjectKey("Pepsi", "7699647509498710805"), "owner/live-thumbs/pepsi/7699647509498710805.mp4");
+  assert.equal(thumbObjectKey("Sampleclip", "7699647509498710805"), "owner/live-thumbs/sampleclip/7699647509498710805.mp4");
   assert.equal(thumbObjectKey("../x", "1"), "");
   assert.equal(b2Configured({}), false);
   assert.equal(b2Configured({ B2_KEY_ID: "id", B2_APP_KEY: "key", B2_BUCKET: "bucket" }), true);

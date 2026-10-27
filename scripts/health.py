@@ -50,8 +50,8 @@ NITTER_HOSTS = (
 )
 SAMPLE_X = "2112600761762717997"
 SAMPLE_YT = "xtrFOsncOeo"
-SAMPLE_IG = {"url": "https://www.instagram.com/p/DeZgzTEggQe/", "handle": "redacted_handle", "statusId": "DeZgzTEggQe", "platform": "instagram"}
-SAMPLE_THREADS = {"url": "https://www.threads.com/@redacted_handle/post/DeZtrvAEfEr", "handle": "redacted_handle", "statusId": "DeZtrvAEfEr", "platform": "threads"}
+SAMPLE_IG = {"url": "https://www.instagram.com/p/DeZgzTEggQe/", "handle": "birchlane", "statusId": "DeZgzTEggQe", "platform": "instagram"}
+SAMPLE_THREADS = {"url": "https://www.threads.com/@birchlane/post/DeZtrvAEfEr", "handle": "birchlane", "statusId": "DeZtrvAEfEr", "platform": "threads"}
 
 
 def now_iso() -> str:
@@ -114,7 +114,7 @@ def probe_fxtwitter() -> dict:
 
 def probe_nitter(base: str) -> dict:
     host = urllib.parse.urlparse(base).netloc
-    status, body = _get(base + "/redacted_handle/rss", timeout=8)
+    status, body = _get(base + "/copperlane/rss", timeout=8)
     up = _feed_ok(status, body)
     return {"id": host, "group": "X", "up": up, "detail": "nitter RSS" if up else _snip(f"HTTP {status}")}
 
@@ -137,7 +137,7 @@ def probe_piped(base: str) -> dict:
     status, body = _get(base + "/trending?region=US", timeout=8)
     up = piped_payload_ok(status, body)
     if not up:
-        status, body = _get(base + "/channel/UCXuqSBlHAE6Xw-yeJA0Tunw", timeout=8)
+        status, body = _get(base + "/channel/UCsyntheticmaple00005000", timeout=8)
         up = piped_payload_ok(status, body) and '"name"' in body
     return {"id": host, "group": "YouTube", "up": up, "detail": "piped API" if up else _snip(f"HTTP {status}"), "down": base}
 
@@ -173,7 +173,7 @@ def probe_own_x() -> dict:
 
 def probe_own_youtube() -> dict:
     try:
-        pack = fetch_youtube_comments(SAMPLE_YT, {"handle": "redacted_handle", "statusId": SAMPLE_YT, "platform": "youtube"})
+        pack = fetch_youtube_comments(SAMPLE_YT, {"handle": "northlamp", "statusId": SAMPLE_YT, "platform": "youtube"})
     except Exception as exc:
         pack = None
         detail = _snip(str(exc))
@@ -251,14 +251,14 @@ def collect() -> list:
         jobs.append(lambda base=base: probe_piped(base))
     rsshub = _rsshub_base()
     routes = (
-        ("/threads/redacted_handle", "threads/:user"),
-        ("/threads/redacted_handle/post/DeZtrvAEfEr", "threads/:user/post/:id"),
-        ("/instagram/user/redacted_handle", "instagram/user/:id"),
-        ("/youtube/community/redacted_handle", "youtube/community/:id"),
+        ("/threads/birchlane", "threads/:user"),
+        ("/threads/birchlane/post/DeZtrvAEfEr", "threads/:user/post/:id"),
+        ("/instagram/user/birchlane", "instagram/user/:id"),
+        ("/youtube/community/northlamp", "youtube/community/:id"),
     )
     for path, label in routes:
         jobs.append(lambda path=path, label=label, rsshub=rsshub: probe_rsshub(rsshub, path, label))
-    bridge = "http://localhost:8080/?action=display&bridge={bridge}&context=Username&u=redacted_handle&format=Atom"
+    bridge = "http://localhost:8080/?action=display&bridge={bridge}&context=Username&u=birchlane&format=Atom"
     for name in ("InstagramBridge", "ThreadsBridge"):
         jobs.append(lambda name=name: probe_bridge(bridge.format(bridge=name), name))
     rows = []

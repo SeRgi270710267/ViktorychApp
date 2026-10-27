@@ -4,8 +4,8 @@
     "items": [
       {
         "id": 1730797,
-        "owner_id": -22822305,
-        "from_id": -22822305,
+        "owner_id": -10000041,
+        "from_id": -10000041,
         "date": 1792306845,
         "post_type": "post",
         "text": "Новая [https://vk.com/away.php?to=https%3A%2F%2Fvk.com%2Fblog|запись в блоге] про ленту.\n#вконтакте",
@@ -18,7 +18,7 @@
             "type": "photo",
             "photo": {
               "id": 457239001,
-              "owner_id": -22822305,
+              "owner_id": -10000041,
               "text": "Обложка",
               "sizes": [
                 {"width": 200, "height": 200, "url": "https://sun1.userapi.com/vk-small.jpg"},
@@ -30,8 +30,8 @@
       },
       {
         "id": 1730700,
-        "owner_id": -22822305,
-        "from_id": -22822305,
+        "owner_id": -10000041,
+        "from_id": -10000041,
         "date": 1792200000,
         "post_type": "post",
         "text": "",
@@ -44,7 +44,7 @@
             "type": "video",
             "video": {
               "id": 456239100,
-              "owner_id": -22822305,
+              "owner_id": -10000041,
               "title": "Как устроена лента",
               "duration": 95,
               "image": [
@@ -57,8 +57,8 @@
       },
       {
         "id": 1730600,
-        "owner_id": -22822305,
-        "from_id": -22822305,
+        "owner_id": -10000041,
+        "from_id": -10000041,
         "date": 1792100000,
         "post_type": "copy",
         "text": "",
@@ -82,15 +82,15 @@
         "post_type": "post",
         "text": "Фестиваль прошёл",
         "coowners": {
-          "coowner_post_id": {"owner_id": -22822305, "post_id": 1732681},
-          "list": [{"owner_id": -220923985}, {"owner_id": -22822305}]
+          "coowner_post_id": {"owner_id": -10000041, "post_id": 1732681},
+          "list": [{"owner_id": -220923985}, {"owner_id": -10000041}]
         },
-        "header": {"title": {"source_id": -220923985, "source_ids": [-22822305, -220923985]}}
+        "header": {"title": {"source_id": -220923985, "source_ids": [-10000041, -220923985]}}
       }
     ],
     "groups": [
       {
-        "id": 22822305,
+        "id": 10000041,
         "name": "ВКонтакте",
         "screen_name": "vk",
         "type": "page",
