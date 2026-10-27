@@ -8024,10 +8024,13 @@ const here = parseRoute();
     const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
+    const findAccounts = !list.length && (tab === "following" || tab === "foryou")
+      ? `<p class="empty-action"><a class="save" href="#/feeds">${esc(tr("Find accounts to follow"))}</a></p>`
+      : "";
     const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
-    );
+    ) + findAccounts;
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
     const bar = STATE.homeFreshBar ? `<div class="home-fresh" role="progressbar" aria-label="${esc(tr("Loading"))}"><span></span></div>` : "";
     return homeHeader(tab) + bar + spaceCard + body + timelineSentinel(list.length, sorted.length);
@@ -11569,7 +11572,7 @@ const here = parseRoute();
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
-        ${optToggle("privacyEmbedShield", tr("Third-party embed shield"), tr("Blocks YouTube and external media players from loading automatically, protecting your IP address and cookies until you tap to play."), true)}
+        ${optToggle("privacyEmbedShield", tr("Third-party embed shield"), tr("Blocks YouTube and external media players from loading automatically, protecting your IP address and cookies until you tap to play."), false)}
         ${optToggle("privacyWebRTC", tr("WebRTC leak protection"), tr("Prevents browser WebRTC requests from exposing your local network and public IP address to network observers."), true)}
         ${optToggle("privacyNoReferrer", tr("Strict no-referrer"), tr("Strips referrer headers when opening external links so destination sites cannot see where you came from."), true)}
         ${optToggle("privacyStripTrackers", tr("Strip tracking parameters"), tr("Automatically cleans tracking identifiers (utm_*, fbclid, gclid, etc.) from copied and shared links."), true)}
@@ -11801,20 +11804,19 @@ if (STATE.histClear) {
       const steps = ios
         ? `<div class="install-step"><span>1</span> ${tr("Tap Share in Safari")}</div><div class="install-step"><span>2</span> ${tr("Choose Add to Home Screen")}</div><div class="install-step"><span>3</span> ${tr("Tap Add")}</div>`
         : `<p>${tr("Use the install icon in the address bar, or open the browser menu and choose Install app.")}</p>`;
-      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" data-act="stop">
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Install app"))}" data-act="stop">
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><h2>${tr("Install app")}</h2></div>
         <div class="modal-body install-sheet">${steps}</div>
       </div></div>`;
     }
     if (STATE.modal === "compose") {
-      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" data-act="stop">
+      return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Post"))}" data-act="stop">
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div></div>
         <div class="modal-body" style="display:flex;gap:12px">
           <span class="ava initials">Y</span>
-          <div style="flex:1"><textarea id="compose-text" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <div style="flex:1"><p class="phandle" id="compose-note">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
           <div class="odai-chips"><button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="compose-text" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="clear" data-field="compose-text" data-scope="post">${tr("Tone")}</button></div>
-          <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div>
-          <p class="phandle">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p></div>
+          <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div></div>
         </div></div></div>`;
     }
     if (STATE.modal === "quote") {
@@ -14535,7 +14537,21 @@ if (STATE.histClear) {
     if (act === "reload") { boot(); return; }
     if (act === "drawer") { STATE.drawer = true; render(); return; }
     if (act === "close-drawer") { STATE.drawer = false; render(); return; }
-    if (act === "compose") { STATE.composeSeed = ""; STATE.modal = "compose"; render(); return; }
+    if (act === "compose") {
+      STATE.modal = "compose";
+      const drafts = window.ViktorychLocal;
+      if (!STATE.composeSeed && drafts && drafts.readDoc) {
+        drafts.readDoc("drafts", "compose").then((saved) => {
+          const text = saved && saved.text ? String(saved.text) : "";
+          if (STATE.modal === "compose" && text && !STATE.composeSeed) {
+            STATE.composeSeed = text;
+            render();
+          }
+        }).catch(() => {});
+      }
+      render();
+      return;
+    }
     if (act === "game-share") {
       STATE.composeSeed = window.ViktorychGames && window.ViktorychGames.shareText ? window.ViktorychGames.shareText() : "";
       STATE.modal = "compose";
@@ -14718,7 +14734,10 @@ if (STATE.histClear) {
       render();
       return;
     }
-    if (act === "close-modal" || act === "close-remove") { STATE.modal = null; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return; }
+    if (act === "close-modal" || act === "close-remove") {
+      if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
+      STATE.modal = null; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return;
+    }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
       const feed = feedById(id) || catalogAccount("x", el.dataset.handle || "");
@@ -14747,19 +14766,21 @@ if (STATE.histClear) {
     if (act === "compose-post") {
       const seed = STATE.composeSeed || "";
       STATE.modal = null;
-      STATE.composeSeed = "";
       if (window.ViktorychCommunities && window.ViktorychCommunities.takeCompose && window.ViktorychCommunities.takeCompose(seed)) {
+        STATE.composeSeed = "";
         render();
         return;
       }
+      if (seed.trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
       if (!navigator.onLine && seed.trim()) {
         queueOffline({ type: "reply", id: "compose", on: true, body: seed });
-        if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
+        STATE.composeSeed = "";
         render();
         return;
       }
+      STATE.composeSeed = "";
       render();
-      toast(tr("Posts come from your feeds"));
+      toast(seed.trim() ? tr("Saved on this device. This reader doesn’t publish.") : tr("Posts come from your feeds"));
       return;
     }
     if (act === "close-tab-menu") {
@@ -16217,6 +16238,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
           event.preventDefault();
           box.focus();
           return;
+        }
+      }
+    }
+    if (event.key === "Tab" && STATE.modal && !document.querySelector("#account-layer .acct-modal")) {
+      const modal = document.querySelector(".modal[role='dialog']");
+      if (modal) {
+        const items = [...modal.querySelectorAll("button, a[href], input, select, textarea")].filter((el) => !el.disabled && el.tabIndex !== -1);
+        if (items.length) {
+          const first = items[0];
+          const last = items[items.length - 1];
+          const active = document.activeElement;
+          if (event.shiftKey && (active === first || !modal.contains(active))) {
+            event.preventDefault();
+            last.focus();
+            return;
+          }
+          if (!event.shiftKey && (active === last || !modal.contains(active))) {
+            event.preventDefault();
+            first.focus();
+            return;
+          }
         }
       }
     }
