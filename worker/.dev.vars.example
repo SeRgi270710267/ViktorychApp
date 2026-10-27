@@ -2,7 +2,7 @@
 # Do not put a production claim code or pepper here, and do not commit .dev.vars.
 OWNER_CLAIM_CODE=local-dev-claim-code
 ACCOUNT_PEPPER=local-dev-pepper
-ALLOWED_ORIGINS=https://viktorychgroup.github.io,http://127.0.0.1:8080,http://localhost:8080
+ALLOWED_ORIGINS=https://viktorychgroup.github.io,https://viktorych-app.pages.dev,http://127.0.0.1:8080,http://localhost:8080
 PBKDF2_ITERATIONS=1000
 # Optional. When set, /v1/x/... requires this value in the X-Viktorych-Token
 # header. Leave it out to keep the cached X mirror open.
