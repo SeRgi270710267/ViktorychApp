@@ -71,17 +71,24 @@ def host_of(url: str) -> str:
     return (urllib.parse.urlparse(url or "").hostname or "").lower()
 
 
-def prefetch(jobs: dict, workers: int = 4) -> dict:
-    """Run callables in a bounded pool. A raised job comes back as its exception."""
+def prefetch(jobs: dict, workers: int = 4, timeout: float | None = None) -> dict:
+    """Run callables in a bounded pool. A raised job comes back as its exception.
+
+    timeout is the per-job wait. A source that ignores its socket timeout is
+    recorded as an error so the rest of the catalog can finish.
+    """
     if not jobs:
         return {}
     limit = max(1, min(int(workers or 4), len(jobs)))
     out: dict = {}
-    with ThreadPoolExecutor(max_workers=limit) as pool:
+    pool = ThreadPoolExecutor(max_workers=limit)
+    try:
         futures = {key: pool.submit(job) for key, job in jobs.items()}
         for key, future in futures.items():
             try:
-                out[key] = future.result()
+                out[key] = future.result(timeout=timeout)
             except Exception as exc:  # the caller falls back to a serial fetch
                 out[key] = exc
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
     return out

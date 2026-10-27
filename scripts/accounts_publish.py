@@ -169,6 +169,42 @@ def upload(key: str, payload: bytes) -> None:
     _request(url, payload, "PUT")
 
 
+def remote_exists(key: str) -> bool:
+    """True when R2 already has this object. A miss or a transport error is False.
+
+    HEAD is enough when the API allows it. A 405/501 falls through to a
+    one-byte GET so a shell deploy still sees the live catalog.
+    """
+    account = _account()
+    token = _token()
+    if not account or not token:
+        return False
+    quoted = urllib.parse.quote(key, safe="/")
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/viktorych-data/objects/{quoted}"
+    attempts = (
+        ("HEAD", {}),
+        ("GET", {"Range": "bytes=0-0"}),
+    )
+    for method, extra in attempts:
+        headers = {"Authorization": "Bearer " + token}
+        headers.update(extra)
+        req = urllib.request.Request(url, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=20) as res:
+                status = int(getattr(res, "status", 200))
+                res.read(1)
+                return 200 <= status < 300
+        except urllib.error.HTTPError as err:
+            if err.code == 404:
+                return False
+            if method == "HEAD" and err.code in (400, 403, 405, 501):
+                continue
+            return False
+        except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+            return False
+    return False
+
+
 def _js_string(text: str, name: str) -> str:
     found = re.search(rf'["\']?{name}["\']?\s*:\s*"([^"]*)"', text)
     return found.group(1) if found else ""
@@ -276,7 +312,7 @@ def mark_wall() -> None:
     (folder / "on").write_text("1\n", encoding="utf-8")
 
 
-def publish(site: Path, source: Path) -> int:
+def publish(site: Path, source: Path, preserve_remote: bool = False) -> int:
     if not _token() or not _account():
         return unlocked("Cloudflare credentials are not set;")
     try:
@@ -300,12 +336,23 @@ def publish(site: Path, source: Path) -> int:
     files = collect(source)
     if "feeds.json" not in files:
         return unlocked("feeds.json is missing;")
+    keep_remote = False
+    if preserve_remote:
+        try:
+            keep_remote = remote_exists("feeds.json")
+        except (urllib.error.URLError, TimeoutError, OSError):
+            keep_remote = False
     try:
-        for key in sorted(files):
-            upload(key, files[key].read_bytes())
-        owner = source / "owner" / "tiktok.json"
-        if owner.is_file():
-            upload("owner/tiktok.json", owner.read_bytes())
+        if keep_remote:
+            # The feed refresh writes the catalog straight to R2. A shell
+            # deploy must not replace that copy with the older git seed.
+            print("remote catalog kept; this deploy updates the shell")
+        else:
+            for key in sorted(files):
+                upload(key, files[key].read_bytes())
+            owner = source / "owner" / "tiktok.json"
+            if owner.is_file():
+                upload("owner/tiktok.json", owner.read_bytes())
     except (urllib.error.URLError, TimeoutError, OSError):
         return unlocked("data upload failed;")
     turnstile = (os.environ.get("TURNSTILE_SITEKEY") or "").strip()
@@ -344,6 +391,7 @@ def main() -> int:
     parser.add_argument("--site", default="_site")
     parser.add_argument("--source", default=".")
     parser.add_argument("--repair", action="store_true")
+    parser.add_argument("--preserve-remote", action="store_true")
     args = parser.parse_args()
     site = Path(args.site)
     if args.repair:
@@ -352,7 +400,7 @@ def main() -> int:
             print("login wall is off; leaving this deploy public")
             return 0
         return repair(site, prior)
-    return publish(site, Path(args.source))
+    return publish(site, Path(args.source), preserve_remote=args.preserve_remote)
 
 
 if __name__ == "__main__":
