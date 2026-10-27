@@ -356,36 +356,6 @@
     return isShortsLocked() && !isTiktokUnlocked(entity.handle || entity.account);
   }
 
-  function noteViewer() {
-    const cfg = window.VIKTORYCH_ACCOUNTS || {};
-    return {
-      owner: signedOwner(),
-      audienceAll: cfg.tiktokAudience === "all",
-      locked: isShortsLocked(),
-      unlocked: function (handle) { return isTiktokUnlocked(handle); }
-    };
-  }
-
-  function noteHidden(note) {
-    if (!note) return false;
-    const view = noteViewer();
-    if (window.TiktokLock && typeof window.TiktokLock.tiktokNoteHidden === "function") {
-      return window.TiktokLock.tiktokNoteHidden(note, view);
-    }
-    const platform = note.platform || (note.feedId && String(note.feedId).indexOf("tiktok:") === 0 ? "tiktok" : "") || (note.hash && String(note.hash).indexOf("#/tiktok/") === 0 ? "tiktok" : "");
-    if (platform !== "tiktok") return false;
-    if (!view.owner && !view.audienceAll) return true;
-    if (view.locked === false) return false;
-    return !isTiktokUnlocked(note.handle || note.account);
-  }
-
-  function visibleNotes(list) {
-    if (window.TiktokLock && typeof window.TiktokLock.visibleNotes === "function") {
-      return window.TiktokLock.visibleNotes(list || [], noteViewer());
-    }
-    return (list || []).filter((note) => !noteHidden(note));
-  }
-
   function withUnreadTitle(text) {
     const base = String(text || "").replace(/^\((?:\d+|\d+\+|20\+)\)\s+/, "");
     const count = bellUnread();
@@ -6885,6 +6855,38 @@ const here = parseRoute();
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
     if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "friends") return { name: "connections", platform, handle, tab: rest[0], query };
     return { name: "profile", platform, handle, query };
+  }
+
+  function noteViewer() {
+    const cfg = (typeof window !== "undefined" && window.VIKTORYCH_ACCOUNTS) || {};
+    return {
+      owner: typeof signedOwner === "function" ? signedOwner() : false,
+      audienceAll: cfg.tiktokAudience === "all",
+      locked: typeof isShortsLocked === "function" ? isShortsLocked() : true,
+      unlocked: function (handle) {
+        return typeof isTiktokUnlocked === "function" ? isTiktokUnlocked(handle) : false;
+      }
+    };
+  }
+
+  function noteHidden(note) {
+    if (!note) return false;
+    const view = noteViewer();
+    if (window.TiktokLock && typeof window.TiktokLock.tiktokNoteHidden === "function") {
+      return window.TiktokLock.tiktokNoteHidden(note, view);
+    }
+    const platform = note.platform || (note.feedId && String(note.feedId).indexOf("tiktok:") === 0 ? "tiktok" : "") || (note.hash && String(note.hash).indexOf("#/tiktok/") === 0 ? "tiktok" : "");
+    if (platform !== "tiktok") return false;
+    if (!view.owner && !view.audienceAll) return true;
+    if (view.locked === false) return false;
+    return typeof isTiktokUnlocked === "function" ? !isTiktokUnlocked(note.handle || note.account) : true;
+  }
+
+  function visibleNotes(list) {
+    if (window.TiktokLock && typeof window.TiktokLock.visibleNotes === "function") {
+      return window.TiktokLock.visibleNotes(list || [], noteViewer());
+    }
+    return (list || []).filter((note) => !noteHidden(note));
   }
 
   function bellUnread() {
