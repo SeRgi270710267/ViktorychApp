@@ -147,6 +147,7 @@
   <link rel="stylesheet" href="stories.css">
   <link rel="stylesheet" href="music.css">
   <link rel="stylesheet" href="accounts.css">
+  <link rel="stylesheet" href="storage.css">
   <link rel="stylesheet" href="yt-player.css">
   <link rel="stylesheet" href="scores.css">
   <link rel="stylesheet" href="weather.css">
@@ -211,7 +212,7 @@
   <div id="x-tooltip" class="x-tooltip" role="tooltip" aria-hidden="true"></div>
   <div id="pull" aria-hidden="true"><span class="spin"></span></div>
   <button id="new-posts" type="button" hidden data-i18n="New posts">New posts</button>
-  <div id="offline" hidden data-i18n="You're offline. Showing saved posts.">You're offline. Showing saved posts.</div>
+  <div id="offline" hidden role="status" data-i18n="Offline - showing saved">Offline - showing saved</div>
   <div id="viewer" hidden></div>
   <div id="stories" hidden role="dialog" aria-modal="true" data-i18n-aria="Stories" aria-label="Stories"></div>
   <div id="toast" hidden></div>
@@ -242,6 +243,7 @@
   <script src="owner-keys.js" defer></script>
   <script src="yt-player.js" defer></script>
   <script src="update.js" defer></script>
+  <script src="storage.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>
