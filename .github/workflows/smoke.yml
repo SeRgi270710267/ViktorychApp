@@ -49,3 +49,10 @@ jobs:
 
       - name: YouTube embed plays muted on desktop and mobile
         run: node scripts/yt_embed_smoke.mjs --root _site
+
+      - name: On-device AI
+        run: |
+          node scripts/device_test.js
+          node scripts/translate_test.js
+          node scripts/ondevice_ai_test.js
+          node scripts/dock_test.js

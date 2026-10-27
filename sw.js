@@ -61,6 +61,8 @@ const SHELL_FILES = [
   "./device.js",
   "./device-search.js",
   "./device-ai.js",
+  "./ondevice-ai.js",
+  "./ondevice-ai-worker.js",
   "./device-media.js",
   "./device-record.js",
   "./logo/v.svg",
