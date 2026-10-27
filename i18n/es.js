@@ -1388,5 +1388,16 @@ SI18n.addPack("es", {
   "Your account was deleted": "Tu cuenta fue eliminada",
   "This account and the data tied to it are gone from this device.": "Esta cuenta y los datos vinculados a ella ya no están en este dispositivo.",
   "That handle is not available yet.": "Ese nombre todavía no está disponible.",
-  "Deletion did not finish. Try again.": "La eliminación no terminó. Inténtalo de nuevo."
+  "Deletion did not finish. Try again.": "La eliminación no terminó. Inténtalo de nuevo.",
+  "Add another key": "Añadir otra clave",
+  "Optional label": "Etiqueta opcional",
+  "Move up": "Subir",
+  "Move down": "Bajar",
+  "Key label": "Etiqueta de la clave",
+  "Keys are backups. One key is used at a time, highest priority first.": "Las claves son de reserva. Se usa una a la vez, primero la de mayor prioridad.",
+  "Slowing down": "Yendo más lento",
+  "This service is slowing down. The same key stays in use.": "Este servicio va más lento. Se sigue usando la misma clave.",
+  "{service} is slowing down. The same key stays in use.": "{service} va más lento. Se sigue usando la misma clave.",
+  "The key is no longer signed in.": "La clave ya no tiene sesión.",
+  "This service already has enough backup keys.": "Este servicio ya tiene suficientes claves de reserva."
 });

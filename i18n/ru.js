@@ -1388,5 +1388,16 @@ SI18n.addPack("ru", {
   "Your account was deleted": "Ваш аккаунт удалён",
   "This account and the data tied to it are gone from this device.": "Этого аккаунта и связанных с ним данных больше нет на этом устройстве.",
   "That handle is not available yet.": "Это имя пока нельзя занять.",
-  "Deletion did not finish. Try again.": "Удаление не завершилось. Попробуйте ещё раз."
+  "Deletion did not finish. Try again.": "Удаление не завершилось. Попробуйте ещё раз.",
+  "Add another key": "Добавить ещё ключ",
+  "Optional label": "Необязательная метка",
+  "Move up": "Выше",
+  "Move down": "Ниже",
+  "Key label": "Метка ключа",
+  "Keys are backups. One key is used at a time, highest priority first.": "Ключи — запасные. За раз используется один, сначала с наибольшим приоритетом.",
+  "Slowing down": "Замедление",
+  "This service is slowing down. The same key stays in use.": "Сервис замедляется. Тот же ключ остаётся в работе.",
+  "{service} is slowing down. The same key stays in use.": "{service} замедляется. Тот же ключ остаётся в работе.",
+  "The key is no longer signed in.": "Ключ больше не в сессии.",
+  "This service already has enough backup keys.": "У этого сервиса уже достаточно запасных ключей."
 });
