@@ -18,6 +18,8 @@
   var form = {};
   var errorText = "";
   var legalTitle = "";
+  var legalKey = "";
+  var authBusy = false;
   var painted = "";
   var pushTimer = 0;
   var pushing = false;
@@ -322,14 +324,24 @@
   }
   function field(name, label, type, max) {
     var value = form[name] == null ? "" : String(form[name]);
+    if (name === "accountNumber") value = grouped(value.replace(/\D/g, ""));
     var id = "acct-" + name;
     var limit = name === "accountNumber" ? 16 : max;
     var maxAttr = "";
     if (name === "accountNumber") maxAttr = ' data-max="16" inputmode="numeric"';
     else if (limit) maxAttr = ' maxlength="' + limit + '" data-max="' + limit + '"';
     var count = limit ? '<span class="acct-count">' + fieldCount(name, value, limit) + "</span>" : "";
-    var autocomplete = name === "accountNumber" || name === "claimCode" ? "off" : name === "website" ? "url" : name === "location" ? "address-level2" : "nickname";
-    return '<div class="acct-field"><input id="' + id + '" name="' + esc(name) + '" type="' + (type || "text") + '"' + maxAttr + ' placeholder=" " autocomplete="' + autocomplete + '" value="' + esc(value) + '"><label for="' + id + '">' + esc(label) + "</label>" + count + "</div>";
+    var autocomplete = name === "accountNumber" || name === "claimCode" ? "off" : name === "website" ? "url" : name === "location" ? "address-level2" : name === "displayName" ? "name" : name === "handle" ? "username" : "nickname";
+    var quiet = name === "accountNumber" || name === "handle" || name === "claimCode" ? ' spellcheck="false" autocapitalize="none" autocorrect="off"' : "";
+    var invalid = errorText ? ' aria-invalid="true" aria-describedby="acct-error"' : "";
+    return '<div class="acct-field"><input id="' + id + '" name="' + esc(name) + '" type="' + (type || "text") + '"' + maxAttr + quiet + invalid + ' placeholder=" " autocomplete="' + autocomplete + '" value="' + esc(value) + '"><label for="' + id + '">' + esc(label) + "</label>" + count + "</div>";
+  }
+  function errorHtml() {
+    return '<p class="acct-error" id="acct-error"' + (errorText ? ' role="alert"' : "") + ">" + esc(errorText) + "</p>";
+  }
+  function nextButton(act, label, extraDisabled) {
+    var disabled = authBusy || extraDisabled;
+    return '<button class="acct-next" type="button" data-acct="' + act + '"' + (disabled ? " disabled" : "") + (authBusy ? ' aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : label) + "</button>";
   }
   function textArea(name, label, max) {
     var value = form[name] == null ? "" : String(form[name]);
@@ -362,19 +374,21 @@
   }
   function landing() {
     var year = String(new Date().getFullYear());
-    var foot = [tr("About"), tr("Help Center"), tr("Terms of Service"), tr("Privacy Policy"), tr("Cookie Policy"), tr("Accessibility"), tr("Blog"), tr("Developers")].map(function (label) {
-      return '<button type="button" data-acct="legal" data-title="' + esc(label) + '">' + esc(label) + "</button>";
+    var pages = [["about", tr("About")], ["help", tr("Help Center")], ["terms", tr("Terms of Service")], ["privacy", tr("Privacy Policy")], ["cookie", tr("Cookie Policy")], ["accessibility", tr("Accessibility")], ["blog", tr("Blog")], ["developers", tr("Developers")]];
+    var foot = pages.map(function (page) {
+      return '<button type="button" data-acct="legal" data-legal="' + page[0] + '" data-title="' + esc(page[1]) + '">' + esc(page[1]) + "</button>";
     }).join("");
-    return '<div class="x-shell"><div class="x-land"><div class="x-land-logo">' + mark("x-mark") + '</div><div class="x-land-copy"><h1>' + esc(tr("Happening now")) + "</h1><h2>" + esc(tr("Join today.")) + '</h2><button class="acct-fill" type="button" data-acct="signup">' + esc(tr("Create account")) + '</button><p class="acct-legal">' + esc(tr("By signing up, you agree to the Terms of Service and Privacy Policy.")) + "</p><h3>" + esc(tr("Already have an account?")) + '</h3><button class="acct-line" type="button" data-acct="login">' + esc(tr("Sign in")) + '</button></div></div><footer class="x-foot">' + foot + '<button type="button" data-acct="login">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
+    var legal = '<p class="acct-legal">' + esc(tr("By signing up, you agree to the")) + ' <button type="button" data-acct="legal" data-legal="terms" data-title="' + esc(tr("Terms of Service")) + '">' + esc(tr("Terms of Service")) + "</button> " + esc(tr("and the")) + ' <button type="button" data-acct="legal" data-legal="privacy" data-title="' + esc(tr("Privacy Policy")) + '">' + esc(tr("Privacy Policy")) + "</button>.</p>";
+    return '<div class="x-shell"><div class="x-land"><div class="x-land-logo">' + mark("x-mark") + '</div><div class="x-land-copy"><h1>' + esc(tr("Happening now")) + "</h1><h2>" + esc(tr("Join today.")) + '</h2><button class="acct-fill" type="button" data-acct="signup">' + esc(tr("Create account")) + "</button>" + legal + '<h3>' + esc(tr("Already have an account?")) + '</h3><button class="acct-line" type="button" data-acct="login">' + esc(tr("Sign in")) + '</button></div></div><footer class="x-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
   }
   function signupBody() {
     if (step === 2) {
       var pending = readPending();
       var number = pending ? grouped(pending.accountNumber) : "";
-      var numberNote = form.passkey
+var numberNote = form.passkey
         ? tr("Save this account number. You can sign in with a passkey later. The number is an optional backup.")
         : tr("This number is shown once. Save it now. It is the only way back into this account.");
-      return '<p class="acct-sub">' + esc(numberNote) + '</p><div class="acct-number">' + esc(number) + '</div><div class="acct-row"><button type="button" data-acct="copy">' + esc(tr("Copy")) + '</button><button type="button" data-acct="download">' + esc(tr("Download")) + '</button></div><label class="acct-check"><input name="saved" type="checkbox"' + (form.saved ? " checked" : "") + "><span>" + esc(tr("I saved my account number")) + '</span></label><p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="saved"' + (form.saved ? "" : " disabled") + ">" + esc(tr("Next")) + "</button>";
+      return '<p class="acct-sub">' + esc(numberNote) + '</p><div class="acct-number" role="status">' + esc(number) + '</div><div class="acct-row"><button type="button" data-acct="copy">' + esc(tr("Copy")) + '</button><button type="button" data-acct="download">' + esc(tr("Download")) + '</button></div><label class="acct-check"><input name="saved" type="checkbox"' + (form.saved ? " checked" : "") + "><span>" + esc(tr("I saved my account number")) + "</span></label>" + errorHtml() + nextButton("saved", tr("Next"), !form.saved);
     }
     if (step === 1) {
       var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : '<button class="acct-quiet" type="button" data-acct="claim">' + esc(tr("Have a claim code?")) + "</button>";
@@ -382,11 +396,11 @@
         ? esc(tr("Choose a handle or leave blank to assign an anonymous identifier."))
         : esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters."));
       var passkeyStep = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
-        ? '<button class="acct-next" type="button" data-acct="passkey-signup">' + esc(tr("Create a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + '</p><button class="acct-quiet" type="button" data-acct="next">' + esc(tr("Continue without a passkey")) + "</button>"
-        : '<button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
+        ? '<button class="acct-next" type="button" data-acct="passkey-signup"' + (authBusy ? " disabled" : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Create a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + '</p><button class="acct-quiet" type="button" data-acct="next"' + (authBusy ? " disabled" : "") + ">" + esc(tr("Continue without a passkey")) + "</button>"
+        : nextButton("next", tr("Next"));
       return '<p class="acct-sub">' + handleSub + "</p>" +
         field("handle", form.profileLess ? tr("Handle (optional)") : tr("Choose a handle"), "text", 15) +
-        claim + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + "</p>" + passkeyStep;
+        claim + turnstileHtml() + errorHtml() + passkeyStep;
     }
     var subText = form.profileLess
       ? esc(tr("Your account will have no public profile. Interactions will be anonymous."))
@@ -395,13 +409,14 @@
     return '<p class="acct-sub">' + subText + "</p>" +
       field("displayName", form.profileLess ? tr("Name (optional)") : tr("Name"), "text", 50) +
       profRow +
-      '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="next">' + esc(tr("Next")) + "</button>";
+      errorHtml() + nextButton("next", tr("Next"));
   }
   function loginBody() {
-    var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
-      ? '<div class="acct-field"><input id="acct-passkey-user" name="passkeyUser" type="text" placeholder=" " autocomplete="username webauthn" value=""><label for="acct-passkey-user">' + esc(tr("Sign in with a passkey")) + '</label></div><button class="acct-next" type="button" data-acct="passkey-login">' + esc(tr("Sign in with a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + "</p>"
+var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
+      ? '<div class="acct-field"><input id="acct-passkey-user" name="passkeyUser" type="text" placeholder=" " autocomplete="username webauthn" value=""><label for="acct-passkey-user">' + esc(tr("Sign in with a passkey")) + '</label></div><button class="acct-next" type="button" data-acct="passkey-login"' + (authBusy ? " disabled" : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Sign in with a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + "</p>"
       : "";
-    return passkey + field("accountNumber", tr("Account number")) + turnstileHtml() + '<p class="acct-error">' + esc(errorText) + '</p><button class="acct-next" type="button" data-acct="do-login">' + esc(tr("Log in")) + '</button><p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
+    var numberHint = passkey ? "" : '<p class="acct-sub">' + esc(tr("There is no password to reset. The account number from sign-up is the only way back in.")) + "</p>";
+    return passkey + field("accountNumber", tr("Account number")) + numberHint + turnstileHtml() + errorHtml() + nextButton("do-login", tr("Log in")) + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
       '<p class="acct-switch"><button type="button" data-acct="open-restore">' + esc(tr("Restore session from another device")) + '</button></p>';
   }
   function emergencyBody() {
@@ -503,7 +518,51 @@
     return '<div class="acct-back"><div class="acct-modal acct-edit" role="dialog" aria-modal="true" aria-label="' + esc(title) + '"><div class="acct-head acct-edit-head"><button class="icon-btn" type="button" data-acct="close" aria-label="' + esc(tr("Close")) + '">' + closeIcon() + '</button><h1>' + esc(title) + '</h1><button class="acct-save" type="button" data-acct="crop-apply">' + esc(tr("Apply")) + '</button></div><div class="acct-body acct-edit-body"><div class="acct-crop-stage" data-kind="' + (form.cropKind === "banner" ? "banner" : "avatar") + '"><img alt="" src="' + esc(form.cropUrl || "") + '"></div><input class="acct-zoom" name="cropZoom" type="range" min="1" max="3" step="0.01" value="' + esc(String(form.cropZoom || 1)) + '" aria-label="' + esc(title) + '"><p class="acct-error">' + esc(errorText) + "</p></div></div></div>";
   }
   function legalBody() {
-    return '<p class="acct-sub">' + esc(tr("Not affiliated with X.")) + "</p>";
+    var copy = {
+      about: tr("This app is a reader for posts from feeds you follow. Not affiliated with X."),
+      help: tr("Sign in with the 16-digit account number from sign-up. It is shown once. There is no password to reset."),
+      terms: tr("The account number is your login. The timeline shows posts from feeds. Not affiliated with X."),
+      privacy: tr("The account number is stored as a hash. There is no email on the account. Settings stay on this device."),
+      cookie: tr("This app does not use tracking cookies. The session and settings stay in this browser."),
+      accessibility: tr("Fields have labels. Tab moves between them, Enter continues, and Escape closes a dialog."),
+      blog: tr("There is no separate blog. What you see here is the app."),
+      developers: tr("After you sign in, Settings can export and import the data on this device.")
+    };
+    return '<p class="acct-sub">' + esc(copy[legalKey] || tr("Not affiliated with X.")) + "</p>";
+  }
+  function wallTheme() {
+    var mode = document.documentElement.getAttribute("data-theme") || "lightsout";
+    if (mode !== "default" && mode !== "dim") mode = "lightsout";
+    return mode;
+  }
+  function applyWallTheme(mode) {
+    if (mode !== "default" && mode !== "dim") mode = "lightsout";
+    document.documentElement.setAttribute("data-theme", mode);
+    var colors = { default: "#FFFFFF", dim: "#15202B", lightsout: "#000000" };
+    var metas = document.querySelectorAll('meta[name="theme-color"]');
+    for (var i = 0; i < metas.length; i++) metas[i].setAttribute("content", colors[mode]);
+    try {
+      var key = "viktorychapp-settings-v1";
+      var raw = localStorage.getItem(key);
+      var parsed = raw ? JSON.parse(raw) : {};
+      if (!parsed || typeof parsed !== "object") parsed = {};
+      parsed.appearance = mode;
+      localStorage.setItem(key, JSON.stringify(parsed));
+    } catch (err) { /* the theme still shows on this page */ }
+  }
+  function prefsBody() {
+    var lang = readLang();
+    var theme = wallTheme();
+    function langBtn(code, label) {
+      return '<button class="outline' + (lang === code ? " on" : "") + '" type="button" data-acct="lang" data-lang="' + code + '">' + esc(label) + "</button>";
+    }
+    function themeBtn(mode, label) {
+      return '<button class="outline' + (theme === mode ? " on" : "") + '" type="button" data-acct="appearance" data-mode="' + mode + '">' + esc(label) + "</button>";
+    }
+    return '<p class="acct-sub">' + esc(tr("Language and appearance stay on this device.")) + "</p>" +
+      '<div class="theme-row" role="group" aria-label="' + esc(tr("Display language")) + '">' + langBtn("en", "English") + langBtn("es", "Español") + langBtn("ru", "Русский") + "</div>" +
+      '<div class="theme-row" role="group" aria-label="' + esc(tr("Appearance")) + '">' + themeBtn("default", tr("Default")) + themeBtn("dim", tr("Dim")) + themeBtn("lightsout", tr("Lights out")) + "</div>" +
+      '<p class="acct-sub">' + esc(tr("Account settings are available after you sign in.")) + "</p>";
   }
   function deletedFlag() {
     try { return sessionStorage.getItem(DELETED_KEY) === "1"; } catch (err) { return false; }
@@ -533,6 +592,7 @@
     if (blocking()) html += landing();
     if (view === "signup") html += modal(tr("Create your account"), signupBody());
     else if (view === "login") html += modal(tr("Sign in to {app}", { app: appName() }), loginBody());
+    else if (view === "prefs") html += modal(tr("Settings"), prefsBody());
     else if (view === "emergency") html += modal(tr("Emergency Offline Access"), emergencyBody());
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
     else if (view === "edit") html += editModal(editBody());
@@ -541,13 +601,28 @@
     else if (view === "unfriend") html += modal(tr("Unfriend @{handle}?", { handle: unfriendTarget ? unfriendTarget.handle : "" }), '<p class="acct-sub">' + esc(tr("This removes @{handle} from your friends.", { handle: unfriendTarget ? unfriendTarget.handle : "" })) + '</p><button class="acct-next acct-danger" type="button" data-friend-act="unfriend-confirm" style="background:#f4212e;border-color:#f4212e;color:#fff">' + esc(tr("Remove Friend")) + '</button><button class="acct-line" type="button" data-acct="close" style="width:100%;margin-top:12px">' + esc(tr("Cancel")) + '</button>');
     else if (view === "link-identity") html += modal(tr("Link social profile"), linkIdentityBody());
     else if (view === "leave") html += modal(tr("Save your account number"), '<p class="acct-sub">' + esc(tr("Leave without saving the account number?")) + '</p><button class="acct-next" type="button" data-acct="abandon">' + esc(tr("Close")) + '</button><button class="acct-line" type="button" data-acct="stay" style="width:100%;margin-top:12px">' + esc(tr("Back")) + "</button>");
+    var previous = document.activeElement;
+    var focusName = "";
+    var focusAct = "";
+    var caret = null;
+    if (previous && previous.closest && previous.closest("#account-layer")) {
+      focusName = previous.name || "";
+      focusAct = previous.getAttribute("data-acct") || "";
+      if (typeof previous.selectionStart === "number") caret = previous.selectionStart;
+    }
     root.innerHTML = html;
-    var mark = (view || "") + ":" + step + ":" + (form.claimOpen ? "1" : "0");
-    if (mark !== painted) {
-      painted = mark;
-      if (view !== "edit" && view !== "crop") {
-        var input = form.claimOpen ? root.querySelector('input[name="claimCode"]') : root.querySelector(".acct-field input, .acct-field textarea");
-        if (input) input.focus();
+    var mark = (view || "") + ":" + step + ":" + (form.claimOpen ? "1" : "0") + ":" + legalKey;
+    var focusEl = null;
+    if (focusName) focusEl = root.querySelector('[name="' + focusName.replace(/[^A-Za-z]/g, "") + '"]');
+    if (!focusEl && focusAct) focusEl = root.querySelector('[data-acct="' + focusAct.replace(/[^a-z-]/g, "") + '"]');
+    if (!focusEl && mark !== painted && view !== "edit" && view !== "crop") {
+      focusEl = form.claimOpen ? root.querySelector('input[name="claimCode"]') : root.querySelector(".acct-field input, .acct-field textarea");
+    }
+    painted = mark;
+    if (focusEl && view !== "edit" && view !== "crop") {
+      focusEl.focus();
+      if (caret != null && focusName && focusEl.setSelectionRange) {
+        try { focusEl.setSelectionRange(caret, caret); } catch (err) { /* a button has no caret */ }
       }
     }
     if (view === "crop" && !layoutCrop()) requestAnimationFrame(layoutCrop);
@@ -621,9 +696,14 @@
       document.querySelectorAll("audio, video").forEach(function (el) { el.pause(); });
     } catch (e) {}
     document.documentElement.setAttribute("data-wall", "1");
+    var queued = window.__VIKTORYCH_AUTH;
+    window.__VIKTORYCH_AUTH = "";
     if (readPending()) {
       view = "signup";
       step = 2;
+    } else if (queued === "signup" || queued === "login" || queued === "prefs") {
+      view = queued;
+      step = 0;
     }
     tellSW(false);
     paint();
@@ -962,7 +1042,7 @@
     } catch (err) { /* the widget is optional */ }
     return "";
   }
-  function signupPayload() {
+function signupPayload() {
     errorText = "";
     var handle = String(form.handle || "").trim().replace(/^@/, "");
     if (!handle && form.profileLess) {
@@ -971,7 +1051,8 @@
     form.handle = handle;
     var checked = window.HandleSkeleton ? window.HandleSkeleton.inspectHandle(handle) : { ok: true, owner: false };
     if (!checked.ok) {
-      errorText = errorMessage(checked.error === "reserved" ? "handle_reserved" : "invalid_handle");
+      if (!handle) errorText = tr("Choose a handle.");
+      else errorText = errorMessage(checked.error === "reserved" ? "handle_reserved" : "invalid_handle");
       paint();
       return null;
     }
@@ -989,7 +1070,19 @@
       turnstileToken: turnstileToken()
     };
   }
+  function offlineMessage() {
+    return tr("Can't reach the server. Check your connection and try again.");
+  }
+  function finishPending() {
+    if (authBusy || !form.saved) return;
+    var pending = readPending();
+    if (!pending) return;
+    authBusy = true;
+    paint();
+    commitSession(pending.token, pending.account);
+  }
   function nextSignup() {
+    if (authBusy) return;
     errorText = "";
     if (step === 0) {
       var name = String(form.displayName || "").trim();
@@ -1005,29 +1098,47 @@
       paint();
       return;
     }
-    var body = signupPayload();
+var body = signupPayload();
     if (!body) return;
+    authBusy = true;
+    paint();
     api("/v1/signup", { method: "POST", body: body }).then(function (res) {
-      if (res.status !== 201 || !res.token || !res.accountNumber) {
-        if (res.error === "claim_required") form.claimOpen = true;
-        errorText = errorMessage(res.error);
+      authBusy = false;
+      if (res.status === 201 && res.token && res.accountNumber) {
+        writePending({ token: res.token, accountNumber: res.accountNumber, account: res.account });
+        view = "signup";
+        step = 2;
+        form.saved = false;
+        errorText = "";
         paint();
         return;
       }
-      writePending({ token: res.token, accountNumber: res.accountNumber, account: res.account });
-      step = 2;
-      form.saved = false;
-      errorText = "";
+      if (view !== "signup") return;
+      if (res.error === "claim_required") form.claimOpen = true;
+      if (res.status === 429) errorText = tr("Too many attempts. Try again later.");
+      else errorText = errorMessage(res.error);
       paint();
     }).catch(function () {
-      errorText = tr("Servers unreachable. Try Emergency Offline Access.");
+      authBusy = false;
+      if (view !== "signup") return;
+      errorText = offlineMessage();
       paint();
     });
   }
   function doLogin() {
+    if (authBusy) return;
     var digits = String(form.accountNumber || "").replace(/\D/g, "");
     errorText = "";
+    if (digits.length !== 16) {
+      errorText = tr("Account numbers are 16 digits.");
+      paint();
+      return;
+    }
+    authBusy = true;
+    paint();
     api("/v1/login", { method: "POST", body: { accountNumber: digits, turnstileToken: turnstileToken() } }).then(function (res) {
+      authBusy = false;
+      if (view !== "login") return;
       if (res.status !== 200 || !res.token) {
         if (res.status === 429) {
           errorText = tr("Too many attempts. Try again later.");
@@ -1039,7 +1150,9 @@
       }
       commitSession(res.token, res.account);
     }).catch(function () {
-      errorText = tr("Something went wrong. Try again.");
+      authBusy = false;
+      if (view !== "login") return;
+      errorText = offlineMessage();
       paint();
     });
   }
@@ -1076,14 +1189,18 @@
     });
   }
   function doPasskeySignup() {
+    if (authBusy) return;
     if (!window.ViktorychPasskeys || !window.ViktorychPasskeys.supported()) {
       nextSignup();
       return;
     }
     var body = signupPayload();
     if (!body) return;
+    authBusy = true;
+    paint();
     api("/v1/webauthn/signup/options", { method: "POST", body: body }).then(function (res) {
       if (!res || res.status !== 200 || !res.publicKey) {
+        authBusy = false;
         if (res && res.error === "claim_required") form.claimOpen = true;
         errorText = errorMessage((res && res.error) || "passkey_failed");
         paint();
@@ -1097,6 +1214,7 @@
       });
     }).then(function (res) {
       if (!res) return;
+      authBusy = false;
       if (res.status !== 201 || !res.token || !res.accountNumber) {
         errorText = errorMessage(res.error || "passkey_failed");
         paint();
@@ -1109,6 +1227,7 @@
       errorText = "";
       paint();
     }).catch(function () {
+      authBusy = false;
       errorText = tr("Could not create a passkey.");
       paint();
     });
@@ -2066,7 +2185,7 @@
     if (window.ViktorychAccounts && window.ViktorychAccounts.profilePostsHtml) pack = window.ViktorychAccounts.profilePostsHtml(account) || pack;
     var count = String(pack.count || 0);
 
-    var postsBody = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(tr("Posts from this account will show up here.")) + "</p></div>");
+    var postsBody = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(mine ? tr("Add a photo and bio from Edit profile. Posts here come from feeds you follow.") : tr("Posts from this account will show up here.")) + "</p></div>");
     var friendsBody = friendsSectionHtml(account);
     var body = activeTab === "friends" ? friendsBody : postsBody;
 
@@ -2608,7 +2727,14 @@
     else if (act === "claim") { form.claimOpen = true; paint(); }
     else if (act === "copy") copyNumber();
     else if (act === "download") downloadNumber();
-    else if (act === "saved") { if (form.saved) { var pending = readPending(); if (pending) commitSession(pending.token, pending.account); } }
+    else if (act === "saved") finishPending();
+    else if (act === "prefs") { view = "prefs"; errorText = ""; paint(); }
+    else if (act === "lang") {
+      try { localStorage.setItem("viktorychapp-lang-user-picked", "1"); } catch (err) { /* the choice still applies for this page */ }
+      if (window.SI18n && window.SI18n.setLang) window.SI18n.setLang(acct.dataset.lang || "en");
+      else paint();
+    }
+    else if (act === "appearance") { applyWallTheme(acct.dataset.mode || "lightsout"); paint(); }
     else if (act === "abandon") abandon();
     else if (act === "edit") openAuth("edit");
     else if (act === "save-profile") saveProfile();
@@ -2663,7 +2789,7 @@
     else if (act === "add-channel") addBackupChannel();
     else if (act === "remove-channel") removeBackupChannel(acct.dataset.index);
     else if (act === "logout-all") logout(true);
-    else if (act === "legal") { legalTitle = acct.dataset.title || tr("About"); view = "legal"; paint(); }
+    else if (act === "legal") { legalKey = acct.dataset.legal || "about"; legalTitle = acct.dataset.title || tr("About"); view = "legal"; paint(); }
   }
   var federationState = { loaded: false, loading: false, enabled_ap: false, enabled_nostr: false, nostr_pubkey: "", ap_handle: "", nostr_nip05: "" };
   function loadFederationSettings() {
@@ -2895,14 +3021,34 @@
     } else if (view === "restore") {
       doRestoreSession();
     } else if (view === "signup") {
-      if (step === 2) {
-        if (form.saved) {
-          var pending = readPending();
-          if (pending) commitSession(pending.token, pending.account);
-        }
-      } else {
-        nextSignup();
+      if (step === 2) finishPending();
+      else nextSignup();
+    }
+  }, true);
+  document.addEventListener("keydown", function (event) {
+    var modal = document.querySelector("#account-layer .acct-modal");
+    if (!modal) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeAuth();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    var items = Array.prototype.filter.call(modal.querySelectorAll("button, a[href], input, select, textarea"), function (el) {
+      return !el.disabled && el.tabIndex !== -1 && el.getAttribute("aria-hidden") !== "true";
+    });
+    if (!items.length) return;
+    var first = items[0];
+    var last = items[items.length - 1];
+    var active = document.activeElement;
+    if (event.shiftKey) {
+      if (active === first || !modal.contains(active)) {
+        event.preventDefault();
+        last.focus();
       }
+    } else if (active === last || !modal.contains(active)) {
+      event.preventDefault();
+      first.focus();
     }
   }, true);
   window.addEventListener("hashchange", function () {

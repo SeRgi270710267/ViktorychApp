@@ -22,6 +22,7 @@ import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
+import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { logError } from "./log.js";
@@ -936,6 +937,17 @@ function cleanBottomNavSync(raw) {
 }
 
 const DEVICE_FEATURES = ["direct", "search", "translate", "ai", "media", "record", "storage", "sync"];
+const AI_FEATURE_KEYS = ["detect", "spam", "summarize", "compose", "semantic", "translateLocal", "semanticLocal", "dmServer", "dmAuto"];
+
+function cleanAiFeatures(raw) {
+  const src = raw && raw.aiFeatures && typeof raw.aiFeatures === "object" ? raw.aiFeatures : null;
+  if (!src) return undefined;
+  const out = {};
+  AI_FEATURE_KEYS.forEach((id) => {
+    if (typeof src[id] === "boolean") out[id] = src[id];
+  });
+  return Object.keys(out).length ? out : undefined;
+}
 const PEER_UPLOAD_CAPS = [32768, 65536, 131072, 262144];
 
 function cleanDevicePerf(raw) {
@@ -960,6 +972,7 @@ function cleanDevicePerf(raw) {
     autoLight: raw.autoLight !== false,
     webllm: raw.webllm === true && raw.webllmAccepted === true,
     webllmAccepted: raw.webllmAccepted === true,
+    aiFeatures: cleanAiFeatures(raw),
     peerMedia: raw.peerMedia === "on" || raw.peerMedia === "off" ? raw.peerMedia : "auto",
     peerUploadCap: cap,
     peerShareWhileWatching: raw.peerShareWhileWatching !== false
@@ -2024,6 +2037,41 @@ function publicMediaHostOk(hostname) {
   return PUBLIC_MEDIA_HOST.test(String(hostname || ""));
 }
 
+function twimgVideoHost(hostname) {
+  return /(^|\.)video\.twimg\.com$/i.test(String(hostname || ""));
+}
+
+function publicMediaIsVideo(parsed, type) {
+  const path = (parsed && parsed.pathname) || "";
+  const host = (parsed && parsed.hostname) || "";
+  if (twimgVideoHost(host)) return true;
+  if (/\.(?:mp4|m4s|webm|m3u8|m4v|mov|ts)(?:$|\?)/i.test(path)) return true;
+  if (/^video\//i.test(String(type || ""))) return true;
+  return false;
+}
+
+// X video bytes stay on the original file. The relay may fetch them, but
+// Cloudflare must not cache that response, and the bytes are not re-encoded.
+// X-Frame-Options from the upstream response is copied unchanged. The tweet
+// embed itself is never requested through this route. Other public images
+// keep the short cache. Any other video file is also left out of the cache.
+export function publicMediaPolicy(hostname) {
+  if (twimgVideoHost(hostname)) {
+    return {
+      video: true,
+      cf: { cacheTtl: 0, cacheEverything: false },
+      cacheControl: "private, no-store",
+      cdnCacheControl: "no-store"
+    };
+  }
+  return {
+    video: false,
+    cf: { cacheTtl: 120, cacheEverything: true },
+    cacheControl: "public, max-age=120, s-maxage=120",
+    cdnCacheControl: "public, max-age=120"
+  };
+}
+
 async function handlePublicMediaProxy(request, env, url) {
   const target = url.searchParams.get("url") || "";
   let parsed = null;
@@ -2031,19 +2079,21 @@ async function handlePublicMediaProxy(request, env, url) {
   if (!parsed || parsed.protocol !== "https:" || parsed.username || parsed.password || !publicMediaHostOk(parsed.hostname)) {
     return json(400, { error: "bad_url" });
   }
+  const policy = publicMediaPolicy(parsed.hostname);
   const headers = new Headers();
   headers.set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
   headers.set("accept", "image/*,video/*,*/*");
-  headers.set("referer", parsed.origin + "/");
+  if (!policy.video) headers.set("referer", parsed.origin + "/");
   const range = request.headers.get("range") || "";
   if (/^bytes=\d*-\d*$/.test(range)) headers.set("range", range);
+  const videoRequest = publicMediaIsVideo(parsed, "");
   let upstream = null;
   try {
     upstream = await fetch(parsed.toString(), {
       headers,
       redirect: "follow",
       signal: AbortSignal.timeout(10000),
-      cf: { cacheTtl: 604800, cacheEverything: true }
+      cf: (policy.video || videoRequest) ? { cacheTtl: 0, cacheEverything: false } : policy.cf
     });
   } catch (err) {
     return json(502, { error: "upstream" });
@@ -2063,8 +2113,16 @@ async function handlePublicMediaProxy(request, env, url) {
   if (contentRange) respHeaders.set("content-range", contentRange);
   const acceptRanges = upstream.headers.get("accept-ranges");
   if (acceptRanges) respHeaders.set("accept-ranges", acceptRanges);
-  respHeaders.set("cache-control", "public, max-age=86400, s-maxage=604800");
-  respHeaders.set("cdn-cache-control", "public, max-age=604800");
+  const videoBody = policy.video || videoRequest || publicMediaIsVideo(parsed, respHeaders.get("content-type") || "");
+  if (videoBody) {
+    respHeaders.set("cache-control", "private, no-store");
+    respHeaders.set("cdn-cache-control", "no-store");
+  } else {
+    respHeaders.set("cache-control", policy.cacheControl);
+    respHeaders.set("cdn-cache-control", policy.cdnCacheControl);
+  }
+  const frameOptions = upstream.headers.get("x-frame-options");
+  if (frameOptions) respHeaders.set("x-frame-options", frameOptions);
   respHeaders.set("x-content-type-options", "nosniff");
   respHeaders.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
   return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
@@ -3359,27 +3417,6 @@ async function requireOwner(request, env) {
   if (!row) return { error: json(401, { error: "unauthorized" }) };
   if (row.owner !== 1) return { error: json(403, { error: "forbidden" }) };
   return { row };
-}
-
-function rememberHandle(found, seen, name) {
-  const clean = String(name || "").trim().replace(/^@/, "");
-  if (!/^[A-Za-z0-9._]{2,24}$/.test(clean)) return;
-  const key = clean.toLowerCase();
-  if (seen.has(key)) return;
-  seen.add(key);
-  found.push(clean);
-}
-
-async function unlockedHandles(env) {
-  const found = [];
-  const seen = new Set();
-  String((env && env.TIKTOK_UNLOCKED) || "").split(/[\s,]+/).forEach((part) => rememberHandle(found, seen, part));
-  const doc = await readJsonObject(env, "owner/tiktok-unlocked.json");
-  const list = doc && (doc.handles || doc.unlocked || []);
-  if (Array.isArray(list)) {
-    list.forEach((item) => rememberHandle(found, seen, typeof item === "string" ? item : item && item.handle));
-  }
-  return found;
 }
 
 async function handleTikTokUnlocked(request, env) {
