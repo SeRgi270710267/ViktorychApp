@@ -11411,7 +11411,56 @@ const here = parseRoute();
     return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${noteBody(note)}${partial}${image}</div></div></a></article>`;
   }
 
+  function notesSignedIn() {
+    const accounts = window.ViktorychAccounts;
+    return !!(accounts && accounts.token && accounts.token());
+  }
+
+  function notesErrorBox() {
+    return `<div class="notes-state error-box" data-notes-state="error"><h2>${esc(tr("Notifications aren’t available"))}</h2><p>${esc(tr("Reload the page."))}</p><button class="retry" type="button" data-act="notes-retry">${esc(tr("Retry"))}</button></div>`;
+  }
+
+  function notesSkeleton() {
+    const rows = [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
+    return `<div class="notes-state" data-notes-state="loading">${rows}</div>`;
+  }
+
+  function notesEmpty(active, current) {
+    const block = (!active || active === "all")
+      ? emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."))
+      : emptyBlock(tr("Nothing in {name} yet", { name: current ? noteTabLabel(current) : tr("the current tab") }), tr("New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All."));
+    return `<div class="notes-state" data-notes-state="empty">${block}</div>`;
+  }
+
+  function ensureNotesLoad() {
+    if (!notesSignedIn()) {
+      notesPhase = "off";
+      return;
+    }
+    if (notesPhase === "idle" || notesPhase === "off") {
+      notesPhase = "loading";
+      Promise.resolve().then(() => pullNotes());
+    }
+  }
+
+  function notesListHtml(notes, active, current) {
+    if (notes.length) {
+      const rows = [];
+      notes.forEach((note) => {
+        try {
+          const row = noteRow(note);
+          if (row) rows.push(row);
+        } catch (err) { /* one bad row does not blank the list */ }
+      });
+      if (rows.length) return `<div class="notes notes-state" data-notes-state="items">${rows.join("")}</div>`;
+    }
+    if (notesSignedIn() && (notesPhase === "loading" || notesPhase === "idle")) return notesSkeleton();
+    if (notesSignedIn() && notesPhase === "error") return notesErrorBox();
+    return notesEmpty(active, current);
+  }
+
   function notificationsView(route) {
+    ensureNotesLoad();
     const active = settleNoteTab(route || parseRoute());
     markNoteTabRead(active);
     const tabs = visibleNoteTabs();
@@ -11419,14 +11468,10 @@ const here = parseRoute();
     const notes = current ? notesForTab(current) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button><button type="button" class="show-more odai-btn" data-act="odai-catch" data-scope="notification">${tr("Catch me up")}</button>`;
+    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
-    let body = "";
-    if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
-    else if (!notes.length) body = emptyBlock(tr("Nothing in {name} yet", { name: current ? noteTabLabel(current) : tr("the current tab") }), tr("New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All."));
-    else body = `<div class="notes">${notes.map(noteRow).join("")}</div>`;
     const xBanner = window.ViktorychXCompose && window.ViktorychXCompose.mentionsBanner ? window.ViktorychXCompose.mentionsBanner() : "";
-    return head + xBanner + body;
+    return head + xBanner + notesListHtml(notes, active, current);
   }
 
   function openFeedTabEditor(id, presetFeed) {
@@ -13747,6 +13792,13 @@ if (STATE.histClear) {
       return lazySkeleton(tr("TV"));
     }
     if (route.name === "status" && route.id && STATE.shared && STATE.shared[String(route.id)]) return statusView(route);
+    if (route.name === "notifications") {
+      try {
+        return notificationsView(route);
+      } catch (err) {
+        return pageHead(tr("Notifications")) + `<div class="notes-state error-box" data-notes-state="error"><h2>${esc(tr("Notifications aren’t available"))}</h2><p>${esc(tr("Reload the page."))}</p><button class="retry" type="button" data-act="notes-retry">${esc(tr("Retry"))}</button></div>`;
+      }
+    }
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
@@ -13772,13 +13824,6 @@ if (STATE.histClear) {
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
-    if (route.name === "notifications") {
-      try {
-        return notificationsView(route);
-      } catch (err) {
-        return pageHead(tr("Notifications")) + `<div class="error-box"><h2>${tr("Notifications aren’t available")}</h2><p>${tr("Reload the page.")}</p><button class="retry" type="button" data-act="reload">${tr("Retry")}</button></div>`;
-      }
-    }
     if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
     if (route.name === "messages") return notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
@@ -14853,6 +14898,12 @@ if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor)
       return;
     }
     if (act === "reload") { boot(); return; }
+    if (act === "notes-retry") {
+      notesPhase = notesSignedIn() ? "loading" : "off";
+      render();
+      pullNotes();
+      return;
+    }
     if (act === "drawer") { STATE.drawer = true; render(); return; }
     if (act === "close-drawer") { STATE.drawer = false; render(); return; }
     if (act === "compose") {
@@ -19254,8 +19305,28 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   let noteSyncTimer = 0;
   let notePages = 0;
   let noteApplying = false;
+  let notesPhase = "idle";
+  let notesAgain = false;
   let hubPoll = 0;
   let channelBound = false;
+
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("timeout")), ms);
+      Promise.resolve(promise).then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      }, (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  function finishNotes(phase) {
+    notesPhase = phase;
+    if (parseRoute().name === "notifications") render();
+  }
 
   function scheduleNoteSync() {
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
@@ -19385,11 +19456,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   async function pullNotes() {
-    const accounts = window.ViktorychAccounts;
-    if (!accounts || !accounts.token || !accounts.token() || noteApplying) return;
+    if (!notesSignedIn()) {
+      if (notesPhase !== "off") finishNotes("off");
+      return;
+    }
+    if (noteApplying) {
+      notesAgain = true;
+      return;
+    }
     noteApplying = true;
+    if (notesPhase !== "ready") notesPhase = "loading";
     const sent = notePending();
     let again = false;
+    let failed = false;
     try {
       const acked = {};
       noteAcked().forEach((id) => { acked[id] = true; });
@@ -19416,8 +19495,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (posting) body.shortsLocked = lockedFlag === "1" ? 1 : 0;
       const since = Number(notesServer().cursor) || 0;
       const path = "/v1/notifications?locked=" + lockedFlag + (since ? "&since=" + encodeURIComponent(String(since)) : "");
-      const res = await accountCall(path, posting ? { method: "POST", body: body } : { method: "GET" });
-      if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
+      const res = await withTimeout(accountCall(path, posting ? { method: "POST", body: body } : { method: "GET" }), 12000);
+      if (!res || res.status !== 200 || !Array.isArray(res.items)) failed = true;
+      else {
+      notesPhase = "ready";
       applyServerNotes(res);
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
       const nowPending = notePending();
@@ -19444,9 +19525,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!nowPending.items.length) delete nowPending.items;
       }
       writeNotePending(nowPending);
-    } catch (err) { /* the next visible fetch tries again */ }
+      }
+    } catch (err) { failed = true; }
     finally { noteApplying = false; }
-    if (again) pullNotes();
+    if (failed && notesPhase !== "ready") finishNotes("error");
+    if (again || notesAgain) {
+      notesAgain = false;
+      pullNotes();
+    }
   }
 
   function channelOpen() {
