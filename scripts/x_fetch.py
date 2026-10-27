@@ -11,6 +11,8 @@ update_feeds.build().
 from __future__ import annotations
 
 import random
+import threading
+import time
 import urllib.error
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
@@ -71,19 +73,44 @@ def host_of(url: str) -> str:
     return (urllib.parse.urlparse(url or "").hostname or "").lower()
 
 
+# Set only on a pool thread. A job that outlives future.result() must stop
+# on its own, or the interpreter waits for that thread at exit.
+_JOB_DEADLINE = threading.local()
+
+
+def job_expired() -> bool:
+    """True when this pool job has used the wait prefetch() allowed."""
+    limit = getattr(_JOB_DEADLINE, "limit", 0.0) or 0.0
+    return bool(limit) and time.monotonic() > limit
+
+
 def prefetch(jobs: dict, workers: int = 4, timeout: float | None = None) -> dict:
     """Run callables in a bounded pool. A raised job comes back as its exception.
 
     timeout is the per-job wait. A source that ignores its socket timeout is
-    recorded as an error so the rest of the catalog can finish.
+    recorded as an error so the rest of the catalog can finish. The worker
+    also sees that wait via job_expired() so it does not keep fetching after
+    the caller has moved on.
     """
     if not jobs:
         return {}
     limit = max(1, min(int(workers or 4), len(jobs)))
     out: dict = {}
+
+    def bounded(job):
+        def inner():
+            if timeout:
+                _JOB_DEADLINE.limit = time.monotonic() + float(timeout)
+            try:
+                return job()
+            finally:
+                _JOB_DEADLINE.limit = 0.0
+
+        return inner
+
     pool = ThreadPoolExecutor(max_workers=limit)
     try:
-        futures = {key: pool.submit(job) for key, job in jobs.items()}
+        futures = {key: pool.submit(bounded(job)) for key, job in jobs.items()}
         for key, future in futures.items():
             try:
                 out[key] = future.result(timeout=timeout)

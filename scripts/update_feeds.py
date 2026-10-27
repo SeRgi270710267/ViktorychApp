@@ -49,7 +49,7 @@ from adapters.common import (  # noqa: E402
 from meta_media import refresh_saved  # noqa: E402
 from site_paths import user_agent  # noqa: E402
 from x_guard import assert_not_x_api, auth_cookie_header, open_url, proxy_token_header  # noqa: E402
-from x_fetch import MAX_ATTEMPTS, host_of, is_retryable, prefetch, retry_delay  # noqa: E402
+from x_fetch import MAX_ATTEMPTS, host_of, is_retryable, job_expired, prefetch, retry_delay  # noqa: E402
 
 UA = user_agent()
 
@@ -353,6 +353,11 @@ def over_deadline() -> bool:
     return bool(limit) and time.monotonic() > limit
 
 
+def _stop_fetch() -> bool:
+    """A serial source or an abandoned prefetch job must not keep the runner."""
+    return over_deadline() or job_expired()
+
+
 def load_http_cache() -> None:
     """Restore ETags from disk, then from R2. Bodies are not stored."""
     global _HTTP_CACHE
@@ -493,6 +498,8 @@ def _fetch_one(url: str, adapter_name: str, feed: dict, errors: list, attempts: 
     """Read and parse one URL, retrying a rate limit or a server error once."""
     last = None
     for attempt in range(max(1, attempts)):
+        if _stop_fetch():
+            return None, None
         try:
             payload = read_source(url)
             return payload, accept_feed(adapter_name, payload, feed)
@@ -509,7 +516,7 @@ def _fetch_one(url: str, adapter_name: str, feed: dict, errors: list, attempts: 
         except Exception as exc:
             last = exc
             errors.append(f"{url}: {exc}")
-            if attempt + 1 < attempts and is_retryable(exc):
+            if attempt + 1 < attempts and is_retryable(exc) and not _stop_fetch():
                 delay = retry_delay(attempt, getattr(exc, "headers", None))
                 print(f"[retry] {feed.get('id')}: {url}: {exc} in {delay:g}s", file=sys.stderr)
                 time.sleep(delay)
@@ -1486,15 +1493,21 @@ def main() -> None:
         try:
             from own_fetch import write_fallbacks
 
-            count = write_fallbacks(doc["posts"])
-            save_document(out, doc)
-            print(f"[fallback] wrote {count}")
+            if over_deadline():
+                print("[fallback] skipped; refresh budget spent", file=sys.stderr)
+            else:
+                count = write_fallbacks(doc["posts"])
+                save_document(out, doc)
+                print(f"[fallback] wrote {count}")
         except Exception as exc:
             print(f"[fallback] {exc}", file=sys.stderr)
         try:
             from health import write_status
 
-            write_status()
+            if over_deadline():
+                print("[health] skipped; refresh budget spent", file=sys.stderr)
+            else:
+                write_status()
         except Exception as exc:
             print(f"[health] {exc}", file=sys.stderr)
         if video_failed is not None:
