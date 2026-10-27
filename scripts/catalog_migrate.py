@@ -45,12 +45,14 @@ SECRET_NAMES = (
     "TIKTOK_TRACKED",
     "TIKTOK_UNLOCKED",
 )
-OWNER_HANDLE_RE = re.compile(r"""^[ \t]*const OWNER_HANDLE = "([^"\\]+)"\s*;?\s*$""", re.M)
-OWNER_GITHUB_RE = re.compile(r"""^[ \t]*const OWNER_GITHUB = "([^"\\]+)"\s*;?\s*$""", re.M)
+_JS_DQ = r'"((?:\\.|[^"\\])*)"'
+OWNER_HANDLE_RE = re.compile(rf"""^[ \t]*const OWNER_HANDLE = {_JS_DQ}\s*;?\s*$""", re.M)
+OWNER_GITHUB_RE = re.compile(rf"""^[ \t]*const OWNER_GITHUB = {_JS_DQ}\s*;?\s*$""", re.M)
 TRACKED_RE = re.compile(r"""^[ \t]*TRACKED = \[([^\]]*)\]""", re.M)
 UNLOCKED_RE = re.compile(r"""var unlockedAccounts = \[([^\]]*)\]""")
-QUOTED_RE = re.compile(r'"([^"\\]+)"')
+QUOTED_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
 WORKER_NAME = "viktorych-accounts"
+_JS_SIMPLE = {"n": "\n", "r": "\r", "t": "\t", "b": "\b", "f": "\f", "\\": "\\", '"': '"', "'": "'", "/": "/"}
 
 
 def _git(root: Path, args: list[str]) -> bytes | None:
@@ -90,6 +92,33 @@ def newest_usable(root: Path, key: str) -> bytes | None:
     return None
 
 
+def _js_unescape(raw: str) -> str:
+    """Decode a JavaScript double-quoted literal body. The result is not logged."""
+    out: list[str] = []
+    i = 0
+    while i < len(raw):
+        if raw[i] != "\\" or i + 1 >= len(raw):
+            out.append(raw[i])
+            i += 1
+            continue
+        nxt = raw[i + 1]
+        if nxt == "u" and i + 6 <= len(raw):
+            hexes = raw[i + 2 : i + 6]
+            if re.fullmatch(r"[0-9a-fA-F]{4}", hexes):
+                out.append(chr(int(hexes, 16)))
+                i += 6
+                continue
+        if nxt == "x" and i + 4 <= len(raw):
+            hexes = raw[i + 2 : i + 4]
+            if re.fullmatch(r"[0-9a-fA-F]{2}", hexes):
+                out.append(chr(int(hexes, 16)))
+                i += 4
+                continue
+        out.append(_JS_SIMPLE.get(nxt, nxt))
+        i += 2
+    return "".join(out)
+
+
 def _newest_pattern(root: Path, path: str, pattern: re.Pattern[str]) -> str:
     for rev in git_log(root, path):
         blob = git_show(root, rev, path)
@@ -98,7 +127,7 @@ def _newest_pattern(root: Path, path: str, pattern: re.Pattern[str]) -> str:
         match = pattern.search(blob.decode("utf-8", "replace"))
         if not match:
             continue
-        value = match.group(1).strip()
+        value = _js_unescape(match.group(1)).strip()
         if value:
             return value
     return ""
@@ -112,7 +141,8 @@ def _newest_list(root: Path, path: str, pattern: re.Pattern[str]) -> list[str]:
         match = pattern.search(blob.decode("utf-8", "replace"))
         if not match:
             continue
-        items = [item.strip() for item in QUOTED_RE.findall(match.group(1)) if item.strip()]
+        items = [_js_unescape(item).strip() for item in QUOTED_RE.findall(match.group(1))]
+        items = [item for item in items if item]
         if items:
             return items
     return []
@@ -244,7 +274,23 @@ def migrate(root: Path, *, get, put, secret_list=None, secret_put=None, catalog_
     print(f"[migrate] secrets set {set_n}, already present {already}")
     if missing:
         print(f"[migrate] secrets not derived {missing}")
-        return 1
+    return 0
+
+
+def dry_run(root: Path) -> int:
+    """Count history without writing R2 or Worker secrets."""
+    candidates_n = candidates_b = absent = 0
+    for key in history_paths(root):
+        blob = newest_usable(root, key)
+        if blob is None:
+            absent += 1
+            continue
+        candidates_n += 1
+        candidates_b += len(blob)
+    derived = derived_secrets(root)
+    print(f"[migrate] dry-run candidates {candidates_n} objects, {candidates_b} bytes")
+    print(f"[migrate] absent {absent}")
+    print(f"[migrate] secrets derivable {len(derived)}")
     return 0
 
 
@@ -277,8 +323,9 @@ def selftest() -> int:
         _run_git(root, "init", "-q", "-b", "main")
         (root / "feeds.json").write_bytes(good_feed)
         (root / "shared").mkdir()
+        escaped_handle = "".join(f"\\u{ord(ch):04x}" for ch in handle)
         (root / "shared" / "handle-skeleton.js").write_text(
-            f'const OWNER_HANDLE = "{handle}";\n', encoding="utf-8"
+            f'const OWNER_HANDLE = "{escaped_handle}";\n', encoding="utf-8"
         )
         (root / "worker" / "src").mkdir(parents=True)
         (root / "worker" / "src" / "account-delete.js").write_text(
@@ -358,6 +405,9 @@ def selftest() -> int:
         if _sha256(handle) not in secrets["OWNER_ID_SHA256"] or _sha256(github) not in secrets["OWNER_GITHUB_SHA256"]:
             print("owner hashes were not derived")
             return 1
+        if derived.get("OWNER_HANDLE") != handle:
+            print("an escaped assignment was not decoded")
+            return 1
         before = dict(store)
         buf = io.StringIO()
         with redirect_stdout(buf):
@@ -368,6 +418,42 @@ def selftest() -> int:
         if "orbitfox" in buf.getvalue():
             print("the second log included a name")
             return 1
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            dry = dry_run(root)
+        dry_text = buf.getvalue()
+        if dry != 0 or "dry-run candidates " not in dry_text or "secrets derivable 6" not in dry_text:
+            print("dry-run counts were wrong")
+            return 1
+        for banned in (handle, github, "orbitfox", "sampleclip", "lockclip", "sampleforum"):
+            if banned in dry_text:
+                print("dry-run log included a name")
+                return 1
+        bare = root / "bare"
+        bare.mkdir()
+        _run_git(bare, "init", "-q", "-b", "main")
+        (bare / "feeds.json").write_bytes(good_feed)
+        _run_git(bare, "add", ".")
+        _run_git(bare, "commit", "-q", "-m", "feed")
+        bare_store: dict[str, bytes] = {}
+
+        def bare_get(key: str):
+            return bare_store.get(key)
+
+        def bare_put(key: str, payload: bytes) -> bool:
+            bare_store[key] = bytes(payload)
+            return True
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            underived = migrate(bare, get=bare_get, put=bare_put, secret_list=lambda: set(), secret_put=lambda name, value: False)
+        underived_text = buf.getvalue()
+        if underived != 0 or "secrets not derived 6" not in underived_text or "stored " not in underived_text:
+            print("an underived secret failed a successful copy")
+            return 1
+        if handle in underived_text or "orbitfox" in underived_text:
+            print("underived log included a name")
+            return 1
     print("catalog migrate ok")
     return 0
 
@@ -376,6 +462,8 @@ def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if "--selftest" in args:
         return selftest()
+    if "--dry-run" in args:
+        return dry_run(ROOT)
     catalog_only = "--catalog-only" in args
     from tiktok_sync import cloudflare_env, r2_get, r2_put
 
