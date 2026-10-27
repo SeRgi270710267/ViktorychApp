@@ -37,6 +37,7 @@ from adapters.common import (  # noqa: E402
     BridgeError,
     canonical_status_id,
     dedupe_posts,
+    feed_sort_key,
     document_is_bridge_error,
     items_are_only_bridge_errors,
     load_document,
@@ -680,6 +681,112 @@ def image_kind(data: bytes) -> str:
     return ""
 
 
+def image_size(data: bytes) -> tuple[int, int]:
+    """Width and height from image headers. The file is not decoded or re-encoded."""
+    if not data:
+        return 0, 0
+    if data.startswith(b"\x89PNG\r\n\x1a\n") and len(data) >= 24 and data[12:16] == b"IHDR":
+        return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+    if (data.startswith(b"GIF87a") or data.startswith(b"GIF89a")) and len(data) >= 10:
+        return int.from_bytes(data[6:8], "little"), int.from_bytes(data[8:10], "little")
+    if data.startswith(b"RIFF") and len(data) >= 30 and data[8:12] == b"WEBP" and data[12:16] == b"VP8X":
+        width = 1 + int.from_bytes(data[24:27], "little")
+        height = 1 + int.from_bytes(data[27:30], "little")
+        return width, height
+    if data.startswith(b"\xff\xd8"):
+        i = 2
+        while i + 8 < len(data):
+            if data[i] != 0xFF:
+                i += 1
+                continue
+            while i < len(data) and data[i] == 0xFF:
+                i += 1
+            if i >= len(data):
+                break
+            marker = data[i]
+            i += 1
+            if marker in (0xD8, 0xD9) or 0xD0 <= marker <= 0xD7:
+                continue
+            if i + 2 > len(data):
+                break
+            length = int.from_bytes(data[i:i + 2], "big")
+            if length < 2:
+                break
+            if marker in (0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF):
+                if i + 7 <= len(data):
+                    height = int.from_bytes(data[i + 3:i + 5], "big")
+                    width = int.from_bytes(data[i + 5:i + 7], "big")
+                    return width, height
+                break
+            i += length
+    return 0, 0
+
+
+def stored_media_size(path: Path) -> tuple[int, int]:
+    """Probe a stored file with image headers, then ffprobe. Nothing is re-encoded."""
+    if not path.is_file():
+        return 0, 0
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(512 * 1024)
+    except OSError:
+        return 0, 0
+    width, height = image_size(head)
+    if width > 0 and height > 0:
+        return width, height
+    if head.startswith(b"\xff\xd8"):
+        try:
+            width, height = image_size(path.read_bytes())
+        except OSError:
+            width, height = 0, 0
+        if width > 0 and height > 0:
+            return width, height
+    return _probe(path)
+
+
+def stamp_media_dimensions(posts, root: Path | None = None) -> int:
+    """Fill missing width/height from stored media. Remote URLs are left for the browser."""
+    root = root or ROOT
+    changed = 0
+
+    def one(item: dict) -> None:
+        nonlocal changed
+        try:
+            width = int(item.get("width") or 0)
+            height = int(item.get("height") or 0)
+        except (TypeError, ValueError):
+            width, height = 0, 0
+        if width > 0 and height > 0:
+            return
+        for field in ("url", "poster"):
+            url = str(item.get(field) or "")
+            if not url.startswith("media/") or ".." in url:
+                continue
+            found_w, found_h = stored_media_size(root / url)
+            if found_w > 0 and found_h > 0:
+                item["width"] = found_w
+                item["height"] = found_h
+                changed += 1
+                return
+
+    def walk(post) -> None:
+        if not isinstance(post, dict):
+            return
+        for item in post.get("media") or []:
+            if isinstance(item, dict):
+                one(item)
+        quoted = post.get("quoted")
+        if isinstance(quoted, dict):
+            walk(quoted)
+        parent = post.get("replyParent")
+        if isinstance(parent, dict):
+            walk(parent)
+
+    for post in posts or []:
+        walk(post)
+    return changed
+
+
 def _probe(path: Path) -> tuple[int, int]:
     try:
         result = subprocess.run(
@@ -1231,7 +1338,7 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         # real <published> time. Cutting it to the newest few drops older
         # uploads, and the next live fetch then treats them as new.
         if limit and feed.get("platform") != "youtube":
-            ranked = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)
+            ranked = sorted(posts, key=feed_sort_key)
             articles = [post for post in ranked if post.get("article")]
             rest = [post for post in ranked if not post.get("article")][: int(limit)]
             posts = articles + rest
@@ -1368,6 +1475,9 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
         print(f"[people] cross-posts: {exc}", file=sys.stderr)
     if download:
         print("[media] --download-media no longer copies Meta CDN files; URLs stay hotlinked", file=sys.stderr)
+    stamped = stamp_media_dimensions(posts)
+    if stamped:
+        print(f"[media] sized {stamped} stored file{'s' if stamped != 1 else ''}")
     refresh_saved(posts, profiles, fresh_ids)
     video_ok = None
     video_failed = None

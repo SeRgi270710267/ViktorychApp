@@ -470,16 +470,29 @@
     }
     return media.url;
   }
+  function mediaFrame(media) {
+    var w = Number(media && media.width) || 0;
+    var h = Number(media && media.height) || 0;
+    var api = window.ViktorychFrame;
+    if (!(w > 0 && h > 0) || !api || !api.spec) return { cls: "", attr: ' data-fit="pending"' };
+    var spec = api.spec(w, h, api.narrow ? api.narrow() : (window.innerWidth || 390) < 700);
+    if (!spec) return { cls: "", attr: ' data-fit="pending"' };
+    return {
+      cls: " has-ratio" + (spec.clamped ? " is-clamped" : ""),
+      attr: ' data-fit="feed" data-mw="' + w + '" data-mh="' + h + '" style="aspect-ratio:' + spec.boxW + " / " + spec.boxH + '"'
+    };
+  }
   function mediaHtml(name, post, list) {
     if (!list || !list.length) return "";
     var rendered = list.map(function (media, index) {
       if (!media || !media.url) return "";
       var src = playUrl(name, post, media, index);
       var fallback = src !== media.url ? ' data-fallback="' + esc(media.url) + '"' : "";
-      if (media.type === "video") return '<video class="cm-reddit-video" controls playsinline src="' + esc(src) + '"' + fallback + "></video>";
-      return '<img class="cm-reddit-photo" alt="" loading="lazy" src="' + esc(src) + '"' + fallback + ">";
+      var frame = mediaFrame(media);
+      if (media.type === "video") return '<video class="cm-reddit-video' + frame.cls + '" controls playsinline src="' + esc(src) + '"' + fallback + frame.attr + "></video>";
+      return '<img class="cm-reddit-photo' + frame.cls + '" alt="" loading="lazy" src="' + esc(src) + '"' + fallback + frame.attr + ">";
     }).join("");
-    return '<div class="cm-media-wrap">' + rendered + '</div>';
+    return '<div class="cm-media-wrap">' + rendered + "</div>";
   }
 
   function face(author) {

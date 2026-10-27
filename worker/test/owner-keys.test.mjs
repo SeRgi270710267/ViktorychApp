@@ -9,9 +9,12 @@ import {
   maskSecret,
   parseMaterial
 } from "../../shared/owner-keys.js";
+import { migrateOwnerKeys } from "../src/owner-keys.js";
 
 const OWNER = "S\u0435\u0420g\u0418";
 const SECRET = "sessionid=super-secret-cookie-value";
+const BACKUP = "sessionid=backup-secret-cookie-value";
+const LEGACY = "sessionid=legacy-kept-cookie-value";
 const ENC = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
 const JOB = "dispatch-test-token";
 
@@ -124,14 +127,19 @@ test("encryption round-trips and the mask never contains the value", async () =>
   assert.equal(JSON.parse(pair.material).clientSecret, "client-secret");
 });
 
-test("a rejected owner key falls back once and a clean response does not", () => {
-  assert.deepEqual(decideAttempt(403, "", true), { action: "fallback", reason: "forbidden" });
-  assert.deepEqual(decideAttempt(401, "", true), { action: "fallback", reason: "unauthorized" });
-  assert.deepEqual(decideAttempt(200, "please captcha-verify", true), { action: "fallback", reason: "captcha" });
-  assert.deepEqual(decideAttempt(200, "cf-challenge", true), { action: "fallback", reason: "challenge" });
+test("a signed-out key advances and a 429 or challenge never does", () => {
+  assert.deepEqual(decideAttempt(401, "", true), { action: "advance", reason: "unauthorized" });
+  assert.deepEqual(decideAttempt(200, "login required", true), { action: "advance", reason: "session_invalid" });
+  assert.deepEqual(decideAttempt(403, "", true), { action: "hold", reason: "forbidden" });
+  assert.deepEqual(decideAttempt(200, "please captcha-verify", true), { action: "hold", reason: "captcha" });
+  assert.deepEqual(decideAttempt(200, "cf-challenge", true), { action: "hold", reason: "challenge" });
+  assert.deepEqual(decideAttempt(429, "", true), { action: "hold", reason: "rate_limit" });
+  assert.deepEqual(decideAttempt(429, "cf-challenge", true), { action: "hold", reason: "rate_limit" });
+  assert.notEqual(decideAttempt(429, "", true).action, "advance");
+  assert.notEqual(decideAttempt(200, "cf-challenge", true).action, "advance");
+  assert.notEqual(decideAttempt(429, "captcha", true).action, "advance");
   assert.deepEqual(decideAttempt(200, "ok", true), { action: "keep", reason: "" });
   assert.deepEqual(decideAttempt(403, "", false), { action: "keep", reason: "" });
-  assert.deepEqual(decideAttempt(429, "", true), { action: "keep", reason: "" });
 });
 
 test("connected keys are owner-only and the saved value stays masked", async () => {
@@ -183,21 +191,105 @@ test("connected keys are owner-only and the saved value stays masked", async () 
     const wrongJob = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.44", token: "nope" });
     assert.equal(wrongJob.status, 401);
 
+    const keyA = saved.body.slot.keys[0].id;
+    assert.equal(typeof keyA, "string");
     const job = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.45", token: JOB });
     assert.equal(job.status, 200);
     assert.equal(job.body.value, SECRET);
+    assert.equal(job.body.keyId, keyA);
 
     const tested = await call(mf, "/v1/owner/keys/tiktok/test", { method: "POST", ip: "203.0.113.46", token });
     assert.equal(tested.status, 200);
-    assert.equal(tested.body.slot.status, "needs_attention");
+    assert.equal(tested.body.slot.status, "unknown");
     assert.equal(tested.body.slot.lastError, "captcha");
+    assert.equal(tested.body.slot.keys[0].status, "unknown");
+    assert.equal(tested.body.slot.pace.reason, "captcha");
     assert.equal(tested.text.includes("super-secret-cookie-value"), false);
     assert.equal(hits.length, 1);
     assert.equal(hits[0].cookie, SECRET);
 
-    const blocked = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.47", token: JOB });
-    assert.equal(blocked.status, 409);
-    assert.equal(blocked.text.includes("super-secret-cookie-value"), false);
+    const still = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.47", token: JOB });
+    assert.equal(still.status, 200);
+    assert.equal(still.body.keyId, keyA);
+    assert.equal(still.body.value, SECRET);
+
+    const savedBackup = await call(mf, "/v1/owner/keys/tiktok", {
+      method: "PUT",
+      ip: "203.0.113.53",
+      token,
+      json: { value: BACKUP, label: "spare" }
+    });
+    assert.equal(savedBackup.status, 200);
+    assert.equal(savedBackup.body.slot.keys.length, 2);
+    assert.equal(savedBackup.text.includes(BACKUP), false);
+    const keyB = savedBackup.body.slot.keys[1].id;
+    assert.equal(savedBackup.body.slot.keys[1].name, "spare");
+    const ordered = await call(mf, "/v1/owner/keys/tiktok/order", {
+      method: "POST",
+      ip: "203.0.113.54",
+      token,
+      json: { ids: [keyB, keyA] }
+    });
+    assert.equal(ordered.status, 200);
+    assert.equal(ordered.body.slot.keys[0].id, keyB);
+    const flipped = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.55", token: JOB });
+    assert.equal(flipped.body.value, BACKUP);
+    assert.equal(flipped.body.keyId, keyB);
+    const restored = await call(mf, "/v1/owner/keys/tiktok/order", {
+      method: "POST",
+      ip: "203.0.113.56",
+      token,
+      json: { ids: [keyA, keyB] }
+    });
+    assert.equal(restored.status, 200);
+    const back = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.57", token: JOB });
+    assert.equal(back.body.keyId, keyA);
+    assert.equal(back.body.value, SECRET);
+
+    const limited = await call(mf, "/v1/owner/keys/tiktok/attention", {
+      method: "POST",
+      ip: "203.0.113.58",
+      token: JOB,
+      json: { error: "rate_limit" }
+    });
+    assert.equal(limited.status, 200);
+    assert.equal(limited.body.switched, false);
+    const afterLimit = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.59", token: JOB });
+    assert.equal(afterLimit.body.keyId, keyA);
+
+    const challenged = await call(mf, "/v1/owner/keys/tiktok/attention", {
+      method: "POST",
+      ip: "203.0.113.60",
+      token: JOB,
+      json: { error: "challenge" }
+    });
+    assert.equal(challenged.body.switched, false);
+    const afterChallenge = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.61", token: JOB });
+    assert.equal(afterChallenge.body.keyId, keyA);
+    assert.equal(afterChallenge.body.value, SECRET);
+
+    const advanced = await call(mf, "/v1/owner/keys/tiktok/attention", {
+      method: "POST",
+      ip: "203.0.113.62",
+      token: JOB,
+      json: { error: "unauthorized", keyId: keyA }
+    });
+    assert.equal(advanced.body.switched, true);
+    const next = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.63", token: JOB });
+    assert.equal(next.status, 200);
+    assert.equal(next.body.keyId, keyB);
+    assert.equal(next.body.value, BACKUP);
+    const heldBackup = await call(mf, "/v1/owner/keys/tiktok/attention", {
+      method: "POST",
+      ip: "203.0.113.64",
+      token: JOB,
+      json: { error: "challenge", keyId: keyB }
+    });
+    assert.equal(heldBackup.body.switched, false);
+    const stay = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.65", token: JOB });
+    assert.equal(stay.body.keyId, keyB);
+    assert.equal(stay.text.includes(SECRET), false);
+    assert.equal(stay.text.includes("backup-secret"), true);
 
     const expiredPaste = "# Netscape HTTP Cookie File\n.tiktok.com\tTRUE\t/\tTRUE\t1000\tsessionid\tsuper-secret-cookie-value\n";
     const expired = await call(mf, "/v1/owner/keys/youtube", {
@@ -222,6 +314,99 @@ test("connected keys are owner-only and the saved value stays masked", async () 
     assert.equal(removed.body.slot.configured, false);
     const gone = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.52", token: JOB });
     assert.equal(gone.status, 404);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("a 429 response never switches to the backup key", async () => {
+  const hits = [];
+  const options = workerOptions(hits);
+  options.outboundService = async (request) => {
+    hits.push({ url: request.url, cookie: request.headers.get("cookie") || "" });
+    return new Response("cf-challenge", { status: 429, headers: { "content-type": "text/html", "retry-after": "30" } });
+  };
+  const mf = new Miniflare(options);
+  try {
+    const owner = await signup(mf, "203.0.113.70", OWNER, "claim-test");
+    const token = owner.body.token;
+    const saved = await call(mf, "/v1/owner/keys/tiktok", {
+      method: "PUT",
+      ip: "203.0.113.71",
+      token,
+      json: { value: SECRET }
+    });
+    const keyA = saved.body.slot.keys[0].id;
+    await call(mf, "/v1/owner/keys/tiktok", {
+      method: "PUT",
+      ip: "203.0.113.72",
+      token,
+      json: { value: BACKUP }
+    });
+    const first = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.73", token: JOB });
+    assert.equal(first.body.keyId, keyA);
+    const tested = await call(mf, "/v1/owner/keys/tiktok/" + keyA + "/test", {
+      method: "POST",
+      ip: "203.0.113.74",
+      token
+    });
+    assert.equal(tested.status, 200);
+    const testedKey = tested.body.slot.keys.find((key) => key.id === keyA);
+    assert.equal(testedKey.status, "unknown");
+    assert.equal(testedKey.lastError, "rate_limit");
+    assert.notEqual(testedKey.status, "needs_attention");
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].cookie, SECRET);
+    assert.equal(hits[0].cookie.includes("backup-secret"), false);
+    const again = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.75", token: JOB });
+    assert.equal(again.status, 200);
+    assert.equal(again.body.keyId, keyA);
+    assert.equal(again.body.value, SECRET);
+    const challenged = await call(mf, "/v1/owner/keys/tiktok/attention", {
+      method: "POST",
+      ip: "203.0.113.76",
+      token: JOB,
+      json: { error: "challenge", keyId: keyA }
+    });
+    assert.equal(challenged.body.switched, false);
+    const stayed = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.77", token: JOB });
+    assert.equal(stayed.body.keyId, keyA);
+    assert.equal(hits.length, 1);
+  } finally {
+    await mf.dispose();
+  }
+});
+
+test("a one-per-slot key is copied without re-encrypting it", async () => {
+  const mf = new Miniflare(workerOptions([]));
+  try {
+    const owner = await signup(mf, "203.0.113.90", OWNER, "claim-test");
+    assert.equal(owner.status, 201);
+    const sealed = await encryptMaterial(ENC, "tiktok", LEGACY);
+    const db = await mf.getBindings();
+    await db.DB.prepare(
+      `INSERT INTO owner_keys (owner_id, slot, kind, ciphertext, iv, mask, status, last_used, last_error, expires_at, updated_at, tested_at)
+       VALUES (?, 'tiktok', 'cookie', ?, ?, ?, 'unknown', 0, '', 0, ?, 0)`
+    ).bind(owner.body.account.publicId, sealed.ciphertext, sealed.iv, "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", Date.now()).run();
+    await migrateOwnerKeys(db);
+    await migrateOwnerKeys(db);
+    const copied = await db.DB.prepare(
+      "SELECT key_id, ciphertext FROM owner_key_items WHERE owner_id = ? AND slot = 'tiktok'"
+    ).bind(owner.body.account.publicId).all();
+    assert.equal(copied.results.length, 1);
+    assert.equal(copied.results[0].key_id, "legacy-tiktok");
+    assert.equal(copied.results[0].ciphertext, sealed.ciphertext);
+    const original = await db.DB.prepare(
+      "SELECT ciphertext FROM owner_keys WHERE owner_id = ? AND slot = 'tiktok'"
+    ).bind(owner.body.account.publicId).first();
+    assert.equal(original.ciphertext, sealed.ciphertext);
+    const listed = await call(mf, "/v1/owner/keys", { ip: "203.0.113.91", token: owner.body.token });
+    assert.equal(listed.text.includes("legacy-kept"), false);
+    assert.equal(listed.text.includes(sealed.ciphertext), false);
+    const job = await call(mf, "/v1/owner/keys/tiktok/material", { ip: "203.0.113.92", token: JOB });
+    assert.equal(job.status, 200);
+    assert.equal(job.body.value, LEGACY);
+    assert.equal(job.body.keyId, "legacy-tiktok");
   } finally {
     await mf.dispose();
   }

@@ -13,10 +13,13 @@ import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
 import { handleYtRoute } from "./ythls.js";
 import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
-import { mediaMime, streamFresh, shouldSniffMedia, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
+import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
-import { handleOwnerKeys, KEYS_SCHEMA } from "./owner-keys.js";
+import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
+import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
+import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
@@ -89,6 +92,7 @@ function json(status, body, extra) {
 }
 
 function withCors(request, env, response) {
+  if (response && (response.status === 101 || response.webSocket)) return response;
   const url = new URL(request.url);
   if (isPublicFederationRoute(url.pathname)) return response;
   const origin = request.headers.get("Origin");
@@ -104,7 +108,7 @@ function withCors(request, env, response) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
-  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match");
+  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match, X-Viktorych-Intent");
   headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag");
   headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
@@ -205,7 +209,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -498,6 +502,19 @@ async function sessionAccount(env, request) {
   return row || null;
 }
 
+async function verifyAccountNumber(env, row, accountNumber) {
+  const digits = String(accountNumber || "").replace(/\D/g, "");
+  const rounds = iterationsOf(env);
+  const dummySalt = new Uint8Array(16);
+  if (!/^\d{16}$/.test(digits)) {
+    await slowHash("0000000000000000", dummySalt, rounds);
+    return false;
+  }
+  const salt = row && row.salt ? b64ToBytes(row.salt) : dummySalt;
+  const hash = await slowHash(digits, salt, rounds);
+  return !!(row && timingEqual(hash, row.number_hash));
+}
+
 async function mintSession(env, publicId) {
   const token = "va1." + b64url(crypto.getRandomValues(new Uint8Array(32)));
   const hash = await sha256Hex(token);
@@ -606,6 +623,7 @@ async function handleSignup(request, env) {
   }
   const clash = await env.DB.prepare("SELECT public_id FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
   if (clash) return json(409, { error: "handle_taken" });
+  if (await handleHeld(env, checked.skeleton)) return json(409, { error: "handle_held" });
   const prior = await env.DB.prepare("SELECT hits, reset_at FROM rate_limits WHERE bucket = ?").bind("su-ok:" + ip).first();
   if (prior && Number(prior.reset_at) > Date.now() && Number(prior.hits) >= 4) {
     return limited({ retry: Math.max(1, Math.ceil((Number(prior.reset_at) - Date.now()) / 1000)) });
@@ -665,6 +683,7 @@ async function handleLogin(request, env) {
     }
     return json(401, { error: "invalid_credentials" });
   }
+  if (await blockDeletedLogin(env, row.public_id)) return json(410, { error: "account_deleted" });
   const token = await mintSession(env, row.public_id);
   return json(200, { token, account: await presentAccount(env, request, row, true) });
 }
@@ -869,6 +888,33 @@ async function handleProfilePatch(request, env) {
   return json(200, { account: await presentAccount(env, request, next, true) });
 }
 
+const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notifications", "messages", "feeds", "lists", "history", "music", "shorts", "games", "subscriptions", "vault", "storage", "settings"];
+
+function cleanBottomNavSync(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const order = [];
+  const seen = new Set();
+  (Array.isArray(raw.order) ? raw.order : []).forEach((id) => {
+    if (typeof id !== "string" || BOTTOM_NAV_SYNC_IDS.indexOf(id) < 0 || seen.has(id)) return;
+    seen.add(id);
+    order.push(id);
+  });
+  BOTTOM_NAV_SYNC_IDS.forEach((id) => { if (!seen.has(id)) order.push(id); });
+  const hiddenSet = new Set();
+  (Array.isArray(raw.hidden) ? raw.hidden : []).forEach((id) => {
+    if (id !== "home" && BOTTOM_NAV_SYNC_IDS.indexOf(id) >= 0) hiddenSet.add(id);
+  });
+  let visible = order.filter((id) => !hiddenSet.has(id));
+  if (visible.length > 6) visible.slice(6).forEach((id) => { if (id !== "home") hiddenSet.add(id); });
+  visible = order.filter((id) => !hiddenSet.has(id));
+  for (let i = 0; i < order.length && visible.length < 2; i++) {
+    if (!hiddenSet.has(order[i])) continue;
+    hiddenSet.delete(order[i]);
+    visible.push(order[i]);
+  }
+  return { order, hidden: order.filter((id) => hiddenSet.has(id)) };
+}
+
 async function handleSyncGet(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
@@ -902,6 +948,29 @@ async function handleSyncPut(request, env) {
   payload.history = cleanHistoryList(rows, payload.historyCut);
   payload.showPictures = cleanFaceChoice(payload.showPictures, previous && previous.showPictures);
   payload.showBanners = cleanFaceChoice(payload.showBanners, previous && previous.showBanners);
+  if (payload.bottomNav != null) {
+    const cleanedNav = cleanBottomNavSync(payload.bottomNav);
+    if (cleanedNav) payload.bottomNav = cleanedNav;
+    else delete payload.bottomNav;
+  }
+  if (payload.bottomNavCustom != null) payload.bottomNavCustom = payload.bottomNavCustom === true;
+  if (payload.navLayoutSync === true) {
+    payload.navLayout = payload.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = payload.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else if (payload.navLayoutSync === false) {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  } else if (previous && previous.navLayoutSync === true) {
+    payload.navLayout = previous.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = previous.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  }
   const text = JSON.stringify(payload);
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });
   const base = Number(body.baseUpdatedAt || 0);
@@ -1895,6 +1964,7 @@ async function handleHandle(env, url) {
   if (!checked.ok) return json(200, { ok: false, error: checked.error === "reserved" ? "handle_reserved" : "invalid_handle" });
   const clash = await env.DB.prepare("SELECT public_id FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
   if (clash) return json(200, { ok: false, error: "handle_taken" });
+  if (await handleHeld(env, checked.skeleton)) return json(200, { ok: false, error: "handle_held" });
   return json(200, { ok: true, owner: !!checked.owner });
 }
 
@@ -2342,19 +2412,36 @@ async function liveBufferIndex(env, partKey) {
 
 async function partRows(env, key) {
   const d1 = await telegramRows(env, key);
-  if (!livePartKey(key)) return d1;
-  const extra = await liveBufferIndex(env, key);
-  if (!extra.length) return d1;
-  const seen = {};
-  d1.forEach((row) => { if (row) seen[row.kind + ":" + row.part_index] = true; });
-  const merged = d1.slice();
-  extra.forEach((row) => {
-    const id = row.kind + ":" + row.part_index;
-    if (seen[id]) return;
-    seen[id] = true;
-    merged.push(row);
-  });
-  return merged;
+  let merged = d1;
+  if (livePartKey(key)) {
+    const extra = await liveBufferIndex(env, key);
+    if (extra.length) {
+      const seen = {};
+      merged = d1.slice();
+      d1.forEach((row) => { if (row) seen[row.kind + ":" + row.part_index] = true; });
+      extra.forEach((row) => {
+        const id = row.kind + ":" + row.part_index;
+        if (seen[id]) return;
+        seen[id] = true;
+        merged.push(row);
+      });
+    }
+  }
+  const ready = [];
+  for (let i = 0; i < merged.length; i++) {
+    const row = merged[i];
+    if (!row) continue;
+    let size = Number(row.size) || 0;
+    if (size <= 0 && row.kind === "init" && row.bufKey && env.DATA && env.DATA.head) {
+      try {
+        const head = await env.DATA.head(row.bufKey);
+        size = Number(head && head.size) || 0;
+        if (size > 0) row.size = size;
+      } catch (err) { size = 0; }
+    }
+    if (size > 0) ready.push(row);
+  }
+  return ready;
 }
 
 async function cachedVod(key, build) {
@@ -2383,7 +2470,8 @@ async function stitchedLivePlaylist(env, parent, origin) {
   let misses = 0;
   for (let n = 1; n <= 48; n++) {
     const key = parent + "/" + n;
-    const text = buildPlaylist(await partRows(env, key), key, origin);
+    const rows = await partRows(env, key);
+    const text = livePartPlayable(rows) ? buildPlaylist(rows, key, origin) : "";
     if (!text) {
       misses += 1;
       if (parts.length && misses >= 2) break;
@@ -2547,7 +2635,10 @@ async function handleTelegram(request, env, path, ctx) {
     const origin = new URL(request.url).origin;
     let text = "";
     if (isLiveParentKey(key)) text = await cachedVod(key, () => stitchedLivePlaylist(env, key, origin));
-    else if (livePartKey(key)) text = await cachedVod(key, async () => buildPlaylist(await partRows(env, key), key, origin));
+    else if (livePartKey(key)) text = await cachedVod(key, async () => {
+      const rows = await partRows(env, key);
+      return livePartPlayable(rows) ? buildPlaylist(rows, key, origin) : "";
+    });
     else text = buildPlaylist(await telegramRows(env, key), key, origin);
     if (!text) {
       if (!publicLoop && !(viewer && viewer.owner === 1)) {
@@ -3359,6 +3450,21 @@ function scrubRecording(row) {
   return body;
 }
 
+async function playableLiveParents(env) {
+  if (!env.DB) return null;
+  try {
+    const listed = await env.DB.prepare("SELECT object_key FROM telegram_files WHERE serve = 1 AND encrypted = 0 AND object_key LIKE 'tiktok/%/live/%' GROUP BY object_key HAVING SUM(CASE WHEN kind = 'init' AND part_index = -1 AND size > 0 THEN 1 ELSE 0 END) > 0 AND SUM(CASE WHEN kind = 'segment' AND size > 0 THEN 1 ELSE 0 END) > 0 LIMIT 400").all();
+    const found = new Set();
+    ((listed && listed.results) || []).forEach((row) => {
+      const parts = liveKeyParts(row && row.object_key);
+      if (parts) found.add(parts.key);
+    });
+    return found;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function handleRecordings(request, env) {
   const gate = await requireOwner(request, env);
   if (gate.error) return gate.error;
@@ -3393,8 +3499,10 @@ async function handleRecordings(request, env) {
     past.push(item);
   });
   past.sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
+  const playable = await playableLiveParents(env);
+  const shown = playable ? past.filter((item) => item && playable.has(String(item.key || ""))) : past;
   const cap = Math.max(1, Math.min(16, Number(index.cap) || 16));
-  return json(200, { cap, active, items, past });
+  return json(200, { cap, active, items, past: shown });
 }
 
 const LIVE_PARENT_KEY = /^tiktok\/([A-Za-z0-9._]{2,24})\/([1-9][0-9]{5,24})\/live(?:\/([1-9][0-9]{0,3}))?$/;
@@ -4034,12 +4142,12 @@ async function handleFollowImport(request, env) {
   if (gate.error) return gate.error;
   const paced = await rateHit(env, "follow-import:" + gate.row.public_id, 8, 60 * 60 * 1000);
   if (!paced.ok) return limited(paced);
-  const body = await readJson(request, 40000);
+  const body = await readJson(request, 500000);
   if (body.error) return json(400, { error: body.error });
   const incoming = Array.isArray(body.ids) ? body.ids : null;
   if (!incoming) return json(400, { error: "bad_follow" });
   const ids = [];
-  for (let i = 0; i < incoming.length && ids.length < 400; i++) {
+  for (let i = 0; i < incoming.length && ids.length < 5000; i++) {
     const id = cleanFollowId(incoming[i]);
     if (!id || id === "app:" + gate.row.public_id || ids.indexOf(id) >= 0) continue;
     if (id.indexOf("app:") === 0) {
@@ -4055,6 +4163,21 @@ async function handleFollowImport(request, env) {
   }
   const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", gate.row.public_id);
   return json(200, { ok: true, followingCount });
+}
+
+async function listFollowIds(env, followerId) {
+  const ids = [];
+  const page = 500;
+  const cap = 5000;
+  for (let offset = 0; ids.length < cap; offset += page) {
+    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC, target_id ASC LIMIT ? OFFSET ?").bind(followerId, page, offset).all();
+    const rows = (listed && listed.results) || [];
+    for (let i = 0; i < rows.length && ids.length < cap; i++) {
+      if (rows[i] && rows[i].target_id) ids.push(rows[i].target_id);
+    }
+    if (rows.length < page) break;
+  }
+  return ids;
 }
 
 async function handleFollowGet(request, env, url) {
@@ -4086,8 +4209,7 @@ async function handleFollowGet(request, env, url) {
     body.isPrivate = isPrivate;
   }
   if (!tab && subject === "app:" + gate.row.public_id) {
-    const listed = await env.DB.prepare("SELECT target_id FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC LIMIT 500").bind(gate.row.public_id).all();
-    body.ids = ((listed && listed.results) || []).map((row) => row.target_id);
+    body.ids = await listFollowIds(env, gate.row.public_id);
     return json(200, body);
   }
   if (!tab) return json(200, body);
@@ -4375,6 +4497,15 @@ async function route(request, env, ctx) {
   if (ownerLive && request.method === "GET") return handleOwnerLive(request, env, ownerLive[1]);
   if (path === "/v1/signup" && request.method === "POST") return handleSignup(request, env);
   if (path === "/v1/login" && request.method === "POST") return handleLogin(request, env);
+  if (path === "/v1/account/delete" && request.method === "POST") {
+    return handleAccountDelete(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });
+  }
+  if (path === "/v1/account/reauth" && request.method === "POST") {
+    return handleAccountReauth(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });
+  }
+  if (path === "/v1/account/deletions" && request.method === "GET") {
+    return handleDeletionList(request, env, { json, rateHit, limited });
+  }
   if (path === "/v1/logout" && request.method === "POST") return handleLogout(request, env, false);
   if (path === "/v1/logout-all" && request.method === "POST") return handleLogout(request, env, true);
   if (path === "/v1/session" && request.method === "GET") return handleSession(request, env);
@@ -4416,6 +4547,12 @@ async function route(request, env, ctx) {
     return handleIdentitiesRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
   }
 
+  if (path === "/v1/presence") {
+    return handlePresence(request, env, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
+  if (path === "/v1/channel" || path === "/v1/channel/ticket") {
+    return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
+  }
   if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
 
     return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
@@ -4423,6 +4560,8 @@ async function route(request, env, ctx) {
   }
   return json(404, { error: "not_found" });
 }
+
+export { AccountChannel };
 
 export default {
   async fetch(request, env, ctx) {
@@ -4441,7 +4580,7 @@ export default {
   },
   async scheduled(event, env, ctx) {
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.

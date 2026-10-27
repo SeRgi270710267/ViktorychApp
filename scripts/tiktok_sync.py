@@ -22,7 +22,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from adapters.common import post_shell, trusted_time
+from adapters.common import feed_sort_key, post_shell, trusted_time
 
 TRACKED = ["gabii_g5", "pepsi"]
 HANDLE_RE = re.compile(r"^[A-Za-z0-9._]{2,24}$")
@@ -339,16 +339,29 @@ def http_get(url: str) -> tuple[int, bytes, str]:
     status, body, retry = _http_once(url, headers)
     if cookie:
         try:
-            from owner_keys import decide_attempt, drop_for_attention
+            from owner_keys import cookie_header, decide_attempt, drop_for_attention, mark_attention
             action, reason = decide_attempt(status, body, True)
         except Exception:
             action, reason = "keep", ""
-        if action == "fallback":
+        if action == "hold":
+            try:
+                mark_attention(slot, reason)
+            except Exception:
+                pass
+            return status, body, retry
+        if action == "advance":
             try:
                 drop_for_attention(slot, reason)
             except Exception:
                 pass
             headers.pop("Cookie", None)
+            nxt = ""
+            try:
+                nxt = cookie_header(slot)
+            except Exception:
+                nxt = ""
+            if nxt:
+                headers["Cookie"] = nxt
             return _http_once(url, headers)
     return status, body, retry
 
@@ -1058,7 +1071,7 @@ def merge_handle_posts(old: list[dict], built: list[dict]) -> list[dict]:
             continue
         by_id[ident] = row
     rows = list(by_id.values())
-    rows.sort(key=lambda row: str(row.get("date") or ""), reverse=True)
+    rows.sort(key=feed_sort_key)
     return rows[:POST_CAP]
 
 
@@ -1225,7 +1238,7 @@ def place(doc: dict, mode: str, feeds_path: Path, owner_path: Path) -> None:
     posts.extend(doc.get("posts") or [])
     # feeds.json is the public artifact: keep only the newest short posts so a
     # full backfill cannot bloat it. owner/tiktok.json keeps the whole archive.
-    posts.sort(key=lambda row: str(row.get("date") or "") if isinstance(row, dict) else "", reverse=True)
+    posts.sort(key=lambda row: feed_sort_key(row if isinstance(row, dict) else None))
     tiktok_posts = [row for row in posts if isinstance(row, dict) and row.get("platform") == "tiktok"]
     if len(tiktok_posts) > 300:
         keep_dates = {row.get("date") for row in tiktok_posts[:300]}

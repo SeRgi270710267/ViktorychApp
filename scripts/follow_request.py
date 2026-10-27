@@ -549,6 +549,16 @@ def main() -> int:
             _comment_and_close(number, "Not applied: " + str(exc), repo)
         print("rejected:", exc, file=sys.stderr)
         return 0
+    try:
+        from account_deletions import load_deletions, scrub_value
+
+        hashes, deletion_salt = load_deletions()
+        if hashes:
+            scrubbed = scrub_value(updated, hashes, deletion_salt)
+            if isinstance(scrubbed, dict):
+                updated = scrubbed
+    except (ImportError, TypeError, ValueError):
+        pass
     CONFIG.write_text(json.dumps(updated, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     subprocess.run(["git", "config", "user.name", "github-actions[bot]"], check=True)
     subprocess.run(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"], check=True)

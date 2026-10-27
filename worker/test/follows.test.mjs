@@ -59,6 +59,22 @@ test.after(async () => {
   if (mf) await mf.dispose();
 });
 
+test("signed-in follow sync returns every account past the first page", async () => {
+  const ada = await signup("203.0.113.80", "ada_page", "Ada Page");
+  const db = await mf.getD1Database("DB");
+  const follower = ada.account.publicId;
+  const stmts = [];
+  for (let i = 0; i < 501; i++) {
+    stmts.push(db.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?)").bind(follower, "x:acct" + String(i).padStart(4, "0"), 1700000000000 + i));
+  }
+  for (let i = 0; i < stmts.length; i += 40) await db.batch(stmts.slice(i, i + 40));
+  const mine = await call("/v1/follows", { ip: "203.0.113.81", token: ada.token });
+  assert.equal(mine.status, 200);
+  assert.equal(mine.body.ids.length, 501);
+  assert.equal(mine.body.ids[0], "x:acct0500");
+  assert.equal(mine.body.ids[500], "x:acct0000");
+});
+
 test("follows persist for the signed-in account and stay private", async () => {
   const closed = await call("/v1/follows", { ip: "203.0.113.210" });
   assert.equal(closed.status, 401);

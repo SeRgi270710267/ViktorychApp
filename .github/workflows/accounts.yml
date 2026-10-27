@@ -6,6 +6,9 @@ on:
     paths:
       - "worker/**"
       - "shared/**"
+      - "presence.js"
+      - "presence.css"
+      - "scripts/presence_chrome_test.mjs"
       - ".github/workflows/accounts.yml"
   push:
     branches:
@@ -13,6 +16,9 @@ on:
     paths:
       - "worker/**"
       - "shared/**"
+      - "presence.js"
+      - "presence.css"
+      - "scripts/presence_chrome_test.mjs"
       - ".github/workflows/accounts.yml"
 
 permissions:
@@ -33,6 +39,13 @@ jobs:
       - name: Test the account worker
         working-directory: worker
         run: npm ci && npm test
+
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Presence page check
+        run: node scripts/presence_chrome_test.mjs
 
   deploy:
     needs: test

@@ -154,6 +154,19 @@ function shouldSniffMedia(pathname, contentType, length) {
   return false;
 }
 
+function livePartPlayable(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  let init = false;
+  let segment = false;
+  for (let i = 0; i < list.length; i++) {
+    const row = list[i];
+    if (!row || !(Number(row.size) > 0)) continue;
+    if (row.kind === "init") init = true;
+    if (row.kind === "segment") segment = true;
+  }
+  return init && segment;
+}
+
 function stitchPlaylists(parts) {
   const lists = (Array.isArray(parts) ? parts : []).map((item) => String(item || "")).filter((text) => text.indexOf("#EXTM3U") >= 0);
   if (!lists.length) return "";
@@ -213,5 +226,6 @@ export {
   hlsFatalPlan,
   mediaMime,
   shouldSniffMedia,
+  livePartPlayable,
   stitchPlaylists
 };

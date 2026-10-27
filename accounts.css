@@ -273,6 +273,13 @@ html[data-theme="default"] .acct-field { border-color: #cfd9de; }
 }
 .acct-next:hover:not(:disabled) { background: var(--fill-hover); }
 .acct-next:disabled { opacity: 0.5; cursor: default; }
+.acct-danger { background: #f4212e; color: #fff; }
+.acct-danger:hover:not(:disabled) { background: #dc1e2b; }
+.acct-delete-list { margin: 12px 0 0; padding-left: 18px; }
+.acct-delete-list li { margin: 6px 0; }
+.acct-progress { list-style: none; margin: 16px 0 0; padding: 0; }
+.acct-progress li { margin: 8px 0; color: var(--muted); }
+.acct-progress li.on { color: var(--text); font-weight: 700; }
 .acct-quiet {
   display: inline;
   margin-top: 16px;

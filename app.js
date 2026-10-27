@@ -1038,7 +1038,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null) });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1096,6 +1096,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         parsed.initialized = true;
       } else mergeDefaultFollows(parsed, configured);
       parsed.navCustom = cleanNavCustom(parsed.navCustom);
+      parsed.bottomNav = cleanBottomNav(parsed.bottomNav);
+      parsed.bottomNavCustom = parsed.bottomNavCustom === true;
+      parsed.navLayout = parsed.navLayout === "bar" ? "bar" : "auto";
+      parsed.navLayoutLand = parsed.navLayoutLand === true;
+      parsed.navLayoutSync = parsed.navLayoutSync === true;
       return parsed;
     } catch (err) {
       return fresh();
@@ -1155,9 +1160,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     STATE.settings.seenFeeds = STATE.settings.seenDefaults.slice();
   }
 
+  function sameFollowId(left, right) {
+    return String(left || "").toLowerCase() === String(right || "").toLowerCase();
+  }
   function isFollowed(id) {
-    if (String(id || "").indexOf("app:") === 0) return (STATE.settings.accountFollows || []).indexOf(id) >= 0;
-    return STATE.settings.follows.includes(id);
+    const list = String(id || "").indexOf("app:") === 0 ? (STATE.settings.accountFollows || []) : (STATE.settings.follows || []);
+    return list.some((item) => sameFollowId(item, id));
   }
   function setFollowed(id, on) {
     if (!id) return;
@@ -1802,7 +1810,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function stamp(post) { return post.sortDate || post.date || ""; }
-  function byStamp(a, b) { return stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0; }
+  function byStamp(a, b) {
+    if (window.FeedOrder) return window.FeedOrder.compare(a, b);
+    return stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0;
+  }
 
   function formatCount(n, compactFrom) {
     if (window.SI18n) return window.SI18n.formatCount(n, compactFrom);
@@ -2250,18 +2261,139 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<img class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
   }
 
-  function feedFrame(post, media) {
-    if (media && media.round) return "";
-    let ratio = 16 / 9;
-    if (!youtubeId(post, media)) {
+  function frameNarrow() {
+    return (window.innerWidth || 390) < 700;
+  }
+
+  function frameSpec(width, height, narrow) {
+    const w = Number(width) || 0;
+    const h = Number(height) || 0;
+    if (!(w > 0 && h > 0)) return null;
+    const ratio = w / h;
+    const minRatio = narrow ? 9 / 16 : 4 / 5;
+    const maxRatio = 2;
+    let boxW = w;
+    let boxH = h;
+    let clamped = false;
+    if (ratio < minRatio) {
+      boxW = Math.round(minRatio * 1000);
+      boxH = 1000;
+      clamped = true;
+    } else if (ratio > maxRatio) {
+      boxW = Math.round(maxRatio * 1000);
+      boxH = 1000;
+      clamped = true;
+    } else {
+      boxW = Math.round(w);
+      boxH = Math.round(h);
+    }
+    return { ratio: ratio, boxW: boxW, boxH: boxH, clamped: clamped, narrow: !!narrow };
+  }
+
+  function frameAttrs(post, media) {
+    if (media && media.round) return { attr: "", cls: "", known: false, fit: "" };
+    let spec = null;
+    let fit = "";
+    if (youtubeId(post, media)) {
+      spec = { boxW: 16, boxH: 9, clamped: false };
+      fit = "feed";
+    } else {
       const w = Number(media && media.width) || 0;
       const h = Number(media && media.height) || 0;
-      if (w > 0 && h > 0) ratio = w / h;
+      spec = frameSpec(w, h, frameNarrow());
+      if (spec) fit = "feed";
     }
-    if (ratio < 0.75) ratio = 0.75;
-    if (ratio > 2) ratio = 2;
-    const rw = Math.round(ratio * 1000);
-    return "min(510px, calc(100cqw * 1000 / " + rw + "))";
+    if (!spec) return { attr: ' data-fit="pending"', cls: "", known: false, fit: "pending" };
+    const mw = Number(media && media.width) || spec.boxW;
+    const mh = Number(media && media.height) || spec.boxH;
+    return {
+      attr: ' style="aspect-ratio:' + spec.boxW + " / " + spec.boxH + '" data-fit="' + fit + '" data-mw="' + mw + '" data-mh="' + mh + '"',
+      cls: " has-ratio" + (spec.clamped ? " is-clamped" : ""),
+      known: true,
+      fit: fit
+    };
+  }
+
+  function feedFrame(post, media) {
+    const framed = frameAttrs(post, media);
+    if (!framed.known) return "";
+    const spec = frameSpec(Number(media && media.width) || 16, Number(media && media.height) || 9, false);
+    const rw = spec ? spec.boxW : 16;
+    const rh = spec ? spec.boxH : 9;
+    return "min(510px, calc(100cqw * " + rh + " / " + rw + "))";
+  }
+
+  function applyFrame(el, w, h, source) {
+    if (!el || !(w > 0 && h > 0)) return;
+    if (el.dataset.fit === "feed") return;
+    if (el.dataset.fit === "video" && source !== "video") return;
+    const spec = frameSpec(w, h, frameNarrow());
+    if (!spec) return;
+    el.style.aspectRatio = spec.boxW + " / " + spec.boxH;
+    el.classList.add("has-ratio");
+    el.classList.toggle("is-clamped", spec.clamped);
+    el.dataset.mw = String(Math.round(w));
+    el.dataset.mh = String(Math.round(h));
+    el.dataset.fit = source || "natural";
+  }
+
+  function watchFrame(el) {
+    if (!el || el.dataset.fit === "feed" || el.dataset.fitWatch === "1") return;
+    el.dataset.fitWatch = "1";
+    const img = el.tagName === "IMG" ? el : el.querySelector("img");
+    const video = el.tagName === "VIDEO" ? el : el.querySelector("video");
+    if (img) {
+      const read = () => applyFrame(el, img.naturalWidth, img.naturalHeight, "natural");
+      if (img.complete && img.naturalWidth) read();
+      else img.addEventListener("load", read, { once: true });
+    }
+    if (video) {
+      const read = () => applyFrame(el, video.videoWidth, video.videoHeight, "video");
+      if (video.videoWidth) read();
+      else video.addEventListener("loadedmetadata", read);
+    }
+  }
+
+  function bindMediaFrames(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll(".media.m1 > .tile[data-fit='pending'], .cm-reddit-photo[data-fit='pending'], .cm-reddit-video[data-fit='pending']").forEach(watchFrame);
+  }
+
+  window.ViktorychFrame = { spec: frameSpec, bind: bindMediaFrames, narrow: frameNarrow };
+
+  function refreshMediaFrames() {
+    document.querySelectorAll(".media.m1 > .tile.has-ratio[data-mw], .cm-reddit-photo.has-ratio[data-mw], .cm-reddit-video.has-ratio[data-mw]").forEach((el) => {
+      const w = Number(el.dataset.mw) || 0;
+      const h = Number(el.dataset.mh) || 0;
+      const spec = frameSpec(w, h, frameNarrow());
+      if (!spec) return;
+      el.style.aspectRatio = spec.boxW + " / " + spec.boxH;
+      el.classList.toggle("is-clamped", spec.clamped);
+    });
+  }
+
+  function stripLeadMentions(text) {
+    return String(text || "").replace(/^(?:@[A-Za-z0-9_]{1,30}(?:\s+|$))+/, "").replace(/^\s+/, "");
+  }
+
+  function stripLeadMentionHtml(html) {
+    let src = String(html || "");
+    let guard = 0;
+    while (guard < 12) {
+      const next = src.replace(/^(?:\s|<br\s*\/?>)*(?:<a\b[^>]*>\s*@[A-Za-z0-9_]{1,30}\s*<\/a>|@[A-Za-z0-9_]{1,30})(?=\s|<br|$)/i, "");
+      if (next === src) break;
+      src = next;
+      guard += 1;
+    }
+    return src.replace(/^(?:\s|<br\s*\/?>)+/i, "");
+  }
+
+  function mentionless(post) {
+    if (!post) return post;
+    const text = stripLeadMentions(post.text || "");
+    const html = post.html ? stripLeadMentionHtml(post.html) : (post.html || "");
+    if (text === String(post.text || "") && html === String(post.html || "")) return post;
+    return Object.assign({}, post, { text: text, html: html });
   }
 
   function clipLoops(media, seconds) {
@@ -2309,9 +2441,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const bar = mode === "feed" && !gif
       ? `<span class="vprog" style="width:${Math.max(0, Math.round(progress * 100))}%"></span>`
       : (progress > 0.02 ? `<span class="vprog" style="width:${Math.round(progress * 100)}%"></span>` : "");
-    const frameHeight = mode === "feed" && arguments[4] !== false ? feedFrame(post, media) : "";
-    const frame = frameHeight ? ` style="height:${frameHeight}"` : "";
-    return `<div class="tile vplay${round}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}"${frame}>
+    const framed = mode === "feed" && arguments[4] !== false ? frameAttrs(post, media) : { attr: "", cls: "" };
+    return `<div class="tile vplay${round}${framed.cls || ""}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}>
       ${posterImg(post, media, "vposter")}
       ${bar}
       ${shieldBadge}
@@ -2436,7 +2567,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const loading = first ? "eager" : "lazy";
       const priority = first ? ` fetchpriority="high"` : "";
       const srcAttr = lead ? "" : ` src="${esc(src)}"${src === rawSrc ? imageSrcset(src) : ""}`;
-      return `<div class="tile" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
+      const framed = n === 1 ? frameAttrs(post, m) : { attr: "", cls: "" };
+      return `<div class="tile${framed.cls || ""}" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
     }).join("");
     return `<div class="media ${cls}">${tiles}</div>` + files;
   }
@@ -3258,7 +3390,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       checkFrame();
     });
     video.addEventListener("loadedmetadata", () => {
-      if (el._gen !== gen || !opts.preview) return;
+      if (el._gen !== gen) return;
+      if (video.videoWidth > 0 && video.videoHeight > 0) applyFrame(el, video.videoWidth, video.videoHeight, "video");
+      if (!opts.preview) return;
       if (clipLoops(media, video.duration)) video.loop = true;
       checkFrame();
     });
@@ -4441,6 +4575,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function isoDate(value) {
     if (value == null || value === "") return "";
+    const order = typeof window !== "undefined" ? window.FeedOrder : null;
+    if (order && order.parseInstant) {
+      const ms = order.parseInstant(value);
+      if (ms) return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+    }
     if (typeof value === "number" || /^\d{10,13}$/.test(String(value))) {
       let n = Number(value);
       if (n < 100000000000) n *= 1000;
@@ -4464,6 +4603,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function timeMs(value) {
+    const order = typeof window !== "undefined" ? window.FeedOrder : null;
+    if (order && order.parseInstant) {
+      const ms = order.parseInstant(value);
+      if (!ms || ms <= Date.parse("2005-01-01T00:00:00Z") || ms > Date.now() + 10 * 60 * 1000) return 0;
+      return ms;
+    }
     const n = Date.parse(value || "");
     return isFinite(n) && n > Date.parse("2005-01-01T00:00:00Z") ? n : 0;
   }
@@ -5802,26 +5947,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function revealArchive() {
     const route = parseRoute();
-    if (route.name !== "home" || (route.tab && route.tab !== "foryou")) { render(); return; }
-    const center = document.querySelector("main.center");
-    if (!center) { render(); return; }
-    const seen = {};
-    center.querySelectorAll("article[data-post]").forEach((el) => { seen[el.dataset.post] = true; });
-    const list = posts().filter((post) => homeShows(post, route));
-    if (tabView(route.tab || "foryou") === "reposts") list.sort(byRepostTime);
-    else list.sort(byStamp);
-    const head = center.querySelector("article[data-post]");
-    if (head && list[0] && list[0].id !== head.dataset.post && stamp(list[0]) > (head.dataset.date || "")) {
-      render();
-      return;
-    }
-    const extra = list.filter((post) => !seen[post.id]);
-    const old = document.getElementById("archive-more");
-    if (old) old.remove();
-    if (extra.length) { center.insertAdjacentHTML("beforeend", extra.map((post) => card(post)).join("")); bindPlayers(); primeTelegramImages(center); }
-    const marker = archiveSentinel();
-    if (marker) center.insertAdjacentHTML("beforeend", marker);
-    watchHydration();
+    if (route.name !== "home") { render(); return; }
+    render({ y: window.scrollY });
   }
 
   function loadNextShard() {
@@ -5834,7 +5961,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     archiveBusy = true;
     loadShard(name).then(() => {
       archiveBusy = false;
-      render();
+      render({ y: window.scrollY });
     });
   }
 
@@ -6005,7 +6132,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     document.querySelectorAll("[data-hydrate]").forEach((el) => HYDRATE_OBS.observe(el));
     if (!ARCHIVE_OBS) {
       ARCHIVE_OBS = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) loadNextShard();
+        if (entries.some((entry) => entry.isIntersecting)) revealMoreTimeline();
       }, { rootMargin: "600px" });
     }
     ARCHIVE_OBS.disconnect();
@@ -6279,19 +6406,40 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<div class="repost-line">${icon("repost")}<span>Forwarded from ${who}</span></div>`;
   }
 
+  function threadParent(post) {
+    if (!post || post.tombstone) return null;
+    const embedded = post.replyParent;
+    if (embedded && embedded !== post && !bridgeErrorPost(embedded) && (embedded.text || embedded.title || embedded.author || embedded.handle || (embedded.media || []).length)) return embedded;
+    if (post.kind !== "reply" && !(post.replyingTo && post.replyingTo.id)) return null;
+    const id = String((post.replyingTo || {}).id || "");
+    if (!id) return null;
+    const found = findAnyPost(id);
+    if (!found || found === post || bridgeErrorPost(found)) return null;
+    return found;
+  }
+
+  function threadPair(parent, child, mode, opts) {
+    const parentHtml = card(parent, mode, Object.assign({}, opts, { inThread: true, continues: true, parentShown: false }));
+    const childHtml = card(child, mode, Object.assign({}, opts, { inThread: true, continues: false, parentShown: true, eager: false }));
+    return `<div class="thread">${parentHtml}${childHtml}</div>`;
+  }
+
   function card(post, mode, opts) {
     creditCarried(post);
     if (bridgeErrorPost(post)) return "";
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
+    if (!opts.inThread && mode !== "reply" && mode !== "status") {
+      const parent = threadParent(post);
+      if (parent) return threadPair(parent, post, mode, opts);
+    }
     const hideRepost = mode === "author" || mode === "status";
     const repost = repostBanner(post, hideRepost ? "author" : "");
     const sharedNote = repostQuote(post, hideRepost ? "author" : "");
     const forwarded = forwardLine(post);
-    const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
+    const showReply = opts.parentShown ? false : (mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle));
     const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
     const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
-    const context = mode !== "status" && post.replyParent && (post.kind === "reply" || post.platform === "telegram") ? contextCard(post.replyParent) : "";
     const repostFeed = feedOf(post);
     const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
       ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? tr("Turn on reposts") : tr("Turn off reposts")}</button>`
@@ -6307,7 +6455,7 @@ const here = parseRoute();
     const creator = isRepost(post) ? creatorOf(post) : null;
     const eager = !!opts.eager;
     watchArticle(post);
-    const shown = displayPost(post);
+    const shown = opts.parentShown ? mentionless(displayPost(post)) : displayPost(post);
     const dest = articleOf(post) ? articleHash(post) : (post.watch ? watchHash(post) : statusHash(post));
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
@@ -6320,7 +6468,6 @@ const here = parseRoute();
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
-      ${context}
       ${repost}
       ${sharedNote}
       ${forwarded}
@@ -6482,7 +6629,7 @@ const here = parseRoute();
       case "home":
         return { id: "home", href: "#/", icon: "home", label: tr("Home"), active: (r) => r.name === "home" };
       case "explore":
-        return { id: "explore", href: "#/explore", icon: "search", label: tr("Explore"), active: (r) => r.name === "explore" };
+        return { id: "explore", href: "#/explore", icon: "search", label: tr("Explore"), barLabel: tr("Search"), active: (r) => r.name === "explore" };
       case "notifications":
         return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
       case "messages":
@@ -6507,8 +6654,10 @@ const here = parseRoute();
         return { id: "subscriptions", href: subsHash((STATE.settings && STATE.settings.subsGroup) || ""), icon: "subs", label: tr("Subscriptions"), active: (r) => r.name === "subscriptions" };
       case "vault":
         return { id: "vault", href: "#/vault", icon: "vault", label: tr("Vault"), active: (r) => r.name === "vault", visible: () => !!(window.ViktorychVault && window.ViktorychVault.visible()) };
+      case "storage":
+        return { id: "storage", href: "#/storage", icon: "storage", label: tr("brand.storage"), active: (r) => r.name === "drive", visible: () => !!(window.ViktorychDrive && window.ViktorychDrive.visible()) };
       case "settings":
-        return { id: "settings", href: "#/settings", icon: "more", label: tr("More"), active: (r) => r.name === "settings" };
+        return { id: "settings", href: "#/settings", icon: "more", label: tr("More"), listLabel: tr("Settings"), active: (r) => r.name === "settings" };
       default:
         return null;
     }
@@ -6729,26 +6878,21 @@ const here = parseRoute();
     return `<a class="logo" href="#/" aria-label="${productName("app")}" data-tooltip="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}${markSvg("mark", "logo-si")}</a>`;
   }
 
-  function nav(route) {
-    const name = route.name;
-    const music = name === "music" && window.SIntelMusic;
+  function navChrome(route, extraClass, linksHtml) {
+    const music = route.name === "music" && window.SIntelMusic;
     const brand = music ? window.SIntelMusic.brand() : brandLink();
-    const links = music ? window.SIntelMusic.links(route, navItem) : renderNavLinks(route);
     const post = music
       ? `<button class="post-btn" data-act="music-add" aria-label="${tr("Add song")}" data-tooltip="${tr("Add song")}"><span class="post-label">${tr("Add song")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
       : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}" data-tooltip="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
-    return `<header class="nav">
-      <div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>
-      <div class="nav-scroll">
-        ${brand}
-        ${links}
-        ${post}
-      </div>
-      <button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">
-        ${(window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`}
-        <span class="dots">${icon("more")}</span>
-      </button>
-    </header>`;
+    const split = extraClass ? "" : `<div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>`;
+    const pillInner = (window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`;
+    return `<header class="nav${extraClass ? " " + extraClass : ""}">${split}<div class="nav-scroll">${brand}${linksHtml}${post}</div><button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">${pillInner}<span class="dots">${icon("more")}</span></button></header>`;
+  }
+
+  function nav(route) {
+    const music = route.name === "music" && window.SIntelMusic;
+    const desktopLinks = music ? window.SIntelMusic.links(route, navItem) : renderNavLinks(route);
+    return navChrome(route, "", desktopLinks) + navChrome(route, "nav-land", landNavLinks(route));
   }
 
   function shownFeeds(list) {
@@ -6781,20 +6925,244 @@ const here = parseRoute();
     </aside>`;
   }
 
+  const BOTTOM_NAV_MIN = 2;
+  const BOTTOM_NAV_MAX = 6;
+  const BOTTOM_NAV_IDS = [
+    "home", "explore", "tv", "communities", "notifications", "messages",
+    "feeds", "lists", "history", "music", "shorts", "games",
+    "subscriptions", "vault", "storage", "settings"
+  ];
+  const BOTTOM_NAV_DEFAULT_ON = ["home", "explore", "tv", "communities", "notifications", "messages"];
+
+  function bottomNavAvailable(id) {
+    try {
+      const def = navItemDef(id);
+      if (!def) return false;
+      if (def.visible && !def.visible()) return false;
+      return true;
+    } catch (err) {
+      return true;
+    }
+  }
+
+  function cleanBottomNav(raw) {
+    const order = [];
+    const seen = new Set();
+    const src = raw && Array.isArray(raw.order) ? raw.order : BOTTOM_NAV_IDS;
+    src.forEach((id) => {
+      if (typeof id !== "string" || !BOTTOM_NAV_IDS.includes(id) || seen.has(id)) return;
+      seen.add(id);
+      order.push(id);
+    });
+    BOTTOM_NAV_IDS.forEach((id) => { if (!seen.has(id)) order.push(id); });
+    const hiddenSrc = raw && Array.isArray(raw.hidden)
+      ? raw.hidden
+      : BOTTOM_NAV_IDS.filter((id) => !BOTTOM_NAV_DEFAULT_ON.includes(id));
+    const hiddenSet = new Set(hiddenSrc.filter((id) => id !== "home" && BOTTOM_NAV_IDS.includes(id)));
+    const visibleIds = () => order.filter((id) => !hiddenSet.has(id) && bottomNavAvailable(id));
+    let visibleNow = visibleIds();
+    if (visibleNow.length > BOTTOM_NAV_MAX) {
+      visibleNow.slice(BOTTOM_NAV_MAX).forEach((id) => { if (id !== "home") hiddenSet.add(id); });
+    }
+    visibleNow = visibleIds();
+    if (visibleNow.length < BOTTOM_NAV_MIN) {
+      order.forEach((id) => {
+        if (visibleNow.length >= BOTTOM_NAV_MIN) return;
+        if (!hiddenSet.has(id) || !bottomNavAvailable(id)) return;
+        hiddenSet.delete(id);
+        visibleNow.push(id);
+      });
+    }
+    return { order, hidden: order.filter((id) => hiddenSet.has(id)) };
+  }
+
+  function getBottomNav() {
+    return cleanBottomNav(STATE.settings && STATE.settings.bottomNav);
+  }
+
+  function saveBottomNav(custom) {
+    if (!STATE.settings) STATE.settings = {};
+    STATE.settings.bottomNav = cleanBottomNav(custom);
+    STATE.settings.bottomNavCustom = true;
+    saveSettings();
+  }
+
+  function bottomBarItems() {
+    const custom = getBottomNav();
+    const hidden = new Set(custom.hidden);
+    const items = [];
+    custom.order.forEach((id) => {
+      if (hidden.has(id) || !bottomNavAvailable(id)) return;
+      const def = navItemDef(id);
+      if (def) items.push(def);
+    });
+    return items.slice(0, BOTTOM_NAV_MAX);
+  }
+
+  function bottomHiddenItems() {
+    const custom = getBottomNav();
+    const hidden = new Set(custom.hidden);
+    const items = [];
+    custom.order.forEach((id) => {
+      if (!hidden.has(id) || !bottomNavAvailable(id)) return;
+      const def = navItemDef(id);
+      if (def) items.push(def);
+    });
+    return items;
+  }
+
+  function bottomBarLabel(def) {
+    return def.barLabel || def.listLabel || def.label;
+  }
+
+  function navChoiceLabel(def) {
+    return def.listLabel || def.label;
+  }
+
+  function bottomGlyph(def, on) {
+    return on && def.icon === "home" && PATH.homeOn ? "homeOn" : def.icon;
+  }
+
+  function bottomNavLink(def, route) {
+    const on = !!(def.active && def.active(route));
+    const badge = def.icon === "bell" ? bellBadgeHtml() : "";
+    const label = bottomBarLabel(def);
+    return `<a href="${esc(def.href)}" class="${on ? "on" : ""}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(bottomGlyph(def, on))}${badge}</span></a>`;
+  }
+
+  function bottomGripSvg() {
+    return `<svg class="bnav-grip-ico" viewBox="0 0 10 16" aria-hidden="true"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg>`;
+  }
+
+  function bottomNavCssId(value) {
+    const text = String(value || "");
+    if (window.CSS && CSS.escape) return CSS.escape(text);
+    return text.replace(/[^a-zA-Z0-9_-]/g, "");
+  }
+
+  let bottomFocus = null;
+  function refocusBottom(id, kind, dir) {
+    bottomFocus = { id, kind, dir: String(dir) };
+    requestAnimationFrame(() => {
+      const want = bottomFocus;
+      bottomFocus = null;
+      if (!want) return;
+      const safe = bottomNavCssId(want.id);
+      let el = null;
+      if (want.kind === "move") el = document.querySelector(`[data-act="bottom-nav-move"][data-id="${safe}"][data-dir="${want.dir}"]`);
+      else if (want.kind === "toggle") el = document.querySelector(`[data-act="bottom-nav-toggle"][data-id="${safe}"]`);
+      else el = document.querySelector(`[data-drag-bottom="${safe}"]`);
+      if (el && !el.disabled) el.focus();
+    });
+  }
+
+  function moveBottomNav(id, dir) {
+    const custom = getBottomNav();
+    const available = custom.order.filter((item) => bottomNavAvailable(item));
+    const index = available.indexOf(id);
+    const target = index + dir;
+    if (index < 0 || target < 0 || target >= available.length) return;
+    const from = custom.order.indexOf(available[index]);
+    const to = custom.order.indexOf(available[target]);
+    const tmp = custom.order[from];
+    custom.order[from] = custom.order[to];
+    custom.order[to] = tmp;
+    saveBottomNav(custom);
+    render();
+  }
+
+  function toggleBottomNav(id) {
+    if (!id || id === "home") return;
+    const custom = getBottomNav();
+    const hidden = new Set(custom.hidden);
+    const visible = custom.order.filter((item) => !hidden.has(item) && bottomNavAvailable(item));
+    if (hidden.has(id)) {
+      if (visible.length >= BOTTOM_NAV_MAX) return;
+      hidden.delete(id);
+    } else {
+      if (visible.length <= BOTTOM_NAV_MIN) return;
+      hidden.add(id);
+    }
+    custom.hidden = custom.order.filter((item) => hidden.has(item));
+    saveBottomNav(custom);
+    render();
+  }
+
+  function applyBottomDomOrder(rowIds) {
+    const custom = getBottomNav();
+    const next = [];
+    const seen = new Set();
+    rowIds.forEach((id) => {
+      if (!BOTTOM_NAV_IDS.includes(id) || seen.has(id) || custom.order.indexOf(id) < 0) return;
+      seen.add(id);
+      next.push(id);
+    });
+    custom.order.forEach((id) => { if (!seen.has(id)) next.push(id); });
+    custom.order = next;
+    saveBottomNav(custom);
+    render();
+  }
+
+  function landNavLinks(route) {
+    if (route.name === "music" && window.SIntelMusic) return window.SIntelMusic.links(route, navItem);
+    const shown = bottomBarItems().map((def) => navItem(def.href, def.icon, navChoiceLabel(def), !!(def.active && def.active(route)))).join("");
+    const hidden = bottomHiddenItems();
+    if (!hidden.length) return shown;
+    const moreOn = hidden.some((def) => def.active && def.active(route));
+    const bellHidden = hidden.some((def) => def.icon === "bell");
+    const menu = hidden.map((def) => navItem(def.href, def.icon, navChoiceLabel(def), !!(def.active && def.active(route)))).join("");
+    return `${shown}<details class="nav-land-more"${moreOn ? " open" : ""}><summary class="nav-item${moreOn ? " on" : ""}"><span class="nav-ico">${icon("more")}${bellHidden ? bellBadgeHtml() : ""}</span><span class="nav-label">${esc(tr("More"))}</span></summary><div class="nav-land-menu">${menu}</div></details>`;
+  }
+
   function bottom(route) {
     if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.bottomHtml) return window.SIntelMusic.bottomHtml(route, icon);
-    const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(name)}${name === "bell" ? bellBadgeHtml() : ""}</span></a>`;
-    return `<nav class="bottom-nav" aria-label="${tr("Primary")}">
-      ${item("#/", route.name === "home" ? "homeOn" : "home", tr("Home"), route.name === "home")}
-      ${item("#/explore", "search", tr("Search"), route.name === "explore")}
-      ${item("#/tv", "tv", tr("TV"), route.name === "tv")}
-      ${item("#/communities", "communities", tr("Communities"), route.name === "communities")}
-      ${item("#/feeds", "spark", tr("Feeds"), route.name === "feeds")}
-      ${item("#/notifications", "bell", tr("Notifications"), route.name === "notifications")}
-      ${item("#/messages", "mail", tr("Messages"), route.name === "messages")}
-      ${window.ViktorychShorts && window.ViktorychShorts.visible() ? item("#/shorts", "shorts", tr("Shorts"), route.name === "shorts") : ""}
-    </nav>
-    <button class="fab" data-act="compose" aria-label="${tr("Post")}">${icon("plus")}</button>`;
+    const links = bottomBarItems().map((def) => bottomNavLink(def, route)).join("");
+    return `<nav class="bottom-nav" aria-label="${tr("Primary")}">${links}</nav><button class="fab" data-act="compose" aria-label="${tr("Post")}">${icon("plus")}</button>`;
+  }
+
+  function bottomNavSettings() {
+    const custom = getBottomNav();
+    const hidden = new Set(custom.hidden);
+    const items = [];
+    custom.order.forEach((id) => {
+      if (!bottomNavAvailable(id)) return;
+      const def = navItemDef(id);
+      if (def) items.push(def);
+    });
+    const visibleCount = items.filter((def) => !hidden.has(def.id)).length;
+    const atMax = visibleCount >= BOTTOM_NAV_MAX;
+    const atMin = visibleCount <= BOTTOM_NAV_MIN;
+    const preview = bottomBarItems().map((def) => `<span class="bnav-preview-ico" data-preview-id="${esc(def.id)}" aria-label="${esc(bottomBarLabel(def))}"><span class="nav-ico">${icon(def.icon)}</span></span>`).join("");
+    const rows = items.map((def, index) => {
+      const on = !hidden.has(def.id);
+      const home = def.id === "home";
+      const disableOff = !on && atMax;
+      const disableOn = on && atMin && !home;
+      const disabled = home || disableOff || disableOn;
+      let title = "";
+      if (home) title = tr("Home always stays in the navigation bar.");
+      else if (disableOff) title = tr("You can show up to {count} items.", { count: BOTTOM_NAV_MAX });
+      else if (disableOn) title = tr("Keep at least {count} items in the navigation bar.", { count: BOTTOM_NAV_MIN });
+      const name = navChoiceLabel(def);
+      const switchLabel = title || (on ? tr("Visible") : tr("Hidden"));
+      return `<div class="bnav-row" data-bottom-id="${esc(def.id)}">
+        <button type="button" class="bnav-grip" data-drag-bottom="${esc(def.id)}" data-act="stop" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
+        <button type="button" class="icon-btn" data-act="bottom-nav-move" data-id="${esc(def.id)}" data-dir="-1" aria-label="${esc(tr("Move up"))}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
+        <button type="button" class="icon-btn" data-act="bottom-nav-move" data-id="${esc(def.id)}" data-dir="1" aria-label="${esc(tr("Move down"))}"${index === items.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
+        <span class="bnav-ico">${icon(def.icon)}</span>
+        <span class="bnav-name">${esc(name)}</span>
+        <button type="button" class="bnav-switch${on ? " on" : ""}" role="switch" aria-checked="${on ? "true" : "false"}" data-act="bottom-nav-toggle" data-id="${esc(def.id)}" aria-label="${esc(switchLabel)}"${disabled ? " disabled" : ""}${title ? ` title="${esc(title)}"` : ""}><i></i></button>
+      </div>`;
+    }).join("");
+    const layout = STATE.settings && STATE.settings.navLayout === "bar" ? "bar" : "auto";
+    const landOn = !!(STATE.settings && STATE.settings.navLayoutLand);
+    const syncOn = !!(STATE.settings && STATE.settings.navLayoutSync);
+    const layoutRadio = (id, label) => {
+      const on = layout === id;
+      return `<button class="lang-row" type="button" role="radio" aria-checked="${on ? "true" : "false"}" data-act="nav-layout" data-layout="${id}"><span>${esc(label)}</span><span class="lang-radio${on ? " on" : ""}" aria-hidden="true"></span></button>`;
+    };
+    const layoutBlock = `<section class="bnav-layout"><h2>${esc(tr("Navigation layout"))}</h2><p class="phandle">${esc(tr("For tablets and other medium-width screens in portrait. Phones keep the bottom bar."))}</p><div class="lang-list" role="radiogroup" aria-label="${esc(tr("Navigation layout"))}">${layoutRadio("auto", tr("Auto (sidebar)"))}${layoutRadio("bar", tr("Bottom bar (phone style)"))}</div><button class="tab-switch${landOn ? " on" : ""}" type="button" role="switch" aria-checked="${landOn ? "true" : "false"}" data-act="nav-layout-land"${layout === "bar" ? "" : " disabled"}><span>${esc(tr("Use bottom bar in landscape too"))}</span><i></i></button><button class="tab-switch${syncOn ? " on" : ""}" type="button" role="switch" aria-checked="${syncOn ? "true" : "false"}" data-act="nav-layout-sync"><span>${esc(tr("Sync this choice"))}</span><i></i></button><p class="phandle">${esc(tr("Saved on this device. Sync uses the same layout on your other signed-in devices."))}</p></section>`;
+    return settingsHead(tr("Customize navigation"), "#/settings/display") + `<div class="bnav-screen">${layoutBlock}<div class="bottom-nav bottom-nav-preview" aria-hidden="true">${preview}</div><p class="phandle set-block">${esc(tr("Choose which icons appear in the bottom bar. Home always stays. You can show {min} to {max}.", { min: BOTTOM_NAV_MIN, max: BOTTOM_NAV_MAX }))}</p><div class="bnav-list">${rows}</div><div class="bnav-reset"><button class="outline" type="button" data-act="bottom-nav-reset">${esc(tr("Reset to default"))}</button></div></div>`;
   }
 
   function listSortOf(list) {
@@ -6838,6 +7206,7 @@ const here = parseRoute();
   }
 
   function byRepostTime(a, b) {
+    if (window.FeedOrder) return window.FeedOrder.compare(a, b);
     const delta = repostMillis(b) - repostMillis(a);
     if (delta) return delta;
     const aid = String((a && a.id) || "");
@@ -7064,7 +7433,9 @@ const here = parseRoute();
     return posts().filter((p) => ids.has(p.feedId) || ids.has((p.platform || "x") + ":" + p.handle)).sort(byStamp);
   }
 
-  function homeView(route) {
+  const FEED_PAGE = 25;
+
+  function homeSorted(route) {
     const tab = route.tab || "foryou";
     let list = posts().filter((post) => homeShows(post, route));
     if (tabView(tab) === "reposts") list.sort(byRepostTime);
@@ -7078,6 +7449,58 @@ const here = parseRoute();
         list.sort((a, b) => heat(b) - heat(a) || byStamp(a, b));
       }
     }
+    return list;
+  }
+
+  function homePage(route, list) {
+    const tab = route.tab || "foryou";
+    if (!STATE.feedShown) STATE.feedShown = {};
+    if (!STATE.feedCutoff) STATE.feedCutoff = {};
+    let count = STATE.feedShown[tab] || FEED_PAGE;
+    if (count < FEED_PAGE) count = FEED_PAGE;
+    const prev = STATE.feedCutoff[tab];
+    if (prev && tabSort(tab) !== "popular") {
+      const at = list.findIndex((post) => String((post && post.id) || "") === prev);
+      if (at >= 0 && at + 1 > count) count = at + 1;
+    }
+    const page = list.slice(0, count);
+    const last = page[page.length - 1];
+    STATE.feedCutoff[tab] = last ? String(last.id || "") : "";
+    STATE.feedShown[tab] = count;
+    return page;
+  }
+
+  function revealMoreTimeline() {
+    const route = parseRoute();
+    if (route.name === "user") {
+      loadMoreLive(route);
+      return;
+    }
+    if (route.name !== "home") {
+      loadNextShard();
+      return;
+    }
+    const tab = route.tab || "foryou";
+    const list = homeSorted(route);
+    const count = (STATE.feedShown && STATE.feedShown[tab]) || FEED_PAGE;
+    if (count < list.length) {
+      if (!STATE.feedShown) STATE.feedShown = {};
+      STATE.feedShown[tab] = Math.min(list.length, count + FEED_PAGE);
+      render({ y: window.scrollY });
+      return;
+    }
+    loadNextShard();
+  }
+
+  function timelineSentinel(shown, total) {
+    if (shown < total) return `<div id="archive-more" class="archive-more">${tr("Older posts")}</div>`;
+    return archiveSentinel();
+  }
+
+  function homeView(route) {
+    const tab = route.tab || "foryou";
+    const sorted = homeSorted(route);
+    const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
     const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
@@ -7085,7 +7508,7 @@ const here = parseRoute();
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     );
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
-    return homeHeader(tab) + spaceCard + body + archiveSentinel();
+    return homeHeader(tab) + spaceCard + body + timelineSentinel(list.length, sorted.length);
   }
 
   function pageHead(title, extra, back, action) {
@@ -7941,18 +8364,36 @@ const here = parseRoute();
       row.paging = "";
       const bucket = liveBucket(row, tab);
       const list = row[bucket] || (row[bucket] = []);
+      if (!row.seenCursors) row.seenCursors = {};
+      const seenCursor = tab + ":" + cursor;
+      if (row.seenCursors[seenCursor]) {
+        row.cursor[tab] = "";
+        render({ y: window.scrollY });
+        return;
+      }
+      row.seenCursors[seenCursor] = true;
+      let added = 0;
       if (pack && pack.posts && pack.posts.length) {
         const seen = {};
-        list.forEach((post) => { seen[post.id] = true; });
+        list.forEach((post) => {
+          const id = window.FeedOrder ? window.FeedOrder.key(post) : String(post.id || "");
+          if (id) seen[id] = true;
+        });
         pack.posts.forEach((post) => {
-          if (!post || seen[post.id]) return;
-          seen[post.id] = true;
+          if (!post) return;
+          const id = window.FeedOrder ? window.FeedOrder.key(post) : String(post.id || "");
+          if (!id || seen[id]) return;
+          seen[id] = true;
           list.push(post);
           rememberLive(post);
+          added += 1;
         });
       }
-      row.cursor[tab] = pack && pack.cursor && pack.cursor !== cursor ? pack.cursor : "";
-      render();
+      if (window.FeedOrder) list.sort(window.FeedOrder.compare);
+      const next = pack && pack.cursor ? String(pack.cursor) : "";
+      if (!added || !next || next === String(cursor) || row.seenCursors[tab + ":" + next]) row.cursor[tab] = "";
+      else row.cursor[tab] = next;
+      render({ y: window.scrollY });
     };
     if (route.platform === "youtube" && tab === "videos") {
       const id = (row.profile && row.profile.channelId) || row.handle;
@@ -8013,7 +8454,7 @@ const here = parseRoute();
     const requested = route.query.get("tab") || "";
     const tab = tabs.some((pair) => pair[0] === requested) ? requested : (tabs[0] ? tabs[0][0] : "");
     const bucket = tab ? liveBucket(row, tab) : "";
-    const list = bucket ? (row[bucket] || []) : [];
+    const list = bucket ? (row[bucket] || []).slice().sort(byStamp) : [];
     const shown = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
     const banner = profile.banner ? `<img class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : profile.bannerColor ? `<div class="pbanner theme" style="background:${esc(profile.bannerColor)}"></div>` : `<div class="pbanner"></div>`;
     const meta = [
@@ -8103,7 +8544,10 @@ const here = parseRoute();
     const bio = row.bio ? `<span class="connect-bio">${esc(row.bio)}</span>` : "";
     const button = self ? "" : followButtonClean(row.id);
     const handle = row.handle ? "@" + esc(row.handle) : "";
-    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${avatar(row.avatar, row.name || row.handle, "", row.avatarFace)}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span><span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
+    const appId = String(row.id || "").startsWith("app:") ? String(row.id).slice(4) : "";
+    let face = avatar(row.avatar, row.name || row.handle, "", row.avatarFace);
+    if (/^\d{12}$/.test(appId) && window.ViktorychPresence) face = window.ViktorychPresence.wrap(appId, face);
+    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${face}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span><span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
   }
 
   function connectionsHash(route, tab) {
@@ -8336,10 +8780,12 @@ const here = parseRoute();
     const talk = telegramTalk(post);
     const slice = talk == null ? replySlice(post) : { loading: false, shown: [] };
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
-    const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">${tr("Replying to")} <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
-    const parentCard = post.platform === "telegram" && post.replyParent ? contextCard(post.replyParent) : "";
-    const body = `${parentCard}${forwardLine(post)}${replyLine}
-        ${textBlock(post, post.id, true, "status-text")}
+    const parentShown = chain.nodes.length > 0;
+    const focusPost = parentShown ? mentionless(post) : post;
+    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
+    const replyLine = !parentShown && post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">${tr("Replying to")} <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
+    const body = `${forwardLine(post)}${replyLine}
+        ${textBlock(focusPost, post.id, true, "status-text")}
         ${hiddenPost(post) ? `<p class="phandle">${tr("Muted on this device.")}</p>` : ""}
         ${pollHtml(post)}
         ${discordMeta(post)}
@@ -10215,6 +10661,9 @@ const here = parseRoute();
       else if (section === "content") key = tr("Custom tabs");
       else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
+      else if (section === "storage" && sub === "usage") key = tr("Storage usage");
+      else if (section === "storage") key = tr("Data and storage");
+      else if (section === "delete-account") key = tr("Delete account");
       else key = tr("Settings");
     } else {
       const map = {
@@ -10295,8 +10744,10 @@ const here = parseRoute();
         ${settingsRow("#/settings/data", tr("Data usage"))}
       </div>`;
     }
+    if (section === "display" && sub === "navigation") return bottomNavSettings();
     if (section === "display") {
       return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
+        ${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}
         <h2>${esc(tr("Appearance"))}</h2>
         <div class="theme-row">
           ${themeBtn("auto", tr("Auto"))}
@@ -10360,7 +10811,9 @@ const here = parseRoute();
         return `<button class="tab-switch${val ? " on" : ""}" type="button" role="switch" aria-checked="${val ? "true" : "false"}" data-act="toggle-privacy-pref" data-key="${key}"><span>${esc(label)}</span><i></i></button>
         <p class="phandle set-desc">${esc(desc)}</p>`;
       };
+      const presenceBlock = window.ViktorychPresence ? window.ViktorychPresence.settingsHtml() : "";
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
+        ${presenceBlock}
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
@@ -10412,6 +10865,20 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("{app}. Posts from accounts you follow stay in this browser. Not affiliated with X.", { app: productName("app") }))}</p>
       </div>`;
     }
+    if (section === "storage" && sub === "usage") {
+      const body = window.ViktorychStorage ? window.ViktorychStorage.usageHtml() : "";
+      return settingsHead(tr("Storage usage"), "#/settings/storage") + body;
+    }
+    if (section === "storage") {
+      const body = window.ViktorychStorage ? window.ViktorychStorage.dataHtml() : "";
+      return settingsHead(tr("Data and storage"), "#/settings") + body;
+    }
+    if (section === "delete-account") {
+      const body = window.ViktorychAccounts && window.ViktorychAccounts.deleteAccountHtml
+        ? window.ViktorychAccounts.deleteAccountHtml()
+        : "";
+      return settingsHead(tr("Delete account"), "#/settings") + body;
+    }
     if (section === "keys") {
       const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
         ? window.OwnerKeys.sectionHtml()
@@ -10425,6 +10892,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
+      ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
       ${keysRow}
@@ -10435,18 +10903,7 @@ const here = parseRoute();
   function drawer() {
     if (!STATE.drawer) return "";
     const music = parseRoute().name === "music" && window.SIntelMusic;
-    const links = music ? window.SIntelMusic.drawerLinks(icon) : `<a href="#/lists">${icon("lists")} ${tr("Lists")}</a>
-      <a href="#/communities">${icon("communities")} ${tr("Communities")}</a>
-      <a href="#/tv">${icon("tv")} ${tr("TV")}</a>
-      <a href="#/history">${icon("clock")} ${tr("History")}</a>
-      <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} ${tr("Subscriptions")}</a>
-      <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
-      <a href="#/music">${icon("muNote")} ${tr("Music")}</a>
-      ${window.ViktorychShorts && window.ViktorychShorts.visible() ? `<a href="#/shorts">${icon("shorts")} ${tr("Shorts")}</a>` : ""}
-      <a href="#/games">${icon("games")} ${tr("Games")}</a>
-      ${window.ViktorychDrive && window.ViktorychDrive.visible() ? `<a href="#/storage">${icon("storage")} ${tr("brand.storage")}</a>` : ""}
-      ${window.ViktorychVault && window.ViktorychVault.visible() ? `<a href="#/vault">${icon("vault")} ${tr("Vault")}</a>` : ""}
-      <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
+    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
@@ -11048,19 +11505,28 @@ if (STATE.histClear) {
     return (post.media || []).some((item) => item && (item.type === "video" || item.type === "animated_gif"));
   }
 
+  function followIdsNow() {
+    const settings = STATE.settings || {};
+    const raw = (settings.follows || []).concat(settings.accountFollows || []);
+    const out = [];
+    const seen = {};
+    raw.forEach((id) => {
+      const extra = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(id) : [id];
+      (extra && extra.length ? extra : [id]).forEach((item) => {
+        const text = String(item || "");
+        const fold = text.toLowerCase();
+        if (!text || seen[fold]) return;
+        seen[fold] = true;
+        out.push(text);
+      });
+    });
+    return out;
+  }
+
   function followedPost(post) {
-    if (!post || !STATE.settings || !Array.isArray(STATE.settings.follows)) return false;
-    const ids = STATE.settings.follows;
-    if (profileMatch(post, ids)) return true;
-    if (post.feedId && accountFollowed(post.feedId)) return true;
-    const plain = (post.platform || "x") + ":" + (post.handle || "");
-    if (accountFollowed(plain)) return true;
-    if (post.channelId && accountFollowed((post.platform || "youtube") + ":" + post.channelId)) return true;
-    const feed = feedOf(post);
-    if (feed && isFeedFollowed(feed)) return true;
-    const creator = creatorOf(post);
-    if (creator && isFeedFollowed(creator)) return true;
-    return false;
+    if (!post || !STATE.settings) return false;
+    if (window.FeedOrder) return window.FeedOrder.followsPost(post, followIdsNow());
+    return profileMatch(post, STATE.settings.follows || []);
   }
 
   function feedOf(post) {
@@ -11986,9 +12452,12 @@ if (STATE.histClear) {
       .then(() => render());
   }
 
-  function ancestorOf(id) {
+  function ancestorOf(id, hint) {
     const known = findAnyPost(id);
     if (known) return { post: known, loading: false, missing: false };
+    if (hint && (hint.text || hint.title || hint.author || hint.handle || (hint.media || []).length)) {
+      return { post: hint, loading: false, missing: false };
+    }
     const slot = STATE.chain[String(id)];
     if (!slot) {
       lookupAncestor(id);
@@ -12003,10 +12472,11 @@ if (STATE.histClear) {
     let loading = false;
     const seen = new Set([postKey(focus), String((focus && focus.id) || "")]);
     for (let guard = 0; guard < 12; guard++) {
-      const parentId = String((current.replyingTo || {}).id || "");
+      const parentId = String((current.replyingTo || {}).id || (current.replyParent && (current.replyParent.statusId || current.replyParent.id)) || "");
       if (!parentId || seen.has(parentId)) break;
       seen.add(parentId);
-      const slot = ancestorOf(parentId);
+      const hint = current.replyParent && String((current.replyParent.statusId || current.replyParent.id) || "") === parentId ? current.replyParent : null;
+      const slot = ancestorOf(parentId, hint);
       if (slot.loading) {
         loading = true;
         break;
@@ -12025,12 +12495,13 @@ if (STATE.histClear) {
     return (focus && focus.handle) || "";
   }
 
-  function ancestorCard(post) {
-    const showReply = !!(post.replyingTo && post.replyingTo.handle);
+  function ancestorCard(post, parentShown) {
+    const showReply = !parentShown && !!(post.replyingTo && post.replyingTo.handle);
     const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
     const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
     const face = authorFace(post);
     const ancHandle = internalPostHandle(post.handle || "", post);
+    const shown = parentShown ? mentionless(post) : post;
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
       <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
@@ -12041,8 +12512,9 @@ if (STATE.histClear) {
           <a class="time" data-act="stop" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
         </div>
         ${reply}
-        ${textBlock(post, "anc:" + postKey(post), false)}
+        ${textBlock(shown, "anc:" + postKey(post), false)}
         ${mediaHtml(post.media, false, post)}
+        ${quoteCard(post.quoted)}
       </div>
     </article>`;
   }
@@ -12053,11 +12525,11 @@ if (STATE.histClear) {
     const id = postKey(focus);
     let html = "";
     if (chain.nodes.length > 3 && !STATE.threadMore[id]) {
-      html = ancestorCard(chain.nodes[0]) +
+      html = ancestorCard(chain.nodes[0], false) +
         `<div class="ancestor-gap"><div class="ava-col"><div class="thread-line"></div></div><button class="ancestor-more" type="button" data-act="thread-more" data-id="${esc(id)}">${tr("Show more")}</button></div>` +
-        ancestorCard(chain.nodes[chain.nodes.length - 1]);
+        ancestorCard(chain.nodes[chain.nodes.length - 1], false);
     } else {
-      html = chain.nodes.map(ancestorCard).join("");
+      html = chain.nodes.map((node, index) => ancestorCard(node, index > 0)).join("");
     }
     if (chain.loading) html += `<div class="ancestor-loading">${tr("Loading…")}</div>`;
     return html;
@@ -12272,9 +12744,8 @@ if (STATE.histClear) {
   function navSection(name) {
     if (name === "list") return "lists";
     if (name === "bookmarks") return "history";
-    if (name === "games") return "games";
-    if (name === "vault") return "vault";
-    if (name === "home" || name === "explore" || name === "notifications" || name === "messages" || name === "feeds" || name === "lists" || name === "history" || name === "settings" || name === "subscriptions") return name;
+    if (name === "drive") return "storage";
+    if (BOTTOM_NAV_IDS.includes(name)) return name;
     return "";
   }
 
@@ -12475,13 +12946,10 @@ if (STATE.histClear) {
     }
     if (route.name !== "status") STATE.focusId = "";
     const reset = opts && opts.reset;
-    if (opts && Object.prototype.hasOwnProperty.call(opts, "y")) STATE.holdY = opts.y;
+    const explicitY = !!(opts && Object.prototype.hasOwnProperty.call(opts, "y"));
+    if (explicitY) STATE.holdY = opts.y;
     if (STATE.snapTop) STATE.holdY = 0;
     let y = STATE.holdY != null ? STATE.holdY : (reset ? 0 : window.scrollY);
-    if (leavingWatch) {
-      y = 0;
-      SCROLLS[nextKey] = 0;
-    }
     const focus = document.activeElement;
     const focusId = focus && focus.id;
     const caret = focus && typeof focus.selectionStart === "number" ? focus.selectionStart : null;
@@ -12503,6 +12971,7 @@ if (STATE.histClear) {
       const pillsRow = document.querySelector(".sp-row");
       const pillsLeft = pillsRow ? pillsRow.scrollLeft : 0;
       document.getElementById("app").innerHTML = shell(view(route), route);
+      if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
       if (pillsLeft) {
         const restorePills = () => {
           const paintedRow = document.querySelector(".sp-row");
@@ -12551,6 +13020,20 @@ if (STATE.histClear) {
       if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = window.SIntelMusic.titleFor(route);
       else document.title = routeTitle(route, liveName, personName, discordTitle);
       window.scrollTo(0, y);
+      if (explicitY && window.requestAnimationFrame) {
+        window.requestAnimationFrame(() => {
+          if (gen !== STATE.renderGen) return;
+          let next = y;
+          if (opts && opts.anchorId) {
+            const raw = String(opts.anchorId);
+            const sel = window.CSS && CSS.escape ? 'article[data-post="' + CSS.escape(raw) + '"]' : 'article[data-post="' + raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"]';
+            const el = document.querySelector(sel);
+            if (el) next = Math.max(0, window.scrollY + (el.getBoundingClientRect().top - (Number(opts.anchorTop) || 0)));
+          }
+          window.scrollTo(0, next);
+          if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = next;
+        });
+      }
       if (focusId) {
         const el = document.getElementById(focusId);
         if (el) {
@@ -12578,6 +13061,7 @@ if (STATE.histClear) {
       if (window.SoccerScores && window.SoccerScores.afterRender) window.SoccerScores.afterRender(route);
       if (window.WeatherPills && window.WeatherPills.afterRender) window.WeatherPills.afterRender(route);
       bindPlayers();
+      bindMediaFrames();
       primeTelegramImages();
       resumePlayback();
       placeTabMenu();
@@ -12595,7 +13079,7 @@ if (STATE.histClear) {
       if (STATE.snapTop) y = 0;
       else if (STATE.holdY != null) y = STATE.holdY;
       else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
-      if (!STATE.snapTop && window.scrollY > y + 4) y = window.scrollY;
+      if (!STATE.snapTop && !explicitY && window.scrollY > y + 4) y = window.scrollY;
       window.scrollTo(0, y);
       if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = y;
       if (STATE.holdY === y) STATE.holdY = null;
@@ -12760,6 +13244,49 @@ if (STATE.histClear) {
       saveNavCustom(DEFAULT_NAV_CUSTOM);
       render();
       toast(tr("Reset to default"));
+      return;
+    }
+    if (act === "bottom-nav-move") {
+      moveBottomNav(el.dataset.id, Number(el.dataset.dir));
+      refocusBottom(el.dataset.id, "move", el.dataset.dir);
+      return;
+    }
+    if (act === "bottom-nav-toggle") {
+      toggleBottomNav(el.dataset.id);
+      refocusBottom(el.dataset.id, "toggle");
+      return;
+    }
+    if (act === "bottom-nav-reset") {
+      if (!STATE.settings) STATE.settings = {};
+      STATE.settings.bottomNav = cleanBottomNav(null);
+      STATE.settings.bottomNavCustom = true;
+      saveSettings();
+      render();
+      toast(tr("Reset to default"));
+      return;
+    }
+    if (act === "nav-layout") {
+      if (!STATE.settings) STATE.settings = {};
+      STATE.settings.navLayout = el.dataset.layout === "bar" ? "bar" : "auto";
+      saveSettings();
+      applyNavLayout();
+      render();
+      return;
+    }
+    if (act === "nav-layout-land") {
+      if (!STATE.settings || STATE.settings.navLayout !== "bar") return;
+      STATE.settings.navLayoutLand = !STATE.settings.navLayoutLand;
+      saveSettings();
+      applyNavLayout();
+      render();
+      return;
+    }
+    if (act === "nav-layout-sync") {
+      if (!STATE.settings) STATE.settings = {};
+      STATE.settings.navLayoutSync = !STATE.settings.navLayoutSync;
+      if (!STATE.settings.navLayoutSync && window.ViktorychAccounts && window.ViktorychAccounts.releaseNavLayout) window.ViktorychAccounts.releaseNavLayout();
+      saveSettings();
+      render();
       return;
     }
     if (act === "nav-order-move") {
@@ -13758,6 +14285,8 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
 
   let tabDrag = null;
   let swallowTabDrag = false;
+  let bottomDrag = null;
+  let swallowBottomNavDrag = false;
   document.addEventListener("pointerdown", (event) => {
     const grip = event.target.closest && event.target.closest("[data-drag-tab]");
     if (!grip || event.button > 0 || grip.closest(".tabs")) return;
@@ -13819,10 +14348,73 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   document.addEventListener("pointerup", finishTabDrag);
   document.addEventListener("pointercancel", finishTabDrag);
 
+  document.addEventListener("pointerdown", (event) => {
+    const grip = event.target.closest && event.target.closest("[data-drag-bottom]");
+    if (!grip || event.button > 0) return;
+    const node = grip.closest(".bnav-row");
+    if (!node) return;
+    bottomDrag = { pointer: event.pointerId, id: grip.dataset.dragBottom, x: event.clientX, y: event.clientY, started: false, node };
+    try { grip.setPointerCapture(event.pointerId); } catch (err) { /* the drag still follows the pointer */ }
+  }, true);
+  document.addEventListener("pointermove", (event) => {
+    if (!bottomDrag || event.pointerId !== bottomDrag.pointer) return;
+    const dx = event.clientX - bottomDrag.x;
+    const dy = event.clientY - bottomDrag.y;
+    if (!bottomDrag.started) {
+      if (dx * dx + dy * dy < 36) return;
+      bottomDrag.started = true;
+      bottomDrag.node.classList.add("is-dragging");
+    }
+    const parent = bottomDrag.node.parentNode;
+    if (!parent) return;
+    let target = null;
+    Array.prototype.forEach.call(parent.children, (el) => {
+      if (el === bottomDrag.node || !el.getAttribute || !el.getAttribute("data-bottom-id")) return;
+      const rect = el.getBoundingClientRect();
+      if (event.clientY >= rect.top && event.clientY <= rect.bottom) target = el;
+    });
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      const before = event.clientY < rect.top + rect.height / 2;
+      if (before) parent.insertBefore(bottomDrag.node, target);
+      else if (target.nextSibling !== bottomDrag.node) parent.insertBefore(bottomDrag.node, target.nextSibling);
+    }
+    if (event.cancelable) event.preventDefault();
+  }, { passive: false });
+  const finishBottomDrag = (event) => {
+    if (!bottomDrag || (event && event.pointerId !== bottomDrag.pointer)) return;
+    const drag = bottomDrag;
+    bottomDrag = null;
+    if (!drag.started) return;
+    swallowBottomNavDrag = true;
+    setTimeout(() => { swallowBottomNavDrag = false; }, 0);
+    const parent = drag.node.parentNode;
+    const ids = [];
+    if (parent) {
+      parent.querySelectorAll("[data-bottom-id]").forEach((row) => {
+        const id = row.getAttribute("data-bottom-id");
+        if (id && ids.indexOf(id) < 0) ids.push(id);
+      });
+    }
+    applyBottomDomOrder(ids);
+    refocusBottom(drag.id, "grip");
+  };
+  document.addEventListener("pointerup", finishBottomDrag);
+  document.addEventListener("pointercancel", finishBottomDrag);
+  document.addEventListener("keydown", (event) => {
+    const grip = event.target.closest && event.target.closest("[data-drag-bottom]");
+    if (!grip || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    event.preventDefault();
+    const dir = event.key === "ArrowUp" ? -1 : 1;
+    moveBottomNav(grip.dataset.dragBottom, dir);
+    refocusBottom(grip.dataset.dragBottom, "grip");
+  });
+
   document.addEventListener("click", (event) => {
-    if (swallowTabDrag || swallowNotePress) {
+    if (swallowTabDrag || swallowNotePress || swallowBottomNavDrag) {
       swallowTabDrag = false;
       swallowNotePress = false;
+      swallowBottomNavDrag = false;
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -13888,7 +14480,7 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     if (!event.touches || event.touches.length !== 1) return;
     const node = event.target;
     if (!node || !node.closest) return;
-    if (node.closest("[data-drag-tab], button.tab-caret, input, textarea, video, .menu")) return;
+    if (node.closest("[data-drag-tab], [data-drag-bottom], button.tab-caret, input, textarea, video, .menu")) return;
     const tab = node.closest("[data-note-tab]");
     const article = node.closest("article.post[data-post]");
     if (article && node.closest("a, button, input, textarea, video")) return;
@@ -14485,6 +15077,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
   });
 
+  function presenceIdOf(profile) {
+    const raw = String((profile && profile.publicId) || "");
+    if (/^\d{12}$/.test(raw)) return raw;
+    const id = String((profile && profile.id) || "");
+    if (id.startsWith("app:") && /^\d{12}$/.test(id.slice(4))) return id.slice(4);
+    if (profile && profile.platform === "app" && /^\d{12}$/.test(String(profile.handle || ""))) return String(profile.handle);
+    return "";
+  }
+
   function paintHover(el, profile) {
     const rect = el.getBoundingClientRect();
     const box = document.getElementById("hover");
@@ -14493,7 +15094,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const id = liveFollowId(profile);
     const bannerFace = faceChoice("banner", profile.banner, profile.bannerFace);
     const banner = bannerFace === "none" ? "" : (bannerFace === "photo" ? `<div class="hbanner" style="background:url(${encodeURI(profile.banner)}) center/cover"></div>` : `<div class="hbanner"></div>`);
-    box.innerHTML = `<div class="hcard">${banner}<div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava", profile.avatarFace)}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
+    const pid = presenceIdOf(profile);
+    let face = avatar(profile.avatar, profile.name, "pava", profile.avatarFace);
+    let seen = "";
+    if (pid && window.ViktorychPresence) {
+      face = window.ViktorychPresence.wrap(pid, face);
+      seen = window.ViktorychPresence.linesHtml(pid);
+    }
+    box.innerHTML = `<div class="hcard">${banner}<div class="hbody"><div class="pava-row">${face}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${seen}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
     const left = Math.min(rect.left, window.innerWidth - 320);
     box.style.left = Math.max(8, left) + "px";
     box.style.top = (rect.bottom + 8) + "px";
@@ -14521,6 +15129,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  try {
+    matchMedia("(max-width: 699px)").addEventListener("change", () => refreshMediaFrames());
+  } catch (err) { /* older webviews keep the ratio from the last render */ }
   let routing = false;
   let scrollFreeze = false;
   window.addEventListener("scroll", () => {
@@ -14612,9 +15223,18 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return THEME_COLORS[mode] ? mode : "lightsout";
   }
 
+  function applyNavLayout() {
+    const layout = STATE.settings && STATE.settings.navLayout === "bar" ? "bar" : "auto";
+    const land = layout === "bar" && !!(STATE.settings && STATE.settings.navLayoutLand);
+    document.documentElement.setAttribute("data-nav-layout", layout);
+    if (land) document.documentElement.setAttribute("data-nav-bar-land", "1");
+    else document.documentElement.removeAttribute("data-nav-bar-land");
+  }
+
   function applyTheme() {
     const theme = resolvedTheme();
     document.documentElement.setAttribute("data-theme", theme);
+    applyNavLayout();
     const color = THEME_COLORS[theme] || "#000000";
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
     const scheme = document.querySelector('meta[name="color-scheme"]');
@@ -14720,9 +15340,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     ((STATE.data && STATE.data.posts) || []).forEach((post) => {
       if (!post) return;
       current[canonicalPostId(post)] = true;
+      if (window.FeedOrder) current[window.FeedOrder.key(post)] = true;
       if (post.id) current[String(post.id)] = true;
     });
-    const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !current[String(post.id || "")]);
+    const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !(window.FeedOrder && current[window.FeedOrder.key(post)]) && !current[String(post.id || "")]);
     return added.concat(live);
   }
 
@@ -14745,7 +15366,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       faces.push(src);
     });
     const avatars = faces.map((src) => `<img class="pill-ava" alt="" src="${esc(src)}">`).join("");
-    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + tr("New posts") + "</span>";
+    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
     el.hidden = false;
   }
 
@@ -14806,7 +15427,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     const out = [];
     (incoming || []).forEach((post) => {
-      if (!post || out.length >= 20) return;
+      if (!post) return;
       const id = canonicalPostId(post);
       if (!id) return;
       post.feedId = feed.id;
@@ -14818,12 +15439,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (post.kind === "repost" && post.repostedBy && !post.repostedBy.avatar && feed.avatar) post.repostedBy.avatar = feed.avatar;
       if (post.kind === "repost" && post.repostedBy && feed.name && post.repostedBy.name === post.repostedBy.handle) post.repostedBy.name = feed.name;
       if (known[id] || known[String(post.id || "")]) return;
-      const ms = timeMs(post.sortDate || post.date || "");
-      if (!ms || (newest && ms <= newest)) return;
       known[id] = true;
       out.push(post);
     });
-    return out;
+    if (window.FeedOrder) {
+      const have = posts().filter((post) => belongsToFeed(post, feed));
+      return window.FeedOrder.freshPosts(have, out, 40);
+    }
+    return out.filter((post) => {
+      const ms = timeMs(post.sortDate || post.date || "");
+      return ms && (!newest || ms > newest);
+    }).slice(0, 20);
   }
 
   function settlePublishTimes(feed, incoming) {
@@ -15154,9 +15780,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (liveDateScrubbed) render();
         if (!incoming.length) return;
         return attachParents(incoming).then(() => {
-          const route = parseRoute();
-          const atTop = window.scrollY < 80 && route.name === "home";
-          if (apply || atTop) applyLive(incoming, true);
+          const atTop = window.scrollY < 40;
+          if (atTop) applyLive(incoming, true);
           else {
             STATE.pendingLive = (STATE.pendingLive || []).concat(incoming);
             showPill(STATE.pendingLive);
@@ -15191,18 +15816,63 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     saveSettings();
   }
 
+  function postCatalogKey(post) {
+    if (window.FeedOrder) return window.FeedOrder.key(post);
+    return canonicalPostId(post);
+  }
+
+  function patchPostDates(kept, incoming) {
+    if (!kept || !incoming) return false;
+    let changed = false;
+    const order = window.FeedOrder;
+    const nextDate = order ? order.preferDate(kept.date, incoming.date) : earlierIso(kept.date, incoming.date);
+    if (nextDate && nextDate !== kept.date) {
+      kept.date = nextDate;
+      changed = true;
+    }
+    const sortMs = order ? order.parseInstant(incoming.sortDate) : timeMs(incoming.sortDate);
+    if (sortMs && sortMs <= Date.now() + 10 * 60 * 1000 && incoming.sortDate !== kept.sortDate) {
+      kept.sortDate = incoming.sortDate;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function mergeCatalog(existing, incoming, includeNew) {
+    const current = ((existing && existing.posts) || []).slice();
+    const byKey = {};
+    current.forEach((post) => {
+      const id = postCatalogKey(post);
+      if (id && !byKey[id]) byKey[id] = post;
+    });
+    let changed = false;
+    const added = [];
+    ((incoming && incoming.posts) || []).forEach((post) => {
+      if (!post) return;
+      const id = postCatalogKey(post);
+      if (!id) return;
+      const kept = byKey[id];
+      if (kept) {
+        if (patchPostDates(kept, post)) changed = true;
+        return;
+      }
+      byKey[id] = post;
+      added.push(post);
+      if (includeNew) {
+        current.push(post);
+        changed = true;
+      }
+    });
+    return { doc: Object.assign({}, existing || {}, incoming || {}, { posts: current }), added: added, changed: changed };
+  }
+
   async function refreshFeeds(apply) {
     try {
       const doc = lockDocDates(await fetchFeeds(true));
       if (!doc || !Array.isArray(doc.posts)) return;
-      const current = {};
-      ((STATE.data && STATE.data.posts) || []).forEach((post) => {
-        current[canonicalPostId(post)] = true;
-        if (post.id) current[String(post.id)] = true;
-      });
-      const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !current[String(post.id || "")]);
+      const atTop = window.scrollY < 40;
       const feedsChanged = catalogSignature(STATE.data) !== catalogSignature(doc);
-      if (apply || !STATE.data || (feedsChanged && !added.length)) {
+      if (!STATE.data) {
         notePublished(doc);
         STATE.data = withMemory(doc);
         if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
@@ -15211,25 +15881,37 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         STATE.pendingFeed = null;
         if (!(STATE.pendingLive || []).length) showPill([]);
         if (feedsChanged) adoptFeeds(doc);
-        render();
+        render(atTop ? { y: 0 } : undefined);
         scanBellPosts(doc.posts);
         ensureVideoOwners();
         return;
       }
-      if (feedsChanged) {
-        adoptFeeds(doc);
-        render();
-      }
+      const includeNew = atTop;
+      const merged = mergeCatalog(STATE.data, doc, includeNew);
+      STATE.data = withMemory(merged.doc);
+      if (feedsChanged) adoptFeeds(doc);
       scanBellPosts(doc.posts);
-      if (!added.length) return;
+      if (includeNew) {
+        notePublished(doc);
+        STATE.pendingFeed = null;
+        if (!(STATE.pendingLive || []).length) showPill([]);
+        STATE.error = null;
+        if (apply || merged.added.length || merged.changed || feedsChanged) render({ y: 0 });
+        ensureVideoOwners();
+        return;
+      }
+      if (merged.changed || feedsChanged) render({ y: window.scrollY });
+      if (!merged.added.length) return;
       STATE.pendingFeed = doc;
-      showPill(added.concat(STATE.pendingLive || []));
+      showPill(merged.added.concat(STATE.pendingLive || []));
       const since = Number(readStored(localStorage, "seen-at") || 0);
-      const fresh = added.filter((post) => followedSince(post, since) && !coveredByBell(post));
+      const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post));
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
-      if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) {
+      if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
+        if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
         try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
       }
+      ensureVideoOwners();
     } catch (err) { /* keep the posts already on screen */ }
   }
 
@@ -15264,7 +15946,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!el) return;
     const was = !el.hidden;
     el.hidden = !offline;
-    el.textContent = tr("You're offline. Showing saved posts.");
+    el.textContent = tr("Offline - showing saved");
     if (was && !offline) {
       toast(tr("You're back online"));
       flushBookmarkQueue();
@@ -15827,6 +16509,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showLocalNotification(note) {
+    if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
+    if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
+    if (document.visibilityState === "visible") {
+      toast((note && note.text) || tr("New post"));
+      return;
+    }
     if (!note || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
       const item = new Notification(note.name || ("@" + (note.handle || "post")), {
@@ -15843,6 +16531,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showPageNotification(note) {
+    if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
+    if (document.visibilityState === "visible") {
+      showLocalNotification(note);
+      return;
+    }
+    if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
     const payload = {
       body: note.text || tr("New post"),
       icon: note.avatar || "icons/icon-192.png",
@@ -16024,6 +16718,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }).catch(() => {});
     navigator.serviceWorker.addEventListener("message", (event) => {
       const data = event.data || {};
+      if (data.type === "storage-offline") setOffline(true);
+      if (data.type === "storage-online" && navigator.onLine) setOffline(false);
       if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
       if (data.type === "feeds-updated") refreshFeeds(false);
       if (data.type === "bell-delivered" || data.type === "bell-queue") commitBellNotes(data.notes || []);
@@ -16076,9 +16772,24 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (parseRoute().name !== "home") { showPill(pendingPillPosts()); return; }
       const pending = STATE.pendingLive || [];
       if (!STATE.pendingFeed && !pending.length) { showPill([]); return; }
+      const y = window.scrollY;
+      let anchorId = "";
+      let anchorTop = 0;
+      if (y >= 40) {
+        const articles = document.querySelectorAll("article[data-post]");
+        for (let i = 0; i < articles.length; i++) {
+          const rect = articles[i].getBoundingClientRect();
+          if (rect.bottom > 0) {
+            anchorId = articles[i].dataset.post || "";
+            anchorTop = rect.top;
+            break;
+          }
+        }
+      }
       if (STATE.pendingFeed) {
         notePublished(STATE.pendingFeed);
-        STATE.data = STATE.pendingFeed;
+        const merged = mergeCatalog(STATE.data, STATE.pendingFeed, true);
+        STATE.data = merged.doc;
       }
       STATE.pendingFeed = null;
       if (pending.length) rememberTimeline(pending);
@@ -16090,9 +16801,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       updateBadge(bellUnread());
       const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
       if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
-      const route = parseRoute();
-      const popular = route.name === "home" && tabSort(route.tab || "foryou") === "popular";
-      render(popular ? undefined : { y: 0 });
+      if (y < 40) render({ y: 0 });
+      else render({ y: y, anchorId: anchorId, anchorTop: anchorTop });
     });
     let pullStart = 0;
     let pulling = false;
@@ -16250,6 +16960,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   async function boot() {
     syncRuVisitorGeo();
+    if (window.ViktorychAccounts && window.ViktorychAccounts.showDeletedIfNeeded && window.ViktorychAccounts.showDeletedIfNeeded()) {
+      registerSW();
+      applyTheme();
+      return;
+    }
     if (window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking()) {
       registerSW();
       STATE.settings = loadSettings();
@@ -16327,8 +17042,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       });
       const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post));
       const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
-      if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
+      if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted" && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
+        if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
+        if (document.visibilityState === "visible") toast(trn("newPosts", fresh.length));
+        else try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
       }
       if (document.visibilityState === "visible") {
         writeStored(localStorage, "seen-at", String(Date.now()));
@@ -16498,10 +17215,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const prevFeeds = STATE.settings.follows || [];
       const prevApps = STATE.settings.accountFollows || [];
       prevFeeds.forEach((id) => {
-        if (feeds.indexOf(id) < 0) rememberUnfollow(id);
+        if (!feeds.some((item) => sameFollowId(item, id))) rememberUnfollow(id);
       });
-      const sameFeeds = prevFeeds.length === feeds.length && prevFeeds.every((id) => feeds.indexOf(id) >= 0);
-      const sameApps = prevApps.length === apps.length && prevApps.every((id) => apps.indexOf(id) >= 0);
+      const sameList = (left, right) => left.length === right.length && left.every((id) => right.some((item) => sameFollowId(item, id)));
+      const sameFeeds = sameList(prevFeeds, feeds);
+      const sameApps = sameList(prevApps, apps);
       if (sameFeeds && sameApps) return;
       STATE.settings.follows = feeds.slice();
       STATE.settings.accountFollows = apps.slice();
@@ -16716,6 +17434,23 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (event.key === "Escape") hideTooltip(true);
     }, { passive: true });
   }
+
+  window.addEventListener("viktorych-settings-applied", () => {
+    if (!STATE.settings) return;
+    const next = loadSettings();
+    if (next.navLayoutSync || STATE.settings.navLayoutSync) {
+      STATE.settings.navLayout = next.navLayout;
+      STATE.settings.navLayoutLand = next.navLayoutLand;
+      STATE.settings.navLayoutSync = next.navLayoutSync;
+    }
+    applyNavLayout();
+    const prevNav = JSON.stringify(STATE.settings.bottomNav || null);
+    const nextNav = JSON.stringify(next.bottomNav || null);
+    if (prevNav === nextNav && (STATE.settings.bottomNavCustom === true) === (next.bottomNavCustom === true)) return;
+    STATE.settings.bottomNav = next.bottomNav;
+    STATE.settings.bottomNavCustom = next.bottomNavCustom;
+    render();
+  });
 
   initTooltipController();
   boot();

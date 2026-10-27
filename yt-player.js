@@ -50,6 +50,8 @@
     pause: '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path>',
     replay: '<path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"></path>',
     next: '<path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"></path>',
+    prev: '<path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"></path>',
+    download: '<path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path>',
     volumeHigh: '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"></path>',
     volumeLow: '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"></path>',
     volumeMuted: '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"></path>',
@@ -218,6 +220,7 @@
   };
 
   YtPlayer.prototype.createChromeBottom_ = function () {
+    var opts = this.options || {};
     var chrome = document.createElement("div");
     chrome.className = "ytp-chrome-bottom";
     this.chromeBottom_ = chrome;
@@ -285,11 +288,23 @@
     this.playBtn_ = playBtn;
     pillLeft.appendChild(playBtn);
 
+    if (typeof opts.onPrevious === "function") {
+      var prevBtn = document.createElement("button");
+      prevBtn.className = "ytp-prev-button ytp-button";
+      prevBtn.setAttribute("type", "button");
+      prevBtn.setAttribute("title", tr("Previous recording"));
+      prevBtn.setAttribute("aria-label", tr("Previous recording"));
+      prevBtn.innerHTML = svg(ICONS.prev);
+      this.prevBtn_ = prevBtn;
+      pillLeft.appendChild(prevBtn);
+    }
+
     var nextBtn = document.createElement("button");
     nextBtn.className = "ytp-next-button ytp-button";
     nextBtn.setAttribute("type", "button");
-    nextBtn.setAttribute("title", tr("Next"));
-    nextBtn.setAttribute("aria-label", tr("Next"));
+    var nextLabel = typeof opts.onNext === "function" ? tr("Next recording") : tr("Next");
+    nextBtn.setAttribute("title", nextLabel);
+    nextBtn.setAttribute("aria-label", nextLabel);
     nextBtn.innerHTML = svg(ICONS.next);
     this.nextBtn_ = nextBtn;
     pillLeft.appendChild(nextBtn);
@@ -349,6 +364,17 @@
     // Right Floating Capsule Pod
     var pillRight = document.createElement("div");
     pillRight.className = "ytp-pill-right";
+
+    if (typeof opts.onDownload === "function") {
+      var downloadBtn = document.createElement("button");
+      downloadBtn.className = "ytp-download-button ytp-button";
+      downloadBtn.setAttribute("type", "button");
+      downloadBtn.setAttribute("title", tr("Download original"));
+      downloadBtn.setAttribute("aria-label", tr("Download original"));
+      downloadBtn.innerHTML = svg(ICONS.download);
+      this.downloadBtn_ = downloadBtn;
+      pillRight.appendChild(downloadBtn);
+    }
 
     var loopBtn = document.createElement("button");
     loopBtn.className = "ytp-loop-button ytp-button";
@@ -698,6 +724,9 @@
         if (!self.isScrubbing_) {
           self.updateProgress_();
         }
+        if (typeof self.options.onTime === "function") {
+          self.options.onTime(video.currentTime, video.duration);
+        }
       });
 
       video.addEventListener("progress", function () {
@@ -708,6 +737,11 @@
         self.updateControls_();
         self.updateProgress_();
         self.updateBuffer_();
+        var at = Number(self.options.resume) || 0;
+        var dur = video.duration;
+        if (at > 3 && (!dur || !isFinite(dur) || at < dur - 8)) {
+          try { video.currentTime = at; } catch (err) { /* the first frame still plays */ }
+        }
       });
 
       video.addEventListener("durationchange", function () {
@@ -727,9 +761,27 @@
 
     this.nextBtn_.addEventListener("click", function (e) {
       e.stopPropagation();
+      if (typeof self.options.onNext === "function") {
+        self.options.onNext();
+        return;
+      }
       self.seekRelative(10);
       self.showQuickSeek_("right");
     });
+
+    if (this.prevBtn_) {
+      this.prevBtn_.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (typeof self.options.onPrevious === "function") self.options.onPrevious();
+      });
+    }
+
+    if (this.downloadBtn_) {
+      this.downloadBtn_.addEventListener("click", function (e) {
+        e.stopPropagation();
+        if (typeof self.options.onDownload === "function") self.options.onDownload(self.downloadBtn_);
+      });
+    }
 
     this.muteBtn_.addEventListener("click", function (e) {
       e.stopPropagation();
@@ -908,6 +960,27 @@
     }
   };
 
+  YtPlayer.prototype.showTooltip_ = function (time, pos) {
+    var tooltip = this.tooltip_;
+    if (!tooltip) return;
+    var label = formatTime(time);
+    var image = this.options && this.options.scrubImage;
+    tooltip.textContent = "";
+    if (image) {
+      var thumb = document.createElement("img");
+      thumb.className = "ytp-tooltip-thumb";
+      thumb.alt = "";
+      thumb.referrerPolicy = "no-referrer";
+      thumb.src = String(image);
+      tooltip.appendChild(thumb);
+    }
+    var text = document.createElement("b");
+    text.textContent = label;
+    tooltip.appendChild(text);
+    if (pos != null) tooltip.style.left = pos + "px";
+    tooltip.classList.add("ytp-visible");
+  };
+
   YtPlayer.prototype.bindScrubber_ = function () {
     var self = this;
     var container = this.progressBarContainer_;
@@ -925,11 +998,7 @@
       var data = getRatio(e);
       var dur = self.getDuration();
       var hoverTime = data.ratio * dur;
-      if (tooltip) {
-        tooltip.textContent = formatTime(hoverTime);
-        tooltip.style.left = data.pos + "px";
-        tooltip.classList.add("ytp-visible");
-      }
+      self.showTooltip_(hoverTime, data.pos);
       if (self.hoverProgress_) {
         self.hoverProgress_.style.width = (data.ratio * 100) + "%";
       }
@@ -964,10 +1033,7 @@
       var onDrag = function (ev) {
         var dragData = getRatio(ev);
         self.seekTo(dragData.ratio * self.getDuration());
-        if (tooltip) {
-          tooltip.textContent = formatTime(dragData.ratio * self.getDuration());
-          tooltip.style.left = dragData.pos + "px";
-        }
+        self.showTooltip_(dragData.ratio * self.getDuration(), dragData.pos);
       };
 
       var onUp = function () {
