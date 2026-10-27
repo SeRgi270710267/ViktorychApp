@@ -106,6 +106,15 @@ def accounts_wall_checks() -> None:
         and "cancel-in-progress: true" in workflow,
         "Pages deploy does not wait on the feed refresh",
     )
+    check(
+        "PYTHONUNBUFFERED" in workflow
+        and "timeout --kill-after=20s 400 python3 scripts/update_feeds.py" in workflow
+        and "timeout --kill-after=20s 190 python3 scripts/tiktok_sync.py" in workflow
+        and "timeout --kill-after=20s 90 python3 scripts/r2_catalog.py push" in workflow,
+        "the refresh step leaves time to push the catalog",
+    )
+    replies_src = (ROOT / "scripts" / "replies.py").read_text(encoding="utf-8")
+    check("over_deadline()" in replies_src and "refresh budget spent" in replies_src, "reply refresh stops when the feed budget is spent")
     check("paths-ignore:" in workflow and "data/communities/**" in workflow, "data-only commits do not start a deploy")
     check("cp shared/lazy-modules.js _site/shared/" in workflow, "the deploy publishes the lazy route loader")
     check(
@@ -349,10 +358,56 @@ def follow_list_checks() -> None:
         check("issues/new" not in text, name + " does not open a GitHub issue")
 
 
+def refresh_budget_checks() -> None:
+    import time
+
+    import replies
+    import update_feeds
+    import x_fetch
+
+    saved = update_feeds._DEADLINE
+    update_feeds._DEADLINE = 0.0
+    x_fetch._JOB_DEADLINE.limit = time.monotonic() - 1
+    started = time.monotonic()
+    payload, result = update_feeds._fetch_one(
+        "https://example.invalid/feed.xml",
+        "generic_rss",
+        {"id": "budget"},
+        [],
+    )
+    elapsed = time.monotonic() - started
+    x_fetch._JOB_DEADLINE.limit = 0.0
+    check(payload is None and result is None and elapsed < 1, "an abandoned prefetch job does not keep fetching")
+
+    update_feeds._DEADLINE = time.monotonic() - 1
+    calls = []
+    original = replies.fetch_x
+
+    def blocked(post, cap=500):
+        calls.append(post.get("id"))
+        return [], "fxtwitter", 0
+
+    replies.fetch_x = blocked
+    try:
+        post = {
+            "id": "1",
+            "statusId": "1",
+            "platform": "x",
+            "handle": "x",
+            "date": datetime.now(timezone.utc).isoformat(),
+        }
+        replies.refresh([post], False, {"1"})
+    finally:
+        replies.fetch_x = original
+        update_feeds._DEADLINE = saved
+    check(calls == [], "reply refresh stops when the budget is spent")
+
+
 def main() -> None:
     from account_identity import selftest as identity_selftest
 
     accounts_wall_checks()
+    refresh_budget_checks()
     follow_list_checks()
     identity_selftest()
     elon = parse_x((FIX / "x_api_v2_elon.json").read_text(encoding="utf-8"), {"id": "x:elonmusk", "platform": "x", "handle": "elonmusk"})
