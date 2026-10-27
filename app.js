@@ -1151,9 +1151,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     STATE.settings.seenFeeds = STATE.settings.seenDefaults.slice();
   }
 
+  function sameFollowId(left, right) {
+    return String(left || "").toLowerCase() === String(right || "").toLowerCase();
+  }
   function isFollowed(id) {
-    if (String(id || "").indexOf("app:") === 0) return (STATE.settings.accountFollows || []).indexOf(id) >= 0;
-    return STATE.settings.follows.includes(id);
+    const list = String(id || "").indexOf("app:") === 0 ? (STATE.settings.accountFollows || []) : (STATE.settings.follows || []);
+    return list.some((item) => sameFollowId(item, id));
   }
   function setFollowed(id, on) {
     if (!id) return;
@@ -1798,7 +1801,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function stamp(post) { return post.sortDate || post.date || ""; }
-  function byStamp(a, b) { return stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0; }
+  function byStamp(a, b) {
+    if (window.FeedOrder) return window.FeedOrder.compare(a, b);
+    return stamp(a) < stamp(b) ? 1 : stamp(a) > stamp(b) ? -1 : 0;
+  }
 
   function formatCount(n, compactFrom) {
     if (window.SI18n) return window.SI18n.formatCount(n, compactFrom);
@@ -4543,6 +4549,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function isoDate(value) {
     if (value == null || value === "") return "";
+    const order = typeof window !== "undefined" ? window.FeedOrder : null;
+    if (order && order.parseInstant) {
+      const ms = order.parseInstant(value);
+      if (ms) return new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
+    }
     if (typeof value === "number" || /^\d{10,13}$/.test(String(value))) {
       let n = Number(value);
       if (n < 100000000000) n *= 1000;
@@ -4566,6 +4577,12 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function timeMs(value) {
+    const order = typeof window !== "undefined" ? window.FeedOrder : null;
+    if (order && order.parseInstant) {
+      const ms = order.parseInstant(value);
+      if (!ms || ms <= Date.parse("2005-01-01T00:00:00Z") || ms > Date.now() + 10 * 60 * 1000) return 0;
+      return ms;
+    }
     const n = Date.parse(value || "");
     return isFinite(n) && n > Date.parse("2005-01-01T00:00:00Z") ? n : 0;
   }
@@ -5904,26 +5921,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function revealArchive() {
     const route = parseRoute();
-    if (route.name !== "home" || (route.tab && route.tab !== "foryou")) { render(); return; }
-    const center = document.querySelector("main.center");
-    if (!center) { render(); return; }
-    const seen = {};
-    center.querySelectorAll("article[data-post]").forEach((el) => { seen[el.dataset.post] = true; });
-    const list = posts().filter((post) => homeShows(post, route));
-    if (tabView(route.tab || "foryou") === "reposts") list.sort(byRepostTime);
-    else list.sort(byStamp);
-    const head = center.querySelector("article[data-post]");
-    if (head && list[0] && list[0].id !== head.dataset.post && stamp(list[0]) > (head.dataset.date || "")) {
-      render();
-      return;
-    }
-    const extra = list.filter((post) => !seen[post.id]);
-    const old = document.getElementById("archive-more");
-    if (old) old.remove();
-    if (extra.length) { center.insertAdjacentHTML("beforeend", extra.map((post) => card(post)).join("")); bindPlayers(); primeTelegramImages(center); }
-    const marker = archiveSentinel();
-    if (marker) center.insertAdjacentHTML("beforeend", marker);
-    watchHydration();
+    if (route.name !== "home") { render(); return; }
+    render({ y: window.scrollY });
   }
 
   function loadNextShard() {
@@ -5936,7 +5935,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     archiveBusy = true;
     loadShard(name).then(() => {
       archiveBusy = false;
-      render();
+      render({ y: window.scrollY });
     });
   }
 
@@ -6107,7 +6106,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     document.querySelectorAll("[data-hydrate]").forEach((el) => HYDRATE_OBS.observe(el));
     if (!ARCHIVE_OBS) {
       ARCHIVE_OBS = new IntersectionObserver((entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) loadNextShard();
+        if (entries.some((entry) => entry.isIntersecting)) revealMoreTimeline();
       }, { rootMargin: "600px" });
     }
     ARCHIVE_OBS.disconnect();
@@ -7173,6 +7172,7 @@ const here = parseRoute();
   }
 
   function byRepostTime(a, b) {
+    if (window.FeedOrder) return window.FeedOrder.compare(a, b);
     const delta = repostMillis(b) - repostMillis(a);
     if (delta) return delta;
     const aid = String((a && a.id) || "");
@@ -7399,7 +7399,9 @@ const here = parseRoute();
     return posts().filter((p) => ids.has(p.feedId) || ids.has((p.platform || "x") + ":" + p.handle)).sort(byStamp);
   }
 
-  function homeView(route) {
+  const FEED_PAGE = 25;
+
+  function homeSorted(route) {
     const tab = route.tab || "foryou";
     let list = posts().filter((post) => homeShows(post, route));
     if (tabView(tab) === "reposts") list.sort(byRepostTime);
@@ -7413,6 +7415,58 @@ const here = parseRoute();
         list.sort((a, b) => heat(b) - heat(a) || byStamp(a, b));
       }
     }
+    return list;
+  }
+
+  function homePage(route, list) {
+    const tab = route.tab || "foryou";
+    if (!STATE.feedShown) STATE.feedShown = {};
+    if (!STATE.feedCutoff) STATE.feedCutoff = {};
+    let count = STATE.feedShown[tab] || FEED_PAGE;
+    if (count < FEED_PAGE) count = FEED_PAGE;
+    const prev = STATE.feedCutoff[tab];
+    if (prev && tabSort(tab) !== "popular") {
+      const at = list.findIndex((post) => String((post && post.id) || "") === prev);
+      if (at >= 0 && at + 1 > count) count = at + 1;
+    }
+    const page = list.slice(0, count);
+    const last = page[page.length - 1];
+    STATE.feedCutoff[tab] = last ? String(last.id || "") : "";
+    STATE.feedShown[tab] = count;
+    return page;
+  }
+
+  function revealMoreTimeline() {
+    const route = parseRoute();
+    if (route.name === "user") {
+      loadMoreLive(route);
+      return;
+    }
+    if (route.name !== "home") {
+      loadNextShard();
+      return;
+    }
+    const tab = route.tab || "foryou";
+    const list = homeSorted(route);
+    const count = (STATE.feedShown && STATE.feedShown[tab]) || FEED_PAGE;
+    if (count < list.length) {
+      if (!STATE.feedShown) STATE.feedShown = {};
+      STATE.feedShown[tab] = Math.min(list.length, count + FEED_PAGE);
+      render({ y: window.scrollY });
+      return;
+    }
+    loadNextShard();
+  }
+
+  function timelineSentinel(shown, total) {
+    if (shown < total) return `<div id="archive-more" class="archive-more">${tr("Older posts")}</div>`;
+    return archiveSentinel();
+  }
+
+  function homeView(route) {
+    const tab = route.tab || "foryou";
+    const sorted = homeSorted(route);
+    const list = homePage(route, sorted);
     const repostsOnly = tabView(tab) === "reposts";
     const catTab = tab.indexOf("cat:") === 0;
     const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
@@ -7420,7 +7474,7 @@ const here = parseRoute();
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
     );
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
-    return homeHeader(tab) + spaceCard + body + archiveSentinel();
+    return homeHeader(tab) + spaceCard + body + timelineSentinel(list.length, sorted.length);
   }
 
   function pageHead(title, extra, back, action) {
@@ -8276,18 +8330,36 @@ const here = parseRoute();
       row.paging = "";
       const bucket = liveBucket(row, tab);
       const list = row[bucket] || (row[bucket] = []);
+      if (!row.seenCursors) row.seenCursors = {};
+      const seenCursor = tab + ":" + cursor;
+      if (row.seenCursors[seenCursor]) {
+        row.cursor[tab] = "";
+        render({ y: window.scrollY });
+        return;
+      }
+      row.seenCursors[seenCursor] = true;
+      let added = 0;
       if (pack && pack.posts && pack.posts.length) {
         const seen = {};
-        list.forEach((post) => { seen[post.id] = true; });
+        list.forEach((post) => {
+          const id = window.FeedOrder ? window.FeedOrder.key(post) : String(post.id || "");
+          if (id) seen[id] = true;
+        });
         pack.posts.forEach((post) => {
-          if (!post || seen[post.id]) return;
-          seen[post.id] = true;
+          if (!post) return;
+          const id = window.FeedOrder ? window.FeedOrder.key(post) : String(post.id || "");
+          if (!id || seen[id]) return;
+          seen[id] = true;
           list.push(post);
           rememberLive(post);
+          added += 1;
         });
       }
-      row.cursor[tab] = pack && pack.cursor && pack.cursor !== cursor ? pack.cursor : "";
-      render();
+      if (window.FeedOrder) list.sort(window.FeedOrder.compare);
+      const next = pack && pack.cursor ? String(pack.cursor) : "";
+      if (!added || !next || next === String(cursor) || row.seenCursors[tab + ":" + next]) row.cursor[tab] = "";
+      else row.cursor[tab] = next;
+      render({ y: window.scrollY });
     };
     if (route.platform === "youtube" && tab === "videos") {
       const id = (row.profile && row.profile.channelId) || row.handle;
@@ -8348,7 +8420,7 @@ const here = parseRoute();
     const requested = route.query.get("tab") || "";
     const tab = tabs.some((pair) => pair[0] === requested) ? requested : (tabs[0] ? tabs[0][0] : "");
     const bucket = tab ? liveBucket(row, tab) : "";
-    const list = bucket ? (row[bucket] || []) : [];
+    const list = bucket ? (row[bucket] || []).slice().sort(byStamp) : [];
     const shown = profile.displayHandle || (profile.platform === "youtube" ? "" : profile.handle);
     const banner = profile.banner ? `<img class="pbanner" src="${esc(profile.banner)}" alt="" referrerpolicy="no-referrer">` : profile.bannerColor ? `<div class="pbanner theme" style="background:${esc(profile.bannerColor)}"></div>` : `<div class="pbanner"></div>`;
     const meta = [
@@ -11394,19 +11466,28 @@ if (STATE.histClear) {
     return (post.media || []).some((item) => item && (item.type === "video" || item.type === "animated_gif"));
   }
 
+  function followIdsNow() {
+    const settings = STATE.settings || {};
+    const raw = (settings.follows || []).concat(settings.accountFollows || []);
+    const out = [];
+    const seen = {};
+    raw.forEach((id) => {
+      const extra = window.FeedsPeople && window.FeedsPeople.followIds ? window.FeedsPeople.followIds(id) : [id];
+      (extra && extra.length ? extra : [id]).forEach((item) => {
+        const text = String(item || "");
+        const fold = text.toLowerCase();
+        if (!text || seen[fold]) return;
+        seen[fold] = true;
+        out.push(text);
+      });
+    });
+    return out;
+  }
+
   function followedPost(post) {
-    if (!post || !STATE.settings || !Array.isArray(STATE.settings.follows)) return false;
-    const ids = STATE.settings.follows;
-    if (profileMatch(post, ids)) return true;
-    if (post.feedId && accountFollowed(post.feedId)) return true;
-    const plain = (post.platform || "x") + ":" + (post.handle || "");
-    if (accountFollowed(plain)) return true;
-    if (post.channelId && accountFollowed((post.platform || "youtube") + ":" + post.channelId)) return true;
-    const feed = feedOf(post);
-    if (feed && isFeedFollowed(feed)) return true;
-    const creator = creatorOf(post);
-    if (creator && isFeedFollowed(creator)) return true;
-    return false;
+    if (!post || !STATE.settings) return false;
+    if (window.FeedOrder) return window.FeedOrder.followsPost(post, followIdsNow());
+    return profileMatch(post, STATE.settings.follows || []);
   }
 
   function feedOf(post) {
@@ -12826,13 +12907,10 @@ if (STATE.histClear) {
     }
     if (route.name !== "status") STATE.focusId = "";
     const reset = opts && opts.reset;
-    if (opts && Object.prototype.hasOwnProperty.call(opts, "y")) STATE.holdY = opts.y;
+    const explicitY = !!(opts && Object.prototype.hasOwnProperty.call(opts, "y"));
+    if (explicitY) STATE.holdY = opts.y;
     if (STATE.snapTop) STATE.holdY = 0;
     let y = STATE.holdY != null ? STATE.holdY : (reset ? 0 : window.scrollY);
-    if (leavingWatch) {
-      y = 0;
-      SCROLLS[nextKey] = 0;
-    }
     const focus = document.activeElement;
     const focusId = focus && focus.id;
     const caret = focus && typeof focus.selectionStart === "number" ? focus.selectionStart : null;
@@ -12902,6 +12980,20 @@ if (STATE.histClear) {
       if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = window.SIntelMusic.titleFor(route);
       else document.title = routeTitle(route, liveName, personName, discordTitle);
       window.scrollTo(0, y);
+      if (explicitY && window.requestAnimationFrame) {
+        window.requestAnimationFrame(() => {
+          if (gen !== STATE.renderGen) return;
+          let next = y;
+          if (opts && opts.anchorId) {
+            const raw = String(opts.anchorId);
+            const sel = window.CSS && CSS.escape ? 'article[data-post="' + CSS.escape(raw) + '"]' : 'article[data-post="' + raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"]';
+            const el = document.querySelector(sel);
+            if (el) next = Math.max(0, window.scrollY + (el.getBoundingClientRect().top - (Number(opts.anchorTop) || 0)));
+          }
+          window.scrollTo(0, next);
+          if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = next;
+        });
+      }
       if (focusId) {
         const el = document.getElementById(focusId);
         if (el) {
@@ -12947,7 +13039,7 @@ if (STATE.histClear) {
       if (STATE.snapTop) y = 0;
       else if (STATE.holdY != null) y = STATE.holdY;
       else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
-      if (!STATE.snapTop && window.scrollY > y + 4) y = window.scrollY;
+      if (!STATE.snapTop && !explicitY && window.scrollY > y + 4) y = window.scrollY;
       window.scrollTo(0, y);
       if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = y;
       if (STATE.holdY === y) STATE.holdY = null;
@@ -15159,9 +15251,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     ((STATE.data && STATE.data.posts) || []).forEach((post) => {
       if (!post) return;
       current[canonicalPostId(post)] = true;
+      if (window.FeedOrder) current[window.FeedOrder.key(post)] = true;
       if (post.id) current[String(post.id)] = true;
     });
-    const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !current[String(post.id || "")]);
+    const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !(window.FeedOrder && current[window.FeedOrder.key(post)]) && !current[String(post.id || "")]);
     return added.concat(live);
   }
 
@@ -15184,7 +15277,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       faces.push(src);
     });
     const avatars = faces.map((src) => `<img class="pill-ava" alt="" src="${esc(src)}">`).join("");
-    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + tr("New posts") + "</span>";
+    el.innerHTML = (avatars ? `<span class="pill-faces">${avatars}</span>` : "") + "<span>" + trn("showPosts", list.length) + "</span>";
     el.hidden = false;
   }
 
@@ -15245,7 +15338,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
     const out = [];
     (incoming || []).forEach((post) => {
-      if (!post || out.length >= 20) return;
+      if (!post) return;
       const id = canonicalPostId(post);
       if (!id) return;
       post.feedId = feed.id;
@@ -15257,12 +15350,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (post.kind === "repost" && post.repostedBy && !post.repostedBy.avatar && feed.avatar) post.repostedBy.avatar = feed.avatar;
       if (post.kind === "repost" && post.repostedBy && feed.name && post.repostedBy.name === post.repostedBy.handle) post.repostedBy.name = feed.name;
       if (known[id] || known[String(post.id || "")]) return;
-      const ms = timeMs(post.sortDate || post.date || "");
-      if (!ms || (newest && ms <= newest)) return;
       known[id] = true;
       out.push(post);
     });
-    return out;
+    if (window.FeedOrder) {
+      const have = posts().filter((post) => belongsToFeed(post, feed));
+      return window.FeedOrder.freshPosts(have, out, 40);
+    }
+    return out.filter((post) => {
+      const ms = timeMs(post.sortDate || post.date || "");
+      return ms && (!newest || ms > newest);
+    }).slice(0, 20);
   }
 
   function settlePublishTimes(feed, incoming) {
@@ -15593,9 +15691,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (liveDateScrubbed) render();
         if (!incoming.length) return;
         return attachParents(incoming).then(() => {
-          const route = parseRoute();
-          const atTop = window.scrollY < 80 && route.name === "home";
-          if (apply || atTop) applyLive(incoming, true);
+          const atTop = window.scrollY < 40;
+          if (atTop) applyLive(incoming, true);
           else {
             STATE.pendingLive = (STATE.pendingLive || []).concat(incoming);
             showPill(STATE.pendingLive);
@@ -15630,18 +15727,63 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     saveSettings();
   }
 
+  function postCatalogKey(post) {
+    if (window.FeedOrder) return window.FeedOrder.key(post);
+    return canonicalPostId(post);
+  }
+
+  function patchPostDates(kept, incoming) {
+    if (!kept || !incoming) return false;
+    let changed = false;
+    const order = window.FeedOrder;
+    const nextDate = order ? order.preferDate(kept.date, incoming.date) : earlierIso(kept.date, incoming.date);
+    if (nextDate && nextDate !== kept.date) {
+      kept.date = nextDate;
+      changed = true;
+    }
+    const sortMs = order ? order.parseInstant(incoming.sortDate) : timeMs(incoming.sortDate);
+    if (sortMs && sortMs <= Date.now() + 10 * 60 * 1000 && incoming.sortDate !== kept.sortDate) {
+      kept.sortDate = incoming.sortDate;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function mergeCatalog(existing, incoming, includeNew) {
+    const current = ((existing && existing.posts) || []).slice();
+    const byKey = {};
+    current.forEach((post) => {
+      const id = postCatalogKey(post);
+      if (id && !byKey[id]) byKey[id] = post;
+    });
+    let changed = false;
+    const added = [];
+    ((incoming && incoming.posts) || []).forEach((post) => {
+      if (!post) return;
+      const id = postCatalogKey(post);
+      if (!id) return;
+      const kept = byKey[id];
+      if (kept) {
+        if (patchPostDates(kept, post)) changed = true;
+        return;
+      }
+      byKey[id] = post;
+      added.push(post);
+      if (includeNew) {
+        current.push(post);
+        changed = true;
+      }
+    });
+    return { doc: Object.assign({}, existing || {}, incoming || {}, { posts: current }), added: added, changed: changed };
+  }
+
   async function refreshFeeds(apply) {
     try {
       const doc = lockDocDates(await fetchFeeds(true));
       if (!doc || !Array.isArray(doc.posts)) return;
-      const current = {};
-      ((STATE.data && STATE.data.posts) || []).forEach((post) => {
-        current[canonicalPostId(post)] = true;
-        if (post.id) current[String(post.id)] = true;
-      });
-      const added = doc.posts.filter((post) => post && !current[canonicalPostId(post)] && !current[String(post.id || "")]);
+      const atTop = window.scrollY < 40;
       const feedsChanged = catalogSignature(STATE.data) !== catalogSignature(doc);
-      if (apply || !STATE.data || (feedsChanged && !added.length)) {
+      if (!STATE.data) {
         notePublished(doc);
         STATE.data = withMemory(doc);
         if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
@@ -15650,25 +15792,36 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         STATE.pendingFeed = null;
         if (!(STATE.pendingLive || []).length) showPill([]);
         if (feedsChanged) adoptFeeds(doc);
-        render();
+        render(atTop ? { y: 0 } : undefined);
         scanBellPosts(doc.posts);
         ensureVideoOwners();
         return;
       }
-      if (feedsChanged) {
-        adoptFeeds(doc);
-        render();
-      }
+      const includeNew = atTop;
+      const merged = mergeCatalog(STATE.data, doc, includeNew);
+      STATE.data = withMemory(merged.doc);
+      if (feedsChanged) adoptFeeds(doc);
       scanBellPosts(doc.posts);
-      if (!added.length) return;
+      if (includeNew) {
+        notePublished(doc);
+        STATE.pendingFeed = null;
+        if (!(STATE.pendingLive || []).length) showPill([]);
+        STATE.error = null;
+        if (apply || merged.added.length || merged.changed || feedsChanged) render({ y: 0 });
+        ensureVideoOwners();
+        return;
+      }
+      if (merged.changed || feedsChanged) render({ y: window.scrollY });
+      if (!merged.added.length) return;
       STATE.pendingFeed = doc;
-      showPill(added.concat(STATE.pendingLive || []));
+      showPill(merged.added.concat(STATE.pendingLive || []));
       const since = Number(readStored(localStorage, "seen-at") || 0);
-      const fresh = added.filter((post) => followedSince(post, since) && !coveredByBell(post));
+      const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post));
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) {
         try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
       }
+      ensureVideoOwners();
     } catch (err) { /* keep the posts already on screen */ }
   }
 
@@ -16517,9 +16670,24 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (parseRoute().name !== "home") { showPill(pendingPillPosts()); return; }
       const pending = STATE.pendingLive || [];
       if (!STATE.pendingFeed && !pending.length) { showPill([]); return; }
+      const y = window.scrollY;
+      let anchorId = "";
+      let anchorTop = 0;
+      if (y >= 40) {
+        const articles = document.querySelectorAll("article[data-post]");
+        for (let i = 0; i < articles.length; i++) {
+          const rect = articles[i].getBoundingClientRect();
+          if (rect.bottom > 0) {
+            anchorId = articles[i].dataset.post || "";
+            anchorTop = rect.top;
+            break;
+          }
+        }
+      }
       if (STATE.pendingFeed) {
         notePublished(STATE.pendingFeed);
-        STATE.data = STATE.pendingFeed;
+        const merged = mergeCatalog(STATE.data, STATE.pendingFeed, true);
+        STATE.data = merged.doc;
       }
       STATE.pendingFeed = null;
       if (pending.length) rememberTimeline(pending);
@@ -16531,9 +16699,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       updateBadge(bellUnread());
       const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
       if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
-      const route = parseRoute();
-      const popular = route.name === "home" && tabSort(route.tab || "foryou") === "popular";
-      render(popular ? undefined : { y: 0 });
+      if (y < 40) render({ y: 0 });
+      else render({ y: y, anchorId: anchorId, anchorTop: anchorTop });
     });
     let pullStart = 0;
     let pulling = false;
@@ -16944,10 +17111,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const prevFeeds = STATE.settings.follows || [];
       const prevApps = STATE.settings.accountFollows || [];
       prevFeeds.forEach((id) => {
-        if (feeds.indexOf(id) < 0) rememberUnfollow(id);
+        if (!feeds.some((item) => sameFollowId(item, id))) rememberUnfollow(id);
       });
-      const sameFeeds = prevFeeds.length === feeds.length && prevFeeds.every((id) => feeds.indexOf(id) >= 0);
-      const sameApps = prevApps.length === apps.length && prevApps.every((id) => apps.indexOf(id) >= 0);
+      const sameList = (left, right) => left.length === right.length && left.every((id) => right.some((item) => sameFollowId(item, id)));
+      const sameFeeds = sameList(prevFeeds, feeds);
+      const sameApps = sameList(prevApps, apps);
       if (sameFeeds && sameApps) return;
       STATE.settings.follows = feeds.slice();
       STATE.settings.accountFollows = apps.slice();

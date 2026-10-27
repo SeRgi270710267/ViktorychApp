@@ -358,24 +358,35 @@ def replace_entities(text: str, entities: dict, quoted_id: str | None = None):
 
 
 def parse_time(value):
-    """Parse an ISO, RFC822, or unix timestamp into an aware UTC datetime."""
+    """Parse an ISO, RFC822, or unix timestamp into an aware UTC datetime.
+
+    Naive wall times (no offset) are UTC. A clock with an offset is converted
+    to UTC. Unparseable text stays None so callers can sort it last.
+    """
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    if isinstance(value, (int, float)):
-        n = float(value)
-        if n < 10**12:
-            n *= 1000
-        return datetime.fromtimestamp(n / 1000, tz=timezone.utc)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return _unix_datetime(float(value))
     text = str(value).strip()
-    if text.isdigit():
-        return parse_time(int(text))
-    if len(text) >= 20 and text[4:5] == "-" and "T" in text:
+    if re.fullmatch(r"\d+(?:\.\d+)?", text):
+        return _unix_datetime(float(text))
+    naive = re.fullmatch(r"(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)", text)
+    if naive:
         try:
-            return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc)
+            return datetime.fromisoformat(naive.group(1) + "T" + naive.group(2)).replace(tzinfo=timezone.utc)
         except ValueError:
             return None
+    if len(text) >= 19 and text[4:5] == "-" and "T" in text:
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
     try:
         parsed = email.utils.parsedate_to_datetime(text)
     except (TypeError, ValueError):
@@ -385,6 +396,14 @@ def parse_time(value):
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _unix_datetime(n: float):
+    if n <= 0:
+        return None
+    if n < 10**11:
+        n *= 1000
+    return datetime.fromtimestamp(n / 1000, tz=timezone.utc)
 
 
 def format_time(value: datetime) -> str:
@@ -430,6 +449,57 @@ def trusted_time(value):
     if parsed is None or parsed.year < 2005:
         return None
     return parsed
+
+
+class _DescId:
+    """Sort key that orders ids newest-first (descending text)."""
+
+    def __init__(self, value: str):
+        self.value = value
+
+    def __lt__(self, other) -> bool:
+        return self.value > other.value
+
+    def __eq__(self, other) -> bool:
+        return isinstance(other, _DescId) and self.value == other.value
+
+
+def order_ms(post, now=None) -> int:
+    """UTC milliseconds used to order a post. 0 sorts last (missing or future).
+
+    Reposts use the repost time. A future stamp is ignored so it cannot jump
+    ahead of posts that actually happened.
+    """
+    if not isinstance(post, dict):
+        return 0
+    if now is None:
+        moment = datetime.now(timezone.utc)
+    elif isinstance(now, datetime):
+        moment = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
+    else:
+        moment = datetime.fromtimestamp(float(now) / 1000, tz=timezone.utc)
+    repost = post.get("kind") == "repost"
+    by = post.get("repostedBy") if isinstance(post.get("repostedBy"), dict) else None
+    if not repost and _person_named(by):
+        repost = True
+    forwarded = post.get("forwardedFrom")
+    if not repost and isinstance(forwarded, dict) and (forwarded.get("handle") or forwarded.get("name")):
+        repost = True
+    fields = ("sortDate", "repostDate", "repostedAt", "date") if repost else ("date", "sortDate")
+    ceiling = moment + timedelta(minutes=10)
+    for field in fields:
+        parsed = trusted_time(post.get(field))
+        if parsed is None or parsed > ceiling:
+            continue
+        return int(parsed.timestamp() * 1000)
+    return 0
+
+
+def feed_sort_key(post, now=None):
+    """Newest real time first, then id descending. Missing and future times last."""
+    ms = order_ms(post, now=now)
+    ident = str((post or {}).get("id") or (post or {}).get("statusId") or "")
+    return (0 if ms else 1, -ms, _DescId(ident))
 
 
 def earlier_iso(left, right) -> str:
@@ -952,7 +1022,7 @@ def guard_posts(root, posts, channel_title: str = "", channel_description: str =
 
 def dedupe_posts(posts, cap: int = 300):
     """One row per canonical id. The earliest trusted publish time stays."""
-    ranked = sorted(posts, key=lambda p: p.get("sortDate") or p.get("date") or "", reverse=True)
+    ranked = sorted(posts, key=feed_sort_key)
     seen = {}
     order = []
     for post in ranked:
