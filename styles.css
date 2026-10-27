@@ -1399,28 +1399,37 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .quote-text { margin-top: 2px; }
 .quote .ava, .quote .ava img, .quote .initials { width: 20px; height: 20px; font-size: 11px; }
 .quote .media { margin-top: 12px; }
+.quote .actions { display: none !important; }
 
 .actions {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   margin-top: 4px;
   max-width: 425px;
+  min-width: 0;
   color: var(--muted);
 }
 .action-stats {
   display: flex;
   flex: 1 1 auto;
   align-items: center;
-  justify-content: space-between;
   min-width: 0;
-  gap: 4px;
+}
+.action-stats > .action,
+.action-stats > .repost-wrap {
+  flex: 1 1 0%;
+  max-width: 25%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 .action-more {
   display: flex;
   flex: none;
   align-items: center;
   gap: 4px;
-  margin-left: 12px;
+  margin-left: 4px;
 }
 .action {
   display: inline-flex;
@@ -1432,11 +1441,32 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
   font-size: 13px;
   line-height: 16px;
   padding: 8px 0;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   white-space: nowrap;
   position: relative;
 }
-.action .count { font-size: 13px; line-height: 16px; }
+.action-more .action {
+  flex: 0 0 auto;
+  max-width: none;
+  overflow: visible;
+}
+.action-stats > .repost-wrap > .action {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.action .count {
+  font-size: 13px;
+  line-height: 16px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+}
 .action .ic {
   width: 18.75px;
   height: 18.75px;
@@ -1462,7 +1492,7 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .action.reply:hover .ic::after { background: var(--blue-dim); }
 .action.repost:hover, .action.repost.on { color: var(--green); }
 .action.repost:hover .ic::after { background: var(--green-dim); }
-.repost-wrap { position: relative; display: inline-flex; }
+.repost-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
 .menu.repost-menu {
   left: 0;
   right: auto;
@@ -2306,7 +2336,8 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   }
   .m-ava .ava, .m-ava .initials { width: 32px; height: 32px; font-size: 14px; }
   .m-logo { min-height: 44px; }
-  .action { min-width: 44px; min-height: 44px; }
+  .action { min-height: 44px; }
+  .actions .action { min-width: 0; }
   .x-tooltip { display: none !important; }
   .bottom-nav {
     display: flex;

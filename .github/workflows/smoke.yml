@@ -32,6 +32,9 @@ jobs:
           fi
           google-chrome --version
 
+      - name: Action bar spacing
+        run: node scripts/action_bar_test.js
+
       - name: Build the shell and fail if a referenced file is missing
         run: |
           python3 scripts/assemble_site.py --selftest
