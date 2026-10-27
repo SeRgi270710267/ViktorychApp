@@ -4,8 +4,9 @@
    and its lowercase share one skeleton. The map folds the Latin/Cyrillic
    pairs that look alike (a/а, e/е, o/о, p/р, c/с, x/х, y/у, H/Н, B/В,
    M/М, T/Т, K/К, and the other single-letter lookalikes in that set).
-   The owner handle is the exact code points S е Р g И. */
-const OWNER_HANDLE = "S\u0435\u0420g\u0418";
+   The owner handle is not stored here. The accounts Worker binds it from
+   the OWNER_HANDLE secret before it checks a signup. */
+let ownerHandleValue = "";
 
 const MAP = {
   "0": "o",
@@ -58,8 +59,14 @@ function skeleton(value) {
 }
 
 let ownerSkel = "";
+function bindOwner(handle) {
+  ownerHandleValue = String(handle || "");
+  ownerSkel = ownerHandleValue ? skeleton(ownerHandleValue) : "";
+}
+function ownerHandle() {
+  return ownerHandleValue;
+}
 function ownerSkeleton() {
-  if (!ownerSkel) ownerSkel = skeleton(OWNER_HANDLE);
   return ownerSkel;
 }
 
@@ -93,13 +100,13 @@ function inspectHandle(raw) {
   if (!skel) return { ok: false, error: "chars" };
   const kind = reservedKind(skel);
   if (kind === "owner") {
-    if (handle === OWNER_HANDLE) return { ok: true, handle: handle, skeleton: skel, owner: true };
+    if (ownerHandleValue && handle === ownerHandleValue) return { ok: true, handle: handle, skeleton: skel, owner: true };
     return { ok: false, error: "reserved", skeleton: skel };
   }
   if (kind) return { ok: false, error: "reserved", skeleton: skel };
   return { ok: true, handle: handle, skeleton: skel, owner: false };
 }
 
-const api = { OWNER_HANDLE: OWNER_HANDLE, skeleton: skeleton, ownerSkeleton: ownerSkeleton, inspectHandle: inspectHandle, reservedKind: reservedKind };
-export { OWNER_HANDLE, skeleton, ownerSkeleton, inspectHandle, reservedKind };
+const api = { bindOwner: bindOwner, ownerHandle: ownerHandle, skeleton: skeleton, ownerSkeleton: ownerSkeleton, inspectHandle: inspectHandle, reservedKind: reservedKind };
+export { bindOwner, ownerHandle, skeleton, ownerSkeleton, inspectHandle, reservedKind };
 globalThis.HandleSkeleton = api;

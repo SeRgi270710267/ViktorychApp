@@ -34,8 +34,7 @@ class Reject(Exception):
     pass
 
 
-def allowed(actor: str, owner: str) -> bool:
-    return bool(actor) and actor == owner
+from owner_gate import allowed  # noqa: E402
 
 
 def _fields(body: str) -> dict:
@@ -321,9 +320,11 @@ def main() -> int:
         _selftest()
         return 0
     actor = os.environ.get("ACTOR") or ""
-    owner = os.environ.get("OWNER") or ""
+    owner = os.environ.get("OWNER_ACTOR_SHA256") or os.environ.get("OWNER") or ""
+    if actor:
+        print("::add-mask::" + actor, flush=True)
     if not allowed(actor, owner):
-        print("ignoring issue from", actor or "unknown")
+        print("ignoring issue")
         return 0
     title = os.environ.get("ISSUE_TITLE") or ""
     body = os.environ.get("ISSUE_BODY") or ""

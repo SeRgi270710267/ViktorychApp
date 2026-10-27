@@ -654,6 +654,9 @@
   }
 
   async function chromeTranslate(sample, target) {
+    var dev = typeof window !== "undefined" ? window.ViktorychDevice : null;
+    if (dev && dev.featureOn && !dev.featureOn(dev.read(), "translate", dev.signals())) return null;
+    if (dev && dev.cooling && dev.cooling("translate")) return null;
     if (typeof Translator === "undefined") return null;
     let source = "";
     if (typeof LanguageDetector !== "undefined") {
@@ -784,8 +787,14 @@
     markBusy(key, true);
     try {
       let chrome = null;
-      try { chrome = await chromeTranslate(sample, target); }
-      catch (err) { chrome = null; }
+      try {
+        const job = chromeTranslate(sample, target);
+        const dev = typeof window !== "undefined" ? window.ViktorychDevice : null;
+        chrome = dev && dev.withTimeout ? await dev.withTimeout(job, dev.TIMEOUT_MS) : await job;
+      } catch (err) {
+        chrome = null;
+        if (typeof window !== "undefined" && window.ViktorychDevice) window.ViktorychDevice.rememberFail("translate", "chrome", Date.now(), "feature");
+      }
       if (chrome && chrome.same) {
         box.lang = box.lang || {};
         box.lang[key] = target;

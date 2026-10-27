@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Miniflare } from "miniflare";
 
-const OWNER = "S\u0435\u0420g\u0418";
+const OWNER = "mirathorn";
 const dispatches = [];
 const liveHits = { page: 0, room: 0 };
 let roomMode = "origin";
@@ -23,6 +23,7 @@ function workerOptions() {
     bindings: {
       ACCOUNT_PEPPER: "pepper-test",
       OWNER_CLAIM_CODE: "claim-test",
+      OWNER_HANDLE: "mirathorn",
       ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080",
       PBKDF2_ITERATIONS: "1000",
       GITHUB_DISPATCH_TOKEN: "dispatch-test"
@@ -243,7 +244,7 @@ test("owner adds and removes a TikTok account in private storage", async () => {
 
   await bindings.DATA.put("owner/tiktok-accounts.json", JSON.stringify({
     added: [{ handle: "https://www.tiktok.com/@noranaslundddd?_r=1&_t=ZN-9AmQevSXE18", name: "N", avatar: "", addedAt: "2026-10-22T00:00:00Z" }],
-    removed: ["https://www.tiktok.com/@gabii_g5"]
+    removed: ["https://www.tiktok.com/@lockclip"]
   }));
   const repaired = await call("/v1/owner/tiktok/accounts", { ip: "203.0.113.83", token: owner.body.token });
   assert.equal(repaired.status, 200);
@@ -252,7 +253,7 @@ test("owner adds and removes a TikTok account in private storage", async () => {
   assert.equal(repaired.body.added[0].name, "N");
   const repairedDoc = JSON.parse(await (await bindings.DATA.get("owner/tiktok-accounts.json")).text());
   assert.equal(repairedDoc.added[0].handle, "noranaslundddd");
-  assert.equal(repairedDoc.removed[0], "gabii_g5");
+  assert.equal(repairedDoc.removed[0], "lockclip");
 
   const mediaDenied = await call("/v1/owner/media?url=" + encodeURIComponent("https://v16.tiktokcdn.com/live.m3u8"), {
     ip: "203.0.113.84",

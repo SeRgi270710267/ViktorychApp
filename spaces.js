@@ -751,8 +751,8 @@
     const musicSpace = spaceModel("superintelmusic") || {
       id: "superintelmusic",
       title: productName("music") || "ViktorychMusic",
-      cover: "icons/sergi-telegram.jpg",
-      host: { name: "SеРgИ3775996834", handle: "SeRgi3775996834", platform: "telegram", avatar: "icons/sergi-telegram.jpg" },
+      cover: "icons/space-host.jpg",
+      host: { name: "Harbor", handle: "quietharbor", platform: "telegram", avatar: "icons/space-host.jpg" },
       live: true,
       state: "live",
       href: "#/spaces/superintelmusic"
@@ -1246,7 +1246,7 @@
     player.loadedVersion = "";
     player.noAnalyser = true;
     let frame = document.getElementById("space-yt");
-    const src = "https://www.youtube-nocookie.com/embed/live_stream?channel=" + encodeURIComponent(channelId) + "&autoplay=1";
+    const src = "https://www.youtube-nocookie.com/embed/live_stream?channel=" + encodeURIComponent(channelId) + "&autoplay=1&playsinline=1";
     if (!frame) {
       frame = document.createElement("iframe");
       frame.id = "space-yt";
@@ -1254,8 +1254,14 @@
       frame.title = "";
       frame.setAttribute("aria-hidden", "true");
       frame.tabIndex = -1;
-      frame.allow = "autoplay; encrypted-media";
+      frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+      frame.allowFullscreen = true;
+      frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
       document.body.appendChild(frame);
+    } else {
+      frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
     }
     if (frame.src !== src) frame.src = src;
   }

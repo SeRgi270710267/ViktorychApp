@@ -2925,7 +2925,7 @@ def selftest() -> int:
     os.environ["TG_DELETE_FROM_R2"] = ""
     passes = hls_attempts(True)
     check(passes == [(False, 6, False), (False, 4, False), (False, 2, False), (False, 1, False), (False, 1, True)] and all(not row[0] for row in passes), "copy-only HLS retries 2s, 1s, then keyframe splits and never re-encodes")
-    check(social_copy_key("tiktok/gabii_g5/7695476356548660503/video") and social_copy_key("tiktok/id/123456789/7695476356548660503/video") and social_copy_key("social/youtube/xtrFOsncOeo/video/0") and not social_copy_key("cold/big.mp4"), "only a synced social video stays copy-only")
+    check(social_copy_key("tiktok/lockclip/7695476356548660503/video") and social_copy_key("tiktok/id/123456789/7695476356548660503/video") and social_copy_key("social/youtube/xtrFOsncOeo/video/0") and not social_copy_key("cold/big.mp4"), "only a synced social video stays copy-only")
     with tempfile.TemporaryDirectory() as kept_dir:
         kept_root = Path(kept_dir)
         original = kept_root / "original.mp4"
@@ -3041,7 +3041,7 @@ def selftest() -> int:
     check(loop_rank("loop/v202610221355/seg_0001.m4s", "v202610221355") < loop_rank("loop/vOLD/seg_0001.m4s", "v202610221355"), "the current loop version is mirrored first")
     tiktok_post = {
         "platform": "tiktok",
-        "handle": "gabii_g5",
+        "handle": "lockclip",
         "statusId": "7695476356548660503",
         "date": "2026-10-11T18:18:39Z",
         "stats": {"views": 9, "likes": 3, "replies": 1, "reposts": 0},
@@ -3053,15 +3053,15 @@ def selftest() -> int:
     planned = plan_social([{"posts": [tiktok_post]}], set())
     planned_keys = {row["key"]: row for row in planned}
     check(set(planned_keys) == {
-        "tiktok/gabii_g5/7695476356548660503/video",
-        "tiktok/gabii_g5/7695476356548660503/poster",
-        "tiktok/gabii_g5/7695476356548660503/photo/1",
+        "tiktok/lockclip/7695476356548660503/video",
+        "tiktok/lockclip/7695476356548660503/poster",
+        "tiktok/lockclip/7695476356548660503/photo/1",
     }, "TikTok video, poster, and carousel photo get stable keys")
-    video_row = planned_keys["tiktok/gabii_g5/7695476356548660503/video"]
-    check(video_row["original"] is True and video_row["page_url"] == "https://www.tiktok.com/@gabii_g5/video/7695476356548660503", "a TikTok video is fetched from the public page")
-    check(planned_keys["tiktok/gabii_g5/7695476356548660503/photo/1"]["photo_ordinal"] == 1, "a carousel photo keeps its gallery index")
+    video_row = planned_keys["tiktok/lockclip/7695476356548660503/video"]
+    check(video_row["original"] is True and video_row["page_url"] == "https://www.tiktok.com/@lockclip/video/7695476356548660503", "a TikTok video is fetched from the public page")
+    check(planned_keys["tiktok/lockclip/7695476356548660503/photo/1"]["photo_ordinal"] == 1, "a carousel photo keeps its gallery index")
     check(video_row["info"]["views"] == 9 and video_row["info"]["likes"] == 3 and video_row["info"]["upload_date"] == "20261011", "the manifest keeps views, likes, and the upload date")
-    live_post = {"platform": "tiktok", "handle": "gabii_g5", "kind": "live", "url": "https://www.tiktok.com/@gabii_g5/live", "media": [{"type": "video", "url": "https://v16.tiktokcdn.com/live.mp4"}]}
+    live_post = {"platform": "tiktok", "handle": "lockclip", "kind": "live", "url": "https://www.tiktok.com/@lockclip/live", "media": [{"type": "video", "url": "https://v16.tiktokcdn.com/live.mp4"}]}
     check(plan_social([{"posts": [live_post]}], set()) == [], "a TikTok live is not recorded")
     thumb = plan_social([{"posts": [{"platform": "youtube", "statusId": "xtrFOsncOeo", "url": "https://www.youtube.com/watch?v=xtrFOsncOeo", "date": "2026-10-20T13:34:32+00:00", "stats": {"views": 88288, "likes": 5387}, "media": [{"type": "video", "url": "https://www.youtube-nocookie.com/embed/xtrFOsncOeo", "poster": "https://i.ytimg.com/vi/xtrFOsncOeo/hqdefault.jpg", "stream": "https://invidious.example/v.mp4"}]}]}], set())
     by_key = {row["key"]: row for row in thumb}
@@ -3069,23 +3069,23 @@ def selftest() -> int:
     check(by_key["social/youtube/xtrFOsncOeo/video/0"]["source_url"] == "" and by_key["social/youtube/xtrFOsncOeo/video/0"]["page_url"] == "https://www.youtube.com/watch?v=xtrFOsncOeo", "the YouTube embed is not fetched")
     check(by_key["social/youtube/xtrFOsncOeo/thumb/0"]["source_url"].startswith("https://i.ytimg.com/"), "YouTube contributes its thumbnail, not the embed")
     check(host_ok("https://v16.tiktokcdn.com/a.mp4") and not host_ok("https://www.youtube.com/watch?v=xtrFOsncOeo"), "only the existing CDN hosts are fetched")
-    again = plan_social([{"posts": [tiktok_post]}], {"tiktok/gabii_g5/7695476356548660503/video"})
-    check(any(row["key"] == "tiktok/gabii_g5/7695476356548660503/video" and row["original"] for row in again), "a TikTok video on R2 is still replaced by the original")
+    again = plan_social([{"posts": [tiktok_post]}], {"tiktok/lockclip/7695476356548660503/video"})
+    check(any(row["key"] == "tiktok/lockclip/7695476356548660503/video" and row["original"] for row in again), "a TikTok video on R2 is still replaced by the original")
     renamed_tiktok = dict(tiktok_post)
     renamed_tiktok["permanentId"] = "123456789"
-    renamed_tiktok["previousHandles"] = ["old_gabii"]
+    renamed_tiktok["previousHandles"] = ["oldlock"]
     renamed_keys = social_key_candidates(renamed_tiktok, "video", 0)
     check(
         renamed_keys
         and renamed_keys[0] == "tiktok/id/123456789/7695476356548660503/video"
-        and "tiktok/gabii_g5/7695476356548660503/video" in renamed_keys
-        and "tiktok/old_gabii/7695476356548660503/video" in renamed_keys,
+        and "tiktok/lockclip/7695476356548660503/video" in renamed_keys
+        and "tiktok/oldlock/7695476356548660503/video" in renamed_keys,
         "a renamed TikTok account keeps the id key and the older handle keys",
     )
-    kept = plan_social([{"posts": [renamed_tiktok]}], {"tiktok/gabii_g5/7695476356548660503/video"})
-    check(any(row["key"] == "tiktok/gabii_g5/7695476356548660503/video" for row in kept), "a file stored under the previous handle stays on that key")
+    kept = plan_social([{"posts": [renamed_tiktok]}], {"tiktok/lockclip/7695476356548660503/video"})
+    check(any(row["key"] == "tiktok/lockclip/7695476356548660503/video" for row in kept), "a file stored under the previous handle stays on that key")
     check("bv*+ba/b" in ytdlp_download_args("https://www.youtube.com/watch?v=xtrFOsncOeo", Path("out"), YTDLP_FORMAT), "yt-dlp uses bv*+ba/b")
-    args = ytdlp_download_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), "bytevc1+audio/bv*+ba/b")
+    args = ytdlp_download_args("https://www.tiktok.com/@lockclip/video/1", Path("out"), "bytevc1+audio/bv*+ba/b")
     check(args[args.index("-f") + 1].endswith("/bv*+ba/b") and args[args.index("--merge-output-format") + 1] == "mp4" and args[args.index("--remux-video") + 1] == "mp4" and "--no-cookies" in args and "--cookies" not in args, "the remux is mp4 and uses no cookies")
     check(tiktok_selector([
         {"format_id": "h264_1080", "vcodec": "h264", "acodec": "none", "tbr": 2500, "height": 1080},
@@ -3103,7 +3103,7 @@ def selftest() -> int:
     check(social_object_key(ig, "photo", 0) == "social/instagram/DeZgzTEggQe/photo/0", "an Instagram shortcode is the object id")
     node_keys = subprocess.run(["node", "--input-type=module", "-e", """
 import { socialObjectKey } from "./shared/social-keys.js";
-const post = { platform: "tiktok", handle: "gabii_g5", statusId: "7695476356548660503" };
+const post = { platform: "tiktok", handle: "lockclip", statusId: "7695476356548660503" };
 const ig = { platform: "instagram", statusId: "https://www.instagram.com/p/DeZgzTEggQe/", url: "https://www.instagram.com/p/DeZgzTEggQe/" };
 const yt = { platform: "youtube", statusId: "xtrFOsncOeo" };
 process.stdout.write([
@@ -3115,9 +3115,9 @@ process.stdout.write([
 ].join("\\n"));
 """], capture_output=True, text=True, check=False)
     check(node_keys.returncode == 0 and node_keys.stdout.splitlines() == [
-        "tiktok/gabii_g5/7695476356548660503/video",
-        "tiktok/gabii_g5/7695476356548660503/poster",
-        "tiktok/gabii_g5/7695476356548660503/photo/1",
+        "tiktok/lockclip/7695476356548660503/video",
+        "tiktok/lockclip/7695476356548660503/poster",
+        "tiktok/lockclip/7695476356548660503/photo/1",
         "social/instagram/DeZgzTEggQe/photo/0",
         "social/youtube/xtrFOsncOeo/thumb/0",
     ], "the page and the backup use the same object keys")
