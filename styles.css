@@ -5184,13 +5184,16 @@ html[data-lock="1"] #update {
 .app-lock-card { width: min(420px, 100%); }
 .app-lock-card h1 { font-size: 22px; margin: 0 0 8px; }
 .app-lock-card p { color: #71767b; }
-html[data-privacy-cover="dms"] [data-privacy="sensitive"] { position: relative; }
+html[data-privacy-cover="dms"] [data-privacy="sensitive"] {
+  position: relative;
+  isolation: isolate;
+}
 html[data-privacy-cover="dms"] [data-privacy="sensitive"]::before {
   content: "";
   position: absolute;
   inset: 0;
   background: #000;
-  z-index: 80;
+  z-index: 5;
 }
 html[data-privacy-select="off"] [data-privacy="sensitive"],
 html[data-privacy-select="off"] [data-privacy="sensitive"] * {
