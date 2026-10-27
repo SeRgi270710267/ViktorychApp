@@ -1538,5 +1538,15 @@ SI18n.addPack("en", {
   "Clear status": "Clear status",
   "Status saved": "Status saved",
   "Couldn’t save your status.": "Couldn’t save your status.",
-  "Your status": "Your status"
+  "Your status": "Your status",
+  "Peer-assisted media": "Peer-assisted media",
+  "Peers can see each other's IP address while sharing.": "Peers can see each other's IP address while sharing.",
+  "Upload cap": "Upload cap",
+  "Share only while watching": "Share only while watching",
+  "From peers {size}": "From peers {size}",
+  "From origin {size}": "From origin {size}",
+  "32 KB/s": "32 KB/s",
+  "64 KB/s": "64 KB/s",
+  "128 KB/s": "128 KB/s",
+  "256 KB/s": "256 KB/s"
 });

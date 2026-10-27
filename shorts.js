@@ -17,6 +17,8 @@
   };
   var cached = null;
   var hls = null;
+  var peerRelease = null;
+  var previewPeerRelease = null;
   var poll = 0;
   var sound = false;
   var lastTap = 0;
@@ -989,7 +991,35 @@
       '<div class="shorts-feed' + (live && pane === "past" ? " is-past" : "") + '" id="shorts-feed">' + slides + "</div>" + accountSheet() + captchaModalHtml() + "</div>";
   }
 
+  function releaseNamed(slot) {
+    var fn = slot === "preview" ? previewPeerRelease : peerRelease;
+    if (!fn) return;
+    try { fn(); } catch (err) { /* the mesh can already be gone */ }
+    if (slot === "preview") previewPeerRelease = null;
+    else peerRelease = null;
+  }
+
+  function hookPeer(player, Hls, url, slot) {
+    var api = window.ViktorychPeer;
+    if (!api || !player) return;
+    if (window.ViktorychPeerMedia && window.ViktorychPeerMedia.applyHls) window.ViktorychPeerMedia.applyHls(player, Hls);
+    if (!api.ready) return;
+    api.ready().then(function (mod) {
+      if (!mod) return;
+      var current = slot === "preview" ? previewHls : hls;
+      if (current !== player) return;
+      if (mod.applyHls) mod.applyHls(player, Hls);
+      releaseNamed(slot);
+      if (mod.watch) {
+        var stop = mod.watch(url);
+        if (slot === "preview") previewPeerRelease = stop;
+        else peerRelease = stop;
+      }
+    });
+  }
+
   function destroyHls() {
+    releaseNamed("main");
     if (hls) {
       try { hls.destroy(); } catch (err) { /* already gone */ }
       hls = null;
@@ -1207,6 +1237,7 @@
       }
       var player = new Hls(playerOpts);
       hls = player;
+      hookPeer(player, Hls, url, "main");
       player.loadSource(url);
       player.attachMedia(video);
       video.muted = muted;
@@ -2433,6 +2464,7 @@
   function stopPreview() {
     previewToken += 1;
     previewHandle = "";
+    releaseNamed("preview");
     if (previewHls) {
       try { previewHls.destroy(); } catch (err) { /* already gone */ }
       previewHls = null;
@@ -2467,6 +2499,7 @@
       if (!Hls || !Hls.isSupported()) return Promise.reject(new Error("hls"));
       var player = new Hls({ autoStartLoad: true, startLevel: -1, capLevelToPlayerSize: true, xhrSetup: function (xhr) { var tokenValue = hooks.token(); if (tokenValue) xhr.setRequestHeader("Authorization", "Bearer " + tokenValue); } });
       previewHls = player;
+      hookPeer(player, Hls, direct, "preview");
       player.loadSource(direct);
       player.attachMedia(video);
       return new Promise(function (resolve, reject) {
