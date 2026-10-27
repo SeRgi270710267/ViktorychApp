@@ -123,6 +123,18 @@ def accounts_wall_checks() -> None:
     check("over_deadline()" in replies_src and "refresh budget spent" in replies_src, "reply refresh stops when the feed budget is spent")
     check("paths-ignore:" in workflow and "data/communities/**" in workflow, "data-only commits do not start a deploy")
     check("python3 scripts/assemble_site.py --site _site" in workflow and "shared/lazy-modules.js" in deployed_paths(), "the deploy publishes the lazy route loader")
+    check(workflow.count("python3 scripts/catalog_migrate.py --catalog-only") >= 2 and workflow.index("python3 scripts/catalog_migrate.py --catalog-only") < workflow.index("python3 scripts/accounts_publish.py") and workflow.index("python3 scripts/catalog_migrate.py --catalog-only") < workflow.rindex("python3 scripts/r2_catalog.py pull"), "the live catalog is copied into R2 before the shell switch and before refresh")
+    migrate_wf = (ROOT / ".github" / "workflows" / "catalog-migrate.yml").read_text(encoding="utf-8")
+    check(
+        "pull_request:" in migrate_wf
+        and "workflow_dispatch:" in migrate_wf
+        and "\n      - main\n" in migrate_wf
+        and "github.event_name == 'pull_request'" in migrate_wf
+        and "python3 scripts/catalog_migrate.py --dry-run" in migrate_wf
+        and "github.event_name == 'push' || github.event_name == 'workflow_dispatch'" in migrate_wf
+        and "python3 scripts/catalog_migrate.py\n" in migrate_wf,
+        "a pull request only counts the catalog, and main copies it before the shell can switch",
+    )
     check(
         accounts_publish.DEFAULT_HEALTH_ATTEMPTS >= 24 and accounts_publish.DEFAULT_HEALTH_INTERVAL >= 15,
         "health is retried for longer than a worker deploy",
@@ -171,7 +183,7 @@ def accounts_wall_checks() -> None:
             site = Path(tmp) / "site"
             source = Path(tmp) / "source"
             source.mkdir()
-            (source / "feeds.json").write_text('{"feeds":[]}\n', encoding="utf-8")
+            (source / "feeds.json").write_text('{"feeds":[{"id":"x:sample"}],"posts":[{"id":"1"}]}\n', encoding="utf-8")
             api = "https://viktorych-accounts.example.workers.dev"
 
             shell(site)
@@ -232,10 +244,23 @@ def accounts_wall_checks() -> None:
                 and seen["api"] == api
                 and "gate: true" in text
                 and worker == "const ACCOUNTS_WALL = true;\n"
-                and uploaded == ["feeds.json"]
+                and uploaded == ["feeds.json", "lastgood/feeds.json"]
                 and Path("accounts-wall/on").is_file(),
                 "a ready API locks the shell with the workers API and the service worker wall",
             )
+
+            shell(site)
+            uploaded.clear()
+            (source / "feeds.json").write_text('{"feeds":[],"posts":[]}\n', encoding="utf-8")
+            accounts_publish.fetch_health = up
+            accounts_publish.upload = fake_upload
+            try:
+                code = accounts_publish.publish(site, source)
+            finally:
+                accounts_publish.fetch_health = original_health
+                accounts_publish.upload = original_upload
+            check(code == 0 and uploaded == [], "an empty catalog is not published")
+            (source / "feeds.json").write_text('{"feeds":[{"id":"x:sample"}],"posts":[{"id":"1"}]}\n', encoding="utf-8")
 
             shell(site)
             uploaded.clear()
@@ -418,32 +443,32 @@ def main() -> None:
     refresh_budget_checks()
     follow_list_checks()
     identity_selftest()
-    elon = parse_x((FIX / "x_api_v2_elon.json").read_text(encoding="utf-8"), {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"})
+    elon = parse_x((FIX / "x_api_v2_samplea.json").read_text(encoding="utf-8"), {"id": "x:copperlane", "platform": "x", "handle": "copperlane"})
     posts = elon["posts"]
     check(len(posts) == 10, "elon parsed 10 tweets")
     check(any(p["kind"] == "repost" for p in posts), "elon has a repost")
     check(any(p["kind"] == "quote" for p in posts), "elon has a quote")
     repost = next(p for p in posts if p["kind"] == "repost")
-    check(repost["repostedBy"]["handle"] == "redacted_handle", "repost credits elon")
+    check(repost["repostedBy"]["handle"] == "copperlane", "repost credits elon")
     check(not repost["text"].startswith("RT @"), "repost text has no RT prefix")
-    check("Sawyer" in repost["author"] or repost["handle"] == "redacted_handle", "repost shows original author")
+    check("Sawyer" in repost["author"] or repost["handle"] == "riverquill", "repost shows original author")
     quote = next(p for p in posts if p["id"] == "2112603906723487744")
     check(quote["kind"] == "quote" and quote["quoted"], "electricity post is a quote")
     check("t.co" not in quote["text"], "quote t.co stripped from elon text")
     check("oversimplification" in quote["text"], "quote keeps elon's words")
     long_quote = quote["quoted"]
     check(len(long_quote["text"]) > 280, "quoted note_tweet is the long text")
-    check(any(p["handle"] == "redacted_handle" and p["verifiedType"] == "blue" for p in posts), "elon verified blue")
+    check(any(p["handle"] == "copperlane" and p["verifiedType"] == "blue" for p in posts), "elon verified blue")
     check(posts[0]["stats"].get("views", 0) > 1000, "stats mapped")
 
-    redacted_handle = parse_x((FIX / "x_api_v2_finkd.json").read_text(encoding="utf-8"), {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"})
-    photo = next(p for p in redacted_handle["posts"] if p["id"] == "2110778025629347999")
-    check(photo["media"] and photo["media"][0]["type"] == "photo", "redacted_handle photo media")
-    check("t.co" not in photo["text"], "redacted_handle media t.co stripped")
-    check(any(p["kind"] == "reply" and (p.get("replyingTo") or {}).get("handle") for p in redacted_handle["posts"]), "redacted_handle reply target")
-    self_reply = next(p for p in redacted_handle["posts"] if p["id"] == "2109689311088287773")
-    check((self_reply.get("replyingTo") or {}).get("handle") == "redacted_handle", "redacted_handle self reply handle")
-    check((self_reply.get("replyingTo") or {}).get("id") == "2109689309825794187", "redacted_handle self reply parent id")
+    mosspoint = parse_x((FIX / "x_api_v2_mosspoint.json").read_text(encoding="utf-8"), {"id": "x:mosspoint", "platform": "x", "handle": "mosspoint"})
+    photo = next(p for p in mosspoint["posts"] if p["id"] == "2110778025629347999")
+    check(photo["media"] and photo["media"][0]["type"] == "photo", "mosspoint photo media")
+    check("t.co" not in photo["text"], "mosspoint media t.co stripped")
+    check(any(p["kind"] == "reply" and (p.get("replyingTo") or {}).get("handle") for p in mosspoint["posts"]), "mosspoint reply target")
+    self_reply = next(p for p in mosspoint["posts"] if p["id"] == "2109689311088287773")
+    check((self_reply.get("replyingTo") or {}).get("handle") == "mosspoint", "mosspoint self reply handle")
+    check((self_reply.get("replyingTo") or {}).get("id") == "2109689309825794187", "mosspoint self reply parent id")
 
     fx = parse_fx((FIX / "fxtwitter_sample.json").read_text(encoding="utf-8"), {"id": "x:testuser", "platform": "x", "handle": "testuser"})
     check(fx["posts"][0]["kind"] == "quote", "fxtwitter quote")
@@ -512,7 +537,7 @@ def main() -> None:
     check(fx["posts"][2]["kind"] == "reply", "fxtwitter reply")
     check(any(p["followers"] == 10 for p in fx["profiles"]), "fxtwitter profile")
 
-    nit = parse_nitter((FIX / "nitter_sample.xml").read_text(encoding="utf-8"), {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"})
+    nit = parse_nitter((FIX / "nitter_sample.xml").read_text(encoding="utf-8"), {"id": "x:copperlane", "platform": "x", "handle": "copperlane"})
     check(nit["posts"][0]["kind"] == "repost", "nitter RT by is a repost")
     check(nit["posts"][0]["media"], "nitter image extracted")
     check(nit["posts"][1]["kind"] == "quote" and nit["posts"][1]["quoted"]["handle"] == "someone", "nitter blockquote quote")
@@ -562,14 +587,14 @@ def main() -> None:
     check(not is_retryable(ValueError("refusing api.x.com: the paid X API is not used")), "the paid api refusal is not retried")
     check(status_of(slow) == 429 and status_of(ValueError("x")) == 0, "the retry status reader is safe")
 
-    th = parse_threads((FIX / "rsshub_threads_zuck.xml").read_text(encoding="utf-8"), {"id": "threads:redacted_handle", "platform": "threads", "handle": "redacted_handle"})
+    th = parse_threads((FIX / "rsshub_threads_birchlane.xml").read_text(encoding="utf-8"), {"id": "threads:birchlane", "platform": "threads", "handle": "birchlane"})
     check(len(th["posts"]) == 10, "threads item count")
-    check(all(not p["text"].startswith("@redacted_handle") for p in th["posts"]), "threads title prefix stripped")
+    check(all(not p["text"].startswith("@birchlane") for p in th["posts"]), "threads title prefix stripped")
     check(any(m["type"] == "video" and m.get("poster") for p in th["posts"] for m in p["media"]), "threads video poster")
     check(any(p["kind"] == "reply" for p in th["posts"]), "threads reply marker")
     check("<" not in th["posts"][0]["text"], "threads html stripped")
 
-    ig = parse_ig((FIX / "rsshub_instagram_zuck.xml").read_text(encoding="utf-8"), {"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle"})
+    ig = parse_ig((FIX / "rsshub_instagram_birchlane.xml").read_text(encoding="utf-8"), {"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane"})
     check(len(ig["posts"]) == 33, "instagram item count")
     check(ig["posts"][0]["media"] and ig["posts"][0]["media"][0]["width"] == 3072, "instagram image size")
     check("<img" not in ig["posts"][0]["text"] and "thoughtful" in ig["posts"][0]["text"], "instagram caption text")
@@ -600,7 +625,7 @@ def main() -> None:
     live_error = {
         "id": "urn:sha1:e3c20ce9e73fcb2aad62770f7a19d0d558f47d5a",
         "text": "Bridge returned error 302! (20747)\nType: HttpException\nFile: lib/http.php\nLine: 34",
-        "url": "http://localhost:8080/?action=display&bridge=InstagramBridge&context=Username&u=redacted_handle&format=Atom",
+        "url": "http://localhost:8080/?action=display&bridge=InstagramBridge&context=Username&u=orbitfox&format=Atom",
     }
     check(post_is_bridge_error(live_error), "a stored bridge error post is detected")
     check(not post_is_bridge_error({"id": "Abcd1234", "text": "The word error is not a failure", "url": "https://www.instagram.com/p/Abcd1234/"}), "a caption that merely says error stays")
@@ -610,37 +635,37 @@ def main() -> None:
     check("function bridgeErrorPost(" in (ROOT / "app.js").read_text(encoding="utf-8"), "the renderer hides bridge error items")
 
     atom_error = """<?xml version="1.0"?>
-    <feed xmlns="http://www.w3.org/2005/Atom"><title>redacted_handle</title>
+    <feed xmlns="http://www.w3.org/2005/Atom"><title>orbitfox</title>
     <entry><title>Bridge returned error 302! (20747)</title>
     <id>urn:sha1:e3c20ce9e73fcb2aad62770f7a19d0d558f47d5a</id>
-    <link href="http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;context=Username&amp;u=redacted_handle&amp;format=Atom"/>
+    <link href="http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;context=Username&amp;u=orbitfox&amp;format=Atom"/>
     <content type="html">Type: HttpException File: lib/http.php Line: 34</content></entry></feed>"""
-    check(raises_bridge(parse_ig, atom_error, {"id": "instagram:redacted_handle", "handle": "redacted_handle"}), "instagram drops an Atom bridge error")
+    check(raises_bridge(parse_ig, atom_error, {"id": "instagram:orbitfox", "handle": "orbitfox"}), "instagram drops an Atom bridge error")
     rsshub_error = """<?xml version="1.0"?><rss><channel><title>RSSHub</title>
     <item><title>Looks like something went wrong</title><description>Error message: timeout</description>
     <link>https://docs.rsshub.app/</link><guid>https://docs.rsshub.app/</guid></item></channel></rss>"""
     check(raises_bridge(parse_generic, rsshub_error, {"id": "rss:x", "handle": "x"}), "generic rss drops an RSSHub error item")
-    http_only = """<?xml version="1.0"?><rss><channel><title>redacted_handle</title>
+    http_only = """<?xml version="1.0"?><rss><channel><title>birchlane</title>
     <item><title>Update</title><description>Type: HttpException Code: 301</description>
     <link>https://www.threads.com/t/NoPost</link><guid>NoPost</guid></item></channel></rss>"""
-    check(raises_bridge(parse_threads, http_only, {"id": "threads:redacted_handle", "handle": "redacted_handle"}), "threads drops an HttpException item")
-    php_only = """<?xml version="1.0"?><rss><channel><title>redacted_handle</title>
+    check(raises_bridge(parse_threads, http_only, {"id": "threads:birchlane", "handle": "birchlane"}), "threads drops an HttpException item")
+    php_only = """<?xml version="1.0"?><rss><channel><title>birchlane</title>
     <item><title>Update</title><description>File: lib/http.php Line: 34</description>
     <link>https://www.threads.com/t/NoPost</link><guid>NoPost</guid></item></channel></rss>"""
-    check(raises_bridge(parse_threads, php_only, {"id": "threads:redacted_handle", "handle": "redacted_handle"}), "threads drops a lib/http.php item")
-    guid_only = """<?xml version="1.0"?><rss><channel><title>redacted_handle</title>
+    check(raises_bridge(parse_threads, php_only, {"id": "threads:birchlane", "handle": "birchlane"}), "threads drops a lib/http.php item")
+    guid_only = """<?xml version="1.0"?><rss><channel><title>birchlane</title>
     <item><title>Update</title><description>photo</description>
-    <link>http://localhost:8080/?action=display&amp;bridge=ThreadsBridge&amp;context=Username&amp;u=redacted_handle&amp;format=Atom</link>
+    <link>http://localhost:8080/?action=display&amp;bridge=ThreadsBridge&amp;context=Username&amp;u=birchlane&amp;format=Atom</link>
     <guid>urn:sha1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb</guid></item></channel></rss>"""
-    check(raises_bridge(parse_threads, guid_only, {"id": "threads:redacted_handle", "handle": "redacted_handle"}), "threads drops an error-like bridge guid")
-    mixed = """<?xml version="1.0"?><rss><channel><title>Mark Zuckerberg (@redacted_handle) - Instagram</title><description>I build stuff</description>
+    check(raises_bridge(parse_threads, guid_only, {"id": "threads:birchlane", "handle": "birchlane"}), "threads drops an error-like bridge guid")
+    mixed = """<?xml version="1.0"?><rss><channel><title>Mark Zuckerberg (@birchlane) - Instagram</title><description>I build stuff</description>
     <item><title>Bridge returned error 302!</title><description>Type: HttpException File: lib/http.php</description>
-    <link>http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=redacted_handle&amp;format=Atom</link>
+    <link>http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=birchlane&amp;format=Atom</link>
     <guid>urn:sha1:cccccccccccccccccccccccccccccccccccccccc</guid><pubDate>Tue, 21 Oct 2026 16:48:30 GMT</pubDate></item>
     <item><title>A real caption</title><description>Building something new</description>
     <link>https://www.instagram.com/p/Abcd1234/</link><guid>Abcd1234</guid>
     <pubDate>Mon, 20 Oct 2026 10:00:00 GMT</pubDate></item></channel></rss>"""
-    mixed_posts = parse_ig(mixed, {"id": "instagram:redacted_handle", "handle": "redacted_handle"})["posts"]
+    mixed_posts = parse_ig(mixed, {"id": "instagram:birchlane", "handle": "birchlane"})["posts"]
     check(len(mixed_posts) == 1 and "Building something new" in mixed_posts[0]["text"] and "Bridge returned" not in mixed_posts[0]["text"], "a mixed instagram feed keeps the real post")
     plain = parse_generic("""<?xml version="1.0"?><rss><channel><title>Example</title>
     <item><title>No failure</title><description>The word error is not a bridge failure</description>
@@ -661,8 +686,8 @@ def main() -> None:
         out = root / "feeds.json"
         seed = {
             "posts": [
-                {"id": "good-old", "statusId": "good-old", "platform": "instagram", "feedId": "instagram:redacted_handle", "handle": "redacted_handle", "text": "Earlier real post", "url": "https://www.instagram.com/p/GoodOld1/", "date": "2026-10-01T00:00:00Z"},
-                live_error | {"statusId": live_error["id"], "platform": "instagram", "feedId": "instagram:redacted_handle", "handle": "redacted_handle", "date": "2026-10-21T16:48:30Z"},
+                {"id": "good-old", "statusId": "good-old", "platform": "instagram", "feedId": "instagram:orbitfox", "handle": "orbitfox", "text": "Earlier real post", "url": "https://www.instagram.com/p/GoodOld1/", "date": "2026-10-01T00:00:00Z"},
+                live_error | {"statusId": live_error["id"], "platform": "instagram", "feedId": "instagram:orbitfox", "handle": "orbitfox", "date": "2026-10-21T16:48:30Z"},
             ],
             "feeds": [],
         }
@@ -674,9 +699,9 @@ def main() -> None:
             "cap": 50,
             "people": [],
             "feeds": [{
-                "id": "instagram:redacted_handle",
+                "id": "instagram:orbitfox",
                 "platform": "instagram",
-                "handle": "redacted_handle",
+                "handle": "orbitfox",
                 "adapter": "rsshub_instagram",
                 "source_urls": [str(error_xml), str(good_xml)],
                 "limit": 8,
@@ -687,20 +712,20 @@ def main() -> None:
         ids = {post.get("id") for post in rotated["posts"]}
         check("Bridge returned error" not in texts and live_error["id"] not in ids, "rotation does not publish the bridge error")
         check("Earlier real post" in texts and "GoodNew1" in ids and "Water storage" in texts, "rotation keeps the stored post and uses the next mirror")
-        check((rotated.get("sourceHealth") or {}).get("instagram:redacted_handle", {}).get("ok"), "a later good mirror counts as a successful fetch")
+        check((rotated.get("sourceHealth") or {}).get("instagram:orbitfox", {}).get("ok"), "a later good mirror counts as a successful fetch")
         out.write_text(bridge_json.dumps(seed), encoding="utf-8")
         config["feeds"][0]["source_urls"] = [str(error_xml)]
         kept = build_feeds(config, False, False)
         kept_ids = {post.get("id"): post.get("text") for post in kept["posts"]}
         check(kept_ids.get("good-old") == "Earlier real post" and live_error["id"] not in kept_ids, "an error fetch does not overwrite the stored post")
-        check(not (kept.get("sourceHealth") or {}).get("instagram:redacted_handle", {}).get("ok"), "an error-only fetch is a failed source")
+        check(not (kept.get("sourceHealth") or {}).get("instagram:orbitfox", {}).get("ok"), "an error-only fetch is a failed source")
         same = dict(seed)
         same["posts"] = [dict(seed["posts"][0], id="GoodNew1", statusId="GoodNew1", text="Earlier real post")]
         out.write_text(bridge_json.dumps(same), encoding="utf-8")
         same_xml = root / "same.xml"
         same_xml.write_text("""<?xml version="1.0"?><rss><channel><title>Canadian Prepper</title>
         <item><title>Bridge returned error 302!</title><description>Type: HttpException File: lib/http.php</description>
-        <link>http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=redacted_handle&amp;format=Atom</link>
+        <link>http://localhost:8080/?action=display&amp;bridge=InstagramBridge&amp;u=orbitfox&amp;format=Atom</link>
         <guid>GoodNew1</guid><pubDate>Tue, 21 Oct 2026 16:48:30 GMT</pubDate></item></channel></rss>""", encoding="utf-8")
         config["feeds"][0]["source_urls"] = [str(same_xml)]
         replaced = build_feeds(config, False, False)
@@ -709,9 +734,9 @@ def main() -> None:
         shard = root / "archive"
         shard.mkdir()
         (shard / "2026-10.json").write_text(bridge_json.dumps([
-            {"p": "instagram", "id": "GoodOld1", "h": "redacted_handle", "d": "2026-10-01T00:00:00Z", "t": "Earlier real post"},
-            {"p": "threads", "id": "err1", "h": "redacted_handle", "d": "2026-10-21T00:00:00Z", "t": "Bridge returned error 301! HttpException"},
-            {"p": "threads", "id": "err2", "h": "redacted_handle", "d": "2026-10-21T00:00:00Z", "t": "Looks like something went wrong"},
+            {"p": "instagram", "id": "GoodOld1", "h": "birchlane", "d": "2026-10-01T00:00:00Z", "t": "Earlier real post"},
+            {"p": "threads", "id": "err1", "h": "birchlane", "d": "2026-10-21T00:00:00Z", "t": "Bridge returned error 301! HttpException"},
+            {"p": "threads", "id": "err2", "h": "birchlane", "d": "2026-10-21T00:00:00Z", "t": "Looks like something went wrong"},
         ]), encoding="utf-8")
         (shard / "index.json").write_text('{"shards":["2026-10"]}\n', encoding="utf-8")
         merge_archive(shard, [])
@@ -727,7 +752,7 @@ def main() -> None:
     check(conversation_reply_count(conv_raw) == 3283 and len(conv) != 3283, "source reply count stays separate from the cap")
     check(scores == sorted(scores, reverse=True), "relevant order is engagement")
     check(conv[0]["handle"] == "yesknow", "highest engagement leads")
-    check(conv[0]["kind"] == "reply" and conv[0]["replyingTo"]["handle"] == "redacted_handle", "conversation reply target")
+    check(conv[0]["kind"] == "reply" and conv[0]["replyingTo"]["handle"] == "copperlane", "conversation reply target")
     check(conv[0]["replyingTo"]["id"] == "2112600761762717997", "conversation reply parent id")
     check(conv[0]["date"].startswith("2026-10-20T"), "conversation date is ISO")
     check(conv[0]["verifiedType"] == "blue", "individual verification maps to blue")
@@ -739,11 +764,11 @@ def main() -> None:
     parent = "PARENT"
     sample = {
         "code": 200,
-        "status": {"replies": 9, "author": {"screen_name": "redacted_handle"}},
+        "status": {"replies": 9, "author": {"screen_name": "copperlane"}},
         "replies": [
-            {"id": "8", "text": "first", "author": {"screen_name": "redacted_handle", "followers": 100}, "replying_to": {"screen_name": "redacted_handle", "status": parent}, "likes": 1, "created_at": "Tue Oct 20 02:00:00 +0000 2026"},
-            {"id": "9", "text": "second", "author": {"screen_name": "redacted_handle", "followers": 100}, "replying_to": {"screen_name": "redacted_handle", "status": "8"}, "conversation_id": parent, "likes": 1, "created_at": "Tue Oct 20 03:00:00 +0000 2026"},
-            {"id": "1", "text": "plain reply", "author": {"screen_name": "ada", "followers": 40, "joined": "Tue Jun 02 20:12:29 +0000 2009", "verification": {"type": "individual"}}, "replying_to": {"screen_name": "redacted_handle", "status": parent}, "likes": 5, "replies": 0, "reposts": 0, "created_at": "Tue Oct 20 00:00:00 +0000 2026"},
+            {"id": "8", "text": "first", "author": {"screen_name": "copperlane", "followers": 100}, "replying_to": {"screen_name": "copperlane", "status": parent}, "likes": 1, "created_at": "Tue Oct 20 02:00:00 +0000 2026"},
+            {"id": "9", "text": "second", "author": {"screen_name": "copperlane", "followers": 100}, "replying_to": {"screen_name": "copperlane", "status": "8"}, "conversation_id": parent, "likes": 1, "created_at": "Tue Oct 20 03:00:00 +0000 2026"},
+            {"id": "1", "text": "plain reply", "author": {"screen_name": "ada", "followers": 40, "joined": "Tue Jun 02 20:12:29 +0000 2009", "verification": {"type": "individual"}}, "replying_to": {"screen_name": "copperlane", "status": parent}, "likes": 5, "replies": 0, "reposts": 0, "created_at": "Tue Oct 20 00:00:00 +0000 2026"},
             {"id": "1", "text": "duplicate id loses", "author": {"screen_name": "ada"}, "replying_to": {"status": parent}, "likes": 1, "created_at": "Tue Oct 20 00:00:00 +0000 2026"},
             {"id": "2", "text": "wrong thread", "author": {"screen_name": "bea"}, "replying_to": {"screen_name": "other", "status": "999"}, "likes": 100, "created_at": "Tue Oct 20 00:00:00 +0000 2026"},
             {"id": "3", "text": "This post is unavailable.", "author": {}, "replying_to": {"status": parent}},
@@ -752,7 +777,7 @@ def main() -> None:
             {"id": "10", "text": "plain reply from another account here", "author": {"screen_name": "copy", "followers": 100}, "replying_to": {"status": parent}, "likes": 1, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
             {"id": "11", "text": "plain reply from another account here", "author": {"screen_name": "copy2", "followers": 100}, "replying_to": {"status": parent}, "likes": 4, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
             {"id": "12", "text": "hi", "author": {"screen_name": "BotUser12345", "followers": 500, "joined": "Tue Jun 02 20:12:29 +0000 2009"}, "replying_to": {"status": parent}, "likes": 3, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
-            {"id": "13", "text": "airdrop now please", "author": {"screen_name": "redacted_handle", "followers": 100}, "replying_to": {"status": parent}, "likes": 1, "created_at": "Tue Oct 20 04:00:00 +0000 2026"},
+            {"id": "13", "text": "airdrop now please", "author": {"screen_name": "copperlane", "followers": 100}, "replying_to": {"status": parent}, "likes": 1, "created_at": "Tue Oct 20 04:00:00 +0000 2026"},
             {"id": "6", "text": "", "author": {"screen_name": "gap"}, "replying_to": {"status": parent}},
             {"id": "7", "text": "maybe", "author": {"screen_name": "neo", "followers": 3, "joined": "Mon Oct 19 00:00:00 +0000 2026"}, "created_at": "Tue Oct 20 00:00:00 +0000 2026", "likes": 4},
             {"id": "14", "text": "low likes lots of replies", "author": {"screen_name": "talk", "followers": 100}, "replying_to": {"status": parent}, "likes": 10, "replies": 20, "reposts": 0, "created_at": "Tue Oct 20 01:00:00 +0000 2026"},
@@ -777,7 +802,7 @@ def main() -> None:
             "id": reply["id"],
             "text": "filled from status" if reply["id"] == "6" else "maybe",
             "author": {"screen_name": reply["author"]["screen_name"], "followers": 3 if reply["id"] == "7" else 50, "joined": "Mon Oct 19 00:00:00 +0000 2026" if reply["id"] == "7" else "Tue Jun 02 20:12:29 +0000 2009"},
-            "replying_to": {"screen_name": "redacted_handle", "status": parent},
+            "replying_to": {"screen_name": "copperlane", "status": parent},
             "created_at": "Tue Oct 20 00:00:00 +0000 2026",
             "likes": 3,
         },
@@ -789,7 +814,7 @@ def main() -> None:
     <div class="timeline-item">
       <a href="/gap/status/6"></a>
       <a class="fullname" href="/gap">Gap</a>
-      <div class="replying-to">Replying to <a href="/redacted_handle/status/PARENT">@redacted_handle</a></div>
+      <div class="replying-to">Replying to <a href="/copperlane/status/PARENT">@copperlane</a></div>
       <div class="tweet-content media-body">filled from nitter</div>
       <span class="tweet-date"><a title="Tue, 20 Oct 2026 18:00:00 +0000"></a></span>
       <div class="icon-heart"></div> 3
@@ -831,16 +856,16 @@ def main() -> None:
     check(nit[0]["handle"] == "yesknow" and "Bach" in nit[0]["text"], "nitter first reply")
     check(nit[0]["stats"]["likes"] == 40 and nit[0]["kind"] == "reply", "nitter reply stats")
 
-    ig_replies = parse_ig_comments((FIX / "replies" / "ig_comments.json").read_text(encoding="utf-8"), {"handle": "redacted_handle", "author": "redacted_handle", "statusId": "1"})
+    ig_replies = parse_ig_comments((FIX / "replies" / "ig_comments.json").read_text(encoding="utf-8"), {"handle": "birchlane", "author": "birchlane", "statusId": "1"})
     check(len(ig_replies) == 2 and ig_replies[0]["stats"]["likes"] == 5, "instagram comments sorted by likes")
     check(ig_replies[0]["verifiedType"] == "blue" and ig_replies[0]["kind"] == "reply", "instagram verified reply")
-    check(ig_replies[0]["replyingTo"]["handle"] == "redacted_handle", "instagram reply target")
+    check(ig_replies[0]["replyingTo"]["handle"] == "birchlane", "instagram reply target")
 
-    th_replies = parse_threads_replies((FIX / "replies" / "threads_replies.html").read_text(encoding="utf-8"), {"handle": "redacted_handle", "author": "redacted_handle", "statusId": "DeZtp"})
+    th_replies = parse_threads_replies((FIX / "replies" / "threads_replies.html").read_text(encoding="utf-8"), {"handle": "birchlane", "author": "birchlane", "statusId": "DeZtp"})
     check(len(th_replies) == 2 and th_replies[0]["stats"]["likes"] == 9, "threads replies sorted by likes")
     check(th_replies[0]["text"] == "Wow" and th_replies[0]["kind"] == "reply", "threads reply text")
 
-    parent = {"handle": "redacted_handle", "author": "Mark Zuckerberg", "statusId": "4006377606181159966", "url": "https://www.instagram.com/p/DeZgzTEggQe/"}
+    parent = {"handle": "birchlane", "author": "Mark Zuckerberg", "statusId": "4006377606181159966", "url": "https://www.instagram.com/p/DeZgzTEggQe/"}
     gql_rows, gql_count = parse_ig_document((FIX / "replies" / "ig_graphql.json").read_text(encoding="utf-8"), parent)
     check(gql_count == 42 and len(gql_rows) == 2 and gql_rows[0]["text"] == "Nice melon", "graphql parent comments")
     check(gql_rows[0]["verifiedType"] == "blue" and gql_rows[0]["stats"]["likes"] == 5, "graphql comment likes")
@@ -851,7 +876,7 @@ def main() -> None:
     viewer_rows, _viewer_count = parse_ig_document((FIX / "replies" / "ig_viewer.html").read_text(encoding="utf-8"), parent)
     check(len(viewer_rows) == 1 and viewer_rows[0]["handle"] == "bea" and viewer_rows[0]["text"] == "Hello there", "viewer html comments")
 
-    direct_rows, direct_count = parse_threads_document((FIX / "replies" / "threads_direct.html").read_text(encoding="utf-8"), {"handle": "redacted_handle", "author": "redacted_handle", "statusId": "DeZtp"})
+    direct_rows, direct_count = parse_threads_document((FIX / "replies" / "threads_direct.html").read_text(encoding="utf-8"), {"handle": "birchlane", "author": "birchlane", "statusId": "DeZtp"})
     check(direct_count == 4 and len(direct_rows) == 1 and direct_rows[0]["text"] == "Wow", "threads direct replies skip other posts")
     check(direct_rows[0]["handle"] == "ada" and direct_rows[0]["replyingTo"]["id"] == "DeZtp", "threads direct reply target")
 
@@ -874,7 +899,7 @@ def main() -> None:
             ],
         }]
     }
-    ig_nested = parse_ig_comments(nested_ig, {"handle": "redacted_handle", "statusId": "post", "url": "https://www.instagram.com/p/abc/"})
+    ig_nested = parse_ig_comments(nested_ig, {"handle": "birchlane", "statusId": "post", "url": "https://www.instagram.com/p/abc/"})
     check(ig_nested[0]["stats"]["replies"] == 4 and len(ig_nested[0]["_children"]) == 2, "instagram stores one level of child comments")
     check(ig_nested[0]["_children"][0]["replyingTo"]["id"] == "p1" and "_children" not in ig_nested[0]["_children"][1], "instagram children reply to the comment")
     gql_nested, _gql_nested_count = parse_ig_document(
@@ -882,7 +907,7 @@ def main() -> None:
             "id": "c1", "text": "Top", "owner": {"username": "ada"}, "edge_liked_by": {"count": 2},
             "edge_threaded_comments": {"count": 2, "edges": [{"node": {"id": "c1a", "text": "Under", "owner": {"username": "bea"}, "edge_liked_by": {"count": 1}}}]},
         }}]}}}},
-        {"handle": "redacted_handle", "statusId": "post"},
+        {"handle": "birchlane", "statusId": "post"},
     )
     check(gql_nested[0]["stats"]["replies"] == 2 and gql_nested[0]["_children"][0]["text"] == "Under", "graphql threaded comments become children")
 
@@ -899,7 +924,7 @@ def main() -> None:
                 }}}]},
             },
         }}]},
-        {"handle": "redacted_handle", "statusId": "root"},
+        {"handle": "birchlane", "statusId": "root"},
     )
     check(thread_nested[0]["stats"]["replies"] == 3 and thread_nested[0]["url"].endswith("/t/AbC"), "threads reply count and permalink")
     check(len(thread_nested[0]["_children"]) == 1 and thread_nested[0]["_children"][0]["replyingTo"]["id"] == "10" and "_children" not in thread_nested[0]["_children"][0], "threads stores one level of replies")
@@ -940,7 +965,7 @@ def main() -> None:
     check(rss_replies[0]["replyingTo"]["id"] == "g1" and rss_replies[0]["replyingTo"]["handle"] == "example", "comment rss target")
 
     # loose JSON header tolerance
-    wrapped = "tool header\n" + (FIX / "x_api_v2_finkd.json").read_text(encoding="utf-8") + "\nX reads left: 1\n"
+    wrapped = "tool header\n" + (FIX / "x_api_v2_mosspoint.json").read_text(encoding="utf-8") + "\nX reads left: 1\n"
     check(parse_json_loose(wrapped)["data"], "loose json skips header and trailer")
 
     check(cdn_expiry("https://scontent.cdninstagram.com/v/a.jpg?oe=6ADDAAC5") == "2026-10-25T07:07:49Z", "oe hex is an expiry")
@@ -965,8 +990,8 @@ def main() -> None:
         check(True, "paid X API is refused")
     os.environ["TWITTER_AUTH_TOKEN"] = "abc123"
     try:
-        check(auth_cookie_header("https://nitter.meowing.monster/redacted_handle/rss").get("Cookie") == "auth_token=abc123", "nitter gets the optional cookie")
-        check(auth_cookie_header("https://api.fxtwitter.com/2/profile/redacted_handle/statuses") == {}, "fxtwitter does not get the X cookie")
+        check(auth_cookie_header("https://nitter.meowing.monster/copperlane/rss").get("Cookie") == "auth_token=abc123", "nitter gets the optional cookie")
+        check(auth_cookie_header("https://api.fxtwitter.com/2/profile/copperlane/statuses") == {}, "fxtwitter does not get the X cookie")
         check(auth_cookie_header("https://www.instagram.com/p/abc/") == {}, "instagram does not get the X cookie")
     finally:
         os.environ.pop("TWITTER_AUTH_TOKEN", None)
@@ -1011,17 +1036,17 @@ def main() -> None:
         lookup = jsonlib.loads((folder / "lookup.json").read_text(encoding="utf-8"))
         check(count == 3 and lookup.get("r1") == "keep" and lookup.get("r2") == "keep" and lookup.get("r3") == "r1", "reply lookup points at the comment file")
 
-    yt = parse_youtube((FIX / "youtube_mkbhd.xml").read_text(encoding="utf-8"), {"id": "youtube:mkbhd", "platform": "youtube", "handle": "mkbhd", "channelId": "UCBJycsmduvYEL83R_U4JriQ"})
+    yt = parse_youtube((FIX / "youtube_amberquill.xml").read_text(encoding="utf-8"), {"id": "youtube:amberquill", "platform": "youtube", "handle": "amberquill", "channelId": "UCsyntheticmaple00002000"})
     first = yt["posts"][0]
-    check(len(yt["posts"]) == 2 and first["id"] == "scwlR0QHGOk" and first["title"].startswith("The NEW Tesla Roadster"), "youtube rss title and id")
-    check(yt["profiles"][0].get("channelId") == "UCBJycsmduvYEL83R_U4JriQ", "youtube profile keeps the channel id")
+    check(len(yt["posts"]) == 2 and first["id"] == "scwlR0QHGOk" and first["title"].startswith("The NEW Goldthistle Roadster"), "youtube rss title and id")
+    check(yt["profiles"][0].get("channelId") == "UCsyntheticmaple00002000", "youtube profile keeps the channel id")
     check(first["stats"]["views"] == 11453176 and first["stats"]["likes"] == 181847, "youtube rss views and likes")
     check(first["media"][0]["poster"] == "https://i.ytimg.com/vi/scwlR0QHGOk/hqdefault.jpg", "youtube thumbnail is hotlinked")
     check("youtube-nocookie.com/embed/scwlR0QHGOk" in first["media"][0]["url"], "youtube embed url")
     from adapters.youtube_community import parse as parse_community
     from adapters.youtube_community import owner_from_oembed, parse_invidious_posts, parse_rss_posts
 
-    community_feed = {"id": "youtube:redacted_handle", "platform": "youtube", "handle": "redacted_handle", "channelId": "UCfgtuaUadGgOA-91geQ8Qog", "profile": {"name": "Canadian Prepper"}}
+    community_feed = {"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "channelId": "UCsyntheticmaple00001000", "profile": {"name": "Canadian Prepper"}}
     community = parse_community((FIX / "youtube_community_invidious.json").read_text(encoding="utf-8"), community_feed)
     by_id = {post["id"]: post for post in community["posts"]}
     image_post = by_id["UgkxwgD1SpZbB0jjdvLVVQ1kDUAUojU3kyah"]
@@ -1045,15 +1070,15 @@ def main() -> None:
                     "videoId": "abcdefghijk",
                     "title": "Foreign title",
                     "author": "Other Creator",
-                    "authorId": "UCothercreator0123456789",
+                    "authorId": "UCsyntheticmaple00003000",
                 },
             }]
         },
         community_feed,
     )[0]
-    check(foreign["kind"] == "repost" and foreign["author"] == "Other Creator" and foreign["repostedBy"]["handle"] == "redacted_handle" and foreign["statusId"] == "abcdefghijk" and str(foreign["id"]).startswith("repost:") and foreign.get("repostComment") == "Watch this" and foreign["profileHandle"] == "UCothercreator0123456789", "a shared community video keeps the reposter's comment and the original channel")
-    oembed = owner_from_oembed({"author_name": "DD Geopolitics", "author_url": "https://www.youtube.com/@DD_Geopolitics", "title": "Hormuz"})
-    check(oembed["name"] == "DD Geopolitics" and oembed["handle"] == "DD_Geopolitics" and oembed["title"] == "Hormuz" and "channelId" not in oembed, "oembed owner is parsed without a network call")
+    check(foreign["kind"] == "repost" and foreign["author"] == "Other Creator" and foreign["repostedBy"]["handle"] == "northlamp" and foreign["statusId"] == "abcdefghijk" and str(foreign["id"]).startswith("repost:") and foreign.get("repostComment") == "Watch this" and foreign["profileHandle"] == "UCsyntheticmaple00003000", "a shared community video keeps the reposter's comment and the original channel")
+    oembed = owner_from_oembed({"author_name": "DD Geopolitics", "author_url": "https://www.youtube.com/@nightheron", "title": "Hormuz"})
+    check(oembed["name"] == "DD Geopolitics" and oembed["handle"] == "nightheron" and oembed["title"] == "Hormuz" and "channelId" not in oembed, "oembed owner is parsed without a network call")
     page = parse_community((FIX / "youtube_community_initial.json").read_text(encoding="utf-8"), community_feed)
     scraped = page["posts"][0]
     check(scraped["id"] == image_post["id"] and scraped["stats"]["likes"] == 690 and scraped["media"][0]["url"].startswith("https://yt3.ggpht.com/") and scraped["date"] == "", "posts page fallback keeps the image and does not invent a time")
@@ -1069,12 +1094,12 @@ def main() -> None:
     )
     rss_posts = parse_rss_posts(rss, community_feed)
     check(len(rss_posts) == 1 and rss_posts[0]["id"] == image_post["id"] and rss_posts[0]["media"][0]["url"] == rss_image and rss_posts[0]["date"].startswith("2026-03-20"), "rsshub community item keeps the post id and image")
-    tesla = parse_youtube((FIX / "youtube_tesla.xml").read_text(encoding="utf-8"), {"id": "youtube:tesla", "platform": "youtube", "handle": "Tesla", "channelId": "UC5WjFrtBdufl6CZojX3D8dQ"})
-    check(tesla["posts"][0]["title"].startswith("Zero to sixty") and tesla["profiles"][0]["name"] == "Tesla", "tesla fixture parses offline")
+    goldthistle = parse_youtube((FIX / "youtube_goldthistle.xml").read_text(encoding="utf-8"), {"id": "youtube:goldthistle", "platform": "youtube", "handle": "Goldthistle", "channelId": "UCsyntheticmaple00004000"})
+    check(goldthistle["posts"][0]["title"].startswith("Zero to sixty") and goldthistle["profiles"][0]["name"] == "Goldthistle", "goldthistle fixture parses offline")
     comment = normalize_invidious_comment(
         {"commentId": "abc", "author": "@ada", "content": "Nice", "likeCount": 5, "published": 1792272039, "verified": True, "replies": {"replyCount": 2, "continuation": "tok"}},
         "scwlR0QHGOk",
-        "mkbhd",
+        "amberquill",
     )
     check(comment["text"] == "Nice" and comment["stats"]["likes"] == 5 and comment["stats"]["replies"] == 2 and comment["date"].startswith("2026-"), "invidious comment shape")
     import yt_remote as yt_remote_mod
@@ -1120,7 +1145,7 @@ def main() -> None:
     post = {
         "platform": "instagram",
         "id": "4006377606181159966",
-        "handle": "redacted_handle",
+        "handle": "birchlane",
         "date": "2026-10-12T16:56:29Z",
         "kind": "post",
         "text": long_text,
@@ -1160,17 +1185,17 @@ def main() -> None:
             "platform": "x",
             "id": "2112908406873072074",
             "statusId": "2112908406873072074",
-            "handle": "DD_Geopolitics",
+            "handle": "nightheron",
             "author": "DD Geopolitics",
             "avatar": "https://pbs.twimg.com/profile_images/face.jpg",
             "kind": "repost",
             "text": "WATCH: University professors",
             "date": "2026-10-21T12:00:00Z",
-            "repostedBy": {"handle": "redacted_handle", "name": "Canadian Prepper"},
+            "repostedBy": {"handle": "cedarhill", "name": "Canadian Prepper"},
             "repostComment": "look at this",
         }
         share_stub = stub_from_post(share)
-        check(share_stub["h"] == "DD_Geopolitics" and share_stub["a"] == "DD Geopolitics" and share_stub["av"].startswith("https://") and share_stub["rb"] == "redacted_handle" and share_stub["rn"] == "Canadian Prepper" and share_stub["rc"] == "look at this" and share_stub["k"] == "repost", "a repost stub keeps the original creator and who reposted it")
+        check(share_stub["h"] == "nightheron" and share_stub["a"] == "DD Geopolitics" and share_stub["av"].startswith("https://") and share_stub["rb"] == "cedarhill" and share_stub["rn"] == "Canadian Prepper" and share_stub["rc"] == "look at this" and share_stub["k"] == "repost", "a repost stub keeps the original creator and who reposted it")
         thin = dict(share)
         thin.pop("avatar")
         thin.pop("repostComment")
@@ -1181,7 +1206,7 @@ def main() -> None:
         check(row["t"].startswith("WATCH:") and row.get("av", "").startswith("https://") and row.get("rc") == "look at this" and "later caption" not in row["t"], "archiving again fills the creator fields without replacing the text")
         index = json.loads((root / "archive" / "index.json").read_text(encoding="utf-8"))
         check(index["shards"] == ["2026-10"], "the shard is named for its month")
-        older = {"platform": "x", "id": "2112600761762717997", "handle": "redacted_handle", "date": "2026-08-02T00:00:00Z", "text": "old", "kind": "post"}
+        older = {"platform": "x", "id": "2112600761762717997", "handle": "copperlane", "date": "2026-08-02T00:00:00Z", "text": "old", "kind": "post"}
         merge_archive(root / "archive", [older])
         index = json.loads((root / "archive" / "index.json").read_text(encoding="utf-8"))
         check(index["shards"] == ["2026-10", "2026-08"], "older months follow the newest shard")
@@ -1258,6 +1283,8 @@ def main() -> None:
     storage_workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     storage_flow = subprocess.run(["node", str(ROOT / "scripts" / "storage_test.js")], cwd=ROOT)
     check(storage_flow.returncode == 0, "the storage cache helpers pass")
+    native_flow = subprocess.run(["node", str(ROOT / "scripts" / "native_test.js")], cwd=ROOT)
+    check(native_flow.returncode == 0, "installed-app helpers pass")
     local_flow = subprocess.run(["node", str(ROOT / "scripts" / "localfirst_test.js")], cwd=ROOT)
     direct_flow = subprocess.run(["node", str(ROOT / "scripts" / "direct_test.js")], cwd=ROOT)
     device_flow = subprocess.run(["node", str(ROOT / "scripts" / "device_test.js")], cwd=ROOT)
@@ -1308,15 +1335,18 @@ def main() -> None:
             os.environ["GITHUB_REPOSITORY"] = saved_repo
     stale = []
     old_repo = "rss-" + "feeds"
-    stale_re = re.compile(r"github\.io/" + old_repo + r"|owner-account/" + old_repo + r"|/" + old_repo + r"/")
+    stale_re = re.compile(r"github\.io/" + old_repo + r"|riverquoll/" + old_repo + r"|/" + old_repo + r"/")
     for path in ROOT.rglob("*"):
         if not path.is_file() or "fixtures" in path.parts or path.suffix not in {".js", ".py", ".html", ".yml", ".md", ".webmanifest", ".css", ".json"}:
+            continue
+        rel = str(path.relative_to(ROOT))
+        if rel == "scripts/text-edits.json":
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         # Account deletion still clears data saved under the previous name.
         cleaned = text.replace('"' + old_repo + '-"', "").replace("'" + old_repo + "-'", "")
         if stale_re.search(cleaned) or old_repo in cleaned:
-            stale.append(str(path.relative_to(ROOT)))
+            stale.append(rel)
     check(not stale, "the previous site name is gone: " + ", ".join(stale))
     check(str(manifest["start_url"]).endswith("#/home"), "the manifest opens the home timeline")
     check("window-controls-overlay" in manifest["display_override"], "desktop installs can use the window controls overlay")
@@ -1324,8 +1354,10 @@ def main() -> None:
     sizes = {icon.get("sizes") for icon in manifest["icons"]}
     check("192x192" in sizes and "512x512" in sizes and "any" in purposes and "maskable" in purposes and "monochrome" in purposes and all(" " not in (item or "") for item in purposes) and all("?v=7" in icon["src"] for icon in manifest["icons"]), "the manifest has separate any, maskable, and monochrome icons with a cache-busting query")
     shortcut_names = [item["name"] for item in manifest["shortcuts"]]
-    check(shortcut_names == ["Search", "Bookmarks", "Subscriptions", "Notifications", "ViktorychMusic"], "the manifest shortcuts are Search, Bookmarks, Subscriptions, Notifications, and ViktorychMusic")
-    check(manifest["share_target"]["method"] == "GET" and manifest["share_target"]["enctype"] == "application/x-www-form-urlencoded" and "url" in manifest["share_target"]["params"], "sharing a link into the app is a GET share target")
+    check(shortcut_names[:4] == ["Home", "Notifications", "Messages", "Post"] and set(["Search", "Bookmarks", "Subscriptions", "Notifications", "ViktorychMusic", "Home", "Messages", "Post"]).issubset(shortcut_names), "the manifest shortcuts lead with Home, Notifications, Messages, and Post and keep Search, Bookmarks, Subscriptions, and ViktorychMusic")
+    share_files = manifest["share_target"]["params"].get("files") or []
+    check(manifest["share_target"]["method"] == "POST" and manifest["share_target"]["enctype"] == "multipart/form-data" and manifest["share_target"]["params"].get("url") == "url" and any(item.get("name") == "media" for item in share_files), "sharing a link or a file into the app is a POST share target")
+    check(manifest.get("file_handlers") and manifest["launch_handler"]["client_mode"] == "focus-existing" and any(item.get("protocol") == "web+viktorych" for item in manifest.get("protocol_handlers") or []), "the installed app opens files, focuses the existing window, and handles web+viktorych")
     worker = (ROOT / "sw.js").read_text(encoding="utf-8")
     check("__SW_VERSION__" in worker and "150 * 1024 * 1024" in worker and "staleWhileRevalidate" in worker, "the service worker versions its cache and caps media")
     check("api.fxtwitter.com" in worker and "networkFirst" in worker and "networkFirstTimeout" in worker and "6000" in worker, "comment APIs are network-first with a short timeout")
@@ -1352,7 +1384,8 @@ def main() -> None:
     community_loader = app[app.index("function ivCommunityThread("):app.index("function ytStub(")]
     check("ucid=" in community_loader and "commentCount" in community_loader, "community comments pass the channel id and keep the source count")
     check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
-    check("status.json" in deployed_paths() and "fallback/" in deployed_paths(), "the deploy publishes status and the own-fetcher files")
+    published = deployed_paths()
+    check("status.json" not in published and "\nfallback/" not in published and "\ncomments/" not in published and "\narchive/" not in published and "\ndiscord/" not in published, "the deploy does not publish private sync files")
     check('name: "sources"' in app and "ownPack" in app and "fxDown" in app and "fallback/" in app and "settled" in app and "source-row" in (ROOT / "styles.css").read_text(encoding="utf-8"), "a hidden sources view fails over to our own files")
     check('name: "user"' in app and "#/u/" in app and "with_replies=1" in app and "Open on Instagram" in app and "feeds.config.json" in app and "pfollow-note" in (ROOT / "styles.css").read_text(encoding="utf-8"), "live profiles open from a handle and keep follows on the device")
     css = (ROOT / "styles.css").read_text(encoding="utf-8")
@@ -1380,7 +1413,7 @@ def main() -> None:
     check(page.index('src="translate.js"') < page.index('src="app.js"') and 'href="translate.css"' in page, "the page loads the translator before the app")
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
-    check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" in deployed_paths() and "suggestions.json" in deployed_paths() and "feeds.config.json" in deployed_paths(), "the deploy publishes translation and people files")
+    check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" not in deployed_paths() and "suggestions.json" not in deployed_paths() and "feeds.config.json" not in deployed_paths(), "the deploy publishes translation and people files")
     check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a20-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
     check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
     check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a20-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
@@ -1423,7 +1456,7 @@ def main() -> None:
     music_catalog = json.loads(music_data)
     check('productName("music")' in music_js and "SuperintelMusic" not in music_js and "SuperintelMusic" not in music_css and "SuperintelMusic" not in music_data and 'aria-label="ViktorychMusic"' in (ROOT / "logo" / "viktorychmusic.svg").read_text(encoding="utf-8"), "the music mode name comes from the language packs")
     check(any(song.get("id") == "america-dont-sit-still" and song.get("artist") == "ViktorychMusic" and song.get("kind") == "hls" and str(song.get("stream") or "").endswith("/index.m3u8") and song.get("stream") not in music_js for song in music_catalog.get("songs") or []), "the lossless release is credited in the catalog and its stream stays out of the script")
-    check('parts[0] === "music"' in app and 'href: "#/music"' in app and 'classList.add("music-on")' in music_js and 'classList.remove("music-on")' in music_js and "audio.pause" in music_js, "music mode opens from its route and pauses on the way out")
+    check('parts[0] === "music"' in app and 'href: "#/music"' in app and 'href="#/music"' in music_js and 'classList.add("music-on")' in music_js and 'classList.remove("music-on")' in music_js and "audio.pause" in music_js, "music mode opens from its route and pauses on the way out")
     check('title === productName("music")' in music_js and '<h1 class="vh">' in music_js and 'const musicHome = route.name === "music"' in app and "tall && !musicHome ? 106" in app, "music home shows the logo without a second title")
     music_row = subprocess.run(["node", "scripts/music_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(music_row.returncode == 0, "SIntelMusic library checks passed\n" + music_row.stdout + music_row.stderr)
@@ -1432,10 +1465,12 @@ def main() -> None:
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
     follows_workflow = (ROOT / ".github" / "workflows" / "follows.yml").read_text(encoding="utf-8")
     music_workflow = (ROOT / ".github" / "workflows" / "music.yml").read_text(encoding="utf-8")
-    check("github.actor == 'owner-account'" in follows_workflow and "github.actor == github.repository_owner" not in follows_workflow and "OWNER: owner-account" in follows_workflow and "OWNER: ${{ github.repository_owner }}" not in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues are applied only for the human owner, not the organization")
-    check("github.actor == 'owner-account'" in music_workflow and "github.actor == github.repository_owner" not in music_workflow and "OWNER: owner-account" in music_workflow and "REPO: ${{ github.repository }}" in music_workflow, "the music catalog issue is applied only for the human owner")
+    check("github.actor ==" not in follows_workflow and "OWNER_ACTOR_SHA256" in follows_workflow and "github.actor == github.repository_owner" not in follows_workflow and "OWNER: ${{ github.repository_owner }}" not in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues are applied only for the human owner, not the organization")
+    check("github.actor ==" not in music_workflow and "OWNER_ACTOR_SHA256" in music_workflow and "github.actor == github.repository_owner" not in music_workflow and "REPO: ${{ github.repository }}" in music_workflow, "the music catalog issue is applied only for the human owner")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "groups.yml").is_file(), "subscription group issue form exists")
-    check("feeds.config.json" in deployed_paths(), "the deploy publishes feeds.config.json")
+    published = deployed_paths()
+    assemble_src = (ROOT / "scripts" / "assemble_site.py").read_text(encoding="utf-8")
+    check("feeds.json" not in published and "stories.json" not in published and "people.json" not in published and "suggestions.json" not in published and "feeds.config.json" not in published and "mindepth 2" not in assemble_src, "the public site does not copy private catalogs")
     chips_at = css.index(".yt-chips {")
     chips_css = css[chips_at:chips_at + 500]
     check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
@@ -1466,7 +1501,7 @@ def main() -> None:
     check(".tabs-bar.notes-tabs" in css and ".tab-grip" in css and ".tab-switch" in css and ".note-gear" in css and ".tab-count" not in css and ".tab-plus" not in css, "notification tabs use the home underline bar, and reorder handles stay in the editor")
     check("pinned.slice" not in app and "lists.slice(0," not in app, "pinned home tabs are not capped")
     check("function sharePostUrl(" in app and "function shareProfileUrl(" in app and "isn’t in the published snapshot" in app and 's/watch-"' in app and 's/" + (post.platform' in app and "function notePublished(" in app and "PUBLISHED.posts" in app, "share and copy use the static preview pages, and a live post outside the snapshot does not")
-    check('og:image" content="icons/icon-512.png?v=7"' in page and 'rel="canonical"' in page and "location.origin" in page and "__SITE_BASE__" not in page and "SuperintelApp/" not in page and "owner-account.github.io" not in page and 'og:site_name" content="ViktorychApp"' in page and "<title>Home / ViktorychApp</title>" in page and 'apple-mobile-web-app-title" content="ViktorychApp"' in page and "manifest.webmanifest?v=7" in page and "favicon.ico?v=7" in page and 'productName("app")' in app and "function routeTitle(" in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'markSvg("app", "logo-full")' in app and 'markSvg("appShort", "logo-short")' in app and 'markSvg("mark", "logo-si")' in app and "function githubRepo(" in app and "owner-account" not in app and "viktorychapp-settings-v1" in page and "superintelapp-settings-v1" in page and 'readStored(localStorage, "settings-v1")' in app and "function shareRoot(" in app and "function pagesDirectory(" in app, "the home page names the app, the shortcut label is the short form, and copied links stay on this site")
+    check('og:image" content="icons/icon-512.png?v=7"' in page and 'rel="canonical"' in page and "location.origin" in page and "__SITE_BASE__" not in page and "SuperintelApp/" not in page and "riverquoll.github.io" not in page and 'og:site_name" content="ViktorychApp"' in page and "<title>Home / ViktorychApp</title>" in page and 'apple-mobile-web-app-title" content="ViktorychApp"' in page and "manifest.webmanifest?v=7" in page and "favicon.ico?v=7" in page and 'productName("app")' in app and "function routeTitle(" in app and 'class="logo" href="#/"' in app and 'class="m-logo" href="#/"' in app and 'markSvg("app", "logo-full")' in app and 'markSvg("appShort", "logo-short")' in app and 'markSvg("mark", "logo-si")' in app and "function githubRepo(" in app and "riverquoll" not in app and "viktorychapp-settings-v1" in page and "superintelapp-settings-v1" in page and 'readStored(localStorage, "settings-v1")' in app and "function shareRoot(" in app and "function pagesDirectory(" in app, "the home page names the app, the shortcut label is the short form, and copied links stay on this site")
     check('tr("Search {app}"' in app and "Surprise me" in app and "explore-mode" in app and 'const SEARCH_SUFFIX = "searches-v1"' in app and "readStored(localStorage, SEARCH_SUFFIX)" in app and 'id="explore-q"' in app and "function exploreHome(" in app and "function wordmarkSvg(" in app and '["videos", tr("Videos")]' in app and "ghome-logo" in css and 'html[data-theme="default"] .ghome-logo' in css, "explore is a search home with themed wordmark, suggestions, and result tabs")
     check('productName("search")' in app and 'productName("searchShort")' in app and "new ResizeObserver" in app and "EXPLORE_SEARCH_MIN = 13" in app and 'tr("Explore")' in app and 't("brand.search")' in (ROOT / "i18n.js").read_text(encoding="utf-8") and '"brand.search": "Search"' in (ROOT / "i18n" / "en.js").read_text(encoding="utf-8") and '"brand.search": "Поиск"' in (ROOT / "i18n" / "ru.js").read_text(encoding="utf-8") and '"brand.search": "Buscar"' in (ROOT / "i18n" / "es.js").read_text(encoding="utf-8"), "the explore field uses the search product name and keeps the Explore nav label")
     check("function shellDocument(" in worker and "/\\/(?:s|u)\\/" in worker, "a share-page navigation does not replace the cached app shell")
@@ -1548,7 +1583,7 @@ def main() -> None:
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "follow-request.yml").is_file() and (ROOT / ".github" / "ISSUE_TEMPLATE" / "unfollow-request.yml").is_file(), "follow and unfollow issue forms exist")
     import follow_request as follow_req
 
-    check(not follow_req.allowed("stranger", "owner-account") and follow_req.allowed("owner-account", "owner-account") and not follow_req.allowed("", "owner-account"), "only the repository owner can change follows")
+    check(not follow_req.allowed("stranger", "riverquoll") and follow_req.allowed("riverquoll", "riverquoll") and not follow_req.allowed("", "riverquoll"), "only the repository owner can change follows")
     parsed_follow = follow_req.parse_issue("Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n")
     check(parsed_follow == {"kind": "follow", "account": "nasa", "platform": "x"}, "a follow issue form is read")
     x_spec = follow_req.normalize("https://x.com/nasa", "x")
@@ -1557,18 +1592,18 @@ def main() -> None:
     check(bare_spec["platform"] == "x" and bare_spec["handle"] == "nasa", "a bare @handle is an X account")
     yt_spec = follow_req.normalize("https://www.youtube.com/@LinusTechTips", "youtube")
     check(yt_spec["handle"] == "LinusTechTips" and yt_spec["channelId"] == "", "a youtube @handle is kept")
-    yt_channel_spec = follow_req.normalize("https://www.youtube.com/channel/UCXuqSBlHAE6Xw-yeJA0Tunw", "youtube")
-    check(yt_channel_spec["channelId"] == "UCXuqSBlHAE6Xw-yeJA0Tunw", "a youtube channel id is kept")
+    yt_channel_spec = follow_req.normalize("https://www.youtube.com/channel/UCsyntheticmaple00005000", "youtube")
+    check(yt_channel_spec["channelId"] == "UCsyntheticmaple00005000", "a youtube channel id is kept")
     check(follow_req.normalize("https://vk.com/vk", "vk")["handle"] == "vk", "a vk profile URL is a handle")
-    check(follow_req.normalize("https://www.threads.net/@redacted_handle", "threads")["handle"] == "redacted_handle", "a threads URL is a handle")
-    check(follow_req.normalize("https://www.instagram.com/redacted_handle/", "instagram")["handle"] == "redacted_handle", "an instagram URL is a handle")
-    tg_link = follow_req.normalize("https://t.me/s/telegram", "")
-    check(tg_link["platform"] == "telegram" and tg_link["handle"] == "telegram" and tg_link["url"] == "https://t.me/telegram", "a t.me preview link is a Telegram channel")
-    tg_at = follow_req.normalize("telegram:@telegram", "telegram")
-    check(tg_at["handle"] == "telegram" and tg_at["url"] == "https://t.me/telegram", "telegram:@name is a Telegram follow")
+    check(follow_req.normalize("https://www.threads.net/@birchlane", "threads")["handle"] == "birchlane", "a threads URL is a handle")
+    check(follow_req.normalize("https://www.instagram.com/birchlane/", "instagram")["handle"] == "birchlane", "an instagram URL is a handle")
+    tg_link = follow_req.normalize("https://t.me/s/laneharbor", "")
+    check(tg_link["platform"] == "telegram" and tg_link["handle"] == "laneharbor" and tg_link["url"] == "https://t.me/laneharbor", "a t.me preview link is a Telegram channel")
+    tg_at = follow_req.normalize("telegram:@laneharbor", "telegram")
+    check(tg_at["handle"] == "laneharbor" and tg_at["url"] == "https://t.me/laneharbor", "telegram:@name is a Telegram follow")
     tg_entry = follow_req.entry_for(tg_at)
     check(tg_entry["adapter"] == "telegram" and tg_entry["source_urls"] == ["https://t.me/s/{handle}"] and tg_entry["fallbacks"][0]["source_urls"] == ["{rsshubBase}/telegram/channel/{handle}"], "a Telegram follow uses the public preview and RSSHub backup")
-    check(follow_req.check_url(tg_at) == "https://t.me/s/telegram", "Telegram is confirmed from the public preview")
+    check(follow_req.check_url(tg_at) == "https://t.me/s/laneharbor", "Telegram is confirmed from the public preview")
     rss_spec = follow_req.normalize("https://example.com/feed.xml", "rss")
     check(rss_spec["platform"] == "rss" and rss_spec["url"] == "https://example.com/feed.xml", "an https feed is an rss follow")
     http_rejected = False
@@ -1587,7 +1622,7 @@ def main() -> None:
         if "fxtwitter.com/nasa" in url:
             return 200, '{"user":"nasa"}'
         if "youtube.com/@" in url:
-            return 200, 'href="https://www.youtube.com/channel/UCXuqSBlHAE6Xw-yeJA0Tunw"'
+            return 200, 'href="https://www.youtube.com/channel/UCsyntheticmaple00005000"'
         if "videos.xml" in url:
             return 200, "<feed></feed>"
         if "example.com" in url:
@@ -1596,28 +1631,28 @@ def main() -> None:
 
     public_resolve = lambda host: ["1.1.1.1"]
     confirmed_yt = follow_req.confirm_source(dict(yt_spec), fake_follow_fetch, public_resolve)
-    check(confirmed_yt["channelId"] == "UCXuqSBlHAE6Xw-yeJA0Tunw", "a youtube page supplies the channel id")
+    check(confirmed_yt["channelId"] == "UCsyntheticmaple00005000", "a youtube page supplies the channel id")
     follow_config = {"feeds": []}
-    added, follow_config = follow_req.run("owner-account", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    added, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     added_row = follow_config["feeds"][0]
     check(added.startswith("Added x:nasa") and added_row["adapter"] == "fxtwitter" and added_row["fallbacks"][0]["adapter"] == "nitter_rss", "a follow adds the fxtwitter source and nitter fallbacks")
     duplicate_rejected = False
     try:
-        follow_req.run("owner-account", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+        follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     except follow_req.Reject:
         duplicate_rejected = True
     check(duplicate_rejected, "a duplicate follow is rejected")
-    removed, follow_config = follow_req.run("owner-account", "owner-account", "Unfollow request: x nasa", "### Account\n\nx:nasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    removed, follow_config = follow_req.run("riverquoll", "riverquoll", "Unfollow request: x nasa", "### Account\n\nx:nasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     check(removed.startswith("Removed x:nasa") and follow_config["feeds"] == [] and "x:nasa" in follow_config.get("removed", []), "an unfollow removes the account and blocks auto-add")
-    brought, follow_config = follow_req.run("owner-account", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
+    brought, follow_config = follow_req.run("riverquoll", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", follow_config, fake_follow_fetch, public_resolve)
     check(brought.startswith("Added x:nasa") and follow_config["feeds"][0]["id"] == "x:nasa" and follow_config.get("removed") == [], "an explicit follow clears the auto-add block")
     untouched = {"feeds": [{"id": "x:keep"}]}
-    ignored, same_config = follow_req.run("someone", "owner-account", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
+    ignored, same_config = follow_req.run("someone", "riverquoll", "Follow request: x nasa", "### Account\n\nnasa\n\n### Platform\n\nx\n", untouched, fake_follow_fetch, public_resolve)
     check(ignored == "" and same_config["feeds"] == [{"id": "x:keep"}], "an issue from anyone else is ignored")
     group_body = "### Groups\n\n" + json.dumps([{"id": "grp_news", "name": "News", "icon": "https://example.com/a.png", "members": ["youtube:Someone"]}])
-    saved, grouped = follow_req.run("owner-account", "owner-account", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
+    saved, grouped = follow_req.run("riverquoll", "riverquoll", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
     check(saved == "Saved 1 subscription groups." and grouped["feeds"] == [{"id": "x:keep"}] and grouped["groups"][0]["id"] == "grp_news" and grouped["groups"][0]["members"] == ["youtube:Someone"], "the owner can publish subscription groups without touching feeds")
-    stranger_groups, stranger_config = follow_req.run("someone", "owner-account", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
+    stranger_groups, stranger_config = follow_req.run("someone", "riverquoll", "Subscription groups", group_body, {"feeds": [{"id": "x:keep"}]}, fake_follow_fetch, public_resolve)
     check(stranger_groups == "" and "groups" not in stranger_config, "a groups issue from anyone else is ignored")
     private_icon = False
     try:
@@ -1640,7 +1675,7 @@ def main() -> None:
     check(clock["vk:vk"]["emptySince"] == "2026-10-21T06:00:00Z", "an empty source starts the clock once")
     sync_health.record_source(clock, "vk:vk", True, "2026-10-21T08:00:00Z")
     check(clock["vk:vk"].get("ok") == "2026-10-21T08:00:00Z" and "emptySince" not in clock["vk:vk"], "posts from a source clear the empty clock")
-    quiet = {"feeds": [{"id": "x:redacted_handle", "emptySince": "", "ok": "2026-10-21T11:00:00Z"}, {"id": "vk:vk", "emptySince": "2026-10-21T06:00:00Z", "detail": "no source"}]}
+    quiet = {"feeds": [{"id": "x:copperlane", "emptySince": "", "ok": "2026-10-21T11:00:00Z"}, {"id": "vk:vk", "emptySince": "2026-10-21T06:00:00Z", "detail": "no source"}]}
     check(sync_health.problems(quiet, "2026-10-21T11:00:00Z") == [], "five hours of nothing does not alert, and a quiet account that still returns posts is healthy")
     stale = sync_health.problems(quiet, "2026-10-21T12:00:00Z")
     check(len(stale) == 1 and stale[0].startswith("vk:vk has returned nothing since 2026-10-21T06:00:00Z"), "six hours of nothing is a sync problem")
@@ -1676,6 +1711,13 @@ def main() -> None:
     check("ViktorychUpdate" in app and "holdsReload" in app and 'src="update.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "python3 scripts/write_version.py --out _site/version.json" in workflow_text and "update.js" in deployed_paths(), "the page offers a full-screen update and the deploy writes version.json")
     import write_version
     write_version.selftest()
+    import handle_guard
+    check(handle_guard.selftest() == 0, "the handle guard hashes a private list")
+    check("private handle list is not configured; hash comparison skipped" in (ROOT / "scripts" / "handle_guard.py").read_text(encoding="utf-8"), "the handle guard stays green until the private list is set")
+    import catalog_migrate
+    check(catalog_migrate.selftest() == 0, "the catalog migration copies counts and sizes only")
+    import r2_catalog
+    check(r2_catalog.selftest() == 0, "a missing catalog keeps the last good copy")
     import subprocess
     update_flow = subprocess.run(["node", str(ROOT / "scripts" / "update_flow_test.js")], cwd=ROOT)
     check(update_flow.returncode == 0, "the update flow helpers pass")
@@ -1686,7 +1728,7 @@ def main() -> None:
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
     follow_fn = app[app.index("function followedFeeds()"):app.index("function followedFeeds()") + 500]
-    check("redacted_handle" not in follow_fn and "redacted_handle" not in follow_fn and "redacted_handle" not in follow_fn, "live refresh has no per-account special case")
+    check("copperlane" not in follow_fn and "mosspoint" not in follow_fn and "northlamp" not in follow_fn, "live refresh has no per-account special case")
     check("return !isSelfReply(post);" in app and "replyParent" in app and "pill-faces" in css and "reply-context" in css and ".thread > .post.continues" in css and "--thread:" in css, "home shows replies to other people and the new-posts pill can show avatars")
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
     community_src = (ROOT / "scripts" / "adapters" / "youtube_community.py").read_text(encoding="utf-8")
@@ -1700,7 +1742,7 @@ def main() -> None:
     check(len(vk_doc["posts"]) == 4, "vk wall keeps the text post, the video, the copy, and the co-owned post")
     vk_text_post = vk_doc["posts"][0]
     check("запись в блоге" in vk_text_post["text"] and "away.php" not in vk_text_post["text"] and vk_text_post["media"][0]["url"].endswith("vk-large.jpg"), "vk markup becomes the label and the largest photo")
-    check(vk_text_post["url"] == "https://vk.com/wall-22822305_1730797" and vk_text_post["stats"]["replies"] == 12, "vk post links to the wall and keeps the comment count")
+    check(vk_text_post["url"] == "https://vk.com/wall-10000041_1730797" and vk_text_post["stats"]["replies"] == 12, "vk post links to the wall and keeps the comment count")
     vk_video = vk_doc["posts"][1]
     check(vk_video["media"][0]["type"] == "video" and vk_video["media"][0]["poster"].endswith("vk-video.jpg") and vk_video["media"][0]["open"].startswith("https://vk.com/video"), "vk video keeps a poster and the watch page")
     vk_repost = vk_doc["posts"][2]
@@ -1708,24 +1750,24 @@ def main() -> None:
     vk_wall = next(post for post in vk_doc["posts"] if post["id"] == "-220923985_58381")
     check(vk_wall["kind"] == "repost" and vk_wall["author"] == "Фандом Фест" and vk_wall["handle"] == "vkfandomfest" and vk_wall["url"] == "https://vk.com/wall-220923985_58381" and vk_wall["repostedBy"]["name"] == "ВКонтакте" and vk_wall["repostedBy"]["handle"] == "vk" and vk_wall["repostedBy"]["feedId"] == "vk:vk" and "Фестиваль" in vk_wall["text"], "a co-owned wall post keeps the original author and names who reposted it")
     owned_wall = parse_vk({"response": {"count": 2, "items": [
-        {"id": 9, "owner_id": -22822305, "from_id": -22822305, "date": 10, "post_type": "post", "text": "Своя запись", "header": {"title": {"source_id": -22822305, "source_ids": [-22822305, -9]}}, "coowners": {"list": [{"owner_id": -22822305}, {"owner_id": -9}]}},
-        {"id": 3, "owner_id": -22822305, "from_id": -22822305, "date": 9, "post_type": "copy", "text": "Смотрите", "copy_history": [{"id": 4, "owner_id": -1, "from_id": -1, "date": 8, "post_type": "post", "text": "Чужая запись"}]},
-    ], "groups": [{"id": 22822305, "name": "ВКонтакте", "screen_name": "vk"}, {"id": 1, "name": "Команда", "screen_name": "team"}]}}, {"id": "vk:vk", "platform": "vk", "handle": "vk"})
+        {"id": 9, "owner_id": -10000041, "from_id": -10000041, "date": 10, "post_type": "post", "text": "Своя запись", "header": {"title": {"source_id": -10000041, "source_ids": [-10000041, -9]}}, "coowners": {"list": [{"owner_id": -10000041}, {"owner_id": -9}]}},
+        {"id": 3, "owner_id": -10000041, "from_id": -10000041, "date": 9, "post_type": "copy", "text": "Смотрите", "copy_history": [{"id": 4, "owner_id": -1, "from_id": -1, "date": 8, "post_type": "post", "text": "Чужая запись"}]},
+    ], "groups": [{"id": 10000041, "name": "ВКонтакте", "screen_name": "vk"}, {"id": 1, "name": "Команда", "screen_name": "team"}]}}, {"id": "vk:vk", "platform": "vk", "handle": "vk"})
     check(owned_wall["posts"][0]["kind"] == "post" and owned_wall["posts"][0]["handle"] == "vk" and not owned_wall["posts"][0].get("repostedBy"), "a post the community owns stays its own post")
     check(owned_wall["posts"][1]["kind"] == "quote" and owned_wall["posts"][1]["handle"] == "vk" and owned_wall["posts"][1]["quoted"]["handle"] == "team", "a copy with commentary stays a quote")
     check(vk_doc["profiles"][0]["name"] == "ВКонтакте" and vk_doc["profiles"][0]["followers"] == 14000000 and vk_doc["profiles"][0]["url"] == "https://vk.com/vk" and vk_doc["profiles"][0]["verifiedType"] == "business" and vk_doc["profiles"][0]["postsCountIncludesReposts"] is True, "vk profile comes from the community and its wall count includes reposts")
     from adapters.common import credit_carried
     stored = [
-        {"id": "-22822305_1", "statusId": "-22822305_1", "platform": "vk", "feedId": "vk:vk", "kind": "post", "author": "ВКонтакте", "handle": "vk", "text": "own"},
+        {"id": "-10000041_1", "statusId": "-10000041_1", "platform": "vk", "feedId": "vk:vk", "kind": "post", "author": "ВКонтакте", "handle": "vk", "text": "own"},
         {"id": "-220923985_58381", "statusId": "-220923985_58381", "platform": "vk", "feedId": "vk:vk", "kind": "post", "author": "Фандом Фест", "handle": "vkfandomfest", "text": "kept"},
-        {"id": "19", "platform": "telegram", "feedId": "telegram:telegram", "kind": "post", "author": "Telegram News", "handle": "telegram", "text": "The original note.", "forwardedFrom": {"name": "Pavel Durov", "handle": "durov"}},
+        {"id": "19", "platform": "telegram", "feedId": "telegram:laneharbor", "kind": "post", "author": "Telegram News", "handle": "laneharbor", "text": "The original note.", "forwardedFrom": {"name": "Pavel Durov", "handle": "durov"}},
     ]
-    check(credit_carried(stored, [{"id": "vk:vk", "platform": "vk", "handle": "vk", "name": "ВКонтакте"}, {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram", "name": "Telegram News"}]) == 2 and stored[1]["kind"] == "repost" and stored[1]["author"] == "Фандом Фест" and stored[1]["repostedBy"]["name"] == "ВКонтакте" and stored[0]["kind"] == "post" and stored[2]["kind"] == "repost" and stored[2]["author"] == "Pavel Durov" and stored[2]["handle"] == "durov" and stored[2]["repostedBy"]["handle"] == "telegram", "stored wall posts and forwards grow a repost line without taking the original author's name")
+    check(credit_carried(stored, [{"id": "vk:vk", "platform": "vk", "handle": "vk", "name": "ВКонтакте"}, {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor", "name": "Telegram News"}]) == 2 and stored[1]["kind"] == "repost" and stored[1]["author"] == "Фандом Фест" and stored[1]["repostedBy"]["name"] == "ВКонтакте" and stored[0]["kind"] == "post" and stored[2]["kind"] == "repost" and stored[2]["author"] == "Pavel Durov" and stored[2]["handle"] == "durov" and stored[2]["repostedBy"]["handle"] == "laneharbor", "stored wall posts and forwards grow a repost line without taking the original author's name")
     vk_comments = parse_vk_comments(
-        {"response": {"count": 1, "items": [{"id": 9, "from_id": 5, "owner_id": -22822305, "post_id": 1730797, "date": 1792307000, "text": "Привет", "likes": {"count": 3}, "thread": {"count": 0, "items": []}}], "profiles": [{"id": 5, "first_name": "Аня", "last_name": "Иванова", "screen_name": "anya"}]}},
-        {"statusId": "-22822305_1730797", "handle": "vk"},
+        {"response": {"count": 1, "items": [{"id": 9, "from_id": 5, "owner_id": -10000041, "post_id": 1730797, "date": 1792307000, "text": "Привет", "likes": {"count": 3}, "thread": {"count": 0, "items": []}}], "profiles": [{"id": 5, "first_name": "Аня", "last_name": "Иванова", "screen_name": "anya"}]}},
+        {"statusId": "-10000041_1730797", "handle": "vk"},
     )
-    check(len(vk_comments) == 1 and vk_comments[0]["text"] == "Привет" and vk_comments[0]["handle"] == "anya" and vk_comments[0]["replyingTo"]["id"] == "-22822305_1730797", "vk comments keep the author and the parent")
+    check(len(vk_comments) == 1 and vk_comments[0]["text"] == "Привет" and vk_comments[0]["handle"] == "anya" and vk_comments[0]["replyingTo"]["id"] == "-10000041_1730797", "vk comments keep the author and the parent")
     vk_client = parse_web_client('{clientSecret:L,clientId:R,authClientId:D}=(j=111,P="publicsecretvalue1",O=1);mG:"5.289"')
     check(vk_client == ("111", "publicsecretvalue1", "5.289"), "the public web bundle yields the anonymous client")
     check("6287487" not in (ROOT / "scripts" / "vk_remote.py").read_text(encoding="utf-8"), "vk client credentials are parsed from vk.com, not copied into the repo")
@@ -1734,7 +1776,7 @@ def main() -> None:
     from adapters.telegram import fetch_channel, parse as parse_telegram
 
     tg_html = (FIX / "telegram_channel.html").read_text(encoding="utf-8")
-    tg_feed = {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram", "_probe": lambda url: ("bad" not in url, "ok")}
+    tg_feed = {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor", "_probe": lambda url: ("bad" not in url, "ok")}
     tg_doc = parse_telegram(tg_html, tg_feed)
     check(len(tg_doc["posts"]) == 11, "telegram preview keeps every message type")
     tg_by = {post["id"]: post for post in tg_doc["posts"]}
@@ -1750,22 +1792,22 @@ def main() -> None:
     check(tg_by["15"]["media"][0]["type"] == "audio" and tg_by["16"]["media"][0]["type"] == "file" and tg_by["16"]["media"][0]["title"] == "notes.pdf", "telegram voice and documents become attachment cards")
     check(tg_by["17"]["link"]["title"] == "Hello from the blog" and tg_by["17"]["link"]["image"].endswith("card.jpg") and not tg_by["17"]["media"], "a telegram link preview is a card, not another photo")
     check(tg_by["18"]["poll"]["question"] == "Which build?" and tg_by["18"]["poll"]["choices"][1]["percent"] == 38, "a telegram poll keeps the question and the percents")
-    check(tg_by["19"]["forwardedFrom"]["name"] == "Pavel Durov" and tg_by["19"]["forwardedFrom"]["handle"] == "durov" and tg_by["19"]["kind"] == "repost" and tg_by["19"]["author"] == "Pavel Durov" and tg_by["19"]["handle"] == "durov" and tg_by["19"]["repostedBy"]["name"] == "Telegram News" and tg_by["19"]["repostedBy"]["handle"] == "telegram" and tg_by["19"]["repostedBy"]["platform"] == "telegram", "a telegram forward keeps the original author and names the channel that reposted it")
+    check(tg_by["19"]["forwardedFrom"]["name"] == "Pavel Durov" and tg_by["19"]["forwardedFrom"]["handle"] == "durov" and tg_by["19"]["kind"] == "repost" and tg_by["19"]["author"] == "Pavel Durov" and tg_by["19"]["handle"] == "durov" and tg_by["19"]["repostedBy"]["name"] == "Telegram News" and tg_by["19"]["repostedBy"]["handle"] == "laneharbor" and tg_by["19"]["repostedBy"]["platform"] == "telegram", "a telegram forward keeps the original author and names the channel that reposted it")
     check(tg_by["20"]["replyParent"]["author"] == "Telegram News" and tg_by["20"]["replyingTo"]["id"] == "10" and tg_by["20"].get("discussion") is True and tg_by["20"]["kind"] == "post", "a telegram reply shows its parent and can open comments")
     quiet = parse_telegram(tg_html + '\n<div id="feeds-discussion" data-on="0"></div>', tg_feed)
     check(all(not post.get("discussion") for post in quiet["posts"]), "a channel without a discussion hides comments")
     tg_profile = tg_doc["profiles"][0]
-    check(tg_profile["name"] == "Telegram News" and tg_profile["followers"] == 9270000 and tg_profile["verifiedType"] == "blue" and tg_profile["url"] == "https://t.me/telegram" and tg_profile["bannerColor"].startswith("linear-gradient"), "telegram profile keeps the title, subscribers, and theme banner")
-    rss_payload = '<?xml version="1.0"?><rss><channel><item><title>Telegram News</title><link>https://t.me/telegram/3</link><description>&lt;b&gt;Hello&lt;/b&gt;</description><pubDate>Wed, 26 Aug 2026 19:11:05 +0000</pubDate></item></channel></rss>'
+    check(tg_profile["name"] == "Telegram News" and tg_profile["followers"] == 9270000 and tg_profile["verifiedType"] == "blue" and tg_profile["url"] == "https://t.me/laneharbor" and tg_profile["bannerColor"].startswith("linear-gradient"), "telegram profile keeps the title, subscribers, and theme banner")
+    rss_payload = '<?xml version="1.0"?><rss><channel><item><title>Telegram News</title><link>https://t.me/laneharbor/3</link><description>&lt;b&gt;Hello&lt;/b&gt;</description><pubDate>Wed, 26 Aug 2026 19:11:05 +0000</pubDate></item></channel></rss>'
     rss_post = parse_telegram(rss_payload, tg_feed)["posts"][0]
     check(rss_post["id"] == "3" and "Hello" in rss_post["text"] and "<b>Hello</b>" in rss_post["html"], "the RSSHub backup is parsed by the same adapter")
     pages = {
-        "https://t.me/s/telegram": '<div class="tgme_widget_message" data-post="telegram/2"><div class="js-message_text">one</div></div><a data-before="2"></a>',
-        "https://t.me/s/telegram?before=2": '<div class="tgme_widget_message" data-post="telegram/1"><div class="js-message_text">two</div></div>',
+        "https://t.me/s/laneharbor": '<div class="tgme_widget_message" data-post="telegram/2"><div class="js-message_text">one</div></div><a data-before="2"></a>',
+        "https://t.me/s/laneharbor?before=2": '<div class="tgme_widget_message" data-post="telegram/1"><div class="js-message_text">two</div></div>',
     }
-    backfill = fetch_channel("telegram", limit=2, backfill=True, get=lambda url: pages[url])
+    backfill = fetch_channel("laneharbor", limit=2, backfill=True, get=lambda url: pages[url])
     check('data-post="telegram/1"' in backfill and 'data-post="telegram/2"' in backfill, "the first follow walks ?before= until the window is full")
-    check('"id": "telegram:telegram"' in config_text and "loadTelegramSaved" in app and "Watch on Telegram" in app and 'act === "spoiler"' in app and ".tg-spoiler" in css and 'platform === "telegram"' in app and "t.me" in app and '["posts", tr("Posts")], ["media", tr("Media")]' in app, "telegram is configured and rendered with Posts and Media")
+    check('"id": "telegram:laneharbor"' in config_text and "loadTelegramSaved" in app and "Watch on Telegram" in app and 'act === "spoiler"' in app and ".tg-spoiler" in css and 'platform === "telegram"' in app and "t.me" in app and '["posts", tr("Posts")], ["media", tr("Media")]' in app, "telegram is configured and rendered with Posts and Media")
     check("RSSHUB_MIRRORS" not in community_src and "rssforever" not in community_src, "community posts use the local RSSHub container")
     ignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
     check("fallback/" in ignore and "status.json" in ignore, "generated fallback files stay out of git")
@@ -1788,9 +1830,9 @@ def main() -> None:
     from health import build_status, piped_payload_ok
 
     synd = parse_syndication(json.loads((FIX / "own" / "syndication.json").read_text(encoding="utf-8")))
-    check(synd["handle"] == "redacted_handle" and synd["stats"]["likes"] == 48280 and synd["stats"]["replies"] == 5558 and synd["replies"] == [] and "Bach" in synd["text"], "x syndication keeps the post and does not invent replies")
+    check(synd["handle"] == "copperlane" and synd["stats"]["likes"] == 48280 and synd["stats"]["replies"] == 5558 and synd["replies"] == [] and "Bach" in synd["text"], "x syndication keeps the post and does not invent replies")
     moment = dt(2026, 10, 21, 12, 0, tzinfo=timezone.utc)
-    comments = parse_innertube_comments(json.loads((FIX / "own" / "innertube_comments.json").read_text(encoding="utf-8")), {"statusId": "xtrFOsncOeo", "handle": "redacted_handle"}, moment)
+    comments = parse_innertube_comments(json.loads((FIX / "own" / "innertube_comments.json").read_text(encoding="utf-8")), {"statusId": "xtrFOsncOeo", "handle": "northlamp"}, moment)
     check(len(comments) == 1 and comments[0]["text"] == "This is a public comment." and comments[0]["stats"]["likes"] == 276 and comments[0]["date"] == "2026-10-20T21:00:00Z", "youtube innertube comments keep text, likes, and a real time")
     check(comments[0]["replies"][0]["text"] == "A reply under it." and comments[0]["replies"][0]["date"] == "2026-10-21T11:57:00Z", "a youtube reply stays under its parent")
     watch = extract_watch((FIX / "own" / "watch_snippet.html").read_text(encoding="utf-8"))
@@ -1846,7 +1888,7 @@ def main() -> None:
             }
         ]
     }
-    classic_rows = parse_thread_renderers(classic, {"statusId": "videoid", "handle": "redacted_handle"}, moment)
+    classic_rows = parse_thread_renderers(classic, {"statusId": "videoid", "handle": "northlamp"}, moment)
     check(
         len(classic_rows) == 1
         and classic_rows[0]["text"] == "Classic thread text."
@@ -1887,8 +1929,8 @@ def main() -> None:
     tab = posts_tab(tab_html)
     check(tab[0] == "UCpostchannelidxxxxxx" and tab[1] == posts_params, "the posts tab is the browse endpoint whose params name posts")
     oembed = parse_ig_oembed(json.loads((FIX / "own" / "ig_oembed.json").read_text(encoding="utf-8")), "DeZgzTEggQe")
-    check("melon" in oembed["text"] and oembed["author"] == "redacted_handle" and oembed["replies"] == [] and oembed["media"][0]["url"].startswith("https://"), "instagram oembed keeps the caption and no comments")
-    wrapped, wrapped_count = parse_threads_document(json.loads((FIX / "own" / "threads_wrapper.json").read_text(encoding="utf-8")), {"handle": "redacted_handle", "statusId": "DeZtp"})
+    check("melon" in oembed["text"] and oembed["author"] == "birchlane" and oembed["replies"] == [] and oembed["media"][0]["url"].startswith("https://"), "instagram oembed keeps the caption and no comments")
+    wrapped, wrapped_count = parse_threads_document(json.loads((FIX / "own" / "threads_wrapper.json").read_text(encoding="utf-8")), {"handle": "birchlane", "statusId": "DeZtp"})
     check(wrapped_count == 76 and len(wrapped) == 1 and wrapped[0]["text"] == "Visible reply" and wrapped[0]["stats"]["likes"] == 25 and wrapped[0]["handle"] == "ada", "threads mobile wrapper yields the visible reply")
     picked = select_recent(
         [
@@ -2006,7 +2048,7 @@ def main() -> None:
     check(exact == "2026-03-16T00:37:27.000Z" and day == "2026-10-11T00:00:00.000Z" and uploaded == "2026-10-11T21:31:32.000Z" and grocery_day == "2026-10-03T00:00:00.000Z", "watch and community pages yield the real publish date")
     drifted = """<?xml version="1.0"?>
     <feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
-    <title>Canadian Prepper</title><yt:channelId>UCfgtuaUadGgOA-91geQ8Qog</yt:channelId>
+    <title>Canadian Prepper</title><yt:channelId>UCsyntheticmaple00001000</yt:channelId>
     <entry><id>yt:video:Iuvm-HKIMg8</id><yt:videoId>Iuvm-HKIMg8</yt:videoId>
     <title>AI Expert Just Ruined My Day With This WARNING</title>
     <published>2026-10-11T21:31:32+00:00</published><updated>2026-10-21T20:24:18+00:00</updated>
@@ -2015,7 +2057,7 @@ def main() -> None:
     <title>Russia's Plan to Win WW3</title>
     <updated>2026-10-21T20:24:18+00:00</updated>
     <link rel="alternate" href="https://www.youtube.com/watch?v=Sl0xhb6STQ0"/></entry></feed>"""
-    drifted_posts = parse_youtube(drifted, {"id": "youtube:redacted_handle", "platform": "youtube", "handle": "redacted_handle"})["posts"]
+    drifted_posts = parse_youtube(drifted, {"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp"})["posts"]
     by_video = {post["id"]: post for post in drifted_posts}
     check(by_video["Iuvm-HKIMg8"]["date"].startswith("2026-10-11T21:31:32") and "20:24:18" not in by_video["Iuvm-HKIMg8"]["date"], "youtube uses the RSS published time, not the later updated time")
     check(by_video["Sl0xhb6STQ0"]["date"] == "", "a missing published field does not fall back to updated or now")
@@ -2082,12 +2124,12 @@ def main() -> None:
     check(added_articles == 1 and published_articles["posts"][0]["article"]["blocks"][0]["text"] == "body" and published_articles["posts"][1]["id"] == "2" and published_articles["feeds"][0]["configured"] is False, "a seed article survives the published snapshot and keeps its body")
     prepper = next(person for person in site_config["people"] if person["id"] == "canadian-prepper")
     prepper_accounts = {(account["platform"], account["handle"]) for account in prepper["accounts"]}
-    check(("youtube", "redacted_handle") in prepper_accounts and ("x", "redacted_handle") in prepper_accounts and ("instagram", "redacted_handle") in prepper_accounts, "Canadian Prepper links the verified YouTube, X, and Instagram accounts")
-    check(any(account.get("channelId") == "UCfgtuaUadGgOA-91geQ8Qog" for account in prepper["accounts"]), "the YouTube account keeps the channel id")
+    check(("youtube", "northlamp") in prepper_accounts and ("x", "cedarhill") in prepper_accounts and ("instagram", "orbitfox") in prepper_accounts, "Canadian Prepper links the verified YouTube, X, and Instagram accounts")
+    check(any(account.get("channelId") == "UCsyntheticmaple00001000" for account in prepper["accounts"]), "the YouTube account keeps the channel id")
     x_source = next(account["source"] for account in prepper["accounts"] if account["platform"] == "x")
     ig_source = next(account["source"] for account in prepper["accounts"] if account["platform"] == "instagram")
-    check("canadianpreparedness.com" in x_source and "twitter.com/redacted_handle" in x_source, "the X handle is sourced from the website")
-    check("youtube.com/@redacted_handle/about" in ig_source and "canadianpreparedness.com" in ig_source, "Instagram is sourced from the About page and the website")
+    check("canadianpreparedness.com" in x_source and "twitter.com/cedarhill" in x_source, "the X handle is sourced from the website")
+    check("youtube.com/@northlamp/about" in ig_source and "canadianpreparedness.com" in ig_source, "Instagram is sourced from the About page and the website")
     check(not any(account["platform"] in ("threads", "telegram") for account in prepper["accounts"]), "Threads and Telegram are omitted when no source lists them")
     bad_id = empty_accounts = duplicate_account = False
     try:
@@ -2108,24 +2150,24 @@ def main() -> None:
     check(bad_id and empty_accounts and duplicate_account, "people schema rejects a bad id, an empty account list, and a shared account")
     extra = people.extra_feeds(site_config)
     extra_ids = {row["id"] for row in extra}
-    check("x:redacted_handle" in extra_ids and "instagram:redacted_handle" in extra_ids and "youtube:redacted_handle" not in extra_ids, "sync follows linked accounts that are not already feeds")
+    check("x:cedarhill" in extra_ids and "instagram:orbitfox" in extra_ids and "youtube:northlamp" not in extra_ids, "sync follows linked accounts that are not already feeds")
     linked_telegram = people.extra_feeds({"feeds": [], "people": [{"id": "t", "name": "T", "accounts": [{"platform": "telegram", "handle": "prepperchannel"}]}]})
     check(len(linked_telegram) == 1 and linked_telegram[0]["id"] == "telegram:prepperchannel" and linked_telegram[0]["adapter"] == "telegram" and linked_telegram[0]["source_urls"] == ["https://t.me/s/{handle}"], "a linked Telegram channel is followed once the adapter exists")
 
     cross_posts = [
-        {"platform": "youtube", "handle": "redacted_handle", "id": "abcdefghijk", "url": "https://www.youtube.com/watch?v=abcdefghijk", "feedId": "youtube:redacted_handle"},
-        {"platform": "x", "handle": "redacted_handle", "id": "1", "text": "new video", "links": [{"expanded": "https://youtu.be/abcdefghijk"}]},
-        {"platform": "x", "handle": "redacted_handle", "id": "2", "text": "also the shop", "links": [{"expanded": "https://youtu.be/abcdefghijk"}, {"expanded": "https://canadianpreparedness.com/shop"}]},
+        {"platform": "youtube", "handle": "northlamp", "id": "abcdefghijk", "url": "https://www.youtube.com/watch?v=abcdefghijk", "feedId": "youtube:northlamp"},
+        {"platform": "x", "handle": "cedarhill", "id": "1", "text": "new video", "links": [{"expanded": "https://youtu.be/abcdefghijk"}]},
+        {"platform": "x", "handle": "cedarhill", "id": "2", "text": "also the shop", "links": [{"expanded": "https://youtu.be/abcdefghijk"}, {"expanded": "https://canadianpreparedness.com/shop"}]},
         {"platform": "x", "handle": "someoneelse", "id": "3", "text": "share", "links": [{"expanded": "https://youtu.be/abcdefghijk"}]},
     ]
     cross_config = {"people": [prepper]}
     stamped = people.stamp_cross_posts(cross_posts, cross_config, fetch=False)
-    check(stamped == 1 and cross_posts[1]["alsoOn"] == {"person": "canadian-prepper", "platform": "youtube", "handle": "redacted_handle", "videoId": "abcdefghijk", "url": "https://youtu.be/abcdefghijk"}, "an X post that only links the person's own video gets alsoOn")
+    check(stamped == 1 and cross_posts[1]["alsoOn"] == {"person": "canadian-prepper", "platform": "youtube", "handle": "northlamp", "videoId": "abcdefghijk", "url": "https://youtu.be/abcdefghijk"}, "an X post that only links the person's own video gets alsoOn")
     check("alsoOn" not in cross_posts[2] and "alsoOn" not in cross_posts[3], "a second link or a different author does not count as a cross-post")
-    unknown = [{"platform": "x", "handle": "redacted_handle", "id": "4", "text": "live", "links": [{"expanded": "https://www.youtube.com/watch?v=zzzzzzzzzzz"}]}]
-    stamped_live = people.stamp_cross_posts(unknown, cross_config, fetch=True, oembed=lambda url: {"author_url": "https://www.youtube.com/@redacted_handle"})
+    unknown = [{"platform": "x", "handle": "cedarhill", "id": "4", "text": "live", "links": [{"expanded": "https://www.youtube.com/watch?v=zzzzzzzzzzz"}]}]
+    stamped_live = people.stamp_cross_posts(unknown, cross_config, fetch=True, oembed=lambda url: {"author_url": "https://www.youtube.com/@northlamp"})
     check(stamped_live == 1 and unknown[0]["alsoOn"]["videoId"] == "zzzzzzzzzzz", "oembed author_url can confirm the person's channel")
-    foreign = [{"platform": "x", "handle": "redacted_handle", "id": "5", "text": "nope", "links": [{"expanded": "https://www.youtube.com/watch?v=yyyyyyyyyyy"}]}]
+    foreign = [{"platform": "x", "handle": "cedarhill", "id": "5", "text": "nope", "links": [{"expanded": "https://www.youtube.com/watch?v=yyyyyyyyyyy"}]}]
     stamped_foreign = people.stamp_cross_posts(foreign, cross_config, fetch=True, oembed=lambda url: {"author_url": "https://www.youtube.com/@SomeoneElse"})
     check(stamped_foreign == 0 and "alsoOn" not in foreign[0], "a different YouTube author is not alsoOn")
 
@@ -2159,18 +2201,18 @@ def main() -> None:
 
     link_body = "### Person\n\nCanadian Prepper\n\n### Accounts\n\nx:nasa\n"
     link_config = {"feeds": [{"id": "x:keep"}], "people": json.loads(json.dumps(site_config["people"]))}
-    linked_msg, linked_config = follow_req.run("owner-account", "owner-account", "Link accounts: Canadian Prepper", link_body, link_config, fake_follow_fetch, public_resolve)
+    linked_msg, linked_config = follow_req.run("riverquoll", "riverquoll", "Link accounts: Canadian Prepper", link_body, link_config, fake_follow_fetch, public_resolve)
     linked_person = next(person for person in linked_config["people"] if person["id"] == "canadian-prepper")
     check(linked_msg.startswith("Linked x:nasa") and any(account["platform"] == "x" and account["handle"] == "nasa" for account in linked_person["accounts"]) and linked_config["feeds"] == [{"id": "x:keep"}], "the owner can link a confirmed account without adding a feed")
-    stranger_link, stranger_people = follow_req.run("someone", "owner-account", "Link accounts: Canadian Prepper", link_body, {"feeds": [{"id": "x:keep"}], "people": []}, fake_follow_fetch, public_resolve)
+    stranger_link, stranger_people = follow_req.run("someone", "riverquoll", "Link accounts: Canadian Prepper", link_body, {"feeds": [{"id": "x:keep"}], "people": []}, fake_follow_fetch, public_resolve)
     check(stranger_link == "" and stranger_people == {"feeds": [{"id": "x:keep"}], "people": []}, "a link issue from anyone else is ignored")
     owned_config = {"people": [
-        {"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "redacted_handle"}]},
+        {"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "northlamp"}]},
         {"id": "other", "name": "Other", "accounts": [{"platform": "x", "handle": "nasa"}]},
     ]}
     owned_rejected = False
     try:
-        follow_req.run("owner-account", "owner-account", "Link accounts: Canadian Prepper", link_body, owned_config, fake_follow_fetch, public_resolve)
+        follow_req.run("riverquoll", "riverquoll", "Link accounts: Canadian Prepper", link_body, owned_config, fake_follow_fetch, public_resolve)
     except follow_req.Reject:
         owned_rejected = True
     check(owned_rejected, "an account already linked to another person is rejected")
@@ -2181,8 +2223,8 @@ def main() -> None:
         return fake_follow_fetch(url)
 
     telegram_body = "### Person\n\nCanadian Prepper\n\n### Accounts\n\ntelegram:prepperchannel\n"
-    telegram_config = {"people": [{"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "redacted_handle"}]}]}
-    telegram_msg, telegram_updated = follow_req.run("owner-account", "owner-account", "Link accounts: Canadian Prepper", telegram_body, telegram_config, telegram_fetch, public_resolve)
+    telegram_config = {"people": [{"id": "canadian-prepper", "name": "Canadian Prepper", "accounts": [{"platform": "youtube", "handle": "northlamp"}]}]}
+    telegram_msg, telegram_updated = follow_req.run("riverquoll", "riverquoll", "Link accounts: Canadian Prepper", telegram_body, telegram_config, telegram_fetch, public_resolve)
     check("telegram:prepperchannel" in telegram_msg and any(account["platform"] == "telegram" and account["handle"] == "prepperchannel" for account in telegram_updated["people"][0]["accounts"]), "a confirmed Telegram page can be linked")
 
     node_check = subprocess.run(
@@ -2229,19 +2271,19 @@ vm.runInContext(fs.readFileSync("people.js", "utf8"), context);
 const P = context.FeedsPeople;
 P.use(JSON.parse(fs.readFileSync("people.json", "utf8")));
 const hash = "#/p/canadian-prepper";
-if (P.hashFor("x", "redacted_handle") !== hash) throw new Error("x");
-if (P.hashFor("youtube", "redacted_handle") !== hash) throw new Error("yt");
-if (P.hashFor("youtube", "UCfgtuaUadGgOA-91geQ8Qog") !== hash) throw new Error("channel");
-if (P.hashFor("instagram", "redacted_handle") !== hash) throw new Error("ig");
+if (P.hashFor("x", "cedarhill") !== hash) throw new Error("x");
+if (P.hashFor("youtube", "northlamp") !== hash) throw new Error("yt");
+if (P.hashFor("youtube", "UCsyntheticmaple00001000") !== hash) throw new Error("channel");
+if (P.hashFor("instagram", "orbitfox") !== hash) throw new Error("ig");
 if (P.hashFor("x", "nasa") !== "") throw new Error("other");
 const posts = [
-  { id: "1", platform: "x", handle: "redacted_handle", kind: "post", date: "2026-10-20T00:00:00Z", media: [{ type: "video", url: "https://example.test/a.mp4" }] },
-  { id: "2", platform: "youtube", handle: "redacted_handle", kind: "post", date: "2026-10-21T00:00:00Z", url: "https://www.youtube.com/shorts/abc" },
-  { id: "3", platform: "youtube", handle: "redacted_handle", kind: "community", date: "2026-10-19T00:00:00Z" },
-  { id: "4", platform: "x", handle: "redacted_handle", kind: "reply", date: "2026-10-18T00:00:00Z" },
+  { id: "1", platform: "x", handle: "cedarhill", kind: "post", date: "2026-10-20T00:00:00Z", media: [{ type: "video", url: "https://example.test/a.mp4" }] },
+  { id: "2", platform: "youtube", handle: "northlamp", kind: "post", date: "2026-10-21T00:00:00Z", url: "https://www.youtube.com/shorts/abc" },
+  { id: "3", platform: "youtube", handle: "northlamp", kind: "community", date: "2026-10-19T00:00:00Z" },
+  { id: "4", platform: "x", handle: "cedarhill", kind: "reply", date: "2026-10-18T00:00:00Z" },
   { id: "5", platform: "x", handle: "someoneelse", kind: "post", date: "2026-10-22T00:00:00Z" },
-  { id: "6", platform: "instagram", handle: "redacted_handle", kind: "post", date: "2026-10-17T00:00:00Z", media: [{ type: "photo", url: "https://example.test/p.jpg" }] },
-  { id: "7", platform: "x", handle: "DD_Geopolitics", feedId: "x:redacted_handle", kind: "repost", date: "2026-10-23T00:00:00Z", media: [{ type: "video", url: "https://example.test/r.mp4" }], author: "DD Geopolitics", repostedBy: { handle: "redacted_handle", name: "Canadian Prepper" } }
+  { id: "6", platform: "instagram", handle: "orbitfox", kind: "post", date: "2026-10-17T00:00:00Z", media: [{ type: "photo", url: "https://example.test/p.jpg" }] },
+  { id: "7", platform: "x", handle: "nightheron", feedId: "x:cedarhill", kind: "repost", date: "2026-10-23T00:00:00Z", media: [{ type: "video", url: "https://example.test/r.mp4" }], author: "DD Geopolitics", repostedBy: { handle: "cedarhill", name: "Canadian Prepper" } }
 ];
 const person = P.byId("canadian-prepper");
 const rows = P.postsFor(person, posts);
@@ -2270,17 +2312,17 @@ if (!profileHtml || profileHtml.indexOf("4 posts") < 0) throw new Error("count "
 if (profileHtml.indexOf("CARD7:show") < 0) throw new Error("repost line hidden");
 if (profileHtml.indexOf("CARD1:author") < 0) throw new Error("own post " + profileHtml);
 const collapsed = P.collapse([
-  { id: "youtube:redacted_handle", platform: "youtube", handle: "redacted_handle", name: "Canadian Prepper" },
-  { id: "x:redacted_handle", platform: "x", handle: "redacted_handle", name: "Canadian Prepper" },
+  { id: "youtube:northlamp", platform: "youtube", handle: "northlamp", name: "Canadian Prepper" },
+  { id: "x:cedarhill", platform: "x", handle: "cedarhill", name: "Canadian Prepper" },
   { id: "x:nasa", platform: "x", handle: "nasa", name: "NASA" }
 ]);
 if (collapsed.length !== 2 || collapsed[0].personId !== "canadian-prepper" || collapsed[0].name !== "Canadian Prepper") throw new Error("collapse");
 const suggested = P.suggestions([
-  { id: "youtube:redacted_handle", platform: "youtube", handle: "redacted_handle", configured: true },
-  { id: "x:redacted_handle", platform: "x", handle: "redacted_handle", configured: true },
+  { id: "youtube:northlamp", platform: "youtube", handle: "northlamp", configured: true },
+  { id: "x:cedarhill", platform: "x", handle: "cedarhill", configured: true },
   { id: "x:nasa", platform: "x", handle: "nasa", configured: true }
-], (id) => id === "youtube:redacted_handle");
-if (suggested.some((feed) => feed.personId === "canadian-prepper" || feed.handle === "redacted_handle")) throw new Error("followed person still suggested");
+], (id) => id === "youtube:northlamp");
+if (suggested.some((feed) => feed.personId === "canadian-prepper" || feed.handle === "cedarhill")) throw new Error("followed person still suggested");
 if (!suggested.some((feed) => feed.handle === "nasa")) throw new Error("nasa missing");
 """],
         cwd=ROOT,
@@ -2469,7 +2511,7 @@ def discord_checks() -> None:
         ],
     }
     previous = [{"id": "discord:%s:%s" % (posts_channel, parent), "platform": "discord", "feedId": "discord:" + guild, "date": "2030-01-01T00:00:00.000Z", "text": "stale"}]
-    doc = {"posts": [{"id": "keep-x", "platform": "x", "feedId": "x:redacted_handle", "date": "2026-01-01T00:00:00.000Z", "text": "stay"}], "feeds": []}
+    doc = {"posts": [{"id": "keep-x", "platform": "x", "feedId": "x:copperlane", "date": "2026-01-01T00:00:00.000Z", "text": "stay"}], "feeds": []}
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         (root / "discord").mkdir()
@@ -2841,7 +2883,7 @@ def discord_checks() -> None:
         check(all("/channels/" not in url for url in guild_calls), "a guild 403 does not read channels")
 
         quiet_calls = []
-        quiet_id = "1540408515661926501"
+        quiet_id = "0100000000000000542"
 
         def quiet_block(url, headers):
             quiet_calls.append(url)
@@ -2991,7 +3033,7 @@ def discord_checks() -> None:
     check("DISCORD_BOT_TOKEN" in workflow and "DISCORD_USER_TOKEN" in workflow and "add-mask" in workflow and "discord/**/*.json" in readme, "the workflow receives both Discord secrets and masks the user token")
     check("merge_discord" in (ROOT / "scripts" / "update_feeds.py").read_text(encoding="utf-8"), "the feed sync calls Discord")
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
-    check('"discord"' in config_text and "169256939211980800" in config_text and '"auth": "user"' in config_text and '"window": 300' in config_text and "general-chat" in config_text and "product-updates" in config_text, "Town Hall is a user-auth server with a rolling window")
+    check('"discord"' in config_text and "100000000000000355" in config_text and '"auth": "user"' in config_text and '"window": 300' in config_text and "general-chat" in config_text and "product-updates" in config_text, "Town Hall is a user-auth server with a rolling window")
     page = (ROOT / "index.html").read_text(encoding="utf-8")
     check(page.index('src="split.js"') < page.index('src="discord-ui.js"') < page.index('src="app.js"') and 'href="discord-ui.css"' in page and "FeedsDiscord" in (ROOT / "app.js").read_text(encoding="utf-8"), "the page loads the Discord messages UI and app.js keeps a small hook")
     split_js = (ROOT / "split.js").read_text(encoding="utf-8")
@@ -3013,11 +3055,11 @@ const D = context.FeedsDiscord;
 const html = D._format("**bold** <script>alert(1)</script> [x](javascript:alert(1)) https://discord.com/safety ||hide|| @Ada");
 if (html.includes("<script>") || html.includes('href="javascript:')) throw new Error("xss " + html);
 if (!html.includes("<strong>bold</strong>") || !html.includes("&lt;script&gt;") || !html.includes("dmsg-spoiler") || !html.includes("dmsg-mention") || !html.includes("https://discord.com/safety")) throw new Error("format " + html);
-const known = { "169256939211980800": true };
+const known = { "100000000000000355": true };
 if (D._validate({ v: 1, ch: "nope", m: { id: "1", content: "x", author: { id: "2", name: "A" } } }, known)) throw new Error("unknown channel");
 const img = D._validate({
   v: 1,
-  ch: "169256939211980800",
+  ch: "100000000000000355",
   m: {
     id: "10",
     content: "hi",
@@ -3031,11 +3073,11 @@ const img = D._validate({
   }
 }, known);
 if (!img || img.m.att.length !== 2 || img.m.author.avatar) throw new Error("cdn " + JSON.stringify(img));
-if (D._validate({ v: 1, ch: "169256939211980800", m: { id: "11", content: "x".repeat(4001), author: { id: "2", name: "A" } } }, known)) throw new Error("cap");
-const posts = "889949624218042420";
+if (D._validate({ v: 1, ch: "100000000000000355", m: { id: "11", content: "x".repeat(4001), author: { id: "2", name: "A" } } }, known)) throw new Error("cap");
+const posts = "100000000000000440";
 if (!D._accept({ v: 1, ch: posts, m: { id: "12", content: "announce", author: { id: "2", name: "A" } } })) throw new Error("posts channel");
 if (D._ids(posts).length) throw new Error("posts leaked into the inbox");
-const general = "169256939211980800";
+const general = "100000000000000355";
 if (!D._accept({ v: 1, ch: general, m: { id: "10", content: "one", author: { id: "2", name: "Ada" } } })) throw new Error("accept");
 if (!D._accept({ v: 1, ch: general, m: { id: "10", content: "one again", author: { id: "2", name: "Ada" } } })) throw new Error("dup");
 if (D._ids(general).join(",") !== "10") throw new Error("dedupe " + D._ids(general).join(","));
@@ -3049,51 +3091,51 @@ if (page.includes("<script>")) throw new Error("page xss");
 if (!page.includes("Discord Town Hall") || !page.includes('aria-expanded="false"') || page.includes("dmsgs-srv open")) throw new Error("collapsed server");
 if (!page.includes('role="separator"') || !page.includes('aria-label="Resize message list"') || !page.includes('title="Discord Town Hall"') || !page.includes('title="general-chat"') || !page.includes('title="Town Hall General"')) throw new Error("split titles");
 if (!page.includes("dmsgs-chev")) throw new Error("chevron");
-D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: ["169256939211980800"], pinnedChannels: ["889950993352110160"], mutedServers: [], mutedChannels: [] });
-const expanded = D.page({ name: "messages", channel: "169256939211980800", query: new URLSearchParams("fixture=1") });
+D._setPrefs({ expanded: { "100000000000000355": true }, pinnedServers: ["100000000000000355"], pinnedChannels: ["100000000000000593"], mutedServers: [], mutedChannels: [] });
+const expanded = D.page({ name: "messages", channel: "100000000000000355", query: new URLSearchParams("fixture=1") });
 if (!expanded.includes('aria-expanded="true"') || !expanded.includes("dmsgs-srv open") || !expanded.includes('aria-pressed="true"')) throw new Error("expanded");
-const peerAt = expanded.indexOf('data-ch="889950993352110160"');
-const generalAt = expanded.indexOf('data-ch="169256939211980800"');
+const peerAt = expanded.indexOf('data-ch="100000000000000593"');
+const generalAt = expanded.indexOf('data-ch="100000000000000355"');
 if (peerAt < 0 || generalAt < 0 || peerAt > generalAt) throw new Error("pinned channel order");
-const peerChunk = expanded.split('data-ch="889950993352110160"')[1].split("</a>")[0];
+const peerChunk = expanded.split('data-ch="100000000000000593"')[1].split("</a>")[0];
 if (!peerChunk.includes("dmsgs-pinmark")) throw new Error("pin mark");
-D._openMenu("169256939211980800", false);
+D._openMenu("100000000000000355", false);
 const pinMenu = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
 if (!pinMenu.includes("Pin channel") || !pinMenu.includes("Mute channel")) throw new Error("pin menu");
-D._openMenu("889950993352110160", false);
+D._openMenu("100000000000000593", false);
 const unpinMenu = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
 if (!unpinMenu.includes("Unpin channel")) throw new Error("unpin");
-D._openMenu("169256939211980800", true);
+D._openMenu("100000000000000355", true);
 const durations = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
 if (!durations.includes("For 15 minutes") || !durations.includes("For 1 hour") || !durations.includes("For 8 hours") || !durations.includes("For 24 hours") || !durations.includes("Until I turn it back on")) throw new Error("durations");
-D._openPins("169256939211980800");
-const pins = D.page({ name: "messages", channel: "169256939211980800", query: new URLSearchParams("fixture=1") });
+D._openPins("100000000000000355");
+const pins = D.page({ name: "messages", channel: "100000000000000355", query: new URLSearchParams("fixture=1") });
 const panel = pins.split('class="dmsgs-pinpanel"')[1] || "";
 const newerPin = panel.indexOf('data-mid="1530000000000000004"');
 const olderPin = panel.indexOf('data-mid="1530000000000000001"');
 if (!panel.includes("Pinned messages") || !panel.includes("Clyde") || newerPin < 0 || olderPin < 0 || newerPin > olderPin) throw new Error("pins panel");
-D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: ["169256939211980800"], mutedChannels: [] });
+D._setPrefs({ expanded: { "100000000000000355": true }, pinnedServers: [], pinnedChannels: [], mutedServers: ["100000000000000355"], mutedChannels: [] });
 const muted = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
 if (!muted.includes("dmsgs-srv open muted") || muted.includes("dmsgs-badge")) throw new Error("muted server " + (muted.includes("dmsgs-badge") ? "badge" : "class"));
 D._openMenu("", false);
 D._openPins("");
-D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: ["889950993352110160"], mutes: {} });
+D._setPrefs({ expanded: { "100000000000000355": true }, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: ["100000000000000593"], mutes: {} });
 const partial = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
 if (!partial.includes('aria-label="1 unread"')) throw new Error("badge " + (partial.match(/aria-label="\\d+ unread"/) || []).join(","));
 const peerBits = partial.split("dmsgs-ch-row");
 let peerRow = "";
-for (let i = 1; i < peerBits.length; i++) { if (peerBits[i].includes('data-ch="889950993352110160"')) peerRow = peerBits[i]; }
+for (let i = 1; i < peerBits.length; i++) { if (peerBits[i].includes('data-ch="100000000000000593"')) peerRow = peerBits[i]; }
 if (!peerRow.startsWith(" muted") || !peerRow.includes("dmsgs-bell") || peerRow.split("</a>")[0].includes("dmsgs-dot")) throw new Error("muted channel");
-D._openMenu("889950993352110160", false);
+D._openMenu("100000000000000593", false);
 if (!D.page({ name: "messages", query: new URLSearchParams("fixture=1") }).includes("Unmute channel")) throw new Error("unmute");
-D._setPrefs({ expanded: { "169256939211980800": true }, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: [], mutes: { "169256939211980800": Date.now() - 1000 } });
+D._setPrefs({ expanded: { "100000000000000355": true }, pinnedServers: [], pinnedChannels: [], mutedServers: [], mutedChannels: [], mutes: { "100000000000000355": Date.now() - 1000 } });
 const expired = D.page({ name: "messages", query: new URLSearchParams("fixture=1") });
 const expiredBits = expired.split("dmsgs-ch-row");
 let expiredRow = "";
-for (let i = 1; i < expiredBits.length; i++) { if (expiredBits[i].includes('data-ch="169256939211980800"')) expiredRow = expiredBits[i]; }
+for (let i = 1; i < expiredBits.length; i++) { if (expiredBits[i].includes('data-ch="100000000000000355"')) expiredRow = expiredBits[i]; }
 if (expiredRow.startsWith(" muted")) throw new Error("expired mute");
-D._applyIndex({ status: "ok", servers: [{ id: "169256939211980800", channels: [{ id: "169256939211980800", pinsForbidden: true }] }] });
-const hiddenPins = D.page({ name: "messages", channel: "169256939211980800", query: new URLSearchParams("fixture=1") });
+D._applyIndex({ status: "ok", servers: [{ id: "100000000000000355", channels: [{ id: "100000000000000355", pinsForbidden: true }] }] });
+const hiddenPins = D.page({ name: "messages", channel: "100000000000000355", query: new URLSearchParams("fixture=1") });
 if (hiddenPins.includes("Pinned messages")) throw new Error("forbidden pins icon");
 D._applyIndex({ status: "ok", servers: [] });
 D._setServers([
@@ -3121,7 +3163,7 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
     live = discord_live.live_servers(json.loads(config_text))
     check(len(live) == 1 and live[0]["ntfy"] == "superintelmusic-discord-th-7f3a91c2" and len(live[0]["channels"]) == 19, "the live poller reads every Town Hall message channel")
     busy_ids = [item["id"] for item in live[0]["channels"] if item["busy"]]
-    check(busy_ids == ["169256939211980800", "1539754628575404213", "889950993352110160"], "general-chat, discord-discussion, and peer-help are the busy channels")
+    check(busy_ids == ["100000000000000355", "0100000000000000576", "100000000000000593"], "general-chat, discord-discussion, and peer-help are the busy channels")
     rotation = [{"id": "1", "busy": True}, {"id": "2", "busy": False}, {"id": "3", "busy": True}]
     first, cursor = discord_live.pick_due(rotation, {"1": 0, "2": 0, "3": 0}, 10, 0)
     second, cursor = discord_live.pick_due(rotation, {"1": 0, "2": 0, "3": 0}, 10, cursor)
@@ -3254,7 +3296,7 @@ def ia_backup_checks() -> None:
     check("token_hex" in source and "x-archive-meta-noindex" in source and "Authorization" in source and "LOW" in source, "backup items are random, unlisted, and use LOW auth")
     check("group: ia-backup" in workflow and "workflow_dispatch" in workflow and "schedule:" not in workflow and 'cron: "47 7 * * *"' not in workflow and 'IA_UPLOADS_ENABLED: "false"' in workflow, "the backup workflow is manual, unscheduled, and uploads are off")
     check("group: pages" not in workflow and "echo \"$IA_" not in workflow and "echo $IA_" not in workflow, "the backup workflow does not take the pages lock or print the keys")
-    check("ia-manifest.json" in sync and "ia-state.json" in sync, "the daily data push keeps the media manifest")
+    check("ia-manifest.json" not in sync and "git push --force" not in sync and "archive stubs stay in R2" in sync, "the daily job leaves archive stubs in private storage")
     snap = (ROOT / "scripts" / "pull_snapshot.py").read_text(encoding="utf-8")
     sidecar = snap[snap.index("def pull_ia_sidecars"):]
     check(sidecar.index('("data", DATA_ARCHIVE)') < sidecar.index('("pages", SITE)'), "the media manifest is taken from the data branch before the live site")
@@ -3435,7 +3477,7 @@ def ia_backup_checks() -> None:
             {"2026-10": [
                 {"p": "x", "id": "20", "s": "fxtwitter", "h": "ada", "d": "2026-10-12T00:00:00Z", "t": "public"},
                 {"p": "discord", "id": "abc", "t": "discord secret words"},
-                {"p": "tiktok", "id": "1", "h": "gabii_g5", "t": "not public"},
+                {"p": "tiktok", "id": "1", "h": "lockclip", "t": "not public"},
                 {"p": "vk", "id": "2", "t": "token wall"},
             ]},
             sleep=lambda delay: sleeps.append(delay),
@@ -3451,12 +3493,12 @@ def ia_backup_checks() -> None:
     check(not any(path.endswith("/discord.jpg") for _method, path, _auth in gets), "Discord media is not downloaded")
     check(b"discord secret words" not in bodies and b"not public" not in bodies and b"token wall" not in bodies, "Discord, TikTok, and VK text are not uploaded")
     ia_policy = ia_backup.load_ia_policy()
-    widened = ia_backup.load_ia_policy({"public_sources": ["discord", "fxtwitter", "vk"], "tiktok_allow": ["gabii_g5"]})
-    check("gabii_g5" not in ia_policy["tiktok"] and ia_policy["tiktok"] == set() and "vk" not in ia_policy["sources"] and "nitter_rss" not in ia_policy["sources"] and "discord" not in ia_policy["sources"], "the TikTok allowlist is empty and token or cookie sources are not public")
-    check("discord" not in widened["sources"] and "vk" not in widened["sources"] and "fxtwitter" in widened["sources"] and "gabii_g5" in widened["tiktok"], "config cannot add a source the code has not audited")
-    check(ia_backup.ia_source_for_post({"platform": "tiktok", "handle": "gabii_g5"}, ia_policy) == "", "gabii_g5 is not an allowlisted TikTok handle")
+    widened = ia_backup.load_ia_policy({"public_sources": ["discord", "fxtwitter", "vk"], "tiktok_allow": ["lockclip"]})
+    check("lockclip" not in ia_policy["tiktok"] and ia_policy["tiktok"] == set() and "vk" not in ia_policy["sources"] and "nitter_rss" not in ia_policy["sources"] and "discord" not in ia_policy["sources"], "the TikTok allowlist is empty and token or cookie sources are not public")
+    check("discord" not in widened["sources"] and "vk" not in widened["sources"] and "fxtwitter" in widened["sources"] and "lockclip" in widened["tiktok"], "config cannot add a source the code has not audited")
+    check(ia_backup.ia_source_for_post({"platform": "tiktok", "handle": "lockclip"}, ia_policy) == "", "lockclip is not an allowlisted TikTok handle")
     check(ia_backup.ia_source_for_post({"platform": "x"}, ia_policy) == "", "an X post with no recorded source is denied")
-    check(ia_backup.ia_source_for_post({"platform": "youtube", "feedId": "youtube:redacted_handle"}, ia_policy) == "youtube_rss", "a YouTube feed with only a public source is allowed")
+    check(ia_backup.ia_source_for_post({"platform": "youtube", "feedId": "youtube:northlamp"}, ia_policy) == "youtube_rss", "a YouTube feed with only a public source is allowed")
     check(not ia_backup.ia_url_ok("https://pub-example.r2.dev/music/song/cover.png", "youtube_rss") and not ia_backup.ia_url_ok("https://pub-example.r2.dev/loop/current.json", "telegram"), "music covers and radio audio are denied")
     hidden_name = re.compile(r"/x[0-9a-f]{32}/[0-9a-f]{20}\.")
     check(puts and all(hidden_name.search(row[1]) for row in puts), "item and file names are unguessable")
@@ -3545,7 +3587,7 @@ def ia_backup_checks() -> None:
             return Resp(200, b'{"success":true}')
         if path == "/metadata/superintelapp-img-2026-10":
             body = json.dumps({
-                "metadata": {"identifier": "superintelapp-img-2026-10", "title": "superintelapp-img-2026-10", "creator": "owner-account", "description": "Public backup", "collection": "opensource_media"},
+                "metadata": {"identifier": "superintelapp-img-2026-10", "title": "superintelapp-img-2026-10", "creator": "riverquoll", "description": "Public backup", "collection": "opensource_media"},
                 "files": [{"name": old_name}, {"name": "superintelapp-img-2026-10_meta.xml"}],
             }).encode()
             return Resp(200, body)
@@ -3637,7 +3679,7 @@ def ia_backup_checks() -> None:
     check("noindex" in " ".join(patches) and "title" in " ".join(patches), "retired items are marked noindex and lose their title")
     check(not any("test-secret-value" in patch or "test-secret-value" in " ".join(retired["notes"]) for patch in patches), "metadata writes do not print the keys")
 
-    probe_meta = {"title": "superintelapp-img-2026-10", "description": "Public backup", "creator": "owner-account"}
+    probe_meta = {"title": "superintelapp-img-2026-10", "description": "Public backup", "creator": "riverquoll"}
     probe_puts = []
     probe_deletes = []
 
@@ -3732,7 +3774,7 @@ def ia_backup_checks() -> None:
     retire_wf = (ROOT / ".github" / "workflows" / "ia-retire.yml").read_text(encoding="utf-8")
     snap = (ROOT / "scripts" / "pull_snapshot.py").read_text(encoding="utf-8")
     check("feeds-archive" not in archive_src and "Viktorych" not in archive_src and "creator" not in archive_src and "opensource" not in archive_src and "internetarchive" not in archive_src and "run_backup" in archive_src, "shard uploads use the anonymous backup items")
-    check("internetarchive" not in sync and "ia_archive.py" not in sync and "r2_usage.py" in sync and "Restore the saved manifest" in sync and 'echo "$CLOUDFLARE' not in sync and "echo $CLOUDFLARE" not in sync, "the daily job restores the manifest and checks R2 without calling archive.org")
+    check("internetarchive" not in sync and "ia_archive.py" not in sync and "r2_usage.py" in sync and "git push --force" not in sync and 'echo "$CLOUDFLARE' not in sync and "echo $CLOUDFLARE" not in sync, "the daily job checks R2 and does not publish archive stubs or call archive.org")
     check("workflow_dispatch" in retire_wf and "schedule:" not in retire_wf and "cron:" not in retire_wf and "push:" not in retire_wf and "ia-retire.once" not in retire_wf and 'echo "$IA_' not in retire_wf and "echo $IA_" not in retire_wf and "IA_ACCESS_KEY" in retire_wf and "IA_SECRET_KEY" in retire_wf and "ia_retire.py copy" in retire_wf and "ia_retire.py delete" in retire_wf and 'git checkout -f "$head"' in retire_wf and retire_wf.count("if: false") >= 4, "the retire workflow is manual, its write steps do not run, and it does not print the keys")
     check(retire_wf.index('git checkout --force "$GITHUB_SHA"') < retire_wf.index("ia_retire.py delete"), "delete runs from this commit after the data branch publish")
     import r2_usage
@@ -3842,7 +3884,7 @@ def ia_backup_checks() -> None:
         "posts": {},
     }
     retire_files = ["superintelapp-2026-10_meta.xml", "superintelapp-2026-10_files.xml"]
-    retire_meta = {"creator": "owner-account", "collection": "opensource", "uploader": "person@example.com", "title": "named"}
+    retire_meta = {"creator": "riverquoll", "collection": "opensource", "uploader": "person@example.com", "title": "named"}
     anon_meta = {"title": "files", "uploader": "person@example.com", "noindex": "true"}
     retire_deleted = []
     retire_headers = []
@@ -4201,7 +4243,7 @@ def vk_web_checks(now) -> None:
         raise AssertionError("user token was called")
 
     accounts, health = collect(
-        [{"id": "vk:vk", "platform": "vk", "handle": "vk", "ownerId": -22822305}],
+        [{"id": "vk:vk", "platform": "vk", "handle": "vk", "ownerId": -10000041}],
         "",
         now,
         previous_vk,
@@ -4248,11 +4290,11 @@ def story_checks() -> None:
 
     now = datetime(2026, 10, 21, 19, 0, tzinfo=timezone.utc)
     payload = json.loads((FIX / "ig_stories.json").read_text(encoding="utf-8"))
-    account = parse_story_document(payload, "redacted_handle", now, {"id": "instagram:redacted_handle", "handle": "redacted_handle"})
+    account = parse_story_document(payload, "birchlane", now, {"id": "instagram:birchlane", "handle": "birchlane"})
     check(len(account["items"]) == 2, "the instagram fixture keeps the two stories that have not expired")
     check(account["items"][0]["id"] == "1002" and account["items"][0]["type"] == "video", "the older video is first")
     check(account["items"][1]["id"] == "1001" and account["items"][1]["caption"] == "Morning" and account["items"][1]["url"].endswith("story.jpg"), "the photo keeps the larger image and its caption")
-    check(account["name"] == "Mark Zuckerberg" and account["avatar"] == "https://cdn.example/redacted_handle.jpg", "the reel supplies the name and avatar")
+    check(account["name"] == "Mark Zuckerberg" and account["avatar"] == "https://cdn.example/birchlane.jpg", "the reel supplies the name and avatar")
     check("1003" not in json.dumps(account), "an expired story is dropped")
     leaked = "sessionid=SECRETVALUE; ds_user_id=42"
     check(redact("Cookie: " + leaked) == "Cookie: sessionid=redacted; ds_user_id=redacted", "a story error cannot carry the session")
@@ -4267,9 +4309,9 @@ def story_checks() -> None:
 
     with tempfile.TemporaryDirectory() as tmp:
         dest = Path(tmp) / "stories.json"
-        dest.write_text('{"accounts":[{"id":"instagram:redacted_handle","items":[{"url":"https://cdn.example/old.jpg"}]}]}', encoding="utf-8")
+        dest.write_text('{"accounts":[{"id":"instagram:birchlane","items":[{"url":"https://cdn.example/old.jpg"}]}]}', encoding="utf-8")
         health = publish(
-            {"feeds": [{"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle"}], "rsshubBase": "http://127.0.0.1:1200"},
+            {"feeds": [{"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane"}], "rsshubBase": "http://127.0.0.1:1200"},
             dest,
             now=now,
             secret="",
@@ -4281,9 +4323,9 @@ def story_checks() -> None:
 
     previous = [
         {
-            "id": "instagram:redacted_handle",
+            "id": "instagram:birchlane",
             "platform": "instagram",
-            "handle": "redacted_handle",
+            "handle": "birchlane",
             "items": [
                 {"id": "9", "type": "photo", "url": "https://cdn.example/keep.jpg", "date": "2026-10-21T12:00:00Z", "expires": "2026-10-22T00:00:00Z"},
                 {"id": "8", "type": "photo", "url": "http://cdn.example/nope.jpg", "date": "2026-10-21T12:00:00Z", "expires": "2026-10-22T00:00:00Z"},
@@ -4306,16 +4348,16 @@ def story_checks() -> None:
         raise StoryAuthError(AUTH_DETAIL)
 
     feeds = [
-        {"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle"},
+        {"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane"},
         {"id": "instagram:nasa", "platform": "instagram", "handle": "nasa"},
-        {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram"},
+        {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor"},
         {"id": "vk:vk", "platform": "vk", "handle": "vk"},
     ]
     accounts, health = collect(feeds, "sessionid=SECRETVALUE", now, previous, transport=rejected)
     check(len(seen_urls) == 1, "a rejected session stops the remaining accounts")
     check(health == [{"platform": "instagram", "ok": False, "detail": AUTH_DETAIL}], "a rejected session is one health failure")
     check("SECRETVALUE" not in json.dumps(health), "the health row does not contain the session")
-    check([row["id"] for row in accounts] == ["instagram:redacted_handle"], "a failed fetch keeps that account and does not invent Telegram or VK")
+    check([row["id"] for row in accounts] == ["instagram:birchlane"], "a failed fetch keeps that account and does not invent Telegram or VK")
     check([item["id"] for item in accounts[0]["items"]] == ["9"], "only the unexpired https story is kept")
 
     def empty_reel(method, url, headers, body):
@@ -4327,7 +4369,7 @@ def story_checks() -> None:
     check(accounts == [] and health == [], "an empty reel clears the account and stays healthy")
 
     rss = """<?xml version="1.0"?><rss><channel><item>
-      <link>https://www.instagram.com/stories/redacted_handle/55/</link>
+      <link>https://www.instagram.com/stories/birchlane/55/</link>
       <guid>55</guid>
       <pubDate>Wed, 21 Oct 2026 18:00:00 GMT</pubDate>
       <description>&lt;img src="https://cdn.example/from-rss.jpg"&gt; Morning</description>
@@ -4343,7 +4385,7 @@ def story_checks() -> None:
         raise AssertionError(url)
 
     accounts, health = collect(
-        [{"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle", "profile": {"name": "Mark"}}],
+        [{"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane", "profile": {"name": "Mark"}}],
         "sessionid=SECRETVALUE",
         now,
         [],
@@ -4392,7 +4434,7 @@ def story_checks() -> None:
     check('href: "#/games"' in nav_fn and 'r.name === "games"' in nav_fn and 'icon: "games"' in nav_fn and '"games"' in side_ids and 'parts[0] === "games"' in app, "Games opens from the left nav and the account menu")
     communities_js = (ROOT / "communities.js").read_text(encoding="utf-8")
     check('communities.js", "communities.css"' in lazy and "communities.js" in worker and "communities.css" in worker and 'info.name === "communities"' in app, "the page and the service worker load Communities on demand")
-    check("communities.js" in deployed_paths() and "communities.css" in deployed_paths() and "data/communities" in workflow and "reddit.yml" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")
+    check("communities.js" in deployed_paths() and "communities.css" in deployed_paths() and "data/communities/index.json" in deployed_paths() and "reddit.yml" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")
     check(('"#/communities", "communities"' in nav_fn or 'href: "#/communities"' in nav_fn) and 'parts[0] === "communities"' in app and "ViktorychCommunities" in app and "takeCompose" in app, "Communities opens from the left nav and reuses compose")
     check("Only on ViktorychApp" in communities_js and "data-cm=\"filter\"" in communities_js and "parentId" in communities_js, "a community thread mixes Reddit and ViktorychApp replies")
     communities_css = (ROOT / "communities.css").read_text(encoding="utf-8")
@@ -4407,7 +4449,7 @@ def story_checks() -> None:
     check("loadComments" in communities_js and "retry-comments" in communities_js and "cleanRedditText(item.reply.text)" in communities_js and "cm-thread-note" in communities_css, "a forum thread loads its own comment page instead of a partial preview")
     check("fetch_replies" in discourse_py and "write_comments" in discourse_py and "prune_comments" in discourse_py and "html_to_text" in discourse_py and "TOPIC_LIMIT" in discourse_py, "the forum sync keeps every topic's comments in a per-topic file")
     sw_js = (ROOT / "sw.js").read_text(encoding="utf-8")
-    check("mindepth 2" in (ROOT / "scripts" / "assemble_site.py").read_text(encoding="utf-8") and "one comment page per topic" in sw_js and "data\\/communities" in sw_js, "published comment pages reach Pages and are treated as data")
+    check("mindepth 2" not in (ROOT / "scripts" / "assemble_site.py").read_text(encoding="utf-8") and "data/communities/index.json" in deployed_paths() and "one comment page per topic" in sw_js and "data\\/communities" in sw_js, "comment pages stay in private storage and the service worker still treats them as data")
     reddit_wf = (ROOT / ".github" / "workflows" / "reddit.yml").read_text(encoding="utf-8")
     check("trying public feeds" in reddit_py and "leaving communities unchanged" not in reddit_py and "client_credentials" in reddit_py and "reddit.com/.json" not in reddit_py and 'cron: "*/20 * * * *"' in reddit_wf and "echo \"$REDDIT_CLIENT" not in reddit_wf and "echo ${{ secrets" not in reddit_wf, "the Reddit mirror tries public feeds without secrets and runs every 20 minutes")
     import communities_publish
@@ -4459,17 +4501,17 @@ def story_checks() -> None:
     check(tiktok_live.returncode == 0, "tiktok live parser\n" + tiktok_live.stdout + tiktok_live.stderr)
     tiktok_norm = subprocess.run([sys.executable, "scripts/tiktok_test.py"], cwd=ROOT, capture_output=True, text=True)
     check(tiktok_norm.returncode == 0, "tiktok normalize\n" + tiktok_norm.stdout + tiktok_norm.stderr)
-    check("IG_SESSION" in workflow and "::add-mask::${IG_SESSION}" in workflow and "stories.json" in workflow and "publish-stories" in workflow, "the sync masks the story session and publishes stories.json")
+    check("IG_SESSION" in workflow and "::add-mask::${IG_SESSION}" in workflow and "stories.json" in workflow and "publish-stories" in workflow and "git add stories.json" not in workflow, "the sync masks the story session and does not commit stories.json")
     check("VK_USER_TOKEN: ${{ secrets.VK_USER_TOKEN }}" in workflow and 'echo "::add-mask::${VK_USER_TOKEN}"' in workflow, "the sync masks the VK user token and does not print it")
     instructions = (ROOT / "docs" / "vk-stories-token.md").read_text(encoding="utf-8")
     check(instructions.rstrip().endswith("add it as the repo secret VK_USER_TOKEN in GitHub Settings > Secrets and variables > Actions."), "the VK token instructions end with the settings step")
 
     token = "vk1.secret.TOKENVALUE"
     stamp = int(now.timestamp())
-    group = {"id": 22822305, "name": "ВКонтакте", "photo_200": "https://cdn.example/vk-face.jpg"}
+    group = {"id": 10000041, "name": "ВКонтакте", "photo_200": "https://cdn.example/vk-face.jpg"}
     photo = {
         "id": 5,
-        "owner_id": -22822305,
+        "owner_id": -10000041,
         "date": stamp - 3600,
         "expires_at": stamp + 3600,
         "type": "photo",
@@ -4481,7 +4523,7 @@ def story_checks() -> None:
     }
     video = {
         "id": 6,
-        "owner_id": -22822305,
+        "owner_id": -10000041,
         "date": stamp - 7200,
         "type": "video",
         "video": {
@@ -4491,7 +4533,7 @@ def story_checks() -> None:
     }
     expired = {
         "id": 4,
-        "owner_id": -22822305,
+        "owner_id": -10000041,
         "date": stamp - 90000,
         "expires_at": stamp - 100,
         "type": "photo",
@@ -4499,17 +4541,17 @@ def story_checks() -> None:
     }
     http_only = {
         "id": 7,
-        "owner_id": -22822305,
+        "owner_id": -10000041,
         "date": stamp - 1800,
         "expires_at": stamp + 3600,
         "type": "photo",
         "photo": {"sizes": [{"url": "http://cdn.example/plain.jpg", "width": 400, "height": 400}]},
     }
-    vk_feed = {"id": "vk:vk", "platform": "vk", "handle": "vk", "ownerId": -22822305}
+    vk_feed = {"id": "vk:vk", "platform": "vk", "handle": "vk", "ownerId": -10000041}
     parsed = parse_vk_stories({"response": {"items": [[photo, video, expired, http_only]], "groups": [group]}}, vk_feed, now)
     check([item["id"] for item in parsed["items"]] == ["6", "5"], "VK keeps the current video and photo, oldest first")
     check(parsed["items"][0]["type"] == "video" and parsed["items"][0]["url"] == "https://cdn.example/v.mp4" and parsed["items"][0]["poster"] == "https://cdn.example/poster.jpg", "a VK video uses the https mp4 and its poster")
-    check(parsed["items"][1]["url"] == "https://cdn.example/big.jpg" and parsed["items"][1]["open"] == "https://vk.com/story-22822305_5", "a VK photo uses the largest https image and the story link")
+    check(parsed["items"][1]["url"] == "https://cdn.example/big.jpg" and parsed["items"][1]["open"] == "https://vk.com/story-10000041_5", "a VK photo uses the largest https image and the story link")
     check(parsed["name"] == "ВКонтакте" and parsed["avatar"] == "https://cdn.example/vk-face.jpg", "the VK group supplies the name and avatar")
     check("old.jpg" not in json.dumps(parsed) and "plain.jpg" not in json.dumps(parsed) and "nope.mp4" not in json.dumps(parsed), "expired and http VK media are dropped")
 
@@ -4531,7 +4573,7 @@ def story_checks() -> None:
         follow.append(method)
         if method == "stories.get":
             return {"response": {"items": [[bare]], "groups": [group]}}
-        check(params.get("stories") == "-22822305_5", "stories.getById asks for the row that had no file")
+        check(params.get("stories") == "-10000041_5", "stories.getById asks for the row that had no file")
         return {"response": {"items": [[photo]], "groups": [group]}}
 
     filled = fetch_vk(vk_feed, token, now, call=missing_then_fill, sleep=lambda delay: paced.append(delay))
@@ -4593,7 +4635,7 @@ def story_checks() -> None:
 
     def one_denied(method, params):
         query_calls.append(params.get("owner_id"))
-        if params.get("owner_id") == -22822305:
+        if params.get("owner_id") == -10000041:
             return {"error": {"error_code": 6, "error_msg": token}}
         return {"response": {"items": [[photo]], "groups": [group]}}
 
@@ -4607,7 +4649,7 @@ def story_checks() -> None:
         sleep=lambda delay: None,
         vk_lookup=lambda handle: 1,
     )
-    check(query_calls == [-22822305, 1], "a non-auth VK error fails that account and continues")
+    check(query_calls == [-10000041, 1], "a non-auth VK error fails that account and continues")
     check(health == [{"platform": "vk", "ok": False, "detail": VK_QUERY_DETAIL}] and token not in json.dumps(health), "a query failure uses the fixed detail")
     by_id = {row["id"]: row for row in accounts}
     check([item["id"] for item in by_id["vk:vk"]["items"]] == ["1"], "the failed VK account keeps its previous https story")
@@ -4640,8 +4682,8 @@ def story_checks() -> None:
     import auto_add
 
     def auto_fetch(url):
-        if "fxtwitter.com/redacted_handle" in url:
-            return 200, '{"screen_name":"redacted_handle","id":"1"}'
+        if "fxtwitter.com/riverquill" in url:
+            return 200, '{"screen_name":"riverquill","id":"1"}'
         if "fxtwitter.com/BrianRoemmele" in url:
             return 200, '{"screen_name":"BrianRoemmele"}'
         if "fxtwitter.com/freshname" in url or "fxtwitter.com/nasa" in url:
@@ -4659,34 +4701,34 @@ def story_checks() -> None:
         return 404, ""
 
     carriers = [
-        {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle", "profile": {"name": "Elon Musk"}},
-        {"id": "telegram:telegram", "platform": "telegram", "handle": "telegram", "profile": {"name": "Telegram News"}},
+        {"id": "x:copperlane", "platform": "x", "handle": "copperlane", "profile": {"name": "Elon Musk"}},
+        {"id": "telegram:laneharbor", "platform": "telegram", "handle": "laneharbor", "profile": {"name": "Telegram News"}},
         {"id": "vk:vk", "platform": "vk", "handle": "vk", "profile": {"name": "VK"}},
-        {"id": "instagram:redacted_handle", "platform": "instagram", "handle": "redacted_handle"},
-        {"id": "youtube:redacted_handle", "platform": "youtube", "handle": "redacted_handle", "channelId": "UCfgtuaUadGgOA-91geQ8Qog"},
+        {"id": "instagram:birchlane", "platform": "instagram", "handle": "birchlane"},
+        {"id": "youtube:northlamp", "platform": "youtube", "handle": "northlamp", "channelId": "UCsyntheticmaple00001000"},
         {"id": "x:already", "platform": "x", "handle": "already", "origin": "repost", "defaultFollow": False, "adapter": "fxtwitter"},
         {"id": "x:X", "platform": "x", "handle": "X", "defaultFollow": False, "adapter": "fxtwitter"},
     ]
     discovered = [
-        {"platform": "x", "feedId": "x:redacted_handle", "kind": "repost", "handle": "redacted_handle", "author": "Sawyer Merritt", "avatar": "https://pbs.twimg.com/a.jpg", "sortDate": "2026-10-20T17:22:54.000Z", "repostedBy": {"handle": "redacted_handle", "name": "Elon Musk", "platform": "x", "feedId": "x:redacted_handle"}},
-        {"platform": "x", "feedId": "x:redacted_handle", "kind": "quote", "handle": "redacted_handle", "quoted": {"handle": "SomeoneElse"}},
-        {"platform": "x", "feedId": "x:redacted_handle", "kind": "repost", "handle": "BrianRoemmele", "author": "Brian", "repostedBy": {"handle": "redacted_handle", "feedId": "x:redacted_handle"}},
-        {"platform": "telegram", "feedId": "telegram:telegram", "kind": "repost", "handle": "durov", "author": "Pavel Durov", "forwardedFrom": {"handle": "durov", "name": "Pavel Durov"}, "repostedBy": {"handle": "telegram", "feedId": "telegram:telegram", "platform": "telegram"}},
-        {"platform": "telegram", "feedId": "telegram:telegram", "kind": "post", "handle": "telegram", "forwardedFrom": {"name": "Hidden person"}, "repostedBy": {"handle": "telegram", "feedId": "telegram:telegram"}},
+        {"platform": "x", "feedId": "x:copperlane", "kind": "repost", "handle": "riverquill", "author": "Sawyer Merritt", "avatar": "https://pbs.twimg.com/a.jpg", "sortDate": "2026-10-20T17:22:54.000Z", "repostedBy": {"handle": "copperlane", "name": "Elon Musk", "platform": "x", "feedId": "x:copperlane"}},
+        {"platform": "x", "feedId": "x:copperlane", "kind": "quote", "handle": "copperlane", "quoted": {"handle": "SomeoneElse"}},
+        {"platform": "x", "feedId": "x:copperlane", "kind": "repost", "handle": "BrianRoemmele", "author": "Brian", "repostedBy": {"handle": "copperlane", "feedId": "x:copperlane"}},
+        {"platform": "telegram", "feedId": "telegram:laneharbor", "kind": "repost", "handle": "durov", "author": "Pavel Durov", "forwardedFrom": {"handle": "durov", "name": "Pavel Durov"}, "repostedBy": {"handle": "laneharbor", "feedId": "telegram:laneharbor", "platform": "telegram"}},
+        {"platform": "telegram", "feedId": "telegram:laneharbor", "kind": "post", "handle": "laneharbor", "forwardedFrom": {"name": "Hidden person"}, "repostedBy": {"handle": "laneharbor", "feedId": "telegram:laneharbor"}},
         {"platform": "vk", "feedId": "vk:vk", "kind": "repost", "handle": "team", "author": "Team", "repostedBy": {"handle": "vk", "feedId": "vk:vk", "platform": "vk"}},
         {"platform": "vk", "feedId": "vk:vk", "kind": "repost", "handle": "12345", "repostedBy": {"handle": "vk", "feedId": "vk:vk"}},
-        {"platform": "instagram", "feedId": "instagram:redacted_handle", "kind": "repost", "handle": "someuser", "repostedBy": {"handle": "redacted_handle", "feedId": "instagram:redacted_handle"}},
-        {"platform": "youtube", "feedId": "youtube:redacted_handle", "kind": "repost", "handle": "OtherCreator", "channelId": "UCabcdefghijklmnopqrstuv", "author": "Other Creator", "repostedBy": {"handle": "redacted_handle", "feedId": "youtube:redacted_handle"}},
+        {"platform": "instagram", "feedId": "instagram:birchlane", "kind": "repost", "handle": "someuser", "repostedBy": {"handle": "birchlane", "feedId": "instagram:birchlane"}},
+        {"platform": "youtube", "feedId": "youtube:northlamp", "kind": "repost", "handle": "OtherCreator", "channelId": "UCsyntheticmaple00006000", "author": "Other Creator", "repostedBy": {"handle": "northlamp", "feedId": "youtube:northlamp"}},
         {"platform": "x", "feedId": "x:already", "kind": "repost", "handle": "freshname", "author": "Fresh", "repostedBy": {"handle": "already", "feedId": "x:already"}},
     ]
     auto_config = {"feeds": [dict(row) for row in carriers], "removed": ["x:brianroemmele"], "autoAdd": {"perRun": 5, "total": 12, "paceSeconds": 2}, "people": []}
     added_ids = auto_add.apply_auto_adds(auto_config, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
     added_set = set(added_ids)
-    check(added_set == {"x:redacted_handle", "telegram:durov", "vk:team", "youtube:OtherCreator"}, "reposts add the original public account and skip quotes, private, removed, and a second hop")
-    sawyer = next(feed for feed in auto_config["feeds"] if feed.get("id") == "x:redacted_handle")
-    check(sawyer.get("origin") == "repost" and sawyer.get("defaultFollow") is False and sawyer.get("limit") == 4 and sawyer["addedFrom"]["handle"] == "redacted_handle" and sawyer["addedFrom"]["feedId"] == "x:redacted_handle" and sawyer["addedFrom"]["at"].startswith("2026-10-20T17:22:54") and sawyer["adapter"] == "fxtwitter", "an auto-added account records who reposted it and is not a default follow")
+    check(added_set == {"x:riverquill", "telegram:durov", "vk:team", "youtube:OtherCreator"}, "reposts add the original public account and skip quotes, private, removed, and a second hop")
+    sawyer = next(feed for feed in auto_config["feeds"] if feed.get("id") == "x:riverquill")
+    check(sawyer.get("origin") == "repost" and sawyer.get("defaultFollow") is False and sawyer.get("limit") == 4 and sawyer["addedFrom"]["handle"] == "copperlane" and sawyer["addedFrom"]["feedId"] == "x:copperlane" and sawyer["addedFrom"]["at"].startswith("2026-10-20T17:22:54") and sawyer["adapter"] == "fxtwitter", "an auto-added account records who reposted it and is not a default follow")
     youtube_added = next(feed for feed in auto_config["feeds"] if feed.get("id") == "youtube:OtherCreator")
-    check(youtube_added.get("channelId") == "UCabcdefghijklmnopqrstuv" and youtube_added.get("adapter") == "youtube_rss", "a shared YouTube channel is added by its channel id")
+    check(youtube_added.get("channelId") == "UCsyntheticmaple00006000" and youtube_added.get("adapter") == "youtube_rss", "a shared YouTube channel is added by its channel id")
     again = auto_add.apply_auto_adds(auto_config, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
     check(again == [], "a later sync does not add the same account twice")
     capped = {"feeds": [dict(row) for row in carriers], "removed": [], "autoAdd": {"perRun": 1, "total": 12}, "people": []}
@@ -4695,33 +4737,33 @@ def story_checks() -> None:
     full = {"feeds": [dict(row) for row in carriers], "removed": [], "autoAdd": {"perRun": 5, "total": 1}, "people": []}
     check(auto_add.apply_auto_adds(full, discovered, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"]) == [], "the total cap counts accounts already added from reposts")
     denied_posts = [
-        {"platform": "x", "feedId": "x:redacted_handle", "kind": "repost", "handle": "DeniedUser", "author": "Denied", "repostedBy": {"handle": "redacted_handle", "feedId": "x:redacted_handle"}},
-        {"platform": "telegram", "feedId": "telegram:telegram", "kind": "repost", "handle": "durov", "forwardedFrom": {"handle": "durov", "name": "Pavel Durov"}, "repostedBy": {"handle": "telegram", "feedId": "telegram:telegram"}},
+        {"platform": "x", "feedId": "x:copperlane", "kind": "repost", "handle": "DeniedUser", "author": "Denied", "repostedBy": {"handle": "copperlane", "feedId": "x:copperlane"}},
+        {"platform": "telegram", "feedId": "telegram:laneharbor", "kind": "repost", "handle": "durov", "forwardedFrom": {"handle": "durov", "name": "Pavel Durov"}, "repostedBy": {"handle": "laneharbor", "feedId": "telegram:laneharbor"}},
     ]
-    denied_config = {"feeds": [dict(row) for row in carriers if row["id"] in ("x:redacted_handle", "telegram:telegram")], "autoAdd": {"perRun": 5, "total": 12}, "people": []}
+    denied_config = {"feeds": [dict(row) for row in carriers if row["id"] in ("x:copperlane", "telegram:laneharbor")], "autoAdd": {"perRun": 5, "total": 12}, "people": []}
     denied_ids = auto_add.apply_auto_adds(denied_config, denied_posts, auto_fetch, lambda *_args: None, lambda host: ["1.1.1.1"])
     check(denied_ids == ["telegram:durov"], "a 403 stops more checks on that platform and still adds other platforms")
     profiles = [
-        {"id": "x:redacted_handle", "handle": "redacted_handle", "configured": True},
-        {"id": "x:redacted_handle", "handle": "redacted_handle", "configured": False},
+        {"id": "x:riverquill", "handle": "riverquill", "configured": True},
+        {"id": "x:copperlane", "handle": "copperlane", "configured": False},
         {"id": "x:X", "handle": "X", "configured": True},
     ]
     auto_add.stamp_profiles(profiles, auto_config["feeds"])
     stamped = {row["id"]: row for row in profiles}
-    check(stamped["x:redacted_handle"]["configured"] is False and stamped["x:redacted_handle"]["origin"] == "repost" and stamped["x:redacted_handle"]["addedFrom"]["handle"] == "redacted_handle", "the published profile stays Added and keeps the repost note")
-    check(stamped["x:redacted_handle"]["configured"] is True and "origin" not in stamped["x:redacted_handle"], "a normal source stays a default follow")
+    check(stamped["x:riverquill"]["configured"] is False and stamped["x:riverquill"]["origin"] == "repost" and stamped["x:riverquill"]["addedFrom"]["handle"] == "copperlane", "the published profile stays Added and keeps the repost note")
+    check(stamped["x:copperlane"]["configured"] is True and "origin" not in stamped["x:copperlane"], "a normal source stays a default follow")
     check(stamped["x:X"]["configured"] is False and "origin" not in stamped["x:X"], "defaultFollow false stays out of Following")
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp)
         base = folder / "feeds.config.json"
         incoming = folder / "incoming.json"
-        base.write_text('{\n  "cap": 300,\n  "autoAdd": {"perRun": 3, "total": 12},\n  "removed": ["x:brianroemmele"],\n  "feeds": [\n    {"id": "x:redacted_handle", "platform": "x", "handle": "redacted_handle"}\n  ]\n}\n', encoding="utf-8")
+        base.write_text('{\n  "cap": 300,\n  "autoAdd": {"perRun": 3, "total": 12},\n  "removed": ["x:brianroemmele"],\n  "feeds": [\n    {"id": "x:copperlane", "platform": "x", "handle": "copperlane"}\n  ]\n}\n', encoding="utf-8")
         evil = json.loads(json.dumps(sawyer))
         evil["source_urls"] = ["http://127.0.0.1/secret"]
         incoming.write_text(json.dumps({"feeds": [sawyer, evil]}), encoding="utf-8")
         merged_ids = auto_add.merge_into_file(base, incoming)
         merged = json.loads(base.read_text(encoding="utf-8"))
-        check(merged_ids == ["x:redacted_handle"] and merged["feeds"][0]["id"] == "x:redacted_handle" and merged["feeds"][1]["id"] == "x:redacted_handle" and merged["cap"] == 300, "the config commit appends the repost source and drops a rewritten URL")
+        check(merged_ids == ["x:riverquill"] and merged["feeds"][0]["id"] == "x:copperlane" and merged["feeds"][1]["id"] == "x:riverquill" and merged["cap"] == 300, "the config commit appends the repost source and drops a rewritten URL")
         blocked = dict(sawyer)
         blocked["id"] = "x:brianroemmele"
         blocked["handle"] = "BrianRoemmele"
@@ -4851,14 +4893,14 @@ def gdrive_checks() -> None:
     blocked, _base = gdrive_backup.playlist_source(b'{"url":"https://cdn.workers.dev/loop/index.m3u8"}', "https://pub-example.r2.dev/loop/current.json", ("r2.dev",))
     check(blocked is None, "a radio manifest that leaves the music host is dropped")
     policy = __import__("ia_backup").load_ia_policy()
-    widened = __import__("ia_backup").load_ia_policy({"tiktok_allow": ["gabii_g5"]})
+    widened = __import__("ia_backup").load_ia_policy({"tiktok_allow": ["lockclip"]})
     posts = [
-        {"platform": "tiktok", "handle": "gabii_g5", "statusId": "123", "media": [{"type": "video", "url": "https://v16.tiktokcdn.com/a.mp4", "poster": "https://p16.tiktokcdn.com/a.jpg"}]},
+        {"platform": "tiktok", "handle": "lockclip", "statusId": "123", "media": [{"type": "video", "url": "https://v16.tiktokcdn.com/a.mp4", "poster": "https://p16.tiktokcdn.com/a.jpg"}]},
         {"platform": "vk", "id": "9", "media": [{"type": "video", "url": "https://userapi.com/v.mp4"}, {"type": "photo", "url": "https://userapi.com/p.jpg"}]},
-        {"platform": "youtube", "id": "abc", "feedId": "youtube:redacted_handle", "media": [{"type": "video", "url": "https://archive.org/download/x/y.mp4"}]},
+        {"platform": "youtube", "id": "abc", "feedId": "youtube:northlamp", "media": [{"type": "video", "url": "https://archive.org/download/x/y.mp4"}]},
     ]
     tiktok = gdrive_backup.tiktok_plan(posts, policy)
-    check(len(tiktok) == 2 and gdrive_backup.tiktok_plan(posts, widened) == [], "TikTok that is not allowlisted is backed up, and gabii_g5 stays off while the list is empty")
+    check(len(tiktok) == 2 and gdrive_backup.tiktok_plan(posts, widened) == [], "TikTok that is not allowlisted is backed up, and lockclip stays off while the list is empty")
     manifest = {
         "files": [
             {"u": "https://video.twimg.com/a.mp4", "a": "https://archive.org/download/xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/a.mp4", "k": "video"},

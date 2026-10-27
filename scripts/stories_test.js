@@ -25,9 +25,9 @@ Date.now = function () { return now; };
 const doc = {
   accounts: [
     {
-      id: "instagram:redacted_handle",
+      id: "instagram:birchlane",
       platform: "instagram",
-      handle: "redacted_handle",
+      handle: "birchlane",
       name: "Mark",
       avatar: "icons/icon-192.png",
       items: [
@@ -36,7 +36,7 @@ const doc = {
       ]
     },
     {
-      id: "telegram:telegram",
+      id: "telegram:laneharbor",
       platform: "telegram",
       handle: "telegram",
       name: "Telegram",
@@ -67,10 +67,10 @@ const doc = {
   ]
 };
 
-const follows = ["instagram:redacted_handle", "telegram:telegram", "vk:vk", "youtube:news"];
+const follows = ["instagram:birchlane", "telegram:laneharbor", "vk:vk", "youtube:news"];
 const active = Stories.activeAccounts(doc, now, follows);
 const ids = Array.prototype.map.call(active, (row) => row.id).join(",");
-assert.strictEqual(ids, "instagram:redacted_handle,telegram:telegram,vk:vk");
+assert.strictEqual(ids, "instagram:birchlane,telegram:laneharbor,vk:vk");
 assert.strictEqual(active[0].items.length, 1);
 assert.strictEqual(active[0].items[0].id, "ig");
 assert.strictEqual(active[2].items[0].type, "video");
@@ -83,7 +83,7 @@ assert.strictEqual(Array.prototype.map.call(ordered, (row) => row.platform).join
 const flipped = Stories.orderedAccounts(active, {});
 assert.strictEqual(Array.prototype.map.call(flipped, (row) => row.platform).join(","), "telegram,vk,instagram");
 assert.strictEqual(Stories.activeAccounts({ accounts: [] }, now, null).length, 0);
-assert.strictEqual(Stories.activeAccounts(doc, now, ["telegram:telegram"]).length, 1);
+assert.strictEqual(Stories.activeAccounts(doc, now, ["telegram:laneharbor"]).length, 1);
 
 let rendered = 0;
 Stories.bind({
@@ -94,8 +94,8 @@ Stories.bind({
 store["rss-stories-seen-v1"] = JSON.stringify(seen);
 Stories.apply(doc);
 const tray = Stories.homeTray();
-assert.ok(tray.indexOf('data-id="telegram:telegram"') < tray.indexOf('data-id="vk:vk"'));
-assert.ok(tray.indexOf('data-id="vk:vk"') < tray.indexOf('data-id="instagram:redacted_handle"'));
+assert.ok(tray.indexOf('data-id="telegram:laneharbor"') < tray.indexOf('data-id="vk:vk"'));
+assert.ok(tray.indexOf('data-id="vk:vk"') < tray.indexOf('data-id="instagram:birchlane"'));
 assert.ok(tray.indexOf("unseen") < tray.indexOf("seen"));
 assert.ok(tray.includes('data-icon="tg"') && tray.includes('data-icon="vk"') && tray.includes('data-icon="ig"'));
 assert.ok(!tray.includes("javascript:"));

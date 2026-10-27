@@ -17,7 +17,7 @@ body:
       label: Accounts
       description: One account per line. Use a profile URL or platform:handle. Platforms are x, threads, instagram, youtube, vk, telegram, and rss.
       placeholder: |
-        x:redacted_handle
-        instagram:redacted_handle
+        x:cedarhill
+        instagram:orbitfox
     validations:
       required: true

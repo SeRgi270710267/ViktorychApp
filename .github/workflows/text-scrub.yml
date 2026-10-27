@@ -1,0 +1,36 @@
+name: text-scrub
+
+# Apply scrubbed issue and pull request text. Push a change to
+# text-scrub.once on main to run it.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/text-scrub.once
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: text-scrub
+  cancel-in-progress: false
+
+jobs:
+  scrub:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Apply scrubbed text
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/apply_text_edits.py

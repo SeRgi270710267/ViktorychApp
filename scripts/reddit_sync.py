@@ -31,7 +31,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "data" / "communities"
 BUILTIN = ("teslamotors",)
-UA = "web:viktorychapp:v1 (by /u/owner-account)"
+UA = "web:viktorychapp:v1"
 NAME_RE = re.compile(r"^[A-Za-z0-9_]{2,21}$")
 TOKEN_URL = "https://www.reddit.com/api/v1/access_token"
 API = "https://oauth.reddit.com"
@@ -1355,8 +1355,8 @@ def selftest() -> int:
     check(doc["posts"][0]["replies"][0]["id"] == "t1_root" and doc["posts"][0]["replies"][0]["parent"] == "t3_hot1", "a comment feed attaches to the Reddit post")
     check(all(host_of(url) == "www.reddit.com" for url in urls), "later fallbacks stay quiet when Reddit RSS works")
     check(all("Cookie" not in headers and headers.get("User-Agent") == UA for _url, headers in calls), "public fetches send the app User-Agent and no Cookie")
-    kept = client.pull("teslamotors", {"title": "Tesla Motors", "subscribers": 12, "about": "Cars", "rules": [{"title": "Be nice", "text": ""}]})
-    check(kept["title"] == "Tesla Motors" and kept["subscribers"] == 12 and kept["about"] == "Cars", "a public feed keeps the earlier about text")
+    kept = client.pull("teslamotors", {"title": "Goldthistle Motors", "subscribers": 12, "about": "Cars", "rules": [{"title": "Be nice", "text": ""}]})
+    check(kept["title"] == "Goldthistle Motors" and kept["subscribers"] == 12 and kept["about"] == "Cars", "a public feed keeps the earlier about text")
 
     client, calls, _clock = client_for([("/.rss", (200, {}, hot))])
     api_doc = mirror_one("teslamotors", "token", client, api=lambda _token, name: {"name": name, "posts": [{"id": "t3_api", "title": "API", "media": [{"type": "photo", "url": "https://i.redd.it/a.jpg"}]}]})
@@ -1439,8 +1439,8 @@ def selftest() -> int:
     try:
         with tempfile.TemporaryDirectory() as temp:
             OUT = Path(temp)
-            (OUT / "index.json").write_text(json.dumps({"communities": [{"name": "teslamotors", "title": "Tesla Motors"}]}), encoding="utf-8")
-            write_index(["teslamotors"], {"teslamotors": {"name": "teslamotors", "title": "Tesla Motors", "posts": []}})
+            (OUT / "index.json").write_text(json.dumps({"communities": [{"name": "teslamotors", "title": "Goldthistle Motors"}]}), encoding="utf-8")
+            write_index(["teslamotors"], {"teslamotors": {"name": "teslamotors", "title": "Goldthistle Motors", "posts": []}})
             names = [row["name"] for row in json.loads((OUT / "index.json").read_text(encoding="utf-8"))["communities"]]
             check("teslamotors" in names and "grapheneos" in names, "a Reddit-only run keeps a configured Discourse forum in the index")
             (OUT / "index.json").unlink()

@@ -271,7 +271,7 @@ async function main() {
     assert.ok(refresh && painted && newest, "marks " + JSON.stringify(sample.marks));
     assert.ok(refresh.t <= painted.t, "fetch starts with the snapshot");
     assert.ok(painted.t <= newest.t, "snapshot paints before the newest row");
-    assert.ok(newest.t < 2500, "newest row at " + newest.t);
+    assert.ok(newest.t - painted.t < 1500, "newest row at " + newest.t + " paint " + painted.t);
     const scrolled = await evaluate(`(function () {
       window.scrollTo(0, 800);
       return new Promise(function (resolve) {

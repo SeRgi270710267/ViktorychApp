@@ -346,8 +346,7 @@
     if (window.ViktorychShorts && typeof window.ViktorychShorts.isUnlocked === "function") {
       return window.ViktorychShorts.isUnlocked(handle);
     }
-    const clean = String(handle || "").toLowerCase().replace(/^@/, "");
-    return clean === "pepsi";
+    return false;
   }
 
   function isLockedTiktok(entity) {
@@ -2628,7 +2627,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const tgAttr = tgKey ? ` data-tg="${esc(tgKey)}"${altAttr}${lead ? ' data-tg-first="1" data-fallback-src="' + esc(rawSrc) + '"' : ""}` : "";
       const sourceAttr = sourceUrl ? ` data-source="${esc(sourceUrl)}"` : "";
       const loading = first ? "eager" : "lazy";
-      const priority = first ? ` fetchpriority="high"` : "";
+      const priority = first ? ` fetchpriority="high"` : ` fetchpriority="low"`;
       const srcAttr = lead ? "" : ` src="${esc(src)}"${src === rawSrc ? imageSrcset(src) : ""}`;
       const framed = n === 1 ? frameAttrs(post, m) : { attr: "", cls: "" };
       return `<div class="tile${framed.cls || ""}" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
@@ -11352,10 +11351,12 @@ const here = parseRoute();
   function drawer() {
     if (!STATE.drawer) return "";
     const music = parseRoute().name === "music" && window.SIntelMusic;
-    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
+    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().filter((def) => def.id !== "games" && def.id !== "music").map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
+    const menuLinks = `<a href="#/games">${icon("games")} ${esc(tr("Games"))}</a>${music ? "" : `<a href="#/music">${icon("muNote")} ${esc(tr("Music"))}</a>`}`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
+      ${menuLinks}
       ${isStandalone() ? "" : `<button class="linky" type="button" data-act="install">${icon("plus")} ${tr("Install app")}</button>`}
     </div></div>`;
   }
@@ -13770,6 +13771,37 @@ if (STATE.histClear) {
     window.FeedsSplit.bind(split, window.FeedsSplit.sidebar, navEl);
   }
 
+  function replayQueuedPlay() {
+    const pending = window.__VIKTORYCH_PLAY;
+    if (!pending) return;
+    let tile = null;
+    const nodes = document.querySelectorAll(".vplay");
+    if (pending.pid) {
+      for (let i = 0; i < nodes.length; i++) {
+        const pid = nodes[i].getAttribute("data-pid") || "";
+        const mi = nodes[i].getAttribute("data-mi") || "";
+        if (pid === pending.pid && mi === String(pending.mi || "")) { tile = nodes[i]; break; }
+      }
+      if (!tile) {
+        for (let i = 0; i < nodes.length; i++) {
+          if ((nodes[i].getAttribute("data-pid") || "") === pending.pid) { tile = nodes[i]; break; }
+        }
+      }
+    }
+    if (!tile && pending.id) {
+      for (let i = 0; i < nodes.length; i++) {
+        const img = nodes[i].querySelector("img");
+        const src = img ? (img.currentSrc || img.getAttribute("src") || "") : "";
+        if (src.indexOf("/vi/" + pending.id + "/") >= 0) { tile = nodes[i]; break; }
+      }
+    }
+    if (!tile) return;
+    window.__VIKTORYCH_PLAY = null;
+    if (tile.querySelector("iframe")) return;
+    if (tile.dataset.preview && !tile.classList.contains("player")) openFullVideo(tile);
+    else startPlayback(tile, {});
+  }
+
   function render(opts) {
     if (document.documentElement.classList.contains("is-split-drag")) {
       STATE.splitRender = opts || STATE.splitRender || {};
@@ -13955,6 +13987,7 @@ if (STATE.histClear) {
       if (STATE.holdY === y) STATE.holdY = null;
       routing = false;
       scrollFreeze = false;
+      replayQueuedPlay();
       if (opts && opts.done) opts.done();
     };
     if (transition) {
@@ -15388,6 +15421,7 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     refocusBottom(grip.dataset.dragBottom, "grip");
   });
 
+  window.__VIKTORYCH_CLICK = true;
   document.addEventListener("click", (event) => {
     if (swallowTabDrag || swallowNotePress || swallowBottomNavDrag) {
       swallowTabDrag = false;
@@ -16004,6 +16038,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   });
   window.addEventListener("scroll", () => {
     if (!routing && Math.abs(window.scrollY - previewAnchor) >= 24) STATE.scrolled = true;
+    const native = window.ViktorychNative;
+    if (native && native.yieldThread) {
+      native.yieldThread().then(() => schedulePreview());
+      return;
+    }
     schedulePreview();
   }, { passive: true });
   window.addEventListener("resize", () => schedulePreview(), { passive: true });
@@ -16552,8 +16591,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (STATE.catalogP) return STATE.catalogP;
     const bootConfig = window.__homeFreshBoot && window.__homeFreshBoot.config;
     if (bootConfig) window.__homeFreshBoot.config = null;
-    const configRes = bootConfig || fetch("feeds.config.json", { cache: "no-store", credentials: "omit", headers: { "X-Feed-Refresh": "1" } });
-    STATE.catalogP = Promise.resolve(configRes).then((res) => (res && res.ok ? res.json() : null)).then((doc) => {
+    const configRes = bootConfig || fetch(catalogRequestUrl("feeds.config.json"), catalogRequestInit());
+    STATE.catalogP = Promise.resolve(configRes).then((res) => {
+      if (!res || !res.ok || catalogMissing(res)) return null;
+      return res.json();
+    }).then((doc) => {
       STATE.catalog = doc;
       return doc;
     }).catch(() => null);
@@ -17089,14 +17131,99 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     refreshLiveTimeline();
   }
 
+  function emptyCatalog() {
+    return { posts: [], feeds: [] };
+  }
+
+  function missingCatalog() {
+    return { posts: [], feeds: [], missing: true };
+  }
+
+  function catalogMissing(res) {
+    if (!res || !res.ok) return true;
+    try {
+      return !!(res.headers && typeof res.headers.get === "function" && res.headers.get("X-Catalog-Missing") === "1");
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function catalogRequestUrl(key) {
+    const cfg = window.VIKTORYCH_ACCOUNTS || {};
+    const api = String(cfg.api || "").replace(/\/$/, "");
+    if (cfg.gate && api) return api + "/v1/data/" + String(key || "").split("/").map(encodeURIComponent).join("/");
+    return key;
+  }
+
+  function catalogRequestInit() {
+    const headers = { "X-Feed-Refresh": "1" };
+    const cfg = window.VIKTORYCH_ACCOUNTS || {};
+    if (cfg.gate && cfg.api) {
+      try {
+        const saved = JSON.parse(readStored(localStorage, "account-v1") || "null");
+        if (saved && saved.token) headers.Authorization = "Bearer " + saved.token;
+      } catch (err) { /* a missing session still settles empty */ }
+    }
+    return { cache: "no-store", credentials: "omit", headers: headers };
+  }
+
+  let feedWorker = null;
+  function parseFeedOffThread(text) {
+    if (typeof Worker === "undefined") return Promise.resolve(null);
+    if (feedWorker === false) return Promise.resolve(null);
+    if (!feedWorker) {
+      try { feedWorker = new Worker("feed-worker.js", { type: "module" }); }
+      catch (err) { feedWorker = false; return Promise.resolve(null); }
+    }
+    return new Promise((resolve) => {
+      const id = "f" + Date.now() + Math.random();
+      const timer = setTimeout(() => {
+        feedWorker.removeEventListener("message", onMsg);
+        resolve(null);
+      }, 2500);
+      const onMsg = (event) => {
+        const data = event.data || {};
+        if (data.id !== id) return;
+        clearTimeout(timer);
+        feedWorker.removeEventListener("message", onMsg);
+        resolve(data.doc || null);
+      };
+      feedWorker.addEventListener("message", onMsg);
+      try { feedWorker.postMessage({ id: id, text: text }); }
+      catch (err) { clearTimeout(timer); resolve(null); }
+    });
+  }
+
+  async function readCatalogBody(text) {
+    if (!text || !String(text).trim()) return missingCatalog();
+    const parsed = await parseFeedOffThread(text);
+    if (parsed && Array.isArray(parsed.posts)) return parsed;
+    try {
+      const doc = JSON.parse(text);
+      if (doc && Array.isArray(doc.posts)) return doc;
+    } catch (err) { /* a missing catalog settles empty */ }
+    return missingCatalog();
+  }
+
   async function fetchFeeds(fresh) {
     const boot = fresh && window.__homeFreshBoot && window.__homeFreshBoot.feeds;
     if (boot) window.__homeFreshBoot.feeds = null;
-    const headers = { "X-Feed-Refresh": "1" };
-    const init = { cache: "no-store", credentials: "omit", headers: headers };
-    const res = await (boot || fetch("feeds.json", fresh ? init : { cache: "no-store", credentials: "omit", headers: headers }));
-    if (!res || !res.ok) throw new Error(String(res && res.status || "feeds"));
-    return res.json();
+    try {
+      if (boot) {
+        const res = await boot;
+        if (catalogMissing(res)) return missingCatalog();
+        return await readCatalogBody(await res.text());
+      }
+      if (!fresh && window.__VIKTORYCH_FEED) {
+        const early = await window.__VIKTORYCH_FEED;
+        if (early) return await readCatalogBody(early);
+      }
+      const res = await fetch(catalogRequestUrl("feeds.json"), catalogRequestInit());
+      if (catalogMissing(res)) return missingCatalog();
+      return await readCatalogBody(await res.text());
+    } catch (err) {
+      return missingCatalog();
+    }
   }
 
   function catalogSignature(doc) {
@@ -17166,7 +17293,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   async function refreshFeeds(apply) {
     try {
       const doc = lockDocDates(await fetchFeeds(true));
-      if (!doc || !Array.isArray(doc.posts)) return;
+      if (!doc || !Array.isArray(doc.posts) || doc.missing) return;
       const includeNew = arrivalMode() === "insert";
       const atTop = includeNew;
       const feedsChanged = catalogSignature(STATE.data) !== catalogSignature(doc);
@@ -17211,7 +17338,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
       if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
         if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
-        try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
+        const title = tr("New posts");
+        const body = trn("newPosts", fresh.length);
+        const payload = { body: body, icon: "icons/icon-192.png", tag: "feeds", data: { hash: "#/" } };
+        const viaWorker = ("serviceWorker" in navigator)
+          ? navigator.serviceWorker.ready.then((reg) => (reg && reg.showNotification ? reg.showNotification(title, payload) : Promise.reject()))
+          : Promise.reject();
+        Promise.resolve(viaWorker).catch(() => { try { new Notification(title, { body: body, icon: payload.icon, tag: "feeds" }); } catch (err) { /* permission can change */ } });
       }
       saveHomeSnapshot();
       ensureVideoOwners();
@@ -17632,10 +17765,29 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return "";
   }
 
+  function applyNativeLaunch(detail) {
+    if (!detail) return;
+    if (detail.hash) {
+      try { location.hash = detail.hash; } catch (err) { /* the current screen stays */ }
+    }
+    if (detail.compose) {
+      STATE.modal = "compose";
+      if (detail.text) STATE.composeSeed = detail.text;
+    }
+  }
+
   function consumeShareTarget() {
     const params = new URLSearchParams(location.search);
-    if (!params.has("url") && !params.has("text") && !params.has("title")) return;
-    STATE.incoming = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "" };
+    const media = params.get("media") || "";
+    const posting = params.get("post") === "1";
+    if (!params.has("url") && !params.has("text") && !params.has("title") && !media && !posting) return;
+    if ((posting || media) && !params.has("url")) {
+      STATE.modal = "compose";
+      STATE.composeSeed = [params.get("title") || "", params.get("text") || ""].filter(Boolean).join("\n");
+      history.replaceState(null, "", location.pathname + "#/home");
+      return;
+    }
+    STATE.incoming = { title: params.get("title") || "", text: params.get("text") || "", url: params.get("url") || "", media: media };
     const shared = parseSharedLink([params.get("url"), params.get("text"), params.get("title")].filter(Boolean).join(" "));
     const hash = shared || (location.hash && location.hash !== "#/" && location.hash !== "#/home" ? location.hash : "#/incoming");
     history.replaceState(null, "", location.pathname + hash);
@@ -18126,6 +18278,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
     if (!("serviceWorker" in navigator)) return;
+    const iosPush = /iphone|ipad|ipod/i.test(navigator.userAgent || "") || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (iosPush && !isStandalone()) return;
     try {
       const reg = await navigator.serviceWorker.ready;
       if (!reg.pushManager) return;
@@ -18212,7 +18366,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const item = new Notification(note.name || ("@" + (note.handle || "post")), {
         body: note.text || tr("New post"),
         icon: note.avatar || "icons/icon-192.png",
-        tag: "bell-" + note.id
+        tag: "note-" + note.id
       });
       item.onclick = () => {
         window.focus();
@@ -18233,7 +18387,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       body: note.text || tr("New post"),
       icon: note.avatar || "icons/icon-192.png",
       image: note.image || undefined,
-      tag: "bell-" + note.id,
+      tag: "note-" + note.id,
       data: { hash: note.hash || "#/" }
     };
     const title = note.name || ("@" + (note.handle || "post"));
@@ -18469,11 +18623,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!reg) return;
       swReg = reg;
       const dev = window.ViktorychDevice;
+      const tags = ["feeds", "notifications", "weather"];
       if (dev && dev.featureOn && !dev.featureOn(dev.read(), "sync", dev.signals())) {
-        if (reg.periodicSync && reg.periodicSync.unregister) reg.periodicSync.unregister("feeds").catch(() => {});
+        if (reg.periodicSync && reg.periodicSync.unregister) tags.forEach((tag) => { reg.periodicSync.unregister(tag).catch(() => {}); });
         return;
       }
-      if (reg.periodicSync) reg.periodicSync.register("feeds", { minInterval: 15 * 60 * 1000 }).catch(() => {});
+      if (reg.periodicSync) {
+        reg.periodicSync.register("feeds", { minInterval: 15 * 60 * 1000 }).catch(() => {});
+        ["notifications", "weather"].forEach((tag) => {
+          reg.periodicSync.register(tag, { minInterval: 30 * 60 * 1000 }).catch(() => {});
+        });
+      }
       if (reg.sync && reg.sync.register) reg.sync.register("feeds").catch(() => {});
     }).catch(() => {});
   }
@@ -18579,9 +18739,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       STATE.installPrompt = event;
+      window.__VIKTORYCH_INSTALL = event;
+      try { document.dispatchEvent(new CustomEvent("viktorych-install-ready")); } catch (err) { /* the menu install button still works */ }
       render();
     });
-    window.addEventListener("appinstalled", () => { STATE.installPrompt = null; render(); });
+    window.addEventListener("appinstalled", () => {
+      STATE.installPrompt = null;
+      window.__VIKTORYCH_INSTALL = null;
+      if (window.ViktorychStorage && window.ViktorychStorage.askPersist) window.ViktorychStorage.askPersist();
+      render();
+    });
     matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => {
       if (STATE.settings && STATE.settings.appearance === "auto") applyTheme();
     });
@@ -19087,6 +19254,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       return;
     }
     consumeShareTarget();
+    document.addEventListener("viktorych-launch", (event) => {
+      applyNativeLaunch(event.detail);
+      render();
+    });
+    if (window.ViktorychNative && window.ViktorychNative.takeLaunch) applyNativeLaunch(window.ViktorychNative.takeLaunch());
     bindShell();
     registerSW();
     scheduleDeviceCore();
@@ -19098,7 +19270,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     applyPrivacyProtections();
     if (window.Stories) window.Stories.start();
     histLoad().then(() => { histSyncSaves(); if (parseRoute().name === "history") render(); });
-    loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {});
+    setTimeout(() => { loadCatalog().then((config) => { if (absorbSiteGroups(config)) render(); }).catch(() => {}); }, 8000);
     const snap = loadTimelineSnap();
     const pill = window.ViktorychLocal ? window.ViktorychLocal.readPill() : [];
     if (pill && pill.length) STATE.pendingFeed = { posts: pill, feeds: (snap && snap.feeds) || [] };
@@ -19117,7 +19289,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       scheduleDeviceIndex();
       if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
-    } else if (painted) {
+    } else if (painted || document.querySelector("#app [data-boot-card]")) {
       STATE.loading = false;
     } else {
       STATE.loading = true;
@@ -19150,23 +19322,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       catalogApplied = true;
       const idbDoc = await newerSnap;
       if (idbDoc) adoptSavedFeed(idbDoc);
-      notePublished(loaded);
-      const includeNew = arrivalMode() === "insert";
-      if (!STATE.data || !Array.isArray(STATE.data.posts)) {
-        STATE.data = withMemory(loaded);
-      } else {
-        const merged = mergeCatalog(STATE.data, loaded, includeNew);
-        STATE.data = withMemory(merged.doc);
-        if (!includeNew && merged.added.length) {
-          STATE.pendingFeed = loaded;
-          showPill(merged.added.concat(STATE.pendingLive || []));
-        } else if (includeNew) {
-          STATE.pendingFeed = null;
-          if (!(STATE.pendingLive || []).length) showPill([]);
+      const keepSaved = !!(loaded && loaded.missing && STATE.data && Array.isArray(STATE.data.posts) && STATE.data.posts.length);
+      if (!keepSaved) {
+        const incoming = loaded && loaded.missing ? emptyCatalog() : loaded;
+        notePublished(incoming);
+        const includeNew = arrivalMode() === "insert";
+        if (!STATE.data || !Array.isArray(STATE.data.posts)) {
+          STATE.data = withMemory(incoming);
+        } else {
+          const merged = mergeCatalog(STATE.data, incoming, includeNew);
+          STATE.data = withMemory(merged.doc);
+          if (!includeNew && merged.added.length) {
+            STATE.pendingFeed = incoming;
+            showPill(merged.added.concat(STATE.pendingLive || []));
+          } else if (includeNew) {
+            STATE.pendingFeed = null;
+            if (!(STATE.pendingLive || []).length) showPill([]);
+          }
         }
+        saveHomeSnapshot();
       }
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
-      saveHomeSnapshot();
       if (window.ViktorychShorts && window.ViktorychShorts.visible()) await window.ViktorychShorts.pull();
       ensureVideoOwners();
       applyIaPreview(STATE.data);
@@ -19256,58 +19432,75 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     render();
     syncWorkerState();
   });
-  if (window.FeedsTV && window.FeedsTV.attach) window.FeedsTV.attach();
-  if (window.FeedsTranslate) window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
-  if (window.FeedsPeople) {
-    window.FeedsPeople.bind({
-      esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
-      followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
-      sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
-      statusHash: statusHash, watchHash: watchHash, render: render,
-      connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
-      extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
-      ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsPeople.start();
+  function bindShellModules(andRender) {
+    const blocked = window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking();
+    if (window.FeedsTV && window.FeedsTV.attach && !window.FeedsTV.__shell) {
+      window.FeedsTV.__shell = true;
+      window.FeedsTV.attach();
+    }
+    if (window.FeedsTranslate && !window.FeedsTranslate.__shell) {
+      window.FeedsTranslate.__shell = true;
+      window.FeedsTranslate.bind({ state: STATE, linkify: linkify, esc: esc, render: render, save: saveSettings, textHtml: textHtml });
+    }
+    if (window.FeedsPeople && !window.FeedsPeople.__shell) {
+      window.FeedsPeople.__shell = true;
+      window.FeedsPeople.bind({
+        esc: esc, avatar: avatar, icon: icon, bioBlock: bioBlock, card: card, formatCount: formatCount,
+        followButtonClean: followButtonClean, bellButton: bellButton, emptyBlock: emptyBlock, archiveSentinel: archiveSentinel,
+        sourceBadge: sourceBadge, posts: posts, feeds: feeds, ensureYtMeta: ensureYtMeta,
+        statusHash: statusHash, watchHash: watchHash, render: render,
+        connectHref: (person, tab) => person && person.id && (tab === "followers" || tab === "following") ? "#/p/" + encodeURIComponent(person.id) + "/" + tab : "",
+        extraFollowers: (id) => window.ViktorychAccounts && window.ViktorychAccounts.followersOf ? window.ViktorychAccounts.followersOf(id) : 0,
+        ensureCounts: (id) => { if (window.ViktorychAccounts && window.ViktorychAccounts.ensureCounts) window.ViktorychAccounts.ensureCounts(id); }
+      });
+      if (!blocked) window.FeedsPeople.start();
+    }
+    if (window.FeedsDiscord && !window.FeedsDiscord.__shell) {
+      window.FeedsDiscord.__shell = true;
+      window.FeedsDiscord.bind({
+        esc: esc,
+        render: render,
+        stay: () => { scrollFreeze = false; routing = false; },
+        noteHash: (hash) => {
+          lastKey = hash || (location.hash || "#/");
+          STATE.scrollKey = "#/messages";
+        }
+      });
+      if (!blocked) window.FeedsDiscord.start();
+    }
+    if (window.Stories && !window.Stories.__shell) {
+      window.Stories.__shell = true;
+      window.Stories.bind({
+        icon: icon,
+        render: render,
+        follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
+        dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
+      });
+    }
+    if (window.Spaces && !window.Spaces.__shell) {
+      window.Spaces.__shell = true;
+      window.Spaces.bind({
+        isFollowed: isFollowed,
+        render: render,
+        findFeed: findFeed,
+        shareRoot: shareRoot,
+        toast: toast
+      });
+      if (!blocked) window.Spaces.start();
+    }
+    if (window.SIntelMusic && window.SIntelMusic.bind && !window.SIntelMusic.__shell && !blocked) {
+      window.SIntelMusic.__shell = true;
+      window.SIntelMusic.bind({
+        render: function () { render(); },
+        toast: toast,
+        go: goHash,
+        repo: function () { return GITHUB_REPO; }
+      });
+    }
+    if (andRender && !blocked) render();
   }
-  if (window.FeedsDiscord) {
-    window.FeedsDiscord.bind({
-      esc: esc,
-      render: render,
-      stay: () => { scrollFreeze = false; routing = false; },
-      noteHash: (hash) => {
-        lastKey = hash || (location.hash || "#/");
-        STATE.scrollKey = "#/messages";
-      }
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.FeedsDiscord.start();
-  }
-  if (window.Stories) {
-    window.Stories.bind({
-      icon: icon,
-      render: render,
-      follows: function () { return (STATE.settings && STATE.settings.follows) || []; },
-      dataUrl: "https://raw.githubusercontent.com/" + GITHUB_REPO + "/data/stories.json"
-    });
-  }
-  if (window.Spaces) {
-    window.Spaces.bind({
-      isFollowed: isFollowed,
-      render: render,
-      findFeed: findFeed,
-      shareRoot: shareRoot,
-      toast: toast
-    });
-    if (!(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) window.Spaces.start();
-  }
-  if (window.SIntelMusic && window.SIntelMusic.bind && !(window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking())) {
-    window.SIntelMusic.bind({
-      render: function () { render(); },
-      toast: toast,
-      go: goHash,
-      repo: function () { return GITHUB_REPO; }
-    });
-  }
+  bindShellModules(false);
+  window.addEventListener("viktorych-late", () => bindShellModules(true));
   function bindCommunitiesModule() {
     if (!window.ViktorychCommunities) return;
     window.ViktorychCommunities.requestRender = function () { render(); };
@@ -19345,9 +19538,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (info.name === "communities") bindCommunitiesModule();
     if (!info.silent) render();
   });
-  if (window.ViktorychLazy && window.ViktorychLazy.preload) {
-    window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
-  }
+  setTimeout(() => {
+    if (window.ViktorychLazy && window.ViktorychLazy.preload) {
+      window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
+    }
+  }, 8000);
   window.addEventListener("viktorych-key-alert", function (event) {
     const detail = event.detail || {};
     if (!detail.id || !detail.text) return;
