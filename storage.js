@@ -119,6 +119,7 @@
     if (!url || blockedPath(url) || tiktokHost(url.hostname)) return false;
     if (shouldCacheMedia(url)) return false;
     var path = url.pathname || "";
+    if (/\/v1\/presence(?:\/|$|\?)/i.test(path) || /\/v1\/channel(?:\/|$|\?)/i.test(path)) return false;
     if (/\/v1\//i.test(path) && !feedV1(path) && !/\/v1\/owner\/tiktok\/recordings$/i.test(path)) return false;
     var cat = categoryOf(url);
     if (cat === "feeds" || cat === "messages" || cat === "profiles" || cat === "threads" || cat === "search" || cat === "explore" || cat === "notifications" || cat === "shorts" || cat === "drafts" || cat === "lives") {

@@ -77,6 +77,16 @@ Drive is a private file store for the owner account only. The Photos section use
 
 A missing session gets 404. Any other session gets 403. Chunks stay under 19 MB. A file can be up to 2 GiB. The browser waits about 1.1 seconds between Telegram calls.
 
+## Presence
+
+`GET /v1/presence` is your own status. `GET /v1/presence?ids=` reads up to 40 accounts. Exact last-seen times follow Telegram: if either person would hide that time, both see a recent placeholder and `lastSeen` is 0. Custom status text is at most 80 characters and is not hidden by that setting. `POST /v1/presence` is the heartbeat (`active`, `idle`, or `hidden`). The same preference, activity, and privacy inside 55 seconds does not write again. `PATCH /v1/presence` sets the preference (`online`, `idle`, `dnd`, `invisible`), who can see last seen (`everyone`, `follows`, `nobody`), and a custom status.
+
+Reads are cached at the edge for about 20 seconds as raw rows. The response is `private, max-age=15` so a shared cache cannot reuse one viewer's answer. The page does not keep those responses in the local feed cache.
+
+`POST /v1/channel/ticket` returns a single-use ticket. `GET /v1/channel?ticket=` upgrades to a hibernating WebSocket on that account's Durable Object. The socket subscribes to topics (`presence`, `notifications`) and can watch other account ids. A change is pushed only when the visible state, privacy, or custom status changes. The one-minute heartbeat stays the fallback when the socket is down. The page connects only while it is visible.
+
+Deleting an account removes `account_presence`, `account_status`, `channel_tickets`, and that account's channel object.
+
 ## Local checks
 
 ```sh
