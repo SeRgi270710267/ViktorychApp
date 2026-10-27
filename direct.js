@@ -230,7 +230,8 @@
     var settings = dev && dev.read ? dev.read() : null;
     var signals = dev && dev.signals ? dev.signals() : {};
     var enabled = !dev || !dev.featureOn || dev.featureOn(settings || dev.normalize(null), "direct", signals);
-    var hit = cacheGet(primary, Date.now());
+    var fresh = !!(init && init.fresh);
+    var hit = !fresh && cacheGet(primary, Date.now());
     if (hit && enabled) {
       note("direct");
       if (dev && dev.noteStat) dev.noteStat("local", "direct", jsonSize(hit), 1);
@@ -277,7 +278,7 @@
     }
     if (!allows(primary)) return remote().catch(function (err) { err.both = true; throw err; });
     if (!enabled) return remote().catch(function () { return json(primary); });
-    if (!dev || !dev.runLocal) return json(primary, typeof server === "string" ? server : githubMirror(primary));
+    if (!dev || !dev.runLocal) return json(primary, typeof server === "string" ? server : githubMirror(primary), init);
     var host = "";
     try { host = new URL(primary).hostname; } catch (err) { host = primary; }
     var distinct = typeof server === "function" || (typeof server === "string" && server && server !== primary) || !!githubMirror(primary);
@@ -290,12 +291,14 @@
     }).then(function (out) { return out.value; });
   }
 
-  function json(url, fallback) {
+  function json(url, fallback, opts) {
     var key = String(url || "");
-    var hit = cacheGet(key, Date.now());
-    if (hit) {
-      note("direct");
-      return Promise.resolve(hit);
+    if (!(opts && opts.fresh)) {
+      var hit = cacheGet(key, Date.now());
+      if (hit) {
+        note("direct");
+        return Promise.resolve(hit);
+      }
     }
     return fetchPublic(key, fallback).then(function (res) {
       if (!res || !res.ok) {

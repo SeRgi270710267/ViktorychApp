@@ -518,7 +518,10 @@
       var raw = localStorage.getItem(POLICY_KEY);
       if (!raw) return null;
       return normalizePolicy(JSON.parse(raw));
-    } catch (err) { return null; }
+    } catch (err) {
+      try { localStorage.removeItem(POLICY_KEY); } catch (ignore) { /* the next open uses the default policy */ }
+      return null;
+    }
   }
 
   function saveLocal(next) {
@@ -836,6 +839,16 @@
     askPersist();
   }
 
+  function applyDeviceCap() {
+    var saved = loadLocal();
+    if (saved && saved.unlimited) return policy;
+    var next = normalizePolicy(saved || policy);
+    policy = next;
+    if (!saved || saved.maxBytes !== next.maxBytes || saved.unlimited !== next.unlimited) saveLocal(policy);
+    post({ type: "storage-policy", policy: policy });
+    return policy;
+  }
+
   function start() {
     policy = loadLocal() || normalizePolicy(null);
     if (!loadLocal() && typeof navigator !== "undefined" && navigator.storage && navigator.storage.estimate) {
@@ -867,6 +880,7 @@
     keepMs: keepMs,
     defaultMaxBytes: defaultMaxBytes,
     normalizePolicy: normalizePolicy,
+    applyDeviceCap: applyDeviceCap,
     planEviction: planEviction,
     mediaFresh: mediaFresh,
     parseByteRange: parseByteRange,

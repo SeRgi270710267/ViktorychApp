@@ -5,6 +5,8 @@
  * Never calls paid X API endpoints (enforced by x_guard).
  */
 
+import { invalidate } from "./edge-cache.js";
+
 export const IDENTITY_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS account_identities (id INTEGER PRIMARY KEY AUTOINCREMENT, public_id TEXT NOT NULL, platform TEXT NOT NULL, handle TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '', proof_url TEXT NOT NULL DEFAULT '', verification_type TEXT NOT NULL DEFAULT 'challenge', verified INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, UNIQUE(public_id, platform, handle))",
   "CREATE INDEX IF NOT EXISTS account_identities_pub ON account_identities(public_id, created_at DESC)",
@@ -360,6 +362,7 @@ export async function handleIdentitiesRoute(request, env, path, url, helpers) {
 
     // Clean up used challenge
     await env.DB.prepare("DELETE FROM identity_challenges WHERE challenge_id = ?").bind(challengeId).run();
+    await invalidate(env, "p:" + row.public_id);
 
     return json(200, {
       ok: true,
@@ -402,6 +405,7 @@ export async function handleIdentitiesRoute(request, env, path, url, helpers) {
     } else {
       return json(400, { error: "missing_identity_id" });
     }
+    await invalidate(env, "p:" + row.public_id);
 
     return json(200, { ok: true, removed: true });
   }

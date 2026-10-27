@@ -75,7 +75,10 @@
       var parsed = raw ? JSON.parse(raw) : null;
       if (!parsed || !parsed.token || !parsed.account) return null;
       return parsed;
-    } catch (err) { return null; }
+    } catch (err) {
+      removeStored("account-v1");
+      return null;
+    }
   }
   function writeSession(session) {
     writeStored("account-v1", JSON.stringify(session));
@@ -183,6 +186,35 @@
   function hasApi() {
     return !!(currentApi() || (config().api || config().backupApi));
   }
+  function mirrorPageFetch(input, init, url) {
+    var api = window.ViktorychMirror;
+    if (!api || !api.mirrorHost(location.hostname)) return nativeFetch(input, init);
+    var method = (init && init.method) || (typeof input !== "string" && input && input.method) || "GET";
+    if (String(method).toUpperCase() !== "GET" || url.origin !== location.origin) return nativeFetch(input, init);
+    var root = api.appRoot(location.origin, location.pathname, location.hostname);
+    var rel = api.relativeTo(root, url.href);
+    if (!rel || /^(?:v1\/|tg\/|ap\/|\.well-known\/)/.test(rel)) return nativeFetch(input, init);
+    return nativeFetch(input, init).then(function (res) {
+      if (!api.failoverStatus(res.status)) return res;
+      return mirrorPageRetry(rel, res);
+    }).catch(function () {
+      return mirrorPageRetry(rel, null);
+    });
+  }
+  function mirrorPageRetry(rel, fallback) {
+    var api = window.ViktorychMirror;
+    var root = api.appRoot(location.origin, location.pathname, location.hostname);
+    var bases = api.bases(root, "", "").filter(function (base) { return base !== api.normalizeBase(root); });
+    var next = bases.length ? api.rewrite(bases[0], rel) : "";
+    if (!next) return fallback || Promise.reject(new Error("fetch"));
+    return nativeFetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store" }).then(function (res) {
+      if (res && res.ok && res.type !== "opaque") return res;
+      return fallback || res;
+    }).catch(function () {
+      if (fallback) return fallback;
+      return Promise.reject(new Error("fetch"));
+    });
+  }
   function patchedFetch(input, init) {
     var raw = typeof input === "string" ? input : (input && input.url) || "";
     var url;
@@ -190,8 +222,7 @@
     catch (err) { return nativeFetch(input, init); }
     if (url.origin === location.origin && /(^|\/)v1\//.test(url.pathname)) return nativeFetch(input, init);
     var key = dataKey(url);
-    if (!key) return nativeFetch(input, init);
-    if (!config().gate) return nativeFetch(input, init);
+    if (!key || !config().gate) return mirrorPageFetch(input, init, url);
     var session = readSession();
     if (key === "BLOCK" || !session) return Promise.resolve(new Response("", { status: 401 }));
     var apiRoot = currentApi();
@@ -401,8 +432,9 @@
     return src ? "photo" : "default";
   }
   function presenceWrap(id, html, opener) {
-    if (!window.ViktorychPresence || !/^\d{12}$/.test(String(id || ""))) return html;
-    return window.ViktorychPresence.wrap(id, html, opener ? ' data-acct="presence-open"' : "");
+    var api = window.ViktorychPresence;
+    if (!api || typeof api.wrap !== "function" || !/^\d{12}$/.test(String(id || ""))) return html;
+    return api.wrap(id, html, opener ? ' data-acct="presence-open"' : "");
   }
   function publicAvatar(src, accountFace, cls) {
     var mode = faceOf("picture", src, accountFace);
@@ -2167,7 +2199,7 @@
     return '<div class="set-block acct-settings" data-delete-form><p class="set-sub">' + esc(tr("This permanently deletes this account. Your profile, photos, sessions, follows, followers, friends, notification tabs, feed settings, groups, drafts, likes, bookmarks, watch history, community posts, vault, drive files, linked accounts, and uploads are removed. The handle can stay reserved so nobody else can take it. This cannot be undone.")) + '</p><div class="acct-field"><input id="acct-delete-number" name="accountNumber" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder=" " data-max="16" value="' + esc(grouped(deleteState.accountNumber || "")) + '"><label for="acct-delete-number">' + esc(tr("Enter your account number again.")) + '</label></div><div class="acct-field"><input id="acct-delete-handle" name="confirmHandle" type="text" autocomplete="off" spellcheck="false" maxlength="32" placeholder=" " value="' + esc(deleteState.handle || "") + '"><label for="acct-delete-handle">' + esc(tr("Confirm your handle")) + '</label></div><p class="acct-error">' + esc(deleteState.error || "") + '</p><button class="acct-next acct-danger" type="button" data-acct="delete-go"' + (ready && !deleteState.busy ? "" : " disabled") + ">" + esc(tr("Delete account")) + "</button></div>";
   }
   function wipeDevice() {
-    var prefixes = ["viktorychapp-", "superintelapp-", "rss-feeds-", "va_cm_"];
+    var prefixes = ["viktorychapp-", "superintelapp-", "rss-" + "feeds-", "va_cm_"];
     try {
       var keys = [];
       for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));

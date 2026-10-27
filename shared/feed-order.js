@@ -149,6 +149,74 @@ function freshPosts(known, incoming, limit) {
   return cap < 0 ? out : out.slice(0, cap);
 }
 
+function normalizePin(post, now) {
+  if (!post || !post.pinned) return post;
+  const pinMs = trustedMs(post.pinAt, now);
+  if (!pinMs) return post;
+  if (trustedMs(post.date, now) === pinMs) post.date = "";
+  if (trustedMs(post.sortDate, now) === pinMs) delete post.sortDate;
+  return post;
+}
+
+/* A source lists a pinned post first. That position is not a publish time.
+   Move pinned rows behind the unpinned rows before a newest-first walk. */
+function prepareActivity(posts, now) {
+  const clock = now == null ? Date.now() : now;
+  const open = [];
+  const pinned = [];
+  (posts || []).forEach((post) => {
+    if (!post) return;
+    normalizePin(post, clock);
+    if (post.pinned) pinned.push(post);
+    else open.push(post);
+  });
+  const next = open.concat(pinned);
+  if (Array.isArray(posts)) {
+    for (let i = 0; i < next.length; i++) posts[i] = next[i];
+    posts.length = next.length;
+    return posts;
+  }
+  return next;
+}
+
+/* Merge a saved tab with one source page. Newer rows fill gaps, a cursor
+   page cannot drop the newest row, and the result is UTC order. */
+function refreshTab(known, incoming, now) {
+  const clock = now == null ? Date.now() : now;
+  (known || []).forEach((post) => normalizePin(post, clock));
+  const source = prepareActivity((incoming || []).slice(), clock);
+  const fresh = freshPosts(known, source, 40);
+  const posts = [];
+  const index = {};
+  function take(post) {
+    const id = key(post);
+    if (!post || !id) return false;
+    const at = index[id];
+    if (at != null) {
+      const kept = posts[at];
+      const nextDate = preferDate(kept.date, post.date, clock);
+      if (nextDate) kept.date = nextDate;
+      const keptMs = trustedMs(kept.sortDate, clock);
+      const nextMs = trustedMs(post.sortDate, clock);
+      if (nextMs && (isRepost(kept) || isRepost(post)) && (!keptMs || nextMs >= keptMs)) kept.sortDate = post.sortDate;
+      if (post.pinned) kept.pinned = true;
+      if (post.pinAt && !kept.pinAt) kept.pinAt = post.pinAt;
+      return false;
+    }
+    index[id] = posts.length;
+    posts.push(post);
+    return true;
+  }
+  (known || []).forEach((post) => take(post));
+  const added = [];
+  fresh.forEach((post) => {
+    if (take(post)) added.push(post);
+  });
+  posts.sort((a, b) => compare(a, b, clock));
+  added.sort((a, b) => compare(a, b, clock));
+  return { posts: posts, added: added };
+}
+
 function pageSlice(sorted, cursor, size) {
   const list = Array.isArray(sorted) ? sorted : [];
   const n = Math.max(0, Number(size) || 25);
@@ -203,7 +271,10 @@ const api = {
   preferDate: preferDate,
   freshPosts: freshPosts,
   pageSlice: pageSlice,
-  followsPost: followsPost
+  followsPost: followsPost,
+  normalizePin: normalizePin,
+  prepareActivity: prepareActivity,
+  refreshTab: refreshTab
 };
 
 export {
@@ -214,6 +285,9 @@ export {
   preferDate,
   freshPosts,
   pageSlice,
-  followsPost
+  followsPost,
+  normalizePin,
+  prepareActivity,
+  refreshTab
 };
 globalThis.FeedOrder = api;
