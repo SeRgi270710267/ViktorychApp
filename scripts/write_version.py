@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SHA_RE = re.compile(r"^[0-9a-f]{7,64}$")
+BUILT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 MENTION_RE = re.compile(r"@[A-Za-z0-9][\w.-]*")
 PR_SUFFIX_RE = re.compile(r"\s*\(#\d+\)\s*$")
 MERGE_PR_RE = re.compile(r"^Merge pull request #\d+ from \S+", re.I)
@@ -87,6 +88,34 @@ def pages_version_url(repo: str) -> str:
     return f"https://{owner}.github.io/{name}/version.json"
 
 
+def built_stamp(env_value: str, now: str) -> str:
+    text = str(env_value or "").strip()
+    if BUILT_RE.fullmatch(text):
+        return text
+    return now
+
+
+def previous_from_payload(payload) -> dict:
+    """Keep the manifest that is already live. A miss writes an empty sha.
+
+    The empty sha does not advertise a version whose files are not published yet.
+    """
+    if not isinstance(payload, dict):
+        return build_doc("", "", [])
+    sha = valid_sha(str(payload.get("sha") or ""))
+    if not sha:
+        return build_doc("", "", [])
+    built = str(payload.get("built") or "")
+    if not BUILT_RE.fullmatch(built):
+        built = ""
+    notes = []
+    for item in payload.get("changelog") or []:
+        text = clean_title(str(item))
+        if text:
+            notes.append(text)
+    return build_doc(sha, built, notes)
+
+
 def build_doc(sha: str, built: str, notes: list[str]) -> dict:
     full = valid_sha(sha)
     return {
@@ -150,13 +179,20 @@ def main(argv: list[str] | None = None) -> int:
         print("version.json used a placeholder sha")
     repo = os.environ.get("GITHUB_REPOSITORY") or ""
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
-    built = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    notes = changelog_for(repo, sha, token) if repo else []
-    doc = build_doc(sha, built, notes)
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    built = built_stamp(os.environ.get("VERSION_BUILT") or "", now)
+    previous = "--previous" in args
+    if previous:
+        payload = fetch_json(pages_version_url(repo), LIVE_TIMEOUT) if repo else None
+        doc = previous_from_payload(payload if isinstance(payload, dict) else None)
+        print("version.json kept the published manifest" if doc.get("sha") else "version.json has no published manifest yet")
+    else:
+        notes = changelog_for(repo, sha, token) if repo else []
+        doc = build_doc(sha, built, notes)
     path = Path(out)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"version.json sha={doc['short']} built={built}")
+    print(f"version.json sha={doc['short']} built={doc['built']}")
     return 0
 
 
@@ -183,6 +219,12 @@ def selftest() -> None:
     assert pages_version_url("ViktorychGroup/ViktorychApp").endswith("/ViktorychApp/version.json")
     assert pages_version_url("octocat/octocat.github.io") == "https://octocat.github.io/version.json"
     assert build_doc("not-a-sha", "t", [])["sha"] == ""
+    assert built_stamp("2026-10-27T00:00:00Z", "2020-01-01T00:00:00Z") == "2026-10-27T00:00:00Z"
+    assert built_stamp("yesterday", "2020-01-01T00:00:00Z") == "2020-01-01T00:00:00Z"
+    kept = previous_from_payload({"sha": "abcdef1234567890", "built": "2020-01-01T00:00:00Z", "changelog": ["Keep this (#4)"]})
+    assert kept["sha"] == "abcdef1234567890" and kept["changelog"] == ["Keep this"]
+    assert previous_from_payload({"sha": "nope"})["sha"] == ""
+    assert previous_from_payload(None)["sha"] == ""
     print("write_version ok")
 
 
