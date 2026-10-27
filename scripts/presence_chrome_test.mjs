@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createReadStream, statSync } from "node:fs";
@@ -59,51 +59,75 @@ function which(name) {
 }
 
 function chromeBin() {
-  return process.env.CHROME || which("google-chrome") || which("google-chrome-stable") || which("chromium") || which("chromium-browser");
+  const named = [process.env.CHROME, process.env.CHROME_PATH, process.env.CHROME_BIN].filter(Boolean);
+  for (const bin of named) {
+    try { statSync(bin); return bin; } catch (err) { /* try the next candidate */ }
+  }
+  // setup-chrome puts its binary on PATH as `chrome`. The runner's
+  // google-chrome wrapper stays first for `which google-chrome` and never
+  // opens a DevTools port, so this check used to time out and skip deploy.
+  return which("chrome") || which("google-chrome") || which("google-chrome-stable") || which("chromium") || which("chromium-browser");
+}
+
+async function readVersion(port) {
+  for (const host of ["127.0.0.1", "localhost"]) {
+    try {
+      const res = await fetch("http://" + host + ":" + port + "/json/version");
+      if (!res.ok) continue;
+      const version = await res.json();
+      if (version && version.webSocketDebuggerUrl) return version;
+    } catch (err) { /* this host is not listening yet */ }
+  }
+  return null;
+}
+
+function readActivePort(profile) {
+  try {
+    const line = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0].trim();
+    return line || "";
+  } catch (err) { return ""; }
 }
 
 async function launchChrome(bin) {
+  let lastLog = "";
   for (let attempt = 0; attempt < 4; attempt++) {
     const profile = mkdtempSync(join(tmpdir(), "presence-chrome-"));
     const debugPort = 9400 + Math.floor(Math.random() * 500);
+    const logPath = join(profile, "chrome.log");
+    const logFd = openSync(logPath, "a");
     const child = spawn(bin, [
       "--headless=new",
       "--no-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
       "--remote-allow-origins=*",
-      "--no-first-run",
-      "--no-default-browser-check",
       "--remote-debugging-port=" + debugPort,
       "--user-data-dir=" + profile,
+      "--no-first-run",
+      "--no-default-browser-check",
       "about:blank"
-    ], { stdio: "ignore" });
+    ], { stdio: ["ignore", logFd, logFd] });
+    closeSync(logFd);
     const started = Date.now();
     let version = null;
     while (Date.now() - started < 20000) {
       if (child.exitCode != null) break;
-      const ports = [String(debugPort)];
-      try {
-        const active = readFileSync(join(profile, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0].trim();
-        if (active && ports.indexOf(active) < 0) ports.push(active);
-      } catch (err) { /* port file not written yet */ }
-      for (const port of ports) {
-        try {
-          const res = await fetch("http://127.0.0.1:" + port + "/json/version");
-          if (res.ok) {
-            const body = await res.json();
-            if (body && body.webSocketDebuggerUrl) { version = body; break; }
-          }
-        } catch (err) { /* debugger not up yet */ }
+      version = await readVersion(debugPort);
+      if (version) return { child, version, profile };
+      const active = readActivePort(profile);
+      if (active && active !== String(debugPort)) {
+        version = await readVersion(active);
+        if (version) return { child, version, profile };
       }
-      if (version) return { child, profile, version };
       await new Promise((done) => setTimeout(done, 200));
     }
+    try { lastLog = readFileSync(logPath, "utf8").trim().slice(-400); } catch (err) { lastLog = ""; }
     try { child.kill("SIGKILL"); } catch (err) { /* already gone */ }
     await new Promise((done) => setTimeout(done, 200));
     try { rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch (err) { /* the profile can still be busy */ }
   }
-  throw new Error("chrome");
+  const detail = lastLog ? " " + lastLog.replace(/\s+/g, " ") : "";
+  throw new Error("chrome " + bin + detail);
 }
 
 const pageHtml = `<!doctype html>
@@ -207,11 +231,13 @@ async function main() {
   if (!bin) throw new Error("chrome");
   const live = await startServer();
   const port = live.address().port;
-  const launched = await launchChrome(bin);
-  const child = launched.child;
-  const profile = launched.profile;
-  const version = launched.version;
+  let child = null;
+  let profile = "";
   try {
+    const launched = await launchChrome(bin);
+    child = launched.child;
+    profile = launched.profile;
+    const version = launched.version;
     const browser = new WebSocket(version.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       browser.addEventListener("open", resolve);
