@@ -6,7 +6,7 @@ const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
+importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./storage.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -49,6 +49,8 @@ const SHELL_FILES = [
   "./i18n/es.js",
   "./app.js",
   "./update.js",
+  "./storage.js",
+  "./storage.css",
   "./translate.js",
   "./translate.css",
   "./people.js",
@@ -286,15 +288,7 @@ function isCommentApi(url) {
 }
 
 function idb() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open("superintelapp-sw", 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+  return self.ViktorychStorage.openDb();
 }
 
 function idbGet(db, key) {
@@ -315,47 +309,104 @@ function idbSet(db, key, value) {
   });
 }
 
-async function trimMedia(cache) {
+async function rememberMedia(url, bytes, category, cacheName) {
   const db = await idb();
-  const rows = (await idbGet(db, "media-index")) || [];
+  const prev = await self.ViktorychStorage.getFile(db, url);
   const now = Date.now();
-  const fresh = rows.filter((row) => row && now - row.at < MEDIA_TTL);
-  let total = fresh.reduce((sum, row) => sum + (row.bytes || 0), 0);
-  fresh.sort((a, b) => a.at - b.at);
-  const dropped = [];
-  while (total > MEDIA_LIMIT && fresh.length) {
-    const row = fresh.shift();
-    total -= row.bytes || 0;
-    dropped.push(row.url);
-  }
-  await Promise.all(dropped.map((url) => cache.delete(url)));
-  const expired = rows.filter((row) => row && now - row.at >= MEDIA_TTL).map((row) => row.url);
-  await Promise.all(expired.map((url) => cache.delete(url)));
-  await idbSet(db, "media-index", fresh);
+  const cat = category || (prev && prev.category) || self.ViktorychStorage.categoryOf(url) || "other";
+  if (!cat) return;
+  await self.ViktorychStorage.putFile(db, {
+    url: url,
+    bytes: bytes || (prev && prev.bytes) || 0,
+    category: cat,
+    at: now,
+    saved: (prev && prev.saved) || now,
+    cacheName: cacheName || (prev && prev.cacheName) || MEDIA
+  });
 }
 
-async function rememberMedia(url, bytes) {
+async function trimMedia() {
   const db = await idb();
-  const rows = ((await idbGet(db, "media-index")) || []).filter((row) => row && row.url !== url);
-  rows.push({ url: url, bytes: bytes || 200 * 1024, at: Date.now() });
-  await idbSet(db, "media-index", rows);
+  const saved = await self.ViktorychStorage.readPolicy(db);
+  const max = saved.unlimited ? Infinity : (saved.maxBytes || MEDIA_LIMIT);
+  let rows = await self.ViktorychStorage.listFiles(db);
+  if (!rows.length) {
+    const old = (await idbGet(db, "media-index")) || [];
+    rows = old.filter((row) => row && row.url).map((row) => ({
+      url: row.url,
+      bytes: row.bytes || 0,
+      category: self.ViktorychStorage.categoryOf(row.url) || "other",
+      at: row.at || Date.now(),
+      saved: row.at || Date.now(),
+      cacheName: MEDIA
+    }));
+  }
+  const plan = self.ViktorychStorage.planEviction(rows, max, Date.now(), self.ViktorychStorage.keepMs(saved.keep));
+  await Promise.all(plan.drop.map(async (row) => {
+    try {
+      const cache = await caches.open(row.cacheName || MEDIA);
+      await cache.delete(row.url);
+    } catch (err) { /* a missing cache is already gone */ }
+  }));
+  await self.ViktorychStorage.replaceFiles(db, plan.keep);
+  await idbSet(db, "media-index", []);
 }
 
-async function staleWhileRevalidate(request) {
+async function wipeUserCaches(full) {
+  await caches.delete(DATA);
+  await caches.delete(MEDIA);
+  await caches.delete(LIVE);
+  if (full) {
+    try { await caches.delete(OFFLINE_MUSIC); } catch (err) { /* music downloads are already gone */ }
+  }
+  try {
+    const db = await idb();
+    await self.ViktorychStorage.replaceFiles(db, []);
+    await idbSet(db, "media-index", []);
+  } catch (err) { /* the page clears the same stores */ }
+}
+
+async function staleWhileRevalidate(request, extraHeaders) {
+  if (self.ViktorychStorage.categoryOf(request.url) === "") return fetch(request);
   const cache = await caches.open(DATA);
-  const cached = await cache.match(request);
-  const update = fetch(request).then(async (res) => {
-    if (res && res.ok) {
-      try {
-        const cacheReq = request.cache === "no-store" ? new Request(request.url, { method: "GET" }) : request;
-        await cache.put(cacheReq, res.clone());
-      } catch (_) {}
-    }
-    return res;
-  }).catch(() => null);
+  const cacheReq = new Request(request.url, { method: "GET" });
+  const cached = await cache.match(cacheReq);
+  const headers = new Headers(extraHeaders || undefined);
   if (cached) {
+    const etag = cached.headers.get("etag");
+    const lastMod = cached.headers.get("last-modified");
+    if (etag) headers.set("If-None-Match", etag);
+    else if (lastMod) headers.set("If-Modified-Since", lastMod);
+  }
+  const update = (async () => {
+    const db = await idb();
+    try {
+      await self.ViktorychStorage.bump(db, "network");
+      const res = await fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+      const action = self.ViktorychStorage.revalidateAction(res && res.status);
+      if (action === "keep" && cached) {
+        await self.ViktorychStorage.touch(db, request.url);
+        broadcast({ type: "storage-online" });
+        return cached;
+      }
+      if (action === "store" && self.ViktorychStorage.shouldCacheFeed(request.url)) {
+        await cache.put(cacheReq, res.clone());
+        await rememberMedia(request.url, self.ViktorychStorage.byteLengthOf(res), self.ViktorychStorage.categoryOf(request.url), DATA);
+        await trimMedia();
+        broadcast({ type: "storage-online" });
+      }
+      return res;
+    } catch (err) {
+      if (cached) broadcast({ type: "storage-offline" });
+      return null;
+    }
+  })();
+  if (cached) {
+    const db = await idb();
+    await self.ViktorychStorage.bump(db, "hits");
+    await self.ViktorychStorage.touch(db, request.url);
     update.then((res) => {
-      if (!res) return;
+      if (!res || res === cached) return;
       self.clients.matchAll({ type: "window" }).then((clients) => {
         clients.forEach((client) => client.postMessage({ type: "data", url: request.url }));
       });
@@ -366,38 +417,74 @@ async function staleWhileRevalidate(request) {
   return res || new Response("{}", { status: 503, headers: { "Content-Type": "application/json" } });
 }
 
-async function cacheFirstMedia(request) {
-  const cache = await caches.open(MEDIA);
-  const cached = await cache.match(request);
-  if (cached) {
-    const db = await idb();
-    const rows = (await idbGet(db, "media-index")) || [];
-    const row = rows.find((item) => item && item.url === request.url);
-    if (!row || Date.now() - row.at < MEDIA_TTL) return cached;
-    cache.delete(request);
+async function serveMedia(request, extraHeaders) {
+  const parsed = new URL(request.url);
+  const headers = new Headers(extraHeaders || undefined);
+  const rangeHeader = request.headers.get("Range");
+  if (!self.ViktorychStorage.shouldCacheMedia(parsed)) {
+    if (rangeHeader) headers.set("Range", rangeHeader);
+    if ([...headers.keys()].length) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+    return fetch(request);
   }
+  const cache = await caches.open(MEDIA);
+  const fullReq = new Request(request.url, { method: "GET" });
+  let cached = await cache.match(fullReq);
+  const db = await idb();
+  const saved = await self.ViktorychStorage.readPolicy(db);
+  if (cached) {
+    const row = await self.ViktorychStorage.getFile(db, request.url);
+    if (row && !self.ViktorychStorage.mediaFresh(row, saved, Date.now())) {
+      await cache.delete(fullReq);
+      cached = null;
+    }
+  }
+  if (cached && !rangeHeader) {
+    await self.ViktorychStorage.bump(db, "hits");
+    await self.ViktorychStorage.touch(db, request.url);
+    return cached;
+  }
+  if (cached && rangeHeader) {
+    const partial = await self.ViktorychStorage.sliceCached(cached, rangeHeader);
+    if (partial) {
+      await self.ViktorychStorage.bump(db, "hits");
+      await self.ViktorychStorage.touch(db, request.url);
+      return partial;
+    }
+  }
+  await self.ViktorychStorage.bump(db, "network");
   try {
     let res;
-    if (isRuVisitor) {
+    const authed = headers.has("Authorization");
+    if (authed && rangeHeader) headers.set("Range", rangeHeader);
+    if (isRuVisitor && !authed) {
       const ctrl = new AbortController();
       const tid = setTimeout(() => ctrl.abort(), 2000);
-      try {
-        res = await fetch(request, { signal: ctrl.signal });
-      } finally {
-        clearTimeout(tid);
-      }
+      try { res = await fetch(request, { signal: ctrl.signal }); }
+      finally { clearTimeout(tid); }
+    } else if (authed) {
+      res = await fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
     } else {
       res = await fetch(request);
     }
-    if (res && (res.ok || res.type === "opaque")) {
-      await cache.put(request, res.clone());
-      const length = Number(res.headers.get("content-length")) || (res.type === "opaque" ? 200 * 1024 : 80 * 1024);
-      await rememberMedia(request.url, length);
-      await trimMedia(cache);
+    const store = res && (res.type === "opaque" || self.ViktorychStorage.revalidateAction(res.status) === "store");
+    if (store && !rangeHeader) {
+      await cache.put(fullReq, res.clone());
+      const length = self.ViktorychStorage.byteLengthOf(res);
+      await rememberMedia(request.url, length, self.ViktorychStorage.categoryOf(request.url), MEDIA);
+      await trimMedia();
     }
+    if (res) broadcast({ type: "storage-online" });
     return res;
   } catch (err) {
-    return cached || (isRuVisitor ? new Response("", { status: 504 }) : Response.error());
+    if (cached) {
+      broadcast({ type: "storage-offline" });
+      if (rangeHeader) {
+        const partial = await self.ViktorychStorage.sliceCached(cached, rangeHeader);
+        if (partial) return partial;
+      }
+      return cached;
+    }
+    return isRuVisitor ? new Response("", { status: 504 }) : Response.error();
   }
 }
 
@@ -405,7 +492,12 @@ async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(request);
-    if (res && res.ok) cache.put(request, res.clone());
+    if (res && res.ok) {
+      cache.put(request, res.clone());
+      if (cacheName === DATA) {
+        try { await rememberMedia(request.url, self.ViktorychStorage.byteLengthOf(res), self.ViktorychStorage.categoryOf(request.url), DATA); } catch (err) { /* the response still returns */ }
+      }
+    }
     return res;
   } catch (err) {
     const cached = await cache.match(request);
@@ -591,17 +683,25 @@ self.addEventListener("message", (event) => {
   if (data.type === "auth") {
     accountsAuthed = !!data.on;
     playToken = data.on && typeof data.token === "string" ? data.token : "";
-    event.waitUntil(idb().then((db) => idbSet(db, "auth-state", { on: accountsAuthed, token: playToken })).catch(() => {}));
+    event.waitUntil((async () => {
+      try {
+        const db = await idb();
+        await idbSet(db, "auth-state", { on: accountsAuthed, token: playToken });
+      } catch (err) { /* the page still signs out */ }
+      if (!data.on) await wipeUserCaches(data.wipe === "signout");
+    })());
     if (event.ports && event.ports[0]) {
       try { event.ports[0].postMessage({ ok: !!playToken }); } catch (err) { /* the page already continued */ }
     }
-    if (!data.on) {
-      event.waitUntil((async () => {
-        await caches.delete(DATA);
-        await caches.delete(MEDIA);
-        await caches.delete(LIVE);
-      })());
-    }
+  }
+  if (data.type === "storage-policy") {
+    event.waitUntil(idb().then(async (db) => {
+      await self.ViktorychStorage.writePolicy(db, data.policy || {});
+      await trimMedia();
+    }).catch(() => {}));
+  }
+  if (data.type === "storage-wipe") {
+    event.waitUntil(wipeUserCaches(true));
   }
   if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
   if (data.type === "cache-bookmark") event.waitUntil(cacheBookmark(data.urls));
@@ -638,8 +738,16 @@ self.addEventListener("message", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET") return;
   const url = new URL(request.url);
+  if ((request.method === "DELETE" && /\/v1\/account\/?$/i.test(url.pathname)) || (request.method === "POST" && /\/v1\/account\/delete\/?$/i.test(url.pathname))) {
+    event.respondWith((async () => {
+      const res = await fetch(request);
+      if (res && res.ok) await wipeUserCaches(true);
+      return res;
+    })());
+    return;
+  }
+  if (request.method !== "GET") return;
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
   if (url.origin === self.location.origin && url.pathname.toLowerCase().endsWith("/version.json")) {
     event.respondWith(fetch(new Request(request.url, { method: "GET", cache: "no-store" })).catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
@@ -661,6 +769,13 @@ self.addEventListener("fetch", (event) => {
       else if (/^Bearer\s+\S+/i.test(incoming)) headers.set("Authorization", incoming);
       const origin = request.headers.get("origin");
       if (origin) headers.set("origin", origin);
+      if (isOwnerPlay(url) || self.ViktorychStorage.categoryOf(url.href) === "") {
+        const range = request.headers.get("Range");
+        if (range) headers.set("Range", range);
+        return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });
+      }
+      if (self.ViktorychStorage.shouldCacheMedia(url)) return serveMedia(request, headers);
+      if (self.ViktorychStorage.shouldCacheFeed(url)) return staleWhileRevalidate(request, headers);
       const range = request.headers.get("Range");
       if (range) headers.set("Range", range);
       return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });
@@ -693,7 +808,13 @@ self.addEventListener("fetch", (event) => {
     );
     return;
   }
-  if (request.headers.has("range")) return;
+  if (request.headers.has("range")) {
+    if (self.ViktorychStorage.shouldCacheMedia(url)) {
+      event.respondWith(serveMedia(request));
+      return;
+    }
+    return;
+  }
   if (request.mode === "navigate") {
     event.respondWith((async () => {
       const home = shellDocument(url);
@@ -715,8 +836,8 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(request.headers.get("X-Feed-Refresh") === "1" ? networkFirst(request, DATA) : staleWhileRevalidate(request));
     return;
   }
-  if (isMedia(url)) {
-    event.respondWith(cacheFirstMedia(request));
+  if (isMedia(url) || self.ViktorychStorage.shouldCacheMedia(url)) {
+    event.respondWith(serveMedia(request));
     return;
   }
   if (isCommentApi(url)) {
@@ -763,7 +884,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|update\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|app\.js|update\.js|storage\.js|storage\.css|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {

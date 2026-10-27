@@ -116,10 +116,10 @@
   function blocking() {
     return !!(config().gate && !readSession());
   }
-  function tellSW(on) {
+  function tellSW(on, wipe) {
     if (!navigator.serviceWorker) return;
     var session = on ? readSession() : null;
-    var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "" };
+    var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "", wipe: wipe || "" };
     try {
       if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage(msg);
     } catch (err) { /* the worker may still be installing */ }
@@ -1015,7 +1015,7 @@
     var session = readSession();
     var token = session && session.token;
     removeStored("account-v1");
-    tellSW(false);
+    tellSW(false, "signout");
     var done = function () { location.replace(location.pathname + location.search); location.reload(); };
     if (!token || !hasApi()) { done(); return; }
     api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
