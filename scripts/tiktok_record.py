@@ -1653,7 +1653,9 @@ def cmd_upload(slot: str) -> int:
     channel = channels[index]
     pace = {"last": 0.0}
     idle_since = 0.0
-    deadline = time.time() + (340 * 60)
+    # The workflow allows one uploader. Leave before the job timeout so a
+    # queued run can take the rest of the buffer instead of waiting for hours.
+    deadline = time.time() + (15 * 60)
     dead = set()
     retry = {}
     slot_prefix = BUF_PREFIX + str(index) + "/"
@@ -1704,7 +1706,7 @@ def cmd_upload(slot: str) -> int:
                 idle_since = time.time()
             if time.time() - idle_since > 30:
                 log("upload idle")
-                break
+                return 0
             time.sleep(5)
             continue
         idle_since = 0.0
@@ -1746,7 +1748,7 @@ def cmd_upload(slot: str) -> int:
             kind = "init" if role == "init" else "segment"
             existing = d1_rows(token, account, database, "SELECT file_id FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? LIMIT 1", [object_key, kind, part_index])
             if not existing:
-                sent = send_document("https://api.telegram.org", bot, channel, local, object_key, pace)
+                sent = send_document("https://api.telegram.org", bot, channel, local, object_key, pace, max_time=90, max_wait=20)
                 remember_d1(token, account, database, {
                     "serve": True,
                     "bucket": BUCKET,
@@ -1780,6 +1782,7 @@ def cmd_upload(slot: str) -> int:
             time.sleep(2)
         finally:
             shutil.rmtree(local.parent, ignore_errors=True)
+    log("upload paused")
     return 0
 
 
@@ -2051,6 +2054,7 @@ def selftest() -> int:
     upload_yml = (ROOT / ".github/workflows/tiktok-live-upload.yml").read_text(encoding="utf-8")
     check("tiktok-record-${{ inputs.handle }}" in record_yml and "cancel-in-progress: false" in record_yml, "one recorder waits per handle and is not cancelled")
     check("group: tiktok-live-upload\n" in upload_yml and "tiktok-upload-${{" not in upload_yml, "one uploader runs at a time")
+    check("timeout-minutes: 20" in upload_yml and "max_time=90" in Path(__file__).read_text(encoding="utf-8"), "a stuck upload releases the runner")
     blob = b"segment-bytes"
     matched = {"sha256": hashlib.sha256(blob).hexdigest(), "size": len(blob)}
     check(piece_matches(blob, matched), "a segment matches its sha256")
