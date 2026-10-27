@@ -1470,7 +1470,7 @@
     });
     var start = imported || !local.length
       ? Promise.resolve({ status: 200 })
-      : api("/v1/follows/import", { method: "POST", token: session.token, body: { ids: local.slice(0, 400) } });
+      : api("/v1/follows/import", { method: "POST", token: session.token, body: { ids: local.slice(0, 5000) } });
     return start.then(function (res) {
       if (!imported && local.length && res && res.status === 200) writeStored(key, "1");
       return api("/v1/follows", { token: session.token });

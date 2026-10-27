@@ -93,6 +93,7 @@ const SHELL_FILES = [
   "./shared/drive-photos.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
+  "./shared/feed-order.js",
   "./shared/lazy-modules.js",
   "./favicon.svg",
   "./favicon.ico",

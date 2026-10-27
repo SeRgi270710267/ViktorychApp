@@ -1252,6 +1252,7 @@ def main() -> None:
     check(storage_flow.returncode == 0, "the storage cache helpers pass")
     check('src="storage.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "storage.js" in storage_workflow and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
     ia_backup_checks()
+    feed_order_checks()
     gdrive_checks()
     telegram_checks()
 
@@ -4701,6 +4702,59 @@ def story_checks() -> None:
         blocked["defaultFollow"] = False
         incoming.write_text(json.dumps({"feeds": [blocked]}), encoding="utf-8")
         check(auto_add.merge_into_file(base, incoming) == [], "a removed account is not committed again")
+
+
+def feed_order_checks() -> None:
+    import subprocess
+    from datetime import datetime, timezone
+
+    from adapters.common import dedupe_posts, order_ms, parse_time
+
+    moment = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    same = datetime(2026, 10, 21, 17, tzinfo=timezone.utc)
+    check(parse_time("2026-10-21T17:00:00") == same, "a timestamp without an offset is UTC")
+    check(parse_time("2026-10-21 17:00:00") == same, "a VK wall time is UTC")
+    check(parse_time("Wed Oct 21 17:00:00 +0000 2026") == same, "an X created_at is UTC")
+    check(parse_time("1761066000.0") == parse_time(1761066000), "a fractional unix time is a timestamp")
+    later = {"id": "b", "platform": "x", "date": "2026-10-21T17:00:00Z"}
+    earlier = {"id": "a", "platform": "x", "date": "2026-10-21T19:00:00+03:00"}
+    future = {"id": "z", "platform": "x", "date": "2099-01-01T00:00:00Z"}
+    missing = {"id": "m", "platform": "x", "date": ""}
+    repost = {"id": "r", "platform": "x", "kind": "repost", "date": "2026-10-20T00:00:00Z", "sortDate": "2026-10-21T18:00:00Z", "repostedBy": {"handle": "someone"}}
+    duplicate = {"id": "yt:video:abcdefghijk", "platform": "youtube", "url": "https://youtu.be/abcdefghijk", "date": "2026-10-21T17:00:00+00:00"}
+    mirror = {"id": "abcdefghijk", "platform": "youtube", "date": "2026-10-21T18:00:00Z"}
+    check(order_ms(later, now=moment) > order_ms(earlier, now=moment), "17:00 UTC sorts ahead of 16:00 UTC even when the offset reads 19:00")
+    check(order_ms(future, now=moment) == 0 and order_ms(missing, now=moment) == 0, "a future or missing time sorts last")
+    check(order_ms(repost, now=moment) > order_ms(later, now=moment), "a repost is ordered by its repost time")
+    ranked = dedupe_posts([earlier, future, later, missing, repost, duplicate, mirror])
+    check([post["id"] for post in ranked] == ["r", "abcdefghijk", "b", "a", "z", "m"], "mixed sources, reposts, and mirrors keep one row in UTC order")
+    check(next(post for post in ranked if post["id"] == "abcdefghijk")["date"] == "2026-10-21T17:00:00+00:00", "dedupe keeps the earlier real publish time")
+    import r2_catalog
+
+    class _Path:
+        def __init__(self, stamp):
+            self._stamp = stamp
+
+        def stat(self):
+            class _Stat:
+                pass
+
+            row = _Stat()
+            row.st_mtime = self._stamp
+            return row
+
+    ordered = r2_catalog.ordered_keys({
+        "archive/2020-01.json": _Path(10),
+        "feeds.json": _Path(1),
+        "data/communities/a.json": _Path(50),
+        "people.json": _Path(2),
+    })
+    check([key for key, _path in ordered] == ["feeds.json", "people.json", "data/communities/a.json", "archive/2020-01.json"], "the live catalog is uploaded before archive JSON, newest extras first")
+    proc = subprocess.run(["node", str(ROOT / "scripts" / "feed_order_test.mjs")], check=False)
+    check(proc.returncode == 0, "feed order fixtures")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    check("shared/feed-order.js" in (ROOT / "index.html").read_text(encoding="utf-8") and "./shared/feed-order.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "cp shared/feed-order.js _site/shared/" in (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8"), "the feed order helper is published with the shell")
+    check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8"), "new posts merge in place and the Following tab uses the signed-in accounts")
 
 
 def gdrive_checks() -> None:
