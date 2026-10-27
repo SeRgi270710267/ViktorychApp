@@ -111,6 +111,34 @@ test("health, signup, login, session, and sync", async () => {
   assert.equal(loaded.status, 200);
   assert.deepEqual(loaded.body.payload.follows, ["x:ada"]);
 
+  const navPut = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.29",
+    token: good.body.token,
+    body: {
+      payload: {
+        follows: ["x:ada"],
+        bottomNavCustom: true,
+        bottomNav: {
+          order: ["messages", "home", "explore", "nope", "tv"],
+          hidden: ["home", "feeds", "feeds", "nope"]
+        }
+      },
+      baseUpdatedAt: loaded.body.updatedAt
+    }
+  });
+  assert.equal(navPut.status, 200);
+  const nav = navPut.body.payload.bottomNav;
+  assert.equal(nav.order[0], "messages");
+  assert.equal(nav.order[1], "home");
+  assert.equal(nav.order.includes("nope"), false);
+  assert.equal(nav.hidden.includes("home"), false);
+  assert.equal(nav.hidden.includes("nope"), false);
+  assert.equal(nav.hidden.includes("feeds"), true);
+  assert.equal(nav.hidden.includes("lists"), true);
+  assert.ok(nav.order.filter((id) => !nav.hidden.includes(id)).length <= 6);
+  assert.equal(navPut.body.payload.bottomNavCustom, true);
+
   const clash = await call("/v1/sync", {
     method: "PUT",
     ip: "203.0.113.26",
