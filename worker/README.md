@@ -63,7 +63,7 @@ Watch and read history syncs as `history`: at most 300 of the newest video and a
 
 ## Account channel
 
-One SQLite Durable Object, `AccountChannel`, is bound as `ACCOUNT_CHANNEL`. Its name is the 12-digit account id. Presence and notifications share it. Do not add a second class or binding.
+One SQLite Durable Object, `AccountChannel`, is bound as `ACCOUNT_CHANNEL`. Its name is the 12-digit account id. Presence and notifications share it. Do not add a second class or binding. Media swarm rooms reuse this same class. The object name is `swarm:` plus the swarm id. That socket carries signaling only. Media bytes stay on the browsers' WebRTC data channels.
 
 The page opens one socket, only while it is visible, with `POST /v1/channel/ticket` and `GET /v1/channel?ticket=`. The ticket is single-use and lasts two minutes. The socket subscribes to `presence` and `notifications`. Clients cannot publish. The Worker publishes a notification with `publishToAccount(env, publicId, "notifications", data)` after D1 is written. The object hibernates between messages. There is no alarm and no server ping. A hidden page does not spend a request.
 

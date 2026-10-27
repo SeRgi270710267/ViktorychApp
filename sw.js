@@ -127,11 +127,15 @@ const SHELL_FILES = [
   "./icons/apple-touch-icon.png",
   "./icons/music-192.png",
   "./icons/music-512.png",
-  "./icons/music-maskable-512.png"
+  "./icons/music-maskable-512.png",
+  "./peer-media.js",
+  "./shared/peer-media.js",
+  "./shared/device-performance.js"
 ];
 
 let updateReporting = false;
 let shellTask = null;
+let peerOn = false;
 const armedClients = new Set();
 
 function versionSha(version) {
@@ -554,6 +558,144 @@ async function staleWhileRevalidate(request, extraHeaders) {
   return res || new Response("{}", { status: 503, headers: { "Content-Type": "application/json" } });
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function peerMediaUrl(value) {
+  let path = "";
+  try { path = new URL(value).pathname; }
+  catch (err) { return false; }
+  if (/\/loop\//i.test(path)) return false;
+  return /\.(m4s|ts|cmfv|cmfa|mp4|webm|m4v)$/i.test(path);
+}
+
+async function askPeer(request) {
+  if (!peerOn || !peerMediaUrl(request.url)) return null;
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  const client = clients && clients[0];
+  if (!client) return null;
+  const channel = new MessageChannel();
+  let settled = false;
+  const answer = new Promise((resolve) => {
+    channel.port1.onmessage = (event) => {
+      if (settled) return;
+      settled = true;
+      resolve(event.data || null);
+    };
+  });
+  const timer = new Promise((resolve) => setTimeout(() => {
+    if (settled) return;
+    settled = true;
+    resolve(null);
+  }, 700));
+  try {
+    client.postMessage({ type: "peer-fetch", url: request.url, range: request.headers.get("Range") || "" }, [channel.port2]);
+  } catch (err) {
+    return null;
+  }
+  return Promise.race([answer, timer]);
+}
+
+function peerBody(asked) {
+  const bytes = asked && asked.bytes;
+  if (!bytes) return null;
+  if (bytes instanceof ArrayBuffer) return bytes;
+  if (ArrayBuffer.isView(bytes)) return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  return null;
+}
+
+function peerResponseFrom(asked, request) {
+  const body = peerBody(asked);
+  if (!body) return null;
+  const size = body.byteLength || 0;
+  if (!size) return null;
+  const range = request.headers.get("Range") || "";
+  const headers = {
+    "Content-Type": asked.type || contentTypeFor(request.url),
+    "Content-Length": String(size),
+    "Cache-Control": "private",
+    "Accept-Ranges": "bytes",
+    "X-Viktorych-Peer": "1"
+  };
+  if (range && asked.status === 206) {
+    const match = /^bytes=(\d+)-(\d+)$/i.exec(range.trim());
+    if (match) headers["Content-Range"] = "bytes " + match[1] + "-" + match[2] + "/" + String(asked.total || size);
+    return new Response(body, { status: 206, headers: headers });
+  }
+  return new Response(body, { status: 200, headers: headers });
+}
+
+function contentTypeFor(url) {
+  const path = String(url || "").split("?")[0].toLowerCase();
+  if (path.endsWith(".m4s") || path.endsWith(".mp4") || path.endsWith(".m4v")) return "video/mp4";
+  if (path.endsWith(".webm")) return "video/webm";
+  if (path.endsWith(".ts")) return "video/mp2t";
+  return "application/octet-stream";
+}
+
+async function rememberPeer(request, response) {
+  try {
+    const cache = await caches.open(MEDIA);
+    const range = request.headers.get("Range") || "";
+    if (!range) {
+      await cache.put(new Request(request.url, { method: "GET" }), response.clone());
+      await rememberMedia(request.url, self.ViktorychStorage.byteLengthOf(response), self.ViktorychStorage.categoryOf(request.url), MEDIA);
+      return;
+    }
+    const key = self.ViktorychStorage.rangeCacheUrl(request.url, range);
+    if (!key || !self.ViktorychStorage.cacheableRange(range, response.headers.get("content-length"))) return;
+    await cache.put(new Request(key, { method: "GET" }), response.clone());
+    await rememberMedia(key, self.ViktorychStorage.byteLengthOf(response), self.ViktorychStorage.categoryOf(request.url), MEDIA);
+  } catch (err) { /* a peer hit still plays */ }
+}
+
+async function fetchMediaOrigin(request, headers, authed) {
+  const mirror = self.ViktorychMirror;
+  const once = async () => {
+    if (isRuVisitor && !authed) {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 2000);
+      try { return await fetch(request, { signal: ctrl.signal }); }
+      finally { clearTimeout(tid); }
+    }
+    if (authed) return fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+    return fetch(request);
+  };
+  let attempt = 0;
+  while (true) {
+    try {
+      const res = await once();
+      if (isRuVisitor || !mirror || !mirror.retryableStatus || !mirror.retryableStatus(res && res.status)) return res;
+      try { if (res.body && res.body.cancel) res.body.cancel(); } catch (err) { /* the next try replaces it */ }
+      const delayMs = mirror.retryDelay(attempt, Math.random());
+      if (delayMs < 0) return res;
+      attempt += 1;
+      await wait(delayMs);
+    } catch (err) {
+      if (isRuVisitor || !mirror || !mirror.retryDelay) throw err;
+      const delayMs = mirror.retryDelay(attempt, Math.random());
+      if (delayMs < 0) throw err;
+      attempt += 1;
+      await wait(delayMs);
+    }
+  }
+}
+
+function teachOrigin(request, response) {
+  const len = Number(response.headers.get("content-length")) || 0;
+  if (!len || len > 8 * 1024 * 1024) return;
+  response.clone().arrayBuffer().then((buf) => {
+    if (!buf || buf.byteLength > 8 * 1024 * 1024) return;
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      if (!clients || !clients.length) return;
+      const payload = { type: "peer-learned", url: request.url, range: request.headers.get("Range") || "", bytes: buf };
+      try { clients[0].postMessage(payload); }
+      catch (err) { /* origin playback already has the bytes */ }
+    });
+  }).catch(() => {});
+}
+
 async function serveMedia(request, extraHeaders) {
   const parsed = new URL(request.url);
   const headers = new Headers(extraHeaders || undefined);
@@ -576,10 +718,33 @@ async function serveMedia(request, extraHeaders) {
       }
     } catch (err) { /* Cache Storage is the fallback */ }
   }
+  const asked = await askPeer(request);
+  if (asked && asked.bytes && !asked.skip) {
+    const peerHit = peerResponseFrom(asked, request);
+    if (peerHit) {
+      const dbPeer = await idb();
+      if (!asked.counted) await self.ViktorychStorage.bump(dbPeer, "peerBytes", peerHit.headers.get("content-length"));
+      await rememberPeer(request, peerHit.clone());
+      return peerHit;
+    }
+  }
+  const countOrigin = !!(asked && asked.miss && !asked.skip);
   const cache = await caches.open(MEDIA);
   const fullReq = new Request(request.url, { method: "GET" });
-  let cached = await cache.match(fullReq);
   const db = await idb();
+  if (rangeHeader && self.ViktorychStorage.rangeCacheUrl) {
+    const rangeKey = self.ViktorychStorage.rangeCacheUrl(request.url, rangeHeader);
+    if (rangeKey) {
+      const ranged = await cache.match(new Request(rangeKey, { method: "GET" }));
+      if (ranged) {
+        await self.ViktorychStorage.bump(db, "hits");
+        await self.ViktorychStorage.bump(db, "savedRequests");
+        await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(ranged));
+        return ranged;
+      }
+    }
+  }
+  let cached = await cache.match(fullReq);
   const saved = await self.ViktorychStorage.readPolicy(db);
   if (cached) {
     const row = await self.ViktorychStorage.getFile(db, request.url);
@@ -607,19 +772,9 @@ async function serveMedia(request, extraHeaders) {
   }
   await self.ViktorychStorage.bump(db, "network");
   try {
-    let res;
     const authed = headers.has("Authorization");
     if (authed && rangeHeader) headers.set("Range", rangeHeader);
-    if (isRuVisitor && !authed) {
-      const ctrl = new AbortController();
-      const tid = setTimeout(() => ctrl.abort(), 2000);
-      try { res = await fetch(request, { signal: ctrl.signal }); }
-      finally { clearTimeout(tid); }
-    } else if (authed) {
-      res = await fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
-    } else {
-      res = await fetch(request);
-    }
+    const res = await fetchMediaOrigin(request, headers, authed);
     const store = res && (res.type === "opaque" || self.ViktorychStorage.revalidateAction(res.status) === "store");
     if (store && !rangeHeader) {
       let inOpfs = false;
@@ -631,6 +786,17 @@ async function serveMedia(request, extraHeaders) {
       if (!inOpfs) await cache.put(fullReq, res.clone());
       await rememberMedia(request.url, length, self.ViktorychStorage.categoryOf(request.url), inOpfs ? "opfs" : MEDIA);
       await trimMedia();
+    }
+    if (res && res.status === 206 && rangeHeader && self.ViktorychStorage.cacheableRange(rangeHeader, res.headers.get("content-length"))) {
+      const rangeKey = self.ViktorychStorage.rangeCacheUrl(request.url, rangeHeader);
+      if (rangeKey) {
+        await cache.put(new Request(rangeKey, { method: "GET" }), res.clone());
+        await rememberMedia(rangeKey, self.ViktorychStorage.byteLengthOf(res), self.ViktorychStorage.categoryOf(request.url), MEDIA);
+      }
+    }
+    if (countOrigin && res && (res.ok || res.status === 206)) {
+      await self.ViktorychStorage.bump(db, "originBytes", self.ViktorychStorage.byteLengthOf(res));
+      if (peerOn) teachOrigin(request, res);
     }
     if (res) broadcast({ type: "storage-online" });
     return res;
@@ -857,6 +1023,17 @@ async function runApply() {
 idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "peer-flag") {
+    peerOn = !!data.on;
+    return;
+  }
+  if (data.type === "media-stats") {
+    const field = data.field === "peerBytes" || data.field === "originBytes" ? data.field : "";
+    const bytes = Number(data.bytes) || 0;
+    if (!field || bytes <= 0) return;
+    event.waitUntil(idb().then((db) => self.ViktorychStorage.bump(db, field, bytes)).catch(() => {}));
+    return;
+  }
   if (data.type === "sw-version") {
     const sha = versionSha(VERSION);
     if (event.source) {
@@ -1184,7 +1361,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|offline\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|dock\.js|dock\.css|native\.js|codec\.js|media-opfs\.js|feed-worker\.js|peer-media\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {

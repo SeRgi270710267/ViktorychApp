@@ -1548,5 +1548,15 @@ SI18n.addPack("ru", {
   "Play in a window": "Играть в окне",
   "manifest.Home": "Главная",
   "manifest.Messages": "Сообщения",
-  "manifest.Post": "Пост"
+  "manifest.Post": "Пост",
+  "Peer-assisted media": "Медиа с помощью пиров",
+  "Peers can see each other's IP address while sharing.": "Пока вы делитесь, пиры видят IP-адрес друг друга.",
+  "Upload cap": "Предел отдачи",
+  "Share only while watching": "Делиться только во время просмотра",
+  "From peers {size}": "От пиров {size}",
+  "From origin {size}": "С источника {size}",
+  "32 KB/s": "32 КБ/с",
+  "64 KB/s": "64 КБ/с",
+  "128 KB/s": "128 КБ/с",
+  "256 KB/s": "256 КБ/с"
 });
