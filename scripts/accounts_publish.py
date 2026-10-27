@@ -352,27 +352,37 @@ def publish(site: Path, source: Path, preserve_remote: bool = False) -> int:
         except (urllib.error.URLError, TimeoutError, OSError):
             keep_remote = False
     try:
+        if preserve_remote and not keep_remote:
+            from r2_catalog import read_catalog
+
+            keep_remote = read_catalog("feeds.json") is not None
         if keep_remote:
             # The feed refresh writes the catalog straight to R2. A shell
             # deploy must not replace that copy with the older git seed.
             print("remote catalog kept; this deploy updates the shell")
         else:
             from account_deletions import load_deletions, scrub_bytes
+            from r2_catalog import usable_catalog
 
             hashes, deletion_salt = load_deletions(api)
             for key in sorted(files):
-                if catalog_seed(files[key]):
-                    print(f"seed skipped {key}")
-                    continue
                 payload = files[key].read_bytes()
+                if not usable_catalog(payload, key):
+                    continue
                 try:
                     payload = scrub_bytes(key, payload, hashes, deletion_salt)
                 except (TypeError, ValueError):
-                    print(f"deletion scrub skipped for {key}")
+                    print("[accounts] deletion scrub skipped")
+                if not usable_catalog(payload, key):
+                    continue
                 upload(key, payload)
+                upload("lastgood/" + key, payload)
             owner = source / "owner" / "tiktok.json"
             if owner.is_file():
-                upload("owner/tiktok.json", owner.read_bytes())
+                payload = owner.read_bytes()
+                if usable_catalog(payload, "owner/tiktok.json"):
+                    upload("owner/tiktok.json", payload)
+                    upload("lastgood/owner/tiktok.json", payload)
     except (urllib.error.URLError, TimeoutError, OSError):
         return unlocked("data upload failed;")
     turnstile = (os.environ.get("TURNSTILE_SITEKEY") or "").strip()

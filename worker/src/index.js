@@ -18,7 +18,14 @@ import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
+import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
+import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
+import { handlePills } from "./pills.js";
+import { logError } from "./log.js";
+import { invalidate, readThrough } from "./edge-cache.js";
+import { maybeBackupD1 } from "./d1-backup.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -43,6 +50,38 @@ function allowedOrigins(env) {
   return raw.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function pagesMirrorOrigin(origin) {
+  let host = "";
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return false;
+    host = url.hostname.toLowerCase().replace(/\.+$/, "");
+  } catch (err) {
+    return false;
+  }
+  const pagesHost = "viktorychapp.pages.dev";
+  if (host === pagesHost) return true;
+  const mark = "." + pagesHost;
+  return host.length > mark.length && host.slice(-mark.length) === mark;
+}
+
+function originAllowed(env, origin) {
+  if (!origin) return true;
+  if (allowedOrigins(env).indexOf(origin) >= 0) return true;
+  return pagesMirrorOrigin(origin);
+}
+
+function areaFor(path, method) {
+  const text = String(path || "");
+  if (text === "/v1/signup" || text === "/v1/login" || text === "/v1/logout" || text === "/v1/logout-all" || text === "/v1/session" || text.startsWith("/v1/session/")) return "auth";
+  if (text === "/v1/sync" || text.startsWith("/v1/sync/")) return "sync";
+  if (text === "/v1/owner/keys" || text.startsWith("/v1/owner/keys/")) return "owner-keys";
+  if (text.startsWith("/v1/media/") || (text === "/v1/profile" && method === "PATCH")) return "upload";
+  if (text === "/v1/profile" || text.startsWith("/v1/profile/")) return "profile";
+  if (text.startsWith("/v1/communities")) return "feed";
+  return "worker";
+}
+
 function json(status, body, extra) {
   const headers = {
     "content-type": "application/json; charset=utf-8",
@@ -55,6 +94,9 @@ function json(status, body, extra) {
 }
 
 function withCors(request, env, response) {
+  // A WebSocket acceptance is status 101. Rebuilding that response is illegal,
+  // and the handshake does not use CORS. A foreign Origin is refused above.
+  if (response && (response.status === 101 || response.webSocket)) return response;
   const url = new URL(request.url);
   if (isPublicFederationRoute(url.pathname)) return response;
   const origin = request.headers.get("Origin");
@@ -64,7 +106,7 @@ function withCors(request, env, response) {
     bareHeaders.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
     return new Response(response.body, { status: response.status, headers: bareHeaders });
   }
-  if (allowedOrigins(env).indexOf(origin) < 0) {
+  if (!originAllowed(env, origin)) {
     return json(403, { error: "origin" });
   }
   const headers = new Headers(response.headers);
@@ -171,7 +213,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -348,7 +390,13 @@ async function acceptUpload(env, row, kind, value, maxBytes, maxChars) {
   const decoded = decodeDataImage(text, maxChars, maxBytes, ["webp"]);
   if (!decoded || decoded.empty) return { error: "too_large", status: 413 };
   if (!env.DATA) return { error: "not_configured", status: 503 };
-  const key = await writeMedia(env, row.public_id, kind, decoded, previous);
+  let key = "";
+  try {
+    key = await writeMedia(env, row.public_id, kind, decoded, previous);
+  } catch (err) {
+    logError("upload", err);
+    throw err;
+  }
   if (!key) return { error: "unavailable", status: 503 };
   return { key };
 }
@@ -674,8 +722,11 @@ async function handleLogout(request, env, all) {
   const hash = await sha256Hex(token);
   const row = await env.DB.prepare("SELECT public_id FROM sessions WHERE token_hash = ?").bind(hash).first();
   if (!row) return json(401, { error: "unauthorized" });
-  if (all) await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(row.public_id).run();
-  else await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run();
+  if (all) {
+    await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(row.public_id).run();
+    await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ?").bind(row.public_id).run();
+    await env.DB.prepare("DELETE FROM channel_tickets WHERE public_id = ?").bind(row.public_id).run();
+  } else await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run();
   return json(200, { ok: true });
 }
 
@@ -708,6 +759,22 @@ async function trimReposts(env, publicId) {
   }
 }
 
+async function liveProfileCounts(env, row, account, viewer) {
+  account.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", row.public_id);
+  account.followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", "app:" + row.public_id);
+  account.viewerFollows = !!(viewer && viewer.public_id !== row.public_id && await followExists(env, viewer.public_id, "app:" + row.public_id));
+  account.friendsCount = await friendCount(env, row.public_id);
+  account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
+  account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await mutualFriendCount(env, viewer.public_id, row.public_id) : 0;
+  return account;
+}
+
+async function publicProfileText(env, request, row) {
+  const account = await presentAccount(env, request, row, false);
+  const reposts = await listReposts(env, row.public_id);
+  return JSON.stringify({ account: account, reposts: reposts });
+}
+
 async function handleProfileGet(request, env, handle) {
   const checked = inspectHandle(handle);
   const skel = checked.skeleton || "";
@@ -723,14 +790,26 @@ async function handleProfileGet(request, env, handle) {
   const viewer = await sessionAccount(env, request);
   const own = !!(viewer && viewer.public_id === row.public_id);
   if (row.profile_less === 1 && !own) return json(404, { error: "not_found" });
-  const account = await presentAccount(env, request, row, own);
-  account.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", row.public_id);
-  account.followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", "app:" + row.public_id);
-  account.viewerFollows = !!(viewer && viewer.public_id !== row.public_id && await followExists(env, viewer.public_id, "app:" + row.public_id));
-  account.friendsCount = await friendCount(env, row.public_id);
-  account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
-  account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await mutualFriendCount(env, viewer.public_id, row.public_id) : 0;
-  return json(200, { account, reposts: await listReposts(env, row.public_id), identities: account.identities || [] });
+  let account = null;
+  let reposts = [];
+  if (own) {
+    account = await presentAccount(env, request, row, true);
+    reposts = await listReposts(env, row.public_id);
+  } else {
+    try {
+      const text = await readThrough(env, "p:" + row.public_id, () => publicProfileText(env, request, row));
+      const parsed = JSON.parse(text);
+      if (!parsed || !parsed.account) throw new Error("profile_cache");
+      account = parsed.account;
+      reposts = Array.isArray(parsed.reposts) ? parsed.reposts : [];
+    } catch (err) {
+      logError("profile", err);
+      account = await presentAccount(env, request, row, false);
+      reposts = await listReposts(env, row.public_id);
+    }
+  }
+  await liveProfileCounts(env, row, account, viewer);
+  return json(200, { account, reposts, identities: account.identities || [] });
 }
 
 async function handleRepostPut(request, env) {
@@ -747,6 +826,11 @@ async function handleRepostPut(request, env) {
   const created = existing ? Number(existing.created_at) : now;
   await env.DB.prepare("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, post_key) DO UPDATE SET kind = excluded.kind, comment = excluded.comment, snapshot = excluded.snapshot").bind(row.public_id, cleaned.postKey, cleaned.kind, cleaned.comment, JSON.stringify(cleaned.post), created).run();
   await trimReposts(env, row.public_id);
+  await invalidate(env, "p:" + row.public_id);
+  if (!existing) {
+    try { await notifyRepost(env, row, cleaned); }
+    catch (err) { /* the repost is saved; the note can be rebuilt from it */ }
+  }
   return json(200, { ok: true, repost: { postKey: cleaned.postKey, kind: cleaned.kind, comment: cleaned.comment, createdAt: created, post: cleaned.post } });
 }
 
@@ -758,6 +842,7 @@ async function handleRepostDelete(request, env) {
   const postKey = cleanRepostKey(body.postKey);
   if (!postKey) return json(400, { error: "bad_repost" });
   await env.DB.prepare("DELETE FROM account_reposts WHERE public_id = ? AND post_key = ?").bind(row.public_id, postKey).run();
+  await invalidate(env, "p:" + row.public_id);
   return json(200, { ok: true });
 }
 
@@ -810,6 +895,7 @@ async function handleProfilePatch(request, env) {
     await env.DB.prepare("UPDATE accounts SET display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ?, profile_less = ? WHERE public_id = ?").bind(displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, profileLess, row.public_id).run();
   }
   const next = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(row.public_id).first();
+  await invalidate(env, "p:" + row.public_id);
   return json(200, { account: await presentAccount(env, request, next, true) });
 }
 
@@ -848,6 +934,11 @@ async function handleSyncGet(request, env) {
   let payload = null;
   try { payload = JSON.parse(saved.payload); }
   catch (err) { payload = null; }
+  if (payload && typeof payload === "object") {
+    delete payload.bellNotes;
+    delete payload.bellSeen;
+    delete payload.bellRead;
+  }
   return json(200, { payload, updatedAt: saved.updated_at });
 }
 
@@ -863,6 +954,9 @@ async function handleSyncPut(request, env) {
     try { previous = JSON.parse(current.payload); } catch (err) { previous = null; }
   }
   const payload = body.payload;
+  delete payload.bellNotes;
+  delete payload.bellSeen;
+  delete payload.bellRead;
   const sentCut = cleanHistoryCut(payload.historyCut);
   const prevCut = cleanHistoryCut(previous && previous.historyCut);
   payload.historyCut = {
@@ -879,6 +973,23 @@ async function handleSyncPut(request, env) {
     else delete payload.bottomNav;
   }
   if (payload.bottomNavCustom != null) payload.bottomNavCustom = payload.bottomNavCustom === true;
+  if (payload.navLayoutSync === true) {
+    payload.navLayout = payload.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = payload.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else if (payload.navLayoutSync === false) {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  } else if (previous && previous.navLayoutSync === true) {
+    payload.navLayout = previous.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = previous.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  }
   const text = JSON.stringify(payload);
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });
   const base = Number(body.baseUpdatedAt || 0);
@@ -963,19 +1074,81 @@ function discordData(request, object) {
   return object.text().then((text) => new Response(text, { status: 200, headers }));
 }
 
+function catalogUnusable(key, text) {
+  const raw = String(text || "");
+  if (!raw.trim()) return true;
+  let doc = null;
+  try { doc = JSON.parse(raw); }
+  catch (err) { return true; }
+  if (!doc || typeof doc !== "object" || Array.isArray(doc)) return true;
+  if (doc.catalogSeed === true) return true;
+  const name = String(key || "").split("/").pop();
+  if (name === "feeds.json" || name === "feeds.config.json") {
+    const feeds = Array.isArray(doc.feeds) ? doc.feeds : [];
+    const posts = Array.isArray(doc.posts) ? doc.posts : [];
+    if (name === "feeds.config.json") {
+      const spaces = Array.isArray(doc.spaces) ? doc.spaces : [];
+      const people = Array.isArray(doc.people) ? doc.people : [];
+      const discord = Array.isArray(doc.discord) ? doc.discord : [];
+      if (!feeds.length && !posts.length && !spaces.length && !people.length && !discord.length) return true;
+    } else if (!feeds.length && !posts.length) return true;
+  }
+  return false;
+}
+
+async function readStoredText(env, key) {
+  if (!env || !env.DATA || !key) return "";
+  let text = "";
+  try {
+    const object = await env.DATA.get(key);
+    text = object ? await object.text() : "";
+  } catch (err) { text = ""; }
+  if (!catalogUnusable(key, text)) return text;
+  let backup = "";
+  try {
+    const object = await env.DATA.get("lastgood/" + key);
+    backup = object ? await object.text() : "";
+  } catch (err) { backup = ""; }
+  if (catalogUnusable(key, backup)) return "";
+  try {
+    await env.DATA.put(key, backup, { httpMetadata: { contentType: "application/json; charset=utf-8" } });
+  } catch (err) { /* the last good copy is still served */ }
+  return backup;
+}
+
+function catalogResponse(text) {
+  return new Response(text, {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "private, no-store",
+      "x-content-type-options": "nosniff"
+    }
+  });
+}
+
 async function handleData(request, env, pathname) {
   const key = dataKey(pathname);
   if (!key) return json(404, { error: "not_found" });
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
   if (!env.DATA) return json(503, { error: "not_configured" });
-  let object = await env.DATA.get(key);
-  if (!object) return json(404, { error: "not_found" });
-  if (key.indexOf("discord/") === 0) return discordData(request, object);
-  const text = await object.text();
-  if (row.owner === 1) {
-    return new Response(text, { status: 200, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "private, no-store", "x-content-type-options": "nosniff" } });
+  if (key.indexOf("discord/") === 0) {
+    let object = null;
+    try { object = await env.DATA.get(key); }
+    catch (err) { object = null; }
+    if (!object) {
+      const text = await readStoredText(env, key);
+      if (!text) return json(404, { error: "not_found" });
+      try { object = await env.DATA.get(key); }
+      catch (err) { object = null; }
+      if (!object) return catalogResponse(text);
+    }
+    return discordData(request, object);
   }
+  const text = await readStoredText(env, key);
+  if (!text) return json(404, { error: "not_found" });
+  if (row.owner === 1) return catalogResponse(text);
   let parsed = null;
   try { parsed = JSON.parse(text); }
   catch (err) { return json(502, { error: "bad_json" }); }
@@ -997,10 +1170,9 @@ async function requireTiktok(request, env) {
 }
 
 async function readOwnerDoc(env) {
-  if (!env.DATA) return null;
-  const object = await env.DATA.get("owner/tiktok.json");
-  if (!object) return null;
-  try { return JSON.parse(await object.text()); }
+  const text = await readStoredText(env, "owner/tiktok.json");
+  if (!text) return null;
+  try { return JSON.parse(text); }
   catch (err) { return null; }
 }
 
@@ -1008,12 +1180,9 @@ async function handleOwnerTiktok(request, env) {
   const gate = await requireTiktok(request, env);
   if (gate.error) return gate.error;
   if (!env.DATA) return json(503, { error: "not_configured" });
-  const object = await env.DATA.get("owner/tiktok.json");
-  if (!object) return json(404, { error: "not_found" });
-  return new Response(await object.text(), {
-    status: 200,
-    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "private, no-store", "x-content-type-options": "nosniff" }
-  });
+  const text = await readStoredText(env, "owner/tiktok.json");
+  if (!text) return json(404, { error: "not_found" });
+  return catalogResponse(text);
 }
 
 const LIVE_BOARD_CACHE = "https://live-board.internal/owner";
@@ -2666,10 +2835,10 @@ function publicTikTokAccount(row) {
 
 async function readTikTokAccounts(env) {
   if (!env.DATA) return emptyTikTokAccounts();
-  const object = await env.DATA.get(TIKTOK_ACCOUNTS_KEY);
-  if (!object) return emptyTikTokAccounts();
+  const text = await readStoredText(env, TIKTOK_ACCOUNTS_KEY);
+  if (!text) return emptyTikTokAccounts();
   try {
-    const parsed = JSON.parse(await object.text());
+    const parsed = JSON.parse(text);
     if (!parsed || typeof parsed !== "object") return emptyTikTokAccounts();
     const added = [];
     let dirty = false;
@@ -2704,6 +2873,11 @@ async function writeTikTokAccounts(env, doc) {
   await env.DATA.put(TIKTOK_ACCOUNTS_KEY, body, {
     httpMetadata: { contentType: "application/json; charset=utf-8" }
   });
+  try {
+    await env.DATA.put("lastgood/" + TIKTOK_ACCOUNTS_KEY, body, {
+      httpMetadata: { contentType: "application/json; charset=utf-8" }
+    });
+  } catch (err) { /* the primary copy is already stored */ }
 }
 
 function unescapeJson(value) {
@@ -2850,11 +3024,10 @@ async function listPrefixNames(env, prefix) {
 }
 
 async function readJsonObject(env, key) {
-  if (!env.DATA) return null;
+  const text = await readStoredText(env, key);
+  if (!text) return null;
   try {
-    const object = await env.DATA.get(key);
-    if (!object) return null;
-    const parsed = JSON.parse(await object.text());
+    const parsed = JSON.parse(text);
     return parsed && typeof parsed === "object" ? parsed : null;
   } catch (err) {
     return null;
@@ -3081,6 +3254,18 @@ async function watchTikTokLive(env, nowMs) {
     if (blocks) await writeJsonObject(env, markKey, Object.assign({}, mark, { blocks: 0, blockedAt: "" }));
 
     const info = liveInfo(handle, prev, seen.roomId || "", seen.picked || { live: false });
+    if (info.live && !(prev && prev.live)) {
+      try {
+        await notifyLiveStarted(env, {
+          handle,
+          platform: "tiktok",
+          roomId: String(seen.roomId || info.roomId || ""),
+          title: info.title || "",
+          name: handle,
+          at: Number(nowMs) || Date.now()
+        });
+      } catch (err) { /* the recording decision still runs */ }
+    }
     if (shouldRememberLive(prev, info, nowMs)) await rememberLive(env, handle, info);
 
     const job = await readJsonObject(env, WATCH_JOB_PREFIX + handle + ".json");
@@ -4044,7 +4229,12 @@ async function handleFollowPut(request, env) {
   const target = await resolveFollowTarget(env, id);
   if (target.error) return target.error;
   const snapshot = cleanFollowSnapshot(id, body.profile);
+  const existing = await env.DB.prepare("SELECT created_at FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(gate.row.public_id, id).first();
   await env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(follower_id, target_id) DO UPDATE SET snapshot = CASE WHEN excluded.snapshot != '' THEN excluded.snapshot ELSE account_follows.snapshot END").bind(gate.row.public_id, id, snapshot, Date.now()).run();
+  if (!existing) {
+    try { await notifyFollow(env, gate.row, id); }
+    catch (err) { /* the follow is saved */ }
+  }
   return followWriteResult(env, gate.row.public_id, id, true);
 }
 
@@ -4081,6 +4271,7 @@ async function handleFollowImport(request, env) {
     ids.push(id);
   }
   const now = Date.now();
+  // A bulk import must not notify. Only a new follow from PUT does.
   for (let i = 0; i < ids.length; i += 40) {
     const part = ids.slice(i, i + 40);
     await env.DB.batch(part.map((id) => env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?) ON CONFLICT(follower_id, target_id) DO NOTHING").bind(gate.row.public_id, id, now)));
@@ -4375,6 +4566,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/x" || path.startsWith("/v1/x/")) {
     return handleXProxy(request, env, url);
   }
+  if (path.startsWith("/v1/pills/") && (request.method === "GET" || request.method === "HEAD")) {
+    return handlePills(request, { fetch: (url, init) => fetch(url, init), cache: caches.default, now: () => Date.now() });
+  }
   await ensureSchema(env);
   if (path === "/v1/geo" && (request.method === "GET" || request.method === "HEAD")) {
     const isTor = !!(request.cf && request.cf.isTor) || request.headers.get("cf-ipcountry") === "T1";
@@ -4472,10 +4666,20 @@ async function route(request, env, ctx) {
     return handleIdentitiesRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
   }
 
+  if (path === "/v1/presence") {
+    return handlePresence(request, env, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
+  if (path === "/v1/channel" || path === "/v1/channel/ticket") {
+    return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
+  }
   if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
 
     return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
 
+  }
+  if (path === "/v1/notifications" || path === "/v1/notifications/read" || path === "/v1/push/vapid" || path === "/v1/push/subscribe") {
+    const handled = await handleNotificationRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
+    if (handled) return handled;
   }
   return json(404, { error: "not_found" });
 }
@@ -4484,28 +4688,38 @@ function bindRequestOwner(env) {
   bindOwner(env && env.OWNER_HANDLE);
 }
 
+export { AccountChannel };
+
 export default {
   async fetch(request, env, ctx) {
+    let path = "";
     try {
       bindRequestOwner(env);
       const url = new URL(request.url);
-      const path = url.pathname;
+      path = url.pathname;
       const origin = request.headers.get("Origin");
-      if (origin && !isPublicFederationRoute(path) && allowedOrigins(env).indexOf(origin) < 0) return json(403, { error: "origin" });
+      if (origin && !isPublicFederationRoute(path) && !originAllowed(env, origin)) return json(403, { error: "origin" });
       const response = await route(request, env, ctx);
       return withCors(request, env, response);
     } catch (err) {
+      logError(areaFor(path, request.method), err);
       return json(500, { error: "unavailable" });
     }
   },
   async scheduled(event, env, ctx) {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
-    // fifteen minute rhythm.
+    // fifteen minute rhythm. The D1 export uses the same minute and only
+    // writes after 04:17 UTC, once a day.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
-    const all = Promise.allSettled(jobs);
+    jobs.push(maybeBackupD1(env, at));
+    const all = Promise.allSettled(jobs).then((results) => {
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === "rejected") logError("cron", results[i].reason);
+      }
+    });
     if (ctx && ctx.waitUntil) ctx.waitUntil(all);
     else await all;
   }

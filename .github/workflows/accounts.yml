@@ -6,6 +6,9 @@ on:
     paths:
       - "worker/**"
       - "shared/**"
+      - "presence.js"
+      - "presence.css"
+      - "scripts/presence_chrome_test.mjs"
       - ".github/workflows/accounts.yml"
   push:
     branches:
@@ -13,6 +16,9 @@ on:
     paths:
       - "worker/**"
       - "shared/**"
+      - "presence.js"
+      - "presence.css"
+      - "scripts/presence_chrome_test.mjs"
       - ".github/workflows/accounts.yml"
 
 permissions:
@@ -33,6 +39,13 @@ jobs:
       - name: Test the account worker
         working-directory: worker
         run: npm ci && npm test
+
+      - uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Presence page check
+        run: node scripts/presence_chrome_test.mjs
 
   deploy:
     needs: test
@@ -157,6 +170,7 @@ jobs:
                   fail("workers.dev subdomain registration", errors[0].get("code"), errors[0].get("message"))
               print("workers.dev subdomain registered:", (created.get("result") or {}).get("subdomain") or name)
           PY
+          python3 ../scripts/cf_kv_bind.py --toml wrangler.toml
           npx wrangler deploy
           if [ -n "${OWNER_CLAIM_CODE:-}" ]; then printf '%s' "$OWNER_CLAIM_CODE" | npx wrangler secret put OWNER_CLAIM_CODE; fi
           if [ -n "${ACCOUNT_PEPPER:-}" ]; then printf '%s' "$ACCOUNT_PEPPER" | npx wrangler secret put ACCOUNT_PEPPER; fi

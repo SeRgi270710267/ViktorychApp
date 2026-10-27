@@ -1,0 +1,390 @@
+#!/usr/bin/env python3
+"""Copy the live catalog from git history into R2, once.
+
+The public tree keeps a seed. This reads the newest usable blob of each
+catalog file and stores it only when R2 does not already have a usable
+object. Logs are counts and sizes. Values are never printed.
+
+Worker secrets that can be derived from those historical files are set
+with wrangler only when they are not already set. The values are piped
+on stdin and the command output is discarded.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from r2_catalog import lastgood_key, read_catalog, store_usable, usable_catalog  # noqa: E402
+
+FIXED_KEYS = (
+    "feeds.json",
+    "stories.json",
+    "people.json",
+    "suggestions.json",
+    "status.json",
+    "feeds.config.json",
+    "owner/tiktok.json",
+    "owner/tiktok-accounts.json",
+    "owner/tiktok-unlocked.json",
+)
+SECRET_NAMES = (
+    "OWNER_HANDLE",
+    "OWNER_ID_SHA256",
+    "OWNER_GITHUB_SHA256",
+    "OWNER_PUBLIC_ID",
+    "TIKTOK_TRACKED",
+    "TIKTOK_UNLOCKED",
+)
+OWNER_HANDLE_RE = re.compile(r"""^[ \t]*const OWNER_HANDLE = "([^"\\]+)"\s*;?\s*$""", re.M)
+OWNER_GITHUB_RE = re.compile(r"""^[ \t]*const OWNER_GITHUB = "([^"\\]+)"\s*;?\s*$""", re.M)
+TRACKED_RE = re.compile(r"""^[ \t]*TRACKED = \[([^\]]*)\]""", re.M)
+UNLOCKED_RE = re.compile(r"""var unlockedAccounts = \[([^\]]*)\]""")
+QUOTED_RE = re.compile(r'"([^"\\]+)"')
+WORKER_NAME = "viktorych-accounts"
+
+
+def _git(root: Path, args: list[str]) -> bytes | None:
+    proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True)
+    if proc.returncode != 0:
+        return None
+    return proc.stdout
+
+
+def git_log(root: Path, path: str) -> list[str]:
+    blob = _git(root, ["log", "--all", "--format=%H", "--", path])
+    if not blob:
+        return []
+    return [line.strip() for line in blob.decode("utf-8", "replace").splitlines() if line.strip()]
+
+
+def git_show(root: Path, rev: str, path: str) -> bytes | None:
+    return _git(root, ["show", f"{rev}:{path}"])
+
+
+def history_paths(root: Path) -> list[str]:
+    found = set(FIXED_KEYS)
+    blob = _git(root, ["log", "--all", "--name-only", "--pretty=format:", "--", "data/communities"])
+    if blob:
+        for line in blob.decode("utf-8", "replace").splitlines():
+            path = line.strip().replace("\\", "/")
+            if path.startswith("data/communities/") and path.endswith(".json") and ".." not in path.split("/"):
+                found.add(path)
+    return sorted(found)
+
+
+def newest_usable(root: Path, key: str) -> bytes | None:
+    for rev in git_log(root, key):
+        blob = git_show(root, rev, key)
+        if usable_catalog(blob, key):
+            return blob
+    return None
+
+
+def _newest_pattern(root: Path, path: str, pattern: re.Pattern[str]) -> str:
+    for rev in git_log(root, path):
+        blob = git_show(root, rev, path)
+        if not blob:
+            continue
+        match = pattern.search(blob.decode("utf-8", "replace"))
+        if not match:
+            continue
+        value = match.group(1).strip()
+        if value:
+            return value
+    return ""
+
+
+def _newest_list(root: Path, path: str, pattern: re.Pattern[str]) -> list[str]:
+    for rev in git_log(root, path):
+        blob = git_show(root, rev, path)
+        if not blob:
+            continue
+        match = pattern.search(blob.decode("utf-8", "replace"))
+        if not match:
+            continue
+        items = [item.strip() for item in QUOTED_RE.findall(match.group(1)) if item.strip()]
+        if items:
+            return items
+    return []
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def derived_secrets(root: Path) -> dict[str, str]:
+    handle = _newest_pattern(root, "shared/handle-skeleton.js", OWNER_HANDLE_RE)
+    github = _newest_pattern(root, "worker/src/account-delete.js", OWNER_GITHUB_RE)
+    tracked = _newest_list(root, "scripts/tiktok_sync.py", TRACKED_RE)
+    unlocked = _newest_list(root, "shorts.js", UNLOCKED_RE)
+    found: dict[str, str] = {}
+    if handle:
+        found["OWNER_HANDLE"] = handle
+    if github:
+        found["OWNER_PUBLIC_ID"] = github
+        found["OWNER_GITHUB_SHA256"] = _sha256(github)
+    hashes = []
+    if handle:
+        hashes.append(_sha256(handle))
+    if github:
+        hashes.append(_sha256(github))
+    if hashes:
+        found["OWNER_ID_SHA256"] = ",".join(hashes)
+    if tracked:
+        found["TIKTOK_TRACKED"] = ",".join(tracked)
+    if unlocked:
+        found["TIKTOK_UNLOCKED"] = ",".join(unlocked)
+    return found
+
+
+def wrangler_secret_names() -> set[str] | None:
+    proc = subprocess.run(
+        ["npx", "wrangler", "secret", "list", "--name", WORKER_NAME],
+        cwd=str(ROOT / "worker"),
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        return None
+    text = proc.stdout.decode("utf-8", "replace")
+    start = text.find("[")
+    end = text.rfind("]")
+    if start < 0 or end < start:
+        return None
+    try:
+        data = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+    names = set()
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict) and item.get("name"):
+                names.add(str(item["name"]))
+            elif isinstance(item, str):
+                names.add(item)
+    return names
+
+
+def wrangler_secret_put(name: str, value: str) -> bool:
+    proc = subprocess.run(
+        ["npx", "wrangler", "secret", "put", name, "--name", WORKER_NAME],
+        cwd=str(ROOT / "worker"),
+        input=value.encode("utf-8"),
+        capture_output=True,
+    )
+    return proc.returncode == 0
+
+
+def copy_catalog(root: Path, get, put) -> tuple[int, int, int, int, int]:
+    stored_n = stored_b = kept_n = kept_b = absent = 0
+    for key in history_paths(root):
+        existing = read_catalog(key, get=get, put=put)
+        if existing is not None:
+            kept_n += 1
+            kept_b += len(existing)
+            continue
+        blob = newest_usable(root, key)
+        if blob is None:
+            absent += 1
+            continue
+        if store_usable(key, blob, put=put) != "ok":
+            raise RuntimeError("copy failed")
+        stored_n += 1
+        stored_b += len(blob)
+    return stored_n, stored_b, kept_n, kept_b, absent
+
+
+def apply_secrets(root: Path, secret_list, secret_put) -> tuple[int, int, int]:
+    existing = secret_list()
+    if existing is None:
+        raise RuntimeError("secret list failed")
+    derived = derived_secrets(root)
+    set_n = already = missing = 0
+    for name in SECRET_NAMES:
+        if name in existing:
+            already += 1
+            continue
+        value = derived.get(name) or ""
+        if not value:
+            missing += 1
+            continue
+        if not secret_put(name, value):
+            raise RuntimeError("secret update failed")
+        set_n += 1
+    return set_n, already, missing
+
+
+def migrate(root: Path, *, get, put, secret_list=None, secret_put=None, catalog_only: bool = False) -> int:
+    try:
+        stored_n, stored_b, kept_n, kept_b, absent = copy_catalog(root, get, put)
+    except RuntimeError:
+        print("[migrate] copy failed")
+        return 1
+    print(f"[migrate] stored {stored_n} objects, {stored_b} bytes")
+    print(f"[migrate] kept {kept_n} existing objects, {kept_b} bytes")
+    print(f"[migrate] absent {absent}")
+    if catalog_only:
+        return 0
+    lister = secret_list or wrangler_secret_names
+    writer = secret_put or wrangler_secret_put
+    try:
+        set_n, already, missing = apply_secrets(root, lister, writer)
+    except RuntimeError:
+        print("[migrate] secret update failed")
+        return 1
+    print(f"[migrate] secrets set {set_n}, already present {already}")
+    if missing:
+        print(f"[migrate] secrets not derived {missing}")
+        return 1
+    return 0
+
+
+def _run_git(root: Path, *args: str) -> None:
+    env = os.environ.copy()
+    env.setdefault("GIT_AUTHOR_NAME", "Catalog Test")
+    env.setdefault("GIT_AUTHOR_EMAIL", "catalog-test@example.com")
+    env.setdefault("GIT_COMMITTER_NAME", "Catalog Test")
+    env.setdefault("GIT_COMMITTER_EMAIL", "catalog-test@example.com")
+    proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True, env=env)
+    if proc.returncode != 0:
+        raise RuntimeError("git failed")
+
+
+def selftest() -> int:
+    import io
+    from contextlib import redirect_stdout
+
+    handle = "mirathorn"
+    github = "sampleowner"
+    tracked = ["sampleclip", "lockclip"]
+    unlocked = ["sampleclip"]
+    community = "data/communities/sampleforum/1.json"
+    good_feed = json.dumps({
+        "feeds": [{"id": "x:orbitfox", "platform": "x", "handle": "orbitfox"}],
+        "posts": [{"id": "p1", "platform": "x", "text": "kept"}],
+    }).encode("utf-8")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _run_git(root, "init", "-q", "-b", "main")
+        (root / "feeds.json").write_bytes(good_feed)
+        (root / "shared").mkdir()
+        (root / "shared" / "handle-skeleton.js").write_text(
+            f'const OWNER_HANDLE = "{handle}";\n', encoding="utf-8"
+        )
+        (root / "worker" / "src").mkdir(parents=True)
+        (root / "worker" / "src" / "account-delete.js").write_text(
+            f'const OWNER_GITHUB = "{github}";\n', encoding="utf-8"
+        )
+        (root / "scripts").mkdir()
+        (root / "scripts" / "tiktok_sync.py").write_text(
+            "TRACKED = [" + ", ".join(json.dumps(item) for item in tracked) + "]\n",
+            encoding="utf-8",
+        )
+        (root / "shorts.js").write_text(
+            "var unlockedAccounts = [" + ", ".join(json.dumps(item) for item in unlocked) + "];\n",
+            encoding="utf-8",
+        )
+        nested = root / "data" / "communities" / "sampleforum"
+        nested.mkdir(parents=True)
+        (nested / "1.json").write_text('{"comments":[{"id":"1"}]}\n', encoding="utf-8")
+        _run_git(root, "add", ".")
+        _run_git(root, "commit", "-q", "-m", "live")
+        (root / "feeds.json").write_text('{"catalogSeed":true,"feeds":[],"posts":[]}\n', encoding="utf-8")
+        (root / "shorts.js").write_text("var unlockedAccounts = [];\n", encoding="utf-8")
+        _run_git(root, "add", ".")
+        _run_git(root, "commit", "-q", "-m", "seed")
+        store: dict[str, bytes] = {}
+
+        def getter(key: str):
+            return store.get(key)
+
+        def putter(key: str, payload: bytes) -> bool:
+            store[key] = bytes(payload)
+            return True
+
+        secrets = {"OWNER_HANDLE": "already-set"}
+        written: list[str] = []
+
+        def secret_list():
+            return set(secrets)
+
+        def secret_put(name: str, value: str) -> bool:
+            if name in secrets:
+                return False
+            secrets[name] = value
+            written.append(name)
+            return True
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = migrate(root, get=getter, put=putter, secret_list=secret_list, secret_put=secret_put)
+        text = buf.getvalue()
+        if code != 0:
+            print("migrate failed")
+            return 1
+        for banned in (handle, github, "orbitfox", "sampleclip", "lockclip", "sampleforum", community):
+            if banned in text:
+                print("migrate log included a name")
+                return 1
+        if "stored " not in text or "bytes" not in text:
+            print("migrate log missed the counts")
+            return 1
+        if store.get("feeds.json") != good_feed or store.get(lastgood_key("feeds.json")) != good_feed:
+            print("the usable catalog was not stored")
+            return 1
+        if community not in store or not usable_catalog(store[community], community):
+            print("community files were not stored")
+            return 1
+        if "OWNER_HANDLE" in written:
+            print("an existing secret was replaced")
+            return 1
+        derived = derived_secrets(root)
+        for name in ("OWNER_ID_SHA256", "OWNER_GITHUB_SHA256", "OWNER_PUBLIC_ID", "TIKTOK_TRACKED", "TIKTOK_UNLOCKED"):
+            if secrets.get(name) != derived.get(name):
+                print("a derived secret was not set")
+                return 1
+        if secrets["OWNER_PUBLIC_ID"] != github or secrets["TIKTOK_UNLOCKED"] != "sampleclip":
+            print("a derived secret did not match its source")
+            return 1
+        if _sha256(handle) not in secrets["OWNER_ID_SHA256"] or _sha256(github) not in secrets["OWNER_GITHUB_SHA256"]:
+            print("owner hashes were not derived")
+            return 1
+        before = dict(store)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            again = migrate(root, get=getter, put=putter, secret_list=secret_list, secret_put=secret_put, catalog_only=True)
+        if again != 0 or store != before or "kept " not in buf.getvalue():
+            print("a second copy replaced the stored catalog")
+            return 1
+        if "orbitfox" in buf.getvalue():
+            print("the second log included a name")
+            return 1
+    print("catalog migrate ok")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if "--selftest" in args:
+        return selftest()
+    catalog_only = "--catalog-only" in args
+    from tiktok_sync import cloudflare_env, r2_get, r2_put
+
+    token, account = cloudflare_env()
+    if not token or not account:
+        print("[migrate] cloudflare credentials are not configured")
+        return 1
+    return migrate(ROOT, get=r2_get, put=r2_put, catalog_only=catalog_only)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

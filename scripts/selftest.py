@@ -57,6 +57,12 @@ ROOT = Path(__file__).resolve().parents[1]
 FIX = ROOT / "scripts" / "fixtures"
 
 
+def deployed_paths() -> str:
+    import assemble_site
+
+    return assemble_site.published_text(ROOT)
+
+
 def check(cond, message):
     if not cond:
         raise SystemExit("FAIL: " + message)
@@ -116,7 +122,8 @@ def accounts_wall_checks() -> None:
     replies_src = (ROOT / "scripts" / "replies.py").read_text(encoding="utf-8")
     check("over_deadline()" in replies_src and "refresh budget spent" in replies_src, "reply refresh stops when the feed budget is spent")
     check("paths-ignore:" in workflow and "data/communities/**" in workflow, "data-only commits do not start a deploy")
-    check("cp shared/lazy-modules.js _site/shared/" in workflow, "the deploy publishes the lazy route loader")
+    check("python3 scripts/assemble_site.py --site _site" in workflow and "shared/lazy-modules.js" in deployed_paths(), "the deploy publishes the lazy route loader")
+    check(workflow.count("python3 scripts/catalog_migrate.py --catalog-only") >= 2 and workflow.index("python3 scripts/catalog_migrate.py --catalog-only") < workflow.index("python3 scripts/accounts_publish.py") and workflow.index("python3 scripts/catalog_migrate.py --catalog-only") < workflow.rindex("python3 scripts/r2_catalog.py pull"), "the live catalog is copied into R2 before the shell switch and before refresh")
     check(
         accounts_publish.DEFAULT_HEALTH_ATTEMPTS >= 24 and accounts_publish.DEFAULT_HEALTH_INTERVAL >= 15,
         "health is retried for longer than a worker deploy",
@@ -165,7 +172,7 @@ def accounts_wall_checks() -> None:
             site = Path(tmp) / "site"
             source = Path(tmp) / "source"
             source.mkdir()
-            (source / "feeds.json").write_text('{"feeds":[]}\n', encoding="utf-8")
+            (source / "feeds.json").write_text('{"feeds":[{"id":"x:sample"}],"posts":[{"id":"1"}]}\n', encoding="utf-8")
             api = "https://viktorych-accounts.example.workers.dev"
 
             shell(site)
@@ -226,10 +233,23 @@ def accounts_wall_checks() -> None:
                 and seen["api"] == api
                 and "gate: true" in text
                 and worker == "const ACCOUNTS_WALL = true;\n"
-                and uploaded == ["feeds.json"]
+                and uploaded == ["feeds.json", "lastgood/feeds.json"]
                 and Path("accounts-wall/on").is_file(),
                 "a ready API locks the shell with the workers API and the service worker wall",
             )
+
+            shell(site)
+            uploaded.clear()
+            (source / "feeds.json").write_text('{"feeds":[],"posts":[]}\n', encoding="utf-8")
+            accounts_publish.fetch_health = up
+            accounts_publish.upload = fake_upload
+            try:
+                code = accounts_publish.publish(site, source)
+            finally:
+                accounts_publish.fetch_health = original_health
+                accounts_publish.upload = original_upload
+            check(code == 0 and uploaded == [], "an empty catalog is not published")
+            (source / "feeds.json").write_text('{"feeds":[{"id":"x:sample"}],"posts":[{"id":"1"}]}\n', encoding="utf-8")
 
             shell(site)
             uploaded.clear()
@@ -405,7 +425,9 @@ def refresh_budget_checks() -> None:
 
 def main() -> None:
     from account_identity import selftest as identity_selftest
+    import assemble_site
 
+    check(assemble_site.selftest() == 0, "the site assembler publishes every referenced shell file")
     accounts_wall_checks()
     refresh_budget_checks()
     follow_list_checks()
@@ -1250,7 +1272,15 @@ def main() -> None:
     storage_workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     storage_flow = subprocess.run(["node", str(ROOT / "scripts" / "storage_test.js")], cwd=ROOT)
     check(storage_flow.returncode == 0, "the storage cache helpers pass")
-    check('src="storage.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "storage.js" in storage_workflow and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
+    local_flow = subprocess.run(["node", str(ROOT / "scripts" / "localfirst_test.js")], cwd=ROOT)
+    direct_flow = subprocess.run(["node", str(ROOT / "scripts" / "direct_test.js")], cwd=ROOT)
+    check(local_flow.returncode == 0, "a blocked reload paints home, a profile, a post, and notifications from cache")
+    check(direct_flow.returncode == 0, "public reads run on the device and fall back to the server")
+    page_html = (ROOT / "index.html").read_text(encoding="utf-8")
+    check('src="storage.js"' in page_html and "storage.js" in deployed_paths() and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
+    check('src="localfirst.js"' in page_html and 'src="direct.js"' in page_html and "localfirst.js" in deployed_paths() and "direct.js" in deployed_paths() and "mergeNotes" in (ROOT / "localfirst.js").read_text(encoding="utf-8") and "public.api.bsky.app" in (ROOT / "direct.js").read_text(encoding="utf-8"), "the shell restores from local snapshots and public APIs are fetched on the device")
+    local_src = (ROOT / "localfirst.js").read_text(encoding="utf-8")
+    check("orderPosts" in local_src and "playlistFirst" in local_src and "cacheFirstSegment" in local_src and 'saveDoc("shorts"' in (ROOT / "shorts.js").read_text(encoding="utf-8") and 'saveDoc("lives"' in (ROOT / "shorts.js").read_text(encoding="utf-8") and 'saveDoc("music"' in (ROOT / "music.js").read_text(encoding="utf-8") and 'saveDoc("messages"' in (ROOT / "discord-ui.js").read_text(encoding="utf-8") and 'order: "utc"' in (ROOT / "app.js").read_text(encoding="utf-8"), "every screen keeps an ordered local copy and the first video segment is cached")
     ia_backup_checks()
     feed_order_checks()
     gdrive_checks()
@@ -1260,7 +1290,7 @@ def main() -> None:
     manifest = json.loads((ROOT / "manifest.webmanifest").read_text(encoding="utf-8"))
     workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check(manifest["display"] == "standalone" and manifest["scope"] == "./" and manifest["id"] == "./" and manifest["name"] == "ViktorychApp" and manifest["short_name"] == "ViktorychApp", "the installed shortcut name is ViktorychApp, and scope and id follow the manifest directory")
-    check("404.html" in workflow and "__SITE_BASE__" not in workflow and "brand.js" not in workflow and "i18n.js" in workflow and "marks.js" in workflow, "the deploy publishes the 404 fallback, translations, and marks without baking a repository path")
+    check("404.html" in deployed_paths() and "__SITE_BASE__" not in workflow and "brand.js" not in workflow and "i18n.js" in deployed_paths() and "marks.js" in deployed_paths(), "the deploy publishes the 404 fallback, translations, and marks without baking a repository path")
     missing = ROOT / "404.html"
     missing_text = missing.read_text(encoding="utf-8")
     check("location.replace" in missing_text and "ViktorychApp" in missing_text and "SuperintelApp" not in missing_text and "github.io" in missing_text and "parts[0]" in missing_text, "a missing page returns to this site's directory")
@@ -1269,7 +1299,7 @@ def main() -> None:
     googlebot_tag = '<meta name="googlebot" content="noindex, nofollow, noarchive, nosnippet, noimageindex">'
     worker_index = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
     discord_pub = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
-    check("User-agent: *" in robots_text and "Disallow: /data/" in robots_text and "robots.txt" in workflow and '"robots.txt"' in discord_pub, "robots.txt disallows data directories while letting crawlers read noindex on HTML pages")
+    check("User-agent: *" in robots_text and "Disallow: /data/" in robots_text and "robots.txt" in deployed_paths() and "assemble_site" in discord_pub, "robots.txt disallows data directories while letting crawlers read noindex on HTML pages")
     check(noindex_tag in (ROOT / "index.html").read_text(encoding="utf-8") and googlebot_tag in (ROOT / "index.html").read_text(encoding="utf-8") and noindex_tag in missing_text and googlebot_tag in missing_text, "the shell and 404 pages block search engine indexing")
     check('"x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"' in worker_index and 'path === "/robots.txt"' in worker_index, "the Worker sends X-Robots-Tag and serves /robots.txt")
     check("https://github.com/${GITHUB_REPO}" not in (ROOT / "app.js").read_text(encoding="utf-8"), "the sidebar fineprint does not link crawlers to the GitHub repository")
@@ -1316,7 +1346,7 @@ def main() -> None:
     check("function creatorOf(" in app and "function repostBanner(" in app and "function countsAsUpload(" in app and "repostComment" in app and "function creditCarried(" in app and "function carriedBy(" in app and "postsCountIncludesReposts" in app and "countsAsOwn" in (ROOT / "people.js").read_text(encoding="utf-8"), "reposts keep the original author, name who reposted, and stay out of that account's post count")
     check("parseSharedLink" in app and "startViewTransition" in app and 'readStored(localStorage, "timeline-v1")' in app and 'readStored(localStorage, "bookmark-queue")' in app and "setAppBadge" in app and 'decoding="async"' in app and "navigator.vibrate" in app, "share targets, view transitions, offline snapshots, badges, and haptics are wired")
     check("requestPermission" in app and app.index("requestPermission") > app.index("data-act=\"notify\""), "notification permission is requested from the settings control")
-    check("manifest.webmanifest" in workflow and "__SW_VERSION__" in workflow and "GITHUB_SHA" in workflow, "the deploy copies the app shell and stamps the service worker")
+    check("manifest.webmanifest" in deployed_paths() and "__SW_VERSION__" in workflow and "GITHUB_SHA" in workflow, "the deploy copies the app shell and stamps the service worker")
     check('ranking_mode: "recency"' in app, "fxtwitter conversations also request newest replies")
     check("COMMENT_TTL" in app and "reply-sort" in app and "Updated " in app and 'tab("relevant", tr("Relevant"))' in app and 'tab("recent", tr("Recent"))' in app and 'tab("liked", tr("Liked"))' in app and "replySortMode" in app, "opening a post can sort replies and show when they were fetched")
     yt_loader = app[app.index("function ytStub("):app.index("function liveDuration(")]
@@ -1330,7 +1360,8 @@ def main() -> None:
     community_loader = app[app.index("function ivCommunityThread("):app.index("function ytStub(")]
     check("ucid=" in community_loader and "commentCount" in community_loader, "community comments pass the channel id and keep the source count")
     check('cron: "15,45 * * * *"' in workflow and "/dispatches" in workflow and "chain" in workflow, "the sync has a staggered cron and a keepalive dispatch")
-    check("status.json" not in workflow and "cp status.json" not in workflow, "the deploy does not publish the sync status file")
+    published = deployed_paths()
+    check("status.json" not in published and "\nfallback/" not in published and "\ncomments/" not in published and "\narchive/" not in published and "\ndiscord/" not in published, "the deploy does not publish private sync files")
     check('name: "sources"' in app and "ownPack" in app and "fxDown" in app and "fallback/" in app and "settled" in app and "source-row" in (ROOT / "styles.css").read_text(encoding="utf-8"), "a hidden sources view fails over to our own files")
     check('name: "user"' in app and "#/u/" in app and "with_replies=1" in app and "Open on Instagram" in app and "feeds.config.json" in app and "pfollow-note" in (ROOT / "styles.css").read_text(encoding="utf-8"), "live profiles open from a handle and keep follows on the device")
     css = (ROOT / "styles.css").read_text(encoding="utf-8")
@@ -1340,7 +1371,7 @@ def main() -> None:
     check("--fill:" in css and "--hover: rgba(231, 233, 234, 0.1)" in css and "--hover-soft: rgba(255, 255, 255, 0.03)" in css and ".add-account .search { flex: 1; min-width: 0; }" in css and "text-overflow: ellipsis; white-space: nowrap; }" in css[css.index(".who-copy .name"):css.index(".who-copy .name") + 220] and ".watch-main { padding: 0; min-width: 0; }" in css and "function deadMediaUrl(" in app and "function collapseSameUrl(" in app and "Skip to content" in app and 'class="vh">${tr("Home")}' in app and 'aria-current="page"' in app and 'role="tab" aria-selected="' in app, "themes, watch width, dead posters, and control names stay in place")
     check('data-act="autoplay"' in app and "On cellular and Wi-Fi" in app and "Wi-Fi only" in app and 'autoplay: "all"' in app, "settings can keep autoplay on, limit it to Wi-Fi, or turn it off")
     accounts_js = (ROOT / "accounts.js").read_text(encoding="utf-8")
-    check('tr("You reposted")' in app and "by.self" in app and 'data-act="repost-do"' in app and 'data-act="quote-open"' in app and "/v1/reposts" in app and "function profilePostsHtml(" in app and "function commitRepost(" in app and "profilePostsHtml" in accounts_js and 'tr("Posts")' in accounts_js and "account_reposts" in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8") and "shared/reposts.js" in worker and "cp shared/handle-skeleton.js shared/reposts.js _site/shared/" in workflow and 'method: "POST"' in app[app.index("function commitRepost("):app.index("function watchHash(")] and 'method: "DELETE"' not in app[app.index("function commitRepost("):app.index("function watchHash(")] and 'request.method === "POST" || request.method === "DELETE"' in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8"), "a repost or quote is saved on the account and shown on that profile")
+    check('tr("You reposted")' in app and "by.self" in app and 'data-act="repost-do"' in app and 'data-act="quote-open"' in app and "/v1/reposts" in app and "function profilePostsHtml(" in app and "function commitRepost(" in app and "profilePostsHtml" in accounts_js and 'tr("Posts")' in accounts_js and "account_reposts" in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8") and "shared/reposts.js" in worker and "shared/handle-skeleton.js" in deployed_paths() and "shared/reposts.js" in deployed_paths() and 'method: "POST"' in app[app.index("function commitRepost("):app.index("function watchHash(")] and 'method: "DELETE"' not in app[app.index("function commitRepost("):app.index("function watchHash(")] and 'request.method === "POST" || request.method === "DELETE"' in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8"), "a repost or quote is saved on the account and shown on that profile")
     check('data-act="face-pref"' in app and "showPictures" in app and "showBanners" in app and "Profile pictures" in app and ".ava-none { display: none; }" in css and "hide-avatar" in accounts_js and "avatarEmpty" in accounts_js and "bannerEmpty" in accounts_js and "data-acct=\"face\"" in accounts_js, "a picture or banner can be the photo, the default, or nothing at all")
     check('meta[name="theme-color"]' in app and 'meta[name="color-scheme"]' in app and "apple-mobile-web-app-status-bar-style" in app and "black-translucent" in page and ".wco { display: none; background: var(--bg); }" in css, "the status bar matches the theme")
     check('media="(prefers-color-scheme: light)" content="#FFFFFF"' in page and 'media="(prefers-color-scheme: dark)" content="#000000"' in page and 'name="theme-color" content="#000000"' in page and "#15202B" in page and "querySelectorAll('meta[name=\"theme-color\"]')" in app and '"#FFFFFF"' in app and '"#15202B"' in app and '"#000000"' in app and 'setAttribute("content", "black-translucent")' in app and 'setAttribute("content", "black-translucent")' in page and 'mode === "default" ? "default"' not in app and 'mode === "default" ? "default"' not in page and "calc(env(safe-area-inset-top, 0px) + 1px)" in css and "--bg: #000000" in css and "--bg: #15202B" in css and "--bg: #FFFFFF" in css, "theme-color matches Lights out, Dim, and Default, including before paint")
@@ -1358,16 +1389,16 @@ def main() -> None:
     check(page.index('src="translate.js"') < page.index('src="app.js"') and 'href="translate.css"' in page, "the page loads the translator before the app")
     check(page.index('src="people.js"') < page.index('src="app.js"') and 'href="people.css"' in page, "the page loads unified profiles before the app")
     check(page.index('src="spaces.js"') < page.index('src="app.js"') and 'href="spaces.css"' in page, "the page loads the Space player before the app")
-    check("translate.js" in workflow and "people.js" in workflow and "people.css" in workflow, "the deploy publishes translation and people files")
+    check("translate.js" in deployed_paths() and "people.js" in deployed_paths() and "people.css" in deployed_paths() and "people.json" not in deployed_paths() and "suggestions.json" not in deployed_paths() and "feeds.config.json" not in deployed_paths(), "the deploy publishes translation and people files")
     check("people.js" in worker and "people.css" in worker and 'VERSION = "viktorych-a20-__SW_VERSION__"' in worker, "the service worker cache stamp drops the previous shell")
-    check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
+    check("tv.js" in deployed_paths() and "tv.css" in deployed_paths(), "the deploy publishes the TV layout")
     check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a20-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
-    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
+    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1200] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
-    check("spaces.js" in workflow and "spaces.css" in workflow and "_site/live" in workflow, "the deploy publishes the Space player and live status")
+    check("spaces.js" in deployed_paths() and "spaces.css" in deployed_paths() and "live/" in deployed_paths(), "the deploy publishes the Space player and live status")
     check("people.js" in worker and "people.css" in worker and "spaces.js" in worker and "spaces.css" in worker and 'VERSION = "viktorych-a20-__SW_VERSION__"' in worker and "live/superintelmusic" not in worker, "the service worker cache stamp includes the Space shell and leaves live status fresh")
     row = subprocess.run(["node", "scripts/spaces_row_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(row.returncode == 0, "space follow, allowlist, and marquee checks passed\n" + row.stdout + row.stderr)
@@ -1394,7 +1425,7 @@ def main() -> None:
     check(not banned_hits, "the old radio host is gone: " + ", ".join(banned_hits))
     check(page.index('src="i18n.js"') < page.index('src="marks.js"') < page.index('src="music.js"') < page.index('src="app.js"') and "brand.js" not in page and 'href="music.css"' in page, "the page loads translations and marks before music")
     check("music.js" in worker and "music.css" in worker and "i18n.js" in worker and "marks.js" in worker and "brand.js" not in worker and "data/music.json" in worker, "the service worker precaches music mode and refreshes its catalog")
-    check("music.js" in workflow and "music.css" in workflow and "hls-1.7.3.min.js" in workflow and "data/music.json" in workflow and '"music.js"' in (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8"), "the deploy publishes ViktorychMusic")
+    check("music.js" in deployed_paths() and "music.css" in deployed_paths() and "hls-1.7.3.min.js" in deployed_paths() and "data/music.json" in deployed_paths() and "assemble_site" in (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8"), "the deploy publishes ViktorychMusic")
     music_js = (ROOT / "music.js").read_text(encoding="utf-8")
     music_css = (ROOT / "music.css").read_text(encoding="utf-8")
     music_data = (ROOT / "data" / "music.json").read_text(encoding="utf-8")
@@ -1413,9 +1444,11 @@ def main() -> None:
     check("github.actor ==" not in follows_workflow and "OWNER_ACTOR_SHA256" in follows_workflow and "github.actor == github.repository_owner" not in follows_workflow and "OWNER: ${{ github.repository_owner }}" not in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues are applied only for the human owner, not the organization")
     check("github.actor ==" not in music_workflow and "OWNER_ACTOR_SHA256" in music_workflow and "github.actor == github.repository_owner" not in music_workflow and "REPO: ${{ github.repository }}" in music_workflow, "the music catalog issue is applied only for the human owner")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "groups.yml").is_file(), "subscription group issue form exists")
-    assemble = workflow.split("mkdir -p _site", 1)[1].split("python3 scripts/share_pages.py", 1)[0]
-    check("feeds.json" not in assemble and "stories.json" not in assemble and "people.json" not in assemble and "suggestions.json" not in assemble and "feeds.config.json" not in assemble and "mindepth 2" not in assemble, "the public site does not copy private catalogs")
-    chips_css = css[css.index(".yt-chips"):css.index(".yt-chips") + 500]
+    published = deployed_paths()
+    assemble_src = (ROOT / "scripts" / "assemble_site.py").read_text(encoding="utf-8")
+    check("feeds.json" not in published and "stories.json" not in published and "people.json" not in published and "suggestions.json" not in published and "feeds.config.json" not in published and "mindepth 2" not in assemble_src, "the public site does not copy private catalogs")
+    chips_at = css.index(".yt-chips {")
+    chips_css = css[chips_at:chips_at + 500]
     check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
     check("var(--fill)" in css[css.index(".yt-chip.on"):css.index(".yt-chip.on") + 160], "the selected subscription chip uses the inverted fill")
     check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups on your account" in app and "Groups saved on your account." in app, "subscription groups filter from the chip bar and save on the account")
@@ -1651,11 +1684,16 @@ def main() -> None:
     check("name: sync-report" in workflow_text and "TITLE = \"Sync problem\"" in (ROOT / "scripts" / "sync_health.py").read_text(encoding="utf-8") and "needs: [gate, build, deploy, wait-accounts, refresh]" in workflow_text, "the sync uploads a report and keeps one problem issue")
     check("function autoplayAllowed(" in app and "prefers-reduced-motion" in app and "prefers-reduced-data" in app and "saveData" in app and "is not Never" in app and 'threshold: [0, 0.5, 1]' in app and 'rootMargin: "0px"' in app and "playsinline" in app and "autoplay=1&mute=1&playsinline=1&controls=0" in app and 'preload = "none"' in app and "STATE.sound" in app and "strict-origin-when-cross-origin" in app and "function scheduleIdleReload(" in app and 'box.id = "autoplay-debug"' in app and "function xRefresh(" in app and "onReady" in app and "reload-armed" in app, "one in-view video previews muted, a miss is explained, and an update reloads when idle")
     check('cache: "reload"' in worker and "skipWaiting" in worker and "clients.claim" in worker and "function isShell(" in worker and "apply-update" in worker and "update-progress" in worker and "version.json" in worker and "includeUncontrolled" in worker and "precacheShell" in worker and "translate.js" in worker and "translate.css" in worker and "ACCOUNTS_WALL = false" in worker, "a new service worker waits, precaches with counted progress, then claims clients")
-    check("ViktorychUpdate" in app and "holdsReload" in app and 'src="update.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "python3 scripts/write_version.py --out _site/version.json" in workflow_text and "update.js" in workflow_text, "the page offers a full-screen update and the deploy writes version.json")
+    check("ViktorychUpdate" in app and "holdsReload" in app and 'src="update.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "python3 scripts/write_version.py --out _site/version.json" in workflow_text and "update.js" in deployed_paths(), "the page offers a full-screen update and the deploy writes version.json")
     import write_version
     write_version.selftest()
     import handle_guard
     check(handle_guard.selftest() == 0, "the handle guard hashes a private list")
+    check("private handle list is not configured; hash comparison skipped" in (ROOT / "scripts" / "handle_guard.py").read_text(encoding="utf-8"), "the handle guard stays green until the private list is set")
+    import catalog_migrate
+    check(catalog_migrate.selftest() == 0, "the catalog migration copies counts and sizes only")
+    import r2_catalog
+    check(r2_catalog.selftest() == 0, "a missing catalog keeps the last good copy")
     import subprocess
     update_flow = subprocess.run(["node", str(ROOT / "scripts" / "update_flow_test.js")], cwd=ROOT)
     check(update_flow.returncode == 0, "the update flow helpers pass")
@@ -2975,7 +3013,7 @@ def discord_checks() -> None:
     messages_css = (ROOT / "discord-ui.css").read_text(encoding="utf-8")
     messages_ui = (ROOT / "discord-ui.js").read_text(encoding="utf-8")
     publish = (ROOT / "scripts" / "discord_publish.py").read_text(encoding="utf-8")
-    check("FeedsSplit" in split_js and "viktorychapp-splits-v1" in split_js and "superintelapp-splits-v1" in split_js and '"rss-" + "feeds-splits-v1"' in split_js and "requestAnimationFrame" in split_js and "function bind(" in split_js and ('role="separator"' in messages_ui or 'role=\\"separator\\"' in messages_ui) and "FeedsSplit.bind" in messages_ui and "--dmsgs-list, 440px" in messages_css and "col-resize" in messages_css and "min-width: 300px" in messages_css and "max-width: 60%" in messages_css and ".dmsgs-split { display: none; }" in messages_css and "split.js" in workflow and '"split.js"' in publish, "the message list divider drags between 300px and 60 percent and remembers the width")
+    check("FeedsSplit" in split_js and "viktorychapp-splits-v1" in split_js and "superintelapp-splits-v1" in split_js and '"rss-" + "feeds-splits-v1"' in split_js and "requestAnimationFrame" in split_js and "function bind(" in split_js and ('role="separator"' in messages_ui or 'role=\\"separator\\"' in messages_ui) and "FeedsSplit.bind" in messages_ui and "--dmsgs-list, 440px" in messages_css and "col-resize" in messages_css and "min-width: 300px" in messages_css and "max-width: 60%" in messages_css and ".dmsgs-split { display: none; }" in messages_css and "split.js" in deployed_paths() and "assemble_site" in publish, "the message list divider drags between 300px and 60 percent and remembers the width")
     styles = (ROOT / "styles.css").read_text(encoding="utf-8")
     shell = (ROOT / "app.js").read_text(encoding="utf-8")
     check('class="nav-split"' in shell and 'role="separator"' in shell and "sidebar: sidebar" in split_js and "snapBelow" in split_js and "Collapse sidebar" in shell and 'data-act="nav-collapse"' in shell and 'html[data-nav="icons"]' in styles and "--nav-w" in styles and "width: 88px" in styles and "History" in shell and ".nav-split { display: none; }" in styles and 'matchMedia("(max-width: 1279px)")' in split_js and 'matchMedia("(max-width: 1279px)")' in (ROOT / "index.html").read_text(encoding="utf-8"), "the sidebar divider drags between icons-only and full width and narrow windows still force the icon rail")
@@ -4353,22 +4391,23 @@ def story_checks() -> None:
     lazy = (ROOT / "shared" / "lazy-modules.js").read_text(encoding="utf-8")
     check('shorts.js", "shorts.css"' in lazy and "shorts.js" in worker and "shorts.css" in worker and 'info.name === "shorts"' in app, "the page and the service worker load Shorts on demand")
     check('drive.js", "drive.css"' in lazy and "drive.js" in worker and "drive.css" in worker and "drive-crypto.js" in worker and 'ensureLazy("drive")' in app, "the page and the service worker load Drive on demand")
-    check("drive.js" in workflow and "drive.css" in workflow and "drive-crypto.js" in workflow and "drive-photos.js" in workflow, "the sync publishes the Drive shell")
+    check("drive.js" in deployed_paths() and "drive.css" in deployed_paths() and "drive-crypto.js" in deployed_paths() and "drive-photos.js" in deployed_paths(), "the sync publishes the Drive shell")
     check('parts[1] === "photos"' in app and 'tr("Photos")' in (ROOT / "drive.js").read_text(encoding="utf-8") and 'tr("Back up photos")' in (ROOT / "drive.js").read_text(encoding="utf-8"), "Photos is an owner Drive section")
     check("drive-photos.js" in worker, "the service worker precaches the Photos library")
     nav_fn = app.split("function navItemDef(id)", 1)[1].split("function shownFeeds", 1)[0]
     bottom_fn = app.split("function bottom(route)", 1)[1].split("function listSortOf", 1)[0]
-    nav_ids = app.split("const ALL_NAV_IDS = [", 1)[1].split("];", 1)[0]
-    default_on = app.split("const BOTTOM_NAV_DEFAULT_ON = [", 1)[1].split("];", 1)[0]
-    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and '"storage"' not in nav_ids and '"storage"' not in default_on, "storage stays out of the main nav")
-    check('href: "#/storage"' in nav_fn and 'icon: "storage"' in nav_fn and "ViktorychDrive.visible" in nav_fn and 'parts[0] === "storage"' in app and 'bare === "#/drive"' in app and "bottomHiddenItems()" in app, "storage opens from the owner account menu and the old drive route redirects")
+    bottom_ids = app.split("const BOTTOM_NAV_IDS", 1)[1].split("];", 1)[0]
+    bottom_default = app.split("const BOTTOM_NAV_DEFAULT_ON", 1)[1].split("];", 1)[0]
+    side_ids = app.split("const ALL_NAV_IDS", 1)[1].split("];", 1)[0]
+    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and "#/storage" not in bottom_fn and '"storage"' not in side_ids and '"storage"' not in bottom_default and '"storage"' in bottom_ids and 'href: "#/storage"' in nav_fn, "storage stays off the default nav and can be pinned on the bottom bar")
+    check('href: "#/storage"' in nav_fn and 'icon: "storage"' in nav_fn and "ViktorychDrive.visible" in app and "bottomHiddenItems()" in app and 'parts[0] === "storage"' in app and 'bare === "#/drive"' in app, "storage opens from the account menu when it is off the bar, and the old drive route redirects")
     games_js = (ROOT / "games.js").read_text(encoding="utf-8")
     check('games.js", "games.css"' in lazy and 'id="game-host"' in page and "games.js" in worker and "games.css" in worker, "the page and the service worker load Games on demand")
-    check("games.js" in workflow and "games.css" in workflow, "the sync publishes the Games shell")
-    check(('"#/games", "games"' in nav_fn or 'href: "#/games"' in nav_fn) and ('name === "games"' in nav_fn or 'r.name === "games"' in nav_fn) and 'icon: "games"' in nav_fn and 'href="#/games"' in games_js and 'parts[0] === "games"' in app and "bottomHiddenItems()" in app, "Games opens from the left nav and the account menu")
+    check("games.js" in deployed_paths() and "games.css" in deployed_paths(), "the sync publishes the Games shell")
+    check('href: "#/games"' in nav_fn and 'r.name === "games"' in nav_fn and 'icon: "games"' in nav_fn and '"games"' in side_ids and 'parts[0] === "games"' in app, "Games opens from the left nav and the account menu")
     communities_js = (ROOT / "communities.js").read_text(encoding="utf-8")
     check('communities.js", "communities.css"' in lazy and "communities.js" in worker and "communities.css" in worker and 'info.name === "communities"' in app, "the page and the service worker load Communities on demand")
-    check("communities.js" in workflow and "communities.css" in workflow and "reddit.yml" in workflow and "data/communities/index.json" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")
+    check("communities.js" in deployed_paths() and "communities.css" in deployed_paths() and "data/communities/index.json" in deployed_paths() and "reddit.yml" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")
     check(('"#/communities", "communities"' in nav_fn or 'href: "#/communities"' in nav_fn) and 'parts[0] === "communities"' in app and "ViktorychCommunities" in app and "takeCompose" in app, "Communities opens from the left nav and reuses compose")
     check("Only on ViktorychApp" in communities_js and "data-cm=\"filter\"" in communities_js and "parentId" in communities_js, "a community thread mixes Reddit and ViktorychApp replies")
     communities_css = (ROOT / "communities.css").read_text(encoding="utf-8")
@@ -4383,7 +4422,7 @@ def story_checks() -> None:
     check("loadComments" in communities_js and "retry-comments" in communities_js and "cleanRedditText(item.reply.text)" in communities_js and "cm-thread-note" in communities_css, "a forum thread loads its own comment page instead of a partial preview")
     check("fetch_replies" in discourse_py and "write_comments" in discourse_py and "prune_comments" in discourse_py and "html_to_text" in discourse_py and "TOPIC_LIMIT" in discourse_py, "the forum sync keeps every topic's comments in a per-topic file")
     sw_js = (ROOT / "sw.js").read_text(encoding="utf-8")
-    check("mindepth 2" not in workflow and "one comment page per topic" in sw_js and "data\\/communities" in sw_js, "comment pages stay in private storage and the service worker still treats them as data")
+    check("mindepth 2" not in (ROOT / "scripts" / "assemble_site.py").read_text(encoding="utf-8") and "data/communities/index.json" in deployed_paths() and "one comment page per topic" in sw_js and "data\\/communities" in sw_js, "comment pages stay in private storage and the service worker still treats them as data")
     reddit_wf = (ROOT / ".github" / "workflows" / "reddit.yml").read_text(encoding="utf-8")
     check("trying public feeds" in reddit_py and "leaving communities unchanged" not in reddit_py and "client_credentials" in reddit_py and "reddit.com/.json" not in reddit_py and 'cron: "*/20 * * * *"' in reddit_wf and "echo \"$REDDIT_CLIENT" not in reddit_wf and "echo ${{ secrets" not in reddit_wf, "the Reddit mirror tries public feeds without secrets and runs every 20 minutes")
     import communities_publish
@@ -4396,7 +4435,7 @@ def story_checks() -> None:
     drive_crypto = subprocess.run(["node", "scripts/drive_test.mjs"], cwd=ROOT, capture_output=True, text=True)
     check(drive_crypto.returncode == 0, "drive crypto round-trip\n" + drive_crypto.stdout + drive_crypto.stderr)
     check('img.closest(".shorts-slide")' in app, "a refused Shorts video stays in the slide so the TikTok detail can show")
-    check("shorts.js" in workflow and "shorts.css" in workflow and "python3 scripts/tiktok_sync.py" in workflow, "the sync fetches TikTok and publishes the Shorts shell")
+    check("shorts.js" in deployed_paths() and "shorts.css" in deployed_paths() and "python3 scripts/tiktok_sync.py" in workflow, "the sync fetches TikTok and publishes the Shorts shell")
     accounts_cfg = (ROOT / "accounts.config.js").read_text(encoding="utf-8")
     wrangler = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
     check('tiktokAudience: "owner"' in accounts_cfg and 'TIKTOK_AUDIENCE = "owner"' in wrangler and "gate: true" not in accounts_cfg, "TikTok stays owner-only until the one audience flag changes")
@@ -4714,7 +4753,7 @@ def feed_order_checks() -> None:
     import subprocess
     from datetime import datetime, timezone
 
-    from adapters.common import dedupe_posts, order_ms, parse_time
+    from adapters.common import dedupe_posts, order_ms, parse_time, stamp_activity
 
     moment = datetime(2026, 10, 27, tzinfo=timezone.utc)
     same = datetime(2026, 10, 21, 17, tzinfo=timezone.utc)
@@ -4756,11 +4795,23 @@ def feed_order_checks() -> None:
         "people.json": _Path(2),
     })
     check([key for key, _path in ordered] == ["feeds.json", "people.json", "data/communities/a.json", "archive/2020-01.json"], "the live catalog is uploaded before archive JSON, newest extras first")
+    pinned_first = [
+        {"id": "pin", "platform": "x", "handle": "tabfixture", "kind": "post", "pinned": True, "date": "2020-01-01T00:00:00Z", "pinAt": "2020-01-01T00:00:00Z"},
+        {"id": "repost:tabfixture:2", "platform": "x", "kind": "repost", "handle": "otheracct", "date": "2026-10-20T00:00:00Z", "repostedBy": {"handle": "tabfixture"}},
+        {"id": "3", "platform": "x", "handle": "tabfixture", "kind": "post", "date": "2026-10-27T11:00:00Z"},
+    ]
+    stamp_activity(pinned_first, datetime(2026, 10, 27, 12, tzinfo=timezone.utc))
+    check(pinned_first[0]["id"] == "repost:tabfixture:2" and pinned_first[-1]["id"] == "pin" and pinned_first[-1]["date"] == "", "a pinned row is not treated as the newest post")
+    check(pinned_first[0].get("sortDate", "") > "2026-10-27T11:00:00Z" and pinned_first[0]["sortDate"] < "2026-10-27T12:00:00Z", "a repost listed under a pin is stamped between the fetch and the next real post")
     proc = subprocess.run(["node", str(ROOT / "scripts" / "feed_order_test.mjs")], check=False)
     check(proc.returncode == 0, "feed order fixtures")
+    custom = subprocess.run(["node", str(ROOT / "scripts" / "custom_tab_test.mjs")], check=False)
+    check(custom.returncode == 0, "custom tab freshness fixtures")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
-    check("shared/feed-order.js" in (ROOT / "index.html").read_text(encoding="utf-8") and "./shared/feed-order.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "cp shared/feed-order.js _site/shared/" in (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8"), "the feed order helper is published with the shell")
-    check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8"), "new posts merge in place and the Following tab uses the signed-in accounts")
+    check("shared/feed-order.js" in (ROOT / "index.html").read_text(encoding="utf-8") and "./shared/feed-order.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "shared/feed-order.js" in deployed_paths() and "python3 scripts/assemble_site.py --site _site" in (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8"), "the feed order helper is published with the shell")
+    order_js = (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8")
+    check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in order_js, "new posts merge in place and the Following tab uses the signed-in accounts")
+    check("function customTabFeeds(" in app and "function timelineFeeds(" in app and "timelineFeeds()" in app and "function hydrateTabSnapshots(" in app and "refreshTab" in order_js, "custom tabs use the same UTC refresh as Following")
 
 
 def gdrive_checks() -> None:
@@ -4830,6 +4881,21 @@ def gdrive_checks() -> None:
     check(len(ordered) == 2 and sizes[ordered[0]["logical"]] == 90 and sizes[ordered[1]["logical"]] == 10, "the larger video is uploaded before the smaller one")
     known = {"v": 1, "files": [{"logical": songs[0]["logical"], "sha256": "ab" * 32, "path": "covers/" + ("ab" * 32) + ".png"}]}
     check(songs[0]["logical"] in gdrive_backup.known_ids(known) and ("ab" * 32) in gdrive_backup.known_hashes(known), "a stored hash and logical id are treated as already uploaded")
+    import cf_pages_prepare
+    import cf_pages_deploy
+    import cf_kv_bind
+    import cf_web_analytics
+    check(cf_pages_prepare.selftest() == 0, "the Pages mirror stays inside the file cap and keeps the shell")
+    check(cf_pages_deploy.selftest() == 0, "a Pages permission failure skips without printing a token")
+    check(cf_kv_bind.selftest() == 0, "a KV permission failure removes only the cache binding")
+    check(cf_web_analytics.selftest() == 0, "the analytics beacon is added only with a public token")
+    sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    smoke = (ROOT / ".github" / "workflows" / "smoke.yml").read_text(encoding="utf-8")
+    check("wrangler pages deploy" in sync and "viktorychapp" in sync and "cf_pages_deploy.py" in sync and "cf_pages_prepare.py" in sync and "shared/mirror.js" in deployed_paths() and "smoke_page.mjs --site _mirror" in sync and "smoke_page.mjs --site _site" in smoke and "smoke_page.mjs --site _mirror" in smoke, "the Pages upload is the generated bundle and the smoke check loads that output")
+    check("ViktorychMirror" in (ROOT / "sw.js").read_text(encoding="utf-8") and 'scope: "./"' in (ROOT / "app.js").read_text(encoding="utf-8"), "the service worker can fail over to the other origin")
+    wrangler_text = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
+    check("head_sampling_rate = 1" in wrangler_text and 'binding = "CACHE"' in wrangler_text and 'crons = ["* * * * *"]' in wrangler_text, "workers logs and the KV cache are configured beside the existing cron")
+    check("backups/d1/" in (ROOT / "worker" / "src" / "d1-backup.js").read_text(encoding="utf-8"), "the daily D1 export keeps its objects under backups/d1/")
 
 
 if __name__ == "__main__":

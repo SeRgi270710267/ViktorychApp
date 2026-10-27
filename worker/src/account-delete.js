@@ -3,19 +3,23 @@
    resumes anything left behind. After the job is done, the only lasting
    public record is a salted hash of the account id.
 
-   Tables audited against migrations 0001–0017 and the runtime schema:
-   accounts, sessions, sync_state (notification tabs, feed settings, groups,
-   drafts, likes, bookmarks, resume and history), rate_limits,
-   account_reposts, account_follows (both directions), drive_vault,
-   drive_items, drive_chunks, community_posts, community_likes,
-   community_members, community_notes, account_friend_requests,
-   account_friends, account_federation, ap_followers, account_identities,
-   identity_challenges, vault_configs, vault_items, vault_shares, owner_keys,
-   owner_key_items, owner_key_pace, account_reauths. telegram_files is a
+   Tables audited against migrations 0001–0019 and the runtime schema:
+   accounts, sessions, sync_state (feed settings, groups, drafts, likes,
+   bookmarks, resume and history), rate_limits, account_reposts,
+   account_follows (both directions), drive_vault, drive_items, drive_chunks,
+   community_posts, community_likes, community_members, community_notes,
+   account_friend_requests, account_friends, account_federation, ap_followers,
+   account_identities, identity_challenges, vault_configs, vault_items,
+   vault_shares, owner_keys, owner_key_items, owner_key_pace, account_reauths,
+   account_presence, account_status, channel_tickets, notifications,
+   notification_state, notification_bells, push_subscriptions, push_log.
+   push_vapid is the one global key and has no account column. The account
+   channel object is wiped in the same database step. telegram_files is a
    shared media index with no account column, so it is left alone. There is
    no invites table. */
 
 import { inspectHandle, ownerHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
+import { wipeAccountChannel } from "./channel.js";
 
 const encoder = new TextEncoder();
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -134,8 +138,10 @@ function timingEqual(left, right) {
 }
 
 function ownerIdHashes(env) {
-  const raw = String((env && (env.OWNER_ID_SHA256 || env.OWNER_GITHUB_SHA256)) || "");
-  return raw.split(/[\s,]+/).map((item) => item.trim().toLowerCase()).filter((item) => /^[a-f0-9]{64}$/.test(item));
+  const parts = [];
+  if (env && env.OWNER_ID_SHA256) parts.push(String(env.OWNER_ID_SHA256));
+  if (env && env.OWNER_GITHUB_SHA256) parts.push(String(env.OWNER_GITHUB_SHA256));
+  return parts.join(",").split(/[\s,]+/).map((item) => item.trim().toLowerCase()).filter((item) => /^[a-f0-9]{64}$/.test(item));
 }
 
 async function matchesOwnerId(env, value) {
@@ -480,6 +486,8 @@ async function runJob(env, job, opts) {
     await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(publicId).run();
     steps.sessions = true;
     await wipeDatabase(env, job);
+    try { await wipeAccountChannel(env, publicId); }
+    catch (err) { /* the rows are already gone; the next run closes the object */ }
     steps.database = true;
     await saveJob(env, job, steps, "running", "");
   }

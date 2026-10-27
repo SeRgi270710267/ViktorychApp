@@ -809,11 +809,12 @@ def extract() -> int:
         config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
     except json.JSONDecodeError:
         config = {}
-    from tiktok_sync import env_tracked, load_added_accounts, r2_get
+    from r2_catalog import read_catalog
+    from tiktok_sync import env_tracked, load_added_accounts
     from update_feeds import load_added_x
 
     if isinstance(config, dict) and config.get("catalogSeed") is True:
-        blob = r2_get("feeds.config.json")
+        blob = read_catalog("feeds.config.json")
         restored = None
         if blob:
             try:

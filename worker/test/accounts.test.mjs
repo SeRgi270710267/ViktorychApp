@@ -140,6 +140,85 @@ test("health, signup, login, session, and sync", async () => {
   assert.ok(nav.order.filter((id) => !nav.hidden.includes(id)).length <= 6);
   assert.equal(navPut.body.payload.bottomNavCustom, true);
 
+  const layoutOff = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.30",
+    token: good.body.token,
+    body: {
+      payload: {
+        follows: ["x:ada"],
+        navLayout: "bar",
+        navLayoutLand: true,
+        navLayoutSync: false
+      },
+      baseUpdatedAt: navPut.body.updatedAt
+    }
+  });
+  assert.equal(layoutOff.status, 200);
+  assert.equal(layoutOff.body.payload.navLayout, undefined);
+  assert.equal(layoutOff.body.payload.navLayoutLand, undefined);
+  assert.equal(layoutOff.body.payload.navLayoutSync, undefined);
+
+  const layoutOn = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.31",
+    token: good.body.token,
+    body: {
+      payload: {
+        follows: ["x:ada"],
+        navLayout: "sideways",
+        navLayoutLand: true,
+        navLayoutSync: true
+      },
+      baseUpdatedAt: layoutOff.body.updatedAt
+    }
+  });
+  assert.equal(layoutOn.status, 200);
+  assert.equal(layoutOn.body.payload.navLayout, "auto");
+  assert.equal(layoutOn.body.payload.navLayoutLand, true);
+  assert.equal(layoutOn.body.payload.navLayoutSync, true);
+
+  const layoutKept = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.32",
+    token: good.body.token,
+    body: {
+      payload: { follows: ["x:ada"] },
+      baseUpdatedAt: layoutOn.body.updatedAt
+    }
+  });
+  assert.equal(layoutKept.status, 200);
+  assert.equal(layoutKept.body.payload.navLayout, "auto");
+  assert.equal(layoutKept.body.payload.navLayoutLand, true);
+  assert.equal(layoutKept.body.payload.navLayoutSync, true);
+
+  const layoutClear = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.33",
+    token: good.body.token,
+    body: {
+      payload: { follows: ["x:ada"], navLayoutSync: false },
+      baseUpdatedAt: layoutKept.body.updatedAt
+    }
+  });
+  assert.equal(layoutClear.status, 200);
+  assert.equal(layoutClear.body.payload.navLayout, undefined);
+  assert.equal(layoutClear.body.payload.navLayoutLand, undefined);
+  assert.equal(layoutClear.body.payload.navLayoutSync, undefined);
+
+  const layoutGone = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.34",
+    token: good.body.token,
+    body: {
+      payload: { follows: ["x:ada"] },
+      baseUpdatedAt: layoutClear.body.updatedAt
+    }
+  });
+  assert.equal(layoutGone.status, 200);
+  assert.equal(layoutGone.body.payload.navLayout, undefined);
+  assert.equal(layoutGone.body.payload.navLayoutSync, undefined);
+
   const clash = await call("/v1/sync", {
     method: "PUT",
     ip: "203.0.113.26",
@@ -862,4 +941,81 @@ test("profile-less account hides public profile, permits own view, and prevents 
   });
   assert.equal(nowPublic.status, 200);
   assert.equal(nowPublic.body.account.profileLess, false);
+});
+
+test("a missing catalog serves the last good copy and never an empty one", async () => {
+  const box = new Miniflare(workerOptions({ TIKTOK_UNLOCKED: "sampleclip" }));
+  try {
+    const data = await box.getBindings();
+    const good = JSON.stringify({
+      feeds: [{ id: "x:orbitfox", platform: "x", handle: "orbitfox" }],
+      posts: [{ id: "p1", platform: "x", text: "kept-post", handle: "orbitfox" }]
+    });
+    await data.DATA.put("lastgood/feeds.json", good);
+    await data.DATA.put("lastgood/owner/tiktok.json", JSON.stringify({ posts: [{ id: "clip", text: "kept-clip" }], live: {} }));
+    const created = await box.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "content-type": "application/json", "CF-Connecting-IP": "203.0.113.210" },
+      body: JSON.stringify({ displayName: "Reader", handle: "readerlast" })
+    });
+    const reader = await created.json();
+    assert.equal(created.status, 201);
+    const seen = await box.dispatchFetch("https://accounts.test/v1/data/feeds.json", {
+      headers: { Authorization: "Bearer " + reader.token, "CF-Connecting-IP": "203.0.113.211" }
+    });
+    const body = await seen.json();
+    assert.equal(seen.status, 200);
+    assert.equal(body.posts[0].id, "p1");
+    const repaired = JSON.parse(await (await data.DATA.get("feeds.json")).text());
+    assert.equal(repaired.posts[0].id, "p1");
+
+    await data.DATA.put("feeds.json", JSON.stringify({ catalogSeed: true, feeds: [], posts: [] }));
+    const seeded = await box.dispatchFetch("https://accounts.test/v1/data/feeds.json", {
+      headers: { Authorization: "Bearer " + reader.token, "CF-Connecting-IP": "203.0.113.212" }
+    });
+    assert.equal((await seeded.json()).posts[0].id, "p1");
+
+    await data.DATA.put("feeds.json", JSON.stringify({ feeds: [], posts: [] }));
+    const emptied = await box.dispatchFetch("https://accounts.test/v1/data/feeds.json", {
+      headers: { Authorization: "Bearer " + reader.token, "CF-Connecting-IP": "203.0.113.213" }
+    });
+    assert.equal((await emptied.json()).posts[0].id, "p1");
+
+    await data.DATA.delete("feeds.json");
+    await data.DATA.delete("lastgood/feeds.json");
+    const missing = await box.dispatchFetch("https://accounts.test/v1/data/feeds.json", {
+      headers: { Authorization: "Bearer " + reader.token, "CF-Connecting-IP": "203.0.113.214" }
+    });
+    assert.equal(missing.status, 404);
+
+    const claimed = await box.dispatchFetch("https://accounts.test/v1/signup", {
+      method: "POST",
+      headers: { "content-type": "application/json", "CF-Connecting-IP": "203.0.113.215" },
+      body: JSON.stringify({ displayName: "Owner", handle: "mirathorn", claimCode: "claim-test" })
+    });
+    const owner = await claimed.json();
+    assert.equal(claimed.status, 201);
+    assert.equal(owner.account.owner, true);
+    const hidden = await box.dispatchFetch("https://accounts.test/v1/owner/tiktok/unlocked", {
+      headers: { Authorization: "Bearer " + reader.token, "CF-Connecting-IP": "203.0.113.216" }
+    });
+    assert.equal(hidden.status, 403);
+    const unlocked = await box.dispatchFetch("https://accounts.test/v1/owner/tiktok/unlocked", {
+      headers: { Authorization: "Bearer " + owner.token, "CF-Connecting-IP": "203.0.113.217" }
+    });
+    assert.deepEqual((await unlocked.json()).handles, ["sampleclip"]);
+    const tiktok = await box.dispatchFetch("https://accounts.test/v1/owner/tiktok", {
+      headers: { Authorization: "Bearer " + owner.token, "CF-Connecting-IP": "203.0.113.218" }
+    });
+    assert.equal(tiktok.status, 200);
+    assert.equal((await tiktok.json()).posts[0].text, "kept-clip");
+    await data.DATA.put("stories.json", JSON.stringify({ accounts: [] }));
+    const storyRes = await box.dispatchFetch("https://accounts.test/v1/data/stories.json", {
+      headers: { Authorization: "Bearer " + reader.token, "CF-Connecting-IP": "203.0.113.219" }
+    });
+    assert.equal(storyRes.status, 200);
+    assert.deepEqual((await storyRes.json()).accounts, []);
+  } finally {
+    await box.dispose();
+  }
 });

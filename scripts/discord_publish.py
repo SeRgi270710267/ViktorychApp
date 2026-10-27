@@ -22,53 +22,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SITE_FILES = (
-    "index.html",
-    "accounts.js",
-    "owner-keys.js",
-    "storage.js",
-    "storage.css",
-    "accounts.css",
-    "accounts.config.js",
-    "shorts.js",
-    "shorts.css",
-    "marks.js",
-    "app.js",
-    "styles.css",
-    "split.js",
-    "discord-ui.js",
-    "discord-ui.css",
-    "translate.js",
-    "translate.css",
-    "people.js",
-    "people.css",
-    "tv.js",
-    "tv.css",
-    "spaces.js",
-    "spaces.css",
-    "music.js",
-    "music.css",
-    "i18n.js",
-    "stories.js",
-    "stories.css",
-    "communities.js",
-    "communities.css",
-    "yt-player.js",
-    "yt-player.css",
-    "scores.js",
-    "scores.css",
-    "weather.js",
-    "weather.css",
-    "404.html",
-    "robots.txt",
-    "favicon.svg",
-    "favicon.ico",
-    "manifest.webmanifest",
-    "sw.js",
-    ".nojekyll",
-    "feeds.config.json",
-)
-COPY_DIRS = ("icons", "splash", "screenshots", "i18n", "shared")
+COPY_DIRS = ("icons", "splash", "screenshots", "i18n", "shared", "logo")
 UA = "viktorych-preview/1.0"
 
 
@@ -154,11 +108,15 @@ def _copy_tree(src: Path, dest: Path) -> None:
         shutil.copy2(path, target)
 
 
+def _shell(root: Path):
+    sys.path.insert(0, str(root / "scripts"))
+    import assemble_site
+    return assemble_site
+
+
 def _overlay(root: Path, dest: Path) -> None:
-    for name in SITE_FILES:
-        src = root / name
-        if src.is_file():
-            shutil.copy2(src, dest / name)
+    assembler = _shell(root)
+    assembler.copy_shell(root, dest)
     for name in COPY_DIRS:
         _copy_tree(root / name, dest / name)
     music = root / "data" / "music.json"
@@ -175,33 +133,14 @@ def _overlay(root: Path, dest: Path) -> None:
     if worker.is_file():
         sha = (os.environ.get("GITHUB_SHA") or "discord-live").strip() or "discord-live"
         worker.write_text(worker.read_text(encoding="utf-8").replace("__SW_VERSION__", sha), encoding="utf-8")
+    assembler.verify_site(dest, assembler.shell_files(root))
 
 
 def _from_checkout(root: Path, dest: Path) -> None:
-    if dest.exists():
-        shutil.rmtree(dest)
-    dest.mkdir(parents=True)
-    names = list(SITE_FILES) + ["feeds.json", "people.json", "suggestions.json"]
-    for name in names:
-        src = root / name
-        if src.is_file():
-            shutil.copy2(src, dest / name)
-    for name in COPY_DIRS:
-        _copy_tree(root / name, dest / name)
-    for folder in ("fallback", "comments", "archive", "discord"):
-        _copy_tree(root / folder, dest / folder)
-    status = root / "status.json"
-    if status.is_file():
-        shutil.copy2(status, dest / "status.json")
-    music = root / "data" / "music.json"
-    if music.is_file():
-        (dest / "data").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(music, dest / "data" / "music.json")
+    assembler = _shell(root)
+    assembler.build(root, dest, (os.environ.get("GITHUB_SHA") or "discord-live").strip() or "discord-live")
     subprocess.run([sys.executable, str(root / "scripts" / "share_pages.py"), "--site", str(dest)], check=False)
-    worker = dest / "sw.js"
-    if worker.is_file():
-        sha = (os.environ.get("GITHUB_SHA") or "discord-live").strip() or "discord-live"
-        worker.write_text(worker.read_text(encoding="utf-8").replace("__SW_VERSION__", sha), encoding="utf-8")
+    assembler.verify_site(dest, assembler.shell_files(root))
 
 
 def _refresh_checkout(root: Path) -> None:

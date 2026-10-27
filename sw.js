@@ -1,12 +1,14 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
 const VERSION = "viktorych-a20-__SW_VERSION__";
-// cache-bust: 2026-10-27T12:00:00Z-live-preview
+const MIRROR_GITHUB = "__MIRROR_GITHUB__";
+const MIRROR_PAGES = "__MIRROR_PAGES__";
+// cache-bust: 2026-10-27T15:30:00Z-presence
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION, "./storage.js?" + VERSION);
+importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -43,6 +45,8 @@ const SHELL_FILES = [
   "./",
   "./index.html",
   "./styles.css",
+  "./dock.css",
+  "./dock.js",
   "./i18n.js",
   "./i18n/en.js",
   "./i18n/ru.js",
@@ -51,6 +55,14 @@ const SHELL_FILES = [
   "./update.js",
   "./storage.js",
   "./storage.css",
+  "./localfirst.js",
+  "./direct.js",
+  "./logo/v.svg",
+  "./logo/v-music.svg",
+  "./logo/viktorychapp.svg",
+  "./logo/viktorychapp-short.svg",
+  "./logo/viktorychmusic.svg",
+  "./logo/viktorychmusic-short.svg",
   "./translate.js",
   "./translate.css",
   "./people.js",
@@ -69,6 +81,9 @@ const SHELL_FILES = [
   "./marks.js",
   "./music.js",
   "./music.css",
+  "./presence.js",
+  "./presence.css",
+  "./shared/presence.js",
   "./accounts.js",
   "./owner-keys.js",
   "./accounts.css",
@@ -91,9 +106,11 @@ const SHELL_FILES = [
   "./weather.css",
   "./shared/drive-crypto.js",
   "./shared/drive-photos.js",
+  "./shared/mirror.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/feed-order.js",
+  "./shared/pill-data.js",
   "./shared/lazy-modules.js",
   "./favicon.svg",
   "./favicon.ico",
@@ -345,12 +362,72 @@ async function trimMedia() {
   const plan = self.ViktorychStorage.planEviction(rows, max, Date.now(), self.ViktorychStorage.keepMs(saved.keep));
   await Promise.all(plan.drop.map(async (row) => {
     try {
+      if ((row.cacheName || "") === "idb-docs") {
+        await self.ViktorychStorage.deleteDoc(db, row.url);
+        return;
+      }
       const cache = await caches.open(row.cacheName || MEDIA);
       await cache.delete(row.url);
     } catch (err) { /* a missing cache is already gone */ }
   }));
   await self.ViktorychStorage.replaceFiles(db, plan.keep);
   await idbSet(db, "media-index", []);
+}
+
+function mirrorApi() {
+  return (typeof self !== "undefined" && self.ViktorychMirror) ? self.ViktorychMirror : null;
+}
+
+function mirrorRelative(url) {
+  const api = mirrorApi();
+  if (!api || !api.mirrorHost(self.location.hostname)) return "";
+  if (!url || url.origin !== self.location.origin) return "";
+  const rel = api.relativeTo(self.registration.scope, url.href);
+  if (!rel || /^(?:v1\/|tg\/|ap\/|\.well-known\/)/.test(rel)) return "";
+  return rel;
+}
+
+function mirrorBases() {
+  const api = mirrorApi();
+  if (!api) return [];
+  const here = api.normalizeBase(self.registration.scope);
+  return api.bases(here, MIRROR_GITHUB, MIRROR_PAGES).filter((base) => base !== here);
+}
+
+async function mirrorAlternate(url) {
+  const api = mirrorApi();
+  const rel = mirrorRelative(url);
+  if (!api || !rel) return null;
+  const bases = mirrorBases();
+  for (let i = 0; i < bases.length; i++) {
+    const next = api.rewrite(bases[i], rel);
+    if (!next) continue;
+    try {
+      const res = await fetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store", redirect: "follow" });
+      if (res && res.ok && res.type !== "opaque") return res;
+    } catch (err) { /* the next origin can still have the file */ }
+  }
+  return null;
+}
+
+async function mirrorFetch(request, init) {
+  let res = null;
+  let failed = false;
+  try {
+    res = init ? await fetch(request, init) : await fetch(request);
+  } catch (err) {
+    failed = true;
+  }
+  const api = mirrorApi();
+  const status = failed || !res ? 0 : res.status;
+  if (api && request && request.method === "GET" && api.failoverStatus(status)) {
+    let url = null;
+    try { url = new URL(request.url); } catch (err) { url = null; }
+    const alt = url ? await mirrorAlternate(url) : null;
+    if (alt) return alt;
+  }
+  if (failed) throw new Error("mirror");
+  return res;
 }
 
 async function wipeUserCaches(full) {
@@ -363,6 +440,7 @@ async function wipeUserCaches(full) {
   try {
     const db = await idb();
     await self.ViktorychStorage.replaceFiles(db, []);
+    await self.ViktorychStorage.clearDocs(db, "all");
     await idbSet(db, "media-index", []);
   } catch (err) { /* the page clears the same stores */ }
 }
@@ -382,14 +460,14 @@ async function staleWhileRevalidate(request, extraHeaders) {
   const update = (async () => {
     const db = await idb();
     try {
-      await self.ViktorychStorage.bump(db, "network");
-      const res = await fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
+      const res = await mirrorFetch(new Request(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" }));
       const action = self.ViktorychStorage.revalidateAction(res && res.status);
       if (action === "keep" && cached) {
         await self.ViktorychStorage.touch(db, request.url);
         broadcast({ type: "storage-online" });
         return cached;
       }
+      if (action === "store") await self.ViktorychStorage.bump(db, "network");
       if (action === "store" && self.ViktorychStorage.shouldCacheFeed(request.url)) {
         await cache.put(cacheReq, res.clone());
         await rememberMedia(request.url, self.ViktorychStorage.byteLengthOf(res), self.ViktorychStorage.categoryOf(request.url), DATA);
@@ -405,6 +483,8 @@ async function staleWhileRevalidate(request, extraHeaders) {
   if (cached) {
     const db = await idb();
     await self.ViktorychStorage.bump(db, "hits");
+    await self.ViktorychStorage.bump(db, "savedRequests");
+    await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
     await self.ViktorychStorage.touch(db, request.url);
     update.then((res) => {
       if (!res || res === cached) return;
@@ -441,6 +521,8 @@ async function serveMedia(request, extraHeaders) {
   }
   if (cached && !rangeHeader) {
     await self.ViktorychStorage.bump(db, "hits");
+    await self.ViktorychStorage.bump(db, "savedRequests");
+    await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
     await self.ViktorychStorage.touch(db, request.url);
     return cached;
   }
@@ -448,6 +530,8 @@ async function serveMedia(request, extraHeaders) {
     const partial = await self.ViktorychStorage.sliceCached(cached, rangeHeader);
     if (partial) {
       await self.ViktorychStorage.bump(db, "hits");
+      await self.ViktorychStorage.bump(db, "savedRequests");
+      await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
       await self.ViktorychStorage.touch(db, request.url);
       return partial;
     }
@@ -492,7 +576,7 @@ async function serveMedia(request, extraHeaders) {
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
-    const res = await fetch(request);
+    const res = await mirrorFetch(request);
     if (res && res.ok) {
       cache.put(request, res.clone());
       if (cacheName === DATA) {
@@ -518,10 +602,20 @@ async function networkFirstTimeout(request, cacheName, timeoutMs) {
       await cache.put(request, res.clone());
       return res;
     }
+    const alt = await mirrorAlternate(new URL(request.url));
+    if (alt && alt.ok) {
+      await cache.put(request, alt.clone());
+      return alt;
+    }
     const cached = await cache.match(request);
     return cached || res;
   } catch (err) {
     clearTimeout(timer);
+    const alt = await mirrorAlternate(new URL(request.url));
+    if (alt && alt.ok) {
+      try { await cache.put(request, alt.clone()); } catch (putErr) { /* the response is still usable */ }
+      return alt;
+    }
     const cached = await cache.match(request);
     if (cached) return cached;
     return new Response("", { status: 504 });
@@ -598,7 +692,12 @@ async function precacheShell(report) {
 }
 
 async function doPrecache(report) {
-  const cache = await caches.open(SHELL);
+  // Download the whole shell into a staging cache. The live cache is
+  // replaced only after every required file succeeds, so a client never
+  // runs one version's HTML with another version's scripts.
+  const stagingName = SHELL + "-staging";
+  await caches.delete(stagingName);
+  const cache = await caches.open(stagingName);
   const files = SHELL_FILES.slice();
   const state = { files: 0, totalFiles: files.length, bytes: 0, totalBytes: 0 };
   let failed = null;
@@ -606,7 +705,7 @@ async function doPrecache(report) {
     while (files.length && !failed) {
       const path = files.shift();
       try {
-        const res = await fetch(new Request(path, { cache: "reload" }));
+        const res = await mirrorFetch(new Request(path, { cache: "reload" }));
         if (!res || !res.ok) throw new Error(path);
         const declared = Number(res.headers.get("content-length")) || 0;
         if (declared) state.totalBytes += declared;
@@ -635,7 +734,17 @@ async function doPrecache(report) {
   const width = Math.min(4, SHELL_FILES.length);
   for (let i = 0; i < width; i++) workers.push(pull());
   await Promise.all(workers);
-  if (failed) throw failed;
+  if (failed) {
+    await caches.delete(stagingName);
+    throw failed;
+  }
+  const live = await caches.open(SHELL);
+  const ready = await cache.keys();
+  await Promise.all(ready.map(async (req) => {
+    const res = await cache.match(req);
+    if (res) await live.put(req, res);
+  }));
+  await caches.delete(stagingName);
   progressState = state;
   return state;
 }
@@ -704,6 +813,10 @@ self.addEventListener("message", (event) => {
         await idbSet(db, "media-index", []);
         if (self.ViktorychStorage) await self.ViktorychStorage.replaceFiles(db, []);
       } catch (err) { /* the page also deletes the database */ }
+      try {
+        const sub = await self.registration.pushManager.getSubscription();
+        if (sub) await sub.unsubscribe();
+      } catch (err) { /* a deleted account has no server subscription left */ }
     })());
     return;
   }
@@ -715,7 +828,20 @@ self.addEventListener("message", (event) => {
         const db = await idb();
         await idbSet(db, "auth-state", { on: accountsAuthed, token: playToken });
       } catch (err) { /* the page still signs out */ }
-      if (!data.on) await wipeUserCaches(data.wipe === "signout");
+      if (!data.on) {
+        await wipeUserCaches(data.wipe === "signout");
+        try {
+          const db = await idb();
+          await idbSet(db, "bells", {});
+          await idbSet(db, "bell-seen", []);
+          await idbSet(db, "bell-queue", []);
+          await idbSet(db, "notify-all", false);
+        } catch (err) { /* the page cleared the same keys */ }
+        try {
+          const sub = await self.registration.pushManager.getSubscription();
+          if (sub) await sub.unsubscribe();
+        } catch (err) { /* push is already gone */ }
+      }
     })());
     if (event.ports && event.ports[0]) {
       try { event.ports[0].postMessage({ ok: !!playToken }); } catch (err) { /* the page already continued */ }
@@ -731,7 +857,7 @@ self.addEventListener("message", (event) => {
     event.waitUntil(wipeUserCaches(true));
   }
   if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
-  if (data.type === "cache-bookmark") event.waitUntil(cacheBookmark(data.urls));
+  if (data.type === "cache-bookmark" || data.type === "cache-media") event.waitUntil(cacheBookmark(data.urls));
   if (data.type === "seen" || data.type === "state") {
     event.waitUntil(idb().then(async (db) => {
       await idbSet(db, "seen-at", data.type === "seen" ? Date.now() : Number(data.seen || 0));
@@ -750,7 +876,7 @@ self.addEventListener("message", (event) => {
     }));
   }
   if (data.type === "bell-deliver") {
-    event.waitUntil(deliverBellNotes(data.notes || []).then((delivered) => {
+    event.waitUntil(deliverBellNotes(data.notes || [], !!data.dnd).then((delivered) => {
       if (event.source) event.source.postMessage({ type: "bell-delivered", notes: delivered });
     }));
   }
@@ -777,7 +903,7 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
   if (url.origin === self.location.origin && url.pathname.toLowerCase().endsWith("/version.json")) {
-    event.respondWith(fetch(new Request(request.url, { method: "GET", cache: "no-store" })).catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
+    event.respondWith(mirrorFetch(new Request(request.url, { method: "GET", cache: "no-store" })).catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
     return;
   }
   if (isGameHost(url)) return;
@@ -822,17 +948,13 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(fetch(new Request(request, { cache: "no-store" })));
     return;
   }
-  if (url.origin === self.location.origin && /\/accounts\.config\.js$/.test(url.pathname)) {
-    event.respondWith(
-      fetch(new Request(request, { cache: "no-store" }))
-        .then((res) => {
-          if (res && res.ok) {
-            caches.open(SHELL).then((c) => c.put(request, res.clone())).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() => caches.match(request))
-    );
+  if (url.origin === self.location.origin && /\/accounts\.config\.js$/.test(url.pathname) && url.search) {
+    // A cache-busted read asks for the latest gate. It must not be written
+    // into the versioned shell, or one new file would sit next to old assets.
+    event.respondWith(mirrorFetch(new Request(request, { cache: "no-store" })).catch(async () => {
+      const cache = await caches.open(SHELL);
+      return (await cache.match("./accounts.config.js")) || Response.error();
+    }));
     return;
   }
   if (request.headers.has("range")) {
@@ -845,16 +967,17 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith((async () => {
       const home = shellDocument(url);
+      if (home) {
+        const cache = await caches.open(SHELL);
+        const cached = (await cache.match("./index.html")) || (await cache.match("./"));
+        if (cached) return cached;
+      }
       try {
-        const res = await fetch(request);
-        if (home && res && res.ok) {
-          const cache = await caches.open(SHELL);
-          cache.put("./index.html", res.clone());
-        }
-        return res;
+        return await mirrorFetch(request);
       } catch (err) {
         if (!home) return Response.error();
-        return (await caches.match("./index.html")) || (await caches.match("./")) || Response.error();
+        const cache = await caches.open(SHELL);
+        return (await cache.match("./index.html")) || (await cache.match("./")) || Response.error();
       }
     })());
     return;
@@ -876,28 +999,31 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (request.cache === "reload") {
-    event.respondWith(fetch(request));
+    event.respondWith(mirrorFetch(request));
     return;
   }
   if (isShell(url)) {
     event.respondWith((async () => {
+      const cache = await caches.open(SHELL);
+      const cached = await cache.match(request);
+      if (cached) return url.pathname.endsWith("manifest.webmanifest") ? brandManifestResponse(cached) : cached;
       try {
-        const res = await fetch(request);
-        if (res && res.ok) {
-          const cache = await caches.open(SHELL);
-          cache.put(request, res.clone());
-        }
+        const res = await mirrorFetch(request);
         if (res && url.pathname.endsWith("manifest.webmanifest")) return brandManifestResponse(res);
-        if (res) return res;
-      } catch (err) { /* offline falls back to the shell copied at install */ }
-      const cachedShell = await caches.match(request);
-      if (cachedShell && url.pathname.endsWith("manifest.webmanifest")) return brandManifestResponse(cachedShell);
-      return cachedShell || Response.error();
+        return res;
+      } catch (err) {
+        return Response.error();
+      }
     })());
     return;
   }
   if (url.origin === self.location.origin) {
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
+    event.respondWith((async () => {
+      const cache = await caches.open(SHELL);
+      const cached = await cache.match(request);
+      if (cached) return cached;
+      return mirrorFetch(request);
+    })());
   }
 });
 
@@ -911,7 +1037,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|update\.js|storage\.js|storage\.css|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|presence\.js|presence\.css|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
@@ -1005,17 +1131,24 @@ function postImageUrl(post) {
 
 function noteFromPost(post, row) {
   const text = String(post.text || post.title || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  const platform = post.platform || "x";
+  const handle = String((row && row.handle) || post.handle || "").replace(/^@/, "");
+  const raw = canonicalNotifyId(post) || String(post.id || "");
+  const live = !!(row && row.mode === "live");
+  const id = !raw ? "" : (live ? ("live:" + platform + ":" + handle.toLowerCase() + ":" + raw) : ("post:" + raw));
   return {
-    id: canonicalNotifyId(post) || String(post.id || ""),
-    at: Date.now(),
-    handle: (row && row.handle) || post.handle || "",
+    id: id,
+    at: Date.parse(post.date || "") || 0,
+    kind: live ? "live" : "post",
+    read: false,
+    handle: handle,
     name: post.author || (row && row.name) || post.handle || "",
     text: text,
     avatar: /^https:\/\//.test(post.avatar || "") ? post.avatar : "",
     image: postImageUrl(post),
     hash: statusHash(post),
     feedId: String(post.feedId || ""),
-    platform: post.platform || "x",
+    platform: platform,
     ids: (row && row.ids) || [],
     handles: (row && row.handles) || []
   };
@@ -1023,32 +1156,46 @@ function noteFromPost(post, row) {
 
 let bellChain = Promise.resolve();
 
-function deliverBellNotes(notes) {
-  const run = bellChain.then(() => deliverBellNotesNow(notes));
+async function pushIsDnd(flag) {
+  if (flag) return true;
+  try {
+    const db = await idb();
+    const presence = await idbGet(db, "presence");
+    if (!presence || typeof presence !== "object") return false;
+    if (presence.state === "dnd" || presence.dnd === true || presence.presence === "dnd") return true;
+    const until = Number(presence.until || presence.dndUntil || 0);
+    if (until > Date.now()) return true;
+  } catch (err) { /* a missing store still buzzes */ }
+  return false;
+}
+
+function deliverBellNotes(notes, dnd) {
+  const run = bellChain.then(() => deliverBellNotesNow(notes, dnd));
   bellChain = run.then(() => {}, () => {});
   return run;
 }
 
-async function deliverBellNotesNow(notes) {
+async function deliverBellNotesNow(notes, dnd) {
   await ensureUiLang();
   const list = (notes || []).filter((note) => note && note.id);
   if (!list.length) return [];
   const db = await idb();
+  const quiet = await pushIsDnd(dnd);
   const seen = new Set((await idbGet(db, "bell-seen")) || []);
   const delivered = [];
   for (const note of list) {
     const id = String(note.id);
-    if (!id || seen.has(id)) continue;
+    if (!id || !note.at || seen.has(id)) continue;
     seen.add(id);
     delivered.push(note);
-    if (Notification.permission !== "granted") continue;
+    if (quiet || Notification.permission !== "granted") continue;
     try {
       await self.registration.showNotification(note.name || ("@" + (note.handle || "post")), {
         body: note.text || tr("New post"),
         icon: note.avatar || "icons/icon-192.png",
         image: note.image || undefined,
         tag: "bell-" + id,
-        data: { hash: note.hash || "#/" }
+        data: { hash: note.hash || "#/", id: id }
       });
     } catch (err) { /* the page still keeps the in-app row */ }
   }
@@ -1094,7 +1241,7 @@ async function bellNotesFor(doc) {
 async function refreshAndNotify() {
   await ensureUiLang();
   const feedUrl = new URL("feeds.json", self.registration.scope).href;
-  const res = await fetch(feedUrl, { cache: "no-store" });
+  const res = await mirrorFetch(new Request(feedUrl, { method: "GET", cache: "no-store" }));
   if (!res.ok) return;
   const doc = await res.json();
   const cache = await caches.open(DATA);
@@ -1139,12 +1286,42 @@ self.addEventListener("periodicsync", (event) => {
   if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
 });
 
+self.addEventListener("push", (event) => {
+  event.waitUntil((async () => {
+    let data = {};
+    try { data = event.data ? event.data.json() : {}; }
+    catch (err) { data = {}; }
+    if (await pushIsDnd(!!(data && data.dnd))) return;
+    const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const visible = open.some((client) => client.visibilityState === "visible");
+    if (visible) {
+      open.forEach((client) => {
+        try { client.postMessage({ type: "push-note", note: data }); }
+        catch (err) { /* the page polls when it is next visible */ }
+      });
+      return;
+    }
+    await ensureUiLang();
+    const vars = data && data.titleVars && typeof data.titleVars === "object" ? data.titleVars : {};
+    const title = data && data.titleKey ? tr(data.titleKey, vars) : tr("New post");
+    await self.registration.showNotification(title, {
+      body: (data && data.body) || "",
+      icon: (data && data.icon) || "icons/icon-192.png",
+      tag: (data && data.tag) || ("note-" + ((data && data.id) || "")),
+      data: { hash: (data && data.hash) || "#/", id: (data && data.id) || "" }
+    });
+  })());
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil((async () => {
+    const payload = event.notification.data || {};
+    const hash = payload.hash || "#/";
     const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    const hash = (event.notification.data && event.notification.data.hash) || "#/";
     if (clients[0]) {
+      try { clients[0].postMessage({ type: "note-open", id: payload.id || "", hash: hash }); }
+      catch (err) { /* navigation still opens the post */ }
       await clients[0].focus();
       if (clients[0].navigate) await clients[0].navigate("./" + hash);
       return;

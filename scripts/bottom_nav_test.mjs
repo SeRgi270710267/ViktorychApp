@@ -304,7 +304,7 @@ async function main() {
   await waitFor(`document.querySelector("[data-bottom-id=shorts]") && document.querySelector(".bottom-nav-preview")`, "customize screen");
   const screen = await evaluate(`(() => {
     const home = document.querySelector('[data-act="bottom-nav-toggle"][data-id="home"]');
-    const help = document.querySelector(".bnav-screen .phandle");
+    const help = document.querySelector(".bnav-screen > .phandle");
     return {
       shorts: !!document.querySelector('[data-bottom-id="shorts"]'),
       vault: !!document.querySelector('[data-bottom-id="vault"]'),
@@ -448,6 +448,29 @@ async function main() {
   await assertLandscape(915, 412);
   await assertLandscape(740, 360);
 
+  // A feed or subscriber-count paint can land in the same moment as the
+  // rotation. Wait until the column stops changing, then check that the
+  // rotation itself keeps the playing node.
+  await evaluate(`(() => {
+    window.__navMut = 0;
+    if (window.__navObs) window.__navObs.disconnect();
+    window.__navObs = new MutationObserver(() => { window.__navMut += 1; });
+    window.__navObs.observe(document.body, { childList: true, subtree: true });
+    return true;
+  })()`);
+  let lastMut = -1;
+  let quiet = 0;
+  const quietStart = Date.now();
+  while (Date.now() - quietStart < 8000) {
+    const now = await evaluate(`window.__navMut || 0`);
+    if (now === lastMut) {
+      quiet += 1;
+      if (quiet >= 5) break;
+    } else quiet = 0;
+    lastMut = now;
+    await sleep(100);
+  }
+
   const beforeScroll = await evaluate(`(() => {
     const main = document.querySelector("main.center") || document.querySelector(".center");
     main.insertAdjacentHTML("beforeend", '<video id="land-keep" data-token="stay"></video>');
@@ -495,6 +518,161 @@ async function main() {
   await waitFor(`${barExpr} === ${JSON.stringify(JSON.stringify(expectedDefault))}`, "default bar");
   const resetFlag = await evaluate(`JSON.parse(localStorage.getItem("viktorychapp-settings-v1")).bottomNavCustom === true`);
   if (!resetFlag) fail("Reset cleared the custom flag");
+
+  const layoutCopy = await evaluate(`(() => {
+    const root = document.querySelector(".bnav-layout");
+    const auto = document.querySelector('[data-act="nav-layout"][data-layout="auto"]');
+    const land = document.querySelector("[data-act=nav-layout-land]");
+    return {
+      text: root ? root.textContent : "",
+      auto: !!(auto && auto.getAttribute("aria-checked") === "true"),
+      landDisabled: !!(land && land.disabled),
+      mode: document.documentElement.getAttribute("data-nav-layout")
+    };
+  })()`);
+  if (!layoutCopy.text.includes("Auto (sidebar)") || !layoutCopy.text.includes("Bottom bar (phone style)") || !layoutCopy.text.includes("Use bottom bar in landscape too")) fail("Layout choices missing: " + layoutCopy.text);
+  if (!layoutCopy.auto || layoutCopy.mode !== "auto" || !layoutCopy.landDisabled) fail("Default layout is not the sidebar: " + JSON.stringify(layoutCopy));
+
+  async function tabletSnap(width, height) {
+    await viewport(width, height, false);
+    await sleep(80);
+    return evaluate(`(() => {
+      const rail = document.querySelector("header.nav:not(.nav-land)");
+      const bar = document.querySelector("nav.bottom-nav");
+      const side = document.querySelector("aside.side");
+      const center = document.querySelector(".center");
+      const box = center.getBoundingClientRect();
+      return {
+        layout: document.documentElement.getAttribute("data-nav-layout"),
+        rail: getComputedStyle(rail).display,
+        railWidth: getComputedStyle(rail).width,
+        bar: getComputedStyle(bar).display,
+        side: getComputedStyle(side).display,
+        maxWidth: getComputedStyle(center).maxWidth,
+        hrefs: [...bar.querySelectorAll("a")].map((a) => a.getAttribute("href")),
+        centered: Math.abs(box.left - (window.innerWidth - box.width) / 2) < 16,
+        mhead: getComputedStyle(document.querySelector(".mhead")).display
+      };
+    })()`);
+  }
+
+  for (const [width, height] of [[820, 1180], [768, 1024]]) {
+    const auto = await tabletSnap(width, height);
+    if (auto.layout !== "auto" || auto.rail !== "flex" || auto.bar !== "none") fail(width + "x" + height + " auto layout " + JSON.stringify(auto));
+    if (parseFloat(auto.railWidth) > 120) fail(width + "x" + height + " left rail is expanded: " + auto.railWidth);
+    await evaluate(`document.querySelector('[data-act="nav-layout"][data-layout="bar"]').click(); true`);
+    await waitFor(`document.documentElement.getAttribute("data-nav-layout") === "bar"`, "bottom bar layout");
+    const chosen = await tabletSnap(width, height);
+    if (chosen.layout !== "bar" || chosen.rail !== "none" || chosen.bar !== "flex" || chosen.side !== "none") fail(width + "x" + height + " phone layout " + JSON.stringify(chosen));
+    if (chosen.maxWidth !== "600px" || !chosen.centered) fail(width + "x" + height + " timeline is not centered " + JSON.stringify(chosen));
+    if (JSON.stringify(chosen.hrefs) !== JSON.stringify(expectedDefault)) fail(width + "x" + height + " bar order " + JSON.stringify(chosen.hrefs));
+    if (chosen.mhead === "none") fail(width + "x" + height + " has no drawer button");
+    await evaluate(`(() => {
+      const btn = [...document.querySelectorAll("[data-act=drawer]")].find((el) => el.offsetParent);
+      if (!btn) throw new Error("no drawer button");
+      btn.click();
+      return true;
+    })()`);
+    await waitFor(`document.querySelector('.drawer a[href="#/feeds"]')`, "tablet drawer");
+    await evaluate(`document.querySelector("[data-act=close-drawer]").click(); true`);
+    await evaluate(`document.querySelector('[data-act="nav-layout"][data-layout="auto"]').click(); true`);
+    await waitFor(`document.documentElement.getAttribute("data-nav-layout") === "auto"`, "sidebar layout");
+    console.log("tablet", width + "x" + height, "ok");
+  }
+
+  await evaluate(`document.querySelector('[data-act="nav-layout"][data-layout="bar"]').click(); true`);
+  await waitFor(`document.documentElement.getAttribute("data-nav-layout") === "bar"`, "bar layout for rotation");
+  await viewport(820, 1180, false);
+  const beforeTablet = await evaluate(`(() => {
+    const main = document.querySelector("main.center") || document.querySelector(".center");
+    main.insertAdjacentHTML("beforeend", '<video id="tablet-keep" data-token="stay"></video>');
+    const video = document.getElementById("tablet-keep");
+    video._keep = "yes";
+    document.body.style.minHeight = "3200px";
+    document.documentElement.style.minHeight = "3200px";
+    window.scrollTo(0, 360);
+    return { y: window.scrollY, top: video.getBoundingClientRect().top };
+  })()`);
+  await viewport(1180, 820, true);
+  await sleep(120);
+  const turned = await evaluate(`(() => {
+    const video = document.getElementById("tablet-keep");
+    const rail = document.querySelector("header.nav:not(.nav-land)");
+    return {
+      token: video ? video.dataset.token : "",
+      keep: video ? video._keep : "",
+      y: window.scrollY,
+      top: video ? video.getBoundingClientRect().top : 0,
+      rail: getComputedStyle(rail).display,
+      bar: getComputedStyle(document.querySelector("nav.bottom-nav")).display,
+      landFlag: document.documentElement.getAttribute("data-nav-bar-land")
+    };
+  })()`);
+  if (turned.token !== "stay" || turned.keep !== "yes") fail("Tablet rotation replaced playing media: " + JSON.stringify(turned));
+  if (Math.abs(turned.y - beforeTablet.y) > 80) fail("Tablet rotation left the page: " + JSON.stringify(turned) + " from " + JSON.stringify(beforeTablet));
+  // Portrait bar mode reserves 53px for the fixed header. That padding leaves with the sidebar, so the same scroll offset shifts the media by about one header.
+  if (Math.abs(turned.top - beforeTablet.top) > 80) fail("Tablet rotation moved the media from " + beforeTablet.top + " to " + turned.top + " (scroll " + beforeTablet.y + " -> " + turned.y + ")");
+  if (turned.landFlag || turned.bar !== "none" || turned.rail === "none") fail("Landscape dropped the sidebar: " + JSON.stringify(turned));
+  await viewport(820, 1180, false);
+  await sleep(80);
+  const back = await evaluate(`(() => {
+    const video = document.getElementById("tablet-keep");
+    return {
+      keep: video ? video._keep : "",
+      bar: getComputedStyle(document.querySelector("nav.bottom-nav")).display,
+      rail: getComputedStyle(document.querySelector("header.nav:not(.nav-land)")).display
+    };
+  })()`);
+  if (back.keep !== "yes" || back.bar !== "flex" || back.rail !== "none") fail("Portrait did not restore the bottom bar: " + JSON.stringify(back));
+
+  await viewport(1180, 820, true);
+  await evaluate(`document.querySelector("[data-act=nav-layout-land]").click(); true`);
+  await waitFor(`document.documentElement.getAttribute("data-nav-bar-land") === "1"`, "landscape bottom bar");
+  const landBar = await evaluate(`(() => ({
+    bar: getComputedStyle(document.querySelector("nav.bottom-nav")).display,
+    rail: getComputedStyle(document.querySelector("header.nav:not(.nav-land)")).display,
+    land: getComputedStyle(document.querySelector("header.nav.nav-land")).display
+  }))()`);
+  if (landBar.bar !== "flex" || landBar.rail !== "none" || landBar.land !== "none") fail("Landscape toggle left a sidebar: " + JSON.stringify(landBar));
+
+  const storedLayout = await evaluate(`(() => {
+    const data = JSON.parse(localStorage.getItem("viktorychapp-settings-v1"));
+    const api = window.ViktorychAccounts;
+    const kept = api.mergePayload(
+      { navLayout: "bar", navLayoutLand: true, follows: [] },
+      { navLayoutSync: true, navLayout: "auto", navLayoutLand: false, follows: [] }
+    );
+    const published = api.mergePayload(
+      { navLayoutSync: true, navLayout: "bar", navLayoutLand: true, follows: [] },
+      { navLayoutSync: true, navLayout: "auto", navLayoutLand: false, follows: [] }
+    );
+    const snapOff = api.snapshotFrom(data);
+    const savedSync = data.navLayoutSync === true;
+    data.navLayoutSync = true;
+    const snapOn = api.snapshotFrom(data);
+    const unsynced = Object.assign({}, data, { navLayoutSync: false });
+    api.releaseNavLayout();
+    const snapClear = api.snapshotFrom(unsynced);
+    const snapAfter = api.snapshotFrom(unsynced);
+    const dropped = api.mergePayload(
+      { navLayoutSync: false, follows: [] },
+      { navLayoutSync: true, navLayout: "bar", navLayoutLand: true, follows: [] }
+    );
+    return {
+      layout: data.navLayout,
+      land: data.navLayoutLand === true,
+      sync: savedSync,
+      remoteKept: kept.navLayoutSync === true && kept.navLayout === "auto",
+      localWins: published.navLayout === "bar" && published.navLayoutLand === true,
+      snapOff: snapOff.navLayout == null && snapOff.navLayoutSync == null,
+      snapOn: snapOn.navLayout === "bar" && snapOn.navLayoutSync === true,
+      snapClear: snapClear.navLayoutSync === false && snapClear.navLayout == null,
+      snapAfter: snapAfter.navLayoutSync == null && snapAfter.navLayout == null,
+      dropped: dropped.navLayoutSync === false && dropped.navLayout == null
+    };
+  })()`);
+  if (storedLayout.layout !== "bar" || !storedLayout.land || storedLayout.sync) fail("Layout was not saved on this device: " + JSON.stringify(storedLayout));
+  if (!storedLayout.remoteKept || !storedLayout.localWins || !storedLayout.snapOff || !storedLayout.snapOn || !storedLayout.snapClear || !storedLayout.snapAfter || !storedLayout.dropped) fail("Layout sync rules failed: " + JSON.stringify(storedLayout));
 
   console.log("bottom nav selftest ok");
   stop();
