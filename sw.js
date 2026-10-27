@@ -1,12 +1,14 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
 const VERSION = "viktorych-a20-__SW_VERSION__";
+const MIRROR_GITHUB = "__MIRROR_GITHUB__";
+const MIRROR_PAGES = "__MIRROR_PAGES__";
 // cache-bust: 2026-10-27T12:00:00Z-live-preview
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
+importScripts("./shared/mirror.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -89,6 +91,7 @@ const SHELL_FILES = [
   "./weather.css",
   "./shared/drive-crypto.js",
   "./shared/drive-photos.js",
+  "./shared/mirror.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/lazy-modules.js",
@@ -341,10 +344,66 @@ async function rememberMedia(url, bytes) {
   await idbSet(db, "media-index", rows);
 }
 
+function mirrorApi() {
+  return (typeof self !== "undefined" && self.ViktorychMirror) ? self.ViktorychMirror : null;
+}
+
+function mirrorRelative(url) {
+  const api = mirrorApi();
+  if (!api || !api.mirrorHost(self.location.hostname)) return "";
+  if (!url || url.origin !== self.location.origin) return "";
+  const rel = api.relativeTo(self.registration.scope, url.href);
+  if (!rel || /^(?:v1\/|tg\/|ap\/|\.well-known\/)/.test(rel)) return "";
+  return rel;
+}
+
+function mirrorBases() {
+  const api = mirrorApi();
+  if (!api) return [];
+  const here = api.normalizeBase(self.registration.scope);
+  return api.bases(here, MIRROR_GITHUB, MIRROR_PAGES).filter((base) => base !== here);
+}
+
+async function mirrorAlternate(url) {
+  const api = mirrorApi();
+  const rel = mirrorRelative(url);
+  if (!api || !rel) return null;
+  const bases = mirrorBases();
+  for (let i = 0; i < bases.length; i++) {
+    const next = api.rewrite(bases[i], rel);
+    if (!next) continue;
+    try {
+      const res = await fetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store", redirect: "follow" });
+      if (res && res.ok && res.type !== "opaque") return res;
+    } catch (err) { /* the next origin can still have the file */ }
+  }
+  return null;
+}
+
+async function mirrorFetch(request, init) {
+  let res = null;
+  let failed = false;
+  try {
+    res = init ? await fetch(request, init) : await fetch(request);
+  } catch (err) {
+    failed = true;
+  }
+  const api = mirrorApi();
+  const status = failed || !res ? 0 : res.status;
+  if (api && request && request.method === "GET" && api.failoverStatus(status)) {
+    let url = null;
+    try { url = new URL(request.url); } catch (err) { url = null; }
+    const alt = url ? await mirrorAlternate(url) : null;
+    if (alt) return alt;
+  }
+  if (failed) throw new Error("mirror");
+  return res;
+}
+
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(DATA);
   const cached = await cache.match(request);
-  const update = fetch(request).then(async (res) => {
+  const update = mirrorFetch(request).then(async (res) => {
     if (res && res.ok) {
       try {
         const cacheReq = request.cache === "no-store" ? new Request(request.url, { method: "GET" }) : request;
@@ -404,7 +463,7 @@ async function cacheFirstMedia(request) {
 async function networkFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   try {
-    const res = await fetch(request);
+    const res = await mirrorFetch(request);
     if (res && res.ok) cache.put(request, res.clone());
     return res;
   } catch (err) {
@@ -425,10 +484,20 @@ async function networkFirstTimeout(request, cacheName, timeoutMs) {
       await cache.put(request, res.clone());
       return res;
     }
+    const alt = await mirrorAlternate(new URL(request.url));
+    if (alt && alt.ok) {
+      await cache.put(request, alt.clone());
+      return alt;
+    }
     const cached = await cache.match(request);
     return cached || res;
   } catch (err) {
     clearTimeout(timer);
+    const alt = await mirrorAlternate(new URL(request.url));
+    if (alt && alt.ok) {
+      try { await cache.put(request, alt.clone()); } catch (putErr) { /* the response is still usable */ }
+      return alt;
+    }
     const cached = await cache.match(request);
     if (cached) return cached;
     return new Response("", { status: 504 });
@@ -513,7 +582,7 @@ async function doPrecache(report) {
     while (files.length && !failed) {
       const path = files.shift();
       try {
-        const res = await fetch(new Request(path, { cache: "reload" }));
+        const res = await mirrorFetch(new Request(path, { cache: "reload" }));
         if (!res || !res.ok) throw new Error(path);
         const declared = Number(res.headers.get("content-length")) || 0;
         if (declared) state.totalBytes += declared;
@@ -642,7 +711,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
   if (url.origin === self.location.origin && url.pathname.toLowerCase().endsWith("/version.json")) {
-    event.respondWith(fetch(new Request(request.url, { method: "GET", cache: "no-store" })).catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
+    event.respondWith(mirrorFetch(new Request(request.url, { method: "GET", cache: "no-store" })).catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
     return;
   }
   if (isGameHost(url)) return;
@@ -682,7 +751,7 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.origin === self.location.origin && /\/accounts\.config\.js$/.test(url.pathname)) {
     event.respondWith(
-      fetch(new Request(request, { cache: "no-store" }))
+      mirrorFetch(new Request(request, { cache: "no-store" }))
         .then((res) => {
           if (res && res.ok) {
             caches.open(SHELL).then((c) => c.put(request, res.clone())).catch(() => {});
@@ -698,7 +767,7 @@ self.addEventListener("fetch", (event) => {
     event.respondWith((async () => {
       const home = shellDocument(url);
       try {
-        const res = await fetch(request);
+        const res = await mirrorFetch(request);
         if (home && res && res.ok) {
           const cache = await caches.open(SHELL);
           cache.put("./index.html", res.clone());
@@ -728,13 +797,13 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (request.cache === "reload") {
-    event.respondWith(fetch(request));
+    event.respondWith(mirrorFetch(request));
     return;
   }
   if (isShell(url)) {
     event.respondWith((async () => {
       try {
-        const res = await fetch(request);
+        const res = await mirrorFetch(request);
         if (res && res.ok) {
           const cache = await caches.open(SHELL);
           cache.put(request, res.clone());
@@ -749,7 +818,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.origin === self.location.origin) {
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
+    event.respondWith(caches.match(request).then((cached) => cached || mirrorFetch(request)));
   }
 });
 
@@ -946,7 +1015,7 @@ async function bellNotesFor(doc) {
 async function refreshAndNotify() {
   await ensureUiLang();
   const feedUrl = new URL("feeds.json", self.registration.scope).href;
-  const res = await fetch(feedUrl, { cache: "no-store" });
+  const res = await mirrorFetch(new Request(feedUrl, { method: "GET", cache: "no-store" }));
   if (!res.ok) return;
   const doc = await res.json();
   const cache = await caches.open(DATA);

@@ -4762,6 +4762,20 @@ def gdrive_checks() -> None:
     check(len(ordered) == 2 and sizes[ordered[0]["logical"]] == 90 and sizes[ordered[1]["logical"]] == 10, "the larger video is uploaded before the smaller one")
     known = {"v": 1, "files": [{"logical": songs[0]["logical"], "sha256": "ab" * 32, "path": "covers/" + ("ab" * 32) + ".png"}]}
     check(songs[0]["logical"] in gdrive_backup.known_ids(known) and ("ab" * 32) in gdrive_backup.known_hashes(known), "a stored hash and logical id are treated as already uploaded")
+    import cf_pages_prepare
+    import cf_pages_deploy
+    import cf_kv_bind
+    import cf_web_analytics
+    check(cf_pages_prepare.selftest() == 0, "the Pages mirror stays inside the file cap and keeps the shell")
+    check(cf_pages_deploy.selftest() == 0, "a Pages permission failure skips without printing a token")
+    check(cf_kv_bind.selftest() == 0, "a KV permission failure removes only the cache binding")
+    check(cf_web_analytics.selftest() == 0, "the analytics beacon is added only with a public token")
+    sync = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    check("wrangler pages deploy" in sync and "viktorych-app" in sync and "cf_pages_deploy.py" in sync and "shared/mirror.js" in sync, "the site workflow also uploads the Cloudflare Pages mirror")
+    check("ViktorychMirror" in (ROOT / "sw.js").read_text(encoding="utf-8") and 'scope: "./"' in (ROOT / "app.js").read_text(encoding="utf-8"), "the service worker can fail over to the other origin")
+    wrangler_text = (ROOT / "worker" / "wrangler.toml").read_text(encoding="utf-8")
+    check("head_sampling_rate = 1" in wrangler_text and 'binding = "CACHE"' in wrangler_text and 'crons = ["* * * * *"]' in wrangler_text, "workers logs and the KV cache are configured beside the existing cron")
+    check("backups/d1/" in (ROOT / "worker" / "src" / "d1-backup.js").read_text(encoding="utf-8"), "the daily D1 export keeps its objects under backups/d1/")
 
 
 if __name__ == "__main__":
