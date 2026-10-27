@@ -57,6 +57,11 @@ const SHELL_FILES = [
   "./storage.css",
   "./localfirst.js",
   "./direct.js",
+  "./device.js",
+  "./device-search.js",
+  "./device-ai.js",
+  "./device-media.js",
+  "./device-record.js",
   "./logo/v.svg",
   "./logo/v-music.svg",
   "./logo/viktorychapp.svg",
@@ -107,6 +112,7 @@ const SHELL_FILES = [
   "./shared/drive-crypto.js",
   "./shared/drive-photos.js",
   "./shared/mirror.js",
+  "./video-embed.js",
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/feed-order.js",
@@ -1460,6 +1466,11 @@ async function refreshAndNotify() {
 }
 
 self.addEventListener("periodicsync", (event) => {
+  if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
+});
+
+// Background Sync uses the same feed refresh as periodic sync.
+self.addEventListener("sync", (event) => {
   if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
 });
 

@@ -160,6 +160,14 @@ test("settings patch keeps unknown performance keys", () => {
   assert.equal(next.profile, "max");
   assert.equal(next.peerMedia, "off");
   assert.equal(next.peerUploadCap, 32768);
+  const shared = patchDevicePerformance({ level: "light", toggles: { direct: true }, peerMedia: "auto" }, { peerMedia: "on" });
+  assert.equal(shared.level, "light");
+  assert.equal(shared.profile, "lite");
+  assert.equal(shared.toggles.direct, true);
+  assert.equal(shared.peerMedia, "on");
+  assert.equal(peerSettings({ level: "light" }).profile, "lite");
+  assert.equal(peerSettings({ profile: "max", level: "light" }).profile, "lite");
+  assert.equal(peerSettings({ profile: "lite" }).level, "light");
 });
 
 test("same-origin media retry backs off and does not retry a block", () => {
