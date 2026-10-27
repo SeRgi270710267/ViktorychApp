@@ -68,6 +68,10 @@ direct.json("https://raw.githubusercontent.com/ViktorychGroup/ViktorychApp/main/
   return direct.json("https://api.fxtwitter.com/x").then(function (cached) {
     assert.strictEqual(cached.via, "device");
     assert.strictEqual(calls.length, before);
+    return direct.json("https://api.fxtwitter.com/x", null, { fresh: true });
+  }).then(function (freshBody) {
+    assert.strictEqual(freshBody.via, "device");
+    assert.ok(calls.length > before);
     return direct.fetch("https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=bsky.app&status=500", "https://edge.example.workers.dev/v1/data/bsky.json");
   });
 }).then(function (res) {

@@ -192,12 +192,14 @@
     });
   }
 
-  function json(url, fallback) {
+  function json(url, fallback, opts) {
     var key = String(url || "");
-    var hit = cacheGet(key, Date.now());
-    if (hit) {
-      note("direct");
-      return Promise.resolve(hit);
+    if (!(opts && opts.fresh)) {
+      var hit = cacheGet(key, Date.now());
+      if (hit) {
+        note("direct");
+        return Promise.resolve(hit);
+      }
     }
     return fetchPublic(key, fallback).then(function (res) {
       if (!res || !res.ok) {
