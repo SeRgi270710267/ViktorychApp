@@ -1437,5 +1437,20 @@ SI18n.addPack("es", {
   "1 GB": "1 GB",
   "5 GB": "5 GB",
   "10 GB": "10 GB",
-  "20 GB": "20 GB"
+  "20 GB": "20 GB",
+  "Profiles": "Perfiles",
+  "Post threads": "Hilos de posts",
+  "Recent searches": "Búsquedas recientes",
+  "Trends and explore": "Tendencias y explorar",
+  "Past lives": "Directos anteriores",
+  "Drafts": "Borradores",
+  "Prefetch media": "Precargar multimedia",
+  "Prefetch the next posts when the connection is fast.": "Los siguientes posts se precargan cuando la conexión es rápida.",
+  "Hit rate {percent}": "Aciertos de caché {percent}",
+  "Saved {size}": "Ahorrado {size}",
+  "Saved requests {count}": "Solicitudes ahorradas {count}",
+  "Pending": "Pendiente",
+  "Waiting to sync": "Esperando para sincronizar",
+  "Direct {count}": "En el dispositivo {count}",
+  "Server {count}": "En el servidor {count}"
 });

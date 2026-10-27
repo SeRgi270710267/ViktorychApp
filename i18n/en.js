@@ -1437,5 +1437,20 @@ SI18n.addPack("en", {
   "1 GB": "1 GB",
   "5 GB": "5 GB",
   "10 GB": "10 GB",
-  "20 GB": "20 GB"
+  "20 GB": "20 GB",
+  "Profiles": "Profiles",
+  "Post threads": "Post threads",
+  "Recent searches": "Recent searches",
+  "Trends and explore": "Trends and explore",
+  "Past lives": "Past lives",
+  "Drafts": "Drafts",
+  "Prefetch media": "Prefetch media",
+  "Prefetch the next posts when the connection is fast.": "Prefetch the next posts when the connection is fast.",
+  "Hit rate {percent}": "Hit rate {percent}",
+  "Saved {size}": "Saved {size}",
+  "Saved requests {count}": "Saved requests {count}",
+  "Pending": "Pending",
+  "Waiting to sync": "Waiting to sync",
+  "Direct {count}": "Direct {count}",
+  "Server {count}": "Server {count}"
 });
