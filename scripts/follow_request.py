@@ -563,6 +563,10 @@ def main() -> int:
         print("ignoring issue")
         return 0
     title = os.environ.get("ISSUE_TITLE") or ""
+    lowered = title.lower()
+    if lowered.startswith("follow request") or lowered.startswith("unfollow request"):
+        print("ignored")
+        return 0
     body = os.environ.get("ISSUE_BODY") or ""
     number = os.environ.get("ISSUE_NUMBER") or ""
     repo = os.environ.get("REPO") or ""
