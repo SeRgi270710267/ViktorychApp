@@ -395,7 +395,7 @@ function isOwnedTelegram(url) {
 }
 
 function isAccountMedia(url) {
-  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname);
+  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\/[a-f0-9]{64}\.(?:webp|jpg|png)$/.test(url.pathname) || /\/v1\/media\/view\/[a-f0-9]{32}$/.test(url.pathname);
 }
 
 function privateData(url) {
@@ -1216,6 +1216,21 @@ async function runApply() {
 idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "drop-profile-media") {
+    event.waitUntil((async () => {
+      const names = await caches.keys();
+      await Promise.all(names.map(async (name) => {
+        const cache = await caches.open(name);
+        const keys = await cache.keys();
+        await Promise.all(keys.map((req) => {
+          const path = new URL(req.url).pathname;
+          if (/\/v1\/media\/(?:view\/[a-f0-9]{32}|(?:avatars|banners)\/\d{12}\/)/.test(path)) return cache.delete(req);
+          return Promise.resolve(false);
+        }));
+      }));
+    })());
+    return;
+  }
   if (data.type === "peer-flag") {
     peerOn = !!data.on;
     return;
@@ -1447,7 +1462,7 @@ self.addEventListener("fetch", (event) => {
       else if (/^Bearer\s+\S+/i.test(incoming)) headers.set("Authorization", incoming);
       const origin = request.headers.get("origin");
       if (origin) headers.set("origin", origin);
-      if (isOwnerPlay(url) || self.ViktorychStorage.categoryOf(url.href) === "") {
+      if (isAccountMedia(url) || isOwnerPlay(url) || self.ViktorychStorage.categoryOf(url.href) === "") {
         const range = request.headers.get("Range");
         if (range) headers.set("Range", range);
         return fetch(request.url, { method: "GET", headers, cache: "no-store", redirect: "follow" });
