@@ -17,6 +17,7 @@ on:
       - "scripts/tiktok_record.py"
       - "scripts/tiktok_sync.py"
       - "scripts/owner_keys.py"
+      - "scripts/past_live_chrome_test.mjs"
       - "shared/tiktok-live.js"
       - ".github/workflows/tiktok-live.yml"
       - ".github/workflows/tiktok-record.yml"
@@ -69,10 +70,21 @@ jobs:
           sudo install -m 755 "$dir/ffprobe" /usr/local/bin/ffprobe
           ffmpeg -version | head -n 1
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Cache Chrome
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/chrome-for-testing
+          key: chrome-for-testing-linux64-v1
+
       - name: Self-test
         run: |
           python3 scripts/owner_keys.py --selftest
           python3 scripts/tiktok_record.py --selftest
+          node scripts/past_live_chrome_test.mjs
 
   status:
     if: github.event_name == 'workflow_dispatch' && inputs.status == '1'

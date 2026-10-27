@@ -13,7 +13,7 @@ import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
 import { handleYtRoute } from "./ythls.js";
 import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
-import { mediaMime, streamFresh, shouldSniffMedia, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
+import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA } from "./owner-keys.js";
@@ -2270,19 +2270,36 @@ async function liveBufferIndex(env, partKey) {
 
 async function partRows(env, key) {
   const d1 = await telegramRows(env, key);
-  if (!livePartKey(key)) return d1;
-  const extra = await liveBufferIndex(env, key);
-  if (!extra.length) return d1;
-  const seen = {};
-  d1.forEach((row) => { if (row) seen[row.kind + ":" + row.part_index] = true; });
-  const merged = d1.slice();
-  extra.forEach((row) => {
-    const id = row.kind + ":" + row.part_index;
-    if (seen[id]) return;
-    seen[id] = true;
-    merged.push(row);
-  });
-  return merged;
+  let merged = d1;
+  if (livePartKey(key)) {
+    const extra = await liveBufferIndex(env, key);
+    if (extra.length) {
+      const seen = {};
+      merged = d1.slice();
+      d1.forEach((row) => { if (row) seen[row.kind + ":" + row.part_index] = true; });
+      extra.forEach((row) => {
+        const id = row.kind + ":" + row.part_index;
+        if (seen[id]) return;
+        seen[id] = true;
+        merged.push(row);
+      });
+    }
+  }
+  const ready = [];
+  for (let i = 0; i < merged.length; i++) {
+    const row = merged[i];
+    if (!row) continue;
+    let size = Number(row.size) || 0;
+    if (size <= 0 && row.kind === "init" && row.bufKey && env.DATA && env.DATA.head) {
+      try {
+        const head = await env.DATA.head(row.bufKey);
+        size = Number(head && head.size) || 0;
+        if (size > 0) row.size = size;
+      } catch (err) { size = 0; }
+    }
+    if (size > 0) ready.push(row);
+  }
+  return ready;
 }
 
 async function cachedVod(key, build) {
@@ -2311,7 +2328,8 @@ async function stitchedLivePlaylist(env, parent, origin) {
   let misses = 0;
   for (let n = 1; n <= 48; n++) {
     const key = parent + "/" + n;
-    const text = buildPlaylist(await partRows(env, key), key, origin);
+    const rows = await partRows(env, key);
+    const text = livePartPlayable(rows) ? buildPlaylist(rows, key, origin) : "";
     if (!text) {
       misses += 1;
       if (parts.length && misses >= 2) break;
@@ -2475,7 +2493,10 @@ async function handleTelegram(request, env, path, ctx) {
     const origin = new URL(request.url).origin;
     let text = "";
     if (isLiveParentKey(key)) text = await cachedVod(key, () => stitchedLivePlaylist(env, key, origin));
-    else if (livePartKey(key)) text = await cachedVod(key, async () => buildPlaylist(await partRows(env, key), key, origin));
+    else if (livePartKey(key)) text = await cachedVod(key, async () => {
+      const rows = await partRows(env, key);
+      return livePartPlayable(rows) ? buildPlaylist(rows, key, origin) : "";
+    });
     else text = buildPlaylist(await telegramRows(env, key), key, origin);
     if (!text) {
       if (!publicLoop && !(viewer && viewer.owner === 1)) {
@@ -3287,6 +3308,21 @@ function scrubRecording(row) {
   return body;
 }
 
+async function playableLiveParents(env) {
+  if (!env.DB) return null;
+  try {
+    const listed = await env.DB.prepare("SELECT object_key FROM telegram_files WHERE serve = 1 AND encrypted = 0 AND object_key LIKE 'tiktok/%/live/%' GROUP BY object_key HAVING SUM(CASE WHEN kind = 'init' AND part_index = -1 AND size > 0 THEN 1 ELSE 0 END) > 0 AND SUM(CASE WHEN kind = 'segment' AND size > 0 THEN 1 ELSE 0 END) > 0 LIMIT 400").all();
+    const found = new Set();
+    ((listed && listed.results) || []).forEach((row) => {
+      const parts = liveKeyParts(row && row.object_key);
+      if (parts) found.add(parts.key);
+    });
+    return found;
+  } catch (err) {
+    return null;
+  }
+}
+
 async function handleRecordings(request, env) {
   const gate = await requireOwner(request, env);
   if (gate.error) return gate.error;
@@ -3321,8 +3357,10 @@ async function handleRecordings(request, env) {
     past.push(item);
   });
   past.sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
+  const playable = await playableLiveParents(env);
+  const shown = playable ? past.filter((item) => item && playable.has(String(item.key || ""))) : past;
   const cap = Math.max(1, Math.min(16, Number(index.cap) || 16));
-  return json(200, { cap, active, items, past });
+  return json(200, { cap, active, items, past: shown });
 }
 
 const LIVE_PARENT_KEY = /^tiktok\/([A-Za-z0-9._]{2,24})\/([1-9][0-9]{5,24})\/live(?:\/([1-9][0-9]{0,3}))?$/;

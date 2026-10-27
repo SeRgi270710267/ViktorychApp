@@ -60,6 +60,7 @@
   var manifestWarm = {};
   var mpeg = null;
   var liveZoom = null;
+  var liveYt = null;
   var prefetchCtrl = null;
   var PEPSI_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%23004b93'/%3E%3Cpath d='M50 2A48 48 0 0 1 98 50C98 50 80 58 50 42C20 26 2 50 2 50A48 48 0 0 1 50 2Z' fill='%23c8102e'/%3E%3Cpath d='M2 50C2 50 20 26 50 42C80 58 98 50 98 50A48 48 0 0 1 50 98A48 48 0 0 1 2 50Z' fill='%23004b93'/%3E%3Cpath d='M2 50C2 50 20 34 50 50C80 66 98 50 98 50C98 50 80 58 50 42C20 26 2 50 2 50Z' fill='%23ffffff'/%3E%3C/svg%3E";
   var PEPSI_POSTER = PEPSI_AVATAR;
@@ -1249,7 +1250,8 @@
         playerOpts.backBufferLength = 90;
         playerOpts.nudgeMaxRetry = 6;
         playerOpts.maxBufferLength = 30;
-        playerOpts.maxMaxBufferLength = 60;
+        playerOpts.maxMaxBufferLength = 120;
+        if (Number(video._startAt) > 3) playerOpts.startPosition = Number(video._startAt);
       }
       var player = new Hls(playerOpts);
       hls = player;
@@ -1290,7 +1292,7 @@
           function acceptOrStep(level) {
             if (hls !== player) return;
             return playOrTap(video).then(function () {
-              return waitForFrames(video, 6000);
+              return waitForFrames(video, live ? 6000 : 20000);
             }).then(function (ok) {
               if (hls !== player || settled) return;
               if (ok) {
@@ -2160,6 +2162,7 @@
     handle = String(handle || (rec && rec.handle) || "");
     if (!handle || !rec || !rec.key) return;
     if (rec.state !== "saved" && rec.state !== "recording" && rec.state !== "queued") return;
+    if (!window.YtPlayer) return;
     closeLive();
     var token = liveToken;
     var parts = Math.max(1, Number(rec.parts) || 1);
@@ -2169,90 +2172,57 @@
     var avatar = rec.cover || avatarFor(handle, liveStatus(handle) || {});
     var root = document.createElement("div");
     root.id = "shorts-live-player";
-    root.className = "shorts-live-player";
+    root.className = "shorts-live-player is-saved";
     root.setAttribute("role", "dialog");
     root.setAttribute("aria-modal", "true");
     root.setAttribute("data-handle", handle);
     root.setAttribute("data-room", rec.roomId || "");
     root.setAttribute("data-mode", recording ? "recording" : "saved");
-    root.innerHTML = '<div class="shorts-live-stage">' +
-      '<video playsinline webkit-playsinline autoplay muted></video>' +
-      '<div class="shorts-live-cover">' +
+    root.innerHTML = '<div class="shorts-live-stage"></div>' +
+      '<div class="shorts-live-cover" hidden>' +
       (avatar ? '<img alt="" src="' + hooks.esc(avatar) + '" referrerpolicy="no-referrer">' : "") +
       '<p class="shorts-live-note"></p>' +
       '<a hidden target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a>" +
-      "</div></div>" +
+      "</div>" +
       '<div class="shorts-live-hud"><button type="button" data-shorts="close-live" aria-label="' + hooks.esc(tr("Close")) + '">×</button>' +
-      '<span class="shorts-live-tag">' + hooks.esc(recording ? tr("Recording") : tr("Saved")) + "</span>" +
-      '<button type="button" data-shorts="quality" class="shorts-live-q"></button>' +
-      '<button type="button" data-shorts="mute" aria-label="' + hooks.esc(sound ? tr("Mute") : tr("Unmute")) + '">' + hooks.icon(sound ? "vol" : "volOff") + "</button></div>" +
-      '<div class="shorts-live-foot"><b>@' + hooks.esc(handle) + "</b>" +
-      (rec.title ? "<span>" + hooks.esc(rec.title) + "</span>" : "") +
-      '<div class="shorts-live-seek-wrap"><div class="shorts-seek-tip" hidden></div>' +
-      '<input class="shorts-live-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + hooks.esc(tr("Seek")) + '"></div>' +
-      '<div class="shorts-live-tools">' +
-      '<button type="button" data-shorts="saved-prev" aria-label="' + hooks.esc(tr("Previous recording")) + '">↑</button>' +
-      '<button type="button" data-shorts="saved-next" aria-label="' + hooks.esc(tr("Next recording")) + '">↓</button>' +
-      '<button type="button" data-shorts="speed" data-rate="1" aria-label="' + hooks.esc(tr("Playback speed")) + '">1×</button>' +
-      '<button type="button" data-shorts="download">' + hooks.esc(tr("Download original")) + "</button>" +
-      "</div></div>";
+      '<span class="shorts-live-tag">' + hooks.esc(recording ? tr("Recording") : tr("Saved")) + "</span></div>";
     document.body.appendChild(root);
     document.documentElement.classList.add("shorts-live-open");
-    liveZoom = bindVideoZoom(root.querySelector(".shorts-live-stage"));
-    var video = root.querySelector("video");
+    var stage = root.querySelector(".shorts-live-stage");
+    liveZoom = bindVideoZoom(stage);
+    var resumeAt = savedResume(rec, 0);
+    liveYt = new window.YtPlayer(stage, {
+      poster: rec.cover || "",
+      scrubImage: rec.cover || "",
+      resume: resumeAt,
+      post: { title: rec.title || "" },
+      onPrevious: function () {
+        var neighbor = pastNeighbor(rec, -1);
+        if (neighbor) openSaved(neighbor.handle, neighbor);
+      },
+      onNext: function () {
+        var neighbor = pastNeighbor(rec, 1);
+        if (neighbor) openSaved(neighbor.handle, neighbor);
+      },
+      onDownload: function (button) { downloadOriginal(rec, button); },
+      onTime: function (time, duration) {
+        var video = liveYt && liveYt.video;
+        if (!video) return;
+        var now = Date.now();
+        if (video._resumeAt && now - video._resumeAt < 5000) return;
+        video._resumeAt = now;
+        rememberResume(rec, time, duration, true);
+      }
+    });
+    var video = liveYt.video;
+    video.muted = !sound;
+    video.autoplay = true;
+    video._startAt = resumeAt;
     revealWhenFrames(video, token);
     video.addEventListener("ended", function () {
       if (token !== liveToken || stitchedPlay) return;
       if (part < parts) playPart(part + 1);
     });
-    var seek = root.querySelector("input.shorts-live-seek");
-    var seeking = false;
-    function syncSeek() {
-      if (!seek || seeking || !video.duration || !isFinite(video.duration)) return;
-      seek.max = String(video.duration);
-      seek.value = String(video.currentTime || 0);
-    }
-    video.addEventListener("timeupdate", function () {
-      syncSeek();
-      var now = Date.now();
-      if (video._resumeAt && now - video._resumeAt < 5000) return;
-      video._resumeAt = now;
-      rememberResume(rec, video.currentTime, video.duration, true);
-    });
-    video.addEventListener("durationchange", syncSeek);
-    video.addEventListener("loadedmetadata", function () {
-      var at = savedResume(rec, video.duration);
-      if (at > 0) {
-        try { video.currentTime = at; } catch (err) { /* the first frame is still fine */ }
-      }
-    });
-    var tip = root.querySelector(".shorts-seek-tip");
-    function showTip(clientX) {
-      if (!tip || !seek || !video.duration) return;
-      var box = seek.getBoundingClientRect();
-      var ratio = box.width ? Math.min(1, Math.max(0, (clientX - box.left) / box.width)) : 0;
-      var at = ratio * video.duration;
-      var face = rec.cover || "";
-      tip.hidden = false;
-      tip.innerHTML = (face ? '<img alt="" src="' + hooks.esc(face) + '" referrerpolicy="no-referrer">' : "") + "<b>" + hooks.esc(clock(at)) + "</b>";
-      tip.style.left = Math.round(ratio * 100) + "%";
-    }
-    if (seek) {
-      seek.addEventListener("pointerdown", function () { seeking = true; });
-      seek.addEventListener("pointermove", function (event) { if (seeking || event.pointerType === "mouse") showTip(event.clientX); });
-      seek.addEventListener("pointerleave", function () { if (!seeking && tip) tip.hidden = true; });
-      seek.addEventListener("input", function (event) {
-        seeking = true;
-        var at = Number(seek.value);
-        if (isFinite(at)) {
-          try { video.currentTime = at; } catch (err) { /* the playlist is still loading */ }
-          if (event && event.clientX) showTip(event.clientX);
-        }
-      });
-      seek.addEventListener("change", function () { seeking = false; if (tip) tip.hidden = true; rememberResume(rec, video.currentTime, video.duration, true); });
-      seek.addEventListener("pointerup", function () { seeking = false; if (tip) tip.hidden = true; });
-      seek.addEventListener("pointercancel", function () { seeking = false; if (tip) tip.hidden = true; });
-    }
     root.addEventListener("click", function (event) {
       var button = event.target.closest ? event.target.closest("[data-shorts]") : null;
       if (!button) return;
@@ -2260,10 +2230,6 @@
       if (kind === "close-live") {
         event.preventDefault();
         closeLive();
-      } else if (kind === "mute") {
-        event.preventDefault();
-        sound = !sound;
-        syncMute(button);
       } else if (kind === "retry-live") {
         event.preventDefault();
         var againHandle = root.getAttribute("data-handle") || handle;
@@ -2272,40 +2238,8 @@
           return item && foldHandle(item.handle) === foldHandle(againHandle) && String(item.roomId || "") === againRoom && item.key;
         })[0];
         openSaved(againHandle, again);
-      } else if (kind === "saved-prev" || kind === "saved-next") {
-        event.preventDefault();
-        var neighbor = pastNeighbor(rec, kind === "saved-next" ? 1 : -1);
-        if (neighbor) openSaved(neighbor.handle, neighbor);
-      } else if (kind === "speed") {
-        event.preventDefault();
-        var speeds = [0.75, 1, 1.25, 1.5, 2];
-        var at = speeds.indexOf(Number(button.getAttribute("data-rate")) || 1);
-        var nextRate = speeds[(at + 1) % speeds.length] || 1;
-        video.playbackRate = nextRate;
-        button.setAttribute("data-rate", String(nextRate));
-        button.textContent = String(nextRate) + "×";
-      } else if (kind === "download") {
-        event.preventDefault();
-        downloadOriginal(rec, button);
-      } else if (kind === "quality") {
-        event.preventDefault();
-        if (!hls || !hls.levels || !hls.levels.length) return;
-        qualityLock = true;
-        var nextLevel = hls.currentLevel + 1;
-        if (nextLevel >= hls.levels.length || nextLevel < 0) nextLevel = 0;
-        hls.currentLevel = nextLevel;
-        var level = hls.levels[nextLevel] || {};
-        button.textContent = level.height ? (level.height + "p") : (qualityLabel(rec.quality) || "");
       }
     });
-    var quality = root.querySelector(".shorts-live-q");
-    if (quality) {
-      var bits = [];
-      var label = qualityLabel(rec.quality);
-      if (label) bits.push(label);
-      if (rec.qualityNote) bits.push(tr("Best available"));
-      quality.textContent = bits.join(" · ");
-    }
     function failSaved(err) {
       if (token !== liveToken) return;
       if (err) console.error("live playback", err && err.message ? err.message : err);
@@ -2336,6 +2270,10 @@
     stopStats();
     if (liveZoom) liveZoom.reset();
     liveZoom = null;
+    if (liveYt) {
+      try { liveYt.destroy(); } catch (err) { /* already gone */ }
+      liveYt = null;
+    }
     destroyHls();
     destroyMpeg();
     var root = liveRoot();

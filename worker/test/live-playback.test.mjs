@@ -7,11 +7,24 @@ import {
   mediaMime,
   playbackSteps,
   shouldSniffMedia,
+  livePartPlayable,
   stitchPlaylists,
   streamFresh,
   videoCodecOk
 } from "../../shared/live-playback.js";
 import { b2Configured, formatBytes, lowestPreview, previewsAllowed, thumbObjectKey } from "../../shared/live-preview.js";
+
+test("a saved live needs a real init and at least one segment", () => {
+  assert.equal(livePartPlayable([
+    { kind: "init", size: 800 },
+    { kind: "segment", size: 4000 }
+  ]), true);
+  assert.equal(livePartPlayable([{ kind: "segment", size: 4000 }]), false);
+  assert.equal(livePartPlayable([
+    { kind: "init", size: 0 },
+    { kind: "segment", size: 4000 }
+  ]), false);
+});
 
 test("previews use the lowest variant and stay off on Save-Data unless asked", () => {
   const step = lowestPreview({

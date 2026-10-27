@@ -381,6 +381,12 @@ test("recordings stay owner-only and hide backup channel ids", async () => {
     public: { state: "recording", quality: "origin", title: "open", roomId: "1000000000000000001", startedAt: "2026-10-02T00:00:00Z" },
     active: { state: "recording", captureDone: false, segments: 2, key: openKey, quality: "origin", title: "open", roomId: "1000000000000000001", startedAt: "2026-10-02T00:00:00Z", viewers: 3, part: 1 }
   }));
+  const putMedia = async (objectKey) => {
+    await bindings.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'init', -1, 'viktorych-data', 'INIT1', 1, 800, 'abc', 'video/mp4', 0, 1, 1, 0, 1)").bind(objectKey).run();
+    await bindings.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'segment', 0, 'viktorych-data', 'SEG1', 2, 4000, 'def', 'video/mp4', 2, 1, 1, 0, 1)").bind(objectKey).run();
+  };
+  await putMedia(key + "/1");
+  await putMedia(openKey + "/1");
   const listed = await call("/v1/owner/tiktok/recordings", { ip: "203.0.113.111", token: ownerToken });
   assert.equal(listed.status, 200);
   assert.equal(listed.body.cap, 12);
@@ -452,7 +458,15 @@ test("a finished capture and an uploaded segment stay on the past list", async (
       part: 1
     }
   }));
+  await bindings.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'init', -1, 'viktorych-data', 'OLD0', 1, 900, 'ini', 'video/mp4', 0, 1, 1, 0, 1)").bind("tiktok/earlier_room/7699647509498710999/live/1").run();
   await bindings.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'segment', 0, 'viktorych-data', 'OLD1', 1, 4, 'abc', 'video/mp4', 2, 1, 1, 0, 1)").bind("tiktok/earlier_room/7699647509498710999/live/1").run();
+  await bindings.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'init', -1, 'viktorych-data', 'CAP0', 1, 900, 'ini2', 'video/mp4', 0, 1, 1, 0, 1)").bind(key + "/1").run();
+  await bindings.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'segment', 0, 'viktorych-data', 'CAP1', 2, 4, 'seg2', 'video/mp4', 2, 1, 1, 0, 1)").bind(key + "/1").run();
+  await bindings.DATA.put("owner/live-jobs/broken_only.json", JSON.stringify({
+    public: { state: "saved", roomId: "7699647509498710777" },
+    saved: [{ state: "saved", title: "broken", key: "tiktok/broken_only/7699647509498710777/live", roomId: "7699647509498710777", startedAt: "2026-10-04T00:00:00Z" }]
+  }));
+  await bindings.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'segment', 0, 'viktorych-data', 'BAD1', 3, 4, 'bad', 'video/mp4', 2, 1, 1, 0, 1)").bind("tiktok/broken_only/7699647509498710777/live/1").run();
   const listed = await call("/v1/owner/tiktok/recordings", { ip: "203.0.113.116", token: ownerToken });
   assert.equal(listed.status, 200);
   const finished = listed.body.past.find((row) => row.handle === handle);
@@ -463,6 +477,7 @@ test("a finished capture and an uploaded segment stay on the past list", async (
   assert.equal(earlier.handle, "earlier_room");
   assert.equal(earlier.key, "tiktok/earlier_room/7699647509498710999/live");
   assert.equal(earlier.state, "saved");
+  assert.equal(listed.body.past.some((row) => row.handle === "broken_only"), false);
 });
 
 test("the live board is owner-only, etagged, and has no stream urls", async () => {
