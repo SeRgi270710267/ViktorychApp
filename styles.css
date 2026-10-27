@@ -3443,7 +3443,7 @@ html[data-theme="default"] .gresults-logo { color: #000; }
 .discord-thread { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .discord-bot { border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; }
 
-.nav-item svg.clock, .drawer a svg.clock, .drawer button svg.clock {
+.nav-item svg.clock, .drawer a svg.clock, .drawer button svg.clock, .bottom-nav svg.clock, .bnav-ico svg.clock {
   fill: none;
   stroke: currentColor;
   stroke-width: 1.75;
@@ -4424,4 +4424,185 @@ body.upd-open { overflow: hidden; }
 @keyframes upd-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .upd-logo, .upd-ring, .upd-bar > i { animation: none !important; transition: none !important; }
+}
+
+.bnav-screen { padding-bottom: 24px; }
+.bottom-nav.bottom-nav-preview {
+  display: flex;
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  height: 64px;
+  margin: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg);
+  align-items: center;
+  justify-content: space-around;
+  z-index: 1;
+}
+.bnav-preview-ico { color: var(--text); display: inline-flex; }
+.bnav-preview-ico svg, .bnav-ico svg { width: 22px; height: 22px; fill: currentColor; }
+.bnav-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 56px;
+  padding: 0 12px 0 4px;
+  border-bottom: 1px solid var(--line);
+}
+.bnav-row.is-dragging { background: var(--hover); }
+.bnav-grip {
+  touch-action: none;
+  width: 32px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 0;
+}
+.bnav-grip-ico { width: 10px; height: 16px; fill: var(--muted); }
+.bnav-row .icon-btn { width: 34px; height: 34px; flex: none; }
+.bnav-row .icon-btn svg { width: 18px; height: 18px; }
+.bnav-ico { display: inline-flex; flex: none; width: 28px; justify-content: center; }
+.bnav-name { flex: 1; min-width: 0; font-weight: 700; font-size: 15px; }
+.bnav-switch {
+  width: 40px;
+  height: 22px;
+  border: 0;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  flex: none;
+}
+.bnav-switch i {
+  display: block;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: #3e4144;
+  position: relative;
+}
+.bnav-switch i::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #fff;
+}
+.bnav-switch.on i { background: var(--blue); }
+.bnav-switch.on i::after { transform: translateX(18px); }
+html[data-theme="default"] .bnav-switch:not(.on) i { background: #cfd9de; }
+html[data-theme="dim"] .bnav-switch:not(.on) i { background: #3e4144; }
+.bnav-switch:disabled { opacity: 0.45; }
+.bnav-reset { padding: 16px; }
+
+header.nav.nav-land { display: none; }
+
+@media (orientation: landscape) and (max-height: 520px) and (hover: none) and (pointer: coarse) {
+  .app {
+    width: 100%;
+    max-width: none;
+    box-sizing: border-box;
+    justify-content: center;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  header.nav:not(.nav-land) { display: none !important; }
+  header.nav.nav-land,
+  html[data-nav="icons"] header.nav.nav-land,
+  html[data-nav="icons"] .nav.nav-land {
+    display: flex !important;
+    flex-direction: column;
+    align-items: stretch;
+    width: 228px;
+    flex: 0 0 228px;
+    height: 100dvh;
+    max-height: 100dvh;
+    box-sizing: border-box;
+    padding: 2px 6px calc(4px + env(safe-area-inset-bottom)) 6px;
+  }
+  html[data-nav="icons"] .nav.nav-land .nav-scroll,
+  .nav.nav-land .nav-scroll { align-items: stretch; }
+  html[data-nav="icons"] .nav.nav-land .logo,
+  .nav.nav-land .logo {
+    width: auto;
+    height: 32px;
+    margin: 0;
+    padding: 0 8px;
+    justify-content: flex-start;
+  }
+  html[data-nav="icons"] .nav.nav-land .logo .logo-full,
+  .nav.nav-land .logo .logo-full { display: block; height: 20px; width: auto; }
+  html[data-nav="icons"] .nav.nav-land .logo .logo-si,
+  html[data-nav="icons"] .nav.nav-land .logo .logo-short,
+  .nav.nav-land .logo .logo-si,
+  .nav.nav-land .logo .logo-short { display: none; }
+  html[data-nav="icons"] .nav.nav-land .nav-label,
+  .nav.nav-land .nav-label,
+  html[data-nav="icons"] .nav.nav-land .post-label,
+  .nav.nav-land .post-label { display: block; }
+  html[data-nav="icons"] .nav.nav-land .account-meta,
+  .nav.nav-land .account-meta { display: flex; }
+  html[data-nav="icons"] .nav.nav-land .account-pill .dots,
+  .nav.nav-land .account-pill .dots { display: inline-flex; }
+  html[data-nav="icons"] .nav.nav-land .nav-item,
+  .nav.nav-land .nav-item {
+    width: 100%;
+    height: 32px;
+    min-height: 32px;
+    justify-content: flex-start;
+    padding: 0 8px;
+    gap: 10px;
+    font-size: 15px;
+    line-height: 20px;
+    overflow: hidden;
+  }
+  html[data-nav="icons"] .nav.nav-land .nav-item svg,
+  .nav.nav-land .nav-item svg { width: 20px; height: 20px; }
+  html[data-nav="icons"] .nav.nav-land .post-btn,
+  .nav.nav-land .post-btn {
+    width: calc(100% - 4px);
+    height: 32px;
+    min-height: 32px;
+    max-width: none;
+    margin: 4px 0;
+    padding: 0 12px;
+    font-size: 14px;
+  }
+  html[data-nav="icons"] .nav.nav-land .post-btn .post-ico,
+  .nav.nav-land .post-btn .post-ico { display: none; }
+  html[data-nav="icons"] .nav.nav-land .account-pill,
+  .nav.nav-land .account-pill {
+    width: 100%;
+    height: auto;
+    min-height: 36px;
+    justify-content: flex-start;
+    padding: 2px 6px;
+    margin-bottom: 0;
+  }
+  .nav.nav-land .nav-land-more { width: 100%; }
+  .nav.nav-land .nav-land-more > summary { list-style: none; cursor: pointer; }
+  .nav.nav-land .nav-land-more > summary::-webkit-details-marker { display: none; }
+  .nav.nav-land .nav-land-menu { display: flex; flex-direction: column; width: 100%; }
+  nav.bottom-nav, .fab { display: none !important; }
+  .side { display: none !important; }
+  .app .center,
+  .app.wide .center {
+    flex: 0 1 600px;
+    width: auto;
+    max-width: 600px;
+    min-width: 0;
+    margin-inline: auto;
+    padding-bottom: 12px;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) and (hover: none) and (pointer: coarse) and (min-width: 1180px) {
+  .side { display: block !important; width: 320px; flex: 0 0 320px; }
 }
