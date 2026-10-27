@@ -124,6 +124,8 @@ const SHELL_FILES = [
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/feed-order.js",
+  "./shared/feed-sources.js",
+  "./feeds-page.js",
   "./shared/home-fresh.js",
   "./shared/pill-data.js",
   "./shared/tiktok-lock.js",

@@ -12,7 +12,7 @@ permissions:
 jobs:
   apply:
     # The repository owner is the org. The script compares the actor to OWNER_ACTOR_SHA256.
-    if: startsWith(github.event.issue.title, 'Follow request') || startsWith(github.event.issue.title, 'Unfollow request') || startsWith(github.event.issue.title, 'Subscription groups') || startsWith(github.event.issue.title, 'Link accounts')
+    if: startsWith(github.event.issue.title, 'Subscription groups') || startsWith(github.event.issue.title, 'Link accounts')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
