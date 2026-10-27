@@ -46,7 +46,7 @@ assert(html.includes('data-panel="ai"'));
 assert(html.includes("<textarea"));
 assert(html.includes("--dock-w:400px"));
 assert(html.includes("--dock-h:530px"));
-assert(!/redacted_handle\.com/i.test(html));
+assert(!/https?:\/\/(?!x\.com)/i.test(html));
 assert(!html.includes("<iframe"));
 assert(!html.includes("window.open"));
 
@@ -141,7 +141,7 @@ const echo = dock.activeProvider();
   assert(!fs.existsSync("worker/test/messages.test.mjs"));
   const tree = fs.readFileSync("dock.js", "utf8") + fs.readFileSync("dock.css", "utf8");
   assert(!tree.includes("/v1/messages"));
-  assert(!/redacted_handle\.com/i.test(tree));
+  assert(!/https?:\/\/(?!x\.com)/i.test(tree));
   assert(!tree.includes("window.open"));
   assert(!fs.existsSync("extension"));
 

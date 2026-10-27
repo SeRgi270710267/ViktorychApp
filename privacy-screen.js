@@ -48,9 +48,11 @@
     var missingH = sh - wh;
     /* Browser chrome, a taskbar, and a normal resized window leave a strip.
        Split-screen leaves another pane: at least 30% of that axis and 240px.
-       A phone that is simply shorter than the screen is not split. */
-    var vertical = widthRatio < 0.7 && heightRatio > 0.85 && missingW >= 240;
-    var horizontal = heightRatio < 0.7 && widthRatio > 0.85 && missingH >= 240;
+       A phone that is simply shorter than the screen is not split.
+       Android reports outerHeight as a chrome sliver (about 80–200px). That
+       is not a second pane, and treating it as one covers Notifications. */
+    var vertical = widthRatio < 0.7 && heightRatio > 0.85 && missingW >= 240 && ww >= 240;
+    var horizontal = heightRatio < 0.7 && widthRatio > 0.85 && missingH >= 240 && wh >= 240;
     return !!(vertical || horizontal);
   }
 
@@ -62,7 +64,9 @@
     else if (input.pip) reason = "pip";
     else if (input.frozen) reason = "freeze";
     else if (input.hidden) reason = "hidden";
-    else if (input.blurred) reason = "blur";
+    /* A phone or tablet fires window blur while the page is still the one
+       on screen. Visibility and pagehide cover the app switcher there. */
+    else if (input.blurred && !input.coarse) reason = "blur";
     else if (input.split) reason = "split";
     if (!reason) return { cover: false, scope: picked, reason: "" };
     if (picked === "dms" && !input.sensitive) return { cover: false, scope: picked, reason: reason };
@@ -78,13 +82,23 @@
     } catch (err) { /* document picture-in-picture is optional */ }
     var displayPip = false;
     try { displayPip = !!(root.matchMedia && root.matchMedia("(display-mode: picture-in-picture)").matches); } catch (err) { displayPip = false; }
+    var innerW = Number(root.innerWidth) || 0;
+    var innerH = Number(root.innerHeight) || 0;
+    var outerW = Number(root.outerWidth) || 0;
+    var outerH = Number(root.outerHeight) || 0;
     return {
       screenWidth: screenObj.width || 0,
       screenHeight: screenObj.height || 0,
-      windowWidth: root.outerWidth || root.innerWidth || 0,
-      windowHeight: root.outerHeight || root.innerHeight || 0,
+      windowWidth: innerW || outerW,
+      windowHeight: innerH || outerH,
       pip: pip || displayPip || !!reasons.pip
     };
+  }
+
+  function coarsePointer() {
+    try {
+      return !!(root.matchMedia && root.matchMedia("(hover: none) and (pointer: coarse)").matches);
+    } catch (err) { return false; }
   }
 
   function sensitiveOnScreen() {
@@ -95,13 +109,18 @@
   function collect() {
     var doc = root.document;
     var current = metrics();
+    var hidden = !!(doc && (doc.visibilityState === "hidden" || doc.hidden));
+    var focused = !!(doc && !hidden && doc.hasFocus && doc.hasFocus());
     return {
       mode: mode(),
       printing: !!reasons.print,
       pip: !!current.pip,
       frozen: !!reasons.freeze,
-      hidden: !!(doc && (doc.visibilityState === "hidden" || doc.hidden)),
-      blurred: !!reasons.blur,
+      hidden: hidden,
+      /* A focused, visible window is the one in front. A blur event can
+         stick after a re-render and paint the notifications list black. */
+      blurred: !!reasons.blur && !focused,
+      coarse: coarsePointer(),
       split: splitView(current),
       sensitive: sensitiveOnScreen()
     };
@@ -174,7 +193,13 @@
     root.addEventListener("focus", function () { mark("blur", false); }, true);
     root.document.addEventListener("visibilitychange", function () {
       if (root.document.visibilityState === "hidden") mark("hidden", true);
-      else mark("hidden", false);
+      else {
+        mark("hidden", false);
+        if (root.document.hasFocus && root.document.hasFocus()) mark("blur", false);
+      }
+    }, true);
+    root.addEventListener("pointerdown", function () {
+      if (root.document && root.document.visibilityState !== "hidden") mark("blur", false);
     }, true);
     root.addEventListener("pagehide", function () { mark("hidden", true); }, true);
     root.addEventListener("pageshow", function () { mark("hidden", false); mark("freeze", false); }, true);
