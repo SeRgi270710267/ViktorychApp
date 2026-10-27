@@ -18,6 +18,9 @@ import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
+import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
+import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 
@@ -56,6 +59,9 @@ function json(status, body, extra) {
 }
 
 function withCors(request, env, response) {
+  // A WebSocket acceptance is status 101. Rebuilding that response is illegal,
+  // and the handshake does not use CORS. A foreign Origin is refused above.
+  if (response && (response.status === 101 || response.webSocket)) return response;
   const url = new URL(request.url);
   if (isPublicFederationRoute(url.pathname)) return response;
   const origin = request.headers.get("Origin");
@@ -172,7 +178,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -675,8 +681,11 @@ async function handleLogout(request, env, all) {
   const hash = await sha256Hex(token);
   const row = await env.DB.prepare("SELECT public_id FROM sessions WHERE token_hash = ?").bind(hash).first();
   if (!row) return json(401, { error: "unauthorized" });
-  if (all) await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(row.public_id).run();
-  else await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run();
+  if (all) {
+    await env.DB.prepare("DELETE FROM sessions WHERE public_id = ?").bind(row.public_id).run();
+    await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ?").bind(row.public_id).run();
+    await env.DB.prepare("DELETE FROM channel_tickets WHERE public_id = ?").bind(row.public_id).run();
+  } else await env.DB.prepare("DELETE FROM sessions WHERE token_hash = ?").bind(hash).run();
   return json(200, { ok: true });
 }
 
@@ -748,6 +757,10 @@ async function handleRepostPut(request, env) {
   const created = existing ? Number(existing.created_at) : now;
   await env.DB.prepare("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, post_key) DO UPDATE SET kind = excluded.kind, comment = excluded.comment, snapshot = excluded.snapshot").bind(row.public_id, cleaned.postKey, cleaned.kind, cleaned.comment, JSON.stringify(cleaned.post), created).run();
   await trimReposts(env, row.public_id);
+  if (!existing) {
+    try { await notifyRepost(env, row, cleaned); }
+    catch (err) { /* the repost is saved; the note can be rebuilt from it */ }
+  }
   return json(200, { ok: true, repost: { postKey: cleaned.postKey, kind: cleaned.kind, comment: cleaned.comment, createdAt: created, post: cleaned.post } });
 }
 
@@ -849,6 +862,11 @@ async function handleSyncGet(request, env) {
   let payload = null;
   try { payload = JSON.parse(saved.payload); }
   catch (err) { payload = null; }
+  if (payload && typeof payload === "object") {
+    delete payload.bellNotes;
+    delete payload.bellSeen;
+    delete payload.bellRead;
+  }
   return json(200, { payload, updatedAt: saved.updated_at });
 }
 
@@ -864,6 +882,9 @@ async function handleSyncPut(request, env) {
     try { previous = JSON.parse(current.payload); } catch (err) { previous = null; }
   }
   const payload = body.payload;
+  delete payload.bellNotes;
+  delete payload.bellSeen;
+  delete payload.bellRead;
   const sentCut = cleanHistoryCut(payload.historyCut);
   const prevCut = cleanHistoryCut(previous && previous.historyCut);
   payload.historyCut = {
@@ -880,6 +901,23 @@ async function handleSyncPut(request, env) {
     else delete payload.bottomNav;
   }
   if (payload.bottomNavCustom != null) payload.bottomNavCustom = payload.bottomNavCustom === true;
+  if (payload.navLayoutSync === true) {
+    payload.navLayout = payload.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = payload.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else if (payload.navLayoutSync === false) {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  } else if (previous && previous.navLayoutSync === true) {
+    payload.navLayout = previous.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = previous.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  }
   const text = JSON.stringify(payload);
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });
   const base = Number(body.baseUpdatedAt || 0);
@@ -3093,6 +3131,18 @@ async function watchTikTokLive(env, nowMs) {
     if (blocks) await writeJsonObject(env, markKey, Object.assign({}, mark, { blocks: 0, blockedAt: "" }));
 
     const info = liveInfo(handle, prev, seen.roomId || "", seen.picked || { live: false });
+    if (info.live && !(prev && prev.live)) {
+      try {
+        await notifyLiveStarted(env, {
+          handle,
+          platform: "tiktok",
+          roomId: String(seen.roomId || info.roomId || ""),
+          title: info.title || "",
+          name: handle,
+          at: Number(nowMs) || Date.now()
+        });
+      } catch (err) { /* the recording decision still runs */ }
+    }
     if (shouldRememberLive(prev, info, nowMs)) await rememberLive(env, handle, info);
 
     const job = await readJsonObject(env, WATCH_JOB_PREFIX + handle + ".json");
@@ -4029,7 +4079,12 @@ async function handleFollowPut(request, env) {
   const target = await resolveFollowTarget(env, id);
   if (target.error) return target.error;
   const snapshot = cleanFollowSnapshot(id, body.profile);
+  const existing = await env.DB.prepare("SELECT created_at FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(gate.row.public_id, id).first();
   await env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(follower_id, target_id) DO UPDATE SET snapshot = CASE WHEN excluded.snapshot != '' THEN excluded.snapshot ELSE account_follows.snapshot END").bind(gate.row.public_id, id, snapshot, Date.now()).run();
+  if (!existing) {
+    try { await notifyFollow(env, gate.row, id); }
+    catch (err) { /* the follow is saved */ }
+  }
   return followWriteResult(env, gate.row.public_id, id, true);
 }
 
@@ -4066,6 +4121,7 @@ async function handleFollowImport(request, env) {
     ids.push(id);
   }
   const now = Date.now();
+  // A bulk import must not notify. Only a new follow from PUT does.
   for (let i = 0; i < ids.length; i += 40) {
     const part = ids.slice(i, i + 40);
     await env.DB.batch(part.map((id) => env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, '', ?) ON CONFLICT(follower_id, target_id) DO NOTHING").bind(gate.row.public_id, id, now)));
@@ -4459,13 +4515,25 @@ async function route(request, env, ctx) {
     return handleIdentitiesRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
   }
 
+  if (path === "/v1/presence") {
+    return handlePresence(request, env, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
+  if (path === "/v1/channel" || path === "/v1/channel/ticket") {
+    return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
+  }
   if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
 
     return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
 
   }
+  if (path === "/v1/notifications" || path === "/v1/notifications/read" || path === "/v1/push/vapid" || path === "/v1/push/subscribe") {
+    const handled = await handleNotificationRoutes(request, env, path, { json, sessionAccount, readJson, rateHit, limited });
+    if (handled) return handled;
+  }
   return json(404, { error: "not_found" });
 }
+
+export { AccountChannel };
 
 export default {
   async fetch(request, env, ctx) {
@@ -4482,7 +4550,7 @@ export default {
   },
   async scheduled(event, env, ctx) {
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));

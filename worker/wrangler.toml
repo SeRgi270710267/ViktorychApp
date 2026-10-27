@@ -44,3 +44,14 @@ bucket_name = "viktorych-data"
 # The Discord mirror still runs on the quarter hour.
 [triggers]
 crons = ["* * * * *"]
+
+# One hibernating object per account. Presence and notifications publish
+# into it by topic. Sockets stay open only while a tab is visible.
+# Do not add a second class or binding.
+[[durable_objects.bindings]]
+name = "ACCOUNT_CHANNEL"
+class_name = "AccountChannel"
+
+[[migrations]]
+tag = "v1-account-channel"
+new_sqlite_classes = ["AccountChannel"]

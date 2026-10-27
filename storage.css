@@ -33,6 +33,7 @@
 .stor-slider { width: 100%; margin: 4px 0 14px; accent-color: var(--blue, #1d9bf0); }
 .stor-debug { padding: 4px 16px 24px; }
 .stor-controls .danger { margin-top: 8px; }
+.is-pending { box-shadow: inset 0 0 0 1px var(--accent, #3390ec); }
 @media (prefers-reduced-motion: reduce) {
   .stor-bar i { transition: none; }
 }
