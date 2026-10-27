@@ -14,6 +14,9 @@
   var SNOOZE_KEY = "viktorychapp-update-snooze";
   var RESTORE_KEY = "viktorychapp-update-restore";
   var RELOAD_KEY = "viktorychapp-sw-reload";
+  var FAIL_KEY = "viktorychapp-update-fails";
+  var LOG_KEY = "viktorychapp-update-log";
+  var FALLBACK_KEY = "viktorychapp-update-fallback";
   var RING = 2 * Math.PI * 44;
 
   function tr(key, vars) {
@@ -110,6 +113,41 @@
     return true;
   }
 
+  function isoBuilt(value) {
+    var text = String(value || "");
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(text) ? text : "";
+  }
+
+  function manifestPending(remoteSha, currentSha, remoteBuilt, currentBuilt) {
+    if (!remoteSha || !currentSha || remoteSha === currentSha) return false;
+    var remote = isoBuilt(remoteBuilt);
+    var local = isoBuilt(currentBuilt);
+    if (remote && local) return remote > local;
+    return true;
+  }
+
+  function shouldOfferReset(failures) {
+    return Number(failures) >= 2;
+  }
+
+  function shouldFallback(failures) {
+    return Number(failures) >= 3;
+  }
+
+  function safeFailure(input) {
+    var reason = String(input && input.reason || "").toLowerCase();
+    if (reason !== "network" && reason !== "timeout" && reason !== "quota" && !/^http-\d{3}$/.test(reason)) reason = "network";
+    var raw = String(input && input.url || "");
+    raw = raw.split("#")[0].split("?")[0].trim();
+    try {
+      if (/^[a-z][a-z0-9+.-]*:/i.test(raw)) raw = new URL(raw).pathname;
+    } catch (err) { raw = ""; }
+    raw = raw.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
+    if (!raw || raw.indexOf("..") >= 0 || !/^[a-z0-9._/-]{1,160}$/i.test(raw)) raw = "";
+    if (raw && !/\.(?:js|css|html|svg|png|ico|webmanifest|json)$/i.test(raw)) raw = "";
+    return { url: raw, reason: reason };
+  }
+
   function stepRank(step) {
     if (step === "download") return 0;
     if (step === "install") return 1;
@@ -134,9 +172,19 @@
     busy: false,
     currentSha: "",
     remoteSha: "",
+    currentBuilt: "",
+    remoteBuilt: "",
+    failPath: "",
+    failReason: "",
+    failures: 0,
+    failureNoted: false,
+    expectingController: false,
+    reloaded: false,
+    suppressAutoFallback: false,
     reg: null,
     waiting: null
   };
+  var applying = null;
   var started = false;
   var checking = false;
   var reloadTimer = 0;
@@ -224,7 +272,8 @@
       + '<div class="upd-progress" id="upd-progress" hidden><div class="upd-bar" aria-hidden="true"><i id="upd-bar"></i></div><p class="upd-count" id="upd-count"></p><ol class="upd-steps" id="upd-steps"></ol></div>'
       + '<section class="upd-notes" id="upd-notes" hidden><h2 id="upd-notes-title"></h2><ul id="upd-notes-list"></ul></section>'
       + '<p class="upd-error" id="upd-error" hidden></p>'
-      + '<div class="upd-actions"><button type="button" class="upd-go" id="upd-go"></button><button type="button" class="upd-later" id="upd-later"></button><button type="button" class="upd-later" id="upd-hard" hidden></button></div>'
+      + '<p class="upd-detail" id="upd-detail" hidden></p>'
+      + '<div class="upd-actions"><button type="button" class="upd-go" id="upd-go"></button><button type="button" class="upd-later" id="upd-later"></button><button type="button" class="upd-later" id="upd-hard" hidden></button><button type="button" class="upd-later" id="upd-reset" hidden></button></div>'
       + '</div></div>';
     document.body.appendChild(rootEl);
     var steps = rootEl.querySelector("#upd-steps");
@@ -252,6 +301,7 @@
     });
     rootEl.querySelector("#upd-later").addEventListener("click", snooze);
     rootEl.querySelector("#upd-hard").addEventListener("click", hardReload);
+    rootEl.querySelector("#upd-reset").addEventListener("click", resetAppData);
     document.addEventListener("keydown", function (event) {
       if (event.key !== "Escape" || mode() !== "overlay" || state.phase !== "offer") return;
       event.preventDefault();
@@ -272,9 +322,11 @@
       notesTitle: rootEl.querySelector("#upd-notes-title"),
       notesList: rootEl.querySelector("#upd-notes-list"),
       error: rootEl.querySelector("#upd-error"),
+      detail: rootEl.querySelector("#upd-detail"),
       go: rootEl.querySelector("#upd-go"),
       later: rootEl.querySelector("#upd-later"),
       hard: rootEl.querySelector("#upd-hard"),
+      reset: rootEl.querySelector("#upd-reset"),
       arc: rootEl.querySelector(".upd-arc"),
       logo: rootEl.querySelector(".upd-logo")
     };
@@ -355,7 +407,11 @@
       }
     }
     box.error.hidden = state.phase !== "error";
-    box.error.textContent = tr("The update didn't finish.");
+    box.error.textContent = state.failReason === "quota"
+      ? tr("This device is out of space for the update.")
+      : tr("The update didn't finish. You can keep this version and try again.");
+    box.detail.hidden = state.phase !== "error" || !state.failPath;
+    box.detail.textContent = state.failPath || "";
     var primary = state.phase === "error" ? tr("Retry") : tr("Update now");
     box.go.hidden = state.phase === "working" || state.phase === "done";
     box.go.textContent = primary;
@@ -363,6 +419,8 @@
     box.later.textContent = tr("Later");
     box.hard.hidden = state.phase !== "error";
     box.hard.textContent = tr("Reload anyway");
+    box.reset.hidden = state.phase !== "error" || !shouldOfferReset(state.failures);
+    box.reset.textContent = tr("Reset app data");
     box.overlay.setAttribute("aria-busy", state.phase === "working" ? "true" : "false");
     if (shown === "overlay" && !box.go.hidden) {
       var active = document.activeElement;
@@ -389,10 +447,10 @@
   function armStall() {
     clearTimeout(stallTimer);
     stallTimer = setTimeout(function () {
-      if (state.phase === "working") {
-        state.phase = "error";
-        paint();
-      }
+      if (state.phase !== "working") return;
+      noteFailure("", "timeout");
+      state.phase = "error";
+      paint();
     }, 25000);
   }
 
@@ -407,13 +465,79 @@
     });
   }
 
+  function rememberLog(clean) {
+    var list = [];
+    try { list = JSON.parse(readStore(localStorage, LOG_KEY) || "[]"); } catch (err) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    var row = { t: Date.now(), url: clean.url || "", reason: clean.reason || "network" };
+    var last = list.length ? list[list.length - 1] : null;
+    if (last && last.url === row.url && last.reason === row.reason && Date.now() - last.t < 60000) return;
+    list.push(row);
+    if (list.length > 8) list = list.slice(-8);
+    writeStore(localStorage, LOG_KEY, JSON.stringify(list));
+  }
+
+  function noteFailure(url, reason) {
+    var clean = safeFailure({ url: url, reason: reason });
+    if (!state.failureNoted) {
+      state.failureNoted = true;
+      state.failures += 1;
+      writeStore(sessionStorage, FAIL_KEY, String(state.failures));
+    }
+    if (clean.url) state.failPath = clean.url;
+    if (clean.reason) state.failReason = clean.reason;
+    rememberLog(clean);
+    if (!state.suppressAutoFallback && shouldFallback(state.failures)) fallbackReload();
+  }
+
+  function finishUpdate() {
+    if (state.reloaded) return;
+    state.reloaded = true;
+    state.expectingController = false;
+    state.failures = 0;
+    state.failureNoted = false;
+    state.failPath = "";
+    state.failReason = "";
+    try { sessionStorage.removeItem(FAIL_KEY); } catch (err) { /* the next page starts clean */ }
+    clearTimeout(stallTimer);
+    state.phase = "done";
+    state.step = "ready";
+    state.files = state.totalFiles || state.files;
+    paint();
+    scheduleReload();
+  }
+
+  function readControllerSha() {
+    return new Promise(function (resolve) {
+      var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (!worker) { resolve(""); return; }
+      var timer = setTimeout(function () { resolve(state.currentSha || ""); }, 800);
+      function onMsg(event) {
+        var data = event.data || {};
+        if (data.type !== "sw-version" || !data.sha) return;
+        navigator.serviceWorker.removeEventListener("message", onMsg);
+        clearTimeout(timer);
+        state.currentSha = String(data.sha).toLowerCase();
+        state.currentBuilt = isoBuilt(data.built);
+        resolve(state.currentSha);
+      }
+      navigator.serviceWorker.addEventListener("message", onMsg);
+      try { worker.postMessage({ type: "sw-version" }); } catch (err) { resolve(""); }
+    });
+  }
+
   function applyNow() {
+    var attempt = {};
+    applying = attempt;
     state.pending = true;
     state.phase = "working";
     state.step = "download";
     state.forced = true;
     state.files = 0;
     state.bytes = 0;
+    state.failureNoted = false;
+    state.expectingController = true;
+    state.reloaded = false;
     paint();
     armStall();
     var ready = state.reg ? Promise.resolve(state.reg) : navigator.serviceWorker.getRegistration();
@@ -424,11 +548,24 @@
     }).then(function (reg) {
       return waitForWorker(reg);
     }).then(function (worker) {
-      if (!worker) throw new Error("waiting");
-      state.waiting = worker;
-      worker.postMessage({ type: "apply-update" });
+      if (applying !== attempt) return;
+      if (worker) {
+        state.waiting = worker;
+        worker.postMessage({ type: "apply-update" });
+        return;
+      }
+      return readControllerSha().then(function (sha) {
+        if (applying !== attempt) return;
+        if (sha && state.remoteSha && sha === state.remoteSha) {
+          finishUpdate();
+          return;
+        }
+        throw new Error("waiting");
+      });
     }).catch(function () {
+      if (applying !== attempt) return;
       clearTimeout(stallTimer);
+      noteFailure("", "network");
       state.phase = "error";
       paint();
     });
@@ -436,17 +573,65 @@
 
   function scheduleReload() {
     if (reloadTimer) return;
+    var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (worker) {
+      try { worker.postMessage({ type: "update-reloading" }); } catch (err) { /* the worker reloads the page if this one does not */ }
+    }
     reloadTimer = setTimeout(function () {
       captureState();
       location.reload();
     }, reducedMotion() ? 350 : 900);
   }
 
+  function fallbackReload() {
+    if (state.suppressAutoFallback) return;
+    if (readStore(sessionStorage, FALLBACK_KEY) === "1") return;
+    writeStore(sessionStorage, FALLBACK_KEY, "1");
+    state.expectingController = false;
+    applying = null;
+    var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (worker) {
+      try { worker.postMessage({ type: "serve-network-once" }); } catch (err) { /* the reload query asks for the network too */ }
+    }
+    hardReload();
+  }
+
+  function resetAppData() {
+    try { localStorage.clear(); } catch (err) { /* private mode */ }
+    try { sessionStorage.clear(); } catch (err) { /* private mode */ }
+    var jobs = [];
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      jobs.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all((regs || []).map(function (reg) { return reg.unregister(); }));
+      }));
+    }
+    if (window.caches && caches.keys) {
+      jobs.push(caches.keys().then(function (keys) {
+        return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+      }));
+    }
+    if (window.indexedDB && indexedDB.databases) {
+      jobs.push(indexedDB.databases().then(function (dbs) {
+        return Promise.all((dbs || []).map(function (db) {
+          return new Promise(function (resolve) {
+            if (!db || !db.name) { resolve(); return; }
+            var req = indexedDB.deleteDatabase(db.name);
+            req.onsuccess = req.onerror = req.onblocked = function () { resolve(); };
+          });
+        }));
+      }).catch(function () {}));
+    }
+    Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
+  }
+
   function onWorkerMessage(data) {
     data = data || {};
     if (data.type === "sw-version" && data.sha) {
       state.currentSha = String(data.sha).toLowerCase();
-      if (state.remoteSha && state.remoteSha !== state.currentSha) state.pending = true;
+      state.currentBuilt = isoBuilt(data.built);
+      if (state.waiting) state.pending = true;
+      else if (manifestPending(state.remoteSha, state.currentSha, state.remoteBuilt, state.currentBuilt)) state.pending = true;
+      else if (state.phase === "offer") state.pending = false;
       paint();
       return;
     }
@@ -456,14 +641,8 @@
     }
     if (data.type === "update-ready") {
       if (data.sha) state.currentSha = String(data.sha).toLowerCase();
-      if (state.phase === "working" || state.phase === "done") {
-        clearTimeout(stallTimer);
-        state.phase = "done";
-        state.step = "ready";
-        state.files = state.totalFiles || state.files;
-        paint();
-        scheduleReload();
-      }
+      if (data.built) state.currentBuilt = isoBuilt(data.built);
+      if (state.expectingController || state.phase === "working" || state.phase === "done") finishUpdate();
       return;
     }
     if (data.type !== "update-progress") return;
@@ -474,6 +653,7 @@
     if (typeof data.totalBytes === "number") state.totalBytes = data.totalBytes;
     if (data.step === "error") {
       clearTimeout(stallTimer);
+      noteFailure(data.url, data.reason);
       state.phase = "error";
     } else {
       state.phase = "working";
@@ -537,9 +717,10 @@
       var sha = String(doc && doc.sha || "").toLowerCase();
       if (!/^[0-9a-f]{7,64}$/.test(sha)) return;
       state.remoteSha = sha;
+      state.remoteBuilt = isoBuilt(doc && doc.built);
       state.notes = notesOf(doc);
       state.short = String((doc && doc.short) || sha.slice(0, 7));
-      if (state.currentSha && sha !== state.currentSha) state.pending = true;
+      if (manifestPending(sha, state.currentSha, state.remoteBuilt, state.currentBuilt)) state.pending = true;
       paint();
     }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
       checking = false;
@@ -656,6 +837,11 @@
 
   function hardReload() {
     captureState();
+    state.expectingController = false;
+    var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (worker) {
+      try { worker.postMessage({ type: "serve-network-once" }); } catch (err) { /* the query string asks for the network copy */ }
+    }
     try {
       var url = new URL(location.href);
       url.searchParams.set("vapp", String(Date.now()));
@@ -680,6 +866,11 @@
     started = true;
     restoreRouteEarly();
     loadSnooze();
+    state.failures = Number(readStore(sessionStorage, FAIL_KEY)) || 0;
+    if (readStore(sessionStorage, FALLBACK_KEY) === "1") {
+      state.suppressAutoFallback = true;
+      try { sessionStorage.removeItem(FALLBACK_KEY); } catch (err) { /* one fallback reload already happened */ }
+    }
     var saved = pendingRestore;
     if (saved) {
       var stops = ["wheel", "touchmove", "keydown"];
@@ -702,7 +893,10 @@
     }, CHECK_MS);
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.addEventListener("message", function (event) { onWorkerMessage(event.data || {}); });
-    navigator.serviceWorker.addEventListener("controllerchange", askVersion);
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      askVersion();
+      if (state.expectingController) finishUpdate();
+    });
     var attach = function (reg) { if (reg) watch(reg); };
     navigator.serviceWorker.getRegistration().then(attach).catch(function () {});
     navigator.serviceWorker.ready.then(attach).catch(function () {});
@@ -729,6 +923,10 @@
     watch: watch,
     poke: poke,
     holdsReload: holdsReload,
-    onWorkerMessage: onWorkerMessage
+    onWorkerMessage: onWorkerMessage,
+    manifestPending: manifestPending,
+    shouldOfferReset: shouldOfferReset,
+    shouldFallback: shouldFallback,
+    safeFailure: safeFailure
   };
 });

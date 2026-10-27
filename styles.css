@@ -2203,14 +2203,22 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   }
   .nav-folder-child { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; }
   .nav-customize-btn { width: 50px; height: 50px; justify-content: center; padding: 0; gap: 0; }
-  .center { width: min(600px, calc(100vw - 88px)); flex: 1 1 auto; }
+  .center { width: auto; flex: 1 1 0%; max-width: none; min-width: 0; }
 }
 @media (max-width: 999px) {
-  .side { display: none; }
+  .side {
+    display: none;
+    width: 0;
+    flex: 0 0 0px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
 }
 @media (min-width: 1000px) and (max-width: 1279px) {
-  .side { display: block; width: 320px; flex: 0 0 320px; padding-left: 16px; }
-  .center { width: auto; flex: 1 1 auto; max-width: 600px; }
+  .side { display: block; width: 320px; flex: 0 0 320px; min-width: 0; padding-left: 16px; }
+  .center { width: auto; flex: 1 1 0%; max-width: none; min-width: 0; }
 }
 @media (max-width: 499px) {
   .nav, .side { display: none; }
@@ -2230,7 +2238,11 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
     transition: transform 0.2s ease;
   }
   .topbar.is-hidden { transform: translateY(calc(-100% + env(safe-area-inset-top))); }
-  .topbar { padding-top: env(safe-area-inset-top); }
+  .topbar {
+    padding-top: env(safe-area-inset-top);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
+  }
   .center { padding-top: calc(var(--top) + env(safe-area-inset-top)); overscroll-behavior: contain; }
   .center { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
   .modal-body { padding-bottom: 72px; }
@@ -2254,8 +2266,17 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   }
   .m-logo .logo-full { display: none; }
   .m-logo .logo-short { display: block; height: 22px; width: auto; max-width: 70vw; }
-  .m-ava { width: 32px; height: 32px; padding: 0; }
+  .m-ava, .m-icon, .icon-btn, .more-btn, .tab-caret {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
   .m-ava .ava, .m-ava .initials { width: 32px; height: 32px; font-size: 14px; }
+  .m-logo { min-height: 44px; }
+  .action { min-width: 44px; min-height: 44px; }
+  .x-tooltip { display: none !important; }
   .bottom-nav {
     display: flex;
     position: fixed;
@@ -2264,6 +2285,8 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
     bottom: 0;
     height: calc(53px + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
     background: var(--topbar);
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--line);
@@ -4430,7 +4453,7 @@ body.upd-open { overflow: hidden; }
   font-weight: 800;
 }
 .upd-version { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
-.upd-version[hidden], .upd-progress[hidden], .upd-notes[hidden], .upd-error[hidden] { display: none; }
+.upd-version[hidden], .upd-progress[hidden], .upd-notes[hidden], .upd-error[hidden], .upd-detail[hidden] { display: none; }
 .upd-progress { margin-top: 22px; text-align: left; }
 .upd-bar {
   height: 4px;
@@ -4494,6 +4517,7 @@ body.upd-open { overflow: hidden; }
   background: var(--blue);
 }
 .upd-error { margin: 16px 0 0; color: var(--red); font-weight: 700; }
+.upd-detail { margin: 8px 0 0; color: var(--muted); font-size: 13px; word-break: break-all; }
 .upd-actions { margin-top: 22px; display: flex; flex-direction: column; gap: 4px; }
 .upd-go, .upd-later {
   font: inherit;
@@ -4610,123 +4634,240 @@ html[data-theme="dim"] .bnav-switch:not(.on) i { background: #3e4144; }
 
 header.nav.nav-land { display: none; }
 
-@media (orientation: landscape) and (max-height: 520px) and (hover: none) and (pointer: coarse) {
+/* Phone landscape uses the same icon rail as X: the mark stays at the top,
+   the icons scroll in the middle, and Post plus the account stay at the
+   bottom. A short height tightens the rail but never below a 44px target. */
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) {
   .app {
     width: 100%;
     max-width: none;
+    margin: 0;
+    justify-content: flex-start;
     box-sizing: border-box;
-    justify-content: center;
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--bg);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
   }
   header.nav:not(.nav-land) { display: none !important; }
   header.nav.nav-land,
-  html[data-nav="icons"] header.nav.nav-land,
-  html[data-nav="icons"] .nav.nav-land {
+  html[data-nav="icons"] header.nav.nav-land {
     display: flex !important;
     flex-direction: column;
-    align-items: stretch;
-    width: 228px;
-    flex: 0 0 228px;
+    align-items: center;
+    justify-content: flex-start;
+    width: 80px;
+    flex: 0 0 80px;
     height: 100dvh;
     max-height: 100dvh;
+    min-height: 0;
+    position: sticky;
+    top: 0;
     box-sizing: border-box;
-    padding: 2px 6px calc(4px + env(safe-area-inset-bottom)) 6px;
+    padding: 4px 0 calc(4px + var(--safe-b, env(safe-area-inset-bottom, 0px)));
+    overflow: visible;
   }
   html[data-nav="icons"] .nav.nav-land .nav-scroll,
-  .nav.nav-land .nav-scroll { align-items: stretch; }
+  .nav.nav-land .nav-scroll {
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 4px;
+    padding: 4px 0;
+    margin: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: auto;
+    scrollbar-width: none;
+  }
+  .nav.nav-land .nav-scroll::-webkit-scrollbar { width: 0; height: 0; display: none; }
+  .nav.nav-land .nav-scroll > * { flex: 0 0 auto; min-height: 44px; }
   html[data-nav="icons"] .nav.nav-land .logo,
   .nav.nav-land .logo {
-    width: auto;
-    height: 32px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+    flex: 0 0 48px;
     margin: 0;
-    padding: 0 8px;
-    justify-content: flex-start;
+    padding: 0;
+    justify-content: center;
   }
   html[data-nav="icons"] .nav.nav-land .logo .logo-full,
-  .nav.nav-land .logo .logo-full { display: block; height: 20px; width: auto; }
-  html[data-nav="icons"] .nav.nav-land .logo .logo-si,
   html[data-nav="icons"] .nav.nav-land .logo .logo-short,
-  .nav.nav-land .logo .logo-si,
+  .nav.nav-land .logo .logo-full,
   .nav.nav-land .logo .logo-short { display: none; }
-  html[data-nav="icons"] .nav.nav-land .nav-label,
-  .nav.nav-land .nav-label,
+  html[data-nav="icons"] .nav.nav-land .logo .logo-si,
+  .nav.nav-land .logo .logo-si { display: block; height: 26px; width: auto; }
+  html[data-nav="icons"] .nav.nav-land .nav-scroll .nav-label,
   html[data-nav="icons"] .nav.nav-land .post-label,
-  .nav.nav-land .post-label { display: block; }
   html[data-nav="icons"] .nav.nav-land .account-meta,
-  .nav.nav-land .account-meta { display: flex; }
   html[data-nav="icons"] .nav.nav-land .account-pill .dots,
-  .nav.nav-land .account-pill .dots { display: inline-flex; }
-  html[data-nav="icons"] .nav.nav-land .nav-item,
-  .nav.nav-land .nav-item {
-    width: 100%;
-    height: 32px;
-    min-height: 32px;
-    justify-content: flex-start;
-    padding: 0 8px;
-    gap: 10px;
-    font-size: 15px;
-    line-height: 20px;
-    overflow: hidden;
+  .nav.nav-land .nav-scroll .nav-label,
+  .nav.nav-land .post-label,
+  .nav.nav-land .account-meta,
+  .nav.nav-land .account-pill .dots { display: none; }
+  html[data-nav="icons"] .nav.nav-land .nav-scroll > a.nav-item,
+  .nav.nav-land .nav-scroll > a.nav-item,
+  .nav.nav-land .nav-land-more > summary {
+    width: 48px;
+    height: 48px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 auto;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    gap: 0;
+    overflow: visible;
   }
-  html[data-nav="icons"] .nav.nav-land .nav-item svg,
-  .nav.nav-land .nav-item svg { width: 20px; height: 20px; }
+  .nav.nav-land .nav-scroll > a.nav-item svg,
+  .nav.nav-land .nav-land-more > summary svg { width: 24px; height: 24px; }
   html[data-nav="icons"] .nav.nav-land .post-btn,
   .nav.nav-land .post-btn {
-    width: calc(100% - 4px);
-    height: 32px;
-    min-height: 32px;
+    width: 48px;
+    height: 48px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 48px;
     max-width: none;
-    margin: 4px 0;
-    padding: 0 12px;
-    font-size: 14px;
+    margin: 4px 0 0;
+    padding: 0;
   }
   html[data-nav="icons"] .nav.nav-land .post-btn .post-ico,
-  .nav.nav-land .post-btn .post-ico { display: none; }
+  .nav.nav-land .post-btn .post-ico { display: block; width: 22px; height: 22px; margin: 0 auto; fill: var(--on-fill); }
   html[data-nav="icons"] .nav.nav-land .account-pill,
   .nav.nav-land .account-pill {
-    width: 100%;
-    height: auto;
-    min-height: 36px;
-    justify-content: flex-start;
-    padding: 2px 6px;
-    margin-bottom: 0;
+    width: 48px;
+    height: 48px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 48px;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    margin: 4px 0 0;
+    gap: 0;
   }
-  .nav.nav-land .nav-land-more { width: 100%; }
+  .nav.nav-land .account-pill .ava,
+  .nav.nav-land .account-pill .initials { width: 32px; height: 32px; font-size: 14px; }
+  .nav.nav-land .nav-land-more {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    min-width: 44px;
+    min-height: 44px;
+    flex: 0 0 48px;
+  }
   .nav.nav-land .nav-land-more > summary { list-style: none; cursor: pointer; }
   .nav.nav-land .nav-land-more > summary::-webkit-details-marker { display: none; }
-  .nav.nav-land .nav-land-menu { display: flex; flex-direction: column; width: 100%; }
-  nav.bottom-nav, .fab { display: none !important; }
-  .side { display: none !important; }
-  .app .center,
-  .app.wide .center {
-    flex: 0 1 600px;
-    width: auto;
-    max-width: 600px;
-    min-width: 0;
-    margin-inline: auto;
-    padding-bottom: 12px;
+  .nav.nav-land .nav-land-menu {
+    position: absolute;
+    left: calc(100% + 8px);
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    width: max-content;
+    min-width: 220px;
+    max-height: min(280px, 70dvh);
+    overflow: auto;
+    padding: 4px 0;
+    background: var(--sheet);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    box-shadow: 0 0 15px var(--shadow);
+    z-index: 30;
   }
+  html[data-nav="icons"] .nav.nav-land .nav-land-menu .nav-item,
+  .nav.nav-land .nav-land-menu .nav-item {
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    min-height: 44px;
+    flex: 0 0 auto;
+    justify-content: flex-start;
+    padding: 0 16px;
+    gap: 12px;
+  }
+  html[data-nav="icons"] .nav.nav-land .nav-land-menu .nav-label,
+  .nav.nav-land .nav-land-menu .nav-label { display: block; }
+  nav.bottom-nav, .fab { display: none !important; }
+  .side {
+    display: none !important;
+    width: 0 !important;
+    flex: 0 0 0px !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
+  .app .center,
+  .app.wide .center,
+  .app.explore-mode .center {
+    flex: 1 1 0%;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    margin: 0;
+    padding-bottom: calc(76px + var(--safe-b, env(safe-area-inset-bottom, 0px)));
+  }
+  .tabs-bar, .topbar, .tabs { max-width: 100%; min-width: 0; }
+  .tabs-bar { position: relative; z-index: 4; }
 }
-@media (orientation: landscape) and (max-height: 520px) and (hover: none) and (pointer: coarse) and (min-width: 1180px) {
-  .side { display: block !important; width: 320px; flex: 0 0 320px; }
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
+  header.nav.nav-land,
+  html[data-nav="icons"] header.nav.nav-land {
+    width: 68px;
+    flex: 0 0 68px;
+  }
+  html[data-nav="icons"] .nav.nav-land .logo,
+  .nav.nav-land .logo,
+  html[data-nav="icons"] .nav.nav-land .nav-scroll > a.nav-item,
+  .nav.nav-land .nav-scroll > a.nav-item,
+  .nav.nav-land .nav-land-more,
+  .nav.nav-land .nav-land-more > summary,
+  html[data-nav="icons"] .nav.nav-land .post-btn,
+  .nav.nav-land .post-btn,
+  html[data-nav="icons"] .nav.nav-land .account-pill,
+  .nav.nav-land .account-pill {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    flex-basis: 44px;
+  }
+  .nav.nav-land .nav-scroll { gap: 4px; }
 }
 
 @media (orientation: portrait) and (min-width: 500px) and (max-width: 1279px) {
   html[data-nav-layout="bar"] header.nav,
   html[data-nav-layout="bar"] .side { display: none !important; }
+  html[data-nav-layout="bar"] .side {
+    width: 0 !important;
+    flex: 0 0 0px !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
   html[data-nav-layout="bar"] .app {
     width: 100%;
     max-width: none;
-    justify-content: center;
+    margin: 0;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    background: var(--bg);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
   }
   html[data-nav-layout="bar"] .app .center,
   html[data-nav-layout="bar"] .app.wide .center {
-    width: 100%;
-    max-width: 600px;
-    flex: 1 1 600px;
-    margin-inline: auto;
+    width: auto;
+    max-width: none;
+    flex: 1 1 0%;
+    margin: 0;
     border: 0;
     min-width: 0;
     padding-top: calc(var(--top) + env(safe-area-inset-top));
@@ -4738,6 +4879,8 @@ header.nav.nav-land { display: none; }
     left: 0;
     right: 0;
     padding-top: env(safe-area-inset-top);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
     z-index: 5;
   }
   html[data-nav-layout="bar"] .mhead {
@@ -4756,6 +4899,8 @@ header.nav.nav-land { display: none; }
     bottom: 0;
     height: calc(53px + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
     background: var(--topbar);
     backdrop-filter: blur(12px);
     border-top: 1px solid var(--line);
@@ -4797,22 +4942,32 @@ header.nav.nav-land { display: none; }
   html[data-nav-layout="bar"][data-nav-bar-land="1"] header.nav,
   html[data-nav-layout="bar"][data-nav-bar-land="1"] header.nav.nav-land,
   html[data-nav-layout="bar"][data-nav-bar-land="1"] .side { display: none !important; }
+  html[data-nav-layout="bar"][data-nav-bar-land="1"] .side {
+    width: 0 !important;
+    flex: 0 0 0px !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+  }
   html[data-nav-layout="bar"][data-nav-bar-land="1"] .app {
     width: 100%;
     max-width: none;
-    justify-content: center;
+    margin: 0;
+    justify-content: flex-start;
     box-sizing: border-box;
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+    background: var(--bg);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
   }
   html[data-nav-layout="bar"][data-nav-bar-land="1"] .app .center,
   html[data-nav-layout="bar"][data-nav-bar-land="1"] .app.wide .center {
-    width: 100%;
-    max-width: 600px;
-    flex: 0 1 600px;
-    margin-inline: auto;
+    width: auto;
+    max-width: none;
+    flex: 1 1 0%;
+    margin: 0;
     min-width: 0;
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-bottom: calc(72px + var(--safe-b, env(safe-area-inset-bottom, 0px)));
   }
   html[data-nav-layout="bar"][data-nav-bar-land="1"] nav.bottom-nav {
     display: flex !important;
@@ -4822,6 +4977,8 @@ header.nav.nav-land { display: none; }
     bottom: 0;
     height: calc(53px + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
     background: var(--topbar);
     border-top: 1px solid var(--line);
     z-index: 20;
@@ -4849,3 +5006,35 @@ header.nav.nav-land { display: none; }
 .device-stat .set-sub { color: var(--muted); font-size: 13px; line-height: 18px; }
 .device-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
 .device-ai textarea { width: 100%; min-height: 96px; box-sizing: border-box; resize: vertical; }
+
+/* Below the desktop shell, the page itself fills the screen. Safe-area
+   padding is the only inset, and it stays inside the border box so the
+   background still reaches the edge. A hidden right column keeps no width. */
+@media (max-width: 1279px) {
+  .app,
+  .app.wide,
+  .app.explore-mode {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    justify-content: flex-start;
+    box-sizing: border-box;
+    background: var(--bg);
+    padding-left: var(--safe-l, env(safe-area-inset-left, 0px));
+    padding-right: var(--safe-r, env(safe-area-inset-right, 0px));
+  }
+  .app .center,
+  .app.wide .center,
+  .app.explore-mode .center,
+  html[data-nav-layout="bar"] .app .center,
+  html[data-nav-layout="bar"] .app.wide .center,
+  html[data-nav-layout="bar"][data-nav-bar-land="1"] .app .center,
+  html[data-nav-layout="bar"][data-nav-bar-land="1"] .app.wide .center {
+    flex: 1 1 0%;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    margin-left: 0;
+    margin-right: 0;
+  }
+}

@@ -4148,7 +4148,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function subsDesktop() {
-    return (window.innerWidth || 0) >= 1000 && !!(window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+    const w = window.innerWidth || 0;
+    const h = window.innerHeight || 0;
+    if (w < 1000) return false;
+    if (w > h && h <= 520 && w <= 1100) return false;
+    return true;
   }
 
   function paintMute(btn) {
@@ -7138,7 +7142,14 @@ const here = parseRoute();
       : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}" data-tooltip="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
     const split = extraClass ? "" : `<div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>`;
     const pillInner = (window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`;
-    return `<header class="nav${extraClass ? " " + extraClass : ""}">${split}<div class="nav-scroll">${brand}${linksHtml}${post}</div><button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">${pillInner}<span class="dots">${icon("more")}</span></button></header>`;
+    const account = `<button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">${pillInner}<span class="dots">${icon("more")}</span></button>`;
+    /* Landscape keeps the mark above a scrolling icon list, with Post and the
+       account pinned under that list so a short screen scrolls instead of
+       squashing the rows. */
+    if (extraClass === "nav-land") {
+      return `<header class="nav nav-land">${brand}<div class="nav-scroll">${linksHtml}</div>${post}${account}</header>`;
+    }
+    return `<header class="nav">${split}<div class="nav-scroll">${brand}${linksHtml}${post}</div>${account}</header>`;
   }
 
   function nav(route) {
@@ -16065,7 +16076,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (motion.addEventListener) motion.addEventListener("change", () => schedulePreview());
   }
-  window.addEventListener("resize", () => hscrollOnResize());
+  function syncShell() {
+    const w = window.innerWidth || 0;
+    const h = window.innerHeight || 0;
+    let mode = "desktop";
+    if (w > h && h <= 520 && w <= 1100) mode = "land";
+    else if (w < 500) mode = "phone";
+    else if (w < 1000) mode = "tablet";
+    else if (w < 1280) mode = "wide";
+    if (document.documentElement.getAttribute("data-shell") !== mode) {
+      document.documentElement.setAttribute("data-shell", mode);
+    }
+    hscrollOnResize();
+  }
+  window.addEventListener("resize", () => syncShell());
+  window.addEventListener("orientationchange", () => syncShell());
+  syncShell();
   window.addEventListener("scroll", () => {
     if (window.innerWidth >= 500) {
       STATE.headerHidden = false;
@@ -19410,6 +19436,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
 
     function showTooltip(target, immediate) {
+      if ((window.innerWidth || 0) < 500) {
+        hideTooltip(true);
+        return;
+      }
       const el = findTooltipTarget(target);
       if (!el) {
         hideTooltip(false);
@@ -19460,6 +19490,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       hideTooltip(true);
     }, { passive: true });
 
+    window.addEventListener("resize", () => {
+      if ((window.innerWidth || 0) < 500) hideTooltip(true);
+    }, { passive: true });
+    window.addEventListener("orientationchange", () => hideTooltip(true));
     window.addEventListener("scroll", () => hideTooltip(true), { passive: true, capture: true });
     window.addEventListener("pointerdown", () => hideTooltip(true), { passive: true });
     window.addEventListener("keydown", (event) => {
