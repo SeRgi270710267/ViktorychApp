@@ -30,6 +30,7 @@ import { handlePills } from "./pills.js";
 import { logError } from "./log.js";
 import { invalidate, readThrough } from "./edge-cache.js";
 import { maybeBackupD1 } from "./d1-backup.js";
+import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
 import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
 
 const encoder = new TextEncoder();
@@ -4704,6 +4705,9 @@ async function route(request, env, ctx) {
   if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
     return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
   }
+  if (path === "/v1/owner/feeds" || path.startsWith("/v1/owner/feeds/")) {
+    return handleOwnerFeeds(request, env, path, { json, readJson, rateHit, limited, requireOwnerHidden, dispatchWorkflows });
+  }
   if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);
@@ -4847,7 +4851,7 @@ export default {
   async scheduled(event, env, ctx) {
     bindRequestOwner(env);
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at), drainOutbox(env), sweepOwnerFeeds(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm. The D1 export uses the same minute and only
     // writes after 04:17 UTC, once a day.
