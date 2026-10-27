@@ -456,6 +456,7 @@ SI18n.addPack("ru", {
   "This video isn’t in the current snapshot.": "Этого видео нет в текущем снимке.",
   "Open original": "Открыть оригинал",
   "Watch on X": "Смотреть в X",
+  "Open on X": "Открыть в X",
   "Watch on YouTube": "Смотреть на YouTube",
   "Watch on Instagram": "Смотреть в Instagram",
   "Watch on Threads": "Смотреть в Threads",

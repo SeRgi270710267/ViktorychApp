@@ -1,8 +1,12 @@
 /* Official embeds for viktorychapp.
    The page itself sends no referrer. YouTube will not start an embed
    without a Referer, so each player frame sets its own referrer policy
-   before src. The official player is the primary path. A direct file is
-   optional and must be able to fall back here.
+   before src. For YouTube the official player is the primary path. A direct
+   file is optional and must be able to fall back here.
+   X is the other way around: the original mp4 or HLS on video.twimg.com
+   plays first, and any failure swaps to the official tweet embed. That
+   embed is the real platform.twitter.com frame. This file does not load it
+   through the site relay and does not strip X-Frame-Options.
 
    Ideas, not code, from FUTO Grayjay. The Grayjay app is FUTO Source First
    and was not copied. The YouTube, Odysee, PeerTube, Rumble, and Twitch
@@ -193,6 +197,359 @@
     return parentHost(pageOrigin(opts || {}));
   }
 
+  var X_STALL_MS = 3000;
+
+  function digitsId(value) {
+    var raw = String(value || "");
+    return /^\d{6,25}$/.test(raw) ? raw : "";
+  }
+
+  function xStatusId(value) {
+    var raw = "";
+    if (value && typeof value === "object") {
+      raw = [value.statusId, value.id, value.url, value.open, value.href].filter(Boolean).join(" ");
+      var direct = digitsId(value.statusId);
+      if (direct) return direct;
+      var tail = String(value.id || "");
+      var cut = tail.lastIndexOf(":");
+      if (cut >= 0) tail = tail.slice(cut + 1);
+      if (digitsId(tail)) return tail;
+    } else raw = String(value || "");
+    var query = raw.match(/[?&]id=(\d{6,25})\b/);
+    if (query) return query[1];
+    var path = raw.match(/(?:^|\/)(?:status|statuses)\/(\d{6,25})\b/i);
+    if (path) return path[1];
+    var videos = raw.match(/\/i\/videos\/tweet\/(\d{6,25})\b/i);
+    if (videos) return videos[1];
+    if (digitsId(String(raw).trim())) return String(raw).trim();
+    return "";
+  }
+
+  function hostPathId(value, leaf) {
+    var raw = "";
+    if (value && typeof value === "object") raw = [value.url, value.open, value.href, value.text].filter(Boolean).join(" ");
+    else raw = String(value || "");
+    var re = new RegExp("(?:x\\.com|twitter\\.com|mobile\\.x\\.com|mobile\\.twitter\\.com)/i/" + leaf + "/([A-Za-z0-9]{4,40})", "i");
+    var found = raw.match(re);
+    return found ? found[1] : "";
+  }
+
+  function xSpaceId(value) {
+    return hostPathId(value, "spaces");
+  }
+
+  function xBroadcastId(value) {
+    return hostPathId(value, "broadcasts");
+  }
+
+  function xOpenUrl(id, kind) {
+    var clean = String(id || "");
+    if (!clean || /[@/]/.test(clean)) return "";
+    if (kind === "space") return "https://x.com/i/spaces/" + encodeURIComponent(clean);
+    if (kind === "broadcast") return "https://x.com/i/broadcasts/" + encodeURIComponent(clean);
+    if (!digitsId(clean)) return "";
+    return "https://x.com/i/status/" + encodeURIComponent(clean);
+  }
+
+  function xEmbedUrl(id) {
+    var clean = digitsId(String(id || ""));
+    if (!clean) clean = digitsId(String(id || "").replace(/\D/g, ""));
+    if (!clean) return "";
+    return "https://platform.twitter.com/embed/Tweet.html?id=" + encodeURIComponent(clean) + "&theme=dark&dnt=true";
+  }
+
+  function isTwimgVideo(url) {
+    try { return /(^|\.)video\.twimg\.com$/i.test(new URL(String(url || "")).hostname); }
+    catch (err) { return false; }
+  }
+
+  function heightFromUrl(url) {
+    var found = String(url || "").match(/\/(\d{3,4})x(\d{3,4})\//);
+    if (!found) return 0;
+    return Number(found[2]) || Number(found[1]) || 0;
+  }
+
+  function xPrimary(media, opts) {
+    opts = opts || {};
+    var expired = opts.expired || function () { return false; };
+    var rows = [];
+    function push(url, bitrate, kind) {
+      if (!url || !isTwimgVideo(url) || expired(url)) return;
+      if (rows.some(function (row) { return row.url === url; })) return;
+      rows.push({ url: String(url), bitrate: Number(bitrate) || 0, kind: kind, height: heightFromUrl(url) });
+    }
+    ((media && media.variants) || []).forEach(function (row) {
+      if (!row || !row.url) return;
+      var path = String(row.url).split("?")[0].toLowerCase();
+      if (path.indexOf(".m3u8") >= 0) push(row.url, 0, "hls");
+      else push(row.url, row.bitrate || row.bit_rate || 0, "mp4");
+    });
+    [media && media.url, media && media.fallback].forEach(function (url) {
+      if (!url) return;
+      var path = String(url).split("?")[0].toLowerCase();
+      push(url, 0, path.indexOf(".m3u8") >= 0 ? "hls" : "mp4");
+    });
+    if (media && media.hls) push(media.hls, 0, "hls");
+    var mp4 = rows.filter(function (row) { return row.kind === "mp4"; });
+    mp4.sort(function (a, b) { return (b.bitrate - a.bitrate) || (b.height - a.height); });
+    if (mp4.length) return { kind: "mp4", url: mp4[0].url };
+    var hls = rows.filter(function (row) { return row.kind === "hls"; });
+    if (hls.length) return { kind: "hls", url: hls[0].url };
+    return null;
+  }
+
+  function xRoute(direct, opts) {
+    opts = opts || {};
+    var mode = String(opts.networkMode || "auto").toLowerCase();
+    if (mode !== "max" && mode !== "direct") mode = "auto";
+    var relay = String(opts.relay || "");
+    if (!direct) return { url: "", relay: "" };
+    if (mode === "direct" || !relay) return { url: direct, relay: "" };
+    if (mode === "max" || opts.preferRelay) return { url: relay, relay: "" };
+    if (typeof opts.playbackUrl === "function") {
+      var chosen = "";
+      try { chosen = opts.playbackUrl(direct, relay, opts.playbackOpts || {}) || ""; }
+      catch (err) { chosen = ""; }
+      if (chosen && chosen !== direct) return { url: chosen, relay: "" };
+    }
+    if (opts.sourceFailed) return { url: relay, relay: "" };
+    return { url: direct, relay: relay };
+  }
+
+  function xPlan(input) {
+    input = input || {};
+    var post = input.post || {};
+    var media = input.media || {};
+    var text = String(input.text || "");
+    var file = xPrimary(media, input);
+    var id = xStatusId(post) || xStatusId(media) || xStatusId(text);
+    var space = xSpaceId(text) || xSpaceId(media) || xSpaceId(post);
+    var broadcast = xBroadcastId(text) || xBroadcastId(media) || xBroadcastId(post);
+    if (!file && space) return { primary: null, relay: null, embedUrl: "", openUrl: xOpenUrl(space, "space"), external: "space" };
+    if (!file && broadcast) return { primary: null, relay: null, embedUrl: "", openUrl: xOpenUrl(broadcast, "broadcast"), external: "broadcast" };
+    var embedUrl = id ? xEmbedUrl(id) : "";
+    var openUrl = id ? xOpenUrl(id, "status") : "";
+    if (!file) return { primary: null, relay: null, embedUrl: embedUrl, openUrl: openUrl, external: "" };
+    var routed = typeof input.route === "function" ? input.route(file.url) : { url: file.url, relay: "" };
+    if (!routed || typeof routed !== "object") routed = { url: file.url, relay: "" };
+    var primaryUrl = routed.url || file.url;
+    var primary = { kind: file.kind, url: primaryUrl, origin: file.url };
+    var relayUrl = routed.relay && routed.relay !== primaryUrl ? routed.relay : "";
+    var relay = relayUrl ? { kind: file.kind, url: relayUrl, origin: file.url } : null;
+    return { primary: primary, relay: relay, embedUrl: embedUrl, openUrl: openUrl, external: "" };
+  }
+
+  function xExternal(value) {
+    var space = xSpaceId(value);
+    if (space) return { kind: "link", site: "x", openUrl: xOpenUrl(space, "space") };
+    var cast = xBroadcastId(value);
+    if (cast) return { kind: "link", site: "x", openUrl: xOpenUrl(cast, "broadcast") };
+    return null;
+  }
+
+  function prepareXVideo(video, url, opts) {
+    opts = opts || {};
+    if (!video) return video;
+    video.playsInline = true;
+    video.disablePictureInPicture = false;
+    var policy = referrerFor(url);
+    if (video.setAttribute) {
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      video.setAttribute("referrerpolicy", policy);
+    }
+    video.referrerPolicy = policy;
+    if (opts.gif || opts.loop) video.loop = true;
+    if (opts.gif || opts.muted) {
+      video.muted = true;
+      video.defaultMuted = true;
+      if (video.setAttribute) video.setAttribute("muted", "");
+    }
+    return video;
+  }
+
+  function runXPlayback(host, opts) {
+    opts = opts || {};
+    if (!host || typeof document === "undefined") return;
+    if (host._gen == null) host._gen = 1;
+    var gen = host._gen;
+    var plan = opts.plan || {};
+    var stallMs = opts.stallMs == null ? X_STALL_MS : Number(opts.stallMs);
+    var phase = "";
+    function alive() {
+      return host._gen === gen && (!opts.active || opts.active());
+    }
+    function stopEmbedWatch() {
+      if (!host._xEmbedStop) return;
+      try { host._xEmbedStop(); } catch (err) { /* the watch can already be cleared */ }
+      host._xEmbedStop = null;
+    }
+    function wipeMedia() {
+      stopEmbedWatch();
+      if (opts.onStop) { try { opts.onStop(); } catch (err) { /* the previous player can already be gone */ } }
+      host.querySelectorAll("video, iframe.x-embed-frame, a.x-open").forEach(function (node) { node.remove(); });
+      host.querySelectorAll(".vshield, .ytp-video-click-target").forEach(function (node) { node.remove(); });
+    }
+    // A blocked embed does not fire error, and the frame looks the same as a
+    // loaded one. The official player posts a message once it is up. Silence
+    // for the stall window means it never started, so the last step is the link.
+    function watchEmbed(frame) {
+      var timer = 0;
+      function stop() {
+        if (timer) clearTimeout(timer);
+        timer = 0;
+        window.removeEventListener("message", onMessage);
+      }
+      function onMessage(event) {
+        if (!alive() || phase !== "embed" || !frame.isConnected) return;
+        if (event.origin !== "https://platform.twitter.com") return;
+        stop();
+        if (host._xEmbedStop === stop) host._xEmbedStop = null;
+      }
+      window.addEventListener("message", onMessage);
+      timer = setTimeout(function () {
+        stop();
+        if (host._xEmbedStop === stop) host._xEmbedStop = null;
+        if (!alive() || phase !== "embed" || !frame.isConnected) return;
+        showLink();
+      }, stallMs > 0 ? stallMs : X_STALL_MS);
+      host._xEmbedStop = stop;
+    }
+    function showLink() {
+      if (!alive() || phase === "link") return;
+      phase = "link";
+      wipeMedia();
+      host.classList.remove("is-playing", "is-shown", "is-x-embed");
+      host.classList.add("is-failed");
+      var href = plan.openUrl || "";
+      var label = opts.linkLabel || "Open on X";
+      var link = host.querySelector(".vfallback");
+      if (link) {
+        link.hidden = false;
+        if (href) link.href = href;
+        var span = link.querySelector("span");
+        if (span) span.textContent = label;
+        else link.textContent = label;
+      } else if (href) {
+        var created = document.createElement("a");
+        created.className = "x-open";
+        created.href = href;
+        created.target = "_blank";
+        created.rel = "noopener noreferrer";
+        created.textContent = label;
+        host.appendChild(created);
+      }
+      var play = host.querySelector(":scope > .play");
+      if (play) play.hidden = true;
+      var retry = host.querySelector(".vretry");
+      if (retry) retry.hidden = false;
+    }
+    function showEmbed() {
+      if (!alive() || phase === "embed" || phase === "link") return;
+      var url = plan.embedUrl || "";
+      if (!url) { showLink(); return; }
+      phase = "embed";
+      wipeMedia();
+      host.classList.remove("is-failed");
+      host.classList.add("is-playing", "is-x-embed");
+      var held = host.querySelector(".vfallback");
+      if (held) held.hidden = true;
+      var frame = document.createElement("iframe");
+      frame.className = "x-embed-frame";
+      prepareFrame(frame, { url: url, title: opts.title || "Post", allowFullscreen: !opts.preview });
+      frame.addEventListener("error", function () { showLink(); });
+      host.appendChild(frame);
+      frame.src = url;
+      watchEmbed(frame);
+      var play = host.querySelector(":scope > .play");
+      if (play) play.hidden = true;
+    }
+    function playFile(source, next) {
+      if (!alive() || !source || !source.url) { next(); return; }
+      wipeMedia();
+      phase = "file";
+      host.classList.remove("is-failed", "is-x-embed");
+      host.classList.add("is-playing");
+      var held = host.querySelector(".vfallback");
+      if (held) held.hidden = true;
+      var video = document.createElement("video");
+      prepareXVideo(video, source.url, { gif: !!opts.gif, muted: !!(opts.muted || opts.gif), loop: !!(opts.loop || opts.gif) });
+      video.preload = "auto";
+      video.controls = !opts.preview && !opts.gif;
+      if (Number(opts.resume) > 0.3) {
+        video.addEventListener("loadedmetadata", function () {
+          try { video.currentTime = Number(opts.resume) || 0; } catch (err) { /* not seekable yet */ }
+        });
+      }
+      var timer = 0;
+      var moved = false;
+      function step() {
+        if (moved || !alive()) return;
+        moved = true;
+        if (timer) clearTimeout(timer);
+        if (opts.onFail) { try { opts.onFail(source); } catch (err) { /* stats are optional */ } }
+        next();
+      }
+      video.addEventListener("error", step);
+      function framed() {
+        if (!(video.videoWidth > 0)) return;
+        if (timer) { clearTimeout(timer); timer = 0; }
+        if (opts.onFrame) opts.onFrame(video);
+      }
+      video.addEventListener("loadeddata", framed);
+      video.addEventListener("playing", framed);
+      video.addEventListener("timeupdate", function () {
+        framed();
+        if (opts.onTime) opts.onTime(video);
+      });
+      host.appendChild(video);
+      if (opts.onVideo) opts.onVideo(video, source);
+      timer = setTimeout(function () {
+        if (!alive() || moved) return;
+        if (video.videoWidth > 0) return;
+        step();
+      }, stallMs);
+      function start() {
+        if (!alive() || moved) return;
+        var pending = video.play && video.play();
+        if (!pending || !pending.then) return;
+        pending.then(function () {}).catch(function (err) {
+          if (!alive() || moved) return;
+          var name = err && err.name;
+          if (name === "NotAllowedError" && !video.muted) {
+            video.muted = true;
+            video.defaultMuted = true;
+            video.setAttribute("muted", "");
+            var again = video.play();
+            if (again && again.catch) again.catch(function () { step(); });
+            return;
+          }
+          step();
+        });
+      }
+      if (source.kind === "hls" && !(video.canPlayType && video.canPlayType("application/vnd.apple.mpegurl"))) {
+        if (opts.loadHls) opts.loadHls(video, source.url, step, start);
+        else step();
+        return;
+      }
+      video.src = source.url;
+      start();
+    }
+    if (plan.external === "space" || plan.external === "broadcast") { showLink(); return; }
+    if (!plan.primary || !plan.primary.url) {
+      if (plan.embedUrl) showEmbed();
+      else showLink();
+      return;
+    }
+    playFile(plan.primary, function () {
+      if (plan.relay && plan.relay.url && plan.relay.url !== plan.primary.url) {
+        playFile(plan.relay, showEmbed);
+        return;
+      }
+      showEmbed();
+    });
+  }
+
   function match(text, opts) {
     opts = opts || {};
     var raw = String(text || "");
@@ -235,8 +592,14 @@
     }
     var hasFile = /\.mp4(\?|$)/i.test(raw) || /video\.twimg\.com/i.test(raw);
     if (!hasFile) {
-      var tweet = raw.match(/platform\.twitter\.com\/embed\/Tweet\.html\?id=(\d+)/i) || raw.match(/twitter\.com\/i\/videos\/tweet\/(\d+)/i);
-      if (tweet) return { kind: "iframe", site: "x", url: "https://platform.twitter.com/embed/Tweet.html?id=" + tweet[1] };
+      var space = xSpaceId(raw);
+      if (space) return { kind: "link", site: "x", url: xOpenUrl(space, "space") };
+      var cast = xBroadcastId(raw);
+      if (cast) return { kind: "link", site: "x", url: xOpenUrl(cast, "broadcast") };
+      var tweet = xStatusId(raw);
+      if (tweet && /platform\.twitter\.com\/embed\/Tweet\.html|\/i\/videos\/tweet\/|\/status\/|\/statuses\//i.test(raw)) {
+        return { kind: "iframe", site: "x", url: xEmbedUrl(tweet) };
+      }
     }
     return null;
   }
@@ -364,6 +727,18 @@
     match: match,
     needsReferrer: needsReferrer,
     referrerFor: referrerFor,
-    youtubePlayer: youtubePlayer
+    youtubePlayer: youtubePlayer,
+    X_STALL_MS: X_STALL_MS,
+    xStatusId: xStatusId,
+    xSpaceId: xSpaceId,
+    xBroadcastId: xBroadcastId,
+    xOpenUrl: xOpenUrl,
+    xEmbedUrl: xEmbedUrl,
+    xPrimary: xPrimary,
+    xRoute: xRoute,
+    xPlan: xPlan,
+    xExternal: xExternal,
+    prepareXVideo: prepareXVideo,
+    runXPlayback: runXPlayback
   };
 });

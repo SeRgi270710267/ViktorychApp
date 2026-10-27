@@ -2016,6 +2016,41 @@ function publicMediaHostOk(hostname) {
   return PUBLIC_MEDIA_HOST.test(String(hostname || ""));
 }
 
+function twimgVideoHost(hostname) {
+  return /(^|\.)video\.twimg\.com$/i.test(String(hostname || ""));
+}
+
+function publicMediaIsVideo(parsed, type) {
+  const path = (parsed && parsed.pathname) || "";
+  const host = (parsed && parsed.hostname) || "";
+  if (twimgVideoHost(host)) return true;
+  if (/\.(?:mp4|m4s|webm|m3u8|m4v|mov|ts)(?:$|\?)/i.test(path)) return true;
+  if (/^video\//i.test(String(type || ""))) return true;
+  return false;
+}
+
+// X video bytes stay on the original file. The relay may fetch them, but
+// Cloudflare must not cache that response, and the bytes are not re-encoded.
+// X-Frame-Options from the upstream response is copied unchanged. The tweet
+// embed itself is never requested through this route. Other public images
+// keep the short cache. Any other video file is also left out of the cache.
+export function publicMediaPolicy(hostname) {
+  if (twimgVideoHost(hostname)) {
+    return {
+      video: true,
+      cf: { cacheTtl: 0, cacheEverything: false },
+      cacheControl: "private, no-store",
+      cdnCacheControl: "no-store"
+    };
+  }
+  return {
+    video: false,
+    cf: { cacheTtl: 120, cacheEverything: true },
+    cacheControl: "public, max-age=120, s-maxage=120",
+    cdnCacheControl: "public, max-age=120"
+  };
+}
+
 async function handlePublicMediaProxy(request, env, url) {
   const target = url.searchParams.get("url") || "";
   let parsed = null;
@@ -2023,19 +2058,21 @@ async function handlePublicMediaProxy(request, env, url) {
   if (!parsed || parsed.protocol !== "https:" || parsed.username || parsed.password || !publicMediaHostOk(parsed.hostname)) {
     return json(400, { error: "bad_url" });
   }
+  const policy = publicMediaPolicy(parsed.hostname);
   const headers = new Headers();
   headers.set("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
   headers.set("accept", "image/*,video/*,*/*");
-  headers.set("referer", parsed.origin + "/");
+  if (!policy.video) headers.set("referer", parsed.origin + "/");
   const range = request.headers.get("range") || "";
   if (/^bytes=\d*-\d*$/.test(range)) headers.set("range", range);
+  const videoRequest = publicMediaIsVideo(parsed, "");
   let upstream = null;
   try {
     upstream = await fetch(parsed.toString(), {
       headers,
       redirect: "follow",
       signal: AbortSignal.timeout(10000),
-      cf: { cacheTtl: 604800, cacheEverything: true }
+      cf: (policy.video || videoRequest) ? { cacheTtl: 0, cacheEverything: false } : policy.cf
     });
   } catch (err) {
     return json(502, { error: "upstream" });
@@ -2055,8 +2092,16 @@ async function handlePublicMediaProxy(request, env, url) {
   if (contentRange) respHeaders.set("content-range", contentRange);
   const acceptRanges = upstream.headers.get("accept-ranges");
   if (acceptRanges) respHeaders.set("accept-ranges", acceptRanges);
-  respHeaders.set("cache-control", "public, max-age=86400, s-maxage=604800");
-  respHeaders.set("cdn-cache-control", "public, max-age=604800");
+  const videoBody = policy.video || videoRequest || publicMediaIsVideo(parsed, respHeaders.get("content-type") || "");
+  if (videoBody) {
+    respHeaders.set("cache-control", "private, no-store");
+    respHeaders.set("cdn-cache-control", "no-store");
+  } else {
+    respHeaders.set("cache-control", policy.cacheControl);
+    respHeaders.set("cdn-cache-control", policy.cdnCacheControl);
+  }
+  const frameOptions = upstream.headers.get("x-frame-options");
+  if (frameOptions) respHeaders.set("x-frame-options", frameOptions);
   respHeaders.set("x-content-type-options", "nosniff");
   respHeaders.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
   return new Response(upstream.body, { status: upstream.status, headers: respHeaders });
