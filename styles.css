@@ -2765,15 +2765,23 @@ html.tv-on #new-posts { display: none; }
 }
 #offline {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(53px + env(safe-area-inset-bottom));
-  z-index: 22;
-  background: #1d9bf0;
-  color: #fff;
+  left: 50%;
+  right: auto;
+  bottom: calc(66px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 30;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
   text-align: center;
   font-weight: 700;
-  padding: 10px 16px;
+  font-size: 13px;
+  line-height: 18px;
+  padding: 8px 14px;
 }
 #offline[hidden] { display: none; }
 #update {
@@ -2867,7 +2875,7 @@ html.tv-on #new-posts { display: none; }
   pointer-events: none;
 }
 @media (min-width: 500px) {
-  #offline { bottom: 0; }
+  #offline { bottom: 24px; }
 }
 .install-sheet { display: flex; flex-direction: column; gap: 12px; }
 .install-step { display: flex; gap: 12px; align-items: center; font-size: 17px; font-weight: 700; }

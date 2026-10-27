@@ -1246,6 +1246,11 @@ def main() -> None:
     combined = skipped.stdout + skipped.stderr
     check(skipped.returncode == 0 and "skipping the upload" in skipped.stdout, "missing Internet Archive keys skip the upload")
     check("sentinel-secret-value" not in combined and "IA_SECRET_KEY" not in combined, "the skip path does not print a secret")
+    storage_worker = (ROOT / "sw.js").read_text(encoding="utf-8")
+    storage_workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    storage_flow = subprocess.run(["node", str(ROOT / "scripts" / "storage_test.js")], cwd=ROOT)
+    check(storage_flow.returncode == 0, "the storage cache helpers pass")
+    check('src="storage.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "storage.js" in storage_workflow and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
     ia_backup_checks()
     gdrive_checks()
     telegram_checks()
