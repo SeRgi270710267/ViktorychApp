@@ -4854,6 +4854,9 @@ def feed_order_checks() -> None:
     check(fresh_node.returncode == 0, "home snapshot freshness fixtures")
     check("shared/home-fresh.js" in page and "./shared/home-fresh.js" in worker and "shared/home-fresh.js" in deployed_paths(), "the home freshness helper is published with the shell")
     check("PERIODIC_MIN_MS = 15 * 60 * 1000" in fresh_js and "VISIBLE_MS = 60 * 1000" in fresh_js and "home-refresh-start" in page and "X-Feed-Refresh" in page and "function refreshData(" in worker and "minInterval: 15 * 60 * 1000" in app and "pageshow" in app and "function saveHomeSnapshot(" in app, "a stale snapshot refreshes in the background and on the way back")
+    lock_notes = subprocess.run(["node", str(ROOT / "scripts" / "tiktok_lock_test.mjs")], check=False)
+    check(lock_notes.returncode == 0, "locked account notifications stay hidden")
+    check("shared/tiktok-lock.js" in page and "./shared/tiktok-lock.js" in worker and "shared/tiktok-lock.js" in deployed_paths(), "the tiktok lock helper is published with the shell")
 
 
 def gdrive_checks() -> None:

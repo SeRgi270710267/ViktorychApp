@@ -22,6 +22,7 @@ import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
 import { handleMediaSwarm } from "./media-swarm.js";
 import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
+import { unlockedHandles } from "./tiktok-unlock.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
 import { logError } from "./log.js";
@@ -3396,27 +3397,6 @@ async function requireOwner(request, env) {
   if (!row) return { error: json(401, { error: "unauthorized" }) };
   if (row.owner !== 1) return { error: json(403, { error: "forbidden" }) };
   return { row };
-}
-
-function rememberHandle(found, seen, name) {
-  const clean = String(name || "").trim().replace(/^@/, "");
-  if (!/^[A-Za-z0-9._]{2,24}$/.test(clean)) return;
-  const key = clean.toLowerCase();
-  if (seen.has(key)) return;
-  seen.add(key);
-  found.push(clean);
-}
-
-async function unlockedHandles(env) {
-  const found = [];
-  const seen = new Set();
-  String((env && env.TIKTOK_UNLOCKED) || "").split(/[\s,]+/).forEach((part) => rememberHandle(found, seen, part));
-  const doc = await readJsonObject(env, "owner/tiktok-unlocked.json");
-  const list = doc && (doc.handles || doc.unlocked || []);
-  if (Array.isArray(list)) {
-    list.forEach((item) => rememberHandle(found, seen, typeof item === "string" ? item : item && item.handle));
-  }
-  return found;
 }
 
 async function handleTikTokUnlocked(request, env) {
