@@ -138,21 +138,10 @@
       } catch (err) {}
     })();
   </script>
+  <script src="accounts.config.js" async></script>
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="dock.css">
-  <link rel="stylesheet" href="presence.css">
-  <link rel="stylesheet" href="translate.css">
-  <link rel="stylesheet" href="people.css">
-  <link rel="stylesheet" href="tv.css">
-  <link rel="stylesheet" href="discord-ui.css">
-  <link rel="stylesheet" href="spaces.css">
-  <link rel="stylesheet" href="stories.css">
-  <link rel="stylesheet" href="music.css">
-  <link rel="stylesheet" href="accounts.css">
-  <link rel="stylesheet" href="storage.css">
-  <link rel="stylesheet" href="yt-player.css">
-  <link rel="stylesheet" href="scores.css">
-  <link rel="stylesheet" href="weather.css">
+  <link rel="stylesheet" href="dock.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="dock.css"></noscript>
   <script>
     (function () {
       var isRu = false;
@@ -180,7 +169,6 @@
       }
     })();
   </script>
-  <link rel="preload" href="feeds.json" as="fetch" crossorigin="anonymous">
   <script>
     (function () {
       try {
@@ -313,7 +301,70 @@
     })();
   </script>
   <div class="wco" aria-hidden="true"></div>
-  <div id="app"></div>
+  <div id="app"><article class="post boot-card" data-boot-card="1"><div class="pbody"><b>Elon Musk</b><p>“Lack of electricity” is an oversimplification. Everything is hard about bringing massive compute online at extremely high speed. If there was twice as much time, this would be relatively easy, but there is not.</p></div></article><article class="post boot-card" data-boot-card="1"><div class="pbody"><b>Elon Musk</b><p>Johann Sebastian Bach is the Shakespeare of music. Best there ever was.</p></div></article></div>
+  <script>
+    (function () {
+      var app = document.getElementById("app");
+      if (!app) return;
+      function read(key) {
+        try {
+          var raw = localStorage.getItem(key);
+          if (!raw) return null;
+          return JSON.parse(raw);
+        } catch (err) { return null; }
+      }
+      function esc(value) {
+        return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+        });
+      }
+      function textOf(post) {
+        if (!post) return "";
+        var article = post.article || {};
+        var bits = [post.text, post.title, article.title, article.preview];
+        var out = "";
+        for (var i = 0; i < bits.length; i++) {
+          var part = String(bits[i] || "").replace(/\s+/g, " ").trim();
+          if (part) out += (out ? " " : "") + part;
+        }
+        return out.slice(0, 280);
+      }
+      function paintPosts(posts) {
+        if (!app || !posts || !posts.length) return false;
+        var hadBoot = !!app.querySelector("[data-boot-card]");
+        if (app.childElementCount && !hadBoot) return false;
+        var rows = posts.filter(function (post) { return post && textOf(post).length > 20; });
+        rows.sort(function (a, b) { return (Date.parse(b.date || "") || 0) - (Date.parse(a.date || "") || 0); });
+        var html = "";
+        for (var i = 0; i < rows.length && i < 6; i++) {
+          var post = rows[i];
+          html += '<article class="post boot-card" data-boot-card="1"><div class="pbody"><b>' + esc(post.author || post.handle || "") + '</b><p>' + esc(textOf(post)) + '</p></div></article>';
+        }
+        if (!html) return false;
+        app.innerHTML = html;
+        app.setAttribute("data-local-timeline", "1");
+        return true;
+      }
+      function paintScreen(saved) {
+        if (!saved || typeof saved.html !== "string" || !saved.html) return false;
+        if (saved.schema != null && Number(saved.schema) !== 1) return false;
+        if (saved.html.indexOf("<script") >= 0) return false;
+        if (app.childElementCount && !app.querySelector("[data-boot-card]")) return false;
+        app.innerHTML = saved.html;
+        document.documentElement.classList.add("is-restored");
+        return true;
+      }
+      try {
+        if (window.VIKTORYCH_ACCOUNTS && window.VIKTORYCH_ACCOUNTS.gate) {
+          app.innerHTML = "";
+          return;
+        }
+        if (paintScreen(read("viktorych-screen-v1"))) return;
+        var snap = read("viktorychapp-timeline-v1") || read("superintelapp-timeline-v1");
+        if (snap && paintPosts(snap.posts)) return;
+      } catch (err) { /* a broken saved copy must not stop the shell */ }
+    })();
+  </script>
   <div id="account-layer"></div>
   <div id="hover"></div>
   <div id="x-tooltip" class="x-tooltip" role="tooltip" aria-hidden="true"></div>
@@ -327,38 +378,182 @@
   <div id="soccer-sheet" hidden role="dialog" aria-modal="true" data-i18n-aria="Match Details" aria-label="Match Details"></div>
   <div id="weather-sheet" hidden role="dialog" aria-modal="true" data-i18n-aria="Weather Details" aria-label="Weather Details"></div>
   <div id="pills-manage-sheet" hidden role="dialog" aria-modal="true" data-i18n-aria="Customize Pills" aria-label="Customize Pills"></div>
-  <script src="i18n.js" defer></script>
-  <script src="i18n/en.js" defer></script>
-  <script src="i18n/ru.js" defer></script>
-  <script src="i18n/es.js" defer></script>
-  <script src="marks.js" defer></script>
-  <script src="translate.js" defer></script>
-  <script src="shared/feed-order.js" type="module"></script>
-  <script src="people.js" defer></script>
-  <script src="tv.js" defer></script>
-  <script src="split.js" defer></script>
-  <script src="discord-ui.js" defer></script>
-  <script src="shared/pill-data.js" type="module"></script>
-  <script src="scores.js" defer></script>
-  <script src="weather.js" defer></script>
-  <script src="spaces.js" defer></script>
-  <script src="stories.js" defer></script>
-  <script src="music.js" defer></script>
+  <template id="late-scripts">
+    <link rel="stylesheet" href="presence.css">
+    <link rel="stylesheet" href="translate.css">
+    <link rel="stylesheet" href="people.css">
+    <link rel="stylesheet" href="tv.css">
+    <link rel="stylesheet" href="discord-ui.css">
+    <link rel="stylesheet" href="spaces.css">
+    <link rel="stylesheet" href="stories.css">
+    <link rel="stylesheet" href="music.css">
+    <link rel="stylesheet" href="accounts.css">
+    <link rel="stylesheet" href="storage.css">
+    <link rel="stylesheet" href="yt-player.css">
+    <link rel="stylesheet" href="scores.css">
+    <link rel="stylesheet" href="weather.css">
+    <script src="i18n.js" defer></script>
+    <script src="i18n/en.js" defer></script>
+    <script src="i18n/ru.js" defer></script>
+    <script src="i18n/es.js" defer></script>
+    <script src="marks.js" defer></script>
+    <script src="translate.js" defer></script>
+    <script src="shared/feed-order.js" type="module"></script>
+    <script src="people.js" defer></script>
+    <script src="tv.js" defer></script>
+    <script src="split.js" defer></script>
+    <script src="discord-ui.js" defer></script>
+  </template>
   <script src="shared/mirror.js" defer></script>
-  <script src="accounts.config.js" defer></script>
-  <script src="shared/handle-skeleton.js" type="module"></script>
-  <script src="shared/reposts.js" type="module"></script>
-  <script src="shared/lazy-modules.js" defer></script>
-  <script src="presence.js" type="module"></script>
-  <script src="accounts.js" defer></script>
-  <script src="owner-keys.js" defer></script>
-  <script src="yt-player.js" defer></script>
-  <script src="update.js" defer></script>
-  <script src="storage.js" defer></script>
-  <script src="localfirst.js" defer></script>
-  <script src="direct.js" defer></script>
   <script src="dock.js" defer></script>
   <script src="video-embed.js" defer></script>
-  <script src="app.js" defer></script>
+  <template id="late-scripts-rest">
+    <script src="shared/pill-data.js" type="module"></script>
+    <script src="scores.js" defer></script>
+    <script src="weather.js" defer></script>
+    <script src="spaces.js" defer></script>
+    <script src="stories.js" defer></script>
+    <script src="music.js" defer></script>
+    <script src="shared/handle-skeleton.js" type="module"></script>
+    <script src="shared/reposts.js" type="module"></script>
+    <script src="shared/lazy-modules.js" defer></script>
+    <script src="presence.js" type="module"></script>
+    <script src="accounts.js" defer></script>
+    <script src="owner-keys.js" defer></script>
+    <script src="yt-player.js" defer></script>
+    <script src="update.js" defer></script>
+    <script src="storage.js" defer></script>
+    <script src="localfirst.js" defer></script>
+    <script src="direct.js" defer></script>
+    <script src="native.js" defer></script>
+    <script src="app.js" defer></script>
+  </template>
+  <script>
+    (function () {
+      function mount() {
+        var ids = ["late-scripts", "late-scripts-rest"];
+        var links = [];
+        var nodes = [];
+        for (var n = 0; n < ids.length; n++) {
+          var tpl = document.getElementById(ids[n]);
+          if (!tpl || !tpl.content || tpl.dataset.mounted) continue;
+          tpl.dataset.mounted = "1";
+          links.push.apply(links, Array.prototype.slice.call(tpl.content.querySelectorAll("link")));
+          nodes.push.apply(nodes, Array.prototype.slice.call(tpl.content.querySelectorAll("script")));
+        }
+        if (!links.length && !nodes.length) return;
+        links.forEach(function (node) {
+          var el = document.createElement("link");
+          el.rel = "stylesheet";
+          el.href = node.getAttribute("href");
+          document.head.appendChild(el);
+        });
+        var i = 0;
+        function next() {
+          if (i >= nodes.length) {
+            try { window.dispatchEvent(new Event("viktorych-late")); } catch (err) { /* the shell is already up */ }
+            return;
+          }
+          var node = nodes[i++];
+          var src = node.getAttribute("src");
+          if (!src) { next(); return; }
+          var el = document.createElement("script");
+          var type = node.getAttribute("type");
+          if (type) el.type = type;
+          el.async = false;
+          el.src = src;
+          el.onload = el.onerror = next;
+          document.body.appendChild(el);
+        }
+        next();
+      }
+      var started = false;
+      var scheduled = false;
+      function start() {
+        if (started) return;
+        started = true;
+        mount();
+      }
+      function warmTimeline() {
+        if (window.__VIKTORYCH_FEED) return;
+        try {
+          window.__VIKTORYCH_FEED = fetch("feeds.json", { credentials: "omit", priority: "low" }).then(function (res) {
+            if (!res.ok) throw new Error(String(res.status));
+            return res.text();
+          });
+        } catch (err) { window.__VIKTORYCH_FEED = null; }
+      }
+      function afterFirstPaint() {
+        warmTimeline();
+        var pending = true;
+        var hold = 0;
+        function go() {
+          if (!pending) return;
+          pending = false;
+          clearTimeout(hold);
+          warmTimeline();
+          start();
+        }
+        ["pointerdown", "keydown", "scroll"].forEach(function (type) {
+          window.addEventListener(type, go, { capture: true, passive: true, once: true });
+        });
+        window.addEventListener("hashchange", go);
+        window.addEventListener("popstate", go);
+        hold = setTimeout(function () {
+          if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 1500 });
+          else go();
+        }, 2500);
+      }
+      function arm() {
+        if (window.VIKTORYCH_ACCOUNTS && window.VIKTORYCH_ACCOUNTS.gate) {
+          var root = document.getElementById("app");
+          if (root && root.querySelector("[data-boot-card]")) root.innerHTML = "";
+          start();
+          return;
+        }
+        if (scheduled || started) return;
+        scheduled = true;
+        if (window.requestAnimationFrame) {
+          requestAnimationFrame(function () { requestAnimationFrame(afterFirstPaint); });
+        } else {
+          setTimeout(afterFirstPaint, 0);
+        }
+      }
+      var cfg = document.querySelector('script[src="accounts.config.js"]');
+      if (cfg && !window.VIKTORYCH_ACCOUNTS) cfg.addEventListener("load", arm);
+      arm();
+      document.addEventListener("click", function (event) {
+        if (window.__VIKTORYCH_CLICK) return;
+        var node = event.target && event.target.closest ? event.target.closest("[data-act='play']") : null;
+        if (!node) return;
+        var tile = node.closest(".vplay") || node;
+        if (!tile || !tile.classList || !tile.classList.contains("vplay") || tile.querySelector("iframe")) return;
+        start();
+        var img = tile.querySelector("img");
+        var src = img ? (img.currentSrc || img.getAttribute("src") || "") : "";
+        var found = String(src).match(/i\.ytimg\.com\/vi\/([A-Za-z0-9_-]{11})/);
+        if (!found) {
+          var link = tile.querySelector("a[href]");
+          var href = link ? link.getAttribute("href") || "" : "";
+          found = href.match(/(?:[?&]v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+        }
+        var id = found ? found[1] : "";
+        window.__VIKTORYCH_PLAY = { pid: tile.getAttribute("data-pid") || "", mi: tile.getAttribute("data-mi") || "", id: id };
+        var embed = window.ViktorychEmbed;
+        if (!id || !embed || !embed.youtubeEmbed || !embed.prepareFrame) return;
+        event.preventDefault();
+        event.stopPropagation();
+        var frame = document.createElement("iframe");
+        var origin = location.origin && String(location.origin).indexOf("http") === 0 ? location.origin : "https://viktorychapp.com";
+        var url = embed.youtubeEmbed(id, { origin: origin, controls: 1 });
+        embed.prepareFrame(frame, { url: url, title: "Video" });
+        var bound = embed.bindFrame ? embed.bindFrame(frame, {}) : null;
+        tile.appendChild(frame);
+        if (bound && bound.nudge) frame.addEventListener("load", function () { bound.nudge(); });
+        frame.src = url;
+        tile.classList.add("is-playing");
+      }, true);
+    })();
+  </script>
 </body>
 </html>

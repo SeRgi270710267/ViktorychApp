@@ -372,7 +372,7 @@ async function main() {
   if (!stored.custom || !stored.hidden) fail("Settings were not saved: " + JSON.stringify(stored));
 
   await page.send("Page.reload", { ignoreCache: true });
-  await waitFor(`document.querySelector("nav.bottom-nav a")`, "bar after reload");
+  await waitFor(`document.querySelector("nav.bottom-nav a") && window.ViktorychAccounts && window.ViktorychAccounts.snapshotFrom`, "bar after reload");
   const reloaded = JSON.parse(await evaluate(barExpr));
   if (JSON.stringify(reloaded) !== JSON.stringify(hiddenWant)) fail("Reload lost the bar: " + JSON.stringify(reloaded));
   const still = await evaluate(`JSON.parse(localStorage.getItem("viktorychapp-settings-v1")).bottomNavCustom === true`);
