@@ -8,7 +8,12 @@ on:
       - "shared/**"
       - "presence.js"
       - "presence.css"
+      - "passkeys.js"
+      - "app-lock.js"
+      - "privacy-screen.js"
       - "scripts/presence_chrome_test.mjs"
+      - "scripts/webauthn_lock_test.mjs"
+      - "scripts/app_lock_crypto_test.mjs"
       - ".github/workflows/accounts.yml"
   push:
     branches:
@@ -18,7 +23,12 @@ on:
       - "shared/**"
       - "presence.js"
       - "presence.css"
+      - "passkeys.js"
+      - "app-lock.js"
+      - "privacy-screen.js"
       - "scripts/presence_chrome_test.mjs"
+      - "scripts/webauthn_lock_test.mjs"
+      - "scripts/app_lock_crypto_test.mjs"
       - ".github/workflows/accounts.yml"
 
 permissions:
@@ -46,6 +56,11 @@ jobs:
 
       - name: Presence page check
         run: node scripts/presence_chrome_test.mjs
+
+      - name: WebAuthn virtual authenticator, app lock, and privacy screen
+        run: |
+          npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
+          PLAYWRIGHT_MJS=/tmp/pw/node_modules/playwright-core/index.js node scripts/webauthn_lock_test.mjs
 
   deploy:
     needs: test
