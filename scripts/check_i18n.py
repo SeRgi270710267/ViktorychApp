@@ -27,6 +27,7 @@ UI_FILES = (
     "index.html",
     "404.html",
     "accounts.js",
+    "presence.js",
     "owner-keys.js",
     "shorts.js",
     "drive.js",
