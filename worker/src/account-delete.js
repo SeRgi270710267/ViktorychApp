@@ -12,7 +12,8 @@
    account_identities, identity_challenges, vault_configs, vault_items,
    vault_shares, owner_keys, owner_key_items, owner_key_pace, account_reauths,
    account_presence, account_status, channel_tickets, notifications,
-   notification_state, notification_bells, push_subscriptions, push_log.
+   notification_state, notification_bells, push_subscriptions, push_log,
+   webauthn_credentials, webauthn_challenges.
    push_vapid is the one global key and has no account column. The account
    channel object is wiped in the same database step. telegram_files is a
    shared media index with no account column, so it is left alone. There is
