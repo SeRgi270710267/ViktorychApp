@@ -16171,6 +16171,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }, true);
   window.addEventListener("hashchange", () => {
     if (window.ViktorychAccounts?.blocking?.()) return;
+    showPill(pendingPillPosts());
     const nextHash = location.hash || "#/";
     const prevHash = lastKey || "";
     if (/^#\/messages(?:[/?]|$)/.test(prevHash) && /^#\/messages(?:[/?]|$)/.test(nextHash) && window.FeedsDiscord && window.FeedsDiscord.syncFromHash) {
@@ -16204,7 +16205,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
     hscrollNav = true;
-    showPill(pendingPillPosts());
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
     render({

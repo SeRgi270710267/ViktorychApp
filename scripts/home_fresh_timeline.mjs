@@ -292,14 +292,27 @@ async function main() {
     const before = (sample.hits || []).length;
     const switched = await evaluate(`(function () {
       var btn = document.querySelector("[data-act='htab'][data-tab='following']");
-      if (!btn) return { ok: false };
-      btn.click();
+      if (!btn) return { ok: false, hash: location.hash };
+      var err = "";
+      try { btn.click(); }
+      catch (e) { err = String(e && e.message || e); }
       var hits = (window.__feedHits || []).slice(${before}).map(function (row) { return { id: row.id, tab: row.tab }; });
-      var on = document.querySelector(".tab.on");
-      return { ok: true, hits: hits, on: on ? (on.getAttribute("data-tab") || "") : "" };
+      return new Promise(function (resolve) {
+        var start = Date.now();
+        function wait() {
+          var on = document.querySelector("#app .tab.on");
+          var tab = on ? (on.getAttribute("data-tab") || "") : "";
+          if (tab === "following" || Date.now() - start > 1500) {
+            resolve({ ok: true, err: err, hash: location.hash, hits: hits, on: tab });
+            return;
+          }
+          requestAnimationFrame(wait);
+        }
+        wait();
+      });
     })()`);
-    assert.equal(switched.ok, true);
-    assert.equal(switched.on, "following");
+    assert.equal(switched.ok, true, JSON.stringify(switched));
+    assert.equal(switched.on, "following", JSON.stringify(switched));
     assert.ok((switched.hits || []).some((row) => row.id === "src-a" || row.id === "src-b"), "tab fetch " + JSON.stringify(switched.hits));
     assert.ok((switched.hits || []).every((row) => row.tab !== "Following"), "fetch starts before the tab paints");
     console.log(JSON.stringify({
@@ -307,13 +320,15 @@ async function main() {
       snapshotMs: painted.t,
       newestMs: newest.t,
       gapMs: newest.t - painted.t,
-      hits: (sample.hits || []).map((row) => row.id + "@" + row.t)
+      hits: (sample.hits || []).map((row) => row.id + "@" + row.t),
+      tab: switched.on,
+      tabHits: switched.hits
     }));
   } finally {
-    if (browser) browser.close();
-    child.kill("SIGKILL");
-    live.close();
-    rmSync(profile, { recursive: true, force: true });
+    try { if (browser) browser.close(); } catch (err) { /* the browser is already gone */ }
+    try { child.kill("SIGKILL"); } catch (err) { /* already exited */ }
+    try { live.close(); } catch (err) { /* the server is already closed */ }
+    try { rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); } catch (err) { /* a locked profile does not change the result */ }
   }
 }
 
