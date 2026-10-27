@@ -881,6 +881,10 @@
 
   function destroyHls() {
     player.generation += 1;
+    if (player.peerRelease) {
+      try { player.peerRelease(); } catch (err) { /* the mesh can already be gone */ }
+      player.peerRelease = null;
+    }
     if (player.hls && player.hls.destroy) {
       try { player.hls.destroy(); } catch (err) { /* already gone */ }
     }
@@ -1143,6 +1147,19 @@
         playlistLoadPolicy: loadPolicy(4000, 8000),
         fragLoadPolicy: loadPolicy(6000, 12000)
       }, shared));
+      if (!loop && root.ViktorychPeer) {
+        player.hls = hls;
+        if (root.ViktorychPeerMedia && root.ViktorychPeerMedia.applyHls) root.ViktorychPeerMedia.applyHls(hls, Hls);
+        if (root.ViktorychPeer.ready) {
+          const playUrl = mirror ? mirror : (bust ? bustUrl(url) : url);
+          root.ViktorychPeer.ready().then((mod) => {
+            if (!mod || generation !== player.generation || player.hls !== hls) return;
+            if (mod.applyHls) mod.applyHls(hls, Hls);
+            if (player.peerRelease) { try { player.peerRelease(); } catch (err) { /* replaced */ } }
+            player.peerRelease = mod.watch ? mod.watch(playUrl) : null;
+          });
+        }
+      }
       hls.on(Hls.Events.ERROR, (_evt, data) => {
         if (generation !== player.generation || !data) return;
         if (Date.now() < player.ignoreErrorUntil) return;
