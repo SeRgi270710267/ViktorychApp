@@ -1234,6 +1234,31 @@ a:not(:has(> :not(.ava-none))):has(> .ava-none),
 .vplay.is-shown video, .vplay.is-shown iframe, .vplay.is-playing iframe { z-index: 2; }
 .vplay.is-playing > .play,
 .yt-thumb.is-playing > .play { visibility: hidden; }
+.vplay.is-x-embed .vposter,
+.vplay.is-x-embed > .play,
+.vplay.is-x-embed .vdur,
+.vplay.is-x-embed .vshield,
+.vplay.is-x-embed .ytp-video-click-target {
+  visibility: hidden;
+  pointer-events: none;
+}
+.vplay.is-x-embed iframe,
+#viewer iframe.x-embed-frame {
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #000;
+}
+.x-open {
+  position: relative;
+  z-index: 3;
+  display: inline-block;
+  margin: 12px;
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
 .vmute {
   position: absolute;
   right: 8px;
@@ -2825,6 +2850,26 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
       var(--topbar);
   }
   .topbar::before { height: calc(env(safe-area-inset-top, 0px) + 1px); }
+}
+
+.home-fresh {
+  position: sticky;
+  top: 0;
+  height: 0;
+  z-index: 6;
+  overflow: visible;
+  pointer-events: none;
+}
+.home-fresh > span {
+  display: block;
+  height: 3px;
+  width: 35%;
+  background: var(--blue);
+  animation: home-fresh 0.9s ease-in-out infinite;
+}
+@keyframes home-fresh {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
 }
 
 #pull {

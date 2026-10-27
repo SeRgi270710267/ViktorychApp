@@ -1715,7 +1715,10 @@ def main() -> None:
     write_version.selftest()
     import handle_guard
     check(handle_guard.selftest() == 0, "the handle guard hashes a private list")
-    check("private handle list is not configured; hash comparison skipped" in (ROOT / "scripts" / "handle_guard.py").read_text(encoding="utf-8"), "the handle guard stays green until the private list is set")
+    guard_src = (ROOT / "scripts" / "handle_guard.py").read_text(encoding="utf-8")
+    guard_workflow = (ROOT / ".github" / "workflows" / "handle-guard.yml").read_text(encoding="utf-8")
+    check("hash comparison skipped" in guard_src and "HANDLE_ALLOWLIST" in guard_src and "derived " in guard_src, "the handle guard skips when the private catalog cannot be read")
+    check("CLOUDFLARE_API_TOKEN" in guard_workflow and "HANDLE_DENYLIST" in guard_workflow and "HANDLE_GUARD_REQUIRE_CATALOG" in guard_workflow, "the handle guard reads the private catalog and still accepts an optional list")
     import catalog_migrate
     check(catalog_migrate.selftest() == 0, "the catalog migration copies counts and sizes only")
     import r2_catalog
@@ -1728,7 +1731,7 @@ def main() -> None:
     frame_test = subprocess.run(["node", str(ROOT / "scripts" / "media_frame_test.js")], cwd=ROOT)
     check(frame_test.returncode == 0, "media frames keep each ratio and a reply thread strips only leading mentions")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
-    check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
+    check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
     follow_fn = app[app.index("function followedFeeds()"):app.index("function followedFeeds()") + 500]
     check("copperlane" not in follow_fn and "mosspoint" not in follow_fn and "northlamp" not in follow_fn, "live refresh has no per-account special case")
     check("return !isSelfReply(post);" in app and "replyParent" in app and "pill-faces" in css and "reply-context" in css and ".thread > .post.continues" in css and "--thread:" in css, "home shows replies to other people and the new-posts pill can show avatars")
@@ -2024,6 +2027,9 @@ def main() -> None:
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("Watch on Instagram" in app and "function youtubeSources" in app and "function startPlayback" in app and 'toast("Video unavailable")' not in app and "hls.min.js" in app, "the player rotates sources and does not toast video unavailable")
     check('src="video-embed.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "./video-embed.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "function playbackSource(" in (ROOT / "video-embed.js").read_text(encoding="utf-8") and "/v1/yt/manifest" not in app, "the official embed helper is in the shell and the page does not relay YouTube through the worker")
+    embed_js = (ROOT / "video-embed.js").read_text(encoding="utf-8")
+    worker_js = (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8")
+    check("function runXPlayback(" in embed_js and "function xEmbedUrl(" in embed_js and "function startXPlayback(" in app and "dev.playbackUrl" in app and "armPeer(el, null, source.url)" in app and "function publicMediaPolicy(" in worker_js and "cacheEverything: false" in worker_js, "X video tries the original file, then the official embed, and a relayed file skips the CDN cache")
     embed_flow = subprocess.run(["node", str(ROOT / "scripts" / "video_embed_test.js")], cwd=ROOT)
     check(embed_flow.returncode == 0, "official embed urls, fallbacks, and combined-file selection pass")
     check("latest_version" not in (ROOT / "scripts" / "yt_remote.py").read_text(encoding="utf-8"), "sync does not bake an invidious itag url")
@@ -4841,6 +4847,13 @@ def feed_order_checks() -> None:
     order_js = (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8")
     check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in order_js, "new posts merge in place and the Following tab uses the signed-in accounts")
     check("function customTabFeeds(" in app and "function timelineFeeds(" in app and "timelineFeeds()" in app and "function hydrateTabSnapshots(" in app and "refreshTab" in order_js, "custom tabs use the same UTC refresh as Following")
+    fresh_js = (ROOT / "shared" / "home-fresh.js").read_text(encoding="utf-8")
+    page = (ROOT / "index.html").read_text(encoding="utf-8")
+    worker = (ROOT / "sw.js").read_text(encoding="utf-8")
+    fresh_node = subprocess.run(["node", str(ROOT / "scripts" / "home_fresh_test.mjs")], check=False)
+    check(fresh_node.returncode == 0, "home snapshot freshness fixtures")
+    check("shared/home-fresh.js" in page and "./shared/home-fresh.js" in worker and "shared/home-fresh.js" in deployed_paths(), "the home freshness helper is published with the shell")
+    check("PERIODIC_MIN_MS = 15 * 60 * 1000" in fresh_js and "VISIBLE_MS = 60 * 1000" in fresh_js and "home-refresh-start" in page and "X-Feed-Refresh" in page and "function refreshData(" in worker and "minInterval: 15 * 60 * 1000" in app and "pageshow" in app and "function saveHomeSnapshot(" in app, "a stale snapshot refreshes in the background and on the way back")
 
 
 def gdrive_checks() -> None:
