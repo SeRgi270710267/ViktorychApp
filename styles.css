@@ -2266,8 +2266,17 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   }
   .m-logo .logo-full { display: none; }
   .m-logo .logo-short { display: block; height: 22px; width: auto; max-width: 70vw; }
-  .m-ava { width: 32px; height: 32px; padding: 0; }
+  .m-ava, .m-icon, .icon-btn, .more-btn, .tab-caret {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
   .m-ava .ava, .m-ava .initials { width: 32px; height: 32px; font-size: 14px; }
+  .m-logo { min-height: 44px; }
+  .action { min-width: 44px; min-height: 44px; }
+  .x-tooltip { display: none !important; }
   .bottom-nav {
     display: flex;
     position: fixed;
@@ -4627,9 +4636,7 @@ header.nav.nav-land { display: none; }
 /* Phone landscape uses the same icon rail as X: the mark stays at the top,
    the icons scroll in the middle, and Post plus the account stay at the
    bottom. A short height tightens the rail but never below a 44px target. */
-@media (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) and (hover: none) and (pointer: coarse),
-       (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) and (display-mode: standalone),
-       (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) and (display-mode: fullscreen) {
+@media (orientation: landscape) and (max-height: 520px) and (max-width: 1100px) {
   .app {
     width: 100%;
     max-width: none;
@@ -4808,9 +4815,7 @@ header.nav.nav-land { display: none; }
   .tabs-bar, .topbar, .tabs { max-width: 100%; min-width: 0; }
   .tabs-bar { position: relative; z-index: 4; }
 }
-@media (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) and (hover: none) and (pointer: coarse),
-       (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) and (display-mode: standalone),
-       (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) and (display-mode: fullscreen) {
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
   header.nav.nav-land,
   html[data-nav="icons"] header.nav.nav-land {
     width: 68px;

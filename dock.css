@@ -373,7 +373,27 @@ html[data-theme="default"] .xdock-menu {
   .xdock-caret { transition: none; animation: none; }
 }
 @media (max-width: 499px) {
-  .xdock { display: none; }
+  .xdock:not(:has(.xdock-panel.is-open)) { display: none; }
+  .xdock:has(.xdock-panel.is-open) {
+    inset: 0;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: auto;
+    max-width: none;
+    z-index: 40;
+  }
+  .xdock-panel:not(.is-open) { display: none; }
+  .xdock-panel.is-open {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    border-radius: 0;
+    z-index: 40;
+  }
+  .xdock-resize { display: none; }
 }
 @media (orientation: portrait) and (min-width: 500px) and (max-width: 1279px) {
   html[data-nav-layout="bar"] .xdock {
