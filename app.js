@@ -6994,7 +6994,14 @@ const here = parseRoute();
       : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}" data-tooltip="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
     const split = extraClass ? "" : `<div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>`;
     const pillInner = (window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`;
-    return `<header class="nav${extraClass ? " " + extraClass : ""}">${split}<div class="nav-scroll">${brand}${linksHtml}${post}</div><button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">${pillInner}<span class="dots">${icon("more")}</span></button></header>`;
+    const account = `<button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">${pillInner}<span class="dots">${icon("more")}</span></button>`;
+    /* Landscape keeps the mark above a scrolling icon list, with Post and the
+       account pinned under that list so a short screen scrolls instead of
+       squashing the rows. */
+    if (extraClass === "nav-land") {
+      return `<header class="nav nav-land">${brand}<div class="nav-scroll">${linksHtml}</div>${post}${account}</header>`;
+    }
+    return `<header class="nav">${split}<div class="nav-scroll">${brand}${linksHtml}${post}</div>${account}</header>`;
   }
 
   function nav(route) {

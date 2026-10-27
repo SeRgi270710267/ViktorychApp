@@ -404,14 +404,31 @@ async function main() {
     const info = await evaluate(`(() => {
       const query = "(orientation: landscape) and (max-height: 520px) and (hover: none) and (pointer: coarse)";
       const land = document.querySelector("header.nav.nav-land");
-      const label = land.querySelector("a.nav-item .nav-label");
+      const label = land.querySelector(".nav-scroll > a.nav-item .nav-label");
       const center = document.querySelector(".center");
+      const doc = document.documentElement;
+      const appEl = document.querySelector(".app");
+      const appBox = appEl.getBoundingClientRect();
+      const cBox = center.getBoundingClientRect();
+      const padR = parseFloat(getComputedStyle(appEl).paddingRight) || 0;
+      const rows = [...land.querySelectorAll(".nav-scroll > a.nav-item, .nav-scroll > .nav-land-more")];
+      const first = rows[0] ? rows[0].getBoundingClientRect() : null;
+      const second = rows[1] ? rows[1].getBoundingClientRect() : null;
+      const scroll = land.querySelector(".nav-scroll").getBoundingClientRect();
+      const logo = land.querySelector(".logo").getBoundingClientRect();
+      const post = land.querySelector(".post-btn").getBoundingClientRect();
+      const account = land.querySelector(".account-pill").getBoundingClientRect();
+      const sideEl = document.querySelector("aside.side");
       let safe = false;
+      let safeRight = false;
+      let compact = false;
       [...document.styleSheets].forEach((sheet) => {
         try {
           [...sheet.cssRules].forEach((rule) => {
             const text = rule.cssText || "";
             if (text.includes("orientation: landscape") && text.includes("max-height: 520px") && text.includes("safe-area-inset-left")) safe = true;
+            if (text.includes("orientation: landscape") && text.includes("max-height: 520px") && text.includes("safe-area-inset-right")) safeRight = true;
+            if (text.includes("orientation: landscape") && text.includes("max-height: 500px") && text.includes("max-width: 1100px")) compact = true;
           });
         } catch (err) {}
       });
@@ -423,9 +440,21 @@ async function main() {
         labelDisplay: label ? getComputedStyle(label).display : "",
         labelText: label ? label.textContent.trim() : "",
         bar: getComputedStyle(document.querySelector("nav.bottom-nav")).display,
-        side: getComputedStyle(document.querySelector("aside.side")).display,
+        side: sideEl ? getComputedStyle(sideEl).display : "none",
+        sideW: sideEl ? sideEl.getBoundingClientRect().width : 0,
         maxWidth: getComputedStyle(center).maxWidth,
+        itemW: first ? first.width : 0,
+        itemH: first ? first.height : 0,
+        gap: first && second ? Math.round((second.top - first.bottom) * 10) / 10 : -1,
+        overflow: doc.scrollWidth > doc.clientWidth + 1,
+        gapRight: Math.round((doc.clientWidth - (appBox.right + window.scrollX)) * 10) / 10,
+        centerGap: Math.round(((appBox.right - padR) - cBox.right) * 10) / 10,
+        logoAbove: logo.bottom <= scroll.top + 2,
+        postBelow: post.top >= scroll.bottom - 2,
+        accountBelow: account.top >= post.bottom - 2,
         safe,
+        safeRight,
+        compact,
         direct: [...land.querySelectorAll(".nav-scroll > a.nav-item")].map((a) => a.getAttribute("href")),
         barHrefs: [...document.querySelectorAll("nav.bottom-nav a")].map((a) => a.getAttribute("href")),
         feedsDirect: !!land.querySelector('.nav-scroll > a.nav-item[href="#/feeds"]'),
@@ -435,18 +464,24 @@ async function main() {
     })()`);
     if (!info.match) fail(width + "x" + height + " did not match the phone landscape query " + JSON.stringify(info));
     if (info.land !== "flex") fail("Landscape sidebar display " + info.land);
-    if (!info.labelText || info.labelDisplay === "none") fail("Landscape labels are hidden: " + JSON.stringify(info));
+    if (!info.labelText || info.labelDisplay !== "none") fail("Landscape rail is not icon-only: " + JSON.stringify(info));
+    if (info.itemW < 44 || info.itemH < 44) fail("Landscape tap target is under 44px: " + JSON.stringify(info));
+    if (info.gap < 2 || info.gap > 12) fail("Landscape rail spacing is out of range: " + JSON.stringify(info));
+    if (!info.logoAbove || !info.postBelow || !info.accountBelow) fail("Landscape rail is not pinned top and bottom: " + JSON.stringify(info));
     if (info.bar !== "none") fail("Bottom bar still visible in landscape");
-    if (info.side !== "none") fail("Right column is visible at " + width);
-    if (info.maxWidth !== "600px") fail("Center max width is " + info.maxWidth);
-    if (!info.safe) fail("Landscape rule is missing a left safe-area inset");
+    if (info.side !== "none" || info.sideW > 1) fail("Right column still takes space at " + width);
+    if (info.maxWidth !== "none") fail("Center max width is " + info.maxWidth);
+    if (info.overflow || Math.abs(info.gapRight) > 2 || Math.abs(info.centerGap) > 2) fail("Landscape does not fill the width: " + JSON.stringify(info));
+    if (!info.safe || !info.safeRight || !info.compact) fail("Landscape rule is missing a safe-area inset or the short-height query");
     if (JSON.stringify(info.direct) !== JSON.stringify(info.barHrefs)) fail("Sidebar links " + JSON.stringify(info.direct) + " vs bar " + JSON.stringify(info.barHrefs));
     if (info.feedsDirect || !info.feedsMore || !info.tvMore) fail("More menu is wrong: " + JSON.stringify(info));
     console.log("landscape", width + "x" + height, "ok");
   }
 
+  await assertLandscape(844, 390);
   await assertLandscape(915, 412);
   await assertLandscape(740, 360);
+  await assertLandscape(932, 430);
 
   // A feed or subscriber-count paint can land in the same moment as the
   // rotation. Wait until the column stops changing, then check that the
@@ -497,7 +532,9 @@ async function main() {
   })()`);
   if (kept.token !== "stay" || kept.keep !== "yes" || !kept.connected) fail("Rotation replaced the playing media: " + JSON.stringify(kept));
   if (kept.y < 80) fail("Rotation jumped away from the scrolled page: " + JSON.stringify(kept));
-  if (Math.abs(kept.top - beforeScroll.top) > 12) fail("Rotation moved the media in view from " + beforeScroll.top + " to " + kept.top + " (scroll " + beforeScroll.y + " -> " + kept.y + ")");
+  // The landscape column now fills the screen, so the text above this marker
+  // reflows when the phone turns portrait. The node and the scroll offset stay.
+  if (Math.abs(kept.top - beforeScroll.top) > 240) fail("Rotation moved the media in view from " + beforeScroll.top + " to " + kept.top + " (scroll " + beforeScroll.y + " -> " + kept.y + ")");
   if (kept.bar !== "flex" || kept.land !== "none") fail("Rotation did not restore the bottom bar: " + JSON.stringify(kept));
 
   await evaluate(`(() => {
@@ -542,15 +579,23 @@ async function main() {
       const side = document.querySelector("aside.side");
       const center = document.querySelector(".center");
       const box = center.getBoundingClientRect();
+      const doc = document.documentElement;
+      const appEl = document.querySelector(".app");
+      const appBox = appEl.getBoundingClientRect();
+      const padR = parseFloat(getComputedStyle(appEl).paddingRight) || 0;
+      const edge = side && getComputedStyle(side).display !== "none" ? side.getBoundingClientRect().right : box.right;
       return {
         layout: document.documentElement.getAttribute("data-nav-layout"),
         rail: getComputedStyle(rail).display,
         railWidth: getComputedStyle(rail).width,
         bar: getComputedStyle(bar).display,
         side: getComputedStyle(side).display,
+        sideW: side.getBoundingClientRect().width,
         maxWidth: getComputedStyle(center).maxWidth,
         hrefs: [...bar.querySelectorAll("a")].map((a) => a.getAttribute("href")),
-        centered: Math.abs(box.left - (window.innerWidth - box.width) / 2) < 16,
+        overflow: doc.scrollWidth > doc.clientWidth + 1,
+        gapRight: Math.round((doc.clientWidth - (appBox.right + window.scrollX)) * 10) / 10,
+        centerGap: Math.round(((appBox.right - padR) - edge) * 10) / 10,
         mhead: getComputedStyle(document.querySelector(".mhead")).display
       };
     })()`);
@@ -560,11 +605,12 @@ async function main() {
     const auto = await tabletSnap(width, height);
     if (auto.layout !== "auto" || auto.rail !== "flex" || auto.bar !== "none") fail(width + "x" + height + " auto layout " + JSON.stringify(auto));
     if (parseFloat(auto.railWidth) > 120) fail(width + "x" + height + " left rail is expanded: " + auto.railWidth);
+    if (auto.overflow || Math.abs(auto.gapRight) > 2 || Math.abs(auto.centerGap) > 2) fail(width + "x" + height + " does not fill the width " + JSON.stringify(auto));
     await evaluate(`document.querySelector('[data-act="nav-layout"][data-layout="bar"]').click(); true`);
     await waitFor(`document.documentElement.getAttribute("data-nav-layout") === "bar"`, "bottom bar layout");
     const chosen = await tabletSnap(width, height);
     if (chosen.layout !== "bar" || chosen.rail !== "none" || chosen.bar !== "flex" || chosen.side !== "none") fail(width + "x" + height + " phone layout " + JSON.stringify(chosen));
-    if (chosen.maxWidth !== "600px" || !chosen.centered) fail(width + "x" + height + " timeline is not centered " + JSON.stringify(chosen));
+    if (chosen.maxWidth !== "none" || chosen.overflow || Math.abs(chosen.gapRight) > 2 || Math.abs(chosen.centerGap) > 2) fail(width + "x" + height + " timeline does not fill the width " + JSON.stringify(chosen));
     if (JSON.stringify(chosen.hrefs) !== JSON.stringify(expectedDefault)) fail(width + "x" + height + " bar order " + JSON.stringify(chosen.hrefs));
     if (chosen.mhead === "none") fail(width + "x" + height + " has no drawer button");
     await evaluate(`(() => {

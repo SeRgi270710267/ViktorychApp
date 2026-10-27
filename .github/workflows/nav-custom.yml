@@ -11,6 +11,7 @@ on:
       - "scripts/bottom_nav_test.mjs"
       - "scripts/nav_custom_test.js"
       - "scripts/dock_test.js"
+      - "scripts/landscape_layout_test.mjs"
       - "dock.js"
       - "dock.css"
       - "worker/**"
@@ -26,6 +27,7 @@ on:
       - "scripts/bottom_nav_test.mjs"
       - "scripts/nav_custom_test.js"
       - "scripts/dock_test.js"
+      - "scripts/landscape_layout_test.mjs"
       - "dock.js"
       - "dock.css"
       - "worker/**"
@@ -51,3 +53,7 @@ jobs:
         run: node scripts/bottom_nav_test.mjs
       - name: Corner drawers
         run: node scripts/dock_test.js
+      - name: Landscape layout
+        run: |
+          npm install --prefix /tmp/landscape-pw playwright-core
+          PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/landscape_layout_test.mjs

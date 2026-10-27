@@ -1,21 +1,21 @@
 /* In-page corner drawers. They sit on the page, not in a dialog. */
 .xdock {
   position: fixed;
-  bottom: 0;
+  bottom: var(--safe-b, env(safe-area-inset-bottom, 0px));
   z-index: 24;
   display: flex;
   align-items: flex-end;
   gap: 12px;
   width: max-content;
-  max-width: calc(100vw - 16px);
+  max-width: calc(100% - 16px - var(--safe-l, env(safe-area-inset-left, 0px)) - var(--safe-r, env(safe-area-inset-right, 0px)));
   pointer-events: none;
   font-family: var(--font);
   color: var(--text);
   font-size: 15px;
   line-height: 20px;
 }
-.xdock.side-right { right: 12px; flex-direction: row; }
-.xdock.side-left { left: 12px; flex-direction: row-reverse; }
+.xdock.side-right { right: calc(12px + var(--safe-r, env(safe-area-inset-right, 0px))); flex-direction: row; }
+.xdock.side-left { left: calc(12px + var(--safe-l, env(safe-area-inset-left, 0px))); flex-direction: row-reverse; }
 .xdock-panel {
   position: relative;
   pointer-events: auto;
@@ -374,4 +374,18 @@ html[data-theme="default"] .xdock-menu {
 }
 @media (max-width: 499px) {
   .xdock { display: none; }
+}
+@media (orientation: portrait) and (min-width: 500px) and (max-width: 1279px) {
+  html[data-nav-layout="bar"] .xdock {
+    bottom: calc(53px + var(--safe-b, env(safe-area-inset-bottom, 0px)));
+  }
+}
+@media (orientation: landscape) and (max-width: 1279px) {
+  html[data-nav-bar-land="1"] .xdock {
+    bottom: calc(53px + var(--safe-b, env(safe-area-inset-bottom, 0px)));
+  }
+}
+@media (orientation: landscape) and (max-height: 500px) and (max-width: 1100px) {
+  .xdock { bottom: var(--safe-b, env(safe-area-inset-bottom, 0px)); }
+  .xdock-panel:not(.is-open) { width: 48px; height: 48px; margin-bottom: 8px; }
 }
