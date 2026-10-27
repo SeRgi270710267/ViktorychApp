@@ -50,10 +50,16 @@ export function watchDecision(job, marker, roomId, nowMs) {
   if (room && String(mark.roomId || "") === room && fresh(mark.at, now, WATCH_RETRY_MS)) {
     return { action: "skip", part: 0, why: "dispatched" };
   }
-  if (saved.some((row) => row && String(row.roomId || "") === room)) {
+  const backoff = Math.max(parseMs(job && job.backoffUntil), parseMs(active && active.blockedUntil));
+  if (backoff > now) return { action: "skip", part: 0, why: "backoff" };
+  if (saved.some((row) => row && String(row.roomId || "") === room && !row.partial)) {
     return { action: "skip", part: 0, why: "saved" };
   }
-  if (!active) return { action: "record", part: 1, why: "new" };
+  if (!active) {
+    const partial = saved.find((row) => row && String(row.roomId || "") === room && row.partial);
+    if (partial) return { action: "record", part: Math.max(1, Number(partial.parts) || 1) + 1, why: "partial" };
+    return { action: "record", part: 1, why: "new" };
+  }
 
   const activeRoom = String(active.roomId || "");
   const part = Math.max(1, Number(active.part) || 1);
@@ -74,6 +80,11 @@ export function watchDecision(job, marker, roomId, nowMs) {
       return { action: "skip", part: 0, why: "part" };
     }
     return { action: "part", part, why: "part" };
+  }
+  // A blocked pull that stored nothing used to set captureDone and then
+  // never ran again. Zero bytes is not a finished live.
+  if (String(active.state || "") === "blocked" && Number(active.segments || 0) <= 0) {
+    return { action: "record", part, why: "unblocked" };
   }
   if (active.captureDone) {
     // Capture is over. Wait for the uploader to mark the room saved instead
