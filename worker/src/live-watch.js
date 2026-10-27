@@ -9,6 +9,21 @@ export const WATCH_LIMIT = 4;
 export const WATCH_RETRY_MS = 10 * 60 * 1000;
 export const WATCH_HEARTBEAT_MS = 8 * 60 * 1000;
 export const WATCH_PART_MS = 3 * 60 * 1000;
+export const RECORD_CAP = 16;
+
+const CONTINUED = { part: 1, stale: 1, partial: 1, unblocked: 1, retry: 1 };
+
+// A new live waits when sixteen recorders are already running. A live that
+// already has a slot keeps it: the next part, a stale runner, and a retry
+// are not dropped to make room.
+export function admitRecord(choice, handle, activeNames, cap = RECORD_CAP) {
+  if (!choice || (choice.action !== "record" && choice.action !== "part")) return false;
+  const names = (Array.isArray(activeNames) ? activeNames : []).map((name) => String(name || "").toLowerCase());
+  const held = names.indexOf(String(handle || "").toLowerCase()) >= 0;
+  const full = names.length >= Math.max(1, Number(cap) || RECORD_CAP);
+  if (held || CONTINUED[choice.why]) return true;
+  return !full;
+}
 
 function parseMs(value) {
   const at = Date.parse(String(value || ""));
@@ -50,10 +65,16 @@ export function watchDecision(job, marker, roomId, nowMs) {
   if (room && String(mark.roomId || "") === room && fresh(mark.at, now, WATCH_RETRY_MS)) {
     return { action: "skip", part: 0, why: "dispatched" };
   }
-  if (saved.some((row) => row && String(row.roomId || "") === room)) {
+  const backoff = Math.max(parseMs(job && job.backoffUntil), parseMs(active && active.blockedUntil));
+  if (backoff > now) return { action: "skip", part: 0, why: "backoff" };
+  if (saved.some((row) => row && String(row.roomId || "") === room && !row.partial)) {
     return { action: "skip", part: 0, why: "saved" };
   }
-  if (!active) return { action: "record", part: 1, why: "new" };
+  if (!active) {
+    const partial = saved.find((row) => row && String(row.roomId || "") === room && row.partial);
+    if (partial) return { action: "record", part: Math.max(1, Number(partial.parts) || 1) + 1, why: "partial" };
+    return { action: "record", part: 1, why: "new" };
+  }
 
   const activeRoom = String(active.roomId || "");
   const part = Math.max(1, Number(active.part) || 1);
@@ -75,6 +96,11 @@ export function watchDecision(job, marker, roomId, nowMs) {
     }
     return { action: "part", part, why: "part" };
   }
+  // A blocked pull that stored nothing used to set captureDone and then
+  // never ran again. Zero bytes is not a finished live.
+  if (String(active.state || "") === "blocked" && Number(active.segments || 0) <= 0) {
+    return { action: "record", part, why: "unblocked" };
+  }
   if (active.captureDone) {
     // Capture is over. Wait for the uploader to mark the room saved instead
     // of recording the same room a second time.
@@ -85,7 +111,7 @@ export function watchDecision(job, marker, roomId, nowMs) {
     return { action: "skip", part: 0, why: "waiting" };
   }
   if (String(active.state || "") === "queued") {
-    return { action: "skip", part: 0, why: "queued" };
+    return { action: "record", part, why: "queued" };
   }
   if (String(active.state || "") === "blocked") {
     return { action: "record", part, why: "unblocked" };

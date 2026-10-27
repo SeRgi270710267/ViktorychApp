@@ -1912,16 +1912,32 @@
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {});
   }
+  function healthWhen(value) {
+    if (!value) return "";
+    try { return new Date(value).toLocaleString(); } catch (err) { return String(value); }
+  }
   function healthHtml() {
     var body = tiktokHealth;
+    var locked = false;
+    try { locked = typeof localStorage !== "undefined" && localStorage.getItem("viktorych_shorts_locked") === "1"; } catch (e) {}
     var rows = body && body.backoffs || [];
-    try {
-      if (typeof localStorage !== "undefined" && localStorage.getItem("viktorych_shorts_locked") === "1") {
-        rows = rows.filter(function (r) {
-          return String(r && r.handle || "").toLowerCase().replace(/^@/, "") === "pepsi";
-        });
-      }
-    } catch (e) {}
+    var accounts = body && body.accounts || [];
+    if (locked) {
+      rows = rows.filter(function (r) {
+        return String(r && r.handle || "").toLowerCase().replace(/^@/, "") === "pepsi";
+      });
+      accounts = accounts.filter(function (r) {
+        return String(r && r.handle || "").toLowerCase().replace(/^@/, "") === "pepsi";
+      });
+    }
+    var checked = body && body.checkedAt ? healthWhen(body.checkedAt) : "";
+    var checkLine = '<p class="phandle">' + esc(checked ? tr("Last check {time}", { time: checked }) : tr("No check yet.")) + "</p>";
+    var accountLines = accounts.map(function (row) {
+      var status = row.status === "live" ? tr("LIVE") : row.status === "blocked" ? tr("Blocked") : row.status === "offline" ? tr("Offline") : "";
+      var rec = row.recording ? tr("Recording") : (row.lastRecordingAt ? tr("Last recording {time}", { time: healthWhen(row.lastRecordingAt) }) : "");
+      var bits = ["@" + String(row.handle || ""), status, rec].filter(Boolean);
+      return '<p class="phandle">' + esc(bits.join(" · ")) + "</p>";
+    }).join("");
     var blocked = body ? (body.blocked403 || 0) + (body.blocked429 || 0) + (body.captcha || 0) : 0;
     var lines = '<p class="phandle">' + esc(tr("No recent blocks.")) + "</p>";
     if (body && (blocked || rows.length)) {
@@ -1932,7 +1948,7 @@
         return '<p class="phandle">@' + esc(row.handle || "") + " " + esc(tr("Backing off until {time}", { time: when })) + "</p>";
       }).join("");
     }
-    return '<div class="set-block"><h2>' + esc(tr("TikTok health")) + "</h2>" + lines + "</div>";
+    return '<div class="set-block"><h2>' + esc(tr("TikTok health")) + "</h2>" + checkLine + accountLines + lines + "</div>";
   }
   function addBackupChannel() {
     var session = readSession();

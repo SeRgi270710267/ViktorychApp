@@ -25,6 +25,7 @@
   var addingAccount = false;
   var accountsLoaded = false;
   var livePaintKey = "";
+  var pastPaintKey = "";
   var paintTimer = 0;
   var liveInflight = {};
   var liveToken = 0;
@@ -34,7 +35,7 @@
   var liveFatal = null;
   var onLiveLevel = null;
   var climbTimer = 0;
-  var recordings = { cap: 12, active: 0, items: {} };
+  var recordings = { cap: 12, active: 0, items: {}, past: [] };
   var hlsDead = false;
   var qualityLock = false;
   var stitchedPlay = false;
@@ -72,6 +73,7 @@
       localStorage.setItem(LOCKED_KEY, lockedMode ? "1" : "0");
     } catch (err) { /* private mode */ }
     livePaintKey = "";
+    pastPaintKey = "";
     if (onLiveRoute()) {
       paintLive();
       liveRows().forEach(function (row) { if (row && row.handle) refreshLive(row.handle); });
@@ -569,24 +571,32 @@
       return res.json();
     }).then(function (body) {
       if (!body || !body.items) return body;
-      recordings = { cap: body.cap || 12, active: body.active || 0, items: body.items };
+      recordings = { cap: body.cap || 12, active: body.active || 0, items: body.items, past: body.past || [] };
       schedulePaint();
       return body;
     }).catch(function () { return null; });
   }
 
-  function pastStamp(row) {
-    var rec = row && row.record || {};
-    return String(rec.endedAt || rec.startedAt || (row && row.lastLiveAt) || "");
+  function pastSource() {
+    var list = recordings && Array.isArray(recordings.past) ? recordings.past : [];
+    if (list.length) return list;
+    var items = recordings && recordings.items || {};
+    return Object.keys(items).map(function (name) {
+      var row = items[name];
+      if (!row || typeof row !== "object") return null;
+      return Object.assign({ handle: row.handle || name }, row);
+    }).filter(Boolean);
   }
 
   function pastRows() {
-    return liveRows().filter(function (row) {
-      var rec = row.record || {};
-      return rec.state === "saved" || rec.state === "recording" || rec.state === "queued";
-    }).sort(function (a, b) {
-      var left = pastStamp(a);
-      var right = pastStamp(b);
+    if (!ownerHere()) return [];
+    return pastSource().filter(function (row) {
+      if (!row || !row.handle) return false;
+      if (isLocked() && !isUnlocked(row.handle)) return false;
+      return row.state === "saved" || row.state === "recording" || row.state === "queued";
+    }).slice().sort(function (a, b) {
+      var left = String(a.endedAt || a.startedAt || "");
+      var right = String(b.endedAt || b.startedAt || "");
       if (left !== right) return left < right ? 1 : -1;
       var lh = foldHandle(a.handle);
       var rh = foldHandle(b.handle);
@@ -598,27 +608,10 @@
     return pastRows().length;
   }
 
-  function pastRow(row) {
-    var handle = row.handle;
-    var rec = row.record || {};
-    var avatar = avatarFor(handle, row);
-    var face = avatar ? '<img alt="" src="' + hooks.esc(avatar) + '" referrerpolicy="no-referrer">' : "";
-    var label = recordLabel(row);
-    var when = pastStamp(row);
-    var meta = [label, when ? hooks.fullTime(when) : ""].filter(Boolean).join(" · ");
-    var title = row.title || rec.title || "";
-    var inner = face + "<span><b>@" + hooks.esc(handle) + "</b><small>" + hooks.esc(meta) + "</small>" +
-      (title ? "<small>" + hooks.esc(title) + "</small>" : "") + "</span>";
-    if (rec.state === "saved" && rec.key) {
-      return '<button type="button" class="shorts-past-row" data-shorts="saved" data-handle="' + hooks.esc(handle) + '">' + inner + "</button>";
-    }
-    return '<article class="shorts-past-row" data-handle="' + hooks.esc(handle) + '">' + inner + "</article>";
-  }
-
   function pastListHtml() {
     var rows = pastRows();
     if (!rows.length) return '<div class="shorts-past-empty">' + hooks.esc(tr("No past lives yet.")) + "</div>";
-    return rows.map(pastRow).join("");
+    return '<ul class="shorts-past-list">' + rows.map(pastCard).join("") + "</ul>";
   }
 
   function subtabs(pane) {
@@ -838,6 +831,42 @@
     return '<div class="mhead"><button class="m-ava" data-act="drawer" type="button" aria-label="' + hooks.esc(tr("Menu")) + '"><span class="ava initials">Y</span></button>' +
       '<a class="m-logo" href="#/" aria-label="' + hooks.esc(hooks.productName()) + '">' + hooks.logo() + "</a>" +
       '<a class="m-icon" href="#/settings" aria-label="' + hooks.esc(tr("Settings")) + '">' + hooks.icon("spark") + "</a></div>";
+  }
+
+  function clock(seconds) {
+    var n = Math.max(0, Math.floor(Number(seconds) || 0));
+    if (!n) return "";
+    var h = Math.floor(n / 3600);
+    var m = Math.floor((n % 3600) / 60);
+    var s = n % 60;
+    function pad(v) { return v < 10 ? "0" + v : String(v); }
+    if (h) return h + ":" + pad(m) + ":" + pad(s);
+    return m + ":" + pad(s);
+  }
+
+  function pastCard(row, index) {
+    var handle = String(row.handle || "");
+    var recording = row.state === "recording" || row.state === "queued";
+    var tag = recording ? tr("Recording ({n} of {cap})", { n: recordings.active || 1, cap: recordings.cap || 12 }) : tr("Saved");
+    var when = row.startedAt && hooks.fullTime ? hooks.fullTime(row.startedAt) : "";
+    var dur = clock(row.duration);
+    var cover = row.cover || avatarFor(handle, row);
+    var face = cover ? '<img alt="" src="' + hooks.esc(cover) + '" referrerpolicy="no-referrer">' : "";
+    var bits = [];
+    var label = qualityLabel(row.quality);
+    if (label) bits.push(label);
+    if (row.qualityNote) bits.push(tr("Best available"));
+    if (row.viewers) bits.push(tr("Peak {count}", { count: hooks.formatCount(row.viewers, 1000) }));
+    var action = row.key
+      ? '<button type="button" class="shorts-past-play" data-shorts="past" data-past="' + index + '">' + hooks.esc(tag) + "</button>"
+      : '<span class="shorts-past-play">' + hooks.esc(tag) + "</span>";
+    return '<li class="shorts-past-row">' +
+      '<span class="shorts-past-face">' + face + "</span>" +
+      '<span class="shorts-past-copy"><b>@' + hooks.esc(handle) + "</b>" +
+      (row.title ? "<small>" + hooks.esc(row.title) + "</small>" : "") +
+      (when || dur ? "<small>" + hooks.esc([when, dur].filter(Boolean).join(" · ")) + "</small>" : "") +
+      (bits.length ? "<small>" + hooks.esc(bits.join(" · ")) + "</small>" : "") +
+      "</span>" + action + "</li>";
   }
 
   function page(route) {
@@ -1304,9 +1333,7 @@
       }
       if (slot) slot.textContent = text;
     }
-    livePaintKey = liveRows().map(function (item) {
-      return [item.handle, item.live ? 1 : 0, item.viewers || 0, item.lastLiveAt || "", item.title || ""].join("\n");
-    }).join("\n");
+    livePaintKey = liveRowsSignature();
   }
 
   function refreshLive(handle, fresh) {
@@ -1480,8 +1507,7 @@
     if (pane === "past") {
       var past = pastRows();
       var pastKey = "past\n" + past.map(function (row) {
-        var rec = row.record || {};
-        return [row.handle, rec.state || "", rec.key || "", pastStamp(row)].join("\n");
+        return [row.handle, row.state || "", row.roomId || "", row.key || "", row.endedAt || row.startedAt || "", row.viewers || 0, row.title || ""].join("\n");
       }).join("\n");
       if (pastKey === livePaintKey && feed.querySelector(".shorts-past-row, .shorts-past-empty")) return;
       livePaintKey = pastKey;
@@ -1788,6 +1814,11 @@
   }
 
   function savedRecording(handle) {
+    var want = foldHandle(handle);
+    var rows = pastRows();
+    for (var i = 0; i < rows.length; i++) {
+      if (foldHandle(rows[i].handle) === want && rows[i].state === "saved" && rows[i].key) return rows[i];
+    }
     var rec = recordOf(handle);
     return rec && rec.state === "saved" && rec.key ? rec : null;
   }
@@ -1849,36 +1880,47 @@
     return attemptSources(video, info, "live");
   }
 
-  function openSaved(handle) {
-    handle = String(handle || "");
-    var rec = recordOf(handle);
-    if (!handle || !rec || rec.state !== "saved" || !rec.key) return;
+  function openSaved(handle, row) {
+    if (!row) {
+      var want = foldHandle(handle);
+      var found = pastRows().filter(function (item) {
+        return item && foldHandle(item.handle) === want && item.key;
+      })[0];
+      row = found || recordOf(handle);
+    }
+    var rec = row;
+    handle = String(handle || (rec && rec.handle) || "");
+    if (!handle || !rec || !rec.key) return;
+    if (rec.state !== "saved" && rec.state !== "recording" && rec.state !== "queued") return;
     closeLive();
     var token = liveToken;
     var parts = Math.max(1, Number(rec.parts) || 1);
     var part = 1;
+    var recording = rec.state === "recording" || rec.state === "queued";
     var profile = "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live";
-    var avatar = avatarFor(handle, liveStatus(handle) || {});
+    var avatar = rec.cover || avatarFor(handle, liveStatus(handle) || {});
     var root = document.createElement("div");
     root.id = "shorts-live-player";
     root.className = "shorts-live-player";
     root.setAttribute("role", "dialog");
     root.setAttribute("aria-modal", "true");
     root.setAttribute("data-handle", handle);
-    root.setAttribute("data-mode", "saved");
+    root.setAttribute("data-room", rec.roomId || "");
+    root.setAttribute("data-mode", recording ? "recording" : "saved");
     root.innerHTML = '<div class="shorts-live-stage">' +
       '<video playsinline webkit-playsinline autoplay muted></video>' +
-      '<label class="shorts-live-seek"><input type="range" min="0" max="1000" value="0" data-shorts="seek" aria-label="' + hooks.esc(tr("Seek")) + '"></label>' +
       '<div class="shorts-live-cover">' +
       (avatar ? '<img alt="" src="' + hooks.esc(avatar) + '" referrerpolicy="no-referrer">' : "") +
       '<p class="shorts-live-note"></p>' +
       '<a hidden target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a>" +
       "</div></div>" +
       '<div class="shorts-live-hud"><button type="button" data-shorts="close-live" aria-label="' + hooks.esc(tr("Close")) + '">×</button>' +
-      '<span class="shorts-live-tag">' + hooks.esc(tr("Saved")) + "</span>" +
+      '<span class="shorts-live-tag">' + hooks.esc(recording ? tr("Recording") : tr("Saved")) + "</span>" +
       '<button type="button" data-shorts="quality" class="shorts-live-q"></button>' +
       '<button type="button" data-shorts="mute" aria-label="' + hooks.esc(sound ? tr("Mute") : tr("Unmute")) + '">' + hooks.icon(sound ? "vol" : "volOff") + "</button></div>" +
-      '<div class="shorts-live-foot"><b>@' + hooks.esc(handle) + "</b></div>";
+      '<div class="shorts-live-foot"><b>@' + hooks.esc(handle) + "</b>" +
+      (rec.title ? "<span>" + hooks.esc(rec.title) + "</span>" : "") +
+      '<input class="shorts-live-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="' + hooks.esc(tr("Seek")) + '"></div>';
     document.body.appendChild(root);
     document.documentElement.classList.add("shorts-live-open");
     liveZoom = bindVideoZoom(root.querySelector(".shorts-live-stage"));
@@ -1892,22 +1934,27 @@
       if (token !== liveToken || stitchedPlay) return;
       if (part < parts) playPart(part + 1);
     });
-    var seek = root.querySelector("[data-shorts='seek']");
+    var seek = root.querySelector("input.shorts-live-seek");
     var seeking = false;
+    function syncSeek() {
+      if (!seek || seeking || !video.duration || !isFinite(video.duration)) return;
+      seek.max = String(video.duration);
+      seek.value = String(video.currentTime || 0);
+    }
+    video.addEventListener("timeupdate", syncSeek);
+    video.addEventListener("durationchange", syncSeek);
     if (seek) {
       seek.addEventListener("pointerdown", function () { seeking = true; });
-      seek.addEventListener("pointerup", function () { seeking = false; });
       seek.addEventListener("input", function () {
-        var duration = Number(video.duration);
-        if (!duration || !isFinite(duration)) return;
-        video.currentTime = duration * (Number(seek.value) / 1000);
+        seeking = true;
+        var at = Number(seek.value);
+        if (isFinite(at)) {
+          try { video.currentTime = at; } catch (err) { /* the playlist is still loading */ }
+        }
       });
-      video.addEventListener("timeupdate", function () {
-        if (seeking) return;
-        var duration = Number(video.duration);
-        if (!duration || !isFinite(duration)) return;
-        seek.value = String(Math.round(video.currentTime / duration * 1000));
-      });
+      seek.addEventListener("change", function () { seeking = false; });
+      seek.addEventListener("pointerup", function () { seeking = false; });
+      seek.addEventListener("pointercancel", function () { seeking = false; });
     }
     root.addEventListener("click", function (event) {
       var button = event.target.closest ? event.target.closest("[data-shorts]") : null;
@@ -1922,7 +1969,12 @@
         syncMute(button);
       } else if (kind === "retry-live") {
         event.preventDefault();
-        openSaved(root.getAttribute("data-handle") || handle);
+        var againHandle = root.getAttribute("data-handle") || handle;
+        var againRoom = root.getAttribute("data-room") || "";
+        var again = pastRows().filter(function (item) {
+          return item && foldHandle(item.handle) === foldHandle(againHandle) && String(item.roomId || "") === againRoom && item.key;
+        })[0];
+        openSaved(againHandle, again);
       } else if (kind === "quality") {
         event.preventDefault();
         if (!hls || !hls.levels || !hls.levels.length) return;
@@ -2421,6 +2473,12 @@
       openSaved(button.getAttribute("data-handle") || (slideEl && slideEl.getAttribute("data-handle")) || "");
       return;
     }
+    if (kind === "past") {
+      event.preventDefault();
+      var picked = pastRows()[Number(button.getAttribute("data-past"))];
+      if (picked && picked.key) openSaved(picked.handle, picked);
+      return;
+    }
     if (kind === "mute") {
       sound = !sound;
       if (video) video.muted = !sound;
@@ -2909,7 +2967,8 @@
       recordings = {
         cap: (next && next.cap) || 12,
         active: (next && next.active) || 0,
-        items: (next && next.items) || {}
+        items: (next && next.items) || {},
+        past: (next && next.past) || []
       };
     },
     setLiveState: function (items) {

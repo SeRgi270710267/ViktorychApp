@@ -353,6 +353,8 @@ test("live stats use user_count and keep the origin url", async () => {
   assert.equal(health.status, 200);
   assert.equal(health.body.blocked429 >= 1, true);
   assert.equal(health.body.backoffs.some((row) => row.handle === "other_name"), true);
+  assert.equal(typeof health.body.checkedAt, "string");
+  assert.equal(Array.isArray(health.body.accounts), true);
 });
 
 test("recordings stay owner-only and hide backup channel ids", async () => {
@@ -360,22 +362,40 @@ test("recordings stay owner-only and hide backup channel ids", async () => {
   assert.equal(anon.status, 401);
   const bindings = await mf.getBindings();
   const handle = "canddeserrano_";
+  const openHandle = "aa_fixture";
   const key = "tiktok/" + handle + "/7699647509498710804/live";
+  const openKey = "tiktok/" + openHandle + "/1000000000000000001/live";
   await bindings.DATA.put("owner/tiktok-recordings.json", JSON.stringify({
     cap: 12,
     active: 1,
-    items: { [handle]: { state: "saved", quality: "origin", qualityNote: "", title: "now", key, parts: 1, roomId: "7699647509498710804" } }
+    items: {
+      [handle]: { state: "saved", quality: "origin", qualityNote: "", title: "now", key, parts: 1, roomId: "7699647509498710804" },
+      [openHandle]: { state: "recording", quality: "origin", title: "open", roomId: "1000000000000000001", startedAt: "2026-10-02T00:00:00Z" }
+    }
   }));
   await bindings.DATA.put("owner/live-jobs/" + handle + ".json", JSON.stringify({
-    public: { state: "saved", quality: "hd", qualityNote: "best available", title: "now", key, parts: 2, roomId: "7699647509498710804" }
+    public: { state: "saved", quality: "hd", qualityNote: "best available", title: "now", key, parts: 2, roomId: "7699647509498710804" },
+    saved: [{ state: "saved", quality: "hd", qualityNote: "best available", title: "earlier", key, parts: 2, roomId: "7699647509498710804", startedAt: "2026-10-01T00:00:00Z", viewers: 4, duration: 90 }]
+  }));
+  await bindings.DATA.put("owner/live-jobs/" + openHandle + ".json", JSON.stringify({
+    public: { state: "recording", quality: "origin", title: "open", roomId: "1000000000000000001", startedAt: "2026-10-02T00:00:00Z" },
+    active: { state: "recording", captureDone: false, segments: 2, key: openKey, quality: "origin", title: "open", roomId: "1000000000000000001", startedAt: "2026-10-02T00:00:00Z", viewers: 3, part: 1 }
   }));
   const listed = await call("/v1/owner/tiktok/recordings", { ip: "203.0.113.111", token: ownerToken });
   assert.equal(listed.status, 200);
   assert.equal(listed.body.cap, 12);
-  assert.equal(listed.body.active, 0);
+  assert.equal(listed.body.active, 1);
   assert.equal(listed.body.items[handle].quality, "hd");
   assert.equal(listed.body.items[handle].qualityNote, "best available");
   assert.equal(listed.body.items[handle].key, key);
+  assert.equal(listed.body.past.length, 2);
+  assert.equal(listed.body.past[0].handle, openHandle);
+  assert.equal(listed.body.past[0].state, "recording");
+  assert.equal(listed.body.past[0].key, openKey);
+  assert.equal(listed.body.past[1].handle, handle);
+  assert.equal(listed.body.past[1].title, "earlier");
+  assert.equal(listed.body.past[1].key, key);
+  assert.equal(listed.body.past[1].viewers, 4);
   assert.equal(listed.text.indexOf("-100"), -1);
   assert.equal(listed.text.indexOf("m3u8"), -1);
   const stranger = await call("/v1/signup", {

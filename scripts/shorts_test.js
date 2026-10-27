@@ -260,13 +260,19 @@ shorts.setRecordings({
   cap: 12,
   active: 1,
   items: {
-    gabii_g5: { state: "recording", endedAt: "2026-10-02T00:00:00Z" },
+    gabii_g5: { state: "recording", endedAt: "2026-10-02T00:00:00Z", title: "current-only" },
     pepsi: { state: "saved", key: "tiktok/pepsi/1/live", endedAt: "2026-10-01T00:00:00Z" }
-  }
+  },
+  past: [
+    { handle: "gabii_g5", state: "recording", startedAt: "2026-10-02T00:00:00Z", key: "tiktok/gabii_g5/1/live" },
+    { handle: "pepsi", state: "saved", startedAt: "2026-10-01T00:00:00Z", key: "tiktok/pepsi/1/live", title: "earlier" }
+  ]
 });
 const pastHtml = shorts.page({ live: true, livePane: "past" });
 assert(pastHtml.indexOf("@gabii_g5") < pastHtml.indexOf("@pepsi"), "Past lives are newest first");
 assert(pastHtml.includes("Recording ({n} of {cap})"), "In-progress captures are marked Recording");
+assert(pastHtml.includes("earlier"), "Past lives read the per-handle history");
+assert(!pastHtml.includes("current-only"), "Past lives do not fall back to the current row when history exists");
 assert(pastHtml.includes(">2<"), "Past lives count badge is shown");
 localStorage.setItem("viktorych_shorts_live_pane", "past");
 const remembered = shorts.page({ live: true });
