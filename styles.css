@@ -641,7 +641,6 @@ html.is-split-drag * {
 .sp-row,
 .story-tray,
 .pills,
-.yt-chips,
 .yt-strip,
 .hist-chips,
 .cm-filter-bar,
@@ -965,6 +964,10 @@ html.is-split-drag * {
   cursor: pointer;
   content-visibility: auto;
   contain-intrinsic-size: auto 220px;
+}
+.post.boot-card {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
 }
 @media (hover: hover) {
   .post:hover { background: var(--hover-soft); }
@@ -2327,6 +2330,8 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
   flex-wrap: nowrap;
   gap: 12px;
   overflow-x: auto;
+  overflow-anchor: none;
+  touch-action: pan-x pan-y;
   padding: 12px;
   position: sticky;
   top: 53px;
