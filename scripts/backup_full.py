@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -220,26 +221,29 @@ def export_artifacts(repo: str) -> tuple[dict, dict]:
 
 def clone_mirror(repo: str, dest: Path) -> None:
     url = f"https://github.com/{repo}.git"
-    token = (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or "").strip()
-    cmd = ["git", "-c", "credential.helper=", "clone", "--mirror", "--", url, str(dest)]
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
-    if token:
-        cmd = [
-            "git",
-            "-c",
-            "credential.helper=",
-            "-c",
-            f"http.extraheader=AUTHORIZATION: bearer {token}",
-            "clone",
-            "--mirror",
-            "--",
-            url,
-            str(dest),
-        ]
+    # The checkout action stores an Authorization header globally. Clearing
+    # it for this command lets the public mirror clone run on its own.
+    cmd = [
+        "git",
+        "-c",
+        "credential.helper=",
+        "-c",
+        "http.https://github.com/.extraheader=",
+        "clone",
+        "--mirror",
+        "--",
+        url,
+        str(dest),
+    ]
+    print("[backup-full] clone_start", flush=True)
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
     if proc.returncode != 0:
-        fail(f"mirror clone failed ({proc.returncode})")
+        err = scrub(proc.stderr.decode("utf-8", "replace"))
+        err = re.sub(r"(?i)authorization:\s*\S+", "authorization: ***", err)
+        err = re.sub(r"\s+", " ", err).strip()[-180:]
+        fail(f"mirror clone failed ({proc.returncode}) {err}".rstrip())
 
 
 def ref_names(text: str) -> list[str]:
@@ -375,6 +379,12 @@ def backup(work: Path) -> dict:
     bundle = work / "repo.bundle"
     clone_mirror(repo, mirror)
     counts = make_bundle(mirror, bundle)
+    print(
+        "[backup-full] "
+        f"branches={counts['branches']} tags={counts['tags']} data_branch={counts['data_branch']} "
+        f"bundle_bytes={counts['bundle_bytes']}",
+        flush=True,
+    )
     pulls, pull_counts = export_pulls(repo)
     artifacts, artifact_counts = export_artifacts(repo)
     counts.update(pull_counts)
