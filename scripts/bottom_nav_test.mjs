@@ -132,7 +132,11 @@ async function launchChrome(bin) {
     }
     lastLog = logTail(logPath);
     try { chrome.kill("SIGKILL"); } catch (err) { /* already gone */ }
-    if (chrome.exitCode == null) break;
+    await new Promise((resolve) => {
+      if (chrome.exitCode != null) { resolve(); return; }
+      chrome.once("exit", () => resolve());
+      setTimeout(resolve, 1000);
+    });
   }
   fail("Chrome did not open a DevTools port\n" + lastLog);
 }
