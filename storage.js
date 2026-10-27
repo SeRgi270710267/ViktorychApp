@@ -61,7 +61,7 @@
     if (/owner-keys/i.test(path)) return true;
     if (/\/v1\/owner\/play$/i.test(path)) return true;
     if (/\/v1\/(?:session|login|logout|logout-all|auth|account|me)(?:\/|$)/i.test(path)) return true;
-    if (/\/v1\/(?:notifications|push|hub)(?:\/|$)/i.test(path)) return true;
+    if (/\/v1\/(?:notifications|push|channel|presence)(?:\/|$)/i.test(path)) return true;
     if (/\/v1\/owner\/keys(?:\/|$)/i.test(path)) return true;
     if (/\/tg\/loop\//i.test(path)) return true;
     if (/\/loop\/current\.json$/i.test(path)) return true;
@@ -98,6 +98,7 @@
     var url = toUrl(value);
     if (!url || blockedPath(url) || tiktokHost(url.hostname)) return false;
     if (shouldCacheMedia(url)) return false;
+    if (/\/v1\/presence(?:\/|$|\?)/i.test(url.pathname) || /\/v1\/channel(?:\/|$|\?)/i.test(url.pathname)) return false;
     if (/\/v1\//i.test(url.pathname) && !/\/v1\/owner\/tiktok\/recordings$/i.test(url.pathname)) return false;
     var cat = categoryOf(url);
     return cat === "feeds" || cat === "messages" || (cat === "live" && /\.json$/i.test(url.pathname));

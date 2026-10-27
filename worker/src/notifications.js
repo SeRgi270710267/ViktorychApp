@@ -1,14 +1,16 @@
 /* Account notifications.
    D1 is the source of truth: items, the read cursor, tab settings, bells,
-   and one push subscription per device. The account Durable Object only
-   wakes other open pages. A hidden page is not connected and is not polled.
+   and one push subscription per device. Open pages hear changes on the
+   existing AccountChannel topic "notifications". There is no second
+   Durable Object and no replay log. A hidden page is not connected and
+   is not polled. A page that reconnects reads D1.
 
    Read state only moves forward. An item id is stable. A second write with
    the same idempotency key does not change the time, does not clear read,
    and does not send a second push. */
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
-import { hubPublish, hubUpgrade } from "./account-hub.js";
+import { publishToAccount } from "./channel.js";
 
 const encoder = new TextEncoder();
 const KINDS = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
@@ -65,7 +67,6 @@ export const NOTIFICATION_SCHEMA = [
     PRIMARY KEY (public_id, endpoint_hash)
   )`,
   "CREATE TABLE IF NOT EXISTS push_vapid (id INTEGER PRIMARY KEY CHECK (id = 1), public_key TEXT NOT NULL, private_jwk TEXT NOT NULL, created_at INTEGER NOT NULL)",
-  "CREATE TABLE IF NOT EXISTS hub_tickets (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, expires_at INTEGER NOT NULL)",
   "CREATE TABLE IF NOT EXISTS push_log (id INTEGER PRIMARY KEY AUTOINCREMENT, public_id TEXT NOT NULL, note_id TEXT NOT NULL, created_at INTEGER NOT NULL)"
 ];
 
@@ -465,8 +466,17 @@ async function vapidJwt(endpoint, publicKey, privateJwk) {
   return header + "." + payload + "." + b64url(sig);
 }
 
+async function publishNotes(env, publicId, data) {
+  try { await publishToAccount(env, publicId, "notifications", data, publicId); }
+  catch (err) { /* D1 stays the source of truth if the channel is down */ }
+}
+
 async function sendPush(env, publicId, item) {
-  const account = await accountRow(env, publicId);
+  const account = await accountRow(env, publicId) || {};
+  try {
+    const presence = await env.DB.prepare("SELECT preference FROM account_presence WHERE public_id = ?").bind(publicId).first();
+    if (presence && presence.preference) account.presence = presence.preference;
+  } catch (err) { /* presence is optional; the in-app list still updates */ }
   if (pushSuppressed(account, Date.now())) return;
   const keys = await vapidPublic(env);
   if (!keys.publicKey || !keys.privateJwk) return;
@@ -567,7 +577,7 @@ export async function emitNotification(env, input) {
     await env.DB.prepare("UPDATE notifications SET pushed_at = ? WHERE public_id = ? AND note_id = ?").bind(now, publicId, key).run();
     await sendPush(env, publicId, item);
   }
-  await hubPublish(env, publicId, "notifications", { type: "upsert", items: [item], unread, readUntil: state.readUntil });
+  await publishNotes(env, publicId, { type: "upsert", items: [item], unread, readUntil: state.readUntil });
   return { created: true, id: key, unread };
 }
 
@@ -676,7 +686,7 @@ async function saveTabs(env, publicId, body) {
     "INSERT INTO notification_state (public_id, read_until, tabs, bells_at, updated_at) VALUES (?, 0, ?, 0, ?) ON CONFLICT(public_id) DO UPDATE SET tabs = excluded.tabs, updated_at = excluded.updated_at"
   ).bind(publicId, text, Date.now()).run();
   const unread = await unreadCount(env, publicId, (await readState(env, publicId)).readUntil);
-  await hubPublish(env, publicId, "notifications", {
+  await publishNotes(env, publicId, {
     type: "tabs",
     tabs: merged,
     noteTabsSame,
@@ -707,7 +717,7 @@ async function markRead(env, publicId, until, ids) {
   }
   const saved = await readState(env, publicId);
   const unread = await unreadCount(env, publicId, saved.readUntil);
-  await hubPublish(env, publicId, "notifications", {
+  await publishNotes(env, publicId, {
     type: "read",
     until: saved.readUntil,
     ids: cleanIds,
@@ -820,30 +830,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     }
     return json(200, { ok: true });
   }
-  if (path === "/v1/hub/ticket" && request.method === "POST") {
-    const hit = await rateHit(env, "hub-ticket:" + row.public_id, 60, 10 * 60 * 1000);
-    if (!hit.ok) return limited(hit);
-    const ticket = b64url(crypto.getRandomValues(new Uint8Array(32)));
-    const hash = await sha256Hex(ticket);
-    await env.DB.prepare("INSERT INTO hub_tickets (token_hash, public_id, expires_at) VALUES (?, ?, ?)").bind(hash, row.public_id, Date.now() + 60 * 1000).run();
-    return json(200, { ticket, expiresAt: Date.now() + 60 * 1000 });
-  }
   return null;
-}
-
-export async function handleHubSocket(request, env, deps) {
-  await ensureNotificationSchema(env);
-  if (!env.ACCOUNT_HUB) return deps.json(503, { error: "not_configured" });
-  const url = new URL(request.url);
-  const ticket = String(url.searchParams.get("ticket") || "");
-  if (!ticket || ticket.length > 200) return deps.json(401, { error: "unauthorized" });
-  const hash = await sha256Hex(ticket);
-  const row = await env.DB.prepare("SELECT public_id, expires_at FROM hub_tickets WHERE token_hash = ?").bind(hash).first();
-  await env.DB.prepare("DELETE FROM hub_tickets WHERE token_hash = ?").bind(hash).run();
-  if (!row || Number(row.expires_at) < Date.now()) return deps.json(401, { error: "unauthorized" });
-  const hit = await deps.rateHit(env, "hub-socket:" + row.public_id, 60, 10 * 60 * 1000);
-  if (!hit.ok) return deps.limited(hit);
-  return hubUpgrade(env, row.public_id, request);
 }
 
 export async function notifyFollow(env, actor, targetId) {

@@ -111,6 +111,113 @@ test("health, signup, login, session, and sync", async () => {
   assert.equal(loaded.status, 200);
   assert.deepEqual(loaded.body.payload.follows, ["x:ada"]);
 
+  const navPut = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.29",
+    token: good.body.token,
+    body: {
+      payload: {
+        follows: ["x:ada"],
+        bottomNavCustom: true,
+        bottomNav: {
+          order: ["messages", "home", "explore", "nope", "tv"],
+          hidden: ["home", "feeds", "feeds", "nope"]
+        }
+      },
+      baseUpdatedAt: loaded.body.updatedAt
+    }
+  });
+  assert.equal(navPut.status, 200);
+  const nav = navPut.body.payload.bottomNav;
+  assert.equal(nav.order[0], "messages");
+  assert.equal(nav.order[1], "home");
+  assert.equal(nav.order.includes("nope"), false);
+  assert.equal(nav.hidden.includes("home"), false);
+  assert.equal(nav.hidden.includes("nope"), false);
+  assert.equal(nav.hidden.includes("feeds"), true);
+  assert.equal(nav.hidden.includes("lists"), true);
+  assert.ok(nav.order.filter((id) => !nav.hidden.includes(id)).length <= 6);
+  assert.equal(navPut.body.payload.bottomNavCustom, true);
+
+  const layoutOff = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.30",
+    token: good.body.token,
+    body: {
+      payload: {
+        follows: ["x:ada"],
+        navLayout: "bar",
+        navLayoutLand: true,
+        navLayoutSync: false
+      },
+      baseUpdatedAt: navPut.body.updatedAt
+    }
+  });
+  assert.equal(layoutOff.status, 200);
+  assert.equal(layoutOff.body.payload.navLayout, undefined);
+  assert.equal(layoutOff.body.payload.navLayoutLand, undefined);
+  assert.equal(layoutOff.body.payload.navLayoutSync, undefined);
+
+  const layoutOn = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.31",
+    token: good.body.token,
+    body: {
+      payload: {
+        follows: ["x:ada"],
+        navLayout: "sideways",
+        navLayoutLand: true,
+        navLayoutSync: true
+      },
+      baseUpdatedAt: layoutOff.body.updatedAt
+    }
+  });
+  assert.equal(layoutOn.status, 200);
+  assert.equal(layoutOn.body.payload.navLayout, "auto");
+  assert.equal(layoutOn.body.payload.navLayoutLand, true);
+  assert.equal(layoutOn.body.payload.navLayoutSync, true);
+
+  const layoutKept = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.32",
+    token: good.body.token,
+    body: {
+      payload: { follows: ["x:ada"] },
+      baseUpdatedAt: layoutOn.body.updatedAt
+    }
+  });
+  assert.equal(layoutKept.status, 200);
+  assert.equal(layoutKept.body.payload.navLayout, "auto");
+  assert.equal(layoutKept.body.payload.navLayoutLand, true);
+  assert.equal(layoutKept.body.payload.navLayoutSync, true);
+
+  const layoutClear = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.33",
+    token: good.body.token,
+    body: {
+      payload: { follows: ["x:ada"], navLayoutSync: false },
+      baseUpdatedAt: layoutKept.body.updatedAt
+    }
+  });
+  assert.equal(layoutClear.status, 200);
+  assert.equal(layoutClear.body.payload.navLayout, undefined);
+  assert.equal(layoutClear.body.payload.navLayoutLand, undefined);
+  assert.equal(layoutClear.body.payload.navLayoutSync, undefined);
+
+  const layoutGone = await call("/v1/sync", {
+    method: "PUT",
+    ip: "203.0.113.34",
+    token: good.body.token,
+    body: {
+      payload: { follows: ["x:ada"] },
+      baseUpdatedAt: layoutClear.body.updatedAt
+    }
+  });
+  assert.equal(layoutGone.status, 200);
+  assert.equal(layoutGone.body.payload.navLayout, undefined);
+  assert.equal(layoutGone.body.payload.navLayoutSync, undefined);
+
   const clash = await call("/v1/sync", {
     method: "PUT",
     ip: "203.0.113.26",

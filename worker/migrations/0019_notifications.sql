@@ -58,12 +58,6 @@ CREATE TABLE IF NOT EXISTS push_vapid (
   created_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS hub_tickets (
-  token_hash TEXT PRIMARY KEY,
-  public_id TEXT NOT NULL,
-  expires_at INTEGER NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS push_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   public_id TEXT NOT NULL,

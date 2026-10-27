@@ -40,6 +40,8 @@ assert.strictEqual(storage.shouldCacheMedia("https://viktorych.example/discord/s
 assert.strictEqual(storage.shouldCacheFeed("https://viktorych.example/feeds.json"), true);
 assert.strictEqual(storage.shouldCacheFeed("https://viktorych.example/discord/state.json"), true);
 assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/me"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/presence?ids=1"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/channel?ticket=1"), false);
 assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/version.json"), false);
 
 assert.strictEqual(storage.revalidateAction(304), "keep");
