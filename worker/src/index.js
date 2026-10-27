@@ -59,6 +59,8 @@ function json(status, body, extra) {
 }
 
 function withCors(request, env, response) {
+  // A WebSocket acceptance is status 101. Rebuilding that response is illegal,
+  // and the handshake does not use CORS. A foreign Origin is refused above.
   if (response.status === 101 || response.webSocket) return response;
   const url = new URL(request.url);
   if (isPublicFederationRoute(url.pathname)) return response;
