@@ -47,13 +47,20 @@ def pull(root: Path) -> int:
 
 
 def push(root: Path) -> int:
+    from account_deletions import load_deletions, scrub_bytes
     from accounts_publish import collect
     from tiktok_sync import r2_put
 
+    hashes, deletion_salt = load_deletions()
     failed = 0
     stored = 0
     for key, path in sorted(collect(root).items()):
-        if r2_put(key, path.read_bytes()):
+        payload = path.read_bytes()
+        try:
+            payload = scrub_bytes(key, payload, hashes, deletion_salt)
+        except (TypeError, ValueError):
+            print(f"[r2] deletion scrub skipped for {key}")
+        if r2_put(key, payload):
             stored += 1
         else:
             failed += 1

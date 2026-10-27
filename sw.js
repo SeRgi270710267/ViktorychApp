@@ -588,6 +588,34 @@ self.addEventListener("message", (event) => {
     isRuVisitor = !!data.on;
     return;
   }
+  if (data.type === "account-deleted") {
+    accountsAuthed = false;
+    playToken = "";
+    event.waitUntil((async () => {
+      await caches.delete(DATA);
+      await caches.delete(MEDIA);
+      await caches.delete(LIVE);
+      await caches.delete(OFFLINE_MUSIC);
+      const names = await caches.keys();
+      await Promise.all(names.filter((name) => name !== SHELL && (name.indexOf("data-") === 0 || name.indexOf("media-") === 0 || name.indexOf("live-") === 0 || name === OFFLINE_MUSIC)).map((name) => caches.delete(name)));
+      try {
+        const db = await idb();
+        await idbSet(db, "auth-state", { on: false, token: "" });
+        await idbSet(db, "follows", []);
+        await idbSet(db, "seen-at", 0);
+        await idbSet(db, "seen-ids", []);
+        await idbSet(db, "bells", {});
+        await idbSet(db, "bell-seen", []);
+        await idbSet(db, "bell-queue", []);
+        await idbSet(db, "muted-words", []);
+        await idbSet(db, "muted-accounts", []);
+        await idbSet(db, "repost-off", []);
+        await idbSet(db, "notify-all", false);
+        await idbSet(db, "media-index", []);
+      } catch (err) { /* the page also deletes the database */ }
+    })());
+    return;
+  }
   if (data.type === "auth") {
     accountsAuthed = !!data.on;
     playToken = data.on && typeof data.token === "string" ? data.token : "";

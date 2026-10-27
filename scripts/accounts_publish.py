@@ -349,8 +349,16 @@ def publish(site: Path, source: Path, preserve_remote: bool = False) -> int:
             # deploy must not replace that copy with the older git seed.
             print("remote catalog kept; this deploy updates the shell")
         else:
+            from account_deletions import load_deletions, scrub_bytes
+
+            hashes, deletion_salt = load_deletions(api)
             for key in sorted(files):
-                upload(key, files[key].read_bytes())
+                payload = files[key].read_bytes()
+                try:
+                    payload = scrub_bytes(key, payload, hashes, deletion_salt)
+                except (TypeError, ValueError):
+                    print(f"deletion scrub skipped for {key}")
+                upload(key, payload)
             owner = source / "owner" / "tiktok.json"
             if owner.is_file():
                 upload("owner/tiktok.json", owner.read_bytes())

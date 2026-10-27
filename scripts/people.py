@@ -763,6 +763,16 @@ def publish(config: dict, doc: dict, fetch: bool = False, root: Path | None = No
     profiles = list(doc.get("feeds") or [])
     posts = list(doc.get("posts") or [])
     people_doc = build_people(config, profiles, fetch=fetch)
+    try:
+        from account_deletions import load_deletions, scrub_value
+
+        hashes, deletion_salt = load_deletions()
+        if hashes:
+            scrubbed = scrub_value(people_doc, hashes, deletion_salt)
+            if isinstance(scrubbed, dict):
+                people_doc = scrubbed
+    except (ImportError, TypeError, ValueError):
+        pass
     suggestions = {
         "updated": people_doc["updated"],
         "suggestions": suggest(profiles, config.get("people") or []),
