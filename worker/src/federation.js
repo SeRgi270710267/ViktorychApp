@@ -237,7 +237,7 @@ export async function handleFederationRoute(request, env, path, url, helpers) {
         publicKeyPem: row.ap_public_key_pem || ""
       }
     };
-    if (row.avatar) {
+    if (row.avatar && /^https:\/\//.test(row.avatar) && !/\/v1\/media\/(?:avatars|banners)\/\d{12}\//.test(row.avatar) && !/^media\/(?:avatars|banners)\/\d{12}\//.test(row.avatar)) {
       actor.icon = {
         type: "Image",
         mediaType: "image/jpeg",

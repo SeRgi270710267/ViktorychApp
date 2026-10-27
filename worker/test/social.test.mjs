@@ -281,7 +281,7 @@ test("a block hides both sides and a mute hides without a note", async () => {
   assert.equal(muted.status, 200);
   assert.equal(muted.body.ok, true);
   const still = await call("/v1/follows", { ip: "203.0.113.95", token: north.token });
-  assert.equal(still.body.ids.indexOf("app:" + south.account.publicId) >= 0, true);
+  assert.equal(still.body.ids.indexOf("app:@" + south.account.handle) >= 0, true);
   const quietNotes = await call("/v1/notifications", { ip: "203.0.113.96", token: north.token });
   assert.equal(kindsOf(quietNotes.body).includes("follow"), false);
   await call("/v1/posts", { method: "POST", ip: "203.0.113.97", token: south.token, body: { text: "Muted line" } });
@@ -295,9 +295,9 @@ test("a block hides both sides and a mute hides without a note", async () => {
   const blocked = await call("/v1/blocks", { method: "PUT", ip: "203.0.113.101", token: north.token, body: { id: south.account.publicId } });
   assert.equal(blocked.status, 200);
   const mine = await call("/v1/follows", { ip: "203.0.113.102", token: north.token });
-  assert.equal(mine.body.ids.indexOf("app:" + south.account.publicId) >= 0, false);
+  assert.equal(mine.body.ids.indexOf("app:@" + south.account.handle) >= 0, false);
   const theirs = await call("/v1/follows", { ip: "203.0.113.103", token: south.token });
-  assert.equal(theirs.body.ids.indexOf("app:" + north.account.publicId) >= 0, false);
+  assert.equal(theirs.body.ids.indexOf("app:@" + north.account.handle) >= 0, false);
   const seen = await call("/v1/profile/quiet_sg", { ip: "203.0.113.104", token: north.token });
   assert.equal(seen.body.account.viewerBlocks, true);
   assert.equal(seen.body.reposts.length, 0);
@@ -316,7 +316,7 @@ test("a block hides both sides and a mute hides without a note", async () => {
   const opened = await call("/v1/blocks", { method: "DELETE", ip: "203.0.113.110", token: north.token, body: { id: south.account.publicId } });
   assert.equal(opened.status, 200);
   const restored = await call("/v1/follows", { ip: "203.0.113.111", token: north.token });
-  assert.equal(restored.body.ids.indexOf("app:" + south.account.publicId) >= 0, false);
+  assert.equal(restored.body.ids.indexOf("app:@" + south.account.handle) >= 0, false);
 });
 
 test("a friend accept needs a real request, and a protected account can still follow someone", async () => {
@@ -339,6 +339,6 @@ test("a friend accept needs a real request, and a protected account can still fo
   assert.equal(imported.status, 200);
   assert.equal(imported.body.followingCount, 1);
   const ids = await call("/v1/follows", { ip: "203.0.113.126", token: south.token });
-  assert.equal(ids.body.ids.indexOf("app:" + north.account.publicId) >= 0, false);
+  assert.equal(ids.body.ids.indexOf("app:@" + north.account.handle) >= 0, false);
   assert.equal(ids.body.ids.indexOf("x:plainyard") >= 0, true);
 });

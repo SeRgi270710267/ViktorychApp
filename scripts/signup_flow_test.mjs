@@ -125,11 +125,27 @@ async function openFresh(browser, viewport) {
 
 async function gotoFresh(page) {
   const started = Date.now();
-  await page.goto(pageOrigin + "/", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/");
   await page.getByRole("button", { name: "Create account" }).first().waitFor({ timeout: 8000 });
   const firstScreen = Date.now() - started;
   await page.waitForFunction(() => window.ViktorychAccounts && window.ViktorychAccounts.blocking, null, { timeout: 20000 });
   return firstScreen;
+}
+
+async function openPage(page, path) {
+  const url = pageOrigin + path;
+  let last = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await page.goto(url, { waitUntil: "domcontentloaded" });
+      return;
+    } catch (err) {
+      last = err;
+      const text = String(err && err.message || err);
+      if (attempt === 2 || text.indexOf("interrupted by another navigation") < 0) throw err;
+    }
+  }
+  throw last;
 }
 
 async function layoutPass(page, viewport) {
@@ -336,11 +352,11 @@ async function firstRun(page) {
     return /Add a photo and bio/.test(html);
   }, null, { timeout: 15000 }).then(() => true, () => false);
   if (!profile) notes.push("own profile empty state is misleading");
-  await page.goto(pageOrigin + "/#/settings/device", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings/device");
   const balanced = page.getByRole("radio", { name: "Balanced" });
   await balanced.waitFor({ timeout: 15000 });
   if ((await balanced.getAttribute("aria-checked")) !== "true") notes.push("device performance is not Balanced");
-  await page.goto(pageOrigin + "/#/settings/privacy", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings/privacy");
   await page.getByRole("heading", { name: "Privacy and safety" }).waitFor();
   const privacy = await page.evaluate(() => {
     const on = (key) => {
@@ -354,7 +370,7 @@ async function firstRun(page) {
   });
   const expected = { embed: "false", webrtc: "true", referrer: "true", trackers: "true", zero: "false", fingerprint: "true" };
   if (JSON.stringify(privacy) !== JSON.stringify(expected)) notes.push("privacy defaults differ");
-  await page.goto(pageOrigin + "/#/settings/notifications", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings/notifications");
   await page.getByRole("button", { name: "Notify me about new posts" }).click();
   await page.getByRole("button", { name: "Notifications on" }).waitFor({ timeout: 10000 });
   await page.locator("[data-act='compose']:visible").first().click();
@@ -374,12 +390,12 @@ async function firstRun(page) {
   });
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.getElementById("compose-text"));
-  await page.goto(pageOrigin + "/#/settings/resources", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings/resources");
   await page.getByRole("button", { name: "Install app" }).click();
   await page.getByRole("heading", { name: "Install app" }).waitFor();
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector(".modal"));
-  await page.goto(pageOrigin + "/#/settings", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings");
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await page.getByRole("heading", { name: "Happening now" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: "Sign in" }).first().click();
@@ -411,7 +427,7 @@ async function firstRun(page) {
     notes.push("sign-in did not open the app (" + loginStatus + ")");
     return notes;
   }
-  await page.goto(pageOrigin + "/#/settings", { waitUntil: "domcontentloaded" });
+  await openPage(page, "/#/settings");
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await page.getByRole("heading", { name: "Happening now" }).waitFor({ timeout: 20000 });
   await page.getByRole("button", { name: "Create account" }).first().click();
