@@ -2103,7 +2103,7 @@ def selftest() -> int:
     check(shelved["active"] == {} and shelved["saved"] and shelved["saved"][0]["key"].endswith("/live"), "a finished capture is saved when the live ends")
     check(listed[0]["viewers"] == 3 and listed[1]["key"].endswith("/live"), "a past live keeps its peak and playback key")
 
-    check(channel_slot("7699647509498710804", 2) == channel_slot("7699647509498710804", 2), "a room stays on the same channel")
+    check(channel_slot("7100000000000000002", 2) == channel_slot("7100000000000000002", 2), "a room stays on the same channel")
     check(channel_ok("-1004242") and not channel_ok("4242"), "a backup channel id is a private -100 id")
 
     if shutil.which("ffmpeg"):
