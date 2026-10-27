@@ -19,12 +19,15 @@ on:
       - main
     paths-ignore:
       # Community and catalog commits are data. The app reads them from R2,
-      # so they must not start a Pages deploy.
+      # so they must not start a Pages deploy. Cleanup marker pushes are not deploys.
       - "data/communities/**"
       - "feeds.json"
       - "stories.json"
       - "people.json"
       - "suggestions.json"
+      - ".github/workflows/actions-cleanup.once"
+      - ".github/workflows/actions-cleanup.yml"
+      - "scripts/actions_cleanup.py"
 
 # Deploy and refresh each cancel their own outdated run. A push must not
 # cancel a feed refresh, and a refresh must not hold the Pages deploy.
