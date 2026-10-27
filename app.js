@@ -547,8 +547,24 @@
     });
   }
 
+  function tryDeviceRelay(img) {
+    if (!img || img.dataset.deviceRelay === "1") return false;
+    const dev = window.ViktorychDevice;
+    if (!dev || !dev.featureOn(dev.read(), "media", dev.signals())) return false;
+    const src = img.dataset.source || img.getAttribute("src") || "";
+    if (!src || !/^https:\/\//i.test(src)) return false;
+    const api = accountsApi();
+    if (!api) return false;
+    dev.rememberFail("media", src, Date.now(), "source");
+    img.dataset.deviceRelay = "1";
+    img.removeAttribute("srcset");
+    img.src = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(src);
+    return true;
+  }
+
   function finishMediaError(img) {
     if (!img || !img.isConnected) return;
+    if (tryDeviceRelay(img)) return;
     if (tryRuProxyFallback(img)) return;
     if (img.dataset.fallback === "avatar") {
       const span = document.createElement("span");
@@ -1051,9 +1067,16 @@
     return { folders, order, hidden };
   }
 
+  function cleanPlaybackSource(value) {
+    const raw = String(value || "").toLowerCase();
+    if (raw === "device" || raw === "direct") return "device";
+    if (raw === "server") return "server";
+    return "embed";
+  }
+
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false, playbackSource: "embed" });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1080,6 +1103,7 @@ const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(
       if (parsed.notify !== true) parsed.notify = false;
       if (parsed.autoplay !== "wifi" && parsed.autoplay !== "never") parsed.autoplay = "all";
       if (parsed.networkMode !== "max" && parsed.networkMode !== "direct") parsed.networkMode = "auto";
+      parsed.playbackSource = cleanPlaybackSource(parsed.playbackSource);
       parsed.mutedWords = Array.isArray(parsed.mutedWords) ? parsed.mutedWords : [];
       parsed.mutedAccounts = Array.isArray(parsed.mutedAccounts) ? parsed.mutedAccounts : [];
       parsed.repostOff = Array.isArray(parsed.repostOff) ? parsed.repostOff : [];
@@ -1120,6 +1144,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         removeStored(localStorage, "settings-v1");
         return fresh();
       }
+      parsed.devicePerf = window.ViktorychDevice ? window.ViktorychDevice.normalize(parsed.devicePerf) : (parsed.devicePerf || null);
       return parsed;
     } catch (err) {
       removeStored(localStorage, "settings-v1");
@@ -1128,6 +1153,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function saveSettings() {
+    if (STATE.settings && STATE.settings.devicePerf && window.ViktorychDevice && window.ViktorychDevice.persist) {
+      STATE.settings.devicePerf = window.ViktorychDevice.persist(STATE.settings.devicePerf);
+    }
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
     syncWorkerState();
     applyPrivacyProtections();
@@ -2568,8 +2596,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!list.length) return files;
     if (list.length === 1 && list[0].type === "embed") {
       const embed = list[0];
+      let src = String(embed.url || "");
+      const helper = window.ViktorychEmbed;
+      const found = helper && helper.match ? helper.match(src, { preview: true, muted: true, origin: (typeof location !== "undefined" && location.origin) || "" }) : null;
+      if (found && found.url) src = found.url;
       const open = embed.open ? `<a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(embed.open)}">${tr("Open original")}</a>` : "";
-      return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(embed.url)}" title="${esc(embed.title || tr("Post noun"))}" loading="lazy"></iframe>${open}</div></div>` + files;
+      const policy = embedPolicyAttr(src);
+      const allow = policy ? ` allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen` : "";
+      return `<div class="media m1 embed-media"><div class="tile embed-tile"><iframe src="${esc(src)}" title="${esc(embed.title || tr("Post noun"))}" loading="lazy"${policy}${allow}></iframe>${open}</div></div>` + files;
     }
     if (list.length === 1 && list[0].type === "placeholder") {
       return `<div class="media m1"><div class="tile broken"><a class="open-original" data-act="stop" target="_blank" rel="noopener noreferrer" href="${esc(list[0].url || "#")}">${tr("Open original")}</a></div></div>` + files;
@@ -2619,73 +2653,73 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     list.push(item);
   }
 
+  function embedPolicyAttr(url) {
+    const helper = window.ViktorychEmbed;
+    if (!helper || !helper.needsReferrer || !helper.needsReferrer(url)) return "";
+    const policy = helper.referrerFor ? helper.referrerFor(url) : "strict-origin-when-cross-origin";
+    return ` referrerpolicy="${esc(policy)}"`;
+  }
+
   function youtubeSources(id) {
-    const narrow = (window.innerWidth || 390) < 700;
-    const itags = narrow ? ["18", "22"] : ["22", "18"];
-    const ru = isRuVisitor();
-    const base = accountsApi();
-    const relay = base ? [{ kind: "hls", url: base.replace(/\/$/, "") + "/v1/yt/manifest?id=" + encodeURIComponent(id) }] : [];
+    return Promise.resolve([{ kind: "iframe", url: embedUrl(id, false) }]);
+  }
+
+  function directYoutubeSources(id) {
+    const narrow = (window.innerWidth || 390) < 700 || !!(navigator.connection && navigator.connection.saveData);
+    const rows = [];
+    const pushRow = (row) => { if (row && row.url && String(row.url).indexOf("/v1/yt/") < 0) rows.push(row); };
     return healthyIv().then((bases) => {
-      const tgOut = [];
-      pushTelegram(tgOut, "social/youtube/" + id + "/video/0");
-      pushTelegram(tgOut, "social/youtube/" + id + "/video");
-      const out = relay.slice();
       let chain = Promise.resolve();
-      bases.slice(0, 3).forEach((base) => {
-        chain = chain.then(() => {
-          if (out.length >= 4) return null;
-          return fetchTimed(base + "/api/v1/videos/" + encodeURIComponent(id), 5000).then((data) => {
-            itags.forEach((itag) => {
-              pushSource(out, { kind: "mp4", url: base + "/latest_version?id=" + encodeURIComponent(id) + "&itag=" + itag + "&local=true" });
-            });
-            ((data && data.formatStreams) || []).forEach((row) => {
-              const itag = String((row && row.itag) || "");
-              if (itags.indexOf(itag) < 0 || !row.url) return;
-              pushSource(out, { kind: "mp4", url: row.url });
-            });
-            if (data && data.hlsUrl) pushSource(out, { kind: "hls", url: data.hlsUrl });
-          }).catch(() => {
-            itags.forEach((itag) => {
-              pushSource(out, { kind: "mp4", url: base + "/latest_version?id=" + encodeURIComponent(id) + "&itag=" + itag + "&local=true" });
+      (bases || []).slice(0, 2).forEach((base) => {
+        chain = chain.then(() => fetchTimed(base + "/api/v1/videos/" + encodeURIComponent(id), 4000).then((data) => {
+          ["22", "18"].forEach((itag) => {
+            pushRow({
+              url: base + "/latest_version?id=" + encodeURIComponent(id) + "&itag=" + itag + "&local=true",
+              itag: itag,
+              mime: "video/mp4",
+              height: itag === "22" ? 720 : 360
             });
           });
-        });
+          ((data && data.formatStreams) || []).forEach((row) => {
+            if (!row || !row.url) return;
+            pushRow({ url: row.url, itag: String(row.itag || ""), mime: row.type || row.mimeType || "video/mp4", height: Number(row.size) || 0 });
+          });
+        }).catch(() => null));
       });
-      return chain.then(() => {
-        return ru ? tgOut.concat(out) : out.concat(tgOut);
-      });
-    }).then((out) => {
-      const pipedBases = PIPED_SEEDS.filter((base) => !LIVE.dead[base]).slice(0, 2);
+      return chain;
+    }).then(() => {
+      const pipedBases = PIPED_SEEDS.filter((base) => !LIVE.dead[base]).slice(0, 1);
       let chain = Promise.resolve();
       pipedBases.forEach((base) => {
-        chain = chain.then(() => {
-          if (out.length >= 6) return null;
-          return fetchTimed(base + "/streams/" + encodeURIComponent(id), 5000).then((data) => {
-            ((data && data.videoStreams) || []).forEach((row) => {
-              if (!row || !row.url || row.videoOnly) return;
-              const mime = String(row.mimeType || row.format || "");
-              if (mime && !/mp4|webm/i.test(mime)) return;
-              pushSource(out, { kind: "mp4", url: row.url });
-            });
-            if (data && data.hls) pushSource(out, { kind: "hls", url: data.hls });
-          }).catch(() => null);
-        });
+        chain = chain.then(() => fetchTimed(base + "/streams/" + encodeURIComponent(id), 4000).then((data) => {
+          ((data && data.videoStreams) || []).forEach((row) => {
+            if (!row || !row.url) return;
+            pushRow({ url: row.url, mime: row.mimeType || "", height: Number(row.height) || 0, videoOnly: !!row.videoOnly, audioOnly: !!row.audioOnly });
+          });
+        }).catch(() => null));
       });
       return chain.then(() => {
-        pushSource(out, { kind: "iframe", url: embedUrl(id, false) });
-        pushTelegram(out, "social/youtube/" + id + "/video/0");
-        pushTelegram(out, "social/youtube/" + id + "/video");
-        return out.slice(0, 9);
+        const helper = window.ViktorychEmbed;
+        const picked = helper && helper.pickCombined ? helper.pickCombined(rows, {
+          narrow: narrow,
+          canPlay: (mime) => {
+            try { return document.createElement("video").canPlayType(mime || ""); } catch (err) { return ""; }
+          }
+        }) : [];
+        return picked.map((row) => ({ kind: "mp4", url: row.url }));
       });
     });
   }
 
-  function embedUrl(id, preview) {
-    const base = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id);
+  function embedUrl(id, preview, opts) {
     const origin = (typeof location !== "undefined" && location.origin && location.origin.indexOf("http") === 0) ? location.origin : "https://viktorychapp.com";
+    const helper = window.ViktorychEmbed;
+    if (helper && helper.youtubeEmbed) return helper.youtubeEmbed(id, { preview: !!preview, muted: !!(preview || (opts && opts.muted)), origin: origin, controls: preview ? 0 : 1 });
+    const base = "https://www.youtube-nocookie.com/embed/" + encodeURIComponent(id);
     const api = "&enablejsapi=1&origin=" + encodeURIComponent(origin) + "&widget_referrer=" + encodeURIComponent(origin + "/");
     if (preview) return base + "?autoplay=1&mute=1&playsinline=1&controls=0&rel=0" + api;
-    return base + "?autoplay=1&playsinline=1&controls=0&modestbranding=1&iv_load_policy=3&fs=0&disablekb=1&rel=0" + api;
+    const muted = opts && opts.muted ? "&mute=1" : "";
+    return base + "?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1" + muted + api;
   }
 
   function metaCode(post) {
@@ -2751,18 +2785,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function ruSafeImageUrl(url) {
-    if (!isRuVisitor()) return url;
     const raw = String(url || "");
-    if (!raw || !/^https:\/\//i.test(raw)) return url;
+    const dev = window.ViktorychDevice;
+    const failed = !!(dev && dev.sourceState && raw && dev.sourceState(raw) === "fail");
+    if (!isRuVisitor() && !failed) return url;
     const api = accountsApi();
-    if (!api) return url;
+    if (!raw || !/^https:\/\//i.test(raw) || !api) return url;
+    let relay = "";
+    let preferRelay = false;
     try {
       const parsed = new URL(raw);
-      if (BLOCKED_IN_RU.test(parsed.hostname)) {
-        return api + "/v1/media?url=" + encodeURIComponent(raw);
+      if (isRuVisitor() && BLOCKED_IN_RU.test(parsed.hostname)) {
+        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
+        preferRelay = true;
+      } else if (failed) {
+        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
       }
-    } catch (err) {}
-    return url;
+    } catch (err) { return url; }
+    if (dev && dev.playbackUrl) return dev.playbackUrl(raw, relay, { preferRelay: preferRelay, settings: dev.read(), signals: dev.signals() }) || url;
+    return preferRelay ? relay : url;
   }
 
   function tryRuProxyFallback(img) {
@@ -3175,18 +3216,37 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   const DEVICE_PERF_KEY = "viktorychapp-device-performance-v1";
+  function alignDevicePerf(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const text = String(src.level || src.profile || "balanced").toLowerCase();
+    const level = text === "light" || text === "lite" || text === "low" || text === "saver" || text === "battery" ? "light" : (text === "max" || text === "high" || text === "full" ? "max" : "balanced");
+    const caps = [32768, 65536, 131072, 262144];
+    const next = Object.assign({}, src);
+    next.level = level;
+    next.profile = level === "light" ? "lite" : level;
+    next.peerMedia = src.peerMedia === "on" || src.peerMedia === "off" ? src.peerMedia : "auto";
+    next.peerUploadCap = caps.indexOf(Number(src.peerUploadCap)) >= 0 ? Number(src.peerUploadCap) : 65536;
+    next.peerShareWhileWatching = src.peerShareWhileWatching !== false;
+    return next;
+  }
   function readDevicePerf() {
+    let fromKey = {};
     try {
       const raw = JSON.parse(localStorage.getItem(DEVICE_PERF_KEY) || "{}");
-      return raw && typeof raw === "object" ? raw : {};
-    } catch (err) { return {}; }
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) fromKey = raw;
+    } catch (err) { fromKey = {}; }
+    const fromSettings = STATE.settings && STATE.settings.devicePerf && typeof STATE.settings.devicePerf === "object" ? STATE.settings.devicePerf : {};
+    return Object.assign({}, fromSettings, fromKey);
   }
   function writeDevicePerf(patch) {
-    const raw = readDevicePerf();
-    Object.keys(patch || {}).forEach((key) => { raw[key] = patch[key]; });
-    try { localStorage.setItem(DEVICE_PERF_KEY, JSON.stringify(raw)); } catch (err) { /* the toggle still updates this view */ }
+    const current = readDevicePerf();
+    const dev = window.ViktorychDevice;
+    const next = dev && dev.patch ? dev.patch(current, patch || {}) : alignDevicePerf(Object.assign({}, current, patch || {}));
+    try { localStorage.setItem(DEVICE_PERF_KEY, JSON.stringify(next)); } catch (err) { /* the toggle still updates this view */ }
+    if (STATE.settings) STATE.settings.devicePerf = next;
+    saveSettings();
     if (window.ViktorychPeerMedia && window.ViktorychPeerMedia.configure) window.ViktorychPeerMedia.configure();
-    return raw;
+    return next;
   }
   function ensurePeerMedia() {
     if (window.ViktorychPeerMedia) return Promise.resolve(window.ViktorychPeerMedia);
@@ -3221,7 +3281,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const share = perf.peerShareWhileWatching !== false;
     const caps = [[32768, tr("32 KB/s")], [65536, tr("64 KB/s")], [131072, tr("128 KB/s")], [262144, tr("256 KB/s")]];
     const above = window.ViktorychDevicePerformance && window.ViktorychDevicePerformance.settingsHtml ? window.ViktorychDevicePerformance.settingsHtml() : "";
-    return above + `<h2>${esc(tr("Peer-assisted media"))}</h2>
+    return above + `<p class="phandle">${esc(tr("Peer sharing follows the level on this device."))} <a href="#/settings/device">${esc(tr("Device performance"))}</a></p>
+      <h2>${esc(tr("Peer-assisted media"))}</h2>
       <p class="phandle">${esc(tr("Peers can see each other's IP address while sharing."))}</p>
       <div class="theme-row" role="group" aria-label="${esc(tr("Peer-assisted media"))}">
         ${["auto", "on", "off"].map((id) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="peer-media" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
@@ -3279,7 +3340,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       try { el._ytPlayer.destroy(); } catch (err) {}
       el._ytPlayer = null;
     }
-    el.querySelectorAll("video, iframe, .html5-video-player").forEach((node) => node.remove());
+    el.querySelectorAll("video, iframe, .html5-video-player, .vshield").forEach((node) => node.remove());
   }
 
   function showVideoCard(el, post, media) {
@@ -3361,6 +3422,87 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     video.addEventListener("playing", clear);
   }
 
+  function mediaReferrer(url) {
+    const helper = window.ViktorychEmbed;
+    if (helper && helper.referrerFor) return helper.referrerFor(url);
+    return "no-referrer";
+  }
+
+  function applyMediaReferrer(video, url) {
+    const policy = mediaReferrer(url);
+    video.setAttribute("referrerpolicy", policy);
+    video.referrerPolicy = policy;
+  }
+
+  function currentPlaybackSource() {
+    let stored = "";
+    try { stored = localStorage.getItem("viktorychapp-device-playback") || ""; } catch (err) { stored = ""; }
+    const helper = window.ViktorychEmbed;
+    if (helper && helper.playbackSource) return helper.playbackSource(STATE.settings, stored);
+    return cleanPlaybackSource((STATE.settings && STATE.settings.playbackSource) || stored);
+  }
+
+  function restoreOfficial(el, post, media, opts, gen, id) {
+    if (!el || el._gen !== gen || !id) return;
+    el._embedErrored = false;
+    notePlay(el, "youtube-embed");
+    playSource(el, { kind: "iframe", url: embedUrl(id, !!(opts && opts.preview), opts) }, post, media, opts || {}, gen, () => {
+      if (el._gen === gen) showVideoCard(el, post, media);
+    });
+  }
+
+  function tryDirectFallback(el, post, media, opts, gen, id) {
+    if (!el || el._gen !== gen || !id || el._directTried || el._ytLive) {
+      showVideoCard(el, post, media);
+      return;
+    }
+    el._directTried = true;
+    notePlay(el, "youtube-direct");
+    directYoutubeSources(id).then((list) => {
+      if (el._gen !== gen) return;
+      const files = (list || []).filter((row) => row && row.url && String(row.url).indexOf("/v1/yt/") < 0);
+      if (!files.length) {
+        restoreOfficial(el, post, media, opts, gen, id);
+        return;
+      }
+      let index = 0;
+      const advance = () => {
+        if (el._gen !== gen) return;
+        index += 1;
+        if (index >= files.length) {
+          restoreOfficial(el, post, media, opts, gen, id);
+          return;
+        }
+        playSource(el, files[index], post, media, opts, gen, advance);
+      };
+      playSource(el, files[0], post, media, opts, gen, advance);
+    }).catch(() => {
+      if (el._gen === gen) restoreOfficial(el, post, media, opts, gen, id);
+    });
+  }
+
+  function handleYtError(el, code) {
+    if (!el) return;
+    const num = Number(code);
+    if (!isFinite(num) || !num) return;
+    if (el._ytLive) {
+      notePlay(el, "youtube-error-" + num);
+      return;
+    }
+    if (el._embedErrored) return;
+    el._embedErrored = true;
+    notePlay(el, "youtube-error-" + num);
+    const post = playPost(el) || {};
+    const media = playMedia(el, post) || {};
+    const id = el._ytId || youtubeId(post, media);
+    const blocked = num === 100 || num === 101 || num === 150;
+    if (!blocked && currentPlaybackSource() === "device" && (num === 5 || num === 153)) {
+      tryDirectFallback(el, post, media, el._playOpts || {}, el._gen, id);
+      return;
+    }
+    showVideoCard(el, post, media);
+  }
+
   function playSource(el, source, post, media, opts, gen, advance) {
     if (el._gen !== gen) return;
     el._src = (el._src || 0) + 1;
@@ -3370,20 +3512,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       let url = source.url;
       if (opts.preview && /youtube-nocookie\.com\/embed\//.test(url || "")) {
         const id = (url.match(/embed\/([^?]+)/) || [])[1];
-        if (id) url = embedUrl(decodeURIComponent(id), true);
+        if (id) url = embedUrl(decodeURIComponent(id), true, opts);
       }
       const frame = document.createElement("iframe");
       frame.id = "ytf" + gen;
-      if (/youtube-nocookie\.com|youtube\.com/.test(url || "")) {
+      const isYt = /youtube-nocookie\.com\/embed\/|youtube\.com\/embed\//.test(url || "");
+      const helper = window.ViktorychEmbed;
+      if (helper && helper.prepareFrame) helper.prepareFrame(frame, { url: url, title: (post && (post.title || post.text)) || tr("Video"), allowFullscreen: !opts.preview });
+      else if (isYt || /player\.vimeo\.com|player\.twitch\.tv|odysee\.com|\/videos\/embed\/|platform\.twitter\.com/i.test(url || "")) {
         frame.setAttribute("referrerpolicy", "strict-origin-when-cross-origin");
         frame.referrerPolicy = "strict-origin-when-cross-origin";
         frame.removeAttribute("sandbox");
+        frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+        frame.allowFullscreen = !opts.preview;
       }
-      frame.src = url;
       frame.title = (post && (post.title || post.text)) || tr("Video");
-      frame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+      frame.allow = frame.allow || "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
       frame.allowFullscreen = !opts.preview;
-      const nudge = () => {
+      const bound = helper && helper.bindFrame ? helper.bindFrame(frame, { preview: !!opts.preview, muted: !!(opts.preview || opts.muted), resume: opts.resume }) : null;
+      const nudge = bound ? bound.nudge : () => {
         if (el._gen !== gen || !frame.contentWindow) return;
         const send = (func, args) => {
           try {
@@ -3395,37 +3542,38 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         } catch (err) { /* cross-origin until the widget loads */ }
         send("addEventListener", ["onReady"]);
         send("addEventListener", ["onStateChange"]);
+        send("addEventListener", ["onError"]);
         if (opts.preview || opts.muted) {
           send("mute", []);
           send("playVideo", []);
-        }
-        if (!opts.preview && Number(opts.resume) > 3 && !el._ytSeeked) {
-          el._ytSeeked = true;
-          send("seekTo", [Number(opts.resume), true]);
         }
       };
       el._nudge = nudge;
       frame.addEventListener("load", () => {
         if (el._gen !== gen) return;
         if (!frame.src || frame.src === "about:blank") return;
-        notePlay(el, "youtube-loaded");
+        notePlay(el, isYt ? "youtube-loaded" : "embed-loaded");
         nudge();
         setTimeout(nudge, 250);
         setTimeout(nudge, 700);
         setTimeout(nudge, 1500);
-        setTimeout(() => {
-          if (el._gen === gen && frame.isConnected && !el.classList.contains("is-failed")) {
-            markShown(el);
-          }
-        }, 500);
+        if (!isYt) {
+          setTimeout(() => {
+            if (el._gen === gen && frame.isConnected && !el.classList.contains("is-failed")) markShown(el);
+          }, 500);
+        }
       });
-      if (!opts.preview && typeof window.YtPlayer === "function") {
-        const posterSrc = (media && (media.poster || media.url)) || (post && post.poster) || "";
-        el._ytPlayer = new window.YtPlayer(el, { iframe: frame, post: post, media: media, resume: opts.resume, poster: posterSrc });
-      } else {
-        el.appendChild(frame);
+      el.appendChild(frame);
+      if (opts.preview) {
+        const shield = document.createElement("button");
+        shield.type = "button";
+        shield.className = "vshield";
+        shield.setAttribute("data-act", "play");
+        shield.setAttribute("aria-label", tr("Play"));
+        el.appendChild(shield);
       }
-      el.classList.add("is-playing");
+      frame.src = url;
+      if (!opts.preview || !isYt) el.classList.add("is-playing");
       el.classList.remove("is-failed");
       return;
     }
@@ -3433,8 +3581,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     video.playsInline = true;
     video.setAttribute("playsinline", "");
     video.setAttribute("webkit-playsinline", "");
-    video.setAttribute("referrerpolicy", "no-referrer");
-    video.referrerPolicy = "no-referrer";
+    applyMediaReferrer(video, source.url);
     const isFullVideo = !opts.preview && !opts.loop && !(media && media.type === "animated_gif") && typeof window.YtPlayer === "function";
     video.controls = !opts.preview && !opts.loop && !isFullVideo;
     if (opts.loop || (media && media.type === "animated_gif")) video.loop = true;
@@ -3607,7 +3754,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (source.kind === "hls") {
       const telegram = !!source.telegram;
       const native = !telegram && video.canPlayType("application/vnd.apple.mpegurl");
-      if (native) { video.src = source.url; start(); return; }
+      if (native) { applyMediaReferrer(video, source.url); video.src = source.url; start(); return; }
       const authReady = telegram && window.ViktorychAccounts && window.ViktorychAccounts.syncPlaybackAuth
         ? window.ViktorychAccounts.syncPlaybackAuth().catch(() => {})
         : Promise.resolve();
@@ -3643,7 +3790,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       });
       return;
     }
-    video.referrerPolicy = "no-referrer";
+    applyMediaReferrer(video, source.url);
     video.src = source.url;
     armPeer(el, null, source.url);
     start();
@@ -3736,13 +3883,15 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       opts.muted = gif || el.dataset.preview === "subs" || !STATE.sound;
       if (!(Number(opts.resume) > 0.25) && Number(el._hold) > 0.25) opts.resume = Number(el._hold);
     }
-    if (el.classList.contains("is-playing")) {
+    if (el.classList.contains("is-playing") && !el.classList.contains("is-failed")) {
       const video = el.querySelector("video");
       if (video) {
         video.muted = previewing ? !!opts.muted : (!!opts.muted || (video.muted && !!opts.muted));
         if (!previewing && !opts.muted) video.muted = false;
         if (opts.resume > 0.3) { try { video.currentTime = opts.resume; } catch (err) { /* ignore */ } }
       }
+      const frame = el.querySelector("iframe");
+      if (frame && el._nudge && !el.classList.contains("is-shown")) el._nudge();
       return;
     }
     const post = playPost(el) || {};
@@ -3757,49 +3906,34 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     el.dataset.want = "1";
     const gen = (el._gen || 0) + 1;
     el._gen = gen;
-    const giveUp = () => recoverPreview(el, post, media, opts, gen);
-    if (previewing && yt) {
-      notePlay(el, "youtube-embed");
-      const fileOf = (list) => (list || []).find((row) => row && row.kind !== "iframe" && row.url);
-      const useFile = (file) => {
-        playSource(el, file, post, media, opts, gen, () => {
-          if (el._gen !== gen) return;
-          playSource(el, { kind: "iframe", url: embedUrl(yt, true) }, post, media, opts, gen, giveUp);
-        });
-      };
-      playSource(el, { kind: "iframe", url: embedUrl(yt, true) }, post, media, opts, gen, giveUp);
-      sourcesFor(post, media, 0).then((list) => {
-        if (el._gen === gen) el._sources = list;
-      }).catch(() => {});
-      setTimeout(() => {
-        if (el._gen !== gen || el.classList.contains("is-shown")) return;
-        const file = fileOf(el._sources);
-        if (file) useFile(file);
-      }, 1200);
-      return;
-    }
-    if (opts.iframe && yt) {
-      playSource(el, { kind: "iframe", url: embedUrl(yt, previewing) }, post, media, opts, gen, giveUp);
-      return;
-    }
-    let jumped = false;
-    const deadline = setTimeout(() => {
-      if (!yt || el._gen !== gen || jumped) return;
-      const video = el.querySelector("video");
-      if (video && video.currentTime > 0.2) return;
-      if (el.querySelector("iframe")) return;
-      jumped = true;
-      el._src = (el._src || 0) + 1;
-      playSource(el, { kind: "iframe", url: embedUrl(yt, previewing) }, post, media, opts, gen, giveUp);
-    }, 8000);
+    el._playOpts = opts;
+    el._ytId = yt || "";
+    el._embedErrored = false;
+    el._ytLive = false;
+    el._directTried = false;
     el.classList.remove("is-failed");
     const link = el.querySelector(".vfallback");
     if (link) link.hidden = true;
     const retry = el.querySelector(".vretry");
     if (retry) retry.hidden = true;
+    const giveUp = () => recoverPreview(el, post, media, opts, gen);
+    if (yt) {
+      notePlay(el, "youtube-embed");
+      playSource(el, { kind: "iframe", url: embedUrl(yt, previewing, opts) }, post, media, opts, gen, giveUp);
+      return;
+    }
+    const helper = window.ViktorychEmbed;
+    const blob = [media && media.url, media && media.open, media && media.fallback, media && media.hls, post && post.url].join(" ");
+    const matched = helper && helper.match ? helper.match(blob, { preview: previewing, muted: !!opts.muted, origin: (typeof location !== "undefined" && location.origin) || "" }) : null;
+    const filesNow = fileSources(post, media);
+    if (matched && matched.kind === "iframe" && matched.url && !filesNow.length) {
+      notePlay(el, "embed-" + (matched.site || "other"));
+      playSource(el, matched, post, media, opts, gen, giveUp);
+      return;
+    }
     const known = el._sources && el._sources.length ? Promise.resolve(el._sources) : sourcesFor(post, media, 0);
     known.then((list) => {
-      if (el._gen !== gen || jumped) { clearTimeout(deadline); return; }
+      if (el._gen !== gen) return;
       el._sources = list;
       let index = 0;
       const advance = () => {
@@ -3825,11 +3959,18 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function recoverPreview(el, post, media, opts, gen) {
+    const yt = youtubeId(post, media);
+    if (yt) {
+      const frame = el.querySelector("iframe");
+      if (frame && frame.isConnected && frame.src && frame.src.indexOf("about:blank") < 0 && !el._embedErrored) return;
+      notePlay(el, "no-source");
+      showVideoCard(el, post, media);
+      return;
+    }
     const platform = (post && post.platform) || "";
     const can = platform === "vk" || platform === "instagram" || platform === "threads" || platform === "x";
     if (!can || el._recovered) {
-      const yt = youtubeId(post, media);
-      const tgKey = yt ? ("social/youtube/" + yt + "/video/0") : socialFileKey(post, media);
+      const tgKey = socialFileKey(post, media);
       const tgUrl = tgKey ? tgMediaUrl(tgKey) : "";
       if (tgUrl && !el._triedTgBackup) {
         el._triedTgBackup = true;
@@ -4549,11 +4690,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return pending;
   }
 
-  function fetchJson(url, opts) {
-    const fresh = !!(opts && opts.fresh);
-    if (window.ViktorychDirect && window.ViktorychDirect.allows(url)) {
-      return window.ViktorychDirect.json(url, null, fresh ? { fresh: true } : null);
-    }
+  function fetchJsonNow(url) {
     let signal;
     try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
@@ -4585,6 +4722,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (!next) throw err;
       return run(next);
     });
+  }
+
+  function fetchJson(url, opts) {
+    const direct = window.ViktorychDirect;
+    if (direct && direct.fetchSource && direct.allows && direct.allows(url)) {
+      return direct.fetchSource(url, function () { return fetchJsonNow(url); }, opts && opts.fresh ? { fresh: true } : null);
+    }
+    return fetchJsonNow(url);
   }
 
   function ivBases() {
@@ -8400,8 +8545,6 @@ const here = parseRoute();
   }
 
   function publicJson(url) {
-    const direct = window.ViktorychDirect;
-    if (direct && direct.allows(url)) return direct.json(url);
     return fetchJson(url);
   }
 
@@ -9110,10 +9253,32 @@ const here = parseRoute();
   }
 
   function exploreHits(q) {
+    const dev = window.ViktorychDevice;
+    const idx = window.ViktorychDeviceSearch;
+    if (dev && idx && dev.featureOn(dev.read(), "search", dev.signals()) && !dev.cooling("search")) {
+      try {
+        const found = idx.query(q, {
+          posts: posts(),
+          feeds: shownFeeds(feeds()),
+          hidden: hiddenPost,
+          mute: (feed) => matchesMute(STATE.settings.mutedAccounts, feed.handle, feed.platform, feed.id),
+          byStamp: byStamp,
+          heat: exploreHeat
+        });
+        if (found && found.complete && found.hits) {
+          dev.noteStat("local", "search", dev.measureBytes(found.hits), found.ms || 0);
+          return found.hits;
+        }
+      } catch (err) {
+        dev.rememberFail("search", "index", Date.now(), "feature");
+      }
+    }
     const lq = String(q || "").trim().toLowerCase();
+    const started = Date.now();
     const accounts = lq ? shownFeeds(feeds()).filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && ((f.name || "") + " " + (f.handle || "") + " " + (f.aliases || "") + " " + (f.bio || "")).toLowerCase().includes(lq)) : [];
     const found = lq ? posts().filter((p) => !hiddenPost(p) && postHay(p).toLowerCase().includes(lq)).sort(byStamp) : [];
     const top = found.slice().sort((a, b) => exploreHeat(b) - exploreHeat(a) || byStamp(a, b));
+    if (dev && dev.featureOn(dev.read(), "search", dev.signals())) dev.noteStat("local", "search", dev.measureBytes({ accounts: accounts, posts: found }), Math.max(0, Date.now() - started));
     return { accounts: accounts, posts: found, top: top };
   }
 
@@ -10927,6 +11092,7 @@ const here = parseRoute();
       if (sub === "display-language" || section === "display-language") key = tr("Display language");
       else if (section === "accessibility") key = tr("Accessibility, display and languages");
       else if (section === "display") key = tr("Display");
+      else if (section === "device") key = tr("Device performance");
       else if (section === "languages") key = tr("Languages");
       else if (section === "data") key = tr("Data usage");
       else if (section === "notifications") key = tr("Notifications");
@@ -11018,9 +11184,21 @@ const here = parseRoute();
       </div>`;
     }
     if (section === "display" && sub === "navigation") return bottomNavSettings();
+    if (section === "device") {
+      if (!window.ViktorychDevice) {
+        loadDeviceCore().then(() => {
+          if (parseRoute().section === "device") render();
+        });
+      }
+      const body = window.ViktorychDevice
+        ? window.ViktorychDevice.settingsHtml(STATE.settings && STATE.settings.devicePerf)
+        : `<div class="device-screen"><div class="set-block"><p class="phandle">${esc(tr("Choose how much this device does itself."))}</p></div></div>`;
+      return settingsHead(tr("Device performance"), "#/settings/display") + body;
+    }
     if (section === "display") {
       return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
         ${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}
+        ${settingsRow("#/settings/device", tr("Device performance"), tr("Choose how much this device does itself."))}
         <h2>${esc(tr("Appearance"))}</h2>
         <div class="theme-row">
           ${themeBtn("auto", tr("Auto"))}
@@ -12933,6 +13111,11 @@ if (STATE.histClear) {
       return pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     }
     if (route.name === "drive") {
+      loadDeviceCore().then((dev) => {
+        if (!dev) return;
+        dev.ensure("media");
+        dev.ensure("record");
+      });
       if (window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
       if (!window.ViktorychDrive) { ensureLazy("drive"); return lazySkeleton(tr("brand.storage")); }
       return pageHead(tr("brand.storage")) + emptyBlock(tr("brand.storage"), tr("Reload the page."));
@@ -13847,6 +14030,70 @@ if (STATE.histClear) {
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act && act.indexOf("keys-") === 0 && window.OwnerKeys && window.OwnerKeys.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
+    if (act && act.indexOf("device-") === 0 && !window.ViktorychDevice) {
+      const level = el.dataset.level || "";
+      const key = el.dataset.key || "";
+      loadDeviceCore().then((dev) => {
+        if (!dev) return;
+        el.dataset.level = level;
+        el.dataset.key = key;
+        onAct(el);
+      });
+      return;
+    }
+    if (act === "device-level" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.applyLevel(el.dataset.level || "balanced");
+      window.ViktorychDevice.setWarn(false);
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-toggle" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.toggle(STATE.settings.devicePerf, el.dataset.key || "");
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-webllm" && window.ViktorychDevice) {
+      const perf = window.ViktorychDevice.normalize(STATE.settings.devicePerf);
+      if (perf.webllmAccepted) {
+        STATE.settings.devicePerf = window.ViktorychDevice.confirmWebllm(perf, false);
+        window.ViktorychDevice.setWarn(false);
+      } else {
+        window.ViktorychDevice.setWarn(true);
+      }
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-webllm-yes" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.confirmWebllm(STATE.settings.devicePerf, true);
+      window.ViktorychDevice.setWarn(false);
+      saveSettings();
+      render();
+      if (window.ViktorychDeviceAi && window.ViktorychDeviceAi.loadWebllm) window.ViktorychDeviceAi.loadWebllm().catch(function () {});
+      else window.ViktorychDevice.ensure("ai").then(function () {
+        if (window.ViktorychDeviceAi && window.ViktorychDeviceAi.loadWebllm) window.ViktorychDeviceAi.loadWebllm().catch(function () {});
+      });
+      return;
+    }
+    if (act === "device-webllm-no" && window.ViktorychDevice) {
+      window.ViktorychDevice.setWarn(false);
+      render();
+      return;
+    }
+    if (act === "device-ai" && window.ViktorychDevice) {
+      window.ViktorychDevice.openAssistant();
+      return;
+    }
+    if (act === "device-ai-close" && window.ViktorychDevice) {
+      window.ViktorychDevice.closeAssistant();
+      return;
+    }
+    if (act === "device-ai-ask" && window.ViktorychDevice) {
+      window.ViktorychDevice.askAssistant();
+      return;
+    }
     if (act === "set-network-mode") {
       const mode = el.dataset.mode || "auto";
       STATE.settings.networkMode = mode;
@@ -14649,6 +14896,8 @@ if (STATE.histClear) {
     if (act === "pip") {
       const tile = document.querySelector(".player.vplay") || document.querySelector(".player");
       const video = tile && tile.querySelector("video");
+      const frame = tile && tile.querySelector("iframe");
+      if (frame && !video) return;
       if (!document.pictureInPictureEnabled) return;
       if (video) {
         const done = document.pictureInPictureElement ? document.exitPictureInPicture() : video.requestPictureInPicture();
@@ -14744,6 +14993,9 @@ if (STATE.histClear) {
         tile.classList.remove("is-failed", "is-playing", "is-shown");
         tile._gen = (tile._gen || 0) + 1;
         tile._recovered = 0;
+        tile._embedErrored = false;
+        tile._directTried = false;
+        tile._ytLive = false;
         delete tile._triedTgBackup;
         delete tile._sources;
         delete tile._prefetch;
@@ -15708,6 +15960,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (frame.contentWindow !== event.source && (!data.id || data.id !== frame.id)) return;
       const tile = frame.closest(".vplay");
       if (!tile) return;
+      if (data.event === "onError") {
+        let code = data.info;
+        if (code && typeof code === "object") code = code.errorCode || code.code;
+        handleYtError(tile, code);
+        return;
+      }
       if (data.event === "onReady" && tile._nudge) {
         notePlay(tile, "youtube-ready");
         tile._nudge();
@@ -15734,6 +15992,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }, 2000);
       }
       if (stateNum === 1 || current > 0.15) {
+        if (stateNum === 1) tile._ytLive = true;
+        tile.classList.add("is-playing");
         notePlay(tile, stateNum === 1 ? "youtube-playing" : "youtube-time");
         markShown(tile);
       } else if (stateNum === -1 || stateNum === 5) {
@@ -16590,7 +16850,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const job = loadCatalog().then((config) => {
       const selected = timelineFeeds();
       liveDateScrubbed = false;
-      return mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => [])).then((lists) => {
+      const pending = mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => []));
+      timelineUsesDevice = true;
+      releaseDeviceFeeds();
+      return pending.then((lists) => {
         let incoming = [];
         lists.forEach((list, index) => {
           const feed = selected[index];
@@ -17917,12 +18180,96 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     toast(STATE.settings.notify ? tr("Notifications on") : tr("Notifications stay off"));
   }
 
+  let deviceCoreTask = null;
+  let deviceScriptReady = false;
+  let timelineUsesDevice = false;
+
+  function holdDeviceFeeds() {
+    timelineUsesDevice = false;
+    if (window.ViktorychDirect && window.ViktorychDirect.holdDevice) window.ViktorychDirect.holdDevice(true);
+  }
+
+  function releaseDeviceFeeds() {
+    if (!deviceScriptReady || !timelineUsesDevice) return;
+    if (window.ViktorychDirect && window.ViktorychDirect.holdDevice) window.ViktorychDirect.holdDevice(false);
+  }
+
+  function loadDeviceCore() {
+    if (window.ViktorychDevice) return Promise.resolve(window.ViktorychDevice);
+    if (deviceCoreTask) return deviceCoreTask;
+    deviceCoreTask = new Promise((resolve) => {
+      const tag = document.createElement("script");
+      tag.src = "device.js";
+      tag.async = true;
+      tag.onload = () => {
+        const dev = window.ViktorychDevice || null;
+        if (dev) deviceScriptReady = true;
+        if (dev && window.ViktorychStorage && window.ViktorychStorage.applyDeviceCap) window.ViktorychStorage.applyDeviceCap();
+        releaseDeviceFeeds();
+        resolve(dev);
+      };
+      tag.onerror = () => resolve(null);
+      (document.body || document.documentElement).appendChild(tag);
+    });
+    return deviceCoreTask;
+  }
+
+  function scheduleDeviceCore() {
+    let started = false;
+    let idleId = 0;
+    let fallbackId = 0;
+    const names = ["pointerdown", "keydown", "scroll"];
+    const stop = () => {
+      names.forEach((name) => window.removeEventListener(name, onInteract, true));
+      window.removeEventListener("hashchange", onInteract);
+      window.removeEventListener("popstate", onInteract);
+      if (idleId && typeof cancelIdleCallback === "function") cancelIdleCallback(idleId);
+      if (fallbackId) clearTimeout(fallbackId);
+    };
+    const fire = () => {
+      if (started) return;
+      started = true;
+      stop();
+      loadDeviceCore().then(() => registerPeriodic());
+    };
+    function onInteract() { fire(); }
+    names.forEach((name) => window.addEventListener(name, onInteract, { capture: true, passive: true }));
+    window.addEventListener("hashchange", onInteract);
+    window.addEventListener("popstate", onInteract);
+    const armIdle = () => {
+      if (started) return;
+      if (typeof requestIdleCallback === "function") idleId = requestIdleCallback(fire, { timeout: 1200 });
+      else fallbackId = setTimeout(fire, 1200);
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(armIdle));
+    else armIdle();
+  }
+
   function registerPeriodic() {
     if (!("serviceWorker" in navigator)) return;
+    if (!window.ViktorychDevice) return;
     navigator.serviceWorker.ready.then((reg) => {
-      if (!reg.periodicSync) return;
-      return reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 });
+      const dev = window.ViktorychDevice;
+      if (dev && !dev.featureOn(dev.read(), "sync", dev.signals())) return;
+      const jobs = [];
+      if (reg.periodicSync) jobs.push(reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 }));
+      if (reg.sync && reg.sync.register) jobs.push(reg.sync.register("feeds"));
+      return Promise.all(jobs);
     }).catch(() => {});
+  }
+
+  function scheduleDeviceIndex() {
+    if (parseRoute().name !== "explore" && parseRoute().name !== "settings") return;
+    const run = () => {
+      loadDeviceCore().then((dev) => {
+        if (!dev || !dev.featureOn(dev.read(), "search", dev.signals())) return;
+        dev.ensure("search").then(() => {
+          if (window.ViktorychDeviceSearch) window.ViktorychDeviceSearch.indexPosts(posts(), feeds());
+        });
+      });
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 5000 });
+    else setTimeout(run, 4000);
   }
 
   function syncWorkerState() {
@@ -18490,6 +18837,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("pagehide", () => { try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ } });
 
   async function boot() {
+    holdDeviceFeeds();
     syncRuVisitorGeo();
     if (window.ViktorychLocal) {
       const savedScrolls = window.ViktorychLocal.readScrolls();
@@ -18511,6 +18859,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     consumeShareTarget();
     bindShell();
     registerSW();
+    scheduleDeviceCore();
     STATE.error = null;
     loadStatus();
     STATE.settings = loadSettings();
@@ -18531,6 +18880,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
+      scheduleDeviceIndex();
       if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
     } else if (painted) {
@@ -18571,6 +18921,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
       }
       render({ reset: true });
+      scheduleDeviceIndex();
       loadNewestShard().then(() => {
         if (applyIaPreview(STATE.data)) render({ reset: true });
         revealArchive();
