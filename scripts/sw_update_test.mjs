@@ -144,6 +144,10 @@ async function waitControlled(page) {
 async function openApp(browser, url) {
   const context = await browser.newContext({ serviceWorkers: "allow" });
   const page = await context.newPage();
+  page.on("console", (msg) => {
+    const text = msg.text();
+    if (/shell update|failed|http-|missing/i.test(text)) console.log("page:", text.slice(0, 240));
+  });
   await page.goto(url, { waitUntil: "domcontentloaded" });
   await waitControlled(page);
   const sha = await shaOf(page);
@@ -185,18 +189,31 @@ async function waitSha(page, expected) {
     try { last = await shaOf(page); } catch (err) { last = ""; }
     if (last === expected) return;
     if (nudged < 5 && Date.now() - start > 12000 && Date.now() - nudgedAt > 12000) {
+      nudgedAt = Date.now();
       detail = await registrationState(page);
-      if (detail && detail.failed) {
+      if (detail && (detail.failed || detail.waiting)) {
         nudged += 1;
-        nudgedAt = Date.now();
         await page.click("#upd-go").catch(() => {});
       }
     }
     await page.waitForTimeout(300);
   }
   detail = await registrationState(page);
+  const info = await page.evaluate(() => {
+    const text = (id) => {
+      const el = document.getElementById(id);
+      return el ? String(el.textContent || "").replace(/\s+/g, " ").trim() : "";
+    };
+    const root = document.getElementById("upd-root");
+    return {
+      title: text("upd-title"),
+      detail: text("upd-detail"),
+      error: text("upd-error"),
+      phase: root ? root.getAttribute("data-phase") || "" : ""
+    };
+  }).catch(() => ({}));
   const extra = detail ? " (phase=" + detail.phase + " installing=" + detail.installing + " waiting=" + detail.waiting + ")" : "";
-  throw new Error((last ? "worker stayed on the previous build" : "worker never reported a build") + extra);
+  throw new Error((last ? "worker stayed on the previous build" : "worker never reported a build") + extra + " " + JSON.stringify(info));
 }
 
 async function testCleanUpdate(browser) {

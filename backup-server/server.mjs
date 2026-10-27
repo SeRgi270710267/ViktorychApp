@@ -36,6 +36,7 @@ const stats = {
 function workerEnv(overrides) {
   return {
     ACCOUNT_PEPPER: process.env.ACCOUNT_PEPPER || "",
+    SIGNUP_GUARD: process.env.SIGNUP_GUARD || "on",
     OWNER_CLAIM_CODE: process.env.OWNER_CLAIM_CODE || "",
     ALLOWED_ORIGINS: ALLOWED_ORIGINS,
     PBKDF2_ITERATIONS: process.env.PBKDF2_ITERATIONS || "8000",

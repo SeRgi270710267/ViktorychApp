@@ -1250,20 +1250,33 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function applyFollow(ids, on) {
     const list = (ids || []).map((item) => String(item || "").trim()).filter(Boolean);
     if (!list.length) return;
-    list.forEach((item) => setFollowed(item, on));
+    const accounts = window.ViktorychAccounts;
+    const ready = [];
+    list.forEach((item) => {
+      if (accounts && accounts.pressFollow) {
+        if (accounts.pressFollow(item)) ready.push(item);
+        return;
+      }
+      ready.push(item);
+    });
+    if (!ready.length) return;
+    ready.forEach((item) => setFollowed(item, on));
     saveSettings();
     if (!navigator.onLine) {
-      list.forEach((item) => queueOffline({ type: "follow", id: item, on: !!on, snapshot: followSnapshot(item) }));
+      ready.forEach((item) => {
+        if (accounts && accounts.previewFollow) accounts.previewFollow(item, on);
+        queueOffline({ type: "follow", id: item, on: !!on, snapshot: followSnapshot(item) });
+        if (accounts && accounts.releaseFollow) accounts.releaseFollow(item);
+      });
       render();
       return;
     }
-    const accounts = window.ViktorychAccounts;
     if (accounts && accounts.changeFollow) {
-      Promise.all(list.map((item) => accounts.changeFollow(item, on, followSnapshot(item)))).then((results) => {
+      Promise.all(ready.map((item) => accounts.changeFollow(item, on, followSnapshot(item), { held: true }))).then((results) => {
         let reverted = false;
         results.forEach((ok, index) => {
-          if (ok === false) {
-            setFollowed(list[index], !on);
+          if (ok === false || (ok && ok.pending)) {
+            setFollowed(ready[index], false);
             reverted = true;
           }
         });
@@ -1271,7 +1284,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         if (accounts.syncFollows) accounts.syncFollows();
         render();
       });
-    }
+    } else ready.forEach((item) => { if (accounts && accounts.releaseFollow) accounts.releaseFollow(item); });
     render();
   }
   function followSnapshot(id) {
@@ -4529,7 +4542,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (String(id || "").indexOf("app:") === 0) {
       const me = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
       if (me && id === "app:" + me.publicId) return "";
-      const attr = ` data-id="${esc(id)}"`;
+      const special = window.ViktorychAccounts && window.ViktorychAccounts.followControlHtml && window.ViktorychAccounts.followControlHtml(id, large);
+      if (special) return special;
+      const attr = ` type="button" data-id="${esc(id)}" aria-pressed="${isFollowed(id) ? "true" : "false"}"`;
       if (isFollowed(id)) return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span></button>`;
       return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>${tr("Follow")}</button>`;
     }
@@ -4616,17 +4631,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     </div>`;
   }
 
-  function internalPostHandle(handle, post, creator) {
-    const raw = String(handle || "").replace(/^@/, "");
-    if (!raw) return "";
-    const isInternal = (post && (post.platform === "app" || (post.feedId && post.feedId.startsWith("app:")) || !!post.publicId)) ||
-      (creator && (creator.platform === "app" || (creator.feedId && creator.feedId.startsWith("app:")) || !!creator.publicId));
-    if (!isInternal) return raw;
-    const pid = String((post && (post.publicId || post.authorId)) || (creator && creator.publicId) ||
-      (post && post.feedId && post.feedId.startsWith("app:") && /^\d+$/.test(post.feedId.slice(4)) ? post.feedId.slice(4) : "") ||
-      (creator && creator.feedId && creator.feedId.startsWith("app:") && /^\d+$/.test(creator.feedId.slice(4)) ? creator.feedId.slice(4) : "") || "").replace(/^app:/, "");
-    if (pid && !raw.endsWith(pid)) return raw + pid;
-    return raw;
+  function internalPostHandle(handle) {
+    return String(handle || "").replace(/^@/, "");
   }
 
   function quoteCard(quoted) {
@@ -4763,6 +4769,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!post) return false;
     if (catalogRowHidden(post)) return true;
     if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) return true;
+    const blocks = window.ViktorychAccounts && window.ViktorychAccounts.blockSet && window.ViktorychAccounts.blockSet();
+    if (blocks && post && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) return true;
     if (wordMuted(post.text)) return true;
     return repostsOff(post);
   }
@@ -6816,12 +6824,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const html = window.ViktorychXCompose.inlineHtml("reply", post);
       if (html) return html;
     }
-    const key = post ? postKey(post) : "";
     return `<div class="composer${bridge ? " bridge" : ""}">
       <span class="ava initials">Y</span>
       <div class="composer-main">
         <div class="composer-placeholder">${tr("Post your reply")}</div>
-        <div class="odai-chips"><button type="button" data-act="odai-suggest" data-key="${esc(key)}" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="reply-draft" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="warm" data-field="reply-draft" data-scope="post">${tr("Tone")}</button></div>
         <div class="composer-bar"><button class="reply-send" type="button" disabled>${tr("Reply")}</button></div>
       </div>
     </div>`;
@@ -7025,11 +7031,11 @@ const here = parseRoute();
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     if (parts[0] === "u" && parts[1] && parts[2]) {
       const platform = parts[1] === "twitter" ? "x" : parts[1];
-      if (parts[3] === "followers" || parts[3] === "following" || parts[3] === "friends") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
+      if (parts[3] === "followers" || parts[3] === "following" || parts[3] === "friends" || parts[3] === "mutuals" || parts[3] === "requests") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
       return { name: "user", platform: platform, handle: parts[2], query };
     }
     if (parts[0] === "p" && parts[1]) {
-      if (parts[2] === "followers" || parts[2] === "following") return { name: "connections", personId: parts[1], tab: parts[2], platform: "", handle: "", query };
+      if (parts[2] === "followers" || parts[2] === "following" || parts[2] === "mutuals" || parts[2] === "requests") return { name: "connections", personId: parts[1], tab: parts[2], platform: "", handle: "", query };
       return { name: "person", id: parts[1], query };
     }
     if (parts[0] === "messages") {
@@ -7083,7 +7089,7 @@ const here = parseRoute();
       return { name: "home", tab: "foryou", query };
     }
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
-    if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "friends") return { name: "connections", platform, handle, tab: rest[0], query };
+    if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
     return { name: "profile", platform, handle, query };
   }
 
@@ -8036,6 +8042,156 @@ const here = parseRoute();
     return archiveSentinel();
   }
 
+  const WELCOME_KEY = "viktorychapp-welcome-v1";
+  let publicPosts = [];
+  let publicStamp = 0;
+  let welcomePhoto = "";
+  const welcomeFollows = {};
+
+  function readWelcome() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(WELCOME_KEY) || "null");
+      if (raw && typeof raw === "object") return { step: Number(raw.step) || 0, done: !!raw.done };
+    } catch (err) { /* start at the first step */ }
+    return { step: 0, done: false };
+  }
+
+  function writeWelcome(doc) {
+    try { localStorage.setItem(WELCOME_KEY, JSON.stringify({ step: doc.step || 0, done: !!doc.done })); } catch (err) { /* the sheet can still close */ }
+  }
+
+  function samePublicPosts(next) {
+    if (publicPosts.length !== next.length) return false;
+    for (let i = 0; i < next.length; i++) if (!publicPosts[i] || publicPosts[i].id !== next[i].id) return false;
+    return true;
+  }
+
+  function schedulePublicPosts() {
+    if (document.documentElement.getAttribute("data-wall") === "1") return;
+    if (!accountToken()) return;
+    const now = Date.now();
+    if (now - publicStamp < 20000) return;
+    publicStamp = now;
+    accountCall("/v1/posts").then((res) => {
+      if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      if (samePublicPosts(res.posts)) return;
+      publicPosts = res.posts;
+      render();
+    }).catch(() => {});
+  }
+
+  function hydratePublicMedia() {
+    const token = accountToken();
+    const root = accountsApi();
+    if (!token || !root) return;
+    document.querySelectorAll("[data-public-media]").forEach((el) => {
+      if (el.getAttribute("data-public-tried")) return;
+      const path = el.getAttribute("data-public-media") || "";
+      if (path.charAt(0) !== "/") return;
+      el.setAttribute("data-public-tried", "1");
+      fetch(root + path, { headers: { Authorization: "Bearer " + token }, credentials: "omit" }).then((res) => {
+        if (!res.ok) return null;
+        return res.blob();
+      }).then((blob) => {
+        if (blob) el.src = URL.createObjectURL(blob);
+      }).catch(() => {});
+    });
+  }
+
+  function publicPostSpam(post) {
+    const mine = signedAccount();
+    if (mine && mine.publicId && mine.publicId === post.authorId) return false;
+    const ai = window.ViktorychOnDeviceAi;
+    if (!ai) return false;
+    if (ai.likelySpam && ai.likelySpam(post.body || "", "post", { force: true })) return true;
+    if (typeof ai.spamScore === "function" && ai.spamScore(post.body || "") >= 0.45) return true;
+    return false;
+  }
+
+  function publicMediaHtml(item) {
+    const mime = String(item.mime || "");
+    const tag = mime.indexOf("video/") === 0 ? "video" : mime.indexOf("audio/") === 0 ? "audio" : mime.indexOf("image/") === 0 ? "img" : "";
+    if (!tag) return "";
+    const extra = tag === "img" ? ' alt=""' : " controls";
+    return `<${tag}${extra} data-public-media="${esc(item.url || "")}"></${tag}>`;
+  }
+
+  function publicPostHtml(post) {
+    if (!STATE.publicSpam) STATE.publicSpam = {};
+    if (publicPostSpam(post) && !STATE.publicSpam[post.id]) {
+      return `<article class="card public-post" data-post="${esc(post.id)}"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></article>`;
+    }
+    const media = (post.media || []).map(publicMediaHtml).join("");
+    const quote = post.quote ? `<blockquote class="public-quote"><strong>${esc(post.quote.authorName || "")}</strong><p>${esc(post.quote.body || "")}</p></blockquote>` : "";
+    const mine = signedAccount();
+    const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
+    const tools = self ? "" : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>`;
+    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
+  }
+
+  function welcomeHtml(route) {
+    if (!route || route.name !== "home") return "";
+    if (document.documentElement.getAttribute("data-wall") === "1") return "";
+    if (!accountToken()) return "";
+    const doc = readWelcome();
+    if (doc.done) return "";
+    const step = doc.step || 0;
+    let body = "";
+    if (step <= 0) {
+      body = `<h2>${esc(tr("Add a photo and a short bio"))}</h2><label class="field"><span>${esc(tr("Name"))}</span><input id="welcome-name" maxlength="50" value="${esc(STATE.welcomeName || "")}"></label><label class="field"><span>${esc(tr("Bio"))}</span><textarea id="welcome-bio" maxlength="160">${esc(STATE.welcomeBio || "")}</textarea></label><label class="field"><span>${esc(tr("Add media"))}</span><input id="welcome-photo" type="file" accept="image/*"></label>`;
+    } else if (step === 1) {
+      const picks = feeds().slice(0, 6).map((feed) => {
+        const on = !!welcomeFollows[feed.id];
+        const label = feed.name || feed.handle || "";
+        return `<button type="button" data-act="welcome-follow" data-id="${esc(feed.id)}" aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
+      }).join("");
+      body = `<h2>${esc(tr("Pick feeds to follow"))}</h2><div class="welcome-feeds">${picks}</div>`;
+    } else {
+      body = `<h2>${esc(tr("Notifications can wait until you ask"))}</h2><button class="save" type="button" data-act="welcome-notify">${esc(tr("Notify me about new posts"))}</button>`;
+    }
+    return `<section class="welcome-sheet" data-welcome>${body}<div class="welcome-actions"><button type="button" data-act="welcome-skip">${esc(tr("Not now"))}</button><button class="save" type="button" data-act="welcome-next">${esc(tr("Next"))}</button></div></section>`;
+  }
+
+  function publishPublicPost(text, parentId, quoteId, file) {
+    const token = accountToken();
+    const root = accountsApi();
+    const finishOk = (post) => {
+      if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
+      if (post && post.id) publicPosts = [post].concat(publicPosts.filter((item) => item.id !== post.id));
+      publicStamp = Date.now();
+      toast(tr("Your post was sent."));
+      render();
+    };
+    const finishFail = () => {
+      if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
+      toast(tr("Could not send that post. It is still saved on this device."));
+    };
+    if (file && token && root) {
+      const data = new FormData();
+      if (text) data.set("body", text);
+      if (parentId) data.set("parentId", parentId);
+      if (quoteId) data.set("quoteId", quoteId);
+      data.set("file", file, file.name || "upload");
+      fetch(root + "/v1/posts", { method: "POST", headers: { Authorization: "Bearer " + token }, body: data, credentials: "omit" }).then((res) => {
+        return res.json().catch(() => ({})).then((body) => {
+          body.status = res.status;
+          return body;
+        });
+      }).then((res) => {
+        if (res && res.status === 201 && res.post) finishOk(res.post);
+        else finishFail();
+      }).catch(finishFail);
+      return;
+    }
+    const body = { body: text };
+    if (parentId) body.parentId = parentId;
+    if (quoteId) body.quoteId = quoteId;
+    accountCall("/v1/posts", { method: "POST", body: body }).then((res) => {
+      if (res && res.status === 201 && res.post) finishOk(res.post);
+      else finishFail();
+    }).catch(finishFail);
+  }
+
   function homeView(route) {
     const tab = route.tab || "foryou";
     const sorted = homeSorted(route);
@@ -8045,13 +8201,14 @@ const here = parseRoute();
     const findAccounts = !list.length && (tab === "following" || tab === "foryou")
       ? `<p class="empty-action"><a class="save" href="#/feeds">${esc(tr("Find accounts to follow"))}</a></p>`
       : "";
-    const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const published = tab === "foryou" ? publicPosts.map(publicPostHtml).join("") : "";
+    const body = published + (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
-    ) + findAccounts;
+    ) + findAccounts);
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
     const bar = STATE.homeFreshBar ? `<div class="home-fresh" role="progressbar" aria-label="${esc(tr("Loading"))}"><span></span></div>` : "";
-    const inline = (tab === "foryou" || tab === "following") && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
+    const inline = (tab === "foryou" || tab === "following") && STATE.modal !== "compose" && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
       ? window.ViktorychXCompose.inlineHtml("home")
       : "";
     return homeHeader(tab) + bar + inline + spaceCard + body + timelineSentinel(list.length, sorted.length);
@@ -9241,12 +9398,15 @@ const here = parseRoute();
     if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
       return pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This account is currently locked."));
     }
-    const tab = (route.tab === "followers" || route.tab === "friends") ? route.tab : "following";
+    const tab = (route.tab === "followers" || route.tab === "friends" || route.tab === "mutuals" || route.tab === "requests") ? route.tab : "following";
     const subject = connectionsSubject(route);
     const name = subject.name || subject.handle || route.handle || "";
     const sub = subject.handle ? "@" + subject.handle : "";
     const head = `<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
-    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a>` : "";
+    const mineGraph = subject.kind === "account" && window.ViktorychAccounts && window.ViktorychAccounts.account && subject.id === "app:" + (window.ViktorychAccounts.account() || {}).publicId;
+    const requestN = mineGraph && window.ViktorychAccounts.listPack ? (window.ViktorychAccounts.listPack(subject.id, "requests").accounts ? window.ViktorychAccounts.listPack(subject.id, "requests").accounts.length : 0) : 0;
+    const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
+    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Follow requests"))}${requestBadge}</span></a>` : ""}` : "";
     const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a>${friendsTabHtml}</div>`;
     if (tab === "friends") {
       if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
@@ -9259,6 +9419,10 @@ const here = parseRoute();
     }
     if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
     const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
+    if (subject.kind === "account" && subject.id && window.ViktorychAccounts && window.ViktorychAccounts.graphListHtml) {
+      if (!signed) return head + tabs + emptyBlock(tr("Followers"), tr("Sign in to see this list."));
+      return head + tabs + window.ViktorychAccounts.graphListHtml(subject.id, tab, subject.handle || name);
+    }
     if (!signed) return head + tabs + emptyBlock(tr("Followers"), tr("Sign in to see this list."));
     if (!subject.id || !window.ViktorychAccounts.ensureList) {
       const title = tab === "followers" ? tr("No followers yet") : tr("Not following anyone yet");
@@ -11217,6 +11381,8 @@ const here = parseRoute();
     if (kind === "discord") return tr("Discord alert");
     if (kind === "mention" || (note && note.mention)) return tr("{name} mentioned you", { name: who });
     if (kind === "follow") return tr("{name} followed you", { name: who });
+    if (kind === "follow_request") return tr("{name} requested to follow you", { name: who });
+    if (kind === "follow_accept") return tr("{name} accepted your follow request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
     return tr("New post notifications for @{handle}", { handle: who });
   }
@@ -11243,7 +11409,56 @@ const here = parseRoute();
     return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${noteBody(note)}${partial}${image}</div></div></a></article>`;
   }
 
+  function notesSignedIn() {
+    const accounts = window.ViktorychAccounts;
+    return !!(accounts && accounts.token && accounts.token());
+  }
+
+  function notesErrorBox() {
+    return `<div class="notes-state error-box" data-notes-state="error"><h2>${esc(tr("Notifications aren’t available"))}</h2><p>${esc(tr("Reload the page."))}</p><button class="retry" type="button" data-act="notes-retry">${esc(tr("Retry"))}</button></div>`;
+  }
+
+  function notesSkeleton() {
+    const rows = [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
+    return `<div class="notes-state" data-notes-state="loading">${rows}</div>`;
+  }
+
+  function notesEmpty(active, current) {
+    const block = (!active || active === "all")
+      ? emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."))
+      : emptyBlock(tr("Nothing in {name} yet", { name: current ? noteTabLabel(current) : tr("the current tab") }), tr("New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All."));
+    return `<div class="notes-state" data-notes-state="empty">${block}</div>`;
+  }
+
+  function ensureNotesLoad() {
+    if (!notesSignedIn()) {
+      notesPhase = "off";
+      return;
+    }
+    if (notesPhase === "idle" || notesPhase === "off") {
+      notesPhase = "loading";
+      Promise.resolve().then(() => pullNotes());
+    }
+  }
+
+  function notesListHtml(notes, active, current) {
+    if (notes.length) {
+      const rows = [];
+      notes.forEach((note) => {
+        try {
+          const row = noteRow(note);
+          if (row) rows.push(row);
+        } catch (err) { /* one bad row does not blank the list */ }
+      });
+      if (rows.length) return `<div class="notes notes-state" data-notes-state="items">${rows.join("")}</div>`;
+    }
+    if (notesSignedIn() && (notesPhase === "loading" || notesPhase === "idle")) return notesSkeleton();
+    if (notesSignedIn() && notesPhase === "error") return notesErrorBox();
+    return notesEmpty(active, current);
+  }
+
   function notificationsView(route) {
+    ensureNotesLoad();
     const active = settleNoteTab(route || parseRoute());
     markNoteTabRead(active);
     const tabs = visibleNoteTabs();
@@ -11251,14 +11466,10 @@ const here = parseRoute();
     const notes = current ? notesForTab(current) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button><button type="button" class="show-more odai-btn" data-act="odai-catch" data-scope="notification">${tr("Catch me up")}</button>`;
+    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
-    let body = "";
-    if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
-    else if (!notes.length) body = emptyBlock(tr("Nothing in {name} yet", { name: current ? noteTabLabel(current) : tr("the current tab") }), tr("New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All."));
-    else body = `<div class="notes">${notes.map(noteRow).join("")}</div>`;
     const xBanner = window.ViktorychXCompose && window.ViktorychXCompose.mentionsBanner ? window.ViktorychXCompose.mentionsBanner() : "";
-    return head + xBanner + body;
+    return head + xBanner + notesListHtml(notes, active, current);
   }
 
   function openFeedTabEditor(id, presetFeed) {
@@ -11422,6 +11633,36 @@ const here = parseRoute();
     return `<button class="primary" type="button" data-act="install">${tr("Install app")}</button>`;
   }
 
+  function setMeta(selector, value) {
+    const el = document.head && document.head.querySelector(selector);
+    if (el) el.setAttribute("content", value == null ? "" : String(value));
+  }
+  function setProfileShareMeta(route) {
+    const fallbackTitle = document.title || productName("app");
+    const icon = "icons/icon-512.png?v=7";
+    let title = fallbackTitle;
+    let description = "";
+    let image = icon;
+    let url = location.origin + location.pathname;
+    if (route && route.name === "profile" && window.ViktorychAccounts && window.ViktorychAccounts.storedAccount) {
+      const account = window.ViktorychAccounts.storedAccount(route.handle);
+      if (account && account.handle) {
+        const name = account.displayName || account.handle;
+        title = name + " (@" + account.handle + ")";
+        description = account.bio || "";
+        url += "#/@" + encodeURIComponent(account.handle);
+        const avatar = String(account.avatar || "");
+        if (avatar && !/\/v1\/media\/(?:avatars|banners)\/\d{12}\//.test(avatar)) image = avatar;
+      }
+    }
+    setMeta('meta[property="og:title"]', title);
+    setMeta('meta[name="twitter:title"]', title);
+    setMeta('meta[property="og:description"]', description);
+    setMeta('meta[name="twitter:description"]', description);
+    setMeta('meta[property="og:url"]', url);
+    setMeta('meta[property="og:image"]', image);
+    setMeta('meta[name="twitter:image"]', image);
+  }
   function routeTitle(route, liveName, personName, discordTitle) {
     const titleSuffix = " / " + productName("app");
     if (discordTitle) return discordTitle + titleSuffix;
@@ -11429,6 +11670,15 @@ const here = parseRoute();
     const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
     if (route.name === "explore") return (exploreQ ? tr("{q} - Explore", { q: exploreQ }) : tr("Explore")) + titleSuffix;
     if (route.name === "user") return (liveName || route.handle || tr("Profile")) + titleSuffix;
+    if (route.name === "profile") {
+      const stored = window.ViktorychAccounts && window.ViktorychAccounts.storedAccount && window.ViktorychAccounts.storedAccount(route.handle);
+      if (stored && stored.handle) {
+        const name = stored.displayName || stored.handle;
+        return name + " (@" + stored.handle + ")" + titleSuffix;
+      }
+      const bare = String(route.handle || "").replace(/\d{12}$/, "");
+      return (bare ? "@" + bare : tr("Profile")) + titleSuffix;
+    }
     let key = "";
     if (route.name === "home") key = tr("Home");
     else if (route.name === "status") key = tr("Post noun");
@@ -11638,6 +11888,7 @@ const here = parseRoute();
       const presenceBlock = window.ViktorychPresence ? window.ViktorychPresence.settingsHtml() : "";
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${presenceBlock}
+        ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
@@ -11887,16 +12138,18 @@ if (STATE.histClear) {
       </div></div>`;
     }
     if (STATE.modal === "compose") {
-      if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
+      if (STATE.composeVia === "x" && window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
         const composed = window.ViktorychXCompose.modalHtml();
         if (composed) return composed;
       }
+      const mine = signedAccount();
+      const face = mine ? avatar(mine.avatar, mine.displayName || mine.handle) : `<span class="ava initials">Y</span>`;
       return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Post"))}" data-act="stop">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div></div>
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div><button class="outline" type="button" data-act="compose-x">${tr("Post to X")}</button></div>
         <div class="modal-body" style="display:flex;gap:12px">
-          <span class="ava initials">Y</span>
-          <div style="flex:1"><p class="phandle" id="compose-note">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
-          <div class="odai-chips"><button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="compose-text" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="clear" data-field="compose-text" data-scope="post">${tr("Tone")}</button></div>
+          ${face}
+          <div style="flex:1"><p class="xc-note" id="compose-note">${tr("Posts here are public inside the app. Offline notes stay on this device.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <label class="field"><span>${esc(tr("Add media"))}</span><input id="compose-file" type="file" accept="image/*,video/*,audio/*"></label>
           <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div></div>
         </div></div></div>`;
     }
@@ -12014,7 +12267,7 @@ if (STATE.histClear) {
     const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const sensitive = route.name === "messages" || route.name === "notifications" || (route.name === "settings" && route.section === "privacy");
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
 
   function toggleReaction(act, id) {
@@ -13536,6 +13789,13 @@ if (STATE.histClear) {
       return lazySkeleton(tr("TV"));
     }
     if (route.name === "status" && route.id && STATE.shared && STATE.shared[String(route.id)]) return statusView(route);
+    if (route.name === "notifications") {
+      try {
+        return notificationsView(route);
+      } catch (err) {
+        return pageHead(tr("Notifications")) + `<div class="notes-state error-box" data-notes-state="error"><h2>${esc(tr("Notifications aren’t available"))}</h2><p>${esc(tr("Reload the page."))}</p><button class="retry" type="button" data-act="notes-retry">${esc(tr("Retry"))}</button></div>`;
+      }
+    }
     if (STATE.loading) {
       return `<div class="topbar"><div class="page-head"><h1>${tr("Home")}</h1></div></div>` + [0, 1, 2].map(() => `<div class="skel"><div class="av"></div><div style="flex:1"><i></i><i style="width:80%"></i><i style="width:60%"></i></div></div>`).join("");
     }
@@ -13561,13 +13821,6 @@ if (STATE.histClear) {
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
-    if (route.name === "notifications") {
-      try {
-        return notificationsView(route);
-      } catch (err) {
-        return pageHead(tr("Notifications")) + `<div class="error-box"><h2>${tr("Notifications aren’t available")}</h2><p>${tr("Reload the page.")}</p><button class="retry" type="button" data-act="reload">${tr("Retry")}</button></div>`;
-      }
-    }
     if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
     if (route.name === "messages") return notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
@@ -14290,6 +14543,8 @@ if (STATE.histClear) {
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
       commitApp(shell(view(route), route));
+      schedulePublicPosts();
+      hydratePublicMedia();
       if (window.ViktorychPrivacy && window.ViktorychPrivacy.paint) window.ViktorychPrivacy.paint();
       if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
       if (window.ViktorychShorts) {
@@ -14324,8 +14579,9 @@ if (STATE.histClear) {
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
       const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
-      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = withUnreadTitle(window.SIntelMusic.titleFor(route));
+if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = withUnreadTitle(window.SIntelMusic.titleFor(route));
       else document.title = withUnreadTitle(routeTitle(route, liveName, personName, discordTitle));
+      setProfileShareMeta(route);
       window.scrollTo(0, y);
       if (explicitY && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
@@ -14639,10 +14895,16 @@ if (STATE.histClear) {
       return;
     }
     if (act === "reload") { boot(); return; }
+    if (act === "notes-retry") {
+      notesPhase = notesSignedIn() ? "loading" : "off";
+      render();
+      pullNotes();
+      return;
+    }
     if (act === "drawer") { STATE.drawer = true; render(); return; }
     if (act === "close-drawer") { STATE.drawer = false; render(); return; }
     if (act === "compose") {
-      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
+      STATE.composeVia = "app";
       STATE.modal = "compose";
       const drafts = window.ViktorychLocal;
       if (!STATE.composeSeed && drafts && drafts.readDoc) {
@@ -14650,7 +14912,6 @@ if (STATE.histClear) {
           const text = saved && saved.text ? String(saved.text) : "";
           if (STATE.modal === "compose" && text && !STATE.composeSeed) {
             STATE.composeSeed = text;
-            if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(text);
             render();
           }
         }).catch(() => {});
@@ -14660,7 +14921,7 @@ if (STATE.histClear) {
     }
     if (act === "game-share") {
       STATE.composeSeed = window.ViktorychGames && window.ViktorychGames.shareText ? window.ViktorychGames.shareText() : "";
-      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
+      STATE.composeVia = "app";
       STATE.modal = "compose";
       render();
       return;
@@ -14843,7 +15104,7 @@ if (STATE.histClear) {
     }
     if (act === "close-modal" || act === "close-remove") {
       if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
-      STATE.modal = null; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return;
+      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return;
     }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
@@ -14870,24 +15131,123 @@ if (STATE.histClear) {
       else render();
       return;
     }
+    if (act === "welcome-skip") {
+      writeWelcome({ step: 0, done: true });
+      render();
+      return;
+    }
+    if (act === "welcome-follow") {
+      const id = el.dataset.id || "";
+      if (id) welcomeFollows[id] = !welcomeFollows[id];
+      render();
+      return;
+    }
+    if (act === "welcome-notify") {
+      writeWelcome({ step: 2, done: true });
+      enableNotifications();
+      return;
+    }
+    if (act === "welcome-next") {
+      const doc = readWelcome();
+      const step = doc.step || 0;
+      if (step <= 0) {
+        const nameEl = document.getElementById("welcome-name");
+        const bioEl = document.getElementById("welcome-bio");
+        const name = nameEl ? nameEl.value : (STATE.welcomeName || "");
+        const bio = bioEl ? bioEl.value : (STATE.welcomeBio || "");
+        const body = {};
+        if (String(name).trim()) body.displayName = String(name).trim();
+        if (String(bio).trim()) body.bio = String(bio);
+        if (welcomePhoto) body.avatar = welcomePhoto;
+        const advance = () => { writeWelcome({ step: 1, done: false }); render(); };
+        if (Object.keys(body).length) accountCall("/v1/profile", { method: "PATCH", body: body }).then(advance, advance);
+        else advance();
+        return;
+      }
+      if (step === 1) {
+        const ids = Object.keys(welcomeFollows).filter((id) => welcomeFollows[id]);
+        if (ids.length) applyFollow(ids, true);
+        writeWelcome({ step: 2, done: false });
+        render();
+        return;
+      }
+      writeWelcome({ step: 2, done: true });
+      render();
+      return;
+    }
+    if (act === "show-public-spam") {
+      if (!STATE.publicSpam) STATE.publicSpam = {};
+      STATE.publicSpam[el.dataset.id || ""] = true;
+      render();
+      return;
+    }
+    if (act === "public-reply" || act === "public-quote") {
+      STATE.composeParent = act === "public-reply" ? (el.dataset.id || "") : "";
+      STATE.composeQuote = act === "public-quote" ? (el.dataset.id || "") : "";
+      STATE.composeVia = "app";
+      STATE.modal = "compose";
+      STATE.composeSeed = "";
+      render();
+      return;
+    }
+    if (act === "public-report") {
+      const reason = tr("Report this post");
+      accountCall("/v1/posts/report", { method: "POST", body: { postId: el.dataset.id || "", reason: reason } }).then(() => {
+        toast(tr("Report this post"));
+      }).catch(() => {});
+      return;
+    }
+    if (act === "public-block" || act === "public-mute") {
+      const path = act === "public-block" ? "/v1/blocks" : "/v1/mutes";
+      accountCall(path, { method: "POST", body: { accountId: el.dataset.id || "" } }).then(() => {
+        publicStamp = 0;
+        schedulePublicPosts();
+      }).catch(() => {});
+      return;
+    }
+    if (act === "compose-x") {
+      STATE.composeVia = "x";
+      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
+      STATE.modal = "compose";
+      render();
+      return;
+    }
     if (act === "compose-post") {
       const seed = STATE.composeSeed || "";
+      const parentId = STATE.composeParent || "";
+      const quoteId = STATE.composeQuote || "";
+      const fileEl = document.getElementById("compose-file");
+      const file = fileEl && fileEl.files && fileEl.files[0] ? fileEl.files[0] : null;
       STATE.modal = null;
       if (window.ViktorychCommunities && window.ViktorychCommunities.takeCompose && window.ViktorychCommunities.takeCompose(seed)) {
         STATE.composeSeed = "";
         render();
         return;
       }
-      if (seed.trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
-      if (!navigator.onLine && seed.trim()) {
-        queueOffline({ type: "reply", id: "compose", on: true, body: seed });
+      if (!seed.trim() && !file) {
         STATE.composeSeed = "";
+        STATE.composeParent = "";
+        STATE.composeQuote = "";
         render();
+        toast(tr("Posts come from your feeds"));
         return;
       }
+      if (!navigator.onLine || !accountToken()) {
+        if (seed.trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
+        if (!navigator.onLine && seed.trim()) queueOffline({ type: "reply", id: "compose", on: true, body: seed });
+        STATE.composeSeed = "";
+        STATE.composeParent = "";
+        STATE.composeQuote = "";
+        render();
+        if (navigator.onLine && !accountToken()) toast(tr("Saved on this device. This reader doesn’t publish."));
+        return;
+      }
+      const text = seed;
       STATE.composeSeed = "";
+      STATE.composeParent = "";
+      STATE.composeQuote = "";
       render();
-      toast(seed.trim() ? tr("Saved on this device. This reader doesn’t publish.") : tr("Posts come from your feeds"));
+      publishPublicPost(text, parentId, quoteId, file);
       return;
     }
     if (act === "close-tab-menu") {
@@ -15084,8 +15444,45 @@ if (STATE.histClear) {
     if (act === "follow") {
       const ids = String(el.dataset.ids || el.dataset.id || "").split(",").map((part) => part.trim()).filter(Boolean);
       if (!ids.length) return;
+      const rowPending = ids.some((item) => {
+        const html = window.ViktorychAccounts && window.ViktorychAccounts.followControlHtml && window.ViktorychAccounts.followControlHtml(item, false);
+        return html && html.indexOf("pending") >= 0;
+      });
+      if (rowPending) {
+        applyFollow(ids, false);
+        return;
+      }
       const on = ids.some((item) => isFollowed(item));
       applyFollow(ids, !on);
+      return;
+    }
+    if (act === "graph-unblock" || act === "graph-block" || act === "graph-mute" || act === "graph-unmute") {
+      const accounts = window.ViktorychAccounts;
+      if (!accounts || !accounts.relationWrite) return;
+      const id = String(el.dataset.id || "").replace(/^app:/, "");
+      if (act === "graph-unblock") accounts.relationWrite("blocks", id, true);
+      else if (act === "graph-block") accounts.relationWrite("blocks", id, false);
+      else if (act === "graph-unmute") accounts.relationWrite("mutes", id, true);
+      else accounts.relationWrite("mutes", id, false);
+      return;
+    }
+    if (act === "remove-follower" || act === "accept-follow" || act === "decline-follow" || act === "graph-more") {
+      const accounts = window.ViktorychAccounts;
+      if (!accounts || !accounts.call) return;
+      if (act === "graph-more") {
+        accounts.ensureList(el.dataset.id, el.dataset.tab, true);
+        return;
+      }
+      const path = act === "remove-follower" ? "/v1/follows/remove" : act === "accept-follow" ? "/v1/follows/accept" : "/v1/follows/decline";
+      accounts.call(path, { method: "POST", token: accounts.token(), body: { id: el.dataset.id } }).then((res) => {
+        if (!res || res.status !== 200) {
+          toast(tr("You can’t do that with this account."));
+          return;
+        }
+        if (act === "remove-follower") toast(tr("Follower removed"));
+        if (accounts.syncFollows) accounts.syncFollows();
+        render();
+      });
       return;
     }
     if (act === "subs-layout") {
@@ -16144,14 +16541,46 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     if (event.target && event.target.closest && event.target.closest(".gsuggest")) event.preventDefault();
   });
 
+  document.addEventListener("change", (event) => {
+    const el = event.target;
+    if (!el) return;
+    if (el.id === "compose-file") {
+      const btn = document.getElementById("compose-post");
+      if (btn) btn.disabled = !(el.files && el.files[0]) && !(STATE.composeSeed || "").trim();
+      return;
+    }
+    if (el.id !== "welcome-photo" || !el.files || !el.files[0]) return;
+    const file = el.files[0];
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const edge = 512;
+      const scale = Math.min(1, edge / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      try { welcomePhoto = canvas.toDataURL("image/webp", 0.86); } catch (err) { welcomePhoto = ""; }
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  });
+
   document.addEventListener("input", (event) => {
     const el = event.target;
     if (el.id === "compose-text") {
+      if (STATE.composeVia === "x") return;
       STATE.composeSeed = el.value;
       const btn = document.getElementById("compose-post");
-      if (btn) btn.disabled = !el.value.trim();
+      const fileEl = document.getElementById("compose-file");
+      const hasFile = !!(fileEl && fileEl.files && fileEl.files[0]);
+      if (btn) btn.disabled = !el.value.trim() && !hasFile;
       return;
     }
+    if (el.id === "welcome-name") { STATE.welcomeName = el.value; return; }
+    if (el.id === "welcome-bio") { STATE.welcomeBio = el.value; return; }
     if (el.id === "quote-text") {
       const btn = document.getElementById("quote-post");
       if (btn) btn.disabled = !String(el.value || "").trim();
@@ -16450,6 +16879,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
     if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
       STATE.modal = null;
+      STATE.composeVia = "";
       STATE.drawer = false;
       STATE.menu = null;
       STATE.share = null;
@@ -18396,6 +18826,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       try { location.hash = detail.hash; } catch (err) { /* the current screen stays */ }
     }
     if (detail.compose) {
+      STATE.composeVia = "app";
       STATE.modal = "compose";
       if (detail.text) STATE.composeSeed = detail.text;
     }
@@ -18407,6 +18838,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const posting = params.get("post") === "1";
     if (!params.has("url") && !params.has("text") && !params.has("title") && !media && !posting) return;
     if ((posting || media) && !params.has("url")) {
+      STATE.composeVia = "app";
       STATE.modal = "compose";
       STATE.composeSeed = [params.get("title") || "", params.get("text") || ""].filter(Boolean).join("\n");
       history.replaceState(null, "", location.pathname + "#/home");
@@ -18870,8 +19302,28 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   let noteSyncTimer = 0;
   let notePages = 0;
   let noteApplying = false;
+  let notesPhase = "idle";
+  let notesAgain = false;
   let hubPoll = 0;
   let channelBound = false;
+
+  function withTimeout(promise, ms) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("timeout")), ms);
+      Promise.resolve(promise).then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      }, (err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  function finishNotes(phase) {
+    notesPhase = phase;
+    if (parseRoute().name === "notifications") render();
+  }
 
   function scheduleNoteSync() {
     if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
@@ -19001,11 +19453,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   async function pullNotes() {
-    const accounts = window.ViktorychAccounts;
-    if (!accounts || !accounts.token || !accounts.token() || noteApplying) return;
+    if (!notesSignedIn()) {
+      if (notesPhase !== "off") finishNotes("off");
+      return;
+    }
+    if (noteApplying) {
+      notesAgain = true;
+      return;
+    }
     noteApplying = true;
+    if (notesPhase !== "ready") notesPhase = "loading";
     const sent = notePending();
     let again = false;
+    let failed = false;
     try {
       const acked = {};
       noteAcked().forEach((id) => { acked[id] = true; });
@@ -19032,8 +19492,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (posting) body.shortsLocked = lockedFlag === "1" ? 1 : 0;
       const since = Number(notesServer().cursor) || 0;
       const path = "/v1/notifications?locked=" + lockedFlag + (since ? "&since=" + encodeURIComponent(String(since)) : "");
-      const res = await accountCall(path, posting ? { method: "POST", body: body } : { method: "GET" });
-      if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
+      const res = await withTimeout(accountCall(path, posting ? { method: "POST", body: body } : { method: "GET" }), 12000);
+      if (!res || res.status !== 200 || !Array.isArray(res.items)) failed = true;
+      else {
+      notesPhase = "ready";
       applyServerNotes(res);
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
       const nowPending = notePending();
@@ -19060,9 +19522,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!nowPending.items.length) delete nowPending.items;
       }
       writeNotePending(nowPending);
-    } catch (err) { /* the next visible fetch tries again */ }
+      }
+    } catch (err) { failed = true; }
     finally { noteApplying = false; }
-    if (again) pullNotes();
+    if (failed && notesPhase !== "ready") finishNotes("error");
+    if (again || notesAgain) {
+      notesAgain = false;
+      pullNotes();
+    }
   }
 
   function channelOpen() {
@@ -19864,7 +20331,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function syncOffline(action) {
     if (!action) return false;
     if (action.type === "follow" && window.ViktorychAccounts && window.ViktorychAccounts.changeFollow) {
-      window.ViktorychAccounts.changeFollow(action.id, !!action.on, action.snapshot || null);
+      window.ViktorychAccounts.changeFollow(action.id, !!action.on, action.snapshot || null, { replay: true });
     } else if (action.type === "repost") {
       const on = !!action.on;
       const req = on
@@ -20436,10 +20903,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!mine) return '<span class="ava initials">Y</span>';
         return avatar(mine.avatar, mine.displayName || mine.handle);
       },
-      modalOpen: function () { return STATE.modal === "compose"; },
-      openModal: function () { STATE.modal = "compose"; render(); },
+      modalOpen: function () { return STATE.modal === "compose" && STATE.composeVia === "x"; },
+      openModal: function () { STATE.composeVia = "x"; STATE.modal = "compose"; render(); },
       closeModal: function () {
         if (STATE.modal === "compose") STATE.modal = null;
+        STATE.composeVia = "";
         render();
       },
       saveLocal: function (text) {

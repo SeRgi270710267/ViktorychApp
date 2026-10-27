@@ -14,6 +14,9 @@
   var profileEpoch = {};
   var entered = false;
   var view = "";
+  var gallery = { open: false, kind: "photo", index: 0 };
+  var mediaManagerLoaded = false;
+  var idCopied = false;
   var step = 0;
   var form = {};
   var errorText = "";
@@ -30,6 +33,7 @@
   var friendsSearchQuery = "";
   var friendsSubTab = "all";
   var unfriendTarget = null;
+  var reportState = { items: [], loading: false };
 
   function tr(key, vars) {
     return window.t ? window.t(key, vars) : key;
@@ -313,6 +317,9 @@
     if (code === "invalid_location") return tr("That location is too long.");
     if (code === "invalid_website") return tr("That website is too long.");
     if (code === "too_large") return tr("Could not save that photo.");
+    if (code === "too_fast") return tr("Wait a moment and try again.");
+    if (code === "guard_required" || code === "rejected") return tr("Sign-up could not be checked. Try again.");
+    if (code === "recovery_invalid") return tr("That recovery code did not work.");
     return tr("Something went wrong. Try again.");
   }
   function layer() {
@@ -331,7 +338,7 @@
     if (name === "accountNumber") maxAttr = ' data-max="16" inputmode="numeric"';
     else if (limit) maxAttr = ' maxlength="' + limit + '" data-max="' + limit + '"';
     var count = limit ? '<span class="acct-count">' + fieldCount(name, value, limit) + "</span>" : "";
-    var autocomplete = name === "accountNumber" || name === "claimCode" ? "off" : name === "website" ? "url" : name === "location" ? "address-level2" : name === "displayName" ? "name" : name === "handle" ? "username" : "nickname";
+    var autocomplete = name === "accountNumber" ? (type === "password" ? "current-password" : "new-password") : name === "claimCode" ? "off" : name === "website" ? "url" : name === "location" ? "address-level2" : name === "displayName" ? "name" : name === "handle" ? "username" : "nickname";
     var quiet = name === "accountNumber" || name === "handle" || name === "claimCode" ? ' spellcheck="false" autocapitalize="none" autocorrect="off"' : "";
     var invalid = errorText ? ' aria-invalid="true" aria-describedby="acct-error"' : "";
     return '<div class="acct-field"><input id="' + id + '" name="' + esc(name) + '" type="' + (type || "text") + '"' + maxAttr + quiet + invalid + ' placeholder=" " autocomplete="' + autocomplete + '" value="' + esc(value) + '"><label for="' + id + '">' + esc(label) + "</label>" + count + "</div>";
@@ -381,6 +388,75 @@
     var legal = '<p class="acct-legal">' + esc(tr("By signing up, you agree to the")) + ' <button type="button" data-acct="legal" data-legal="terms" data-title="' + esc(tr("Terms of Service")) + '">' + esc(tr("Terms of Service")) + "</button> " + esc(tr("and the")) + ' <button type="button" data-acct="legal" data-legal="privacy" data-title="' + esc(tr("Privacy Policy")) + '">' + esc(tr("Privacy Policy")) + "</button>.</p>";
     return '<div class="x-shell"><div class="x-land"><div class="x-land-logo">' + mark("x-mark") + '</div><div class="x-land-copy"><h1>' + esc(tr("Happening now")) + "</h1><h2>" + esc(tr("Join today.")) + '</h2><button class="acct-fill" type="button" data-acct="signup">' + esc(tr("Create account")) + "</button>" + legal + '<h3>' + esc(tr("Already have an account?")) + '</h3><button class="acct-line" type="button" data-acct="login">' + esc(tr("Sign in")) + '</button></div></div><footer class="x-foot">' + foot + '<button type="button" data-acct="prefs">' + esc(tr("Settings")) + "</button><span>" + esc(tr("© {year} {app}", { year: year, app: appName() })) + "</span></footer></div>";
   }
+  function honeypotHtml() {
+    return '<div class="acct-hp" aria-hidden="true"><label>Fax<input name="fax" tabindex="-1" autocomplete="off" value=""></label></div>';
+  }
+  function recoveryBlock(codes) {
+    if (!codes || !codes.length) return "";
+    var items = codes.map(function (code) { return "<li data-recovery-code>" + esc(code) + "</li>"; }).join("");
+    return '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="acct-sub">' + esc(tr("These recovery codes are shown once. Each code works one time.")) + '</p><ul class="acct-codes">' + items + '</ul><div class="acct-row"><button type="button" data-acct="copy-codes">' + esc(tr("Copy recovery codes")) + '</button><button type="button" data-acct="download-codes">' + esc(tr("Download recovery codes")) + "</button></div>";
+  }
+  function lostBody() {
+    return '<form id="acct-recover-form" method="post" action="" autocomplete="off"><p class="acct-sub">' + esc(tr("Enter one recovery code. It works once, then new codes replace it.")) + '</p><div class="acct-field"><input id="acct-recovery" name="recovery" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" placeholder=" " value="' + esc(form.recovery || "") + '"><label for="acct-recovery">' + esc(tr("Recovery code")) + "</label></div>" + errorHtml() + '<button class="acct-next" type="submit" data-acct="do-recover"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Continue")) + "</button></form>";
+  }
+  function recoveryShownBody() {
+    return recoveryBlock(form.recoveryCodes || []) + errorHtml() + '<button class="acct-next" type="button" data-acct="close">' + esc(tr("Done")) + "</button>";
+  }
+  function leadingZeroBits(bytes) {
+    var count = 0;
+    for (var i = 0; i < bytes.length; i++) {
+      var byte = bytes[i];
+      if (byte === 0) { count += 8; continue; }
+      for (var bit = 7; bit >= 0; bit--) {
+        if ((byte >> bit) & 1) return count;
+        count += 1;
+      }
+    }
+    return count;
+  }
+  function solvePow(ch) {
+    var enc = new TextEncoder();
+    var bits = Number(ch.bits) || 12;
+    var i = 0;
+    function next() {
+      if (i > 3000000) return Promise.reject(new Error("pow"));
+      var n = i++;
+      return crypto.subtle.digest("SHA-256", enc.encode(ch.id + ":" + ch.nonce + ":" + n)).then(function (buf) {
+        if (leadingZeroBits(new Uint8Array(buf)) >= bits) return n;
+        return next();
+      });
+    }
+    return next();
+  }
+  function ensureGuard() {
+    return api("/v1/signup/challenge").then(function (ch) {
+      if (!ch || !ch.id) return null;
+      var started = Date.now();
+      return solvePow(ch).then(function (counter) {
+        var left = (Number(ch.waitMs) || 800) + 200 - (Date.now() - started);
+        var done = function () { return { id: ch.id, counter: counter }; };
+        if (left <= 0) return done();
+        return new Promise(function (resolve) { setTimeout(function () { resolve(done()); }, left); });
+      });
+    });
+  }
+  function faxValue() {
+    var el = document.querySelector('#account-layer input[name="fax"]');
+    return el ? String(el.value || "") : "";
+  }
+  function storeCredential(formEl) {
+    try {
+      if (!formEl || typeof window.PasswordCredential !== "function" || !navigator.credentials || !navigator.credentials.store) return;
+      var pass = formEl.querySelector('input[autocomplete="current-password"], input[autocomplete="new-password"]');
+      var user = formEl.querySelector('input[name="username"]');
+      if (pass) {
+        var digits = String(pass.value || "").replace(/\D/g, "");
+        if (digits) pass.value = digits;
+        if (user && !String(user.value || "").trim()) user.value = digits;
+      }
+      navigator.credentials.store(new window.PasswordCredential(formEl)).catch(function () {});
+    } catch (err) { /* the browser may not offer a password manager */ }
+  }
   function signupBody() {
     if (step === 2) {
       var pending = readPending();
@@ -388,7 +464,9 @@
 var numberNote = form.passkey
         ? tr("Save this account number. You can sign in with a passkey later. The number is an optional backup.")
         : tr("This number is shown once. Save it now. It is the only way back into this account.");
-      return '<p class="acct-sub">' + esc(numberNote) + '</p><div class="acct-number" role="status">' + esc(number) + '</div><div class="acct-row"><button type="button" data-acct="copy">' + esc(tr("Copy")) + '</button><button type="button" data-acct="download">' + esc(tr("Download")) + '</button></div><label class="acct-check"><input name="saved" type="checkbox"' + (form.saved ? " checked" : "") + "><span>" + esc(tr("I saved my account number")) + "</span></label>" + errorHtml() + nextButton("saved", tr("Next"), !form.saved);
+      var digits = pending ? String(pending.accountNumber || "").replace(/\D/g, "") : "";
+      var userName = pending && pending.account && pending.account.handle ? pending.account.handle : digits;
+      return '<form id="acct-save-form" method="post" action="" autocomplete="on"><p class="acct-sub">' + esc(numberNote) + '</p><div class="acct-field"><input id="acct-username" name="username" type="text" autocomplete="username" spellcheck="false" autocapitalize="none" value="' + esc(userName) + '" readonly><label for="acct-username">' + esc(tr("Username")) + '</label></div><div class="acct-number" role="status">' + esc(number) + '</div><div class="acct-field"><input id="acct-new-password" name="password" type="password" autocomplete="new-password" inputmode="numeric" spellcheck="false" value="' + esc(digits) + '"><label for="acct-new-password">' + esc(tr("Account number")) + '</label></div><div class="acct-row"><button type="button" data-acct="copy">' + esc(tr("Copy")) + '</button><button type="button" data-acct="download">' + esc(tr("Download")) + '</button><button type="button" data-acct="show-number">' + esc(tr("Show")) + '</button></div>' + recoveryBlock(pending && pending.recoveryCodes) + '<label class="acct-check"><input name="saved" type="checkbox"' + (form.saved ? " checked" : "") + "><span>" + esc(tr("I saved my account number")) + "</span></label>" + errorHtml() + '<button class="acct-next" type="submit" data-acct="saved"' + (!form.saved || authBusy ? " disabled" : "") + (authBusy ? ' aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Next")) + "</button>" + (window.ViktorychPasskeys && window.ViktorychPasskeys.supported() ? '<button class="acct-line" type="button" data-acct="save-passkey" style="width:100%;margin-top:12px">' + esc(tr("Save a passkey on this device")) + "</button>" : "") + "</form>";
     }
     if (step === 1) {
       var claim = form.claimOpen ? field("claimCode", tr("Claim code"), "password") : '<button class="acct-quiet" type="button" data-acct="claim">' + esc(tr("Have a claim code?")) + "</button>";
@@ -400,7 +478,7 @@ var numberNote = form.passkey
         : nextButton("next", tr("Next"));
       return '<p class="acct-sub">' + handleSub + "</p>" +
         field("handle", form.profileLess ? tr("Handle (optional)") : tr("Choose a handle"), "text", 15) +
-        claim + turnstileHtml() + errorHtml() + passkeyStep;
+        claim + turnstileHtml() + honeypotHtml() + errorHtml() + passkeyStep;
     }
     var subText = form.profileLess
       ? esc(tr("Your account will have no public profile. Interactions will be anonymous."))
@@ -412,13 +490,15 @@ var numberNote = form.passkey
       errorHtml() + nextButton("next", tr("Next"));
   }
   function loginBody() {
-var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
+    var digits = String(form.accountNumber || "").replace(/\D/g, "");
+    var userField = '<div class="acct-field"><input id="acct-login-user" name="username" type="text" autocomplete="username" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder=" " value="' + esc(digits) + '"><label for="acct-login-user">' + esc(tr("Username")) + "</label></div>";
+    var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
       ? '<div class="acct-field"><input id="acct-passkey-user" name="passkeyUser" type="text" placeholder=" " autocomplete="username webauthn" value=""><label for="acct-passkey-user">' + esc(tr("Sign in with a passkey")) + '</label></div><button class="acct-next" type="button" data-acct="passkey-login"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Sign in with a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + "</p>"
       : "";
     var numberHint = passkey
       ? tr("There is no password to reset. A passkey can sign in, and the account number from sign-up still works.")
       : tr("There is no password to reset. The account number from sign-up is the only way back in.");
-    return passkey + field("accountNumber", tr("Account number")) + '<p class="acct-sub">' + esc(numberHint) + "</p>" + turnstileHtml() + errorHtml() + nextButton("do-login", tr("Log in")) + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
+    return '<form id="acct-login-form" method="post" action="" autocomplete="on">' + userField + passkey + field("accountNumber", tr("Account number"), "password") + '<p class="acct-sub">' + esc(numberHint) + "</p>" + turnstileHtml() + errorHtml() + '<button class="acct-next" type="submit" data-acct="do-login"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Log in")) + "</button></form>" + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="lost">' + esc(tr("Lost your account number?")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
       '<p class="acct-switch"><button type="button" data-acct="open-restore">' + esc(tr("Restore session from another device")) + '</button></p>';
   }
   function emergencyBody() {
@@ -597,6 +677,9 @@ var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
     else if (view === "prefs") html += modal(tr("Settings"), prefsBody());
     else if (view === "emergency") html += modal(tr("Emergency Offline Access"), emergencyBody());
     else if (view === "restore") html += modal(tr("Restore session"), restoreBody());
+    else if (view === "lost") html += modal(tr("Lost your account number?"), lostBody());
+    else if (view === "recovery") html += modal(tr("Recovery codes"), recoveryShownBody());
+    else if (view === "reports") html += modal(tr("Review reports"), reportsBody());
     else if (view === "edit") html += editModal(editBody());
     else if (view === "crop") html += cropModal();
     else if (view === "legal") html += modal(legalTitle || tr("About"), legalBody());
@@ -626,6 +709,10 @@ var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
       if (caret != null && focusName && focusEl.setSelectionRange) {
         try { focusEl.setSelectionRange(caret, caret); } catch (err) { /* a button has no caret */ }
       }
+    }
+    if (view === "signup" && step === 2 && window.ViktorychPasskeys && window.ViktorychPasskeys.armConditionalCreate) {
+      var pendingPass = readPending();
+      if (pendingPass && pendingPass.token) window.ViktorychPasskeys.armConditionalCreate(pendingPass.token);
     }
     if (view === "crop" && !layoutCrop()) requestAnimationFrame(layoutCrop);
     if (view === "login" && window.ViktorychPasskeys) {
@@ -718,6 +805,7 @@ var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
     } catch (err) { back = ""; }
     if (!back || back.charAt(0) !== "#") back = "#/";
     document.documentElement.removeAttribute("data-wall");
+    try { history.pushState({ signed: 1 }, "", location.pathname + location.search); } catch (err) { /* the reload still navigates */ }
     location.replace(location.pathname + location.search + back);
     location.reload();
   }
@@ -1079,6 +1167,7 @@ function signupPayload() {
     if (authBusy || !form.saved) return;
     var pending = readPending();
     if (!pending) return;
+    storeCredential(document.getElementById("acct-save-form"));
     authBusy = true;
     paint();
     commitSession(pending.token, pending.account);
@@ -1100,14 +1189,18 @@ function signupPayload() {
       paint();
       return;
     }
-var body = signupPayload();
+    var body = signupPayload();
     if (!body) return;
     authBusy = true;
     paint();
-    api("/v1/signup", { method: "POST", body: body }).then(function (res) {
+    ensureGuard().then(function (pow) {
+      body.pow = pow;
+      body.fax = faxValue();
+      return api("/v1/signup", { method: "POST", body: body });
+    }).then(function (res) {
       authBusy = false;
       if (res.status === 201 && res.token && res.accountNumber) {
-        writePending({ token: res.token, accountNumber: res.accountNumber, account: res.account });
+        writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
         view = "signup";
         step = 2;
         form.saved = false;
@@ -1150,11 +1243,63 @@ var body = signupPayload();
         paint();
         return;
       }
+      storeCredential(document.getElementById("acct-login-form"));
       commitSession(res.token, res.account);
     }).catch(function () {
       authBusy = false;
       if (view !== "login") return;
       errorText = offlineMessage();
+      paint();
+    });
+  }
+  function doRecover() {
+    if (authBusy) return;
+    var code = String(form.recovery || "").trim();
+    errorText = "";
+    if (!code) {
+      errorText = tr("Enter one recovery code. It works once, then new codes replace it.");
+      paint();
+      return;
+    }
+    authBusy = true;
+    paint();
+    api("/v1/recovery/restore", { method: "POST", body: { code: code } }).then(function (res) {
+      authBusy = false;
+      if (!res || res.status !== 200 || !res.token || !res.accountNumber) {
+        errorText = errorMessage((res && res.error) || "recovery_invalid");
+        paint();
+        return;
+      }
+      writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
+      view = "signup";
+      step = 2;
+      form.saved = false;
+      form.passkey = false;
+      errorText = "";
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      errorText = offlineMessage();
+      paint();
+    });
+  }
+  function savePasskeyNow() {
+    var pending = readPending();
+    if (!pending || !pending.token || !window.ViktorychPasskeys) return;
+    authBusy = true;
+    paint();
+    api("/v1/webauthn/register/options", { method: "POST", token: pending.token, body: {} }).then(function (res) {
+      if (!res || res.status !== 200 || !res.publicKey) throw new Error("passkey");
+      return window.ViktorychPasskeys.create(res.publicKey).then(function (credential) {
+        return api("/v1/webauthn/register/verify", { method: "POST", token: pending.token, body: { challengeId: res.challengeId, credential: credential, label: tr("This device") } });
+      });
+    }).then(function (res) {
+      authBusy = false;
+      errorText = res && res.status === 200 ? tr("Passkey saved") : tr("Could not create a passkey.");
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      errorText = tr("Could not create a passkey.");
       paint();
     });
   }
@@ -1200,7 +1345,11 @@ var body = signupPayload();
     if (!body) return;
     authBusy = true;
     paint();
-    api("/v1/webauthn/signup/options", { method: "POST", body: body }).then(function (res) {
+    ensureGuard().then(function (pow) {
+      body.pow = pow;
+      body.fax = faxValue();
+      return api("/v1/webauthn/signup/options", { method: "POST", body: body });
+    }).then(function (res) {
       if (!res || res.status !== 200 || !res.publicKey) {
         authBusy = false;
         if (res && res.error === "claim_required") form.claimOpen = true;
@@ -1223,7 +1372,7 @@ var body = signupPayload();
         return;
       }
       form.passkey = true;
-      writePending({ token: res.token, accountNumber: res.accountNumber, account: res.account });
+      writePending({ token: res.token, accountNumber: res.accountNumber, recoveryCodes: res.recoveryCodes || [], account: res.account });
       step = 2;
       form.saved = false;
       errorText = "";
@@ -1347,6 +1496,93 @@ var body = signupPayload();
       return;
     }
     downloadNumber();
+  }
+  function listedCodes() {
+    var nodes = document.querySelectorAll("#account-layer [data-recovery-code]");
+    var codes = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var text = String(nodes[i].textContent || "").trim();
+      if (text) codes.push(text);
+    }
+    return codes;
+  }
+  function saveTextFile(name, text) {
+    var blob = new Blob([text], { type: "text/plain" });
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+  }
+  function copyCodes() {
+    var text = listedCodes().join("\n");
+    if (!text) return;
+    var done = function () {
+      errorText = tr("Copied");
+      paint();
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { saveTextFile("recovery-codes.txt", text + "\n"); });
+      return;
+    }
+    saveTextFile("recovery-codes.txt", text + "\n");
+  }
+  function downloadCodes() {
+    var text = listedCodes().join("\n");
+    if (!text) return;
+    saveTextFile("recovery-codes.txt", text + "\n");
+  }
+  function regenerateCodes() {
+    var session = readSession();
+    if (!session || authBusy) return;
+    authBusy = true;
+    errorText = "";
+    api("/v1/recovery/codes", { method: "POST", token: session.token, body: {} }).then(function (res) {
+      authBusy = false;
+      if (!res || res.status !== 200 || !res.recoveryCodes || !res.recoveryCodes.length) {
+        errorText = errorMessage((res && res.error) || "");
+        paint();
+        return;
+      }
+      form.recoveryCodes = res.recoveryCodes;
+      view = "recovery";
+      errorText = "";
+      paint();
+    }).catch(function () {
+      authBusy = false;
+      errorText = offlineMessage();
+      paint();
+    });
+  }
+  function reportsBody() {
+    if (reportState.loading && !reportState.items.length) return '<p class="acct-sub">' + esc(tr("Loading…")) + "</p>";
+    if (!reportState.items.length) return '<p class="acct-sub">' + esc(tr("No open reports")) + "</p>" + errorHtml();
+    return reportState.items.map(function (item) {
+      return '<article class="acct-codes"><p>' + esc(item.body || "") + '</p><p class="acct-sub">' + esc(item.reason || "") + '</p><div class="acct-row"><button type="button" data-acct="report-hide" data-id="' + esc(item.id) + '">' + esc(tr("Hide")) + '</button><button type="button" data-acct="report-dismiss" data-id="' + esc(item.id) + '">' + esc(tr("Dismiss report")) + "</button></div></article>";
+    }).join("") + errorHtml();
+  }
+  function loadReports() {
+    var session = readSession();
+    if (!session) return;
+    reportState.loading = true;
+    api("/v1/moderation/reports", { token: session.token }).then(function (res) {
+      reportState.loading = false;
+      reportState.items = res && Array.isArray(res.reports) ? res.reports : [];
+      if (view === "reports") paint();
+    }).catch(function () {
+      reportState.loading = false;
+      errorText = tr("Something went wrong. Try again.");
+      if (view === "reports") paint();
+    });
+  }
+  function resolveReport(id, action) {
+    var session = readSession();
+    if (!session || !id) return;
+    api("/v1/moderation/reports", { method: "POST", token: session.token, body: { id: id, action: action } }).then(function () {
+      loadReports();
+    }).catch(function () {});
   }
   function downloadNumber() {
     var pending = readPending();
@@ -1632,10 +1868,25 @@ var body = signupPayload();
     return (readSettings().follows || []).filter(function (id) { return id && String(id).indexOf("app:") !== 0; });
   }
   function localAppFollows() {
-    return (readSettings().accountFollows || []).filter(function (id) { return /^app:\d{12}$/.test(String(id || "")); });
+    return (readSettings().accountFollows || []).filter(function (id) {
+      var text = String(id || "");
+      return /^app:\d{12}$/.test(text) || /^app:@[A-Za-z0-9_\u0400-\u04FF]{1,32}$/.test(text);
+    });
+  }
+  function accountRef(account) {
+    if (!account) return "";
+    if (account.publicId && /^\d{12}$/.test(String(account.publicId))) return "app:" + account.publicId;
+    if (account.handle) return "app:@" + account.handle;
+    return "";
+  }
+  function profileMine(account) {
+    var session = readSession();
+    if (!session || !session.account || !account) return false;
+    if (account.publicId && session.account.publicId === account.publicId) return true;
+    return !!(account.handle && skel(session.account.handle) === skel(account.handle));
   }
   function accountStat(account, field) {
-    var id = "app:" + (account && account.publicId || "");
+    var id = accountRef(account);
     var known = graphCounts[id];
     if (field === "following" && myAccountId() === id && (!known || known.following == null)) {
       return localFeedFollows().length + localAppFollows().length;
@@ -1647,22 +1898,26 @@ var body = signupPayload();
     return 0;
   }
   function noteProfile(account) {
-    if (!account || !account.publicId) return;
-    var id = "app:" + account.publicId;
+    var id = accountRef(account);
+    if (!account || !id) return;
     graphCounts[id] = graphCounts[id] || {};
     if (account.followingCount != null && !graphCounts[id].fresh) graphCounts[id].following = account.followingCount;
     if (account.followersCount != null && !graphCounts[id].fresh) graphCounts[id].followers = account.followersCount;
     if (account.friendsCount != null && !graphCounts[id].fresh) graphCounts[id].friends = account.friendsCount;
     if (account.viewerFriendStatus != null) graphCounts[id].friendStatus = account.viewerFriendStatus;
     if (account.mutualFriendsCount != null) graphCounts[id].mutualFriendsCount = account.mutualFriendsCount;
+    graphCounts[id].pending = !!account.viewerPending;
+    graphCounts[id].viewerBlocks = !!account.viewerBlocks;
+    graphCounts[id].blockedBy = !!account.blockedBy;
+    graphCounts[id].muted = !!account.viewerMutes;
+    graphCounts[id].locked = !!account.locked;
   }
   function countLink(account, tab, n, label) {
     var href = tab === "friends" ? ("#/@" + encodeURIComponent(account.handle || "") + "?tab=friends") : ("#/@" + encodeURIComponent(account.handle || "") + "/" + tab);
     return '<a href="' + esc(href) + '"><b>' + esc(formatNum(n)) + "</b> <span>" + esc(label) + "</span></a>";
   }
   function accountCountsHtml(account) {
-    var priv = account && account.privateFollows ? '<span class="private-badge" title="' + esc(tr("Followers and following are private")) + '" aria-label="' + esc(tr("Followers and following are private")) + '">' + lockIcon(12) + ' <span>' + esc(tr("Private")) + '</span></span>' : "";
-    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + countLink(account, "friends", accountStat(account, "friends"), tr("Friends")) + priv + "</div>";
+    return '<div class="counts">' + countLink(account, "following", accountStat(account, "following"), tr("Following count")) + countLink(account, "followers", accountStat(account, "followers"), tr("Followers")) + countLink(account, "friends", accountStat(account, "friends"), tr("Friends")) + "</div>";
   }
   function followersOf(id) {
     var known = graphCounts[id];
@@ -1685,17 +1940,25 @@ var body = signupPayload();
     }).catch(function () { countLoads[id] = false; });
   }
   function listPack(id, tab) {
-    return listCache[id + "|" + tab] || { loading: false, accounts: null, error: false, isPrivate: false };
+    return listCache[id + "|" + tab] || { loading: false, accounts: null, error: false, isPrivate: false, cursor: "", query: graphQuery[id + "|" + tab] || "" };
   }
-  function ensureList(id, tab) {
+  var graphQuery = {};
+  var graphTimer = {};
+  function ensureList(id, tab, more) {
     var session = readSession();
     var key = id + "|" + tab;
     if (!id || !session || !hasApi()) return;
     var pack = listCache[key];
-    if (pack && (pack.loading || (pack.accounts && !pack.dirty))) return;
+    if (pack && pack.loading) return;
+    if (pack && pack.accounts && !pack.dirty && !more) return;
     var epoch = followEpoch;
-    listCache[key] = { loading: true, accounts: pack && pack.accounts, error: false, dirty: false };
-    api("/v1/follows?id=" + encodeURIComponent(id) + "&tab=" + encodeURIComponent(tab), { token: session.token }).then(function (res) {
+    var q = graphQuery[key] || "";
+    var cursor = more && pack && pack.cursor ? pack.cursor : "";
+    listCache[key] = { loading: true, accounts: pack && pack.accounts, error: false, dirty: false, cursor: pack && pack.cursor, query: q, isPrivate: pack && pack.isPrivate, locked: pack && pack.locked, blocked: pack && pack.blocked };
+    var path = "/v1/follows?id=" + encodeURIComponent(id) + "&tab=" + encodeURIComponent(tab) + "&limit=20";
+    if (q) path += "&q=" + encodeURIComponent(q);
+    if (cursor) path += "&cursor=" + encodeURIComponent(cursor);
+    api(path, { token: session.token }).then(function (res) {
       if (epoch !== followEpoch) {
         if (listCache[key]) {
           listCache[key].loading = false;
@@ -1703,55 +1966,133 @@ var body = signupPayload();
         }
         return;
       }
-      if (!res || res.status !== 200) listCache[key] = { loading: false, accounts: [], error: true, isPrivate: false };
+      if (!res || res.status !== 200) listCache[key] = { loading: false, accounts: [], error: true, isPrivate: false, cursor: "", query: q };
       else {
-        var isPriv = !!res.isPrivate;
-        listCache[key] = { loading: false, accounts: Array.isArray(res.accounts) ? res.accounts : [], error: false, isPrivate: isPriv };
+        var next = Array.isArray(res.accounts) ? res.accounts : [];
+        var prev = more && pack && Array.isArray(pack.accounts) ? pack.accounts : [];
+        listCache[key] = {
+          loading: false,
+          accounts: prev.concat(next),
+          error: false,
+          isPrivate: !!res.isPrivate,
+          locked: !!res.locked,
+          blocked: !!res.blocked,
+          cursor: res.cursor || "",
+          query: q
+        };
         graphCounts[id] = graphCounts[id] || {};
         if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
         if (res.followingCount != null) graphCounts[id].following = res.followingCount;
+        if (res.requestsCount != null) graphCounts[id].requests = res.requestsCount;
         graphCounts[id].fresh = true;
       }
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {
-      listCache[key] = { loading: false, accounts: [], error: true };
+      listCache[key] = { loading: false, accounts: (pack && pack.accounts) || [], error: true, cursor: "", query: q };
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     });
+  }
+  function setGraphQuery(id, tab, value) {
+    var key = id + "|" + tab;
+    graphQuery[key] = String(value || "");
+    if (listCache[key]) listCache[key].dirty = true;
+    clearTimeout(graphTimer[key]);
+    graphTimer[key] = setTimeout(function () { ensureList(id, tab, false); }, 200);
   }
   function dirtyLists() {
     Object.keys(listCache).forEach(function (key) {
       if (listCache[key]) listCache[key].dirty = true;
     });
   }
-  function changeFollow(id, follow, profile) {
+  var followInflight = {};
+  function pressFollow(id) {
+    if (!id || followInflight[id]) return false;
+    followInflight[id] = true;
+    return true;
+  }
+  function releaseFollow(id) {
+    if (id) followInflight[id] = false;
+  }
+  function previewFollow(id, follow) {
+    if (!id) return;
+    graphCounts[id] = graphCounts[id] || {};
+    var me = myAccountId();
+    if (graphCounts[id].followers != null) graphCounts[id].followers = Math.max(0, graphCounts[id].followers + (follow ? 1 : -1));
+    if (me && graphCounts[me] && graphCounts[me].following != null) graphCounts[me].following = Math.max(0, graphCounts[me].following + (follow ? 1 : -1));
+  }
+  function followErrorText(res) {
+    if (!res) return tr("Couldn’t update that follow. Try again.");
+    if (res.status === 429 || res.error === "rate_limited") return tr("Too many follows. Wait a few minutes and try again.");
+    if (res.status === 403 || res.error === "blocked") return tr("You can’t follow this account.");
+    if (res.status === 404) return tr("That account isn’t here.");
+    return tr("Couldn’t update that follow. Try again.");
+  }
+  function rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine) {
+    if (hadTarget) graphCounts[id].followers = prevTarget;
+    else if (graphCounts[id]) {
+      delete graphCounts[id].followers;
+      graphCounts[id].fresh = false;
+    }
+    if (hadMine && graphCounts[me]) graphCounts[me].following = prevMine;
+  }
+  function changeFollow(id, follow, profile, opts) {
     var session = readSession();
-    if (!session || !hasApi() || !id) return Promise.resolve(true);
-    if (id === myAccountId()) return Promise.resolve(false);
+    opts = opts || {};
+    var held = !!opts.held;
+    if (!id) return Promise.resolve(false);
+    if (!held && followInflight[id]) return Promise.resolve({ ok: true, ignored: true });
+    if (!held) followInflight[id] = true;
+    if (!session || !hasApi()) {
+      releaseFollow(id);
+      return Promise.resolve(true);
+    }
+    if (id === myAccountId()) {
+      releaseFollow(id);
+      return Promise.resolve(false);
+    }
     followEpoch += 1;
     var epoch = followEpoch;
     var me = myAccountId();
+    graphCounts[id] = graphCounts[id] || {};
+    var wasPending = !!graphCounts[id].pending;
+    var skipCounts = !!opts.replay || (follow && wasPending) || (!follow && wasPending);
     var hadTarget = !!(graphCounts[id] && graphCounts[id].followers != null);
     var prevTarget = hadTarget ? graphCounts[id].followers : 0;
     var hadMine = !!(me && graphCounts[me] && graphCounts[me].following != null);
     var prevMine = hadMine ? graphCounts[me].following : 0;
-    graphCounts[id] = graphCounts[id] || {};
-    graphCounts[id].followers = Math.max(0, prevTarget + (follow ? 1 : -1));
-    if (hadMine) graphCounts[me].following = Math.max(0, prevMine + (follow ? 1 : -1));
+    if (!skipCounts) {
+      graphCounts[id].followers = Math.max(0, prevTarget + (follow ? 1 : -1));
+      if (hadMine) graphCounts[me].following = Math.max(0, prevMine + (follow ? 1 : -1));
+    }
+    if (follow) graphCounts[id].pending = false;
     dirtyLists();
     var body = { id: id };
     if (profile && typeof profile === "object") body.profile = profile;
     return api("/v1/follows", { method: follow ? "PUT" : "DELETE", token: session.token, body: body }).then(function (res) {
-      if (epoch !== followEpoch) return res && res.status === 200;
+      releaseFollow(id);
+      if (epoch !== followEpoch) return res && res.status === 200 ? true : false;
       if (!res || res.status !== 200) {
-        if (hadTarget) graphCounts[id].followers = prevTarget;
-        else {
-          delete graphCounts[id].followers;
-          graphCounts[id].fresh = false;
-        }
-        if (hadMine) graphCounts[me].following = prevMine;
+        if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
+        else if (opts.replay) previewFollow(id, !follow);
+        if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(followErrorText(res));
+        if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
         return false;
       }
       graphCounts[id] = graphCounts[id] || {};
+      if (res.pending) {
+        if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
+        graphCounts[id].pending = true;
+        graphCounts[id].fresh = true;
+        if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
+        if (me && res.followingCount != null) {
+          graphCounts[me] = graphCounts[me] || {};
+          graphCounts[me].following = res.followingCount;
+        }
+        dirtyLists();
+        if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        return { pending: true };
+      }
+      graphCounts[id].pending = false;
       if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
       graphCounts[id].fresh = true;
       if (me && res.followingCount != null) {
@@ -1760,15 +2101,32 @@ var body = signupPayload();
         graphCounts[me].fresh = true;
       }
       dirtyLists();
+      refreshProfileMedia();
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
       return true;
     }).catch(function () {
+      releaseFollow(id);
       if (epoch !== followEpoch) return false;
-      if (hadTarget) graphCounts[id].followers = prevTarget;
-      else delete graphCounts[id].followers;
-      if (hadMine) graphCounts[me].following = prevMine;
+      if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
+      else if (opts.replay) previewFollow(id, !follow);
+      if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(tr("Couldn’t update that follow. Try again."));
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
       return false;
     });
+  }
+  function followControlHtml(id, large) {
+    var row = graphCounts[id] || {};
+    var busy = !!followInflight[id];
+    var size = large ? " lg" : "";
+    var attr = ' type="button" data-act="follow" data-id="' + esc(id) + '" aria-busy="' + (busy ? "true" : "false") + '"';
+    if (row.blockedBy) return "";
+    if (row.viewerBlocks) {
+      return '<button class="follow following' + size + '"' + attr.replace('data-act="follow"', 'data-act="graph-unblock"') + ' aria-pressed="false">' + esc(tr("Unblock")) + '</button>';
+    }
+    if (row.pending) {
+      return '<button class="follow pending' + size + '"' + attr + ' aria-pressed="false" aria-label="' + esc(tr("Pending")) + '"><span class="f">' + esc(tr("Pending")) + '</span><span class="u">' + esc(tr("Cancel request")) + '</span></button>';
+    }
+    return "";
   }
   function syncFollows() {
     var session = readSession();
@@ -1798,7 +2156,16 @@ var body = signupPayload();
         graphCounts[me] = graphCounts[me] || {};
         if (res.followingCount != null) graphCounts[me].following = res.followingCount;
         if (res.followersCount != null) graphCounts[me].followers = res.followersCount;
+        if (res.requestsCount != null) graphCounts[me].requests = res.requestsCount;
         graphCounts[me].fresh = true;
+        var outgoing = Array.isArray(res.outgoingRequests) ? res.outgoingRequests : [];
+        Object.keys(graphCounts).forEach(function (key) {
+          if (graphCounts[key] && key !== me) graphCounts[key].pending = outgoing.indexOf(key) >= 0;
+        });
+        outgoing.forEach(function (oid) {
+          graphCounts[oid] = graphCounts[oid] || {};
+          graphCounts[oid].pending = true;
+        });
         if (window.ViktorychAccounts.onServerFollows) window.ViktorychAccounts.onServerFollows(Array.isArray(res.ids) ? res.ids : []);
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
       }
@@ -1819,8 +2186,9 @@ var body = signupPayload();
     var session = readSession();
     var account = profiles[key];
     if (!account && session && session.account && skel(session.account.handle) === key) account = session.account;
-    if (account && account.publicId) {
-      return { id: "app:" + account.publicId, kind: "account", name: account.displayName || account.handle, handle: account.handle, platform: "x" };
+    if (account && account.handle) {
+      var id = account.publicId && /^\d{12}$/.test(String(account.publicId)) ? "app:" + account.publicId : "app:@" + account.handle;
+      return { id: id, kind: "account", name: account.displayName || account.handle, handle: account.handle, platform: "x" };
     }
     if ((platform || "x") === "x" && readSession() && hasApi() && !profileMiss[key]) {
       loadProfile(handle);
@@ -1830,10 +2198,10 @@ var body = signupPayload();
   }
   function friendButtonHtml(account) {
     var session = readSession();
-    if (!session || !account || !account.publicId) return "";
-    if (session.account && session.account.publicId === account.publicId) return "";
-    var status = (graphCounts["app:" + account.publicId] && graphCounts["app:" + account.publicId].friendStatus) || account.viewerFriendStatus || "none";
-    var pid = account.publicId;
+    var ref = accountRef(account);
+    if (!session || !account || !ref || profileMine(account)) return "";
+    var status = (graphCounts[ref] && graphCounts[ref].friendStatus) || account.viewerFriendStatus || "none";
+    var pid = ref;
     var handle = account.handle || "";
 
     if (status === "friends") {
@@ -1850,20 +2218,24 @@ var body = signupPayload();
 
   function ensureFriends(targetId) {
     var session = readSession();
-    if (!targetId || !session || !hasApi()) return;
-    if (friendsLoads[targetId] || friendsCache[targetId]) return;
-    friendsLoads[targetId] = true;
-    api("/v1/friends?id=" + encodeURIComponent("app:" + targetId) + "&tab=friends", { token: session.token }).then(function (res) {
-      friendsLoads[targetId] = false;
+    var key = String(targetId || "");
+    if (!key) return;
+    if (key.indexOf("app:") !== 0 && key.indexOf("@") !== 0) key = "app:" + key;
+    if (key.charAt(0) === "@") key = "app:" + key;
+    if (!session || !hasApi()) return;
+    if (friendsLoads[key] || friendsCache[key]) return;
+    friendsLoads[key] = true;
+    api("/v1/friends?id=" + encodeURIComponent(key) + "&tab=friends", { token: session.token }).then(function (res) {
+      friendsLoads[key] = false;
       if (!res || res.status !== 200) return;
-      friendsCache[targetId] = Array.isArray(res.friends) ? res.friends : [];
-      var id = "app:" + targetId;
+      friendsCache[key] = Array.isArray(res.friends) ? res.friends : [];
+      var id = key;
       graphCounts[id] = graphCounts[id] || {};
       if (res.friendsCount != null) graphCounts[id].friends = res.friendsCount;
       if (res.status != null) graphCounts[id].friendStatus = res.status;
       if (res.mutualCount != null) graphCounts[id].mutualFriendsCount = res.mutualCount;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
-    }).catch(function () { friendsLoads[targetId] = false; });
+    }).catch(function () { friendsLoads[key] = false; });
   }
 
   function ensureFriendRequests() {
@@ -1885,9 +2257,7 @@ var body = signupPayload();
     var session = readSession();
     if (!session || !hasApi()) return Promise.resolve();
     ensureFriendRequests();
-    if (session.account && session.account.publicId) {
-      ensureFriends(session.account.publicId);
-    }
+    if (session.account) ensureFriends(accountRef(session.account));
     return Promise.resolve();
   }
 
@@ -1895,9 +2265,10 @@ var body = signupPayload();
     var session = readSession();
     if (!session || !hasApi() || !targetId) return;
     var me = session.account && session.account.publicId;
-    var tId = targetId.replace(/^app:/, "");
-    var idKey = "app:" + tId;
-    var meKey = "app:" + me;
+    var rawTarget = String(targetId || "");
+    var tId = rawTarget.indexOf("app:") === 0 ? rawTarget : ("app:" + rawTarget.replace(/^@/, "@"));
+    var idKey = tId;
+    var meKey = me ? "app:" + me : "";
 
     graphCounts[idKey] = graphCounts[idKey] || {};
     var prevStatus = graphCounts[idKey].friendStatus || "none";
@@ -1948,6 +2319,7 @@ var body = signupPayload();
       }
       if (res.status != null) graphCounts[idKey].friendStatus = res.status;
       if (res.friendsCount != null && graphCounts[meKey]) graphCounts[meKey].friends = res.friendsCount;
+      refreshProfileMedia();
       if (window.ViktorychAccounts && window.ViktorychAccounts.toast) {
         if (action === "request") window.ViktorychAccounts.toast(tr("Friend request sent"));
         else if (action === "accept") window.ViktorychAccounts.toast(tr("Friend request accepted"));
@@ -1966,12 +2338,12 @@ var body = signupPayload();
 
   function friendsSectionHtml(account) {
     var session = readSession();
-    var mine = session && session.account && session.account.publicId === account.publicId;
+    var mine = profileMine(account);
     if (!session) {
       return '<div class="empty"><h2>' + esc(tr("Friends")) + '</h2><p>' + esc(tr("Sign in to see this list.")) + '</p></div>';
     }
 
-    var pid = account.publicId;
+    var pid = accountRef(account);
     ensureFriends(pid);
     if (mine) ensureFriendRequests();
 
@@ -2172,14 +2544,75 @@ var body = signupPayload();
       '<button class="acct-next" type="button" data-acct="gen-challenge">' + esc(linkIdentityForm.loading ? tr("Loading…") : tr("Generate verification code")) + '</button>';
   }
 
-  function accountPage(account, route) {
+  function graphListHtml(subjectId, tab, handle) {
+    ensureList(subjectId, tab, false);
+    var pack = listPack(subjectId, tab);
+    var q = graphQuery[subjectId + "|" + tab] || "";
+    var searchLabel = tab === "followers" ? tr("Search followers") : tab === "following" ? tr("Search following") : tab === "mutuals" ? tr("Search mutuals") : tr("Search followers");
+    var search = '<div class="friends-search-box"><input type="search" class="friends-search-input" data-graph-search="1" data-graph-id="' + esc(subjectId) + '" data-graph-tab="' + esc(tab) + '" placeholder="' + esc(searchLabel) + '" aria-label="' + esc(searchLabel) + '" value="' + esc(q) + '"></div>';
+    if (pack.loading && !pack.accounts) return search + '<div class="reply-empty">' + esc(tr("Loading…")) + '</div>';
+    if (pack.error) return search + '<div class="empty"><h2>' + esc(tr("Followers")) + '</h2><p>' + esc(tr("Couldn’t load this list.")) + '</p></div>';
+    if (pack.blocked) return '<div class="empty"><h2>' + esc(tr("You're blocked")) + '</h2><p>' + esc(tr("This account has blocked you. You can’t see their posts or profile.")) + '</p></div>';
+    if (pack.locked) return '<div class="empty"><h2>' + esc(tr("These posts are protected")) + '</h2><p>' + esc(tr("Follow this account and wait for approval to see their posts.")) + '</p></div>';
+    if (pack.isPrivate) return '<div class="empty"><h2>' + esc(tr("These lists are private")) + '</h2><p>' + esc(tr("Only @{handle} can see who they follow and who follows them.", { handle: handle || "" })) + '</p></div>';
+    var rows = pack.accounts || [];
+    if (!rows.length) {
+      var title = tab === "followers" ? tr("No followers yet") : tab === "mutuals" ? tr("No mutuals yet") : tab === "requests" ? tr("No follow requests") : tr("Not following anyone yet");
+      var copy = tab === "requests" ? tr("When someone asks to follow you, they’ll show up here.") : tab === "mutuals" ? tr("People you follow who follow you back show up here.") : tab === "followers" ? tr("When someone follows this account, they’ll show up here.") : tr("When this account follows someone, they’ll show up here.");
+      return search + '<div class="empty"><h2>' + esc(title) + '</h2><p>' + esc(copy) + '</p></div>';
+    }
     var session = readSession();
-    var mine = session && session.account && session.account.publicId === account.publicId;
-    var photo = presenceWrap(account.publicId, publicAvatar(account.avatar, account.avatarFace, "pava"), mine);
+    var mine = session && session.account && ("app:" + session.account.publicId) === subjectId;
+    var html = rows.map(function (item) {
+      var button = window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(item.id, false) || "") : "";
+      var badge = item.followsYou ? '<span class="pill-badge">' + esc(tr("Follows you")) + '</span>' : "";
+      var remove = mine && tab === "followers" && item.removable ? '<button class="outline" type="button" data-act="remove-follower" data-id="' + esc(item.id) + '">' + esc(tr("Remove follower")) + '</button>' : "";
+      var accept = mine && tab === "requests" ? '<button class="friend-btn friend-accept" type="button" data-act="accept-follow" data-id="' + esc(item.id) + '">' + esc(tr("Accept")) + '</button><button class="friend-btn friend-decline" type="button" data-act="decline-follow" data-id="' + esc(item.id) + '">' + esc(tr("Decline")) + '</button>' : "";
+      var name = item.name || item.handle || "";
+      var href = item.handle ? "#/@" + encodeURIComponent(item.handle) : (item.id ? "#/p/" + encodeURIComponent(item.id) : "#/");
+      return '<div class="connect-row"><a class="who-main" href="' + esc(href) + '"><span class="who-copy"><span class="name">' + esc(name) + badge + '</span><span class="handle">' + (item.handle ? "@" + esc(item.handle) : "") + '</span></span></a><span class="row-actions">' + accept + remove + button + '</span></div>';
+    }).join("");
+    var more = pack.cursor ? '<button class="outline" type="button" data-act="graph-more" data-id="' + esc(subjectId) + '" data-tab="' + esc(tab) + '">' + esc(tr("Load more")) + '</button>' : "";
+    return search + html + more;
+  }
+  function galleryList(account, kind) {
+    var list = kind === "banner" ? ((account && account.banners) || []) : ((account && account.photos) || []);
+    var items = list.filter(function (item) { return item && item.url; });
+    if (!items.length) {
+      var url = kind === "banner" ? (account && account.banner) : (account && account.avatar);
+      if (url) items = [{ url: url, main: true }];
+    }
+    return items;
+  }
+  function galleryHtml(account) {
+    if (!gallery.open || !account) return "";
+    var items = galleryList(account, gallery.kind);
+    if (!items.length) return "";
+    if (gallery.index < 0) gallery.index = items.length - 1;
+    if (gallery.index >= items.length) gallery.index = 0;
+    var item = items[gallery.index];
+    return '<div class="photo-gallery" data-acct="gallery-root">' +
+      '<button class="photo-gallery-x" type="button" data-acct="gallery-close" aria-label="' + esc(tr("Close")) + '">×</button>' +
+      (items.length > 1 ? '<button class="photo-gallery-nav prev" type="button" data-acct="gallery-prev" aria-label="' + esc(tr("Back")) + '">‹</button>' : "") +
+      photoHtml(item.url, "photo-gallery-img") +
+      (items.length > 1 ? '<button class="photo-gallery-nav next" type="button" data-acct="gallery-next" aria-label="' + esc(tr("Next")) + '">›</button>' : "") +
+      "</div>";
+  }
+  function accountPage(account, route) {
+    var mine = profileMine(account);
+    var ref = accountRef(account);
+    if (account.blockedBy && !mine) {
+      return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" type="button" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div></div></div></div><div class="empty"><h2>' + esc(tr("You're blocked")) + '</h2><p>' + esc(tr("This account has blocked you. You can’t see their posts or profile.")) + '</p></div>';
+    }
+    var photo = presenceWrap(mine ? account.publicId : "", publicAvatar(account.avatar, account.avatarFace, "pava"), mine);
+    if ((account.photos && account.photos.length) || (account.banners && account.banners.length) || account.avatar || account.banner) {
+      photo = photo.replace("<img", '<img data-acct="open-gallery" data-kind="photo"');
+    }
     var banner = publicBanner(account.banner, account.bannerFace);
+    if (banner.indexOf("<img") >= 0) banner = banner.replace("<img", '<img data-acct="open-gallery" data-kind="banner"');
     var edit = mine ? '<button class="follow" type="button" data-acct="edit">' + esc(tr("Edit profile")) + "</button>" : "";
-    var followBtn = !mine && account.publicId && window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton("app:" + account.publicId, true) || "") : "";
-    var friendBtn = !mine && account.publicId ? friendButtonHtml(account) : "";
+    var followBtn = !mine && ref && window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(ref, true) || "") : "";
+    var friendBtn = !mine && ref ? friendButtonHtml(account) : "";
     var activeTab = (route && route.query && route.query.get("tab")) || (route && route.tab) || "posts";
     if (activeTab !== "friends") activeTab = "posts";
 
@@ -2188,13 +2621,15 @@ var body = signupPayload();
     var count = String(pack.count || 0);
 
     var postsBody = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(mine ? tr("Add a photo and bio from Edit profile. Posts here come from feeds you follow.") : tr("Posts from this account will show up here.")) + "</p></div>");
+    if (!mine && account.viewerBlocks) postsBody = '<div class="empty"><h2>' + esc(tr("You blocked this account")) + '</h2><p>' + esc(tr("Posts from this account stay hidden.")) + '</p></div>';
+    else if (!mine && account.locked) postsBody = '<div class="empty"><h2>' + esc(tr("These posts are protected")) + '</h2><p>' + esc(tr("Follow this account and wait for approval to see their posts.")) + '</p></div>';
     var friendsBody = friendsSectionHtml(account);
     var body = activeTab === "friends" ? friendsBody : postsBody;
 
     var profileHref = "#/@" + encodeURIComponent(account.handle || "");
     var friendsHref = "#/@" + encodeURIComponent(account.handle || "") + "?tab=friends";
 
-    var mutualCount = (graphCounts["app:" + account.publicId] && graphCounts["app:" + account.publicId].mutualFriendsCount) || account.mutualFriendsCount;
+    var mutualCount = (graphCounts[ref] && graphCounts[ref].mutualFriendsCount) || account.mutualFriendsCount;
     var mutualLine = (!mine && mutualCount) ? '<div class="pmutual">' + esc(tr("{count} mutual friends", { count: mutualCount })) + '</div>' : '';
 
     var tabs = '<div class="tabs ptabs" role="tablist" aria-label="' + esc(tr("Profile")) + '">' +
@@ -2202,8 +2637,9 @@ var body = signupPayload();
       '<a class="tab' + (activeTab === "friends" ? " on" : "") + '" role="tab" aria-selected="' + (activeTab === "friends" ? "true" : "false") + '" href="' + esc(friendsHref) + '"><span>' + esc(tr("Friends")) + (accountStat(account, "friends") > 0 ? ' <small class="tab-n">(' + formatNum(accountStat(account, "friends")) + ')</small>' : '') + '</span></a>' +
     '</div>';
 
-    var seenLine = window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
-    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + seenLine + mutualLine + '<div class="acct-id">' + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + "</div>" + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body;
+    var seenLine = mine && account.publicId && window.ViktorychPresence ? window.ViktorychPresence.linesHtml(account.publicId) : "";
+    var lock = account.privateFollows ? '<span class="protected-badge" title="' + esc(tr("Private account")) + '" aria-label="' + esc(tr("Private account")) + '">' + lockIcon(18) + "</span>" : "";
+    return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div><div class="pt-count">' + esc(tr("{count} posts", { count: count })) + "</div></div></div></div>" + banner + '<div class="pinfo"><div class="pava-row">' + photo + '<div class="pactions">' + edit + followBtn + friendBtn + seenLine + '</div></div><h1 class="pname">' + esc(account.displayName || account.handle) + lock + (account.owner ? badge() : "") + '</h1><div class="phandle">@' + esc(account.handle) + '</div>' + mutualLine + (account.bio ? '<div class="pbio">' + esc(account.bio) + "</div>" : "") + (account.location ? '<div class="acct-loc">' + esc(account.location) + "</div>" : "") + (siteHref(account.website) ? '<div class="acct-loc"><a href="' + esc(siteHref(account.website)) + '" target="_blank" rel="noopener noreferrer">' + esc(account.website) + "</a></div>" : "") + linkedIdentitiesHtml(account) + (account.profileLess ? '<div class="private-badge" style="margin:4px 0 8px">' + esc(tr("Profile-less (not visible to others)")) + '</div>' : "") + accountCountsHtml(account) + "</div>" + tabs + body + galleryHtml(account);
   }
   function profileHtml(route) {
     if (!route || route.name !== "profile" || !route.handle || route.handle === "_") return "";
@@ -2211,7 +2647,7 @@ var body = signupPayload();
     if (profileMiss[key]) return "";
     var account = profiles[key];
     var session = readSession();
-    if (!account && session && session.account && (skel(session.account.handle) === key || skel(session.account.handle + session.account.publicId) === key || session.account.publicId === route.handle)) account = session.account;
+    if (!account && session && session.account && (skel(session.account.handle) === key || skel(session.account.handle + (session.account.publicId || "")) === key || session.account.publicId === route.handle)) account = session.account;
     if (!account && /\d{12}$/.test(route.handle)) {
       account = profiles[skel(route.handle.slice(-12))];
     }
@@ -2220,6 +2656,12 @@ var body = signupPayload();
       return "";
     }
     if (!account.repostsLoaded) loadProfile(route.handle);
+    if (account.handle && skel(account.handle) !== key) {
+      var nextHash = "#/@" + encodeURIComponent(account.handle);
+      var tab = route.query && route.query.get && route.query.get("tab");
+      if (tab) nextHash += "?tab=" + encodeURIComponent(tab);
+      if ((location.hash || "") !== nextHash) location.replace(nextHash);
+    }
     return accountPage(account, route);
   }
   function profilePending(handle) {
@@ -2534,6 +2976,148 @@ var body = signupPayload();
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     });
   }
+  function ensureMediaManager() {
+    var session = readSession();
+    if (!session || mediaManagerLoaded || !hasApi()) return;
+    if (session.account && Array.isArray(session.account.photos)) {
+      mediaManagerLoaded = true;
+      return;
+    }
+    mediaManagerLoaded = true;
+    api("/v1/session", { token: session.token }).then(function (res) {
+      if (!res || res.status !== 200 || !res.account) return;
+      session.account = res.account;
+      writeSession(session);
+      remember(res.account);
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
+  function applyOwnAccount(res) {
+    var session = readSession();
+    if (!session || !res || res.status !== 200 || !res.account) return false;
+    session.account = res.account;
+    writeSession(session);
+    remember(res.account);
+    if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    return true;
+  }
+  function saveMedia(body, method) {
+    var session = readSession();
+    if (!session) return;
+    api("/v1/profile/media", { method: method || "PATCH", token: session.token, body: body }).then(applyOwnAccount).catch(function () {});
+  }
+  function readOriginalFile(file, maxBytes) {
+    return new Promise(function (resolve) {
+      if (!file || file.size > maxBytes) { resolve(""); return; }
+      var reader = new FileReader();
+      reader.onload = function () { resolve(String(reader.result || "")); };
+      reader.onerror = function () { resolve(""); };
+      reader.readAsDataURL(file);
+    });
+  }
+  function mediaCard(item, kind) {
+    var vis = item.visibility || "everyone";
+    function opt(value, label) {
+      return '<option value="' + value + '"' + (vis === value ? " selected" : "") + ">" + esc(tr(label)) + "</option>";
+    }
+    return '<div class="media-privacy-card">' +
+      photoHtml(item.url, kind === "banner" ? "media-privacy-banner" : "media-privacy-photo") +
+      '<label>' + esc(kind === "banner" ? tr("Who can see this banner") : tr("Who can see this photo")) +
+      '<select data-acct="media-vis" data-id="' + esc(item.id) + '">' +
+      opt("everyone", "Everyone") + opt("followers", "Followers") + opt("friends", "Mutual follows") + opt("nobody", "Only you") +
+      "</select></label>" +
+      '<p class="set-sub">' + esc(tr("People you allow can always see it. People you block never can.")) + "</p>" +
+      '<label>' + esc(tr("Always allow")) + '<input data-media-allow="' + esc(item.id) + '" value="' + esc((item.allow || []).join(", ")) + '" placeholder="@handle"></label>' +
+      '<label>' + esc(tr("Never allow")) + '<input data-media-deny="' + esc(item.id) + '" value="' + esc((item.deny || []).join(", ")) + '" placeholder="@handle"></label>' +
+      '<div class="media-privacy-actions">' +
+      '<button class="outline" type="button" data-acct="media-save-except" data-id="' + esc(item.id) + '">' + esc(tr("Save")) + "</button>" +
+      (item.main ? '<span class="media-main">' + esc(kind === "banner" ? tr("Main banner") : tr("Main photo")) + "</span>" : '<button class="outline" type="button" data-acct="media-main" data-id="' + esc(item.id) + '">' + esc(tr("Set as main")) + "</button>") +
+      '<button class="outline" type="button" data-acct="media-fallback" data-id="' + esc(item.id) + '" data-on="' + (item.fallback ? "0" : "1") + '">' + esc(item.fallback ? (kind === "banner" ? tr("Public banner") : tr("Public photo")) : (kind === "banner" ? tr("Set public banner") : tr("Set public photo"))) + "</button>" +
+      '<button class="outline" type="button" data-acct="media-up" data-id="' + esc(item.id) + '" data-kind="' + esc(kind) + '">' + esc(tr("Move up")) + "</button>" +
+      '<button class="outline" type="button" data-acct="media-down" data-id="' + esc(item.id) + '" data-kind="' + esc(kind) + '">' + esc(tr("Move down")) + "</button>" +
+      '<button class="outline" type="button" data-acct="media-delete" data-id="' + esc(item.id) + '">' + esc(kind === "banner" ? tr("Delete banner") : tr("Delete photo")) + "</button>" +
+      "</div></div>";
+  }
+  function redraw() {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+  }
+  function copyAccountId() {
+    var session = readSession();
+    var id = session && session.account && session.account.publicId;
+    if (!id || !navigator.clipboard || !navigator.clipboard.writeText) return;
+    navigator.clipboard.writeText(String(id)).then(function () {
+      idCopied = true;
+      redraw();
+      setTimeout(function () { idCopied = false; redraw(); }, 1600);
+    }).catch(function () {});
+  }
+  function openGallery(kind) {
+    gallery.open = true;
+    gallery.kind = kind === "banner" ? "banner" : "photo";
+    gallery.index = 0;
+    redraw();
+  }
+  function stepGallery(delta) {
+    gallery.index += delta;
+    redraw();
+  }
+  function moveMedia(kind, id, delta) {
+    var session = readSession();
+    var account = session && session.account;
+    if (!account || !id) return;
+    var list = (kind === "banner" ? account.banners : account.photos) || [];
+    var ids = list.map(function (item) { return item.id; });
+    var at = ids.indexOf(id);
+    var nextAt = at + delta;
+    if (at < 0 || nextAt < 0 || nextAt >= ids.length) return;
+    var swap = ids[at];
+    ids[at] = ids[nextAt];
+    ids[nextAt] = swap;
+    saveMedia({ kind: kind === "banner" ? "banner" : "photo", order: ids });
+  }
+  function saveExceptions(id) {
+    function handles(el) {
+      return String(el && el.value || "").split(/[,\s]+/).map(function (item) { return item.replace(/^@/, ""); }).filter(Boolean);
+    }
+    var allowEl = document.querySelector('[data-media-allow="' + id + '"]');
+    var denyEl = document.querySelector('[data-media-deny="' + id + '"]');
+    saveMedia({ id: id, allow: handles(allowEl), deny: handles(denyEl) });
+  }
+  function pickExtra(kind) {
+    var input = document.getElementById(kind === "banner" ? "extra-banner" : "extra-photo");
+    if (!input) return;
+    input.onchange = function () {
+      var file = input.files && input.files[0];
+      input.value = "";
+      readOriginalFile(file, kind === "banner" ? 150 * 1024 : 60 * 1024).then(function (data) {
+        if (!data) return;
+        saveMedia({ kind: kind === "banner" ? "banner" : "photo", image: data }, "POST");
+      });
+    };
+    input.click();
+  }
+  function privacyHtml() {
+    ensureMediaManager();
+    var session = readSession();
+    var account = session && session.account;
+    if (!account) return "";
+    var photos = Array.isArray(account.photos) ? account.photos : [];
+    var banners = Array.isArray(account.banners) ? account.banners : [];
+    var note = account.privateFollows
+      ? tr("A private account starts photos and banners at followers.")
+      : tr("Photos and banners are visible to everyone until you change one.");
+    return '<div class="media-privacy">' +
+      '<h2>' + esc(tr("Profile photo privacy")) + "</h2>" +
+      '<p class="set-sub">' + esc(note) + " " + esc(tr("Shown when someone cannot see your main photo")) + ".</p>" +
+      photos.map(function (item) { return mediaCard(item, "photo"); }).join("") +
+      '<button class="outline" type="button" data-acct="pick-extra" data-kind="photo">' + esc(tr("Add a profile photo")) + "</button>" +
+      '<h2>' + esc(tr("Banner privacy")) + "</h2>" +
+      banners.map(function (item) { return mediaCard(item, "banner"); }).join("") +
+      '<button class="outline" type="button" data-acct="pick-extra" data-kind="banner">' + esc(tr("Add a banner")) + "</button>" +
+      '<input class="acct-hidden" id="extra-photo" type="file" accept="image/jpeg,image/png,image/webp">' +
+      '<input class="acct-hidden" id="extra-banner" type="file" accept="image/jpeg,image/png,image/webp">' +
+      "</div>";
+  }
   function settingsHtml() {
     var session = readSession();
     if (!session || !session.account) {
@@ -2556,9 +3140,9 @@ var body = signupPayload();
       loadBackupChannels();
       health = healthHtml() + channelsHtml();
     }
-    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
-  }
+    return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + "</button><h2>" + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
+      '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
   function onClick(event) {
     var friendSub = event.target && event.target.closest ? event.target.closest("[data-friend-sub]") : null;
     if (friendSub) {
@@ -2596,9 +3180,10 @@ var body = signupPayload();
     }
     var acct = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;
     if (!acct) return;
+    var act = acct.dataset.acct;
+    if (act === "saved" || act === "do-login" || act === "do-recover") return;
     event.preventDefault();
     event.stopPropagation();
-    var act = acct.dataset.acct;
     if (act === "presence-open") {
       if (window.ViktorychPresence) window.ViktorychPresence.open(acct);
       return;
@@ -2723,6 +3308,19 @@ var body = signupPayload();
     else if (act === "passkey-signup") doPasskeySignup();
     else if (act === "passkey-login") doPasskeyLogin();
     else if (act === "do-login") doLogin();
+    else if (act === "lost") { view = "lost"; errorText = ""; form.recovery = ""; paint(); }
+    else if (act === "do-recover") doRecover();
+    else if (act === "save-passkey") savePasskeyNow();
+    else if (act === "show-number") {
+      var secret = document.getElementById("acct-new-password");
+      if (secret) secret.type = secret.type === "password" ? "text" : "password";
+    }
+    else if (act === "copy-codes") copyCodes();
+    else if (act === "download-codes") downloadCodes();
+    else if (act === "recovery-new") regenerateCodes();
+    else if (act === "open-reports") { view = "reports"; errorText = ""; reportState.items = []; paint(); loadReports(); }
+    else if (act === "report-hide") resolveReport(acct.dataset.id, "hide");
+    else if (act === "report-dismiss") resolveReport(acct.dataset.id, "dismiss");
     else if (act === "do-emergency") doEmergency();
     else if (act === "do-restore") doRestoreSession();
     else if (act === "copy-session") copySession();
@@ -2771,6 +3369,11 @@ var body = signupPayload();
     else if (act === "toggle-form-private") { form.privateFollows = !form.privateFollows; paint(); }
     else if (act === "toggle-form-profileless") { form.profileLess = !form.profileLess; paint(); }
     else if (act === "toggle-private-follows") { var s = readSession(); if (s && s.account) setPrivateFollows(!s.account.privateFollows); }
+    else if (act === "toggle-protected") { var sp = readSession(); if (sp && sp.account) setProtected(!sp.account.protected); }
+    else if (act === "unblock-account" || act === "unmute-account-server") {
+      var rid = acct.dataset.id;
+      relationWrite(act === "unblock-account" ? "blocks" : "mutes", rid, true);
+    }
     else if (act === "toggle-profileless") { var s = readSession(); if (s && s.account) setProfileLess(!s.account.profileLess); }
     else if (act === "toggle-fed-ap") toggleFederationAp();
     else if (act === "toggle-fed-nostr") toggleFederationNostr();
@@ -2791,6 +3394,16 @@ var body = signupPayload();
     else if (act === "add-channel") addBackupChannel();
     else if (act === "remove-channel") removeBackupChannel(acct.dataset.index);
     else if (act === "logout-all") logout(true);
+else if (act === "copy-id") copyAccountId();
+    else if (act === "open-gallery") openGallery(acct.dataset.kind || "photo");
+    else if (act === "gallery-close") { gallery.open = false; redraw(); }
+    else if (act === "gallery-prev" || act === "gallery-next") stepGallery(act === "gallery-next" ? 1 : -1);
+    else if (act === "media-main") saveMedia({ id: acct.dataset.id, main: true });
+    else if (act === "media-fallback") saveMedia({ id: acct.dataset.id, fallback: acct.dataset.on === "1" });
+    else if (act === "media-delete") saveMedia({ id: acct.dataset.id }, "DELETE");
+    else if (act === "media-up" || act === "media-down") moveMedia(acct.dataset.kind, acct.dataset.id, act === "media-down" ? 1 : -1);
+    else if (act === "media-save-except") saveExceptions(acct.dataset.id);
+    else if (act === "pick-extra") pickExtra(acct.dataset.kind || "photo");
     else if (act === "legal") { legalKey = acct.dataset.legal || "about"; legalTitle = acct.dataset.title || tr("About"); view = "legal"; paint(); }
   }
   var federationState = { loaded: false, loading: false, enabled_ap: false, enabled_nostr: false, nostr_pubkey: "", ap_handle: "", nostr_nip05: "" };
@@ -2847,6 +3460,7 @@ var body = signupPayload();
     }).catch(function () {});
   }
   var cropDrag = null;
+  var galleryDrag = null;
   function setProfileLess(val) {
     var session = readSession();
     if (!session) return;
@@ -2858,6 +3472,63 @@ var body = signupPayload();
       remember(res.account);
       dirtyLists();
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
+  var relationCache = { blocks: null, mutes: null, loading: false };
+  function ensureRelations() {
+    var session = readSession();
+    if (!session || !hasApi() || relationCache.loading || relationCache.blocks) return;
+    relationCache.loading = true;
+    Promise.all([
+      api("/v1/blocks", { token: session.token }),
+      api("/v1/mutes", { token: session.token })
+    ]).then(function (pair) {
+      relationCache.loading = false;
+      relationCache.blocks = pair[0] && pair[0].status === 200 && Array.isArray(pair[0].accounts) ? pair[0].accounts : [];
+      relationCache.mutes = pair[1] && pair[1].status === 200 && Array.isArray(pair[1].accounts) ? pair[1].accounts : [];
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () { relationCache.loading = false; });
+  }
+  function relationRows(list, act, label) {
+    if (!list || !list.length) return '<p class="set-sub">' + esc(label) + '</p>';
+    return list.map(function (item) {
+      var id = String(item.id || "").replace(/^app:/, "");
+      return '<div class="mute-row"><span>@' + esc(item.handle || item.name || "") + '</span><button type="button" data-acct="' + act + '" data-id="' + esc(id) + '">' + esc(act === "unblock-account" ? tr("Unblock") : tr("Unmute")) + '</button></div>';
+    }).join("");
+  }
+  function relationSettingsHtml() {
+    ensureRelations();
+    return '<h2>' + esc(tr("Blocked accounts")) + '</h2>' + relationRows(relationCache.blocks, "unblock-account", tr("No blocked accounts")) +
+      '<h2>' + esc(tr("Muted accounts")) + '</h2>' + relationRows(relationCache.mutes, "unmute-account-server", tr("No muted accounts"));
+  }
+  function relationWrite(kind, id, remove) {
+    var session = readSession();
+    if (!session || !id) return;
+    api("/v1/" + kind, { method: remove ? "DELETE" : "PUT", token: session.token, body: { id: id } }).then(function (res) {
+      relationCache.blocks = null;
+      relationCache.mutes = null;
+      if (res && res.status === 200 && window.ViktorychAccounts && window.ViktorychAccounts.toast) {
+        var note = tr("Account muted");
+        if (kind === "blocks" && remove) note = tr("Account unblocked");
+        else if (kind === "blocks") note = tr("Account blocked");
+        else if (remove) note = tr("Account unmuted");
+        window.ViktorychAccounts.toast(note);
+      }
+      if (!res || res.status !== 200) {
+        if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(tr("You can’t do that with this account."));
+      }
+      ensureRelations();
+    }).catch(function () {});
+  }
+  function setProtected(val) {
+    var session = readSession();
+    if (!session) return;
+    api("/v1/profile", { method: "PATCH", token: session.token, body: { protected: !!val } }).then(function (res) {
+      if (!res || res.status !== 200 || !res.account) return;
+      session.account = res.account;
+      writeSession(session);
+      remember(res.account);
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {});
   }
   function setPrivateFollows(val) {
@@ -2896,9 +3567,15 @@ var body = signupPayload();
       }
     }
     var stage = event.target && event.target.closest ? event.target.closest(".acct-crop-stage") : null;
-    if (!stage || view !== "crop") return;
-    cropDrag = { x: event.clientX, y: event.clientY, ox: form.cropX || 0, oy: form.cropY || 0, id: event.pointerId };
-    if (stage.setPointerCapture) stage.setPointerCapture(event.pointerId);
+    if (stage && view === "crop") {
+      cropDrag = { x: event.clientX, y: event.clientY, ox: form.cropX || 0, oy: form.cropY || 0, id: event.pointerId };
+      if (stage.setPointerCapture) stage.setPointerCapture(event.pointerId);
+      return;
+    }
+    var frame = event.target && event.target.closest ? event.target.closest(".photo-gallery") : null;
+    if (!frame || !gallery.open) return;
+    if (event.target.closest && event.target.closest("button")) return;
+    galleryDrag = { x: event.clientX, y: event.clientY, id: event.pointerId };
   }, true);
   document.addEventListener("pointermove", function (event) {
     if (!cropDrag || event.pointerId !== cropDrag.id) return;
@@ -2908,11 +3585,40 @@ var body = signupPayload();
   }, true);
   document.addEventListener("pointerup", function (event) {
     if (cropDrag && event.pointerId === cropDrag.id) cropDrag = null;
+    if (galleryDrag && event.pointerId === galleryDrag.id) {
+      var dx = event.clientX - galleryDrag.x;
+      galleryDrag = null;
+      if (Math.abs(dx) >= 40) stepGallery(dx < 0 ? 1 : -1);
+    }
   }, true);
   document.addEventListener("pointercancel", function (event) {
     if (cropDrag && event.pointerId === cropDrag.id) cropDrag = null;
+    if (galleryDrag && event.pointerId === galleryDrag.id) galleryDrag = null;
   }, true);
   var photoBlobs = {};
+  function refreshProfileMedia() {
+    Object.keys(photoBlobs).forEach(function (key) {
+      if (key.indexOf("/v1/media/") >= 0) {
+        try { URL.revokeObjectURL(photoBlobs[key]); } catch (err) { /* the blob is already gone */ }
+        delete photoBlobs[key];
+      }
+    });
+    var imgs = document.querySelectorAll("img[data-photo]");
+    for (var i = 0; i < imgs.length; i++) imgs[i].removeAttribute("data-photo-tried");
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: "drop-profile-media" });
+    }
+    var seen = {};
+    Object.keys(profiles).forEach(function (key) {
+      var account = profiles[key];
+      if (!account || !account.handle || seen[account.handle]) return;
+      seen[account.handle] = true;
+      account.repostsLoaded = false;
+      profileLoads[skel(account.handle)] = false;
+      profileMiss[skel(account.handle)] = false;
+      loadProfile(account.handle);
+    });
+  }
   function loadPhoto(url) {
     if (photoBlobs[url]) return Promise.resolve(photoBlobs[url]);
     var session = readSession();
@@ -2936,6 +3642,19 @@ var body = signupPayload();
     loadPhoto(url).then(function (objectUrl) { if (objectUrl) img.src = objectUrl; });
   }, true);
   document.addEventListener("click", onClick, true);
+  document.addEventListener("change", function (event) {
+    var el = event.target;
+    if (!el || el.getAttribute("data-acct") !== "media-vis") return;
+    saveMedia({ id: el.getAttribute("data-id"), visibility: el.value });
+  }, true);
+  document.addEventListener("submit", function (event) {
+    var formEl = event.target;
+    if (!formEl || !formEl.closest || !formEl.closest("#account-layer")) return;
+    event.preventDefault();
+    if (formEl.id === "acct-login-form") doLogin();
+    else if (formEl.id === "acct-save-form") finishPending();
+    else if (formEl.id === "acct-recover-form") doRecover();
+  }, true);
   document.addEventListener("input", function (event) {
     var el = event.target;
     if (el && el.closest && el.closest("[data-delete-form]")) {
@@ -2959,10 +3678,19 @@ var body = signupPayload();
       return;
     }
     if (!el || !el.closest || !el.closest("#account-layer") || !el.name) return;
+    if (el.id === "acct-login-user") {
+      var typed = String(el.value || "").replace(/\D/g, "").slice(0, 16);
+      form.accountNumber = typed;
+      var passEl = document.getElementById("acct-accountNumber");
+      if (passEl) passEl.value = grouped(typed);
+      return;
+    }
     if (el.name === "accountNumber") {
       var digits = String(el.value || "").replace(/\D/g, "").slice(0, 16);
       el.value = grouped(digits);
       form.accountNumber = digits;
+      var loginUser = document.getElementById("acct-login-user");
+      if (loginUser) loginUser.value = digits;
       var numberCount = el.parentNode && el.parentNode.querySelector(".acct-count");
       if (numberCount) numberCount.textContent = fieldCount("accountNumber", digits, 16);
       return;
@@ -3015,6 +3743,7 @@ var body = signupPayload();
     var el = event.target;
     if (!el || !el.closest || !el.closest("#account-layer")) return;
     if (el.tagName === "TEXTAREA") return;
+    if (el.form && (el.form.id === "acct-login-form" || el.form.id === "acct-save-form" || el.form.id === "acct-recover-form")) return;
     event.preventDefault();
     if (view === "login") {
       doLogin();
@@ -3100,6 +3829,11 @@ var body = signupPayload();
       syncFriends();
     }
   });
+  document.addEventListener("input", function (event) {
+    var el = event.target && event.target.closest ? event.target.closest("[data-graph-search]") : null;
+    if (!el) return;
+    setGraphQuery(el.dataset.graphId, el.dataset.graphTab, el.value);
+  });
 
   window.ViktorychAccounts = {
     blocking: blocking,
@@ -3112,6 +3846,7 @@ var body = signupPayload();
     pillInner: pillInner,
     drawerHead: drawerHead,
     settingsHtml: settingsHtml,
+    privacyHtml: privacyHtml,
     deleteAccountHtml: deleteAccountHtml,
     showDeletedIfNeeded: showDeletedIfNeeded,
     onLocalChange: onLocalChange,
@@ -3127,6 +3862,21 @@ var body = signupPayload();
     followButton: null,
     onServerFollows: null,
     changeFollow: changeFollow,
+    pressFollow: pressFollow,
+    releaseFollow: releaseFollow,
+    previewFollow: previewFollow,
+    followControlHtml: followControlHtml,
+    graphListHtml: graphListHtml,
+    setGraphQuery: setGraphQuery,
+    relationWrite: relationWrite,
+    blockSet: function () {
+      var ids = {};
+      (relationCache.blocks || []).forEach(function (item) {
+        var id = String(item.id || "");
+        if (id) ids[id] = true;
+      });
+      return ids;
+    },
     syncFollows: syncFollows,
     syncFriends: syncFriends,
     friendButton: friendButtonHtml,
