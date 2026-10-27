@@ -61,6 +61,8 @@ SITE_FILES = (
     "scores.css",
     "weather.js",
     "weather.css",
+    "presence.js",
+    "presence.css",
     "404.html",
     "robots.txt",
     "favicon.svg",
@@ -70,7 +72,7 @@ SITE_FILES = (
     ".nojekyll",
     "feeds.config.json",
 )
-COPY_DIRS = ("icons", "splash", "screenshots", "i18n", "shared")
+COPY_DIRS = ("icons", "splash", "screenshots", "i18n", "shared", "logo")
 UA = "viktorych-preview/1.0"
 
 
