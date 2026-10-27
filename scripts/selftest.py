@@ -4724,7 +4724,7 @@ def feed_order_checks() -> None:
     import subprocess
     from datetime import datetime, timezone
 
-    from adapters.common import dedupe_posts, order_ms, parse_time
+    from adapters.common import dedupe_posts, order_ms, parse_time, stamp_activity
 
     moment = datetime(2026, 10, 27, tzinfo=timezone.utc)
     same = datetime(2026, 10, 21, 17, tzinfo=timezone.utc)
@@ -4766,11 +4766,23 @@ def feed_order_checks() -> None:
         "people.json": _Path(2),
     })
     check([key for key, _path in ordered] == ["feeds.json", "people.json", "data/communities/a.json", "archive/2020-01.json"], "the live catalog is uploaded before archive JSON, newest extras first")
+    pinned_first = [
+        {"id": "pin", "platform": "x", "handle": "tabfixture", "kind": "post", "pinned": True, "date": "2020-01-01T00:00:00Z", "pinAt": "2020-01-01T00:00:00Z"},
+        {"id": "repost:tabfixture:2", "platform": "x", "kind": "repost", "handle": "otheracct", "date": "2026-10-20T00:00:00Z", "repostedBy": {"handle": "tabfixture"}},
+        {"id": "3", "platform": "x", "handle": "tabfixture", "kind": "post", "date": "2026-10-27T11:00:00Z"},
+    ]
+    stamp_activity(pinned_first, datetime(2026, 10, 27, 12, tzinfo=timezone.utc))
+    check(pinned_first[0]["id"] == "repost:tabfixture:2" and pinned_first[-1]["id"] == "pin" and pinned_first[-1]["date"] == "", "a pinned row is not treated as the newest post")
+    check(pinned_first[0].get("sortDate", "") > "2026-10-27T11:00:00Z" and pinned_first[0]["sortDate"] < "2026-10-27T12:00:00Z", "a repost listed under a pin is stamped between the fetch and the next real post")
     proc = subprocess.run(["node", str(ROOT / "scripts" / "feed_order_test.mjs")], check=False)
     check(proc.returncode == 0, "feed order fixtures")
+    custom = subprocess.run(["node", str(ROOT / "scripts" / "custom_tab_test.mjs")], check=False)
+    check(custom.returncode == 0, "custom tab freshness fixtures")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("shared/feed-order.js" in (ROOT / "index.html").read_text(encoding="utf-8") and "./shared/feed-order.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "shared/feed-order.js" in deployed_paths() and "python3 scripts/assemble_site.py --site _site" in (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8"), "the feed order helper is published with the shell")
-    check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8"), "new posts merge in place and the Following tab uses the signed-in accounts")
+    order_js = (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8")
+    check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in order_js, "new posts merge in place and the Following tab uses the signed-in accounts")
+    check("function customTabFeeds(" in app and "function timelineFeeds(" in app and "timelineFeeds()" in app and "function hydrateTabSnapshots(" in app and "refreshTab" in order_js, "custom tabs use the same UTC refresh as Following")
 
 
 def gdrive_checks() -> None:
