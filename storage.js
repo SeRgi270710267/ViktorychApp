@@ -61,6 +61,7 @@
     if (/owner-keys/i.test(path)) return true;
     if (/\/v1\/owner\/play$/i.test(path)) return true;
     if (/\/v1\/(?:session|login|logout|logout-all|auth|account|me)(?:\/|$)/i.test(path)) return true;
+    if (/\/v1\/(?:notifications|push|hub)(?:\/|$)/i.test(path)) return true;
     if (/\/v1\/owner\/keys(?:\/|$)/i.test(path)) return true;
     if (/\/tg\/loop\//i.test(path)) return true;
     if (/\/loop\/current\.json$/i.test(path)) return true;

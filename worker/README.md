@@ -57,9 +57,26 @@ The public account id is 12 random digits. It is not derived from the secret num
 
 ## Sync
 
-The first sign-in unions follows, bookmarks, likes, reposts, saved posts, lists, custom tabs, and mute lists, then uploads that union. A follow removed on one device stays removed there, and a follow added on the other device stays too: the union does not replay an unfollow. `seenDefaults` includes the unioned follows so the default-follow pass does not add them again. Later saves are last-write-wins, with one union retry on 409. Language stays in `superintelapp-lang`. Bell notes stay on the device. Display choices `showPictures` and `showBanners` travel with the other appearance settings (`show`, `default`, or `none`).
+The first sign-in unions follows, bookmarks, likes, reposts, saved posts, lists, custom tabs, and mute lists, then uploads that union. A follow removed on one device stays removed there, and a follow added on the other device stays too: the union does not replay an unfollow. `seenDefaults` includes the unioned follows so the default-follow pass does not add them again. Later saves are last-write-wins, with one union retry on 409. Language stays in `superintelapp-lang`. The notification list, the unread badge, notification tabs, and per-account bells live on the account. The sync blob does not carry them. Display choices `showPictures` and `showBanners` travel with the other appearance settings (`show`, `default`, or `none`).
 
 Watch and read history syncs as `history`: at most 300 of the newest video and article rows, each just `id`, `kind`, `platform`, `at`, and `progress` when it is not zero. The same id keeps the newer time. While videos or articles are paused, that device does not upload new rows for that kind and does not replace the saved rows for that kind. Clear all on Videos or Articles sets `historyCut` and removes that kind on the account too. The whole sync body stays under 350 KB. Three hundred slim rows are about 25–40 KB.
+
+## Account channel
+
+One SQLite Durable Object, `AccountHub`, is bound as `ACCOUNT_HUB`. Its name is the 12-digit account id. It is a topic channel, not a second copy of the notification tables. Do not add another class or binding.
+
+- `notifications` carries new items, the read cursor, and the badge. The Worker publishes this topic after it has written D1.
+- `presence` is reserved for presence and Do not disturb. Subscribe to it on this same object.
+
+Sockets are accepted with `ctx.acceptWebSocket`. The topic list is stored on the socket attachment, so the object hibernates between messages. There is no alarm and no server ping. The page opens the socket only while it is visible and closes it when the page is hidden. A hidden page does not spend a request.
+
+The browser cannot put the session token on a WebSocket, so `POST /v1/hub/ticket` returns a single-use ticket that lasts 60 seconds. The page then connects to `wss://…/v1/hub?ticket=`. Clients may subscribe and unsubscribe. They cannot publish. The Worker publishes with `hubPublish(env, publicId, topic, data)`.
+
+D1 stays the source of truth. The object keeps the last 40 events per topic so a page that reconnects can catch up. If that cursor has fallen out of the log, the object sends `reset` and the page reads D1.
+
+While the socket is open the page does not poll. Focusing the window, or bringing the page back to the foreground, still fetches once. If the socket is down and the page is visible, the page polls about every 20 seconds. A hidden page is neither connected nor polled, which keeps the account inside the free 100,000 requests a day.
+
+Web Push uses a VAPID key generated once into D1 `push_vapid`. The private key is never returned and never logged. `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_JWK`, when set, override that row. Sign-out drops that device's push subscription. Sign-out everywhere drops every subscription for the account. Account deletion removes the notification rows, bells, push subscriptions, hub tickets, and the push log. `push_vapid` stays, because it is one key for the whole worker. Do not disturb, when another change sets it, skips the operating-system buzz. The in-app list and the other open pages still update.
 
 ## Profile photos
 
