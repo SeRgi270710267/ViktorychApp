@@ -10,6 +10,9 @@ on:
       - "i18n/**"
       - "scripts/bottom_nav_test.mjs"
       - "scripts/nav_custom_test.js"
+      - "scripts/dock_test.js"
+      - "dock.js"
+      - "dock.css"
       - "worker/**"
       - ".github/workflows/nav-custom.yml"
   push:
@@ -22,6 +25,9 @@ on:
       - "i18n/**"
       - "scripts/bottom_nav_test.mjs"
       - "scripts/nav_custom_test.js"
+      - "scripts/dock_test.js"
+      - "dock.js"
+      - "dock.css"
       - "worker/**"
       - ".github/workflows/nav-custom.yml"
 
@@ -43,3 +49,5 @@ jobs:
         run: node scripts/nav_custom_test.js
       - name: Bottom navigation and phone landscape
         run: node scripts/bottom_nav_test.mjs
+      - name: Corner drawers
+        run: node scripts/dock_test.js
