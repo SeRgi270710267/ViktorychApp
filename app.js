@@ -4432,17 +4432,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     </div>`;
   }
 
-  function internalPostHandle(handle, post, creator) {
-    const raw = String(handle || "").replace(/^@/, "");
-    if (!raw) return "";
-    const isInternal = (post && (post.platform === "app" || (post.feedId && post.feedId.startsWith("app:")) || !!post.publicId)) ||
-      (creator && (creator.platform === "app" || (creator.feedId && creator.feedId.startsWith("app:")) || !!creator.publicId));
-    if (!isInternal) return raw;
-    const pid = String((post && (post.publicId || post.authorId)) || (creator && creator.publicId) ||
-      (post && post.feedId && post.feedId.startsWith("app:") && /^\d+$/.test(post.feedId.slice(4)) ? post.feedId.slice(4) : "") ||
-      (creator && creator.feedId && creator.feedId.startsWith("app:") && /^\d+$/.test(creator.feedId.slice(4)) ? creator.feedId.slice(4) : "") || "").replace(/^app:/, "");
-    if (pid && !raw.endsWith(pid)) return raw + pid;
-    return raw;
+  function internalPostHandle(handle) {
+    return String(handle || "").replace(/^@/, "");
   }
 
   function quoteCard(quoted) {
@@ -11078,6 +11069,36 @@ const here = parseRoute();
     return `<button class="primary" type="button" data-act="install">${tr("Install app")}</button>`;
   }
 
+  function setMeta(selector, value) {
+    const el = document.head && document.head.querySelector(selector);
+    if (el) el.setAttribute("content", value == null ? "" : String(value));
+  }
+  function setProfileShareMeta(route) {
+    const fallbackTitle = document.title || productName("app");
+    const icon = "icons/icon-512.png?v=7";
+    let title = fallbackTitle;
+    let description = "";
+    let image = icon;
+    let url = location.origin + location.pathname;
+    if (route && route.name === "profile" && window.ViktorychAccounts && window.ViktorychAccounts.storedAccount) {
+      const account = window.ViktorychAccounts.storedAccount(route.handle);
+      if (account && account.handle) {
+        const name = account.displayName || account.handle;
+        title = name + " (@" + account.handle + ")";
+        description = account.bio || "";
+        url += "#/@" + encodeURIComponent(account.handle);
+        const avatar = String(account.avatar || "");
+        if (avatar && !/\/v1\/media\/(?:avatars|banners)\/\d{12}\//.test(avatar)) image = avatar;
+      }
+    }
+    setMeta('meta[property="og:title"]', title);
+    setMeta('meta[name="twitter:title"]', title);
+    setMeta('meta[property="og:description"]', description);
+    setMeta('meta[name="twitter:description"]', description);
+    setMeta('meta[property="og:url"]', url);
+    setMeta('meta[property="og:image"]', image);
+    setMeta('meta[name="twitter:image"]', image);
+  }
   function routeTitle(route, liveName, personName, discordTitle) {
     const titleSuffix = " / " + productName("app");
     if (discordTitle) return discordTitle + titleSuffix;
@@ -11085,6 +11106,15 @@ const here = parseRoute();
     const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
     if (route.name === "explore") return (exploreQ ? tr("{q} - Explore", { q: exploreQ }) : tr("Explore")) + titleSuffix;
     if (route.name === "user") return (liveName || route.handle || tr("Profile")) + titleSuffix;
+    if (route.name === "profile") {
+      const stored = window.ViktorychAccounts && window.ViktorychAccounts.storedAccount && window.ViktorychAccounts.storedAccount(route.handle);
+      if (stored && stored.handle) {
+        const name = stored.displayName || stored.handle;
+        return name + " (@" + stored.handle + ")" + titleSuffix;
+      }
+      const bare = String(route.handle || "").replace(/\d{12}$/, "");
+      return (bare ? "@" + bare : tr("Profile")) + titleSuffix;
+    }
     let key = "";
     if (route.name === "home") key = tr("Home");
     else if (route.name === "status") key = tr("Post noun");
@@ -11271,6 +11301,7 @@ const here = parseRoute();
       const presenceBlock = window.ViktorychPresence ? window.ViktorychPresence.settingsHtml() : "";
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${presenceBlock}
+        ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
@@ -13929,6 +13960,7 @@ if (STATE.histClear) {
       const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
       if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = window.SIntelMusic.titleFor(route);
       else document.title = routeTitle(route, liveName, personName, discordTitle);
+      setProfileShareMeta(route);
       window.scrollTo(0, y);
       if (explicitY && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {

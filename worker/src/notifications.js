@@ -11,6 +11,7 @@
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { publishToAccount } from "./channel.js";
+import { visibleAvatarUrl } from "./profile-media.js";
 
 const encoder = new TextEncoder();
 const KINDS = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
@@ -218,6 +219,31 @@ async function writeReadUntil(env, publicId, until) {
   ).bind(publicId, next, now).run();
 }
 
+function legacyMedia(value) {
+  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\//.test(String(value || "")) || /^media\/(?:avatars|banners)\/\d{12}\//.test(String(value || ""));
+}
+
+async function presentNote(env, request, viewer, item) {
+  const next = Object.assign({}, item);
+  next.actorId = "";
+  if (legacyMedia(next.avatar)) next.avatar = "";
+  if (legacyMedia(next.image)) next.image = "";
+  const feed = String(next.feedId || "");
+  const match = /^app:(\d{12})$/.exec(feed);
+  if (match) {
+    const row = await env.DB.prepare("SELECT handle FROM accounts WHERE public_id = ?").bind(match[1]).first();
+    next.feedId = row && row.handle ? "app:@" + row.handle : "";
+  }
+  if (legacyMedia(next.hash) || /\d{12}/.test(String(next.hash || ""))) {
+    next.hash = String(next.hash || "").replace(/([A-Za-z0-9_\u0400-\u04FF]{1,32})\d{12}\b/g, "$1");
+  }
+  if (next.handle && request && viewer) {
+    next.avatar = await visibleAvatarUrl(env, request, viewer, next.handle) || "";
+  }
+  if (legacyMedia(next.avatar)) next.avatar = "";
+  return next;
+}
+
 function itemFromRow(row, readUntil) {
   let extra = {};
   try { extra = JSON.parse(row.payload || "{}"); }
@@ -277,12 +303,15 @@ async function listBells(env, publicId) {
   return bells;
 }
 
-async function viewFor(env, publicId) {
+async function viewFor(env, publicId, request) {
   const state = await readState(env, publicId);
   const listed = await env.DB.prepare(
     "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? ORDER BY at DESC, note_id ASC LIMIT 80"
   ).bind(publicId).all();
-  const items = ((listed && listed.results) || []).map((row) => itemFromRow(row, state.readUntil));
+  const viewer = { public_id: publicId };
+  const items = [];
+  const rows = (listed && listed.results) || [];
+  for (let i = 0; i < rows.length; i++) items.push(await presentNote(env, request, viewer, itemFromRow(rows[i], state.readUntil)));
   const unread = await unreadCount(env, publicId, state.readUntil);
   const bells = await listBells(env, publicId);
   const push = await vapidPublic(env);
@@ -491,7 +520,7 @@ async function sendPush(env, publicId, item) {
     body: item.text || "",
     hash: item.hash || "#/",
     id: item.id,
-    icon: item.avatar || "",
+    icon: legacyMedia(item.avatar) ? "" : (item.avatar || ""),
     tag: "note-" + item.id
   }));
   for (let i = 0; i < rows.length; i++) {
@@ -564,14 +593,14 @@ export async function emitNotification(env, input) {
     throw err;
   }
   await trimNotes(env, publicId);
-  const item = itemFromRow({
+  const item = await presentNote(env, input.request, { public_id: publicId }, itemFromRow({
     note_id: key,
     kind,
     at,
     read_at: readAt,
     actor_id: clip(input.actorId, 16),
     payload
-  }, state.readUntil);
+  }, state.readUntil));
   const unread = await unreadCount(env, publicId, state.readUntil);
   if (!readAt) {
     await env.DB.prepare("UPDATE notifications SET pushed_at = ? WHERE public_id = ? AND note_id = ?").bind(now, publicId, key).run();
@@ -768,7 +797,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
   if (path === "/v1/notifications" && request.method === "GET") {
     const hit = await rateHit(env, "notes-read:" + row.public_id, 120, 10 * 60 * 1000);
     if (!hit.ok) return limited(hit);
-    return json(200, await viewFor(env, row.public_id));
+    return json(200, await viewFor(env, row.public_id, request));
   }
   if (path === "/v1/notifications" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
@@ -788,7 +817,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     if (body.until || (Array.isArray(body.ids) && body.ids.length)) await markRead(env, row.public_id, body.until, body.ids);
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
     if (body.bells && typeof body.bells === "object") await saveBells(env, row.public_id, body.bells, body.bellsAt);
-    return json(200, await viewFor(env, row.public_id));
+    return json(200, await viewFor(env, row.public_id, request));
   }
   if (path === "/v1/notifications/read" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
@@ -797,7 +826,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     if (body.error) return json(400, { error: body.error });
     await markRead(env, row.public_id, body.until, body.ids);
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
-    return json(200, await viewFor(env, row.public_id));
+    return json(200, await viewFor(env, row.public_id, request));
   }
   if (path === "/v1/push/vapid" && request.method === "GET") {
     const keys = await vapidPublic(env);
@@ -833,11 +862,13 @@ export async function handleNotificationRoutes(request, env, path, deps) {
   return null;
 }
 
-export async function notifyFollow(env, actor, targetId) {
+export async function notifyFollow(env, actor, targetId, request) {
   if (!targetId || String(targetId).indexOf("app:") !== 0) return;
   const publicId = String(targetId).slice(4);
   if (!/^\d{12}$/.test(publicId) || publicId === actor.public_id) return;
   const now = Date.now();
+  let avatar = "";
+  if (request) avatar = await visibleAvatarUrl(env, request, { public_id: publicId }, actor.handle);
   await emitNotification(env, {
     publicId,
     kind: "follow",
@@ -847,9 +878,11 @@ export async function notifyFollow(env, actor, targetId) {
     handle: actor.handle,
     name: actor.display_name,
     text: "",
+    avatar,
     hash: "#/" + encodeURIComponent(actor.handle || ""),
     platform: "app",
-    feedId: "app:" + actor.public_id
+    feedId: actor.handle ? "app:@" + actor.handle : "",
+    request
   });
 }
 
