@@ -15,6 +15,11 @@ workers_dev = true
 # .github/workflows/worker-dispatch-secret.yml copies it:
 # npx wrangler secret put GITHUB_DISPATCH_TOKEN
 # When it is unset, an added TikTok account waits for the next scheduled sync.
+# HANDLE_HOLD_DAYS keeps a deleted handle from being registered again.
+# The default is 30. Set it to 0 to free the handle immediately.
+# DELETION_SALT, when set as a secret, salts deletion hashes. Otherwise
+# ACCOUNT_PEPPER is used. OWNER_PUBLIC_ID, when set, cannot be deleted.
+# The owner handle and SeRgi270710267 are refused by the delete route.
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io"
 PBKDF2_ITERATIONS = "8000"

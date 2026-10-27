@@ -10339,6 +10339,7 @@ const here = parseRoute();
       else if (section === "resources") key = tr("Additional resources");
       else if (section === "storage" && sub === "usage") key = tr("Storage usage");
       else if (section === "storage") key = tr("Data and storage");
+      else if (section === "delete-account") key = tr("Delete account");
       else key = tr("Settings");
     } else {
       const map = {
@@ -10543,6 +10544,12 @@ const here = parseRoute();
     if (section === "storage") {
       const body = window.ViktorychStorage ? window.ViktorychStorage.dataHtml() : "";
       return settingsHead(tr("Data and storage"), "#/settings") + body;
+    }
+    if (section === "delete-account") {
+      const body = window.ViktorychAccounts && window.ViktorychAccounts.deleteAccountHtml
+        ? window.ViktorychAccounts.deleteAccountHtml()
+        : "";
+      return settingsHead(tr("Delete account"), "#/settings") + body;
     }
     if (section === "keys") {
       const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
@@ -16395,6 +16402,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   async function boot() {
     syncRuVisitorGeo();
+    if (window.ViktorychAccounts && window.ViktorychAccounts.showDeletedIfNeeded && window.ViktorychAccounts.showDeletedIfNeeded()) {
+      registerSW();
+      applyTheme();
+      return;
+    }
     if (window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking()) {
       registerSW();
       STATE.settings = loadSettings();
