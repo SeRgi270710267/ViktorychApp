@@ -286,6 +286,7 @@
       }
       return;
     }
+    if (root.ViktorychHScroll && root.ViktorychHScroll.remember) root.ViktorychHScroll.remember();
     var rowEl = document.querySelector(".sp-row");
     if (rowEl) rowEl.innerHTML = pillsHtml();
     cleanDuplicateRows();
