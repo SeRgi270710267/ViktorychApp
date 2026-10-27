@@ -457,6 +457,30 @@ direct.setFetch(function (url) {
   assert.strictEqual(body.via, "server");
   assert.deepStrictEqual(body.items, [1]);
   delete global.window;
+  direct.reset();
+  device.reset();
+  direct.holdDevice(true);
+  let serverHits = 0;
+  direct.setFetch(function () {
+    return Promise.resolve({ ok: true, status: 200, json: function () { return Promise.resolve({ via: "existing" }); } });
+  });
+  global.window = { STATE: { settings: { devicePerf: balanced() } } };
+  return direct.fetchSource("https://api.fxtwitter.com/reader", function () {
+    serverHits += 1;
+    return { via: "wrapped" };
+  }).then(function (first) {
+    assert.strictEqual(first.via, "existing");
+    assert.strictEqual(serverHits, 0);
+    direct.holdDevice(false);
+    direct.reset();
+    device.reset();
+    direct.setFetch(function () { return Promise.reject(new Error("cors")); });
+    global.window = { STATE: { settings: { devicePerf: balanced() } } };
+    return direct.fetchSource("https://api.fxtwitter.com/reader", function () { return { via: "server" }; });
+  });
+}).then(function (body) {
+  assert.strictEqual(body.via, "server");
+  delete global.window;
   console.log("device performance ok");
 }).catch(function (err) {
   console.error(err);

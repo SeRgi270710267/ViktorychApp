@@ -16622,7 +16622,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const job = loadCatalog().then((config) => {
       const selected = timelineFeeds();
       liveDateScrubbed = false;
-      return mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => [])).then((lists) => {
+      const pending = mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => []));
+      timelineUsesDevice = true;
+      releaseDeviceFeeds();
+      return pending.then((lists) => {
         let incoming = [];
         lists.forEach((list, index) => {
           const feed = selected[index];
@@ -17945,6 +17948,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   let deviceCoreTask = null;
+  let deviceScriptReady = false;
+  let timelineUsesDevice = false;
+
+  function holdDeviceFeeds() {
+    timelineUsesDevice = false;
+    if (window.ViktorychDirect && window.ViktorychDirect.holdDevice) window.ViktorychDirect.holdDevice(true);
+  }
+
+  function releaseDeviceFeeds() {
+    if (!deviceScriptReady || !timelineUsesDevice) return;
+    if (window.ViktorychDirect && window.ViktorychDirect.holdDevice) window.ViktorychDirect.holdDevice(false);
+  }
+
   function loadDeviceCore() {
     if (window.ViktorychDevice) return Promise.resolve(window.ViktorychDevice);
     if (deviceCoreTask) return deviceCoreTask;
@@ -17954,7 +17970,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       tag.async = true;
       tag.onload = () => {
         const dev = window.ViktorychDevice || null;
+        if (dev) deviceScriptReady = true;
         if (dev && window.ViktorychStorage && window.ViktorychStorage.applyDeviceCap) window.ViktorychStorage.applyDeviceCap();
+        releaseDeviceFeeds();
         resolve(dev);
       };
       tag.onerror = () => resolve(null);
@@ -17964,10 +17982,34 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function scheduleDeviceCore() {
-    const fire = () => loadDeviceCore().then(() => registerPeriodic());
-    const arm = () => setTimeout(fire, 6500);
-    if (document.readyState === "complete") arm();
-    else window.addEventListener("load", arm, { once: true });
+    let started = false;
+    let idleId = 0;
+    let fallbackId = 0;
+    const names = ["pointerdown", "keydown", "scroll"];
+    const stop = () => {
+      names.forEach((name) => window.removeEventListener(name, onInteract, true));
+      window.removeEventListener("hashchange", onInteract);
+      window.removeEventListener("popstate", onInteract);
+      if (idleId && typeof cancelIdleCallback === "function") cancelIdleCallback(idleId);
+      if (fallbackId) clearTimeout(fallbackId);
+    };
+    const fire = () => {
+      if (started) return;
+      started = true;
+      stop();
+      loadDeviceCore().then(() => registerPeriodic());
+    };
+    function onInteract() { fire(); }
+    names.forEach((name) => window.addEventListener(name, onInteract, { capture: true, passive: true }));
+    window.addEventListener("hashchange", onInteract);
+    window.addEventListener("popstate", onInteract);
+    const armIdle = () => {
+      if (started) return;
+      if (typeof requestIdleCallback === "function") idleId = requestIdleCallback(fire, { timeout: 1200 });
+      else fallbackId = setTimeout(fire, 1200);
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(armIdle));
+    else armIdle();
   }
 
   function registerPeriodic() {
@@ -18562,6 +18604,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("pagehide", () => { try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ } });
 
   async function boot() {
+    holdDeviceFeeds();
     syncRuVisitorGeo();
     if (window.ViktorychLocal) {
       const savedScrolls = window.ViktorychLocal.readScrolls();
