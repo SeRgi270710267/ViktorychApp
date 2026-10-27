@@ -7049,11 +7049,12 @@ const here = parseRoute();
   }
 
   function bellUnread() {
-    const read = Math.max(Number(STATE.settings && STATE.settings.bellRead) || 0, Number(notesServer().readUntil) || 0);
+    const serverNotes = typeof notesServer === "function" ? notesServer() : null;
+    const read = Math.max(Number(STATE.settings && STATE.settings.bellRead) || 0, Number(serverNotes && serverNotes.readUntil) || 0);
     const notes = (STATE.settings && STATE.settings.bellNotes) || [];
     const visibleUnread = visibleNotes(notes).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
     if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
-      const server = Number(notesServer().unread) || 0;
+      const server = Number(serverNotes && serverNotes.unread) || 0;
       const hiddenUnread = notes.filter((note) => noteHidden(note) && !note.read && (Number(note.at) || 0) > read).length;
       return Math.max(visibleUnread, Math.max(0, server - hiddenUnread));
     }
