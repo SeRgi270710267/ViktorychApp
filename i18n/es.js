@@ -1361,5 +1361,16 @@ SI18n.addPack("es", {
   "{service} needs a new key. Open Connected keys and replace it.": "{service} necesita una clave nueva. Abre Claves conectadas y reemplázala.",
   "Keys are available only to the owner.": "Las claves solo están disponibles para el propietario.",
   "Saved value hidden": "Valor guardado oculto",
-  "Setup needed": "Falta configurar"
+  "Setup needed": "Falta configurar",
+  "Add another key": "Añadir otra clave",
+  "Optional label": "Etiqueta opcional",
+  "Move up": "Subir",
+  "Move down": "Bajar",
+  "Key label": "Etiqueta de la clave",
+  "Keys are backups. One key is used at a time, highest priority first.": "Las claves son de reserva. Se usa una a la vez, primero la de mayor prioridad.",
+  "Slowing down": "Yendo más lento",
+  "This service is slowing down. The same key stays in use.": "Este servicio va más lento. Se sigue usando la misma clave.",
+  "{service} is slowing down. The same key stays in use.": "{service} va más lento. Se sigue usando la misma clave.",
+  "The key is no longer signed in.": "La clave ya no tiene sesión.",
+  "This service already has enough backup keys.": "Este servicio ya tiene suficientes claves de reserva."
 });

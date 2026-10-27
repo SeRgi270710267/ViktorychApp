@@ -98,17 +98,33 @@ def open_url(request: urllib.request.Request, timeout: int = 30):
         except OSError:
             body = b""
         try:
-            from owner_keys import attention_reason, drop_for_attention
-            reason = attention_reason(exc.code, body)
+            from owner_keys import cookie_header, decide_attempt, drop_for_attention, mark_attention
+            action, reason = decide_attempt(exc.code, body, True)
         except Exception:
-            reason = ""
-        if not reason:
+            action, reason = "keep", ""
+        if action == "hold":
+            try:
+                mark_attention("x", reason)
+            except Exception:
+                pass
             raise
+        if action != "advance":
+            raise
+        advanced = False
         try:
-            drop_for_attention("x", reason)
+            advanced = bool(drop_for_attention("x", reason))
         except Exception:
-            pass
+            advanced = False
+        if not advanced:
+            raise
         request.remove_header("Cookie")
+        nxt = ""
+        try:
+            nxt = cookie_header("x")
+        except Exception:
+            nxt = ""
+        if nxt:
+            request.add_header("Cookie", nxt)
         return opener.open(request, timeout=timeout)
 
 

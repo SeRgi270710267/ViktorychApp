@@ -1361,5 +1361,16 @@ SI18n.addPack("ru", {
   "{service} needs a new key. Open Connected keys and replace it.": "{service} нужен новый ключ. Откройте «Подключённые ключи» и замените его.",
   "Keys are available only to the owner.": "Ключи доступны только владельцу.",
   "Saved value hidden": "Сохранённое значение скрыто",
-  "Setup needed": "Нужна настройка"
+  "Setup needed": "Нужна настройка",
+  "Add another key": "Добавить ещё ключ",
+  "Optional label": "Необязательная метка",
+  "Move up": "Выше",
+  "Move down": "Ниже",
+  "Key label": "Метка ключа",
+  "Keys are backups. One key is used at a time, highest priority first.": "Ключи — запасные. За раз используется один, сначала с наибольшим приоритетом.",
+  "Slowing down": "Замедление",
+  "This service is slowing down. The same key stays in use.": "Сервис замедляется. Тот же ключ остаётся в работе.",
+  "{service} is slowing down. The same key stays in use.": "{service} замедляется. Тот же ключ остаётся в работе.",
+  "The key is no longer signed in.": "Ключ больше не в сессии.",
+  "This service already has enough backup keys.": "У этого сервиса уже достаточно запасных ключей."
 });
