@@ -20,10 +20,13 @@
     { "src": "icons/icon-monochrome-512.png?v=7", "sizes": "512x512", "type": "image/png", "purpose": "monochrome" }
   ],
   "shortcuts": [
+    { "name": "Home", "short_name": "Home", "url": "./#/home", "icons": [{ "src": "icons/icon-192.png?v=7", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Notifications", "short_name": "Notifications", "url": "./#/notifications", "icons": [{ "src": "icons/icon-192.png?v=7", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Messages", "short_name": "Messages", "url": "./#/messages", "icons": [{ "src": "icons/icon-192.png?v=7", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Post", "short_name": "Post", "url": "./?post=1#/home", "icons": [{ "src": "icons/icon-192.png?v=7", "sizes": "192x192", "type": "image/png" }] },
     { "name": "Search", "short_name": "Search", "url": "./#/explore", "icons": [{ "src": "icons/icon-192.png?v=7", "sizes": "192x192", "type": "image/png" }] },
     { "name": "Bookmarks", "short_name": "Bookmarks", "url": "./#/bookmarks", "icons": [{ "src": "icons/icon-192.png?v=7", "sizes": "192x192", "type": "image/png" }] },
     { "name": "Subscriptions", "short_name": "Subscriptions", "url": "./#/subscriptions", "icons": [{ "src": "icons/icon-192.png?v=7", "sizes": "192x192", "type": "image/png" }] },
-    { "name": "Notifications", "short_name": "Notifications", "url": "./#/notifications", "icons": [{ "src": "icons/icon-192.png?v=7", "sizes": "192x192", "type": "image/png" }] },
     { "name": "ViktorychMusic", "short_name": "ViktorychMusic", "url": "./#/music", "icons": [{ "src": "icons/music-192.png?v=7", "sizes": "192x192", "type": "image/png" }] }
   ],
   "screenshots": [
@@ -31,9 +34,29 @@
     { "src": "screenshots/wide.png", "sizes": "1920x1080", "type": "image/png", "form_factor": "wide", "label": "Home timeline" }
   ],
   "share_target": {
-    "action": "./",
-    "method": "GET",
-    "enctype": "application/x-www-form-urlencoded",
-    "params": { "title": "title", "text": "text", "url": "url" }
-  }
+    "action": "./?share=1",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        { "name": "media", "accept": ["image/*", "video/*", "audio/*", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm", ".mov"] }
+      ]
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "./",
+      "accept": {
+        "image/*": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif"],
+        "video/*": [".mp4", ".webm", ".mov", ".m4v"]
+      }
+    }
+  ],
+  "protocol_handlers": [
+    { "protocol": "web+viktorych", "url": "./?proto=%s" }
+  ],
+  "launch_handler": { "client_mode": "focus-existing" }
 }

@@ -18,6 +18,7 @@ function workerOptions(extra) {
     bindings: Object.assign({
       ACCOUNT_PEPPER: "pepper-test",
       OWNER_CLAIM_CODE: "claim-test",
+      OWNER_HANDLE: "mirathorn",
       ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080",
       PBKDF2_ITERATIONS: "1000"
     }, extra || {}),
@@ -74,7 +75,7 @@ test("playlist, range, and telegram paths", () => {
   assert.equal(safeTelegramPath("https://evil.example/x"), "");
   assert.equal(safeTelegramPath("/etc/passwd"), "");
   assert.equal(keptVideoKey("social/x/abc/video/0"), true);
-  assert.equal(keptVideoKey("tiktok/gabii_g5/7695476356548660503/video"), true);
+  assert.equal(keptVideoKey("tiktok/lockclip/7695476356548660503/video"), true);
   assert.equal(keptVideoKey("tiktok/id/123456789/7695476356548660503/video"), true);
   assert.equal(keptVideoKey("feeds.json"), false);
   assert.equal(keptVideoKey("music/abc/index.m3u8"), false);
@@ -290,7 +291,7 @@ test("shorts stay owner-only, a hidden avatar stays hidden, and a song key is no
 });
 
 test("tiktok media on /tg stays behind the sign-up gate and the owner audience", async () => {
-  const key = "tiktok/gabii_g5/7695476356548660503/video";
+  const key = "tiktok/lockclip/7695476356548660503/video";
   const mf = new Miniflare(workerOptions({ TELEGRAM_BOT_TOKEN: BOT }));
   try {
     const readerSignup = await mf.dispatchFetch("https://accounts.test/v1/signup", {

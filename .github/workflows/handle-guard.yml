@@ -1,0 +1,29 @@
+name: Handle guard
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compare the tree with the private handle list
+        env:
+          HANDLE_DENYLIST: ${{ secrets.HANDLE_DENYLIST }}
+          OWNER_IDS: ${{ secrets.OWNER_IDS }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python3 scripts/handle_guard.py

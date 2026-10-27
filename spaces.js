@@ -751,8 +751,8 @@
     const musicSpace = spaceModel("superintelmusic") || {
       id: "superintelmusic",
       title: productName("music") || "ViktorychMusic",
-      cover: "icons/sergi-telegram.jpg",
-      host: { name: "SеРgИ3775996834", handle: "redacted_handle", platform: "telegram", avatar: "icons/sergi-telegram.jpg" },
+      cover: "icons/space-host.jpg",
+      host: { name: "Harbor", handle: "quietharbor", platform: "telegram", avatar: "icons/space-host.jpg" },
       live: true,
       state: "live",
       href: "#/spaces/superintelmusic"
