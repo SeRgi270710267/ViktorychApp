@@ -1,6 +1,7 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
 const VERSION = "viktorych-a20-__SW_VERSION__";
+const BUILT = "__SW_BUILT__";
 const MIRROR_GITHUB = "__MIRROR_GITHUB__";
 const MIRROR_PAGES = "__MIRROR_PAGES__";
 // cache-bust: 2026-10-27T15:30:00Z-presence
@@ -130,8 +131,13 @@ const SHELL_FILES = [
 
 let updateReporting = false;
 let shellTask = null;
+let precacheAbort = null;
+let precacheGeneration = 0;
+let serveNetworkOnce = false;
 let peerOn = false;
 const armedClients = new Set();
+const reloadingClients = new Set();
+const PRECACHE_TRIES = 4;
 
 function versionSha(version) {
   const text = String(version || "");
@@ -139,6 +145,50 @@ function versionSha(version) {
   if (text.indexOf(prefix) !== 0) return "";
   const sha = text.slice(prefix.length).trim().toLowerCase();
   return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
+}
+
+function versionBuilt(value) {
+  const text = String(value || "");
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(text) ? text : "";
+}
+
+function versionInfo() {
+  return { version: VERSION, sha: versionSha(VERSION), built: versionBuilt(BUILT) };
+}
+
+function shellError(path, reason) {
+  const err = new Error(reason || "network");
+  err.reason = reason || "network";
+  err.shellPath = path || "";
+  return err;
+}
+
+function failureReason(err, status) {
+  const name = err && err.name ? String(err.name) : "";
+  if (name === "QuotaExceededError") return "quota";
+  if (name === "AbortError") return "timeout";
+  const code = Number(status) || 0;
+  if (code) return "http-" + code;
+  return "network";
+}
+
+function safeShellPath(value) {
+  let text = String(value || "").split("#")[0].split("?")[0].trim();
+  try {
+    if (/^[a-z][a-z0-9+.-]*:/i.test(text)) text = new URL(text).pathname;
+  } catch (err) {
+    return "";
+  }
+  text = text.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
+  if (!text || text.indexOf("..") >= 0 || !/^[a-z0-9._/-]{1,160}$/i.test(text)) return "";
+  return text;
+}
+
+function safeShellReason(value) {
+  const text = String(value || "").toLowerCase();
+  if (text === "network" || text === "timeout" || text === "quota" || text === "replaced") return text;
+  if (/^http-\d{3}$/.test(text)) return text;
+  return "network";
 }
 
 function broadcast(msg) {
@@ -155,22 +205,49 @@ self.addEventListener("install", (event) => {
     // the update and download the shell with a real progress count.
     // The first visit has no active worker, so the shell is cached quietly.
     if (self.registration.active) return;
-    await precacheShell(false);
+    // The page may prime the same download. A newer attempt must not reject
+    // this install; wait for the attempt that is still running.
+    let task = precacheShell(false, false);
+    for (;;) {
+      try {
+        await task;
+        break;
+      } catch (err) {
+        if (!err || err.reason !== "replaced" || !shellTask || shellTask === task) throw err;
+        task = shellTask;
+      }
+    }
+    if (self.registration.active) return;
     await self.skipWaiting();
   })());
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
-    if (updateReporting) broadcastProgress({ step: "activate" }, true);
-    const keys = await caches.keys();
-    await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC).map((key) => caches.delete(key)));
-    try { await forgetLoopCaches(); } catch (err) { /* a stuck loop playlist must not block the new shell */ }
-    if (updateReporting) broadcastProgress({ step: "clean" }, true);
-    await self.clients.claim();
-    const sha = versionSha(VERSION);
-    if (updateReporting) broadcast({ type: "update-ready", version: VERSION, sha: sha });
-    else broadcast({ type: "sw-version", version: VERSION, sha: sha });
+    const reloadClients = updateReporting;
+    try {
+      if (updateReporting) broadcastProgress({ step: "activate" }, true);
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC).map((key) => caches.delete(key)));
+      try { await forgetLoopCaches(); } catch (err) { /* a stuck loop playlist must not block the new shell */ }
+      if (updateReporting) broadcastProgress({ step: "clean" }, true);
+    } catch (err) { /* a full disk must not leave the worker stuck activating */ }
+    try { await self.clients.claim(); } catch (err) { /* the page reloads once the worker is active */ }
+    const info = versionInfo();
+    if (reloadClients) broadcast({ type: "update-ready", version: info.version, sha: info.sha, built: info.built });
+    else broadcast({ type: "sw-version", version: info.version, sha: info.sha, built: info.built });
+    if (reloadClients) {
+      const scope = self.registration.scope;
+      setTimeout(() => {
+        self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+          clients.forEach((client) => {
+            if (!client || !client.navigate || reloadingClients.has(client.id)) return;
+            if (!client.url || client.url.indexOf(scope) !== 0) return;
+            client.navigate(client.url).catch(() => {});
+          });
+        }).catch(() => {});
+      }, 2500);
+    }
   })());
 });
 
@@ -420,6 +497,7 @@ async function mirrorFetch(request, init) {
   try {
     res = init ? await fetch(request, init) : await fetch(request);
   } catch (err) {
+    if (err && err.name === "AbortError") throw err;
     failed = true;
   }
   const api = mirrorApi();
@@ -848,20 +926,113 @@ async function readCounted(res, onChunk) {
   return { chunks: chunks, size: size };
 }
 
-async function precacheShell(report) {
-  if (shellTask) return shellTask;
-  shellTask = doPrecache(report).catch((err) => {
-    shellTask = null;
-    throw err;
-  });
-  return shellTask;
+function retryableStatus(status) {
+  const code = Number(status) || 0;
+  if (code === 404 || code === 408 || code === 429) return true;
+  if (!code || code >= 500) return true;
+  return false;
 }
 
-async function doPrecache(report) {
+function precacheDelay(attempt) {
+  if (attempt <= 0) return 0;
+  return Math.min(1600, 200 * (2 ** (attempt - 1)));
+}
+
+function precacheShell(report, fresh) {
+  // The first visit and a prime share one download. Retry starts a new one
+  // and drops a download that already failed or is still hanging.
+  if (!fresh && shellTask) return shellTask;
+  if (precacheAbort) {
+    try { precacheAbort.abort("replaced"); } catch (err) { /* the previous attempt already stopped */ }
+  }
+  const controller = new AbortController();
+  precacheAbort = controller;
+  const generation = ++precacheGeneration;
+  const task = doPrecache(report, generation, controller.signal).finally(() => {
+    if (shellTask === task) shellTask = null;
+  });
+  task.generation = generation;
+  shellTask = task;
+  return task;
+}
+
+async function fetchShellFile(path, signal) {
+  const sha = versionSha(VERSION) || "0";
+  const join = String(path).indexOf("?") >= 0 ? "&" : "?";
+  const bust = path + join + "sw=" + encodeURIComponent(sha);
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort("timeout"), 7000);
+  const onAbort = () => timeout.abort("replaced");
+  if (signal) {
+    if (signal.aborted) timeout.abort("replaced");
+    else signal.addEventListener("abort", onAbort, { once: true });
+  }
+  try {
+    const request = new Request(bust, { cache: "no-store", signal: timeout.signal });
+    return await mirrorFetch(request);
+  } catch (err) {
+    if (signal && signal.aborted) throw shellError(path, "replaced");
+    if (err && (err.reason === "replaced" || err.name === "AbortError")) throw shellError(path, signal && signal.aborted ? "replaced" : "timeout");
+    throw shellError(path, failureReason(err, 0));
+  } finally {
+    clearTimeout(timer);
+    if (signal) signal.removeEventListener("abort", onAbort);
+  }
+}
+
+async function pullOne(path, report, state, signal, cache) {
+  let last = shellError(path, "network");
+  for (let attempt = 0; attempt < PRECACHE_TRIES; attempt++) {
+    if (signal && signal.aborted) throw shellError(path, "replaced");
+    const delay = precacheDelay(attempt);
+    if (delay) await wait(delay);
+    if (signal && signal.aborted) throw shellError(path, "replaced");
+    try {
+      const res = await fetchShellFile(path, signal);
+      if (!res || !res.ok) {
+        last = shellError(path, res && res.status ? "http-" + res.status : "network");
+        if (!retryableStatus(res && res.status)) break;
+        continue;
+      }
+      const declared = Number(res.headers.get("content-length")) || 0;
+      if (declared) state.totalBytes += declared;
+      const counted = await readCounted(res, (n) => {
+        state.bytes += n;
+        if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, false);
+      });
+      if (!declared) state.totalBytes += counted.size;
+      const headers = new Headers(res.headers);
+      headers.delete("content-encoding");
+      headers.delete("content-length");
+      try {
+        await cache.put(path, new Response(new Blob(counted.chunks), { status: 200, headers: headers }));
+      } catch (err) {
+        const reason = failureReason(err, 0);
+        throw shellError(path, reason === "timeout" ? "quota" : reason);
+      }
+      state.files += 1;
+      if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
+      return;
+    } catch (err) {
+      if (err && err.reason === "replaced") throw err;
+      if (signal && signal.aborted) throw shellError(path, "replaced");
+      last = err && err.shellPath ? err : shellError(path, failureReason(err, 0));
+      if (last.reason === "quota") break;
+    }
+  }
+  if (shellOptional(path)) {
+    state.files += 1;
+    if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
+    return;
+  }
+  throw last;
+}
+
+async function doPrecache(report, generation, signal) {
   // Download the whole shell into a staging cache. The live cache is
   // replaced only after every required file succeeds, so a client never
   // runs one version's HTML with another version's scripts.
-  const stagingName = SHELL + "-staging";
+  const stagingName = SHELL + "-staging-" + generation;
   await caches.delete(stagingName);
   const cache = await caches.open(stagingName);
   const files = SHELL_FILES.slice();
@@ -871,62 +1042,50 @@ async function doPrecache(report) {
     while (files.length && !failed) {
       const path = files.shift();
       try {
-        const res = await mirrorFetch(new Request(path, { cache: "reload" }));
-        if (!res || !res.ok) throw new Error(path);
-        const declared = Number(res.headers.get("content-length")) || 0;
-        if (declared) state.totalBytes += declared;
-        const counted = await readCounted(res, (n) => {
-          state.bytes += n;
-          if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, false);
-        });
-        if (!declared) state.totalBytes += counted.size;
-        const headers = new Headers(res.headers);
-        headers.delete("content-encoding");
-        headers.delete("content-length");
-        await cache.put(path, new Response(new Blob(counted.chunks), { status: 200, headers: headers }));
-        state.files += 1;
-        if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
+        await pullOne(path, report, state, signal, cache);
       } catch (err) {
-        if (shellOptional(path)) {
-          state.files += 1;
-          if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
-          continue;
-        }
-        failed = err || new Error(path);
+        failed = err && err.reason ? err : shellError(path, "network");
       }
     }
   };
   const workers = [];
   const width = Math.min(4, SHELL_FILES.length);
   for (let i = 0; i < width; i++) workers.push(pull());
-  await Promise.all(workers);
-  if (failed) {
-    await caches.delete(stagingName);
-    throw failed;
+  try {
+    await Promise.all(workers);
+    if (signal && signal.aborted) throw shellError("", "replaced");
+    if (failed) throw failed;
+    if (generation !== precacheGeneration) throw shellError("", "replaced");
+    const live = await caches.open(SHELL);
+    const ready = await cache.keys();
+    await Promise.all(ready.map(async (req) => {
+      const res = await cache.match(req);
+      if (res) await live.put(req, res);
+    }));
+    progressState = state;
+    return state;
+  } finally {
+    try { await caches.delete(stagingName); } catch (err) { /* the next attempt opens a new staging cache */ }
   }
-  const live = await caches.open(SHELL);
-  const ready = await cache.keys();
-  await Promise.all(ready.map(async (req) => {
-    const res = await cache.match(req);
-    if (res) await live.put(req, res);
-  }));
-  await caches.delete(stagingName);
-  progressState = state;
-  return state;
 }
 
 async function runApply() {
-  if (updateReporting && shellTask) return;
   updateReporting = true;
+  const task = precacheShell(true, true);
+  const generation = task.generation;
   try {
     broadcastProgress({ step: "download", files: 0, totalFiles: SHELL_FILES.length, bytes: 0, totalBytes: 0 }, true);
-    const state = await precacheShell(true);
+    const state = await task;
+    if (generation !== precacheGeneration) return;
     broadcastProgress({ step: "install", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
     await self.skipWaiting();
   } catch (err) {
+    if (generation !== precacheGeneration || (err && err.reason === "replaced")) return;
     updateReporting = false;
-    shellTask = null;
-    broadcast({ type: "update-progress", step: "error" });
+    const path = safeShellPath(err && err.shellPath);
+    const reason = safeShellReason(err && err.reason);
+    console.warn("shell update failed", path || reason);
+    broadcast({ type: "update-progress", step: "error", url: path, reason: reason });
   }
 }
 
@@ -945,21 +1104,29 @@ self.addEventListener("message", (event) => {
     return;
   }
   if (data.type === "sw-version") {
-    const sha = versionSha(VERSION);
+    const info = versionInfo();
     if (event.source) {
-      try { event.source.postMessage({ type: "sw-version", version: VERSION, sha: sha }); } catch (err) { /* the page already continued */ }
+      try { event.source.postMessage({ type: "sw-version", version: info.version, sha: info.sha, built: info.built }); } catch (err) { /* the page already continued */ }
     }
+    return;
+  }
+  if (data.type === "update-reloading" && event.source) {
+    reloadingClients.add(event.source.id);
+    return;
+  }
+  if (data.type === "serve-network-once") {
+    serveNetworkOnce = true;
     return;
   }
   if (data.type === "prime") {
     event.waitUntil((async () => {
       if (self.registration.active) return;
-      await precacheShell(false);
+      await precacheShell(false, false);
       await self.skipWaiting();
     })().catch(() => {}));
     return;
   }
-  if (data.type === "apply-update") {
+  if (data.type === "apply-update" || data.type === "skip-waiting") {
     event.waitUntil(runApply());
     return;
   }
@@ -1080,7 +1247,13 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
   if (url.origin === self.location.origin && url.pathname.toLowerCase().endsWith("/version.json")) {
-    event.respondWith(mirrorFetch(new Request(request.url, { method: "GET", cache: "no-store" })).catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
+    event.respondWith((async () => {
+      const res = await mirrorFetch(new Request(request.url, { method: "GET", cache: "no-store" }));
+      const headers = new Headers(res.headers);
+      headers.set("cache-control", "no-store");
+      headers.set("pragma", "no-cache");
+      return new Response(res.body, { status: res.status, statusText: res.statusText, headers: headers });
+    })().catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
     return;
   }
   if (isGameHost(url)) return;
@@ -1144,6 +1317,14 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith((async () => {
       const home = shellDocument(url);
+      const fresh = serveNetworkOnce || url.searchParams.has("vapp");
+      if (fresh) serveNetworkOnce = false;
+      if (home && fresh) {
+        try {
+          const res = await fetch(request, { cache: "no-store" });
+          if (res && res.ok) return res;
+        } catch (err) { /* the saved page is still shown */ }
+      }
       if (home) {
         const cache = await caches.open(SHELL);
         const cached = (await cache.match("./index.html")) || (await cache.match("./"));

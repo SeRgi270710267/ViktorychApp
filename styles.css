@@ -4347,7 +4347,7 @@ body.upd-open { overflow: hidden; }
   font-weight: 800;
 }
 .upd-version { margin: 8px 0 0; color: var(--muted); font-size: 15px; }
-.upd-version[hidden], .upd-progress[hidden], .upd-notes[hidden], .upd-error[hidden] { display: none; }
+.upd-version[hidden], .upd-progress[hidden], .upd-notes[hidden], .upd-error[hidden], .upd-detail[hidden] { display: none; }
 .upd-progress { margin-top: 22px; text-align: left; }
 .upd-bar {
   height: 4px;
@@ -4411,6 +4411,7 @@ body.upd-open { overflow: hidden; }
   background: var(--blue);
 }
 .upd-error { margin: 16px 0 0; color: var(--red); font-weight: 700; }
+.upd-detail { margin: 8px 0 0; color: var(--muted); font-size: 13px; word-break: break-all; }
 .upd-actions { margin-top: 22px; display: flex; flex-direction: column; gap: 4px; }
 .upd-go, .upd-later {
   font: inherit;
