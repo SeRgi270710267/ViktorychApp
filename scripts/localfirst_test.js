@@ -50,6 +50,7 @@ queue = localfirst.flushList(queue, function () { sent += 1; return true; });
 assert.strictEqual(sent, 1);
 assert.strictEqual(queue.length, 0);
 
+assert.strictEqual(typeof localfirst.readDoc, "function");
 assert.strictEqual(localfirst.prefetchLimit({ saveData: true, effectiveType: "4g" }, true), 0);
 assert.strictEqual(localfirst.prefetchLimit({ effectiveType: "2g" }, true), 0);
 assert.strictEqual(localfirst.prefetchLimit({ effectiveType: "4g", type: "wifi" }, false), 0);

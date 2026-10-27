@@ -730,6 +730,35 @@ def lock_publish_time(previous: dict | None, post: dict, now: datetime | None = 
         post["sortDate"] = old["sortDate"]
 
 
+def _clear_pin_clock(post: dict) -> None:
+    """A pin time is not a publish time and not a repost time."""
+    if not isinstance(post, dict) or not post.get("pinned"):
+        return
+    pin = trusted_time(post.get("pinAt"))
+    if pin is None:
+        return
+    if trusted_time(post.get("date")) == pin:
+        post["date"] = ""
+    if trusted_time(post.get("sortDate")) == pin:
+        post.pop("sortDate", None)
+
+
+def _sink_pinned(posts: list) -> None:
+    """A pinned row listed first is not the newest post."""
+    if not posts:
+        return
+    open_posts = []
+    pinned = []
+    for post in posts:
+        if isinstance(post, dict) and post.get("pinned"):
+            _clear_pin_clock(post)
+            pinned.append(post)
+        else:
+            open_posts.append(post)
+    if pinned:
+        posts[:] = open_posts + pinned
+
+
 def stamp_activity(posts: list, now: datetime | None = None) -> None:
     """Order reposts by their place in a newest-first timeline.
 
@@ -742,6 +771,7 @@ def stamp_activity(posts: list, now: datetime | None = None) -> None:
     """
     if not posts:
         return
+    _sink_pinned(posts)
     if now is None:
         now = datetime.now(timezone.utc)
     elif now.tzinfo is None:
