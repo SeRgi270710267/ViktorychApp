@@ -1715,7 +1715,10 @@ def main() -> None:
     write_version.selftest()
     import handle_guard
     check(handle_guard.selftest() == 0, "the handle guard hashes a private list")
-    check("private handle list is not configured; hash comparison skipped" in (ROOT / "scripts" / "handle_guard.py").read_text(encoding="utf-8"), "the handle guard stays green until the private list is set")
+    guard_src = (ROOT / "scripts" / "handle_guard.py").read_text(encoding="utf-8")
+    guard_workflow = (ROOT / ".github" / "workflows" / "handle-guard.yml").read_text(encoding="utf-8")
+    check("hash comparison skipped" in guard_src and "HANDLE_ALLOWLIST" in guard_src and "derived " in guard_src, "the handle guard skips when the private catalog cannot be read")
+    check("CLOUDFLARE_API_TOKEN" in guard_workflow and "HANDLE_DENYLIST" in guard_workflow and "HANDLE_GUARD_REQUIRE_CATALOG" in guard_workflow, "the handle guard reads the private catalog and still accepts an optional list")
     import catalog_migrate
     check(catalog_migrate.selftest() == 0, "the catalog migration copies counts and sizes only")
     import r2_catalog
