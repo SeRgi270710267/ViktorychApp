@@ -51,6 +51,14 @@ const SHELL_FILES = [
   "./update.js",
   "./storage.js",
   "./storage.css",
+  "./localfirst.js",
+  "./direct.js",
+  "./logo/v.svg",
+  "./logo/v-music.svg",
+  "./logo/viktorychapp.svg",
+  "./logo/viktorychapp-short.svg",
+  "./logo/viktorychmusic.svg",
+  "./logo/viktorychmusic-short.svg",
   "./translate.js",
   "./translate.css",
   "./people.js",
@@ -348,6 +356,10 @@ async function trimMedia() {
   const plan = self.ViktorychStorage.planEviction(rows, max, Date.now(), self.ViktorychStorage.keepMs(saved.keep));
   await Promise.all(plan.drop.map(async (row) => {
     try {
+      if ((row.cacheName || "") === "idb-docs") {
+        await self.ViktorychStorage.deleteDoc(db, row.url);
+        return;
+      }
       const cache = await caches.open(row.cacheName || MEDIA);
       await cache.delete(row.url);
     } catch (err) { /* a missing cache is already gone */ }
@@ -366,6 +378,7 @@ async function wipeUserCaches(full) {
   try {
     const db = await idb();
     await self.ViktorychStorage.replaceFiles(db, []);
+    await self.ViktorychStorage.clearDocs(db, "all");
     await idbSet(db, "media-index", []);
   } catch (err) { /* the page clears the same stores */ }
 }
@@ -385,7 +398,6 @@ async function staleWhileRevalidate(request, extraHeaders) {
   const update = (async () => {
     const db = await idb();
     try {
-      await self.ViktorychStorage.bump(db, "network");
       const res = await fetch(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" });
       const action = self.ViktorychStorage.revalidateAction(res && res.status);
       if (action === "keep" && cached) {
@@ -393,6 +405,7 @@ async function staleWhileRevalidate(request, extraHeaders) {
         broadcast({ type: "storage-online" });
         return cached;
       }
+      if (action === "store") await self.ViktorychStorage.bump(db, "network");
       if (action === "store" && self.ViktorychStorage.shouldCacheFeed(request.url)) {
         await cache.put(cacheReq, res.clone());
         await rememberMedia(request.url, self.ViktorychStorage.byteLengthOf(res), self.ViktorychStorage.categoryOf(request.url), DATA);
@@ -408,6 +421,8 @@ async function staleWhileRevalidate(request, extraHeaders) {
   if (cached) {
     const db = await idb();
     await self.ViktorychStorage.bump(db, "hits");
+    await self.ViktorychStorage.bump(db, "savedRequests");
+    await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
     await self.ViktorychStorage.touch(db, request.url);
     update.then((res) => {
       if (!res || res === cached) return;
@@ -444,6 +459,8 @@ async function serveMedia(request, extraHeaders) {
   }
   if (cached && !rangeHeader) {
     await self.ViktorychStorage.bump(db, "hits");
+    await self.ViktorychStorage.bump(db, "savedRequests");
+    await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
     await self.ViktorychStorage.touch(db, request.url);
     return cached;
   }
@@ -451,6 +468,8 @@ async function serveMedia(request, extraHeaders) {
     const partial = await self.ViktorychStorage.sliceCached(cached, rangeHeader);
     if (partial) {
       await self.ViktorychStorage.bump(db, "hits");
+      await self.ViktorychStorage.bump(db, "savedRequests");
+      await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
       await self.ViktorychStorage.touch(db, request.url);
       return partial;
     }
@@ -734,7 +753,7 @@ self.addEventListener("message", (event) => {
     event.waitUntil(wipeUserCaches(true));
   }
   if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
-  if (data.type === "cache-bookmark") event.waitUntil(cacheBookmark(data.urls));
+  if (data.type === "cache-bookmark" || data.type === "cache-media") event.waitUntil(cacheBookmark(data.urls));
   if (data.type === "seen" || data.type === "state") {
     event.waitUntil(idb().then(async (db) => {
       await idbSet(db, "seen-at", data.type === "seen" ? Date.now() : Number(data.seen || 0));
@@ -914,7 +933,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|update\.js|storage\.js|storage\.css|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
