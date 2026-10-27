@@ -691,9 +691,14 @@
         : "";
       const gutter = fresh ? avatarHtml(row) : "";
       prev = row;
+      const ai = root.ViktorychOnDeviceAi;
+      const deco = ai && ai.decorate ? ai.decorate(row.body || "", "dm") : null;
+      const bubble = deco && deco.hidden
+        ? deco.html
+        : format(row.body, row.emojis) + (row.edited ? (" <span class=\"dmsg-edited\"" + ">" + tr("(edited)") + "<" + "/span>") : "") + (deco && deco.tools ? deco.tools : "");
       return day + '<article class="dmsg' + (fresh ? " group" : " cont") + (faceOff ? " no-face" : "") + '" data-mid="' + esc(row.id) + '"><div class="dmsg-gutter">' + gutter + "</div>" +
         '<div class="dmsg-body">' + head + replyHtml(row, byId) +
-        '<div class="dmsg-bubble"><div class="dmsg-text">' + format(row.body, row.emojis) + (row.edited ? (" <span class=\"dmsg-edited\"" + ">" + tr("(edited)") + "<" + "/span>") : "") + "</div>" +
+        '<div class="dmsg-bubble"><div class="dmsg-text">' + bubble + "</div>" +
         mediaHtml(row) + embedHtml(row) + reactionHtml(row) +
         "</div></div></article>";
     }).join("");
@@ -1089,8 +1094,10 @@
     const pinBtn = pinsBlocked(ch) ? "" : '<button type="button" class="dmsgs-iconbtn dmsgs-pins' + (state.pinsOpen === id ? " on" : "") + '" data-discord="pins" data-id="' + esc(id) + ("\" " + "aria-label=\"" + tr("Pinned messages") + "\"" + " aria-expanded=\"") + (state.pinsOpen === id ? "true" : "false") + '">' + iconSvg("pin") + "</button>";
     const place = (server && server.name) || ch.category || "Discord";
     const sub = whoId && window.ViktorychPresence ? window.ViktorychPresence.dmSubHtml(whoId, place) : esc(place);
+    const catchup = '<button type="button" class="show-more odai-btn" data-act="odai-unread" data-id="' + esc(id) + '" data-scope="dm">' + esc(tr("Summarize unread")) + "</button>";
+    const suggest = '<button type="button" class="show-more odai-btn" data-act="odai-suggest" data-id="' + esc(id) + '" data-scope="dm">' + esc(tr("Suggest replies")) + "</button>";
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + sub + "</span></div>" + pinBtn + "</header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + sub + "</span></div>" + catchup + suggest + pinBtn + "</header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
       pinPanelHtml(id) +
       ("<button type=\"button\" class=\"dmsgs-jump\" hidden" + ">" + tr("Jump to present") + "<" + "/button>") +
@@ -2384,6 +2391,13 @@
     titleFor: titleFor,
     inbox: inbox,
     thread: sharedThread,
+    unreadText: function (id) {
+      const rows = messagesFor(id);
+      if (!rows.length) return [];
+      const seen = seenMap()[id] || "";
+      const fresh = rows.filter(function (row) { return cmpId(row.id, seen) > 0; });
+      return (fresh.length ? fresh : rows.slice(0, 20)).map(function (row) { return row.body || ""; }).filter(Boolean).slice(0, 30);
+    },
     mount: mount,
     _validate: validate,
     _format: format,
