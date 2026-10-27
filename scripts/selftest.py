@@ -4309,6 +4309,8 @@ def story_checks() -> None:
     check("mindepth 2" in workflow and "one comment page per topic" in sw_js and "data\\/communities" in sw_js, "published comment pages reach Pages and are treated as data")
     reddit_wf = (ROOT / ".github" / "workflows" / "reddit.yml").read_text(encoding="utf-8")
     check("trying public feeds" in reddit_py and "leaving communities unchanged" not in reddit_py and "client_credentials" in reddit_py and "reddit.com/.json" not in reddit_py and 'cron: "*/20 * * * *"' in reddit_wf and "echo \"$REDDIT_CLIENT" not in reddit_wf and "echo ${{ secrets" not in reddit_wf, "the Reddit mirror tries public feeds without secrets and runs every 20 minutes")
+    import communities_publish
+    check(communities_publish.selftest() == 0 and ".communities-r2" in reddit_wf, "community mirrors can stay in R2 instead of a commit on main")
     check("handleCommunityRoute" in (ROOT / "worker" / "src" / "index.js").read_text(encoding="utf-8") and "community_posts" in (ROOT / "worker" / "src" / "communities.js").read_text(encoding="utf-8") and "oauth.reddit.com" not in (ROOT / "worker" / "src" / "communities.js").read_text(encoding="utf-8"), "internal community posts stay in the accounts Worker")
     check('setAttribute("sandbox", "allow-scripts allow-same-origin allow-pointer-lock")' in games_js and 'setAttribute("allow", "fullscreen; autoplay; gamepad")' in games_js and "allow-popups" not in games_js and "allow-top-navigation" not in games_js, "the game frame only gets the Unity sandbox")
     check("https://nzlay.com/ReGone/game/index.html" in games_js and "https://nzlay.com/pages/ReGone" in games_js and "nzlay.com" not in (ROOT / "games.css").read_text(encoding="utf-8"), "ReGone stays on its own site")
