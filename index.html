@@ -3,6 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <script>
+    (function () {
+      try {
+        var perf = window.performance;
+        if (perf && perf.mark) perf.mark("home-refresh-start");
+        var tab = "foryou";
+        var path = String(location.hash || "").split("?")[0];
+        if (path === "#/following" || path.indexOf("#/following/") === 0) tab = "following";
+        else if (path.indexOf("#/tab/") === 0) tab = "list:" + decodeURIComponent(path.slice(6));
+        else if (path.indexOf("#/cat/") === 0) tab = "cat:" + decodeURIComponent(path.slice(6));
+        window.__homeFreshBoot = { started: perf && perf.now ? perf.now() : 0, tab: tab, feeds: null, config: null };
+      } catch (err) { /* the deferred boot still fetches */ }
+    })();
+  </script>
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FFFFFF">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
   <meta name="theme-color" content="#000000">
@@ -139,6 +153,47 @@
     })();
   </script>
   <script src="accounts.config.js" async></script>
+  <script>
+    (function () {
+      function emptyBody(key) {
+        var body = key === "feeds.config.json" ? "{}" : '{"posts":[],"feeds":[]}';
+        return new Response(body, { status: 200, headers: { "Content-Type": "application/json", "X-Catalog-Missing": "1" } });
+      }
+      function sessionToken() {
+        try {
+          var raw = localStorage.getItem("viktorychapp-account-v1");
+          var saved = raw ? JSON.parse(raw) : null;
+          return saved && saved.token ? String(saved.token) : "";
+        } catch (err) { return ""; }
+      }
+      function loadCatalog(key) {
+        var cfg = window.VIKTORYCH_ACCOUNTS || {};
+        var api = String(cfg.api || "").replace(/\/$/, "");
+        var gated = !!(cfg.gate && api);
+        var url = gated ? api + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/") : key;
+        var headers = { "X-Feed-Refresh": "1" };
+        var auth = gated ? sessionToken() : "";
+        if (auth) headers.Authorization = "Bearer " + auth;
+        return fetch(url, { cache: "no-store", credentials: "omit", headers: headers }).then(function (res) {
+          if (!res || !res.ok) return emptyBody(key);
+          return res;
+        }).catch(function () { return emptyBody(key); });
+      }
+      function start() {
+        var boot = window.__homeFreshBoot || {};
+        if (boot.feeds) return;
+        boot.feeds = loadCatalog("feeds.json");
+        boot.config = loadCatalog("feeds.config.json");
+        window.__homeFreshBoot = boot;
+      }
+      if (window.VIKTORYCH_ACCOUNTS) start();
+      else {
+        var cfg = document.querySelector('script[src="accounts.config.js"]');
+        if (cfg) cfg.addEventListener("load", start);
+        else start();
+      }
+    })();
+  </script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="dock.css" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="dock.css"></noscript>
@@ -399,6 +454,7 @@
     <script src="marks.js" defer></script>
     <script src="translate.js" defer></script>
     <script src="shared/feed-order.js" type="module"></script>
+    <script src="shared/home-fresh.js" defer></script>
     <script src="people.js" defer></script>
     <script src="tv.js" defer></script>
     <script src="split.js" defer></script>

@@ -2,7 +2,8 @@
 """Delete completed Actions runs and artifacts.
 
 Keeps runs that are still in progress and the latest successful run of each
-workflow. Run ids in DROP_RUNS are removed even when they are that latest
+workflow. This run does not keep the previous success of its own workflow.
+Run ids in DROP_RUNS are removed even when they are that latest
 success, because their logs matched the private denylist. The older success
 is not promoted. Artifacts attached to an in-progress run are kept.
 
@@ -109,9 +110,13 @@ def paginate(path: str) -> list:
 def keep_ids(runs: list) -> set[int]:
     latest: dict[int, dict] = {}
     keep: set[int] = set()
+    me = int(os.environ.get("GITHUB_RUN_ID") or 0)
+    mine = 0
     for run in runs:
         status = run.get("status") or ""
         run_id = int(run.get("id") or 0)
+        if run_id == me:
+            mine = int(run.get("workflow_id") or 0)
         if status in ACTIVE:
             keep.add(run_id)
             continue
@@ -121,11 +126,14 @@ def keep_ids(runs: list) -> set[int]:
             created = run.get("created_at") or ""
             if previous is None or created > (previous.get("created_at") or ""):
                 latest[workflow_id] = run
+    # This run replaces the previous success of its own workflow once it
+    # finishes. Keeping that older success would leave two completed copies.
     for run in latest.values():
         run_id = int(run.get("id") or 0)
-        if run_id not in DROP_RUNS:
-            keep.add(run_id)
-    me = int(os.environ.get("GITHUB_RUN_ID") or 0)
+        workflow_id = int(run.get("workflow_id") or 0)
+        if run_id in DROP_RUNS or (mine and workflow_id == mine):
+            continue
+        keep.add(run_id)
     if me:
         keep.add(me)
     return keep

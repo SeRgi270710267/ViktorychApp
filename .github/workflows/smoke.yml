@@ -37,6 +37,7 @@ jobs:
           python3 scripts/assemble_site.py --selftest
           python3 scripts/r2_catalog.py --selftest
           python3 scripts/catalog_migrate.py --selftest
+          python3 scripts/handle_guard.py --selftest
           python3 scripts/assemble_site.py --site _site
           python3 scripts/cf_pages_prepare.py --site _site --out _mirror
 
@@ -53,3 +54,12 @@ jobs:
 
       - name: YouTube embed plays muted on desktop and mobile
         run: node scripts/yt_embed_smoke.mjs --root _site
+
+      - name: X video falls back to the official embed
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          npm install --no-save --prefix "${RUNNER_TEMP:-/tmp}/pw" playwright-core@1.49.1
+          PLAYWRIGHT_CORE="${RUNNER_TEMP:-/tmp}/pw/node_modules/playwright-core/index.mjs" node scripts/x_video_play.mjs --root _site
