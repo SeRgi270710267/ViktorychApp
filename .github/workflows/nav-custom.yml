@@ -14,6 +14,7 @@ on:
       - "scripts/landscape_layout_test.mjs"
       - "scripts/phone_resize_test.mjs"
       - "scripts/profile_layout_test.mjs"
+      - "scripts/menu_pages_test.mjs"
       - "dock.js"
       - "dock.css"
       - "worker/**"
@@ -32,6 +33,7 @@ on:
       - "scripts/landscape_layout_test.mjs"
       - "scripts/phone_resize_test.mjs"
       - "scripts/profile_layout_test.mjs"
+      - "scripts/menu_pages_test.mjs"
       - "dock.js"
       - "dock.css"
       - "worker/**"
@@ -63,3 +65,4 @@ jobs:
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/landscape_layout_test.mjs
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/phone_resize_test.mjs
           PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/profile_layout_test.mjs
+          PLAYWRIGHT_CORE=/tmp/landscape-pw/node_modules/playwright-core/index.js node scripts/menu_pages_test.mjs
