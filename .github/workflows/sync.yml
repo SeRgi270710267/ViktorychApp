@@ -241,22 +241,22 @@ jobs:
         run: |
           rm -rf _site
           mkdir -p _site
-          cp index.html 404.html robots.txt app.js update.js storage.js storage.css localfirst.js direct.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js owner-keys.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css vault.js vault.css games.js games.css communities.js communities.css yt-player.js yt-player.css scores.js scores.css weather.js weather.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
+          cp index.html 404.html robots.txt app.js update.js storage.js storage.css localfirst.js direct.js styles.css i18n.js marks.js translate.js translate.css people.js people.css tv.js tv.css split.js discord-ui.js discord-ui.css spaces.js spaces.css stories.js stories.css music.js music.css accounts.js owner-keys.js accounts.css accounts.config.js shorts.js shorts.css drive.js drive.css vault.js vault.css games.js games.css communities.js communities.css yt-player.js yt-player.css scores.js scores.css weather.js weather.css presence.js presence.css hls-1.7.3.min.js mpegts-1.8.0.min.js favicon.svg favicon.ico manifest.webmanifest sw.js .nojekyll feeds.json stories.json people.json suggestions.json feeds.config.json _site/
           mkdir -p _site/shared
           cp shared/handle-skeleton.js shared/reposts.js _site/shared/
           cp shared/feed-order.js _site/shared/
           cp shared/pill-data.js _site/shared/
           cp shared/lazy-modules.js _site/shared/
-          cp shared/drive-crypto.js shared/drive-photos.js _site/shared/
-          cp shared/mirror.js _site/shared/
+          cp shared/drive-crypto.js shared/drive-photos.js shared/presence.js shared/mirror.js _site/shared/
           if [ -f tv-page.js ]; then cp tv-page.js tv-page.css _site/; fi
           mkdir -p _site/i18n
           cp i18n/*.js _site/i18n/
           if [ -f data/music.json ]; then mkdir -p _site/data; cp data/music.json _site/data/; fi
           if [ -d data/communities ]; then mkdir -p _site/data/communities; cp data/communities/*.json _site/data/communities/; find data/communities -mindepth 2 -name '*.json' -exec cp --parents {} _site/ \; ; fi
           if [ -d live ]; then mkdir -p _site/live; cp live/*.json _site/live/; fi
-          mkdir -p _site/icons _site/splash _site/screenshots
+          mkdir -p _site/icons _site/splash _site/screenshots _site/logo
           cp icons/* _site/icons/
+          cp logo/* _site/logo/
           cp splash/* _site/splash/
           cp screenshots/* _site/screenshots/
           if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s/__SW_VERSION__/${GITHUB_SHA}/" _site/sw.js; fi
