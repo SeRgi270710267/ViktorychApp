@@ -1346,5 +1346,6 @@ SI18n.addPack("es", {
   "The encryption key is not configured on the server.": "La clave de cifrado no está configurada en el servidor.",
   "{service} needs a new key. Open Connected keys and replace it.": "{service} necesita una clave nueva. Abre Claves conectadas y reemplázala.",
   "Keys are available only to the owner.": "Las claves solo están disponibles para el propietario.",
-  "Saved value hidden": "Valor guardado oculto"
+  "Saved value hidden": "Valor guardado oculto",
+  "Setup needed": "Falta configurar"
 });

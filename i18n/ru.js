@@ -1346,5 +1346,6 @@ SI18n.addPack("ru", {
   "The encryption key is not configured on the server.": "Ключ шифрования не настроен на сервере.",
   "{service} needs a new key. Open Connected keys and replace it.": "{service} нужен новый ключ. Откройте «Подключённые ключи» и замените его.",
   "Keys are available only to the owner.": "Ключи доступны только владельцу.",
-  "Saved value hidden": "Сохранённое значение скрыто"
+  "Saved value hidden": "Сохранённое значение скрыто",
+  "Setup needed": "Нужна настройка"
 });

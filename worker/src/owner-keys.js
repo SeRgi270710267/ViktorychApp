@@ -323,7 +323,10 @@ export async function handleOwnerKeys(request, env, path, deps) {
   if (!slotId && request.method === "GET") {
     const hit = await rateHit(env, "owner-keys-list:" + gate.row.public_id, 60, 10 * 60 * 1000);
     if (!hit.ok) return limited(hit);
-    return json(200, await listKeys(env, gate.row.public_id));
+    const ready = !!String(env.KEYS_ENC_KEY || "").trim();
+    const listed = await listKeys(env, gate.row.public_id);
+    listed.ready = ready;
+    return json(200, listed);
   }
   if (!spec || parts.length > 5) return json(404, { error: "not_found" });
 

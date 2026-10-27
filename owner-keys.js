@@ -130,7 +130,7 @@
     });
   }
   function fail(body) {
-    if (body && body.error === "not_configured") note = tr("The encryption key is not configured on the server.");
+    if (body && body.error === "not_configured") note = tr("Setup needed");
     else if (body && body.error === "bad_paste") note = tr("That paste was not accepted.");
     else if (!body || !body.status) note = tr("Could not reach the key store.");
     else note = tr("Could not save that key.");
@@ -138,6 +138,9 @@
   function sectionHtml() {
     if (!visible()) return '<div class="set-block"><p class="phandle">' + esc(tr("Keys are available only to the owner.")) + "</p></div>";
     load(false);
+    if (cache && cache.ready === false) {
+      return '<div class="set-block keys-settings"><p class="phandle keys-status">' + esc(tr("Setup needed")) + "</p></div>";
+    }
     var slots = cache && cache.slots ? cache.slots : [];
     var blocks = slots.map(function (slot) {
       var line = statusLabel(slot.status, slot.configured);
