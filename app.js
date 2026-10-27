@@ -4149,7 +4149,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function subsDesktop() {
-    return (window.innerWidth || 0) >= 1000 && !!(window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches);
+    const w = window.innerWidth || 0;
+    const h = window.innerHeight || 0;
+    if (w < 1000) return false;
+    if (w > h && h <= 520 && w <= 1100) return false;
+    return true;
   }
 
   function paintMute(btn) {
@@ -16073,7 +16077,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (motion.addEventListener) motion.addEventListener("change", () => schedulePreview());
   }
-  window.addEventListener("resize", () => hscrollOnResize());
+  function syncShell() {
+    const w = window.innerWidth || 0;
+    const h = window.innerHeight || 0;
+    let mode = "desktop";
+    if (w > h && h <= 520 && w <= 1100) mode = "land";
+    else if (w < 500) mode = "phone";
+    else if (w < 1000) mode = "tablet";
+    else if (w < 1280) mode = "wide";
+    if (document.documentElement.getAttribute("data-shell") !== mode) {
+      document.documentElement.setAttribute("data-shell", mode);
+    }
+    hscrollOnResize();
+  }
+  window.addEventListener("resize", () => syncShell());
+  window.addEventListener("orientationchange", () => syncShell());
+  syncShell();
   window.addEventListener("scroll", () => {
     if (window.innerWidth >= 500) {
       STATE.headerHidden = false;
@@ -19418,6 +19437,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
 
     function showTooltip(target, immediate) {
+      if ((window.innerWidth || 0) < 500) {
+        hideTooltip(true);
+        return;
+      }
       const el = findTooltipTarget(target);
       if (!el) {
         hideTooltip(false);
@@ -19468,6 +19491,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       hideTooltip(true);
     }, { passive: true });
 
+    window.addEventListener("resize", () => {
+      if ((window.innerWidth || 0) < 500) hideTooltip(true);
+    }, { passive: true });
+    window.addEventListener("orientationchange", () => hideTooltip(true));
     window.addEventListener("scroll", () => hideTooltip(true), { passive: true, capture: true });
     window.addEventListener("pointerdown", () => hideTooltip(true), { passive: true });
     window.addEventListener("keydown", (event) => {
