@@ -1,5 +1,7 @@
 /** Internal posts on a mirrored subreddit. Nothing here calls Reddit. */
 
+import { notifyCommunity, notifyMentions } from "./notifications.js";
+
 export const COMMUNITY_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY, community_id TEXT NOT NULL, author_id TEXT NOT NULL, parent_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_at INTEGER NOT NULL, deleted_at INTEGER NOT NULL DEFAULT 0)",
   "CREATE INDEX IF NOT EXISTS community_posts_feed ON community_posts(community_id, created_at DESC)",
@@ -240,6 +242,23 @@ async function createPost(request, env, name, row, json, readJson, rateHit, limi
     await env.DB.prepare("INSERT INTO community_notes (id, public_id, payload, created_at, seen) VALUES (?, ?, ?, ?, 0)").bind(noteId, parentAuthor, JSON.stringify(payload), now).run();
   }
   const author = await authorOf(env, request, row.public_id, presentAccount);
+  if (parentAuthor && parentAuthor !== row.public_id) {
+    await notifyCommunity(env, {
+      publicId: parentAuthor,
+      kind: "reply",
+      at: now,
+      actorId: row.public_id,
+      idempotencyKey: "reply:" + id,
+      handle: author.handle,
+      name: author.displayName,
+      text: Array.from(text).slice(0, 180).join(""),
+      avatar: author.avatar || "",
+      hash: "#/communities/" + name + "/" + encodeURIComponent(parent),
+      platform: "app",
+      feedId: "community:" + name
+    });
+  }
+  await notifyMentions(env, { public_id: row.public_id, handle: author.handle, display_name: author.displayName }, text, [parentAuthor, row.public_id], "mention:" + id, "#/communities/" + name + "/" + encodeURIComponent(parent || id));
   return json(200, { post: { id, authorId: (author && author.profileLess) ? "" : row.public_id, parentId: parent, body: text, createdAt: now, author, mine: true } });
 }
 
@@ -262,10 +281,32 @@ async function setLike(request, env, row, json, readJson, rateHit, limited) {
   if (body.error) return json(400, { error: body.error });
   const item = String(body.itemId || "");
   if (!PARENT_RE.test(item) && !/^va_[a-f0-9]{16}$/.test(item)) return json(400, { error: "bad_post" });
+  let createdLike = false;
   if (request.method === "DELETE") {
     await env.DB.prepare("DELETE FROM community_likes WHERE public_id = ? AND item_id = ?").bind(row.public_id, item).run();
   } else {
+    const before = await env.DB.prepare("SELECT created_at FROM community_likes WHERE public_id = ? AND item_id = ?").bind(row.public_id, item).first();
     await env.DB.prepare("INSERT INTO community_likes (public_id, item_id, created_at) VALUES (?, ?, ?) ON CONFLICT(public_id, item_id) DO NOTHING").bind(row.public_id, item, Date.now()).run();
+    createdLike = !before;
+  }
+  if (createdLike && /^va_[a-f0-9]{16}$/.test(item)) {
+    const liked = await env.DB.prepare("SELECT author_id FROM community_posts WHERE id = ? AND deleted_at = 0").bind(item).first();
+    if (liked && liked.author_id && liked.author_id !== row.public_id) {
+      const me = await env.DB.prepare("SELECT handle, display_name FROM accounts WHERE public_id = ?").bind(row.public_id).first();
+      await notifyCommunity(env, {
+        publicId: liked.author_id,
+        kind: "like",
+        at: Date.now(),
+        actorId: row.public_id,
+        idempotencyKey: "like:" + row.public_id + ":" + item,
+        handle: me && me.handle,
+        name: me && me.display_name,
+        text: "",
+        hash: "#/communities",
+        platform: "app",
+        feedId: "app:" + row.public_id
+      });
+    }
   }
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM community_likes WHERE item_id = ?").bind(item).first();
   return json(200, { itemId: item, likes: Number(count && count.n) || 0, mine: request.method !== "DELETE" });

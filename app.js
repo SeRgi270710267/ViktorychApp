@@ -809,6 +809,7 @@
       out[key] = {
         mode: row.mode,
         since: Number(row.since) || 0,
+        updatedAt: Number(row.updatedAt) || Number(row.since) || 0,
         ids: ids.length ? ids : [key],
         handles: handles,
         handle: String(row.handle || "").replace(/^@/, "").slice(0, 80),
@@ -824,9 +825,13 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
+      const kinds = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
+        kind: kinds[item.kind] ? item.kind : (item.mention === true ? "mention" : "post"),
+        read: item.read === true,
+        recipientId: /^\d{12}$/.test(String(item.recipientId || "")) ? String(item.recipientId) : "",
         handle: String(item.handle || "").replace(/^@/, "").slice(0, 80),
         name: String(item.name || "").slice(0, 80),
         text: String(item.text || "").slice(0, 280),
@@ -880,6 +885,8 @@
         kind: item.kind === "verified" || item.kind === "mentions" ? item.kind : "",
         members: members,
         readAt: Number(item.readAt) || 0,
+        updatedAt: Number(item.updatedAt) || 0,
+        deletedAt: Number(item.deletedAt) || 0,
         sort: item.sort === "popular" ? "popular" : "recent"
       });
     });
@@ -910,15 +917,23 @@
     return editingNoteTabs() ? noteTabs() : feedTabs();
   }
 
+  function tabAlive(tab) {
+    if (!tab) return false;
+    const deleted = Number(tab.deletedAt) || 0;
+    if (!deleted) return true;
+    return deleted < (Number(tab.updatedAt) || 0);
+  }
+
   function visibleNoteTabs() {
     const list = noteTabsSame() ? feedTabs() : noteTabs();
-    return list.filter((tab) => tab.showNotes !== false);
+    return list.filter((tab) => tabAlive(tab) && tab.showNotes !== false);
   }
 
   function noteTabById(id) {
     const wanted = String(id || "");
     const list = noteTabsSame() ? feedTabs() : noteTabs();
-    return list.find((tab) => tab.id === wanted) || null;
+    const found = list.find((tab) => tab.id === wanted) || null;
+    return tabAlive(found) ? found : null;
   }
 
   function noteTabLabel(tab) {
@@ -6588,8 +6603,12 @@ const here = parseRoute();
   }
 
   function bellUnread() {
+    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
+      const server = notesServer();
+      return Number(server.unread) > 0 ? Number(server.unread) : 0;
+    }
     const read = Number(STATE.settings && STATE.settings.bellRead) || 0;
-    return ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => (Number(note.at) || 0) > read).length;
+    return ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
   }
 
   function bellBadgeHtml() {
@@ -10534,20 +10553,42 @@ const here = parseRoute();
   function markNoteTabRead(active) {
     if (!STATE.settings) return;
     if (active === "all") {
-      const newest = ((STATE.settings.bellNotes) || []).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
-      if (newest && (Number(STATE.settings.bellRead) || 0) < newest) {
-        STATE.settings.bellRead = Date.now();
-        saveSettings();
-        updateBadge(0);
-      }
+      const notes = STATE.settings.bellNotes || [];
+      const newest = notes.reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
+      const until = Math.max(newest, Number(notesServer().readUntil) || 0);
+      if (!until || (Number(STATE.settings.bellRead) || 0) >= until && !(notes.some((note) => !note.read))) return;
+      const ids = [];
+      notes.forEach((note) => {
+        if ((Number(note.at) || 0) <= until) {
+          if (!note.read && note.id) ids.push(note.id);
+          note.read = true;
+        }
+      });
+      STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
+      const server = notesServer();
+      server.unread = 0;
+      server.readUntil = Math.max(Number(server.readUntil) || 0, until);
+      writeNotesServer(server);
+      const pending = notePending();
+      pending.until = server.readUntil;
+      pending.ids = (pending.ids || []).concat(ids).slice(-80);
+      writeNotePending(pending);
+      updateBadge(0);
+      saveSettings();
+      scheduleNoteSync();
       return;
     }
     const tab = noteTabById(active);
     if (!tab) return;
     const newest = notesForTab(tab).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
     if (newest && (Number(tab.readAt) || 0) < newest) {
-      tab.readAt = Date.now();
+      tab.readAt = newest;
+      tab.updatedAt = Date.now();
+      const pending = notePending();
+      pending.tabs = true;
+      writeNotePending(pending);
       saveSettings();
+      scheduleNoteSync();
     }
   }
 
@@ -10558,11 +10599,23 @@ const here = parseRoute();
     return `<div class="tab-pair on">${btn}<button class="tab-caret" type="button" data-act="note-tab-menu" data-tab="${esc(id)}" aria-label="${esc(tr("{label} options", { label: label }))}" aria-expanded="${expanded ? "true" : "false"}" aria-haspopup="menu">${icon("caret")}</button></div>`;
   }
 
+  function noteTitle(note) {
+    const who = esc((note && (note.name || note.handle)) || tr("Someone"));
+    const kind = note && note.kind;
+    if (kind === "like") return tr("{name} liked your post", { name: who });
+    if (kind === "repost") return tr("{name} reposted your post", { name: who });
+    if (kind === "reply") return tr("{name} replied to you", { name: who });
+    if (kind === "mention" || (note && note.mention)) return tr("{name} mentioned you", { name: who });
+    if (kind === "follow") return tr("{name} followed you", { name: who });
+    if (kind === "live") return tr("{name} is live", { name: who });
+    return tr("New post notifications for @{handle}", { handle: who });
+  }
+
   function noteRow(note) {
     const who = note.handle || note.name || "account";
     const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
     const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
-    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${tr("New post notifications for @{handle}", { handle: esc(who) })}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
+    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${note.text ? `<p>${esc(note.text)}</p>` : ""}${image}</div></div></a></article>`;
   }
 
   function notificationsView(route) {
@@ -11290,7 +11343,10 @@ if (STATE.histClear) {
         histUpsert("bookmarks", likedPost || findAnyPost(id), { id: id });
         if (!navigator.onLine) toast(tr("Saved. Images download when you’re back online."));
       }
-      if (act === "like") histUpsert("likes", likedPost, { id: id });
+      if (act === "like") {
+        histUpsert("likes", likedPost, { id: id });
+        queueLikeNote(likedPost, id);
+      }
     }
     saveSettings();
     if (!navigator.onLine) queueOffline({ type: act === "bookmark" ? "bookmark" : "like", id: id, on: !!STATE.settings[bucket][id] });
@@ -14605,8 +14661,14 @@ if (STATE.histClear) {
     if (act === "confirm-delete") {
       if (STATE.confirm && STATE.confirm.kind === "feed-tab") {
         const id = STATE.confirm.id;
-        if (editingNoteTabs() || (!noteTabsSame() && noteTabs().some((tab) => tab.id === id) && !feedTabById(id))) STATE.settings.noteTabs = noteTabs().filter((tab) => tab.id !== id);
-        else STATE.settings.feedTabs = feedTabs().filter((tab) => tab.id !== id);
+        if (editingNoteTabs() || (!noteTabsSame() && noteTabs().some((tab) => tab.id === id) && !feedTabById(id))) {
+          const now = Date.now();
+          STATE.settings.noteTabs = noteTabs().map((tab) => tab.id === id ? Object.assign({}, tab, { deletedAt: now, updatedAt: now, showNotes: false }) : tab);
+          const pending = notePending();
+          pending.tabs = true;
+          writeNotePending(pending);
+          scheduleNoteSync();
+        } else STATE.settings.feedTabs = feedTabs().filter((tab) => tab.id !== id);
         if (STATE.settings.lastNoteTab === id) STATE.settings.lastNoteTab = "all";
         STATE.confirm = null;
         STATE.modal = null;
@@ -16983,19 +17045,27 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   function bellNoteFrom(post, row) {
     const text = String(post.text || post.title || "").replace(/\s+/g, " ").trim().slice(0, 180);
+    const platform = post.platform || "x";
+    const handle = String((row && row.handle) || post.handle || "").replace(/^@/, "");
+    const raw = String(canonicalPostId(post) || post.id || "");
+    const mention = noteIsMention({ text: String(post.text || post.title || "") });
+    const live = (row && row.mode === "live") || postIsLiveVideo(post);
+    const id = !raw ? "" : (live ? ("live:" + platform + ":" + handle.toLowerCase() + ":" + raw) : (mention ? ("mention:" + raw) : ("post:" + raw)));
     return {
-      id: String(canonicalPostId(post) || post.id || ""),
-      at: Date.now(),
-      handle: (row && row.handle) || post.handle || "",
+      id: id,
+      at: Date.parse(post.date || "") || 0,
+      kind: live ? "live" : (mention ? "mention" : "post"),
+      read: false,
+      handle: handle,
       name: post.author || (row && row.name) || post.handle || "",
       text: text,
       avatar: httpsUrl(post.avatar),
       image: postImageUrl(post),
       hash: statusHash(post),
       verified: !!(post.verifiedType && post.verifiedType !== "none"),
-      mention: noteIsMention({ text: String(post.text || post.title || "") }),
+      mention: mention,
       feedId: String(post.feedId || ((row && row.ids && row.ids[0]) || "")),
-      platform: post.platform || "x",
+      platform: platform,
       ids: (row && row.ids) || [],
       handles: (row && row.handles) || []
     };
@@ -17028,6 +17098,381 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   }
 
+  function notesServer() {
+    try {
+      const doc = JSON.parse(readStored(localStorage, "notes-server") || "null");
+      return doc && typeof doc === "object" ? doc : {};
+    } catch (err) { return {}; }
+  }
+
+  function writeNotesServer(doc) {
+    writeStored(localStorage, "notes-server", JSON.stringify(doc || {}));
+  }
+
+  function notePending() {
+    try {
+      const doc = JSON.parse(readStored(localStorage, "notes-pending") || "null");
+      return doc && typeof doc === "object" ? doc : {};
+    } catch (err) { return {}; }
+  }
+
+  function writeNotePending(doc) {
+    writeStored(localStorage, "notes-pending", JSON.stringify(doc || {}));
+  }
+
+  function noteAcked() {
+    try {
+      const list = JSON.parse(readStored(localStorage, "notes-acked") || "[]");
+      return Array.isArray(list) ? list : [];
+    } catch (err) { return []; }
+  }
+
+  function rememberAcked(ids) {
+    const have = {};
+    noteAcked().concat(ids || []).forEach((id) => { if (id) have[String(id)] = true; });
+    writeStored(localStorage, "notes-acked", JSON.stringify(Object.keys(have).slice(-500)));
+  }
+
+  function presenceDnd() {
+    const presence = window.ViktorychPresence;
+    if (presence && typeof presence.dnd === "function") {
+      try { return !!presence.dnd(); }
+      catch (err) { return false; }
+    }
+    return false;
+  }
+
+  function mergeLocalNotes(local, remote, readUntil) {
+    const map = {};
+    function take(item, fromServer) {
+      if (!item || !item.id) return;
+      const id = String(item.id).slice(0, 160);
+      const at = Number(item.at) || 0;
+      const read = item.read === true || !!(readUntil && at > 0 && at <= readUntil);
+      const prev = map[id];
+      if (!prev) {
+        map[id] = Object.assign({}, item, { id: id, at: at, read: read, lockAt: !!fromServer });
+        return;
+      }
+      const atKept = prev.lockAt ? prev.at : (fromServer ? at : (prev.at || at));
+      map[id] = Object.assign({}, prev, item, { id: id, at: atKept, read: !!(prev.read || read), lockAt: !!(prev.lockAt || fromServer) });
+    }
+    (Array.isArray(remote) ? remote : []).forEach((item) => take(item, true));
+    (Array.isArray(local) ? local : []).forEach((item) => take(item, false));
+    return Object.keys(map).map((key) => map[key]).sort((a, b) => (b.at - a.at) || (a.id < b.id ? -1 : 1));
+  }
+
+  function mergeLocalTabs(local, remote) {
+    const map = {};
+    function take(tab) {
+      if (!tab || !tab.id) return;
+      const prev = map[tab.id];
+      if (!prev) { map[tab.id] = tab; return; }
+      const newer = (Number(tab.updatedAt) || 0) >= (Number(prev.updatedAt) || 0) ? tab : prev;
+      const next = Object.assign({}, prev, newer);
+      next.readAt = Math.max(Number(tab.readAt) || 0, Number(prev.readAt) || 0);
+      next.deletedAt = Math.max(Number(tab.deletedAt) || 0, Number(prev.deletedAt) || 0);
+      next.updatedAt = Math.max(Number(tab.updatedAt) || 0, Number(prev.updatedAt) || 0);
+      map[tab.id] = next;
+    }
+    (Array.isArray(remote) ? remote : []).forEach(take);
+    (Array.isArray(local) ? local : []).forEach(take);
+    return Object.keys(map).map((key) => map[key]);
+  }
+
+  let noteSyncTimer = 0;
+  let noteApplying = false;
+  let hubPoll = 0;
+  let channelBound = false;
+
+  function scheduleNoteSync() {
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    clearTimeout(noteSyncTimer);
+    noteSyncTimer = setTimeout(() => { pullNotes(); }, 800);
+  }
+
+  function queueReadIds(ids) {
+    const pending = notePending();
+    pending.ids = (pending.ids || []).concat(ids || []).filter(Boolean).slice(-80);
+    writeNotePending(pending);
+    scheduleNoteSync();
+  }
+
+  function queueLikeNote(post, id) {
+    if (!post || !(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    const feed = String(post.feedId || "");
+    if (feed.indexOf("app:") !== 0) return;
+    const recipient = feed.slice(4);
+    if (!/^\d{12}$/.test(recipient)) return;
+    const me = signedAccount();
+    if (!me || !me.publicId || me.publicId === recipient) return;
+    const pending = notePending();
+    pending.items = Array.isArray(pending.items) ? pending.items : [];
+    pending.items.push({
+      id: "like:" + me.publicId + ":" + String(canonicalPostId(post) || id || ""),
+      kind: "like",
+      recipientId: recipient,
+      at: Date.parse(post.date || "") || Date.now(),
+      handle: me.handle || "",
+      name: me.displayName || me.handle || "",
+      text: String(post.text || post.title || "").replace(/\s+/g, " ").trim().slice(0, 180),
+      hash: statusHash(post),
+      feedId: "app:" + me.publicId,
+      platform: "app"
+    });
+    pending.items = pending.items.slice(-40);
+    writeNotePending(pending);
+    scheduleNoteSync();
+  }
+
+  function clientNoteItem(note) {
+    const kind = note.kind === "mention" || note.kind === "live" || note.kind === "like" || note.kind === "repost" ? note.kind : "post";
+    const item = {
+      id: note.id,
+      kind: kind,
+      at: Number(note.at) || 0,
+      handle: note.handle || "",
+      name: note.name || "",
+      text: note.text || "",
+      avatar: note.avatar || "",
+      image: note.image || "",
+      hash: note.hash || "#/",
+      feedId: note.feedId || "",
+      platform: note.platform || "",
+      verified: note.verified === true,
+      mention: note.mention === true || kind === "mention"
+    };
+    if (note.recipientId) item.recipientId = note.recipientId;
+    return item;
+  }
+
+  function applyServerNotes(view) {
+    if (!view || !STATE.settings) return;
+    const until = Number(view.readUntil) || 0;
+    STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], view.items || [], until));
+    STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
+    if (Array.isArray(view.tabs)) {
+      STATE.settings.noteTabs = cleanFeedTabs(mergeLocalTabs(STATE.settings.noteTabs || [], view.tabs));
+      if (view.noteTabsSame === false) STATE.settings.noteTabsSame = false;
+      if (view.noteTabsSame === true) STATE.settings.noteTabsSame = true;
+      if (view.lastNoteTab) STATE.settings.lastNoteTab = cleanLastNoteTab(view.lastNoteTab, STATE.settings.noteTabsSame === false ? STATE.settings.noteTabs : STATE.settings.feedTabs);
+    }
+    if (view.bells && typeof view.bells === "object" && Number(view.bellsAt) >= Number(STATE.settings.bellsAt || 0)) {
+      STATE.settings.bells = cleanBells(view.bells);
+      STATE.settings.bellsAt = Number(view.bellsAt) || 0;
+    }
+    const server = notesServer();
+    server.unread = Number(view.unread) || 0;
+    server.readUntil = until;
+    server.fetchedAt = Date.now();
+    writeNotesServer(server);
+    saveSettings();
+    paintBellBadge();
+    if (parseRoute().name === "notifications") render();
+  }
+
+  function applyHubEvent(data) {
+    if (!data || !STATE.settings) return;
+    if (data.type === "read") {
+      const until = Number(data.readUntil || data.until) || 0;
+      const server = notesServer();
+      server.unread = Number(data.unread) || 0;
+      if (until) server.readUntil = Math.max(Number(server.readUntil) || 0, until);
+      writeNotesServer(server);
+      const ids = Array.isArray(data.ids) ? data.ids : [];
+      (STATE.settings.bellNotes || []).forEach((note) => {
+        if (ids.indexOf(note.id) >= 0 || (until && (Number(note.at) || 0) <= until)) note.read = true;
+      });
+      if (until) STATE.settings.bellRead = Math.max(Number(STATE.settings.bellRead) || 0, until);
+      saveSettings();
+      paintBellBadge();
+      if (parseRoute().name === "notifications") render();
+      return;
+    }
+    if (data.type === "upsert" && Array.isArray(data.items)) {
+      const until = Number(data.readUntil) || Number(notesServer().readUntil) || 0;
+      STATE.settings.bellNotes = cleanBellNotes(mergeLocalNotes(STATE.settings.bellNotes || [], data.items, until));
+      const server = notesServer();
+      server.unread = Number(data.unread) || 0;
+      if (data.readUntil) server.readUntil = Number(data.readUntil);
+      writeNotesServer(server);
+      saveSettings();
+      paintBellBadge();
+      if (parseRoute().name === "notifications") render();
+      return;
+    }
+    if (data.type === "tabs" && Array.isArray(data.tabs)) {
+      STATE.settings.noteTabs = cleanFeedTabs(mergeLocalTabs(STATE.settings.noteTabs || [], data.tabs));
+      if (data.lastNoteTab) STATE.settings.lastNoteTab = data.lastNoteTab;
+      saveSettings();
+      if (parseRoute().name === "notifications") render();
+    }
+  }
+
+  async function pullNotes() {
+    const accounts = window.ViktorychAccounts;
+    if (!accounts || !accounts.token || !accounts.token() || noteApplying) return;
+    noteApplying = true;
+    const sent = notePending();
+    try {
+      const acked = {};
+      noteAcked().forEach((id) => { acked[id] = true; });
+      const localItems = ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => note && note.id && !acked[note.id] && note.kind !== "follow" && note.kind !== "reply");
+      const queued = Array.isArray(sent.items) ? sent.items : [];
+      const items = queued.concat(localItems).slice(0, 40).map(clientNoteItem);
+      const body = {};
+      if (items.length) body.items = items;
+      if (sent.until) body.until = sent.until;
+      if (sent.ids && sent.ids.length) body.ids = sent.ids.slice(-80);
+      if (sent.tabs && STATE.settings) {
+        body.tabs = noteTabs();
+        body.noteTabsSame = STATE.settings.noteTabsSame !== false;
+        body.lastNoteTab = STATE.settings.lastNoteTab || "all";
+      }
+      if (sent.bells && STATE.settings) {
+        body.bells = cleanBells(STATE.settings.bells);
+        body.bellsAt = Number(STATE.settings.bellsAt) || Date.now();
+      }
+      const posting = Object.keys(body).length > 0;
+      const res = await accountCall("/v1/notifications", posting ? { method: "POST", body: body } : { method: "GET" });
+      if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
+      applyServerNotes(res);
+      rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
+      const nowPending = notePending();
+      if (sent.until && Number(nowPending.until) === Number(sent.until)) delete nowPending.until;
+      if (sent.tabs) delete nowPending.tabs;
+      if (sent.bells) delete nowPending.bells;
+      if (Array.isArray(sent.ids)) {
+        const sentIds = {};
+        sent.ids.forEach((id) => { sentIds[id] = true; });
+        nowPending.ids = (nowPending.ids || []).filter((id) => !sentIds[id]);
+        if (!nowPending.ids.length) delete nowPending.ids;
+      }
+      if (Array.isArray(sent.items)) {
+        const sentItems = {};
+        sent.items.forEach((item) => { if (item && item.id) sentItems[item.id] = true; });
+        nowPending.items = (nowPending.items || []).filter((item) => item && !sentItems[item.id]);
+        if (!nowPending.items.length) delete nowPending.items;
+      }
+      writeNotePending(nowPending);
+    } catch (err) { /* the next visible fetch tries again */ }
+    finally { noteApplying = false; }
+  }
+
+  function channelOpen() {
+    const presence = window.ViktorychPresence;
+    return !!(presence && presence.channelOpen && presence.channelOpen());
+  }
+
+  function onChannelMessage(msg) {
+    if (!msg) return;
+    if (msg.op === "state") {
+      if (msg.open) stopPoll();
+      else if (document.visibilityState === "visible") startPoll();
+      return;
+    }
+    if (msg.op === "event" && msg.topic === "notifications" && msg.data) applyHubEvent(msg.data);
+  }
+
+  function bindChannel() {
+    const presence = window.ViktorychPresence;
+    if (!presence || !presence.onChannel || channelBound) return;
+    presence.onChannel(onChannelMessage);
+    channelBound = true;
+  }
+
+  function stopPoll() {
+    if (hubPoll) { clearInterval(hubPoll); hubPoll = 0; }
+  }
+
+  function startPoll() {
+    if (hubPoll || document.visibilityState !== "visible" || channelOpen()) return;
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    hubPoll = setInterval(() => {
+      if (document.visibilityState !== "visible" || channelOpen()) {
+        stopPoll();
+        return;
+      }
+      pullNotes();
+    }, 20000);
+  }
+
+  function stopHub() {
+    stopPoll();
+  }
+
+  function ensureHub() {
+    bindChannel();
+    if (document.visibilityState !== "visible") return;
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    ensurePush();
+    if (channelOpen()) stopPoll();
+    else startPoll();
+  }
+
+  function urlBase64ToBytes(value) {
+    const pad = "=".repeat((4 - (String(value || "").length % 4)) % 4);
+    const raw = atob(String(value || "").replace(/-/g, "+").replace(/_/g, "/") + pad);
+    const out = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  async function ensurePush() {
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (!reg.pushManager) return;
+      const vapid = await accountCall("/v1/push/vapid");
+      const key = vapid && vapid.publicKey;
+      if (!key || vapid.status !== 200) return;
+      let sub = await reg.pushManager.getSubscription();
+      const soon = sub && sub.expirationTime && sub.expirationTime - Date.now() < 24 * 60 * 60 * 1000;
+      if (sub && soon) {
+        try { await sub.unsubscribe(); } catch (err) { /* a fresh subscription follows */ }
+        sub = null;
+      }
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToBytes(key) });
+      const json = sub.toJSON ? sub.toJSON() : {};
+      STATE.pushEndpoint = json.endpoint || "";
+      if (!json.endpoint || !json.keys) return;
+      await accountCall("/v1/push/subscribe", {
+        method: "PUT",
+        body: { endpoint: json.endpoint, keys: json.keys, expirationTime: sub.expirationTime || 0 }
+      });
+    } catch (err) { /* in-app notes still sync */ }
+  }
+
+  async function beforeSignOut(all, token) {
+    stopHub();
+    const endpoint = STATE.pushEndpoint || "";
+    const accounts = window.ViktorychAccounts;
+    if (accounts && accounts.call && token) {
+      try {
+        await accounts.call("/v1/push/subscribe", {
+          method: "DELETE",
+          token: token,
+          body: all ? { all: true } : (endpoint ? { endpoint: endpoint } : {})
+        });
+      } catch (err) { /* the session logout still runs */ }
+    }
+    if (STATE.settings) {
+      STATE.settings.bellNotes = [];
+      STATE.settings.bellSeen = [];
+      STATE.settings.bellRead = 0;
+      writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
+    }
+    removeStored(localStorage, "notes-server");
+    removeStored(localStorage, "notes-acked");
+    removeStored(localStorage, "notes-pending");
+    updateBadge(0);
+  }
+
+  window.ViktorychNotes = { beforeSignOut: beforeSignOut };
+  if (!window.ViktorychPresence) window.ViktorychPresence = { dnd: function () { return false; } };
+
   function commitBellNotes(list) {
     const seen = {};
     (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
@@ -17046,6 +17491,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.settings.bellSeen = Object.keys(seen).slice(-500);
     STATE.settings.bellNotes = cleanBellNotes(added.concat(STATE.settings.bellNotes || []));
     saveSettings();
+    scheduleNoteSync();
     if (parseRoute().name === "notifications") render();
     else paintBellBadge();
   }
@@ -17102,12 +17548,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const list = (notes || []).filter((note) => note && note.id);
     if (!list.length) return;
     const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    const quiet = presenceDnd();
     if (!worker) {
       commitBellNotes(list);
-      list.forEach(showPageNotification);
+      if (!quiet) list.forEach(showPageNotification);
       return;
     }
-    worker.postMessage({ type: "bell-deliver", notes: list });
+    worker.postMessage({ type: "bell-deliver", notes: list, dnd: quiet });
   }
 
   function pullBellQueue() {
@@ -17122,7 +17569,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!keys.length) return;
     const seen = {};
     (STATE.settings.bellSeen || []).forEach((id) => { if (id) seen[String(id)] = true; });
+    const cursor = Math.max(Number(STATE.settings.bellRead) || 0, Number(notesServer().readUntil) || 0);
     const fresh = [];
+    let markedOld = false;
     (list || posts()).forEach((post) => {
       if (!post || hiddenPost(post)) return;
       const id = String(canonicalPostId(post) || post.id || "");
@@ -17142,9 +17591,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (!hit) return;
       const note = bellNoteFrom(post, hit);
       if (!note.id) return;
+      if (!note.at || note.at <= cursor) {
+        seen[note.id] = true;
+        markedOld = true;
+        return;
+      }
       seen[note.id] = true;
       fresh.push(note);
     });
+    if (markedOld) STATE.settings.bellSeen = Object.keys(seen).slice(-500);
+    if (markedOld && !fresh.length) saveSettings();
     if (fresh.length) deliverBellNotes(fresh);
   }
 
@@ -17181,7 +17637,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.bellMenu = null;
     if (mode !== "all" && mode !== "live") {
       delete STATE.settings.bells[key];
+      STATE.settings.bellsAt = Date.now();
+      const pending = notePending();
+      pending.bells = true;
+      writeNotePending(pending);
       saveSettings();
+      scheduleNoteSync();
       render();
       return;
     }
@@ -17195,17 +17656,25 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       toast(tr("Notifications stay off"));
       return;
     }
+    const now = Date.now();
+    STATE.settings.bellsAt = now;
     STATE.settings.bells[key] = {
       mode: mode,
-      since: Date.now(),
+      since: now,
+      updatedAt: now,
       ids: targets.ids,
       handles: targets.handles,
       handle: String(handle || bellHandle(id)).replace(/^@/, ""),
       name: bellName(id)
     };
     rememberLoadedPosts();
+    const pending = notePending();
+    pending.bells = true;
+    writeNotePending(pending);
     saveSettings();
+    scheduleNoteSync();
     registerPeriodic();
+    ensurePush();
     render();
     toast(tr("You'll get notified when @{handle} posts.", { handle: STATE.settings.bells[key].handle }));
   }
@@ -17216,7 +17685,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (permission !== "granted") permission = await Notification.requestPermission();
     STATE.settings.notify = permission === "granted";
     saveSettings();
-    if (STATE.settings.notify) registerPeriodic();
+    if (STATE.settings.notify) {
+      registerPeriodic();
+      ensurePush();
+    }
     render();
     toast(STATE.settings.notify ? tr("Notifications on") : tr("Notifications stay off"));
   }
@@ -17265,6 +17737,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (data.type === "data" && /feeds\.json$/.test(data.url || "")) refreshFeeds(false);
       if (data.type === "feeds-updated") refreshFeeds(false);
       if (data.type === "bell-delivered" || data.type === "bell-queue") commitBellNotes(data.notes || []);
+      if (data.type === "push-note") pullNotes();
+      if (data.type === "note-open") {
+        if (data.hash) location.hash = data.hash;
+        if (data.id) queueReadIds([data.id]);
+      }
       if (data.type === "reload-when-idle") {
         STATE.swUpdate = true;
         showUpdate();
@@ -17384,10 +17861,21 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         refreshLiveTimeline(true);
       }
     }, { passive: true });
+    window.addEventListener("focus", () => {
+      if (document.visibilityState !== "visible") return;
+      pullNotes();
+      ensureHub();
+    });
     document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") {
+        stopHub();
+        return;
+      }
       if (document.visibilityState === "visible") {
         writeStored(localStorage, "seen-at", String(Date.now()));
         updateBadge(bellUnread());
+        pullNotes();
+        ensureHub();
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
         if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
         pullBellQueue();
@@ -17862,6 +18350,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         updateBadge(bellUnread());
       } else if (fresh.length || bellUnread()) updateBadge(Math.max(fresh.length, bellUnread()));
       scanBellPosts(STATE.data.posts);
+      if (document.visibilityState === "visible") {
+        pullNotes();
+        ensureHub();
+      }
       if ("serviceWorker" in navigator) navigator.serviceWorker.ready.then(() => pullBellQueue()).catch(() => {});
       refreshLiveTimeline(false);
       if (!STATE.liveTimer) {
