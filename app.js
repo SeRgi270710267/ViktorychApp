@@ -384,12 +384,18 @@
   function githubRepo() {
     const host = String(location.hostname || "").toLowerCase();
     const suffix = ".github.io";
-    if (host.length <= suffix.length || host.slice(-suffix.length) !== suffix) return "";
-    const owner = host.slice(0, -suffix.length);
-    if (!owner || owner.indexOf(".") !== -1) return "";
-    const seg = pagesDirectory().split("/").filter(Boolean)[0] || "";
-    if (!seg || seg === "s" || seg === "u") return "";
-    return owner + "/" + seg;
+    if (host.length > suffix.length && host.slice(-suffix.length) === suffix) {
+      const owner = host.slice(0, -suffix.length);
+      if (!owner || owner.indexOf(".") !== -1) return "";
+      const seg = pagesDirectory().split("/").filter(Boolean)[0] || "";
+      if (!seg || seg === "s" || seg === "u") return "";
+      return owner + "/" + seg;
+    }
+    const pagesHost = "viktorychapp.pages.dev";
+    if (host === pagesHost || (host.length > pagesHost.length + 1 && host.slice(-(pagesHost.length + 1)) === "." + pagesHost)) {
+      return "ViktorychGroup/ViktorychApp";
+    }
+    return "";
   }
 
   const GITHUB_REPO = githubRepo();
@@ -4482,13 +4488,30 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         signal = AbortSignal.timeout(8000);
       }
     } catch (e) {}
-    return fetch(url, { cache: "no-cache", signal: signal }).then((res) => {
+    const run = (target) => fetch(target, { cache: "no-cache", signal: signal }).then((res) => {
       if (!res.ok) {
         const err = new Error(String(res.status));
         err.status = res.status;
         throw err;
       }
       return res.json();
+    });
+    return run(url).catch((err) => {
+      const api = window.ViktorychMirror;
+      if (!api || !api.mirrorHost(location.hostname)) throw err;
+      if (err && (err.name === "AbortError" || err.name === "TimeoutError")) throw err;
+      const status = Number(err && err.status) || 0;
+      if (status && !api.failoverStatus(status)) throw err;
+      let parsed = null;
+      try { parsed = new URL(url, location.href); } catch (parseErr) { throw err; }
+      if (parsed.origin !== location.origin) throw err;
+      const root = api.appRoot(location.origin, location.pathname, location.hostname);
+      const rel = api.relativeTo(root, parsed.href);
+      if (!rel || /^(?:v1\/|tg\/|ap\/|\.well-known\/)/.test(rel)) throw err;
+      const nextBase = api.bases(root, "", "").filter((base) => base !== api.normalizeBase(root))[0];
+      const next = nextBase ? api.rewrite(nextBase, rel) : "";
+      if (!next) throw err;
+      return run(next);
     });
   }
 
@@ -17729,7 +17752,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function registerSW() {
     if (!("serviceWorker" in navigator) || swStarted) return;
     swStarted = true;
-    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
+    navigator.serviceWorker.register("sw.js", { scope: "./", updateViaCache: "none" }).then((reg) => {
       if (reg && reg.update) reg.update().catch(() => {});
       syncWorkerState();
       if (window.ViktorychUpdate && window.ViktorychUpdate.watch) window.ViktorychUpdate.watch(reg);
