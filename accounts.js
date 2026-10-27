@@ -396,7 +396,7 @@ var numberNote = form.passkey
         ? esc(tr("Choose a handle or leave blank to assign an anonymous identifier."))
         : esc(tr("Latin and Cyrillic letters, digits, and underscore. Up to 15 characters."));
       var passkeyStep = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
-        ? '<button class="acct-next" type="button" data-acct="passkey-signup"' + (authBusy ? " disabled" : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Create a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + '</p><button class="acct-quiet" type="button" data-acct="next"' + (authBusy ? " disabled" : "") + ">" + esc(tr("Continue without a passkey")) + "</button>"
+        ? '<button class="acct-next" type="button" data-acct="passkey-signup"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Create a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + '</p><button class="acct-quiet" type="button" data-acct="next"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(tr("Continue without a passkey")) + "</button>"
         : nextButton("next", tr("Next"));
       return '<p class="acct-sub">' + handleSub + "</p>" +
         field("handle", form.profileLess ? tr("Handle (optional)") : tr("Choose a handle"), "text", 15) +
@@ -413,10 +413,12 @@ var numberNote = form.passkey
   }
   function loginBody() {
 var passkey = window.ViktorychPasskeys && window.ViktorychPasskeys.supported()
-      ? '<div class="acct-field"><input id="acct-passkey-user" name="passkeyUser" type="text" placeholder=" " autocomplete="username webauthn" value=""><label for="acct-passkey-user">' + esc(tr("Sign in with a passkey")) + '</label></div><button class="acct-next" type="button" data-acct="passkey-login"' + (authBusy ? " disabled" : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Sign in with a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + "</p>"
+      ? '<div class="acct-field"><input id="acct-passkey-user" name="passkeyUser" type="text" placeholder=" " autocomplete="username webauthn" value=""><label for="acct-passkey-user">' + esc(tr("Sign in with a passkey")) + '</label></div><button class="acct-next" type="button" data-acct="passkey-login"' + (authBusy ? ' disabled aria-busy="true"' : "") + ">" + esc(authBusy ? tr("Loading…") : tr("Sign in with a passkey")) + '</button><p class="acct-sub">' + esc(tr("A passkey uses this device's fingerprint, face, or screen lock. No password is required. The account number still works as an optional backup.")) + "</p>"
       : "";
-    var numberHint = passkey ? "" : '<p class="acct-sub">' + esc(tr("There is no password to reset. The account number from sign-up is the only way back in.")) + "</p>";
-    return passkey + field("accountNumber", tr("Account number")) + numberHint + turnstileHtml() + errorHtml() + nextButton("do-login", tr("Log in")) + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
+    var numberHint = passkey
+      ? tr("There is no password to reset. A passkey can sign in, and the account number from sign-up still works.")
+      : tr("There is no password to reset. The account number from sign-up is the only way back in.");
+    return passkey + field("accountNumber", tr("Account number")) + '<p class="acct-sub">' + esc(numberHint) + "</p>" + turnstileHtml() + errorHtml() + nextButton("do-login", tr("Log in")) + '<p class="acct-switch">' + esc(tr("Don't have an account?")) + ' <button type="button" data-acct="signup">' + esc(tr("Sign up")) + '</button></p><p class="acct-switch"><button type="button" data-acct="open-emergency" style="font-weight:600">' + esc(tr("Have a claim code?")) + ' (' + esc(tr("Emergency Offline Access")) + ')</button></p>' +
       '<p class="acct-switch"><button type="button" data-acct="open-restore">' + esc(tr("Restore session from another device")) + '</button></p>';
   }
   function emergencyBody() {
