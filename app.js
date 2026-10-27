@@ -10337,6 +10337,7 @@ const here = parseRoute();
       else if (section === "content") key = tr("Custom tabs");
       else if (section === "network") key = tr("Digital Resistance & Proxy");
       else if (section === "resources") key = tr("Additional resources");
+      else if (section === "delete-account") key = tr("Delete account");
       else key = tr("Settings");
     } else {
       const map = {
@@ -10533,6 +10534,12 @@ const here = parseRoute();
         <h2>${esc(tr("About"))}</h2>
         <p class="phandle">${esc(tr("{app}. Posts from accounts you follow stay in this browser. Not affiliated with X.", { app: productName("app") }))}</p>
       </div>`;
+    }
+    if (section === "delete-account") {
+      const body = window.ViktorychAccounts && window.ViktorychAccounts.deleteAccountHtml
+        ? window.ViktorychAccounts.deleteAccountHtml()
+        : "";
+      return settingsHead(tr("Delete account"), "#/settings") + body;
     }
     if (section === "keys") {
       const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
@@ -16382,6 +16389,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
 
   async function boot() {
     syncRuVisitorGeo();
+    if (window.ViktorychAccounts && window.ViktorychAccounts.showDeletedIfNeeded && window.ViktorychAccounts.showDeletedIfNeeded()) {
+      registerSW();
+      applyTheme();
+      return;
+    }
     if (window.ViktorychAccounts && window.ViktorychAccounts.blocking && window.ViktorychAccounts.blocking()) {
       registerSW();
       STATE.settings = loadSettings();

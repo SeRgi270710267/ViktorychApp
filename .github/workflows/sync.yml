@@ -299,6 +299,8 @@ jobs:
           ACCOUNTS_BACKUP_API: ${{ vars.ACCOUNTS_BACKUP_API || secrets.ACCOUNTS_BACKUP_API || 'https://viktorych-backup.onrender.com' }}
           TURNSTILE_SITEKEY: ${{ secrets.TURNSTILE_SITEKEY }}
           OWNER_CLAIM_CODE: ${{ secrets.OWNER_CLAIM_CODE }}
+          ACCOUNT_PEPPER: ${{ secrets.ACCOUNT_PEPPER }}
+          ACCOUNT_DELETION_SALT: ${{ secrets.ACCOUNT_DELETION_SALT }}
         run: python3 scripts/accounts_publish.py --site _site --source . --preserve-remote
 
       - name: Record whether the login wall is on
