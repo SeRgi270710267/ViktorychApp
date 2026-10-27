@@ -49,3 +49,9 @@ jobs:
 
       - name: YouTube embed plays muted on desktop and mobile
         run: node scripts/yt_embed_smoke.mjs --root _site
+
+      - name: Sign-up and first-run
+        run: |
+          npm ci --prefix worker --no-fund --no-audit
+          npm install --prefix /tmp/pw --no-fund --no-audit playwright-core
+          PLAYWRIGHT_CORE=/tmp/pw/node_modules/playwright-core/index.js node scripts/signup_flow_test.mjs

@@ -1939,6 +1939,12 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 .import-btn { display: inline-flex; align-items: center; margin-left: 8px; cursor: pointer; }
 .empty-action { text-align: center; }
 .empty-action .save { margin-top: 16px; }
+.empty-action a.save {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
 .explore-form { padding: 4px 16px 12px; }
 .list-section h2 {
   margin: 0;
