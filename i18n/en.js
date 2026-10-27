@@ -1388,5 +1388,16 @@ SI18n.addPack("en", {
   "Your account was deleted": "Your account was deleted",
   "This account and the data tied to it are gone from this device.": "This account and the data tied to it are gone from this device.",
   "That handle is not available yet.": "That handle is not available yet.",
-  "Deletion did not finish. Try again.": "Deletion did not finish. Try again."
+  "Deletion did not finish. Try again.": "Deletion did not finish. Try again.",
+  "Add another key": "Add another key",
+  "Optional label": "Optional label",
+  "Move up": "Move up",
+  "Move down": "Move down",
+  "Key label": "Key label",
+  "Keys are backups. One key is used at a time, highest priority first.": "Keys are backups. One key is used at a time, highest priority first.",
+  "Slowing down": "Slowing down",
+  "This service is slowing down. The same key stays in use.": "This service is slowing down. The same key stays in use.",
+  "{service} is slowing down. The same key stays in use.": "{service} is slowing down. The same key stays in use.",
+  "The key is no longer signed in.": "The key is no longer signed in.",
+  "This service already has enough backup keys.": "This service already has enough backup keys."
 });

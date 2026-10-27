@@ -230,6 +230,10 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO vault_shares (id, item_id, sender_id, sender_handle, recipient_id, recipient_handle, service, title, encrypted_payload, iv, share_code_hash, created_at) VALUES ('share-bo', 'vitem-bee', ?, 'bee_wipe', ?, 'owner', 'x', 't', 'p', 'iv', '', ?)", b, o, now);
   await sql("INSERT INTO owner_keys (owner_id, slot, kind, ciphertext, iv, mask, status, last_used, last_error, expires_at, updated_at, tested_at) VALUES (?, 'tiktok', 'cookie', 'c', 'iv', 'm', 'unknown', 0, '', 0, ?, 0)", a, now);
   await sql("INSERT INTO owner_keys (owner_id, slot, kind, ciphertext, iv, mask, status, last_used, last_error, expires_at, updated_at, tested_at) VALUES (?, 'youtube', 'cookie', 'c', 'iv', 'm', 'unknown', 0, '', 0, ?, 0)", o, now);
+  await sql("INSERT INTO owner_key_items (owner_id, key_id, slot, label, position, kind, ciphertext, iv, mask, status, last_used, last_error, expires_at, updated_at, tested_at) VALUES (?, 'k-ada', 'tiktok', 'backup', 1, 'cookie', 'c', 'iv', 'm', 'unknown', 0, '', 0, ?, 0)", a, now);
+  await sql("INSERT INTO owner_key_items (owner_id, key_id, slot, label, position, kind, ciphertext, iv, mask, status, last_used, last_error, expires_at, updated_at, tested_at) VALUES (?, 'k-own', 'youtube', 'backup', 1, 'cookie', 'c', 'iv', 'm', 'unknown', 0, '', 0, ?, 0)", o, now);
+  await sql("INSERT INTO owner_key_pace (owner_id, slot, reason, until_at, updated_at) VALUES (?, 'tiktok', 'slow', ?, ?)", a, now + 1000, now);
+  await sql("INSERT INTO owner_key_pace (owner_id, slot, reason, until_at, updated_at) VALUES (?, 'youtube', 'slow', ?, ?)", o, now + 1000, now);
   await sql("INSERT INTO account_reauths (token_hash, public_id, expires_at) VALUES ('reauth-ada', ?, ?)", a, now + 1000);
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + a, now + 100000);
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + b, now + 100000);
@@ -327,6 +331,10 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.equal(await count("SELECT COUNT(*) AS n FROM vault_shares WHERE id = 'share-bo'"), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM owner_keys WHERE owner_id = ?", o), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM owner_keys WHERE owner_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_items WHERE owner_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_pace WHERE owner_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_items WHERE owner_id = ?", o), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM owner_key_pace WHERE owner_id = ?", o), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM rate_limits WHERE bucket = ?", "follow:" + b), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM telegram_files"), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ap_followers WHERE actor_handle = 'bee_wipe'"), 1);

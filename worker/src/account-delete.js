@@ -3,7 +3,7 @@
    resumes anything left behind. After the job is done, the only lasting
    public record is a salted hash of the account id.
 
-   Tables audited against migrations 0001–0016 and the runtime schema:
+   Tables audited against migrations 0001–0017 and the runtime schema:
    accounts, sessions, sync_state (notification tabs, feed settings, groups,
    drafts, likes, bookmarks, resume and history), rate_limits,
    account_reposts, account_follows (both directions), drive_vault,
@@ -11,8 +11,9 @@
    community_members, community_notes, account_friend_requests,
    account_friends, account_federation, ap_followers, account_identities,
    identity_challenges, vault_configs, vault_items, vault_shares, owner_keys,
-   account_reauths. telegram_files is a shared media index with no account
-   column, so it is left alone. There is no invites table. */
+   owner_key_items, owner_key_pace, account_reauths. telegram_files is a
+   shared media index with no account column, so it is left alone. There is
+   no invites table. */
 
 import { OWNER_HANDLE, inspectHandle, ownerSkeleton } from "../../shared/handle-skeleton.js";
 
