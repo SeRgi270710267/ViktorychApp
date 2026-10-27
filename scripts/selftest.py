@@ -1252,11 +1252,13 @@ def main() -> None:
     check(storage_flow.returncode == 0, "the storage cache helpers pass")
     local_flow = subprocess.run(["node", str(ROOT / "scripts" / "localfirst_test.js")], cwd=ROOT)
     direct_flow = subprocess.run(["node", str(ROOT / "scripts" / "direct_test.js")], cwd=ROOT)
+    device_flow = subprocess.run(["node", str(ROOT / "scripts" / "device_test.js")], cwd=ROOT)
     check(local_flow.returncode == 0, "a blocked reload paints home, a profile, a post, and notifications from cache")
     check(direct_flow.returncode == 0, "public reads run on the device and fall back to the server")
+    check(device_flow.returncode == 0, "device performance levels, toggles, and fallbacks pass")
     page_html = (ROOT / "index.html").read_text(encoding="utf-8")
     check('src="storage.js"' in page_html and "storage.js" in storage_workflow and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
-    check('src="localfirst.js"' in page_html and 'src="direct.js"' in page_html and "localfirst.js" in storage_workflow and "direct.js" in storage_workflow and "mergeNotes" in (ROOT / "localfirst.js").read_text(encoding="utf-8") and "public.api.bsky.app" in (ROOT / "direct.js").read_text(encoding="utf-8"), "the shell restores from local snapshots and public APIs are fetched on the device")
+    check('src="localfirst.js"' in page_html and 'src="direct.js"' in page_html and 'src="device.js"' in page_html and "localfirst.js" in storage_workflow and "direct.js" in storage_workflow and "device.js" in storage_workflow and "device-search.js" in storage_workflow and "device-ai.js" in storage_workflow and "device-media.js" in storage_workflow and "device-record.js" in storage_workflow and "mergeNotes" in (ROOT / "localfirst.js").read_text(encoding="utf-8") and "public.api.bsky.app" in (ROOT / "direct.js").read_text(encoding="utf-8"), "the shell restores from local snapshots and public APIs are fetched on the device")
     local_src = (ROOT / "localfirst.js").read_text(encoding="utf-8")
     check("orderPosts" in local_src and "playlistFirst" in local_src and "cacheFirstSegment" in local_src and 'saveDoc("shorts"' in (ROOT / "shorts.js").read_text(encoding="utf-8") and 'saveDoc("lives"' in (ROOT / "shorts.js").read_text(encoding="utf-8") and 'saveDoc("music"' in (ROOT / "music.js").read_text(encoding="utf-8") and 'saveDoc("messages"' in (ROOT / "discord-ui.js").read_text(encoding="utf-8") and 'order: "utc"' in (ROOT / "app.js").read_text(encoding="utf-8"), "every screen keeps an ordered local copy and the first video segment is cached")
     ia_backup_checks()
@@ -1300,7 +1302,9 @@ def main() -> None:
         if not path.is_file() or "fixtures" in path.parts or path.suffix not in {".js", ".py", ".html", ".yml", ".md", ".webmanifest", ".css", ".json"}:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        if stale_re.search(text) or old_repo in text:
+        # Account deletion still clears data saved under the previous name.
+        cleaned = text.replace('"' + old_repo + '-"', "").replace("'" + old_repo + "-'", "")
+        if stale_re.search(cleaned) or old_repo in cleaned:
             stale.append(str(path.relative_to(ROOT)))
     check(not stale, "the previous site name is gone: " + ", ".join(stale))
     check(str(manifest["start_url"]).endswith("#/home"), "the manifest opens the home timeline")
@@ -1370,7 +1374,7 @@ def main() -> None:
     check("tv.js" in workflow and "tv.css" in workflow, "the deploy publishes the TV layout")
     check("tv.js" in worker and "tv.css" in worker and "discord-ui.js" in worker and "discord-ui.css" in worker and "split.js" in worker and "viktorych-a20-__SW_VERSION__" in worker, "the service worker precaches the TV shell and the Discord messages UI")
     pill = app[app.index("function showPill("):app.index("function memoryPosts(")]
-    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 900] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
+    check('route.name !== "home"' in pill and "homeShows(post, route)" in pill and "showPill(pendingPillPosts())" in app[app.index('addEventListener("hashchange"'):app.index('addEventListener("hashchange"') + 1100] and "html.tv-on #new-posts" in css, "the new-posts pill stays on the current home tab")
     check(page.index('src="tv.js"') < page.index('src="app.js"') and 'href="tv.css"' in page and "FeedsTV" in app, "the page loads TV mode before the app and the app keeps a tiny hook")
     tv_js = (ROOT / "tv.js").read_text(encoding="utf-8")
     check("?." not in tv_js and "??" not in tv_js and "10009" in tv_js and "461" in tv_js and "youtube-nocookie.com/embed/" in tv_js and "TV mode" in tv_js, "TV mode stays on ES2017 and drives a nocookie player from the remote")
@@ -1408,7 +1412,7 @@ def main() -> None:
     music_catalog = json.loads(music_data)
     check('productName("music")' in music_js and "SuperintelMusic" not in music_js and "SuperintelMusic" not in music_css and "SuperintelMusic" not in music_data and 'aria-label="ViktorychMusic"' in (ROOT / "logo" / "viktorychmusic.svg").read_text(encoding="utf-8"), "the music mode name comes from the language packs")
     check(any(song.get("id") == "america-dont-sit-still" and song.get("artist") == "ViktorychMusic" and song.get("kind") == "hls" and str(song.get("stream") or "").endswith("/index.m3u8") and song.get("stream") not in music_js for song in music_catalog.get("songs") or []), "the lossless release is credited in the catalog and its stream stays out of the script")
-    check('parts[0] === "music"' in app and 'href="#/music"' in app and 'classList.add("music-on")' in music_js and 'classList.remove("music-on")' in music_js and "audio.pause" in music_js, "music mode opens from its route and pauses on the way out")
+    check('parts[0] === "music"' in app and 'href: "#/music"' in app and 'classList.add("music-on")' in music_js and 'classList.remove("music-on")' in music_js and "audio.pause" in music_js, "music mode opens from its route and pauses on the way out")
     check('title === productName("music")' in music_js and '<h1 class="vh">' in music_js and 'const musicHome = route.name === "music"' in app and "tall && !musicHome ? 106" in app, "music home shows the logo without a second title")
     music_row = subprocess.run(["node", "scripts/music_test.js"], cwd=ROOT, capture_output=True, text=True)
     check(music_row.returncode == 0, "SIntelMusic library checks passed\n" + music_row.stdout + music_row.stderr)
@@ -1421,7 +1425,7 @@ def main() -> None:
     check("github.actor == 'owner-account'" in music_workflow and "github.actor == github.repository_owner" not in music_workflow and "OWNER: owner-account" in music_workflow and "REPO: ${{ github.repository }}" in music_workflow, "the music catalog issue is applied only for the human owner")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "groups.yml").is_file(), "subscription group issue form exists")
     check("feeds.config.json _site/" in workflow, "the deploy publishes feeds.config.json")
-    chips_css = css[css.index(".yt-chips"):css.index(".yt-chips") + 500]
+    chips_css = css[css.index(".yt-chips {"):css.index(".yt-chips {") + 500]
     check("flex-wrap: nowrap" in chips_css and "overflow-x: auto" in chips_css, "subscription chips stay on one scrolling row")
     check("var(--fill)" in css[css.index(".yt-chip.on"):css.index(".yt-chip.on") + 160], "the selected subscription chip uses the inverted fill")
     check("yt-chips" in app and "New group" in app and "Add to group" in app and "subsGroup" in app and "groupsOwn" in app and "group=" in app and "function absorbSiteGroups(" in app and "Save groups on your account" in app and "Groups saved on your account." in app, "subscription groups filter from the chip bar and save on the account")
@@ -4362,12 +4366,13 @@ def story_checks() -> None:
     check("drive-photos.js" in worker, "the service worker precaches the Photos library")
     nav_fn = app.split("function navItemDef(id)", 1)[1].split("function shownFeeds", 1)[0]
     bottom_fn = app.split("function bottom(route)", 1)[1].split("function listSortOf", 1)[0]
-    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and "#/storage" not in nav_fn and "#/storage" not in bottom_fn, "storage stays out of the main nav")
-    check('href="#/storage"' in app and 'icon("storage")' in app and "ViktorychDrive.visible" in app and 'parts[0] === "storage"' in app and 'bare === "#/drive"' in app, "storage opens from the owner account menu and the old drive route redirects")
+    default_on = app.split("BOTTOM_NAV_DEFAULT_ON", 1)[1].split("];", 1)[0]
+    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and "#/storage" not in bottom_fn and 'href: "#/storage"' in nav_fn and "ViktorychDrive.visible" in nav_fn and '"storage"' not in default_on, "storage stays out of the default navigation bar")
+    check('href: "#/storage"' in app and 'icon: "storage"' in app and "ViktorychDrive.visible" in app and 'parts[0] === "storage"' in app and 'bare === "#/drive"' in app, "storage opens from the owner account menu and the old drive route redirects")
     games_js = (ROOT / "games.js").read_text(encoding="utf-8")
     check('games.js", "games.css"' in lazy and 'id="game-host"' in page and "games.js" in worker and "games.css" in worker, "the page and the service worker load Games on demand")
     check("games.js" in workflow and "games.css" in workflow, "the sync publishes the Games shell")
-    check(('"#/games", "games"' in nav_fn or 'href: "#/games"' in nav_fn) and ('name === "games"' in nav_fn or 'r.name === "games"' in nav_fn) and 'icon("games")' in app and 'href="#/games"' in app and 'parts[0] === "games"' in app, "Games opens from the left nav and the account menu")
+    check(('"#/games", "games"' in nav_fn or 'href: "#/games"' in nav_fn) and ('name === "games"' in nav_fn or 'r.name === "games"' in nav_fn) and 'icon: "games"' in app and 'href: "#/games"' in app and 'parts[0] === "games"' in app, "Games opens from the left nav and the account menu")
     communities_js = (ROOT / "communities.js").read_text(encoding="utf-8")
     check('communities.js", "communities.css"' in lazy and "communities.js" in worker and "communities.css" in worker and 'info.name === "communities"' in app, "the page and the service worker load Communities on demand")
     check("communities.js" in workflow and "communities.css" in workflow and "data/communities" in workflow and "reddit.yml" in workflow, "the sync publishes Communities and dispatches the Reddit mirror")

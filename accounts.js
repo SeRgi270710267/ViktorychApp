@@ -644,6 +644,11 @@
       snap.navLayoutSync = false;
     }
     if (settings.noteTabsSame === true || settings.noteTabsSame === false) snap.noteTabsSame = settings.noteTabsSame !== false;
+    if (settings.devicePerf && typeof settings.devicePerf === "object") {
+      snap.devicePerf = window.ViktorychDevice && window.ViktorychDevice.syncShape
+        ? window.ViktorychDevice.syncShape(settings.devicePerf)
+        : settings.devicePerf;
+    }
     var live = window.ViktorychAccounts && window.ViktorychAccounts.readHistory && window.ViktorychAccounts.readHistory();
     if (live) {
       snap.history = live.history || [];
@@ -814,6 +819,9 @@
       lang: local.lang || remote.lang || "en",
       bottomNavCustom: pickedNav.bottomNavCustom
     };
+    if ((local.devicePerf && typeof local.devicePerf === "object") || (remote.devicePerf && typeof remote.devicePerf === "object")) {
+      merged.devicePerf = (local.devicePerf && typeof local.devicePerf === "object") ? local.devicePerf : remote.devicePerf;
+    }
     if (pickedNav.bottomNav) merged.bottomNav = pickedNav.bottomNav;
     if (pickedLayout && pickedLayout.clear) merged.navLayoutSync = false;
     else if (pickedLayout) {
