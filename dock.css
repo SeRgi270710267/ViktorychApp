@@ -1,0 +1,377 @@
+/* In-page corner drawers. They sit on the page, not in a dialog. */
+.xdock {
+  position: fixed;
+  bottom: 0;
+  z-index: 24;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  pointer-events: none;
+  font-family: var(--font);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 20px;
+}
+.xdock.side-right { right: 12px; flex-direction: row; }
+.xdock.side-left { left: 12px; flex-direction: row-reverse; }
+.xdock-panel {
+  position: relative;
+  pointer-events: auto;
+  width: 56px;
+  height: 56px;
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2), 0 0 3px 1px rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  box-sizing: border-box;
+  transition: width 220ms cubic-bezier(0.2, 0, 0, 1), height 220ms cubic-bezier(0.2, 0, 0, 1), margin 220ms cubic-bezier(0.2, 0, 0, 1), border-radius 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+html[data-theme="default"] .xdock-panel {
+  box-shadow: 0 0 15px rgba(101, 119, 134, 0.2), 0 0 3px 1px rgba(101, 119, 134, 0.15);
+}
+.xdock-panel.is-open {
+  width: var(--dock-w, 400px);
+  height: var(--dock-h, 530px);
+  margin-bottom: 0;
+  border-radius: 16px 16px 0 0;
+}
+.xdock-panel.is-dragging { transition: none; }
+.xdock-launcher {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.xdock-launcher:hover { background: var(--hover); }
+.xdock-panel.is-open .xdock-launcher,
+.xdock-panel.is-closing .xdock-launcher { visibility: hidden; }
+.xdock-sheet {
+  display: none;
+  position: relative;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  opacity: 0;
+  transition: opacity 160ms linear 90ms;
+}
+.xdock-panel.is-open .xdock-sheet,
+.xdock-panel.is-closing .xdock-sheet { display: flex; }
+.xdock-panel.is-open.is-settled .xdock-sheet { opacity: 1; }
+.xdock-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 53px;
+  flex: 0 0 53px;
+  box-sizing: border-box;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.xdock-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 24px;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xdock-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  flex: none;
+}
+.xdock-icon:hover { background: var(--hover); }
+.xdock svg { display: block; width: 20px; height: 20px; fill: currentColor; }
+.xdock-launcher svg { width: 26px; height: 26px; }
+.xdock-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.xdock-log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.xdock-search {
+  display: block;
+  margin: 8px 12px;
+  flex: none;
+}
+.xdock-search input,
+.xdock-compose textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  outline: none;
+  background: var(--search);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+.xdock-search input {
+  height: 42px;
+  padding: 0 16px;
+  border-radius: 999px;
+}
+.xdock-search input::placeholder,
+.xdock-compose textarea::placeholder { color: var(--muted); }
+.xdock-row,
+.xdock-friend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 12px 16px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.xdock-row:hover,
+.xdock-friend:hover { background: var(--hover); }
+.xdock-ava {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--ava);
+  color: var(--initials-fg);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  flex: none;
+  overflow: hidden;
+}
+.xdock-ava img { width: 100%; height: 100%; object-fit: cover; }
+.xdock-row b,
+.xdock-friend b { display: block; font-size: 15px; }
+.xdock-row span,
+.xdock-friend span,
+.xdock-empty,
+.xdock-note,
+.xdock-banner { color: var(--muted); }
+.xdock-row i {
+  display: block;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
+}
+.xdock-copy { min-width: 0; flex: 1; }
+.xdock-empty,
+.xdock-soon {
+  padding: 28px 24px;
+  text-align: center;
+}
+.xdock-soon h3 {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 24px;
+}
+.xdock-soon p,
+.xdock-empty p { margin: 0; }
+.xdock-banner {
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--search);
+  font-size: 13px;
+  line-height: 16px;
+}
+.xdock-compose {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  flex: none;
+}
+.xdock-compose textarea {
+  flex: 1;
+  min-height: 40px;
+  max-height: 120px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  resize: none;
+  background: transparent;
+}
+.xdock-send {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--blue);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex: none;
+}
+.xdock-send:disabled { opacity: 0.4; cursor: default; }
+.xdock-send svg { fill: #fff; }
+.xdock-bubble {
+  max-width: 80%;
+  margin: 2px 12px;
+  padding: 10px 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 15px;
+  line-height: 20px;
+}
+.xdock-bubble.out {
+  margin-left: auto;
+  background: var(--blue);
+  color: #fff;
+  border-radius: 22px 22px 4px 22px;
+}
+.xdock-bubble.in {
+  margin-right: auto;
+  background: #2f3336;
+  color: #e7e9ea;
+  border-radius: 22px 22px 22px 4px;
+}
+.xdock-bubble b { display: block; margin-bottom: 2px; font-size: 13px; line-height: 16px; }
+.xdock-readonly {
+  margin: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 20px;
+}
+html[data-theme="dim"] .xdock-bubble.in { background: #3d5466; color: #f7f9f9; }
+html[data-theme="default"] .xdock-bubble.in { background: #eff3f4; color: #0f1419; }
+.xdock-log .xdock-bubble:first-child { margin-top: 12px; }
+.xdock-ai-user { display: flex; justify-content: flex-end; }
+.xdock-ai-text {
+  padding: 4px 16px 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.xdock-ai-copy { white-space: pre-wrap; }
+.xdock-caret {
+  display: inline-block;
+  width: 8px;
+  height: 1.05em;
+  margin-left: 2px;
+  background: var(--text);
+  vertical-align: text-bottom;
+  animation: xdock-blink 1s steps(1) infinite;
+}
+.xdock-ai-actions { display: flex; gap: 2px; padding: 0 8px 4px; }
+.xdock-chips,
+.xdock-files { display: flex; gap: 8px; overflow-x: auto; padding: 8px 12px 0; flex: none; }
+.xdock-chip,
+.xdock-file {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.xdock-chip:hover,
+.xdock-file:hover { background: var(--hover); }
+.xdock-menu {
+  position: absolute;
+  top: 46px;
+  right: 8px;
+  z-index: 2;
+  width: min(280px, calc(100% - 16px));
+  padding: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.2), 0 0 3px 1px rgba(255, 255, 255, 0.15);
+}
+html[data-theme="default"] .xdock-menu {
+  box-shadow: 0 0 15px rgba(101, 119, 134, 0.2), 0 0 3px 1px rgba(101, 119, 134, 0.15);
+}
+.xdock.side-left .xdock-menu { right: auto; left: 8px; }
+.xdock-menu a {
+  display: block;
+  padding: 12px 16px;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+}
+.xdock-menu a:hover { background: var(--hover); }
+.xdock-note { display: block; padding: 0 16px 12px; font-size: 13px; line-height: 16px; }
+.xdock-resize {
+  position: absolute;
+  top: 0;
+  z-index: 3;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
+}
+.xdock.side-right .xdock-resize { left: 0; cursor: nwse-resize; }
+.xdock.side-left .xdock-resize { right: 0; cursor: nesw-resize; }
+.xdock-error { color: var(--red); padding: 8px 16px; margin: 0; }
+.xdock-signin {
+  margin-top: 12px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.xdock-signin:hover { background: var(--hover); }
+@keyframes xdock-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .xdock-panel,
+  .xdock-sheet,
+  .xdock-caret { transition: none; animation: none; }
+}
+@media (max-width: 499px) {
+  .xdock { display: none; }
+}
