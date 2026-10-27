@@ -63,6 +63,43 @@ async function signup(mf, ip, handle, claim) {
   return call(mf, "/v1/signup", { method: "POST", ip, json: body });
 }
 
+test("the worker runs without KEYS_ENC_KEY and connected keys ask for setup", async () => {
+  const options = workerOptions([]);
+  const bindings = Object.assign({}, options.bindings);
+  delete bindings.KEYS_ENC_KEY;
+  options.bindings = bindings;
+  const mf = new Miniflare(options);
+  try {
+    const health = await call(mf, "/v1/health", { ip: "203.0.113.80" });
+    assert.equal(health.status, 200);
+    assert.equal(health.body.ok, true);
+    assert.equal(health.body.ready, true);
+    const owner = await signup(mf, "203.0.113.81", OWNER, "claim-test");
+    assert.equal(owner.status, 201);
+    const token = owner.body.token;
+    const session = await call(mf, "/v1/session", { ip: "203.0.113.82", token });
+    assert.equal(session.status, 200);
+    const listed = await call(mf, "/v1/owner/keys", { ip: "203.0.113.83", token });
+    assert.equal(listed.status, 200);
+    assert.equal(listed.body.ready, false);
+    assert.equal(listed.text.includes(SECRET), false);
+    const saved = await call(mf, "/v1/owner/keys/tiktok", {
+      method: "PUT",
+      ip: "203.0.113.84",
+      token,
+      json: { value: SECRET }
+    });
+    assert.equal(saved.status, 503);
+    assert.equal(saved.body.error, "not_configured");
+    assert.equal(saved.text.includes("super-secret-cookie-value"), false);
+    const again = await call(mf, "/v1/health", { ip: "203.0.113.85" });
+    assert.equal(again.status, 200);
+    assert.equal(again.body.ok, true);
+  } finally {
+    await mf.dispose();
+  }
+});
+
 test("encryption round-trips and the mask never contains the value", async () => {
   const sealed = await encryptMaterial(ENC, "tiktok", SECRET);
   assert.ok(sealed && sealed.iv && sealed.ciphertext);
