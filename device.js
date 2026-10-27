@@ -652,14 +652,24 @@
     if (!src || typeof document === "undefined") return Promise.resolve();
     if (loads[name]) return loads[name];
     loads[name] = new Promise(function (resolve) {
+      var done = function () { resolve(); };
       var existing = document.querySelector('script[src="' + src + '"]');
-      if (existing) { resolve(); return; }
+      if (existing) {
+        var host = typeof self !== "undefined" ? self : (typeof window !== "undefined" ? window : {});
+        var ready = existing.getAttribute("data-loaded") === "1";
+        if (!ready && name === "ondevice" && host.ViktorychOnDeviceAi) ready = true;
+        if (!ready && name === "ai" && host.ViktorychDeviceAi) ready = true;
+        if (ready) { done(); return; }
+        existing.addEventListener("load", done);
+        existing.addEventListener("error", done);
+        return;
+      }
       var tag = document.createElement("script");
       tag.src = src;
       tag.async = true;
-      tag.onload = function () { resolve(); };
-      tag.onerror = function () { resolve(); };
-      document.body.appendChild(tag);
+      tag.onload = function () { tag.setAttribute("data-loaded", "1"); done(); };
+      tag.onerror = done;
+      (document.body || document.documentElement).appendChild(tag);
     });
     return loads[name];
   }

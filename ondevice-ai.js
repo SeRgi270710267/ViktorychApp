@@ -136,9 +136,16 @@
     return {};
   }
 
+  function savedSettings(opts) {
+    if (opts && opts.settings) return opts.settings;
+    var device = (opts && opts.device) || deviceApi();
+    if (device && device.read) return device.read();
+    return null;
+  }
+
   function aiOn(opts, id) {
     var device = (opts && opts.device) || deviceApi();
-    if (device && device.aiFeatureOn) return device.aiFeatureOn(opts && opts.settings, id, signalsOf(opts));
+    if (device && device.aiFeatureOn) return device.aiFeatureOn(savedSettings(opts), id, signalsOf(opts));
     var settings = settingsOf(opts);
     var row = settings.aiFeatures || {};
     return !!row[id];
@@ -147,7 +154,7 @@
   function masterOn(opts, feature) {
     var device = (opts && opts.device) || deviceApi();
     if (!device || !device.featureOn) return true;
-    return device.featureOn(opts && opts.settings, feature, signalsOf(opts));
+    return device.featureOn(savedSettings(opts), feature, signalsOf(opts));
   }
 
   function downloadAllowed(opts) {
@@ -182,6 +189,7 @@
       summarizer: typeof g.Summarizer === "function",
       writer: typeof g.Writer === "function",
       rewriter: typeof g.Rewriter === "function",
+      proofreader: typeof g.Proofreader === "function",
       prompt: typeof g.LanguageModel === "function"
     };
   }
@@ -407,9 +415,18 @@
       return cut.replace(/[.!?]$/, "") + ".";
     }
     if (tone === "clear") return raw.replace(/\b(very|really|just)\b/gi, "").replace(/\s{2,}/g, " ").trim() + ".";
-    if (tone === "warm") return "Thanks for this. " + raw + ".";
+    if (tone === "warm" || tone === "friendly") return "Thanks for this. " + raw + ".";
+    if (tone === "formal") {
+      return raw.replace(/\bdon't\b/gi, "do not").replace(/\bcan't\b/gi, "cannot").replace(/\bi'm\b/gi, "I am").replace(/\bit's\b/gi, "it is").replace(/\b(very|really|just)\b/gi, "").replace(/\s{2,}/g, " ").trim() + ".";
+    }
     if (tone === "direct") return raw.replace(/\b(i think|maybe|perhaps|just)\b/gi, "").replace(/\s{2,}/g, " ").trim() + ".";
     return raw + ".";
+  }
+
+  function toneLocal(tone) {
+    if (tone === "friendly") return "warm";
+    if (tone === "formal" || tone === "direct" || tone === "shorter" || tone === "clear" || tone === "warm") return tone;
+    return "clear";
   }
 
   function suggestionsFor(text) {
@@ -423,58 +440,163 @@
     ];
   }
 
-  function chromeRewrite(text, kind, tone, env) {
-    var g = scope();
-    var api = null;
-    if (env && env.rewriter) api = env.rewriter;
-    else if (kind === "suggest" && env && env.writer) api = env.writer;
-    else if (typeof g.Rewriter === "function" && kind !== "suggest") api = g.Rewriter;
-    else if (typeof g.Writer === "function" && kind === "suggest") api = g.Writer;
-    if (!api || !api.create) return Promise.reject(new Error("unsupported"));
-    return Promise.resolve().then(function () {
-      return api.create(tone ? { tone: tone } : {});
-    }).then(function (session) {
-      if (kind === "suggest" && session.write) return session.write(String(text || ""));
-      if (session.rewrite) return session.rewrite(String(text || ""));
-      if (session.write) return session.write(String(text || ""));
-      return "";
+  function capPromise(promise, ms) {
+    var limit = ms || 8000;
+    var device = deviceApi();
+    if (device && device.withTimeout) return device.withTimeout(promise, limit);
+    var timer;
+    var timeout = new Promise(function (_, reject) {
+      timer = setTimeout(function () { reject(new Error("timeout")); }, limit);
     });
+    return Promise.race([
+      Promise.resolve(promise).then(function (value) { clearTimeout(timer); return value; }, function (err) { clearTimeout(timer); throw err; }),
+      timeout
+    ]);
+  }
+
+  function aiState(value) {
+    var text = String(value || "");
+    if (text === "available" || text === "readily") return "ready";
+    if (text === "downloadable" || text === "downloading" || text === "after-download") return "download";
+    return "";
+  }
+
+  function readOut(value) {
+    if (typeof value === "string") return value.trim();
+    if (value && typeof value === "object") {
+      if (typeof value.correctedInput === "string") return value.correctedInput.trim();
+      if (typeof value.corrected === "string") return value.corrected.trim();
+      if (typeof value.text === "string") return value.text.trim();
+    }
+    return "";
+  }
+
+  function splitSuggest(value) {
+    return String(value || "").split(/\n+/).map(function (line) {
+      return line.replace(/^\s*\d+[.)\-\s]+/, "").trim();
+    }).filter(Boolean).slice(0, 3);
+  }
+
+  function suggestPrompt(text) {
+    return "Suggest three short replies, one per line, to this post:\n" + String(text || "").slice(0, 1200);
+  }
+
+  function rewritePrompt(text, tone, kind) {
+    var ask = "Rewrite this text. Keep the language. Return only the rewritten text.";
+    if (kind === "grammar") ask = "Fix spelling and grammar. Keep the meaning and the language. Return only the corrected text.";
+    else if (tone === "friendly" || tone === "warm") ask = "Rewrite this to sound more friendly. Keep the language. Return only the rewritten text.";
+    else if (tone === "formal" || tone === "direct") ask = "Rewrite this to sound more formal. Keep the language. Return only the rewritten text.";
+    else if (tone === "shorter") ask = "Rewrite this to be shorter. Keep the language. Return only the rewritten text.";
+    return ask + "\n" + String(text || "").slice(0, 1200);
+  }
+
+  function toneOptions(tone) {
+    if (tone === "friendly" || tone === "warm") return { tone: "more-casual", length: "as-is" };
+    if (tone === "formal" || tone === "direct") return { tone: "more-formal", length: "as-is" };
+    if (tone === "shorter") return { tone: "as-is", length: "shorter" };
+    return { tone: "as-is", length: "as-is" };
+  }
+
+  function createOptsFor(apiName, kind, tone) {
+    if (apiName === "Proofreader" || apiName === "LanguageModel") return {};
+    var mapped = toneOptions(kind === "grammar" ? "" : tone);
+    var shared = kind === "grammar"
+      ? "Fix spelling and grammar. Keep the meaning and the language. Return only the corrected text."
+      : (kind === "suggest"
+        ? "Suggest short replies to a social post. One reply per line."
+        : "Rewrite a short social post. Keep the language. Return only the rewritten text.");
+    return { tone: mapped.tone, length: mapped.length, format: "as-is", sharedContext: shared };
+  }
+
+  /* A constructor existing is not the same as a downloaded model.
+     availability() must say the model can run, or the call is skipped. */
+  function apiPlan(kind, env) {
+    var g = scope();
+    var names = kind === "grammar"
+      ? [["Proofreader", "proofreader"], ["Rewriter", "rewriter"], ["LanguageModel", "prompt"], ["Writer", "writer"]]
+      : (kind === "suggest"
+        ? [["LanguageModel", "prompt"], ["Writer", "writer"], ["Rewriter", "rewriter"]]
+        : [["Rewriter", "rewriter"], ["LanguageModel", "prompt"], ["Writer", "writer"]]);
+    var list = [];
+    names.forEach(function (pair) {
+      var api = null;
+      if (env) api = env[pair[1]] || null;
+      else if (typeof g[pair[0]] === "function") api = g[pair[0]];
+      if (api && api.create) list.push({ name: pair[0], api: api });
+    });
+    return list;
+  }
+
+  function tryChrome(row, text, kind, tone, opts) {
+    var api = row.api;
+    var limit = (opts && opts.timeout) || 8000;
+    var probeLimit = Math.min(limit, 2000);
+    var probe = typeof api.availability === "function"
+      ? capPromise(Promise.resolve().then(function () { return api.availability(); }), probeLimit)
+      : Promise.resolve("available");
+    return probe.then(function (state) {
+      if (typeof api.availability === "function" && !aiState(state)) throw new Error("unavailable");
+      return capPromise(Promise.resolve().then(function () { return api.create(createOptsFor(row.name, kind, tone)); }), limit);
+    }).then(function (session) {
+      var call = null;
+      if (kind === "grammar" && session && session.proofread) call = session.proofread(String(text || ""));
+      else if (kind === "suggest" && session && session.prompt) call = session.prompt(suggestPrompt(text));
+      else if (kind === "suggest" && session && session.write) call = session.write(suggestPrompt(text));
+      else if (session && session.rewrite) call = session.rewrite(String(text || ""));
+      else if (session && session.prompt) call = session.prompt(rewritePrompt(text, tone, kind));
+      else if (session && session.write) call = session.write(rewritePrompt(text, tone, kind));
+      else throw new Error("unsupported");
+      return capPromise(Promise.resolve(call), limit);
+    }).then(function (value) {
+      var out = readOut(value);
+      if (!out) throw new Error("invalid");
+      return out;
+    });
+  }
+
+  function composeUiOn(opts) {
+    return !!(aiOn(opts || {}, "compose") && masterOn(opts || {}, "ai"));
   }
 
   function compose(text, opts) {
     opts = opts || {};
     var kind = opts.kind || "grammar";
     var scopeName = opts.scope || "post";
-    if (!aiOn(opts, "compose") || !masterOn(opts, "ai")) return Promise.resolve({ via: "off", text: "", suggestions: [], error: false });
+    if (!composeUiOn(opts)) return Promise.resolve({ via: "off", text: "", suggestions: [], error: false });
     var device = opts.device || deviceApi();
     function local() {
       if (kind === "suggest") return { via: "rules", text: "", suggestions: suggestionsFor(text), error: false, scope: scopeName };
-      return { via: "rules", text: applyTone(text, kind === "tone" ? (opts.tone || "clear") : "clear"), suggestions: [], error: false, scope: scopeName };
+      if (kind === "grammar") return { via: "rules", text: fixGrammar(text), suggestions: [], error: false, scope: scopeName };
+      return { via: "rules", text: applyTone(text, toneLocal(opts.tone)), suggestions: [], error: false, scope: scopeName };
     }
     function afterRules() {
-      if (!serverAllowed(opts)) return Promise.resolve(local());
+      if (opts.server === false || !serverAllowed(opts)) return Promise.resolve(local());
       var server = opts.env && opts.env.server;
       if (typeof server !== "function") return Promise.resolve(local());
       return Promise.resolve().then(function () { return server(text, kind); }).then(function (value) {
         return { via: "worker", text: String(value || ""), suggestions: [], error: false, scope: scopeName };
       }).catch(function () { return local(); });
     }
-    var env = opts.env || null;
-    var chromeReady = env ? !!(env.rewriter || env.writer) : (kind === "suggest" ? chromeApis().writer : (chromeApis().rewriter || chromeApis().writer));
-    if (chromeReady && !cooling(device, "chrome-writer", opts.now)) {
-      return chromeRewrite(text, kind, opts.tone, opts.env).then(function (value) {
-        var out = String(value || "").trim();
-        if (!out) throw new Error("invalid");
-        rememberSource(device, "chrome-writer", true, opts.now);
-        if (device && device.noteStat) device.noteStat("local", "ai", out.length, 0);
-        if (kind === "suggest") return { via: "chrome", text: out, suggestions: out.split(/\n+/).filter(Boolean).slice(0, 3), error: false, scope: scopeName };
-        return { via: "chrome", text: out, suggestions: [], error: false, scope: scopeName };
-      }).catch(function () {
+    var plan = cooling(device, "chrome-writer", opts.now) ? [] : apiPlan(kind, opts.env || null);
+    if (!plan.length) return afterRules();
+    var cursor = 0;
+    function nextApi() {
+      if (cursor >= plan.length) {
         rememberSource(device, "chrome-writer", false, opts.now);
         return afterRules();
-      });
+      }
+      var row = plan[cursor++];
+      return tryChrome(row, text, kind, opts.tone, opts).then(function (out) {
+        rememberSource(device, "chrome-writer", true, opts.now);
+        if (device && device.noteStat) device.noteStat("local", "ai", out.length, 0);
+        if (kind === "suggest") {
+          var lines = splitSuggest(out);
+          return { via: "chrome", text: lines[0] || out, suggestions: lines.length ? lines : [out], error: false, scope: scopeName };
+        }
+        return { via: "chrome", text: out, suggestions: [], error: false, scope: scopeName };
+      }).catch(function () { return nextApi(); });
     }
-    return afterRules();
+    return nextApi();
   }
 
   function stem(word) {
@@ -859,7 +981,7 @@
       worker: typeof Worker === "function",
       cache: typeof caches !== "undefined",
       opfs: typeof navigator !== "undefined" && !!(navigator.storage && navigator.storage.getDirectory),
-      browsers: "Chrome and Edge 138 or newer expose Translator, LanguageDetector, Summarizer, Writer, and Rewriter when the device supports them. The Prompt API is used only when LanguageModel exists. Other browsers use the bundled models, then an optional download, then the free server path."
+      browsers: "Chrome and Edge 138 or newer expose Translator, LanguageDetector, Summarizer, Writer, Rewriter, and Proofreader when the device supports them. The Prompt API is used only when LanguageModel exists. A constructor without a downloaded model is skipped. Other browsers use the bundled models, then an optional download, then the free server path."
     };
   }
 
@@ -958,7 +1080,7 @@
       var box = ctx.field ? ctx.field(el && el.getAttribute ? el.getAttribute("data-field") : "") : null;
       var seed = box ? box.value : (stash[key] || (ctx.seed ? ctx.seed(el) : ""));
       var kind = act === "odai-suggest" ? "suggest" : (act === "odai-tone" ? "tone" : "grammar");
-      compose(seed, { kind: kind, tone: el && el.getAttribute ? el.getAttribute("data-tone") : "clear", scope: scopeName }).then(function (row) {
+      compose(seed, { kind: kind, tone: el && el.getAttribute ? el.getAttribute("data-tone") : "clear", scope: scopeName, server: false }).then(function (row) {
         if (kind !== "suggest" && box && row && row.text) {
           box.value = row.text;
           box.dispatchEvent(new Event("input", { bubbles: true }));
@@ -1000,6 +1122,7 @@
     applyTone: applyTone,
     suggestionsFor: suggestionsFor,
     compose: compose,
+    composeUiOn: composeUiOn,
     embedHash: embedHash,
     cosine: cosine,
     searchSaved: searchSaved,

@@ -26,9 +26,17 @@
   var timer = 0;
   var saveTimer = 0;
   var bound = false;
+  var aiMenu = "";
+  var aiTones = false;
+  var aiBusy = null;
+  var aiPreview = null;
+  var aiToast = "";
+  var aiToastSlot = "";
+  var aiToastTimer = 0;
+  var aiJob = 0;
 
   function blank() {
-    return { posts: [{ text: "", replyTo: "" }], media: [], link: "", hashtags: [], replyTo: "", quoteUrl: "", context: "", targetKey: "", emoji: false };
+    return { posts: [{ text: "", replyTo: "" }], media: [], link: "", hashtags: [], replyTo: "", quoteUrl: "", context: "", targetKey: "", sourceText: "", emoji: false };
   }
   var slots = { post: blank(), reply: blank(), quote: blank() };
 
@@ -54,7 +62,8 @@
     image: "M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14m18 0H3m18 0-5-6-4 5-3-3-6 4",
     gif: "",
     emoji: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zm-4-7a4 4 0 0 0 8 0M9 10h.01M15 10h.01",
-    plus: "M12 5v14M5 12h14"
+    plus: "M12 5v14M5 12h14",
+    spark: "M12 2.2l1.7 5.4 5.5 1.5-5.5 1.6L12 16.2l-1.7-5.5L4.8 9.1l5.5-1.5L12 2.2zM18.2 13.2l.8 2.4 2.5.7-2.5.7-.8 2.5-.8-2.5-2.4-.7 2.4-.7.8-2.4z"
   };
 
   function readStore(key) {
@@ -151,21 +160,140 @@
     var label = info.left <= 20 ? '<span>' + esc(String(info.left)) + '</span>' : "";
     return '<span class="xc-count ' + cls + '" aria-label="' + esc(tr("Characters left")) + '"><svg class="xc-meter" viewBox="0 0 20 20" aria-hidden="true"><circle class="xc-meter-track" cx="10" cy="10" r="8"></circle><circle class="xc-meter-val" cx="10" cy="10" r="8" stroke-dasharray="' + circ + '" stroke-dashoffset="' + (circ * (1 - ratio)).toFixed(2) + '"></circle></svg>' + label + '</span>';
   }
-  function chips(id, key) {
-    if (id !== "compose-text" && id !== "reply-draft") return "";
-    var suggest = id === "reply-draft"
-      ? '<button type="button" data-act="odai-suggest" data-key="' + esc(key || "") + '" data-scope="post">' + esc(tr("Suggest replies")) + "</button>"
-      : '<button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">' + esc(tr("Suggest replies")) + "</button>";
-    var tone = id === "reply-draft" ? "warm" : "clear";
-    return '<div class="odai-chips">' + suggest + '<button type="button" data-act="odai-grammar" data-field="' + id + '" data-scope="post">' + esc(tr("Fix grammar")) + '</button><button type="button" data-act="odai-tone" data-tone="' + tone + '" data-field="' + id + '" data-scope="post">' + esc(tr("Tone")) + "</button></div>";
-  }
   function postLink(slotName, index, label, id) {
     var slot = slots[slotName];
     var info = measure(slot, index);
     var href = info.ok ? ' href="' + esc(intentFor(slot, index)) + '"' : "";
     var disabled = info.ok ? "" : ' aria-disabled="true"';
     var named = id ? ' id="' + esc(id) + '"' : "";
-    return '<a class="save xc-post" target="_blank" rel="noopener noreferrer"' + named + ' data-slot="' + esc(slotName) + '" data-index="' + index + '"' + href + disabled + ">" + esc(label) + "</a>";
+    var tip = index === 0 && slotName === "post" ? ' title="' + esc(tr("The draft stays on this device. You press Post on X.")) + '"' : "";
+    return '<a class="save xc-post" target="_blank" rel="noopener noreferrer"' + named + tip + ' data-slot="' + esc(slotName) + '" data-index="' + index + '"' + href + disabled + ">" + esc(label) + "</a>";
+  }
+  function composeHelpOn() {
+    var ai = window.ViktorychOnDeviceAi;
+    if (ai && ai.composeUiOn) return !!ai.composeUiOn();
+    var device = window.ViktorychDevice;
+    if (!device || !device.aiFeatureOn || !device.featureOn) return false;
+    var settings = device.read ? device.read() : null;
+    var signals = device.signals ? device.signals() : {};
+    return !!(device.featureOn(settings, "ai", signals) && device.aiFeatureOn(settings, "compose", signals));
+  }
+  function replyMode(slotName) {
+    var slot = slots[slotName];
+    return slotName === "reply" || !!(slot && slot.replyTo);
+  }
+  function showAiToast(slotName, message) {
+    aiToast = message || "";
+    aiToastSlot = slotName || "";
+    clearTimeout(aiToastTimer);
+    if (!aiToast) return;
+    aiToastTimer = setTimeout(function () {
+      aiToast = "";
+      aiToastSlot = "";
+      paint();
+    }, 3200);
+  }
+  function toneButton(slotName, tone, label) {
+    return '<button type="button" role="menuitem" data-act="xc-ai-run" data-kind="tone" data-tone="' + esc(tone) + '" data-slot="' + esc(slotName) + '" data-index="0">' + esc(label) + "</button>";
+  }
+  function aiMenuHtml(slotName) {
+    var tones = aiTones
+      ? '<div class="xc-ai-sub" role="group" aria-label="' + esc(tr("Change tone")) + '">' + toneButton(slotName, "friendly", tr("More friendly")) + toneButton(slotName, "formal", tr("More formal")) + toneButton(slotName, "shorter", tr("Shorter")) + "</div>"
+      : "";
+    var suggest = replyMode(slotName)
+      ? '<button type="button" role="menuitem" data-act="xc-ai-run" data-kind="suggest" data-slot="' + esc(slotName) + '" data-index="0">' + esc(tr("Suggest replies")) + "</button>"
+      : "";
+    return '<div class="xc-ai-pop" role="menu">'
+      + '<button type="button" role="menuitem" data-act="xc-ai-run" data-kind="grammar" data-slot="' + esc(slotName) + '" data-index="0">' + esc(tr("Fix grammar")) + "</button>"
+      + '<button type="button" role="menuitem" data-act="xc-ai-tones" data-slot="' + esc(slotName) + '" aria-expanded="' + (aiTones ? "true" : "false") + '">' + esc(tr("Change tone")) + "</button>"
+      + tones
+      + suggest
+      + "</div>";
+  }
+  function aiButton(slotName) {
+    if (!composeHelpOn()) return "";
+    var open = aiMenu === slotName;
+    return '<div class="xc-ai"><button class="xc-tool xc-ai-btn" type="button" data-act="xc-ai" data-slot="' + esc(slotName) + '" aria-label="' + esc(tr("Writing tools")) + '" aria-haspopup="menu" aria-expanded="' + (open ? "true" : "false") + '">' + icon(ICONS.spark) + "</button>"
+      + (open ? aiMenuHtml(slotName) : "")
+      + "</div>";
+  }
+  function aiExtra(slotName) {
+    var html = "";
+    if (aiBusy && aiBusy.slot === slotName) {
+      html += '<div class="xc-ai-preview" role="status"><span class="xc-ai-spin" aria-hidden="true"></span><span>' + esc(tr("Working…")) + "</span></div>";
+    } else if (aiPreview && aiPreview.slot === slotName) {
+      var body = "";
+      if (aiPreview.suggestions && aiPreview.suggestions.length) {
+        body = '<div class="xc-ai-choices">' + aiPreview.suggestions.map(function (line, i) {
+          return '<button type="button" class="xc-ai-choice' + (i === aiPreview.pick ? " on" : "") + '" data-act="xc-ai-pick" data-slot="' + esc(slotName) + '" data-i="' + i + '">' + esc(line) + "</button>";
+        }).join("") + "</div>";
+      } else {
+        body = "<p>" + esc(aiPreview.text || "") + "</p>";
+      }
+      html += '<div class="xc-ai-preview">' + body + '<div class="xc-ai-actions"><button type="button" class="xc-ai-dismiss" data-act="xc-ai-dismiss" data-slot="' + esc(slotName) + '">' + esc(tr("Dismiss")) + '</button><button type="button" class="xc-ai-apply" data-act="xc-ai-apply" data-slot="' + esc(slotName) + '">' + esc(tr("Apply")) + "</button></div></div>";
+    }
+    if (aiToast && aiToastSlot === slotName) html += '<p class="xc-ai-toast" role="status">' + esc(aiToast) + "</p>";
+    return html;
+  }
+  function runAi(slotName, index, kind, tone) {
+    var slot = slots[slotName] || slots.post;
+    var draft = String((slot.posts[index] && slot.posts[index].text) || "");
+    var source = kind === "suggest" ? String(slot.sourceText || "") : draft;
+    aiMenu = "";
+    aiTones = false;
+    if (kind === "suggest" && !source.trim()) {
+      aiBusy = null;
+      showAiToast(slotName, tr("Nothing to reply to yet."));
+      paint();
+      return;
+    }
+    if (kind !== "suggest" && !draft.trim()) {
+      aiBusy = null;
+      showAiToast(slotName, tr("Write something first."));
+      paint();
+      return;
+    }
+    aiPreview = null;
+    aiToast = "";
+    aiBusy = { slot: slotName };
+    var job = ++aiJob;
+    paint();
+    function finish() {
+      var ai = window.ViktorychOnDeviceAi;
+      if (job !== aiJob) return;
+      if (!ai || !ai.compose) {
+        aiBusy = null;
+        showAiToast(slotName, tr("Could not rewrite that on this device."));
+        paint();
+        return;
+      }
+      ai.compose(source, { kind: kind, tone: tone || "", scope: "post", server: false }).then(function (row) {
+        if (job !== aiJob) return;
+        aiBusy = null;
+        var text = row && row.text ? String(row.text).trim() : "";
+        var suggestions = row && row.suggestions ? row.suggestions.map(function (line) { return String(line || "").trim(); }).filter(Boolean).slice(0, 3) : [];
+        if (kind === "suggest" && suggestions.length) {
+          aiPreview = { slot: slotName, index: index, text: suggestions[0], suggestions: suggestions, pick: 0 };
+          paint();
+          return;
+        }
+        if (text) {
+          aiPreview = { slot: slotName, index: index, text: text, suggestions: [], pick: 0 };
+          paint();
+          return;
+        }
+        showAiToast(slotName, tr("Could not rewrite that on this device."));
+        paint();
+      }).catch(function () {
+        if (job !== aiJob) return;
+        aiBusy = null;
+        showAiToast(slotName, tr("Could not rewrite that on this device."));
+        paint();
+      });
+    }
+    if (window.ViktorychOnDeviceAi) finish();
+    else if (window.ViktorychDevice && window.ViktorychDevice.ensure) window.ViktorychDevice.ensure("ondevice").then(finish);
+    else finish();
   }
   function tools(slotName) {
     return '<div class="xc-tools">'
@@ -173,6 +301,7 @@
       + '<button class="xc-tool" type="button" data-act="xc-file" data-slot="' + esc(slotName) + '" data-kind="gif" aria-label="' + esc(tr("GIF")) + '"><span class="xc-gif">GIF</span></button>'
       + '<button class="xc-tool" type="button" data-act="xc-file" data-slot="' + esc(slotName) + '" data-kind="video" aria-label="' + esc(tr("Video")) + '"><span class="xc-gif">▶</span></button>'
       + '<button class="xc-tool" type="button" data-act="xc-emoji" data-slot="' + esc(slotName) + '" aria-label="' + esc(tr("Emoji")) + '">' + icon(ICONS.emoji) + "</button>"
+      + aiButton(slotName)
       + '<button class="xc-tool" type="button" data-act="xc-add-post" data-slot="' + esc(slotName) + '" aria-label="' + esc(tr("Add post")) + '">' + icon(ICONS.plus) + "</button>"
       + '<span class="xc-end" data-xc="end" data-slot="' + esc(slotName) + '"><span data-xc="count" data-slot="' + esc(slotName) + '" data-index="0">' + meter(measure(slots[slotName], 0)) + "</span>" + postLink(slotName, 0, tr("Post to X")) + "</span></div>";
   }
@@ -245,17 +374,19 @@
       ? '<p class="xc-context">' + esc(tr("Quoting")) + "</p>"
       : (slot.replyTo && slot.context ? '<p class="xc-context">' + esc(tr("Replying to @{handle}", { handle: slot.context })) + "</p>" : "");
     var placeholder = slotName === "post" ? tr("What is happening?!") : tr("Post your reply");
-    var note = id === "compose-text" ? '<p class="phandle" id="compose-note">' + esc(tr("The draft stays on this device. You press Post on X.")) + "</p>" : "";
     var described = id === "compose-text" ? ' aria-describedby="compose-note"' : "";
-    return '<div class="xc' + (wide ? " xc-wide" : "") + '" data-slot="' + esc(slotName) + '">' + face + '<div class="xc-main">' + context + note
+    var note = id === "compose-text" ? '<p class="xc-note" id="compose-note">' + esc(tr("The draft stays on this device. You press Post on X.")) + "</p>" : "";
+    var foot = wide ? extraHtml(slotName) : (note ? "" : '<p class="xc-note">' + esc(tr("You press Post on X.")) + "</p>");
+    return '<div class="xc' + (wide ? " xc-wide" : "") + '" data-slot="' + esc(slotName) + '">' + face + '<div class="xc-main">' + context
       + '<div class="xc-field"><textarea class="xc-text" data-xc="text" data-slot="' + esc(slotName) + '" data-index="0" id="' + esc(id) + '"' + described + ' placeholder="' + esc(placeholder) + '" maxlength="2000">' + esc(slot.posts[0].text || "") + '</textarea><div class="xc-suggest" data-xc="suggest" hidden></div></div>'
-      + chips(id, slot.targetKey)
+      + aiExtra(slotName)
       + mediaHtml(slotName)
       + emojiHtml(slotName)
       + hiddenFiles(slotName)
       + tools(slotName)
+      + note
       + threadHtml(slotName)
-      + (wide ? extraHtml(slotName) : '<p class="xc-note">' + esc(tr("You press Post on X.")) + "</p>")
+      + foot
       + "</div></div>";
   }
 
@@ -404,6 +535,7 @@
     if (/^\d{5,22}$/.test(id)) slots.reply.replyTo = id;
     slots.reply.context = String((post && post.handle) || "").replace(/^@/, "");
     slots.reply.targetKey = String((post && post.id) || "");
+    slots.reply.sourceText = String((post && post.text) || "").slice(0, 2000);
     slots.reply.quoteUrl = "";
     if (host && host.openModal) host.openModal();
   }
@@ -419,6 +551,49 @@
   function onAct(act, el) {
     var slotName = el.getAttribute("data-slot") || modalSlot;
     var slot = slots[slotName] || slots.post;
+    if (act === "xc-ai") {
+      aiTones = false;
+      aiMenu = aiMenu === slotName ? "" : slotName;
+      paint();
+      return true;
+    }
+    if (act === "xc-ai-tones") {
+      aiMenu = slotName;
+      aiTones = !aiTones;
+      paint();
+      return true;
+    }
+    if (act === "xc-ai-run") {
+      runAi(slotName, Number(el.getAttribute("data-index") || 0), el.getAttribute("data-kind") || "grammar", el.getAttribute("data-tone") || "");
+      return true;
+    }
+    if (act === "xc-ai-pick") {
+      if (aiPreview && aiPreview.slot === slotName) aiPreview.pick = Number(el.getAttribute("data-i") || 0);
+      paint();
+      return true;
+    }
+    if (act === "xc-ai-dismiss") {
+      aiPreview = null;
+      aiBusy = null;
+      aiJob += 1;
+      paint();
+      return true;
+    }
+    if (act === "xc-ai-apply") {
+      if (aiPreview && aiPreview.slot === slotName) {
+        var chosen = aiPreview.suggestions && aiPreview.suggestions.length
+          ? (aiPreview.suggestions[aiPreview.pick] || aiPreview.suggestions[0])
+          : aiPreview.text;
+        var at = aiPreview.index || 0;
+        if (slot.posts[at]) slot.posts[at].text = String(chosen || "");
+        syncText(slotName, at);
+        saveSoon(slotName);
+        if (slotName === "post" && at === 0 && host && host.setSeed) host.setSeed(slot.posts[0].text || "");
+      }
+      aiPreview = null;
+      paint();
+      return true;
+    }
     if (act === "xc-file") {
       var root = el.closest(".xc");
       var input = root && root.querySelector('input[data-kind="' + (el.getAttribute("data-kind") || "image") + '"]');
@@ -513,6 +688,7 @@
       slots[slotName].replyTo = keepReply;
       slots[slotName].context = keepContext;
       slots[slotName].targetKey = keepKey;
+      slots[slotName].sourceText = String(slot.sourceText || "");
       toast(tr("Draft saved on this device"));
       paint();
       return true;
@@ -628,6 +804,20 @@
     document.addEventListener("input", onInput);
     document.addEventListener("change", onChange);
     document.addEventListener("click", onClickCapture, true);
+    document.addEventListener("click", function (event) {
+      if (!aiMenu) return;
+      var target = event.target;
+      if (target && target.closest && target.closest(".xc-ai")) return;
+      aiMenu = "";
+      aiTones = false;
+      paint();
+    }, true);
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || !aiMenu) return;
+      aiMenu = "";
+      aiTones = false;
+      paint();
+    });
     document.addEventListener("mousedown", function (event) {
       if (event.target.closest && event.target.closest(".xc-suggest")) event.preventDefault();
     });
@@ -684,6 +874,7 @@
       if (/^\d{5,22}$/.test(id) && !slots.reply.replyTo) slots.reply.replyTo = id;
       if (!slots.reply.context) slots.reply.context = String(post.handle || "").replace(/^@/, "");
       if (!slots.reply.targetKey) slots.reply.targetKey = String(post.id || "");
+      if (post.text) slots.reply.sourceText = String(post.text).slice(0, 2000);
     }
     return box(slotName, false);
   }
