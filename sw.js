@@ -8,7 +8,7 @@ const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
 let isRuVisitor = false;
-importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
+importScripts("./shared/mirror.js?" + VERSION, "./storage.js?" + VERSION, "./shared/home-fresh.js?" + VERSION, "./i18n.js?" + VERSION, "./i18n/en.js?" + VERSION, "./i18n/ru.js?" + VERSION, "./i18n/es.js?" + VERSION);
 function tr(key, vars) {
   var fn = (typeof self !== "undefined" && self.t) ? self.t : null;
   return fn ? fn(key, vars) : key;
@@ -116,6 +116,7 @@ const SHELL_FILES = [
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/feed-order.js",
+  "./shared/home-fresh.js",
   "./shared/pill-data.js",
   "./shared/lazy-modules.js",
   "./favicon.svg",
@@ -1165,8 +1166,12 @@ self.addEventListener("fetch", (event) => {
     })());
     return;
   }
+  if (request.headers.get("X-Feed-Refresh") === "1" && url.origin === self.location.origin && /\.json$/i.test(url.pathname)) {
+    event.respondWith(refreshData(request));
+    return;
+  }
   if (isData(url)) {
-    event.respondWith(request.headers.get("X-Feed-Refresh") === "1" ? networkFirst(request, DATA) : staleWhileRevalidate(request));
+    event.respondWith(staleWhileRevalidate(request));
     return;
   }
   if (isMedia(url) || self.ViktorychStorage.shouldCacheMedia(url)) {
@@ -1421,14 +1426,59 @@ async function bellNotesFor(doc) {
   return notes;
 }
 
-async function refreshAndNotify() {
-  await ensureUiLang();
+async function refreshData(request) {
+  const cache = await caches.open(DATA);
+  const cacheReq = new Request(request.url, { method: "GET" });
+  const cached = await cache.match(cacheReq);
+  const network = mirrorFetch(new Request(request.url, { method: "GET", cache: "no-store" })).then(async (res) => {
+    if (res && res.ok && self.ViktorychStorage.shouldCacheFeed(request.url)) {
+      try { await cache.put(cacheReq, res.clone()); } catch (err) { /* the fresh body still returns */ }
+    }
+    return res;
+  });
+  const timeout = new Promise((resolve) => setTimeout(() => resolve(null), 800));
+  let raced = null;
+  try { raced = await Promise.race([network.catch(() => null), timeout]); }
+  catch (err) { raced = null; }
+  if (raced) return raced;
+  if (cached) {
+    network.then((res) => {
+      if (!res || !res.ok) return;
+      broadcast({ type: "data", url: request.url });
+    }).catch(() => {});
+    return cached;
+  }
+  const res = await network.catch(() => null);
+  return res || new Response("{}", { status: 503, headers: { "Content-Type": "application/json" } });
+}
+
+async function saveFeedSnapshot(doc) {
+  if (!doc || !self.HomeFresh || !self.ViktorychStorage || !self.ViktorychStorage.putDoc) return;
+  const body = self.HomeFresh.slimDoc(doc, Date.now());
+  const db = await idb();
+  await self.ViktorychStorage.putDoc(db, {
+    category: "feeds",
+    id: "timeline",
+    body: body,
+    bytes: JSON.stringify(body).length
+  });
+}
+
+async function refreshFeedDoc() {
   const feedUrl = new URL("feeds.json", self.registration.scope).href;
   const res = await mirrorFetch(new Request(feedUrl, { method: "GET", cache: "no-store" }));
-  if (!res.ok) return;
+  if (!res.ok) return null;
   const doc = await res.json();
   const cache = await caches.open(DATA);
-  await cache.put(feedUrl, new Response(JSON.stringify(doc), { headers: { "Content-Type": "application/json" } }));
+  await cache.put(feedUrl, new Response(JSON.stringify(doc), { headers: { "Content-Type": "application/json", "X-Fetched-At": String(Date.now()) } }));
+  try { await saveFeedSnapshot(doc); } catch (err) { /* the catalog response is still cached */ }
+  return doc;
+}
+
+async function refreshAndNotify() {
+  await ensureUiLang();
+  const doc = await refreshFeedDoc();
+  if (!doc) return;
   const db = await idb();
   const seen = Number(await idbGet(db, "seen-at") || 0);
   const follows = new Set(await idbGet(db, "follows") || []);
@@ -1482,6 +1532,7 @@ self.addEventListener("push", (event) => {
     if (await pushIsDnd(!!(data && data.dnd))) return;
     const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const visible = open.some((client) => client.visibilityState === "visible");
+    try { await refreshFeedDoc(); } catch (err) { /* the visible notice still shows */ }
     if (visible) {
       open.forEach((client) => {
         try { client.postMessage({ type: "push-note", note: data }); }
