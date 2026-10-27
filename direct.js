@@ -22,6 +22,7 @@
   var lastAt = {};
   var memory = {};
   var fetcher = null;
+  var deviceHeld = false;
 
   function parse(url) {
     var base = (typeof location !== "undefined" && location.href) ? location.href : "https://app.local";
@@ -278,7 +279,7 @@
     }
     if (!allows(primary)) return remote().catch(function (err) { err.both = true; throw err; });
     if (!enabled) return remote().catch(function () { return json(primary); });
-    if (!dev || !dev.runLocal) return json(primary, typeof server === "string" ? server : githubMirror(primary), init);
+    if (deviceHeld || !dev || !dev.runLocal) return json(primary, typeof server === "string" ? server : githubMirror(primary), init);
     var host = "";
     try { host = new URL(primary).hostname; } catch (err) { host = primary; }
     var distinct = typeof server === "function" || (typeof server === "string" && server && server !== primary) || !!githubMirror(primary);
@@ -359,11 +360,16 @@
     fetcher = fn;
   }
 
+  function holdDevice(on) {
+    deviceHeld = on !== false;
+  }
+
   function reset() {
     counts.direct = 0;
     counts.server = 0;
     lastAt = {};
     memory = {};
+    deviceHeld = false;
   }
 
   function audit() {
@@ -405,6 +411,7 @@
     noteServer: noteServer,
     counts: countsNow,
     setFetch: setFetch,
+    holdDevice: holdDevice,
     reset: reset,
     audit: audit,
     cacheGet: cacheGet,
