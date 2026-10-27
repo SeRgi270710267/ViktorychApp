@@ -813,6 +813,33 @@ async function handleProfilePatch(request, env) {
   return json(200, { account: await presentAccount(env, request, next, true) });
 }
 
+const BOTTOM_NAV_SYNC_IDS = ["home", "explore", "tv", "communities", "notifications", "messages", "feeds", "lists", "history", "music", "shorts", "games", "subscriptions", "vault", "storage", "settings"];
+
+function cleanBottomNavSync(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const order = [];
+  const seen = new Set();
+  (Array.isArray(raw.order) ? raw.order : []).forEach((id) => {
+    if (typeof id !== "string" || BOTTOM_NAV_SYNC_IDS.indexOf(id) < 0 || seen.has(id)) return;
+    seen.add(id);
+    order.push(id);
+  });
+  BOTTOM_NAV_SYNC_IDS.forEach((id) => { if (!seen.has(id)) order.push(id); });
+  const hiddenSet = new Set();
+  (Array.isArray(raw.hidden) ? raw.hidden : []).forEach((id) => {
+    if (id !== "home" && BOTTOM_NAV_SYNC_IDS.indexOf(id) >= 0) hiddenSet.add(id);
+  });
+  let visible = order.filter((id) => !hiddenSet.has(id));
+  if (visible.length > 6) visible.slice(6).forEach((id) => { if (id !== "home") hiddenSet.add(id); });
+  visible = order.filter((id) => !hiddenSet.has(id));
+  for (let i = 0; i < order.length && visible.length < 2; i++) {
+    if (!hiddenSet.has(order[i])) continue;
+    hiddenSet.delete(order[i]);
+    visible.push(order[i]);
+  }
+  return { order, hidden: order.filter((id) => hiddenSet.has(id)) };
+}
+
 async function handleSyncGet(request, env) {
   const row = await sessionAccount(env, request);
   if (!row) return json(401, { error: "unauthorized" });
@@ -846,6 +873,12 @@ async function handleSyncPut(request, env) {
   payload.history = cleanHistoryList(rows, payload.historyCut);
   payload.showPictures = cleanFaceChoice(payload.showPictures, previous && previous.showPictures);
   payload.showBanners = cleanFaceChoice(payload.showBanners, previous && previous.showBanners);
+  if (payload.bottomNav != null) {
+    const cleanedNav = cleanBottomNavSync(payload.bottomNav);
+    if (cleanedNav) payload.bottomNav = cleanedNav;
+    else delete payload.bottomNav;
+  }
+  if (payload.bottomNavCustom != null) payload.bottomNavCustom = payload.bottomNavCustom === true;
   const text = JSON.stringify(payload);
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });
   const base = Number(body.baseUpdatedAt || 0);

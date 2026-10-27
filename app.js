@@ -1032,7 +1032,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null) });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1090,6 +1090,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         parsed.initialized = true;
       } else mergeDefaultFollows(parsed, configured);
       parsed.navCustom = cleanNavCustom(parsed.navCustom);
+      parsed.bottomNav = cleanBottomNav(parsed.bottomNav);
+      parsed.bottomNavCustom = parsed.bottomNavCustom === true;
       return parsed;
     } catch (err) {
       return fresh();
@@ -6602,7 +6604,7 @@ const here = parseRoute();
       case "home":
         return { id: "home", href: "#/", icon: "home", label: tr("Home"), active: (r) => r.name === "home" };
       case "explore":
-        return { id: "explore", href: "#/explore", icon: "search", label: tr("Explore"), active: (r) => r.name === "explore" };
+        return { id: "explore", href: "#/explore", icon: "search", label: tr("Explore"), barLabel: tr("Search"), active: (r) => r.name === "explore" };
       case "notifications":
         return { id: "notifications", href: "#/notifications", icon: "bell", label: tr("Notifications"), active: (r) => r.name === "notifications" };
       case "messages":
@@ -6627,8 +6629,10 @@ const here = parseRoute();
         return { id: "subscriptions", href: subsHash((STATE.settings && STATE.settings.subsGroup) || ""), icon: "subs", label: tr("Subscriptions"), active: (r) => r.name === "subscriptions" };
       case "vault":
         return { id: "vault", href: "#/vault", icon: "vault", label: tr("Vault"), active: (r) => r.name === "vault", visible: () => !!(window.ViktorychVault && window.ViktorychVault.visible()) };
+      case "storage":
+        return { id: "storage", href: "#/storage", icon: "storage", label: tr("brand.storage"), active: (r) => r.name === "drive", visible: () => !!(window.ViktorychDrive && window.ViktorychDrive.visible()) };
       case "settings":
-        return { id: "settings", href: "#/settings", icon: "more", label: tr("More"), active: (r) => r.name === "settings" };
+        return { id: "settings", href: "#/settings", icon: "more", label: tr("More"), listLabel: tr("Settings"), active: (r) => r.name === "settings" };
       default:
         return null;
     }
@@ -6849,26 +6853,21 @@ const here = parseRoute();
     return `<a class="logo" href="#/" aria-label="${productName("app")}" data-tooltip="${productName("app")}">${markSvg("app", "logo-full")}${markSvg("appShort", "logo-short")}${markSvg("mark", "logo-si")}</a>`;
   }
 
-  function nav(route) {
-    const name = route.name;
-    const music = name === "music" && window.SIntelMusic;
+  function navChrome(route, extraClass, linksHtml) {
+    const music = route.name === "music" && window.SIntelMusic;
     const brand = music ? window.SIntelMusic.brand() : brandLink();
-    const links = music ? window.SIntelMusic.links(route, navItem) : renderNavLinks(route);
     const post = music
       ? `<button class="post-btn" data-act="music-add" aria-label="${tr("Add song")}" data-tooltip="${tr("Add song")}"><span class="post-label">${tr("Add song")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.plus}"/></svg></button>`
       : `<button class="post-btn" data-act="compose" aria-label="${tr("Post")}" data-tooltip="${tr("Post")}"><span class="post-label">${tr("Post")}</span><svg class="post-ico" viewBox="0 0 24 24"><path d="${PATH.feather}"/></svg></button>`;
-    return `<header class="nav">
-      <div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>
-      <div class="nav-scroll">
-        ${brand}
-        ${links}
-        ${post}
-      </div>
-      <button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">
-        ${(window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`}
-        <span class="dots">${icon("more")}</span>
-      </button>
-    </header>`;
+    const split = extraClass ? "" : `<div class="nav-split" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${tr("Resize sidebar")}" aria-valuemin="88" aria-valuemax="275" aria-valuenow="275"></div>`;
+    const pillInner = (window.ViktorychAccounts && window.ViktorychAccounts.pillInner && window.ViktorychAccounts.pillInner()) || `<span class="ava initials" data-acct="login">?</span><span class="account-meta" data-acct="login"><b>${tr("Sign in")}</b><span>${tr("Not signed in")}</span></span>`;
+    return `<header class="nav${extraClass ? " " + extraClass : ""}">${split}<div class="nav-scroll">${brand}${linksHtml}${post}</div><button class="account-pill" data-act="drawer" aria-label="${tr("Accounts")}" data-tooltip="${tr("Accounts")}">${pillInner}<span class="dots">${icon("more")}</span></button></header>`;
+  }
+
+  function nav(route) {
+    const music = route.name === "music" && window.SIntelMusic;
+    const desktopLinks = music ? window.SIntelMusic.links(route, navItem) : renderNavLinks(route);
+    return navChrome(route, "", desktopLinks) + navChrome(route, "nav-land", landNavLinks(route));
   }
 
   function shownFeeds(list) {
@@ -6901,20 +6900,236 @@ const here = parseRoute();
     </aside>`;
   }
 
+  const BOTTOM_NAV_MIN = 2;
+  const BOTTOM_NAV_MAX = 6;
+  const BOTTOM_NAV_IDS = [
+    "home", "explore", "tv", "communities", "notifications", "messages",
+    "feeds", "lists", "history", "music", "shorts", "games",
+    "subscriptions", "vault", "storage", "settings"
+  ];
+  const BOTTOM_NAV_DEFAULT_ON = ["home", "explore", "tv", "communities", "notifications", "messages"];
+
+  function bottomNavAvailable(id) {
+    try {
+      const def = navItemDef(id);
+      if (!def) return false;
+      if (def.visible && !def.visible()) return false;
+      return true;
+    } catch (err) {
+      return true;
+    }
+  }
+
+  function cleanBottomNav(raw) {
+    const order = [];
+    const seen = new Set();
+    const src = raw && Array.isArray(raw.order) ? raw.order : BOTTOM_NAV_IDS;
+    src.forEach((id) => {
+      if (typeof id !== "string" || !BOTTOM_NAV_IDS.includes(id) || seen.has(id)) return;
+      seen.add(id);
+      order.push(id);
+    });
+    BOTTOM_NAV_IDS.forEach((id) => { if (!seen.has(id)) order.push(id); });
+    const hiddenSrc = raw && Array.isArray(raw.hidden)
+      ? raw.hidden
+      : BOTTOM_NAV_IDS.filter((id) => !BOTTOM_NAV_DEFAULT_ON.includes(id));
+    const hiddenSet = new Set(hiddenSrc.filter((id) => id !== "home" && BOTTOM_NAV_IDS.includes(id)));
+    const visibleIds = () => order.filter((id) => !hiddenSet.has(id) && bottomNavAvailable(id));
+    let visibleNow = visibleIds();
+    if (visibleNow.length > BOTTOM_NAV_MAX) {
+      visibleNow.slice(BOTTOM_NAV_MAX).forEach((id) => { if (id !== "home") hiddenSet.add(id); });
+    }
+    visibleNow = visibleIds();
+    if (visibleNow.length < BOTTOM_NAV_MIN) {
+      order.forEach((id) => {
+        if (visibleNow.length >= BOTTOM_NAV_MIN) return;
+        if (!hiddenSet.has(id) || !bottomNavAvailable(id)) return;
+        hiddenSet.delete(id);
+        visibleNow.push(id);
+      });
+    }
+    return { order, hidden: order.filter((id) => hiddenSet.has(id)) };
+  }
+
+  function getBottomNav() {
+    return cleanBottomNav(STATE.settings && STATE.settings.bottomNav);
+  }
+
+  function saveBottomNav(custom) {
+    if (!STATE.settings) STATE.settings = {};
+    STATE.settings.bottomNav = cleanBottomNav(custom);
+    STATE.settings.bottomNavCustom = true;
+    saveSettings();
+  }
+
+  function bottomBarItems() {
+    const custom = getBottomNav();
+    const hidden = new Set(custom.hidden);
+    const items = [];
+    custom.order.forEach((id) => {
+      if (hidden.has(id) || !bottomNavAvailable(id)) return;
+      const def = navItemDef(id);
+      if (def) items.push(def);
+    });
+    return items.slice(0, BOTTOM_NAV_MAX);
+  }
+
+  function bottomHiddenItems() {
+    const custom = getBottomNav();
+    const hidden = new Set(custom.hidden);
+    const items = [];
+    custom.order.forEach((id) => {
+      if (!hidden.has(id) || !bottomNavAvailable(id)) return;
+      const def = navItemDef(id);
+      if (def) items.push(def);
+    });
+    return items;
+  }
+
+  function bottomBarLabel(def) {
+    return def.barLabel || def.listLabel || def.label;
+  }
+
+  function navChoiceLabel(def) {
+    return def.listLabel || def.label;
+  }
+
+  function bottomGlyph(def, on) {
+    return on && def.icon === "home" && PATH.homeOn ? "homeOn" : def.icon;
+  }
+
+  function bottomNavLink(def, route) {
+    const on = !!(def.active && def.active(route));
+    const badge = def.icon === "bell" ? bellBadgeHtml() : "";
+    const label = bottomBarLabel(def);
+    return `<a href="${esc(def.href)}" class="${on ? "on" : ""}" aria-label="${esc(label)}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(bottomGlyph(def, on))}${badge}</span></a>`;
+  }
+
+  function bottomGripSvg() {
+    return `<svg class="bnav-grip-ico" viewBox="0 0 10 16" aria-hidden="true"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg>`;
+  }
+
+  function bottomNavCssId(value) {
+    const text = String(value || "");
+    if (window.CSS && CSS.escape) return CSS.escape(text);
+    return text.replace(/[^a-zA-Z0-9_-]/g, "");
+  }
+
+  let bottomFocus = null;
+  function refocusBottom(id, kind, dir) {
+    bottomFocus = { id, kind, dir: String(dir) };
+    requestAnimationFrame(() => {
+      const want = bottomFocus;
+      bottomFocus = null;
+      if (!want) return;
+      const safe = bottomNavCssId(want.id);
+      let el = null;
+      if (want.kind === "move") el = document.querySelector(`[data-act="bottom-nav-move"][data-id="${safe}"][data-dir="${want.dir}"]`);
+      else if (want.kind === "toggle") el = document.querySelector(`[data-act="bottom-nav-toggle"][data-id="${safe}"]`);
+      else el = document.querySelector(`[data-drag-bottom="${safe}"]`);
+      if (el && !el.disabled) el.focus();
+    });
+  }
+
+  function moveBottomNav(id, dir) {
+    const custom = getBottomNav();
+    const available = custom.order.filter((item) => bottomNavAvailable(item));
+    const index = available.indexOf(id);
+    const target = index + dir;
+    if (index < 0 || target < 0 || target >= available.length) return;
+    const from = custom.order.indexOf(available[index]);
+    const to = custom.order.indexOf(available[target]);
+    const tmp = custom.order[from];
+    custom.order[from] = custom.order[to];
+    custom.order[to] = tmp;
+    saveBottomNav(custom);
+    render();
+  }
+
+  function toggleBottomNav(id) {
+    if (!id || id === "home") return;
+    const custom = getBottomNav();
+    const hidden = new Set(custom.hidden);
+    const visible = custom.order.filter((item) => !hidden.has(item) && bottomNavAvailable(item));
+    if (hidden.has(id)) {
+      if (visible.length >= BOTTOM_NAV_MAX) return;
+      hidden.delete(id);
+    } else {
+      if (visible.length <= BOTTOM_NAV_MIN) return;
+      hidden.add(id);
+    }
+    custom.hidden = custom.order.filter((item) => hidden.has(item));
+    saveBottomNav(custom);
+    render();
+  }
+
+  function applyBottomDomOrder(rowIds) {
+    const custom = getBottomNav();
+    const next = [];
+    const seen = new Set();
+    rowIds.forEach((id) => {
+      if (!BOTTOM_NAV_IDS.includes(id) || seen.has(id) || custom.order.indexOf(id) < 0) return;
+      seen.add(id);
+      next.push(id);
+    });
+    custom.order.forEach((id) => { if (!seen.has(id)) next.push(id); });
+    custom.order = next;
+    saveBottomNav(custom);
+    render();
+  }
+
+  function landNavLinks(route) {
+    if (route.name === "music" && window.SIntelMusic) return window.SIntelMusic.links(route, navItem);
+    const shown = bottomBarItems().map((def) => navItem(def.href, def.icon, navChoiceLabel(def), !!(def.active && def.active(route)))).join("");
+    const hidden = bottomHiddenItems();
+    if (!hidden.length) return shown;
+    const moreOn = hidden.some((def) => def.active && def.active(route));
+    const bellHidden = hidden.some((def) => def.icon === "bell");
+    const menu = hidden.map((def) => navItem(def.href, def.icon, navChoiceLabel(def), !!(def.active && def.active(route)))).join("");
+    return `${shown}<details class="nav-land-more"${moreOn ? " open" : ""}><summary class="nav-item${moreOn ? " on" : ""}"><span class="nav-ico">${icon("more")}${bellHidden ? bellBadgeHtml() : ""}</span><span class="nav-label">${esc(tr("More"))}</span></summary><div class="nav-land-menu">${menu}</div></details>`;
+  }
+
   function bottom(route) {
     if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.bottomHtml) return window.SIntelMusic.bottomHtml(route, icon);
-    const item = (href, name, label, on) => `<a href="${href}" class="${on ? "on" : ""}" aria-label="${label}"${on ? ' aria-current="page"' : ""}><span class="nav-ico">${icon(name)}${name === "bell" ? bellBadgeHtml() : ""}</span></a>`;
-    return `<nav class="bottom-nav" aria-label="${tr("Primary")}">
-      ${item("#/", route.name === "home" ? "homeOn" : "home", tr("Home"), route.name === "home")}
-      ${item("#/explore", "search", tr("Search"), route.name === "explore")}
-      ${item("#/tv", "tv", tr("TV"), route.name === "tv")}
-      ${item("#/communities", "communities", tr("Communities"), route.name === "communities")}
-      ${item("#/feeds", "spark", tr("Feeds"), route.name === "feeds")}
-      ${item("#/notifications", "bell", tr("Notifications"), route.name === "notifications")}
-      ${item("#/messages", "mail", tr("Messages"), route.name === "messages")}
-      ${window.ViktorychShorts && window.ViktorychShorts.visible() ? item("#/shorts", "shorts", tr("Shorts"), route.name === "shorts") : ""}
-    </nav>
-    <button class="fab" data-act="compose" aria-label="${tr("Post")}">${icon("plus")}</button>`;
+    const links = bottomBarItems().map((def) => bottomNavLink(def, route)).join("");
+    return `<nav class="bottom-nav" aria-label="${tr("Primary")}">${links}</nav><button class="fab" data-act="compose" aria-label="${tr("Post")}">${icon("plus")}</button>`;
+  }
+
+  function bottomNavSettings() {
+    const custom = getBottomNav();
+    const hidden = new Set(custom.hidden);
+    const items = [];
+    custom.order.forEach((id) => {
+      if (!bottomNavAvailable(id)) return;
+      const def = navItemDef(id);
+      if (def) items.push(def);
+    });
+    const visibleCount = items.filter((def) => !hidden.has(def.id)).length;
+    const atMax = visibleCount >= BOTTOM_NAV_MAX;
+    const atMin = visibleCount <= BOTTOM_NAV_MIN;
+    const preview = bottomBarItems().map((def) => `<span class="bnav-preview-ico" data-preview-id="${esc(def.id)}" aria-label="${esc(bottomBarLabel(def))}"><span class="nav-ico">${icon(def.icon)}</span></span>`).join("");
+    const rows = items.map((def, index) => {
+      const on = !hidden.has(def.id);
+      const home = def.id === "home";
+      const disableOff = !on && atMax;
+      const disableOn = on && atMin && !home;
+      const disabled = home || disableOff || disableOn;
+      let title = "";
+      if (home) title = tr("Home always stays in the navigation bar.");
+      else if (disableOff) title = tr("You can show up to {count} items.", { count: BOTTOM_NAV_MAX });
+      else if (disableOn) title = tr("Keep at least {count} items in the navigation bar.", { count: BOTTOM_NAV_MIN });
+      const name = navChoiceLabel(def);
+      const switchLabel = title || (on ? tr("Visible") : tr("Hidden"));
+      return `<div class="bnav-row" data-bottom-id="${esc(def.id)}">
+        <button type="button" class="bnav-grip" data-drag-bottom="${esc(def.id)}" data-act="stop" aria-label="${esc(tr("Drag to reorder"))}">${bottomGripSvg()}</button>
+        <button type="button" class="icon-btn" data-act="bottom-nav-move" data-id="${esc(def.id)}" data-dir="-1" aria-label="${esc(tr("Move up"))}"${index === 0 ? " disabled" : ""}>${icon("arrowUp")}</button>
+        <button type="button" class="icon-btn" data-act="bottom-nav-move" data-id="${esc(def.id)}" data-dir="1" aria-label="${esc(tr("Move down"))}"${index === items.length - 1 ? " disabled" : ""}>${icon("arrowDown")}</button>
+        <span class="bnav-ico">${icon(def.icon)}</span>
+        <span class="bnav-name">${esc(name)}</span>
+        <button type="button" class="bnav-switch${on ? " on" : ""}" role="switch" aria-checked="${on ? "true" : "false"}" data-act="bottom-nav-toggle" data-id="${esc(def.id)}" aria-label="${esc(switchLabel)}"${disabled ? " disabled" : ""}${title ? ` title="${esc(title)}"` : ""}><i></i></button>
+      </div>`;
+    }).join("");
+    return settingsHead(tr("Customize navigation"), "#/settings/display") + `<div class="bnav-screen"><div class="bottom-nav bottom-nav-preview" aria-hidden="true">${preview}</div><p class="phandle set-block">${esc(tr("Choose which icons appear in the bottom bar. Home always stays. You can show {min} to {max}.", { min: BOTTOM_NAV_MIN, max: BOTTOM_NAV_MAX }))}</p><div class="bnav-list">${rows}</div><div class="bnav-reset"><button class="outline" type="button" data-act="bottom-nav-reset">${esc(tr("Reset to default"))}</button></div></div>`;
   }
 
   function listSortOf(list) {
@@ -10420,8 +10635,10 @@ const here = parseRoute();
         ${settingsRow("#/settings/data", tr("Data usage"))}
       </div>`;
     }
+    if (section === "display" && sub === "navigation") return bottomNavSettings();
     if (section === "display") {
       return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
+        ${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}
         <h2>${esc(tr("Appearance"))}</h2>
         <div class="theme-row">
           ${themeBtn("auto", tr("Auto"))}
@@ -10575,18 +10792,7 @@ const here = parseRoute();
   function drawer() {
     if (!STATE.drawer) return "";
     const music = parseRoute().name === "music" && window.SIntelMusic;
-    const links = music ? window.SIntelMusic.drawerLinks(icon) : `<a href="#/lists">${icon("lists")} ${tr("Lists")}</a>
-      <a href="#/communities">${icon("communities")} ${tr("Communities")}</a>
-      <a href="#/tv">${icon("tv")} ${tr("TV")}</a>
-      <a href="#/history">${icon("clock")} ${tr("History")}</a>
-      <a href="${subsHash(STATE.settings.subsGroup)}">${icon("subs")} ${tr("Subscriptions")}</a>
-      <a href="#/feeds">${icon("spark")} ${tr("Feeds")}</a>
-      <a href="#/music">${icon("muNote")} ${tr("Music")}</a>
-      ${window.ViktorychShorts && window.ViktorychShorts.visible() ? `<a href="#/shorts">${icon("shorts")} ${tr("Shorts")}</a>` : ""}
-      <a href="#/games">${icon("games")} ${tr("Games")}</a>
-      ${window.ViktorychDrive && window.ViktorychDrive.visible() ? `<a href="#/storage">${icon("storage")} ${tr("brand.storage")}</a>` : ""}
-      ${window.ViktorychVault && window.ViktorychVault.visible() ? `<a href="#/vault">${icon("vault")} ${tr("Vault")}</a>` : ""}
-      <a href="#/settings">${icon("more")} ${tr("Settings")}</a>`;
+    const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
@@ -12418,9 +12624,8 @@ if (STATE.histClear) {
   function navSection(name) {
     if (name === "list") return "lists";
     if (name === "bookmarks") return "history";
-    if (name === "games") return "games";
-    if (name === "vault") return "vault";
-    if (name === "home" || name === "explore" || name === "notifications" || name === "messages" || name === "feeds" || name === "lists" || name === "history" || name === "settings" || name === "subscriptions") return name;
+    if (name === "drive") return "storage";
+    if (BOTTOM_NAV_IDS.includes(name)) return name;
     return "";
   }
 
@@ -12905,6 +13110,25 @@ if (STATE.histClear) {
     }
     if (act === "nav-reset-default") {
       saveNavCustom(DEFAULT_NAV_CUSTOM);
+      render();
+      toast(tr("Reset to default"));
+      return;
+    }
+    if (act === "bottom-nav-move") {
+      moveBottomNav(el.dataset.id, Number(el.dataset.dir));
+      refocusBottom(el.dataset.id, "move", el.dataset.dir);
+      return;
+    }
+    if (act === "bottom-nav-toggle") {
+      toggleBottomNav(el.dataset.id);
+      refocusBottom(el.dataset.id, "toggle");
+      return;
+    }
+    if (act === "bottom-nav-reset") {
+      if (!STATE.settings) STATE.settings = {};
+      STATE.settings.bottomNav = cleanBottomNav(null);
+      STATE.settings.bottomNavCustom = true;
+      saveSettings();
       render();
       toast(tr("Reset to default"));
       return;
@@ -13905,6 +14129,8 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
 
   let tabDrag = null;
   let swallowTabDrag = false;
+  let bottomDrag = null;
+  let swallowBottomNavDrag = false;
   document.addEventListener("pointerdown", (event) => {
     const grip = event.target.closest && event.target.closest("[data-drag-tab]");
     if (!grip || event.button > 0 || grip.closest(".tabs")) return;
@@ -13966,10 +14192,73 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   document.addEventListener("pointerup", finishTabDrag);
   document.addEventListener("pointercancel", finishTabDrag);
 
+  document.addEventListener("pointerdown", (event) => {
+    const grip = event.target.closest && event.target.closest("[data-drag-bottom]");
+    if (!grip || event.button > 0) return;
+    const node = grip.closest(".bnav-row");
+    if (!node) return;
+    bottomDrag = { pointer: event.pointerId, id: grip.dataset.dragBottom, x: event.clientX, y: event.clientY, started: false, node };
+    try { grip.setPointerCapture(event.pointerId); } catch (err) { /* the drag still follows the pointer */ }
+  }, true);
+  document.addEventListener("pointermove", (event) => {
+    if (!bottomDrag || event.pointerId !== bottomDrag.pointer) return;
+    const dx = event.clientX - bottomDrag.x;
+    const dy = event.clientY - bottomDrag.y;
+    if (!bottomDrag.started) {
+      if (dx * dx + dy * dy < 36) return;
+      bottomDrag.started = true;
+      bottomDrag.node.classList.add("is-dragging");
+    }
+    const parent = bottomDrag.node.parentNode;
+    if (!parent) return;
+    let target = null;
+    Array.prototype.forEach.call(parent.children, (el) => {
+      if (el === bottomDrag.node || !el.getAttribute || !el.getAttribute("data-bottom-id")) return;
+      const rect = el.getBoundingClientRect();
+      if (event.clientY >= rect.top && event.clientY <= rect.bottom) target = el;
+    });
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      const before = event.clientY < rect.top + rect.height / 2;
+      if (before) parent.insertBefore(bottomDrag.node, target);
+      else if (target.nextSibling !== bottomDrag.node) parent.insertBefore(bottomDrag.node, target.nextSibling);
+    }
+    if (event.cancelable) event.preventDefault();
+  }, { passive: false });
+  const finishBottomDrag = (event) => {
+    if (!bottomDrag || (event && event.pointerId !== bottomDrag.pointer)) return;
+    const drag = bottomDrag;
+    bottomDrag = null;
+    if (!drag.started) return;
+    swallowBottomNavDrag = true;
+    setTimeout(() => { swallowBottomNavDrag = false; }, 0);
+    const parent = drag.node.parentNode;
+    const ids = [];
+    if (parent) {
+      parent.querySelectorAll("[data-bottom-id]").forEach((row) => {
+        const id = row.getAttribute("data-bottom-id");
+        if (id && ids.indexOf(id) < 0) ids.push(id);
+      });
+    }
+    applyBottomDomOrder(ids);
+    refocusBottom(drag.id, "grip");
+  };
+  document.addEventListener("pointerup", finishBottomDrag);
+  document.addEventListener("pointercancel", finishBottomDrag);
+  document.addEventListener("keydown", (event) => {
+    const grip = event.target.closest && event.target.closest("[data-drag-bottom]");
+    if (!grip || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    event.preventDefault();
+    const dir = event.key === "ArrowUp" ? -1 : 1;
+    moveBottomNav(grip.dataset.dragBottom, dir);
+    refocusBottom(grip.dataset.dragBottom, "grip");
+  });
+
   document.addEventListener("click", (event) => {
-    if (swallowTabDrag || swallowNotePress) {
+    if (swallowTabDrag || swallowNotePress || swallowBottomNavDrag) {
       swallowTabDrag = false;
       swallowNotePress = false;
+      swallowBottomNavDrag = false;
       event.preventDefault();
       event.stopPropagation();
       return;
@@ -14035,7 +14324,7 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     if (!event.touches || event.touches.length !== 1) return;
     const node = event.target;
     if (!node || !node.closest) return;
-    if (node.closest("[data-drag-tab], button.tab-caret, input, textarea, video, .menu")) return;
+    if (node.closest("[data-drag-tab], [data-drag-bottom], button.tab-caret, input, textarea, video, .menu")) return;
     const tab = node.closest("[data-note-tab]");
     const article = node.closest("article.post[data-post]");
     if (article && node.closest("a, button, input, textarea, video")) return;
@@ -16873,6 +17162,17 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (event.key === "Escape") hideTooltip(true);
     }, { passive: true });
   }
+
+  window.addEventListener("viktorych-settings-applied", () => {
+    if (!STATE.settings) return;
+    const next = loadSettings();
+    const prevNav = JSON.stringify(STATE.settings.bottomNav || null);
+    const nextNav = JSON.stringify(next.bottomNav || null);
+    if (prevNav === nextNav && (STATE.settings.bottomNavCustom === true) === (next.bottomNavCustom === true)) return;
+    STATE.settings.bottomNav = next.bottomNav;
+    STATE.settings.bottomNavCustom = next.bottomNavCustom;
+    render();
+  });
 
   initTooltipController();
   boot();

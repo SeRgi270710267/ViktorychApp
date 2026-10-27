@@ -625,8 +625,10 @@
       forYouReplies: settings.forYouReplies !== false,
       historyPause: settings.historyPause || { videos: false, articles: false },
       historyCut: settings.historyCut || { video: 0, article: 0 },
-      lang: readLang()
+      lang: readLang(),
+      bottomNavCustom: settings.bottomNavCustom === true
     };
+    if (settings.bottomNav && typeof settings.bottomNav === "object") snap.bottomNav = settings.bottomNav;
     if (settings.noteTabsSame === true || settings.noteTabsSame === false) snap.noteTabsSame = settings.noteTabsSame !== false;
     var live = window.ViktorychAccounts && window.ViktorychAccounts.readHistory && window.ViktorychAccounts.readHistory();
     if (live) {
@@ -700,6 +702,20 @@
     if (remote === "show" || remote === "default" || remote === "none") return remote;
     return "show";
   }
+  function pickBottomNav(local, remote) {
+    local = local || {};
+    remote = remote || {};
+    if (local.bottomNavCustom && local.bottomNav && typeof local.bottomNav === "object") {
+      return { bottomNav: local.bottomNav, bottomNavCustom: true };
+    }
+    if (remote.bottomNav && typeof remote.bottomNav === "object") {
+      return { bottomNav: remote.bottomNav, bottomNavCustom: !!remote.bottomNavCustom };
+    }
+    if (local.bottomNav && typeof local.bottomNav === "object") {
+      return { bottomNav: local.bottomNav, bottomNavCustom: false };
+    }
+    return { bottomNavCustom: false };
+  }
   function mergePayload(local, remote) {
     remote = remote || {};
     var follows = uniq([].concat(local.follows || [], remote.follows || []));
@@ -714,7 +730,8 @@
       });
     }
     var history = mergeHistory(localHistory, remote.history, cut);
-    return {
+    var pickedNav = pickBottomNav(local, remote);
+    var merged = {
       follows: follows,
       seenFeeds: uniq([].concat(local.seenFeeds || [], remote.seenFeeds || [], follows)),
       seenDefaults: uniq([].concat(local.seenDefaults || [], remote.seenDefaults || [], follows)),
@@ -746,8 +763,11 @@
       historyPause: pause,
       historyCut: cut,
       history: history,
-      lang: local.lang || remote.lang || "en"
+      lang: local.lang || remote.lang || "en",
+      bottomNavCustom: pickedNav.bottomNavCustom
     };
+    if (pickedNav.bottomNav) merged.bottomNav = pickedNav.bottomNav;
+    return merged;
   }
   function applySnapshot(payload) {
     var raw = readStored("settings-v1");
@@ -766,6 +786,7 @@
         window.SI18n.setLang(payload.lang);
       }
     }
+    try { window.dispatchEvent(new CustomEvent("viktorych-settings-applied")); } catch (err) { /* the open page keeps its copy */ }
   }
   function rememberSync(updatedAt) {
     var session = readSession();
@@ -2797,6 +2818,9 @@
         }).catch(function () { clearTimeout(timer); resolve(false); });
       });
     },
+    snapshotFrom: snapshotFrom,
+    mergePayload: mergePayload,
+    applySnapshot: applySnapshot,
     refreshToken: function () {
       var session = readSession();
       if (!session || !session.token || !hasApi()) return Promise.resolve("");
