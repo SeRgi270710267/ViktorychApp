@@ -3311,14 +3311,103 @@ async function handleRecordings(request, env) {
     if (row.state === "recording") active += 1;
     pastFromJob(name, job, row).forEach((item) => past.push(item));
   }
+  const knownRooms = {};
+  past.forEach((item) => { knownRooms[String(item.handle || "") + "\n" + String(item.roomId || "")] = true; });
+  const stored = await storedLiveRecordings(env);
+  stored.forEach((item) => {
+    const id = String(item.handle || "") + "\n" + String(item.roomId || "");
+    if (knownRooms[id]) return;
+    knownRooms[id] = true;
+    past.push(item);
+  });
   past.sort((a, b) => String(b.startedAt || "").localeCompare(String(a.startedAt || "")));
   const cap = Math.max(1, Math.min(16, Number(index.cap) || 16));
   return json(200, { cap, active, items, past });
 }
 
+const LIVE_PARENT_KEY = /^tiktok\/([A-Za-z0-9._]{2,24})\/([1-9][0-9]{5,24})\/live(?:\/([1-9][0-9]{0,3}))?$/;
+
+function liveKeyParts(value) {
+  const match = LIVE_PARENT_KEY.exec(String(value || ""));
+  if (!match) return null;
+  return { handle: match[1].toLowerCase(), roomId: match[2], part: match[3] ? Number(match[3]) : 1, key: "tiktok/" + match[1].toLowerCase() + "/" + match[2] + "/live" };
+}
+
+async function storedLiveRecordings(env) {
+  const found = {};
+  function add(row) {
+    const parts = liveKeyParts(row && (row.key || row.object_key));
+    if (!parts || !TIKTOK_HANDLE.test(parts.handle)) return;
+    const id = parts.handle + "\n" + parts.roomId;
+    const prev = found[id];
+    const part = Math.max(1, Number(row.part || parts.part) || 1);
+    if (!prev) {
+      found[id] = {
+        state: "saved",
+        handle: parts.handle,
+        roomId: parts.roomId,
+        key: parts.key,
+        parts: part,
+        title: String(row.title || "").slice(0, 180),
+        startedAt: String(row.startedAt || ""),
+        endedAt: String(row.endedAt || ""),
+        duration: Number(row.duration) || 0,
+        quality: String(row.quality || ""),
+        qualityNote: String(row.qualityNote || ""),
+        cover: String(row.cover || "").slice(0, 400),
+        viewers: Math.max(0, Number(row.viewers) || 0),
+        bytes: Math.max(0, Number(row.bytes) || 0)
+      };
+      return;
+    }
+    prev.parts = Math.max(prev.parts, part);
+    if (!prev.startedAt && row.startedAt) prev.startedAt = String(row.startedAt);
+    if (!prev.title && row.title) prev.title = String(row.title).slice(0, 180);
+  }
+  if (env.DB) {
+    try {
+      const listed = await env.DB.prepare("SELECT object_key FROM telegram_files WHERE serve = 1 AND encrypted = 0 AND object_key LIKE 'tiktok/%/live%' GROUP BY object_key LIMIT 400").all();
+      ((listed && listed.results) || []).forEach((row) => add({ key: row.object_key }));
+    } catch (err) { /* the job list still returns */ }
+  }
+  if (env.DATA && typeof env.DATA.list === "function") {
+    try {
+      const names = [];
+      let cursor;
+      for (let page = 0; page < 8; page++) {
+        const listed = await env.DATA.list({ prefix: "owner/live-manifests/", cursor, limit: 100 });
+        const objects = listed && Array.isArray(listed.objects) ? listed.objects : [];
+        objects.forEach((object) => { if (object && object.key) names.push(String(object.key)); });
+        if (!listed || !listed.truncated || !listed.cursor) break;
+        cursor = listed.cursor;
+      }
+      for (let i = 0; i < names.length && i < 80; i++) {
+        const object = await env.DATA.get(names[i]);
+        if (!object) continue;
+        let meta = null;
+        try { meta = JSON.parse(await object.text()); } catch (err) { meta = null; }
+        if (meta) add(meta);
+      }
+    } catch (err) { /* uploaded keys still list */ }
+  }
+  return Object.keys(found).map((id) => found[id]);
+}
+
 function pastFromJob(handle, job, fallback) {
   const rows = [];
   const active = job && job.active && typeof job.active === "object" ? job.active : null;
+  if (active && active.captureDone && Number(active.segments || 0) > 0 && LIVE_PLAY_KEY.test(String(active.key || ""))) {
+    const already = rows.some((item) => String(item.roomId || "") === String(active.roomId || ""));
+    if (!already) {
+      const finished = scrubRecording(Object.assign({}, active, { state: "saved" }));
+      if (finished) {
+        finished.handle = handle;
+        finished.key = String(active.key);
+        finished.viewers = Math.max(0, Number(active.viewers) || 0);
+        rows.push(finished);
+      }
+    }
+  }
   if (active && (active.state === "recording" || active.state === "queued") && !active.captureDone) {
     const row = scrubRecording(Object.assign({}, active, { state: active.state }));
     if (row) {

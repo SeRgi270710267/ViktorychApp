@@ -916,6 +916,8 @@ SI18n.addPack("es", {
   "Live now": "En directo ahora",
   "Past lives": "Directos anteriores",
   "No past lives yet.": "Aún no hay directos anteriores.",
+  "No recordings yet.": "Aún no hay grabaciones.",
+  "Couldn't load recordings.": "No se pudieron cargar las grabaciones.",
   "Loading past lives": "Cargando directos anteriores",
   "Size {size}": "Tamaño {size}",
   "Download original": "Descargar el original",

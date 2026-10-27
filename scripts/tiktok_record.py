@@ -454,6 +454,8 @@ def plan(lives: list, added: list, jobs: dict, now: str, cap: int = CAP_LIMIT, c
         job = state.setdefault(handle, blank_job(handle))
         active = job.get("active") if isinstance(job.get("active"), dict) else {}
         job["active"] = active
+        shelve_finished(job)
+        active = job.get("active") if isinstance(job.get("active"), dict) else {}
         if not item.get("live"):
             if active.get("state") == "queued":
                 job["active"] = {}
@@ -461,6 +463,7 @@ def plan(lives: list, added: list, jobs: dict, now: str, cap: int = CAP_LIMIT, c
                 active["capturing"] = False
                 active["needsPart"] = False
                 active["captureDone"] = True
+                shelve_finished(job)
             continue
         if live_blocked(item, now) and not (active.get("capturing") and occupies(active, now)):
             active.clear()
@@ -948,6 +951,13 @@ def _offer_loop() -> None:
             log("telegram offer failed")
 
 
+def object_key_from_buf(buf_key: str) -> str:
+    match = re.match(r"^live-buf/\d+/([A-Za-z0-9._]{2,24})/([1-9][0-9]{5,24})/([1-9][0-9]{0,3})/", str(buf_key or ""))
+    if not match:
+        return ""
+    return "tiktok/%s/%s/live/%s" % (match.group(1).lower(), match.group(2), match.group(3))
+
+
 def offer_segment(buf_key: str, meta: dict) -> None:
     """Upload one buffered piece and check its sha256. Leave R2 in place on failure."""
     bot = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
@@ -963,7 +973,9 @@ def offer_segment(buf_key: str, meta: dict) -> None:
     from telegram_backup import d1_id, d1_rows, remember_d1, send_document
 
     database = d1_id(token, account)
-    object_key = str(meta.get("objectKey") or "")
+    object_key = str(meta.get("objectKey") or "") or object_key_from_buf(buf_key)
+    if not object_key:
+        return
     role = "init" if meta.get("role") == "init" else "segment"
     part_index = int(meta.get("index") or 0)
     kind = "init" if role == "init" else "segment"
@@ -1221,6 +1233,18 @@ def run_ffmpeg(url: str, dest: Path, seconds: int, start: int, deadline: float, 
     return reason, tail
 
 
+def shelve_finished(job: dict) -> None:
+    """A finished capture with bytes belongs in Past lives, not only on the active slot."""
+    active = job.get("active") if isinstance(job.get("active"), dict) else {}
+    if not active.get("captureDone") or active.get("needsPart") or active.get("capturing"):
+        return
+    if int(active.get("segments") or 0) <= 0:
+        return
+    if not KEY_RE.fullmatch(str(active.get("key") or "")):
+        return
+    mark_saved_room(job)
+
+
 def mark_saved_room(job: dict) -> None:
     active = job.get("active") if isinstance(job.get("active"), dict) else {}
     if not active:
@@ -1361,6 +1385,7 @@ def cmd_record(handle: str, part: str, room: str) -> int:
             "parts": part_n,
         })
         job["active"] = active
+        shelve_finished(job)
         save_job(job)
         log("capture done %s" % name)
         return 0
@@ -1710,7 +1735,12 @@ def cmd_upload(slot: str) -> int:
                 continue
             meta["sha256"] = digest
             local.write_bytes(blob)
-            object_key = str(meta.get("objectKey") or "")
+            object_key = str(meta.get("objectKey") or "") or object_key_from_buf(media_key)
+            if not object_key:
+                meta["held"] = True
+                dead.add(key)
+                r2_put(key, json.dumps(meta).encode("utf-8"))
+                continue
             role = "init" if meta.get("role") == "init" else "segment"
             part_index = int(meta.get("index") or 0)
             kind = "init" if role == "init" else "segment"
@@ -2031,6 +2061,15 @@ def selftest() -> int:
         "saved": [{"roomId": "7699647509498710800", "key": key_base("a_name", "7699647509498710800"), "parts": 1, "startedAt": "2026-10-27T01:00:00Z", "title": "earlier", "quality": "origin", "viewers": 9}],
     })
     check(len(listed) == 2 and listed[0]["state"] == "recording" and listed[1]["state"] == "saved", "past lives list the open recording before the saved one")
+    finished_live = plan([{
+        "handle": "a_name", "live": False, "roomId": "7699647509498710800",
+    }], added, {"a_name": {"handle": "a_name", "active": {
+        "state": "recording", "captureDone": False, "capturing": False, "needsPart": False,
+        "segments": 4, "roomId": "7699647509498710800", "part": 1, "parts": 1,
+        "key": key_base("a_name", "7699647509498710800"), "startedAt": "2026-10-27T01:00:00Z",
+    }, "saved": []}}, now, cap=12, channels=1)
+    shelved = finished_live["jobs"]["a_name"]
+    check(shelved["active"] == {} and shelved["saved"] and shelved["saved"][0]["key"].endswith("/live"), "a finished capture is saved when the live ends")
     check(listed[0]["viewers"] == 3 and listed[1]["key"].endswith("/live"), "a past live keeps its peak and playback key")
 
     check(channel_slot("7699647509498710804", 2) == channel_slot("7699647509498710804", 2), "a room stays on the same channel")

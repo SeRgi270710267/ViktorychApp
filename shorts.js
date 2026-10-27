@@ -198,15 +198,20 @@
     if (autoplay === "wifi" && network && network !== "wifi") return false;
     return true;
   }
+  function videoQuality(name) {
+    var key = String(name || "").toLowerCase();
+    return key !== "ao" && key !== "audio" && key !== "audio_only";
+  }
   function lowestPreview(info) {
     var rows = info && info.variants && info.variants.length ? info.variants : [];
     var i;
     for (i = rows.length - 1; i >= 0; i--) {
-      if (rows[i] && rows[i].hls) return { kind: "hls", url: String(rows[i].hls), quality: String(rows[i].quality || "") };
-      if (rows[i] && rows[i].flv) return { kind: "flv", url: String(rows[i].flv), quality: String(rows[i].quality || "") };
+      if (!rows[i] || !videoQuality(rows[i].quality)) continue;
+      if (rows[i].hls) return { kind: "hls", url: String(rows[i].hls), quality: String(rows[i].quality || "") };
+      if (rows[i].flv) return { kind: "flv", url: String(rows[i].flv), quality: String(rows[i].quality || "") };
     }
-    if (info && info.hls) return { kind: "hls", url: String(info.hls), quality: String(info.quality || "") };
-    if (info && info.flv) return { kind: "flv", url: String(info.flv), quality: String(info.quality || "") };
+    if (info && videoQuality(info.quality) && info.hls) return { kind: "hls", url: String(info.hls), quality: String(info.quality || "") };
+    if (info && videoQuality(info.quality) && info.flv) return { kind: "flv", url: String(info.flv), quality: String(info.quality || "") };
     return null;
   }
   function previewsOn() {
@@ -469,7 +474,7 @@
     }
     function collect(requireFresh) {
       rows.forEach(function (row) {
-        if (!row) return;
+        if (!row || !videoQuality(row.quality)) return;
         var hlsUrl = String(row.hls || "");
         var flvUrl = String(row.flv || "");
         if (hlsUrl && (!requireFresh || streamFresh(hlsUrl, now))) push("hls", hlsUrl, row.quality);
@@ -659,9 +664,9 @@
 
   function refreshRecordings() {
     if (!ownerBases().length || !hooks.token() || !ownerHere()) return Promise.resolve(null);
-    if (recordingsState === "idle") recordingsState = "loading";
+    if (recordingsState !== "ready") recordingsState = "loading";
     return ownerFetch("/v1/owner/tiktok/recordings", { headers: authHeaders(), cache: "no-store" }).then(function (res) {
-      if (!res.ok) return null;
+      if (!res || !res.ok) throw new Error("recordings");
       return res.json();
     }).then(function (body) {
       recordingsState = "ready";
@@ -669,7 +674,11 @@
       recordings = { cap: body.cap || 12, active: body.active || 0, items: body.items, past: body.past || [] };
       schedulePaint();
       return body;
-    }).catch(function () { return null; });
+    }).catch(function () {
+      recordingsState = "error";
+      schedulePaint();
+      return null;
+    });
   }
 
   function pastSource() {
@@ -706,7 +715,8 @@
   function pastListHtml() {
     var rows = pastRows();
     if (recordingsState === "loading" && !rows.length) return pastSkeletons();
-    if (!rows.length) return '<div class="shorts-past-empty"><h2>' + hooks.esc(tr("No past lives yet.")) + "</h2></div>";
+    if (recordingsState === "error" && !rows.length) return '<div class="shorts-past-empty"><h2>' + hooks.esc(tr("Couldn't load recordings.")) + "</h2></div>";
+    if (!rows.length) return '<div class="shorts-past-empty"><h2>' + hooks.esc(tr("No recordings yet.")) + "</h2></div>";
     return '<ol class="shorts-past-grid">' + rows.map(pastCard).join("") + "</ol>";
   }
 
@@ -1051,18 +1061,115 @@
     catch (err) { return false; }
   }
 
+  function levelCodec(level) {
+    if (!level) return "";
+    if (level.videoCodec) return String(level.videoCodec);
+    if (level.attrs && level.attrs.CODECS) return String(level.attrs.CODECS).split(",")[0].trim();
+    return "";
+  }
+
+  function videoCodecOk(codecs) {
+    var video = String(codecs || "").split(",")[0].trim();
+    if (!video) return true;
+    if (/^(mp4a|aac|opus|mp3)/i.test(video)) return false;
+    var ask = typeof MediaSource !== "undefined" && MediaSource.isTypeSupported;
+    if (ask) {
+      try {
+        if (!MediaSource.isTypeSupported('video/mp4; codecs="' + video + '"')) return false;
+      } catch (err) { /* the frame watchdog still moves on */ }
+    } else if (/hvc1|hev1|hevc|bytevc1|h265/i.test(video)) return false;
+    return true;
+  }
+
+  function levelScore(level) {
+    return (Number(level && level.bitrate) || 0) * 100000 + (Number(level && level.height) || 0);
+  }
+
   function topLevel(player) {
     var levels = player.levels || [];
-    var top = 0;
+    var top = -1;
     var best = -1;
+    var fallback = 0;
+    var fallbackScore = -1;
     for (var i = 0; i < levels.length; i++) {
-      var score = (Number(levels[i].bitrate) || 0) * 100000 + (Number(levels[i].height) || 0);
+      var score = levelScore(levels[i]);
+      if (score >= fallbackScore) {
+        fallbackScore = score;
+        fallback = i;
+      }
+      if (!videoCodecOk(levelCodec(levels[i]))) continue;
       if (score >= best) {
         best = score;
         top = i;
       }
     }
-    return levels.length ? top : -1;
+    if (!levels.length) return -1;
+    return top >= 0 ? top : fallback;
+  }
+
+  function lowerPlayable(player, current) {
+    var levels = player.levels || [];
+    var ceiling = current >= 0 && levels[current] ? levelScore(levels[current]) : Infinity;
+    var best = -1;
+    var pick = -1;
+    for (var i = 0; i < levels.length; i++) {
+      if (i === current || !videoCodecOk(levelCodec(levels[i]))) continue;
+      var score = levelScore(levels[i]);
+      if (score < ceiling && score >= best) {
+        best = score;
+        pick = i;
+      }
+    }
+    return pick;
+  }
+
+  function waitForFrames(video, ms) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish(ok) {
+        if (done) return;
+        done = true;
+        video.removeEventListener("resize", onSize);
+        resolve(!!ok);
+      }
+      function onSize() {
+        if (video.videoWidth > 0) finish(true);
+      }
+      video.addEventListener("resize", onSize);
+      if (video.videoWidth > 0) { finish(true); return; }
+      setTimeout(function () { finish(video.videoWidth > 0); }, ms);
+    });
+  }
+
+  function playOrTap(video) {
+    var started = video.play();
+    if (!started || !started.catch) return Promise.resolve();
+    return started.catch(function (err) {
+      if (!err || err.name !== "NotAllowedError") throw err;
+      return new Promise(function (resolve, reject) {
+        var stage = video.parentNode;
+        if (!stage) { reject(err); return; }
+        function go() {
+          stage.removeEventListener("pointerdown", go);
+          video.muted = true;
+          var again = video.play();
+          if (!again || !again.then) { resolve(); return; }
+          again.then(resolve).catch(reject);
+        }
+        stage.addEventListener("pointerdown", go);
+      });
+    });
+  }
+
+  function revealWhenFrames(video, token) {
+    function hide() {
+      if (token !== liveToken || !(video.videoWidth > 0)) return;
+      var root = video.closest ? video.closest("#shorts-live-player") : null;
+      var cover = root && root.querySelector(".shorts-live-cover");
+      if (cover) cover.hidden = true;
+    }
+    video.addEventListener("playing", hide);
+    video.addEventListener("resize", hide);
   }
 
   function showLiveLevel(player, level, pinned) {
@@ -1071,20 +1178,21 @@
     onLiveLevel(level === pinned, Number(row.height) || 0);
   }
 
-  function climbLive(player, pinned) {
+  function climbLive(player, pinRef) {
     clearTimeout(climbTimer);
     climbTimer = setTimeout(function () {
       if (qualityLock || hls !== player) return;
       var current = player.currentLevel;
+      var pinned = pinRef.level;
       if (current >= 0 && current < pinned) {
         player.currentLevel = current + 1;
         showLiveLevel(player, player.currentLevel, pinned);
-        if (player.currentLevel < pinned) climbLive(player, pinned);
+        if (player.currentLevel < pinned) climbLive(player, pinRef);
       }
     }, 20000);
   }
 
-  function watchStalls(player, Hls, pinned) {
+  function watchStalls(player, Hls, pinRef) {
     var stalls = 0;
     player.on(Hls.Events.ERROR, function (event, data) {
       if (qualityLock || !data || data.fatal) return;
@@ -1096,8 +1204,8 @@
       var current = player.currentLevel;
       if (current > 0) {
         player.currentLevel = current - 1;
-        showLiveLevel(player, player.currentLevel, pinned);
-        climbLive(player, pinned);
+        showLiveLevel(player, player.currentLevel, pinRef.level);
+        climbLive(player, pinRef);
       }
     });
     player.on(Hls.Events.FRAG_BUFFERED, function () { stalls = 0; });
@@ -1124,7 +1232,7 @@
       var playerOpts = {
         enableWorker: false,
         capLevelToPlayerSize: false,
-        startLevel: pin && !qualityLock ? 99 : -1,
+        startLevel: -1,
         startFragPrefetch: true,
         maxBufferHole: 0.5,
         xhrSetup: function (xhr, target) {
@@ -1170,17 +1278,43 @@
         player.on(Hls.Events.MANIFEST_PARSED, function () {
           if (hls !== player) return;
           var top = topLevel(player);
+          var pinRef = { level: top };
           player.capLevelToPlayerSize = false;
           if (pin && !qualityLock && top >= 0) {
             player.startLevel = top;
             player.currentLevel = top;
             showLiveLevel(player, top, top);
-            watchStalls(player, Hls, top);
+            watchStalls(player, Hls, pinRef);
           }
           if (!start) { settled = true; resolve(); return; }
-          video.play().then(function () { settled = true; resolve(); }).catch(function (err) {
-            if (!settled) { settled = true; reject(err); }
-          });
+          function acceptOrStep(level) {
+            if (hls !== player) return;
+            return playOrTap(video).then(function () {
+              return waitForFrames(video, 6000);
+            }).then(function (ok) {
+              if (hls !== player || settled) return;
+              if (ok) {
+                pinRef.level = level;
+                settled = true;
+                resolve();
+                return;
+              }
+              var lower = lowerPlayable(player, level);
+              if (lower >= 0) {
+                pinRef.level = lower;
+                player.currentLevel = lower;
+                showLiveLevel(player, lower, top);
+                return acceptOrStep(lower);
+              }
+              hlsDead = true;
+              try { player.stopLoad(); } catch (err) { /* the next ladder step starts clean */ }
+              settled = true;
+              reject(new Error("no-frames"));
+            }).catch(function (err) {
+              if (!settled) { settled = true; reject(err); }
+            });
+          }
+          acceptOrStep(player.currentLevel);
         });
       });
     });
@@ -1638,7 +1772,7 @@
     feed.classList.toggle("is-past", pane === "past");
     if (pane === "past") {
       var past = pastRows();
-      var pastKey = "past\n" + past.map(function (row) {
+      var pastKey = recordingsState + "\npast\n" + past.map(function (row) {
         return [row.handle, row.state || "", row.roomId || "", row.key || "", row.endedAt || row.startedAt || "", row.viewers || 0, row.title || "", row.bytes || 0, row.thumb || "", row.duration || 0].join("\n");
       }).join("\n");
       if (pastKey === livePaintKey && feed.querySelector(".shorts-past-tile, .shorts-past-empty, .is-skeleton")) return;
@@ -2066,11 +2200,7 @@
     document.documentElement.classList.add("shorts-live-open");
     liveZoom = bindVideoZoom(root.querySelector(".shorts-live-stage"));
     var video = root.querySelector("video");
-    video.addEventListener("playing", function () {
-      if (token !== liveToken) return;
-      var cover = root.querySelector(".shorts-live-cover");
-      if (cover) cover.hidden = true;
-    });
+    revealWhenFrames(video, token);
     video.addEventListener("ended", function () {
       if (token !== liveToken || stitchedPlay) return;
       if (part < parts) playPart(part + 1);
@@ -2434,7 +2564,10 @@
           player.attachMediaElement(video);
           player.on(mpegts.Events.ERROR, function () { reject(new Error("flv")); });
           player.load();
-          video.play().then(resolve).catch(reject);
+          playOrTap(video).then(function () { return waitForFrames(video, 6000); }).then(function (ok) {
+            if (!ok) { reject(new Error("no-frames")); return; }
+            resolve();
+          }).catch(reject);
         });
       });
     }
@@ -2442,11 +2575,48 @@
     return loadHls().then(function (Hls) {
       if (token !== previewToken) return null;
       if (!Hls || !Hls.isSupported()) return Promise.reject(new Error("hls"));
-      var player = new Hls({ autoStartLoad: true, startLevel: 0, capLevelToPlayerSize: true, xhrSetup: function (xhr) { var tokenValue = hooks.token(); if (tokenValue) xhr.setRequestHeader("Authorization", "Bearer " + tokenValue); } });
+      var player = new Hls({ autoStartLoad: true, startLevel: -1, capLevelToPlayerSize: true, xhrSetup: function (xhr) { var tokenValue = hooks.token(); if (tokenValue) xhr.setRequestHeader("Authorization", "Bearer " + tokenValue); } });
       previewHls = player;
       player.loadSource(direct);
       player.attachMedia(video);
-      return video.play();
+      return new Promise(function (resolve, reject) {
+        player.on(Hls.Events.ERROR, function (event, data) {
+          if (!data || !data.fatal || previewHls !== player) return;
+          reject(new Error("hls"));
+        });
+        player.on(Hls.Events.MANIFEST_PARSED, function () {
+          if (previewHls !== player) return;
+          function acceptPreview(level) {
+            if (previewHls !== player) return;
+            if (level >= 0) player.currentLevel = level;
+            playOrTap(video).then(function () { return waitForFrames(video, 6000); }).then(function (ok) {
+              if (previewHls !== player) return;
+              if (ok) { resolve(); return; }
+              var higher = -1;
+              var floor = level >= 0 && player.levels[level] ? levelScore(player.levels[level]) : -1;
+              var best = Infinity;
+              var rows = player.levels || [];
+              for (var i = 0; i < rows.length; i++) {
+                if (i === level || !videoCodecOk(levelCodec(rows[i]))) continue;
+                var score = levelScore(rows[i]);
+                if (score > floor && score <= best) { best = score; higher = i; }
+              }
+              if (higher >= 0) { acceptPreview(higher); return; }
+              reject(new Error("no-frames"));
+            }).catch(reject);
+          }
+          var start = -1;
+          var cheapest = Infinity;
+          var rows = player.levels || [];
+          for (var n = 0; n < rows.length; n++) {
+            if (!videoCodecOk(levelCodec(rows[n]))) continue;
+            var score = levelScore(rows[n]);
+            if (score <= cheapest) { cheapest = score; start = n; }
+          }
+          if (start < 0) start = topLevel(player);
+          acceptPreview(start);
+        });
+      });
     });
   }
 
@@ -2558,11 +2728,7 @@
       video = handed.video;
       try { video.currentTime = handed.at || video.currentTime; } catch (err) { /* the same frame stays */ }
     }
-    video.addEventListener("playing", function () {
-      if (token !== liveToken) return;
-      var cover = root.querySelector(".shorts-live-cover");
-      if (cover) cover.hidden = true;
-    });
+    revealWhenFrames(video, token);
     root.addEventListener("click", function (event) {
       var button = event.target.closest ? event.target.closest("[data-shorts]") : null;
       if (!button) return;
@@ -2657,11 +2823,12 @@
           if (!slot) return;
           slot.textContent = atTop || !height ? qualityLabel(info.quality) : (height + "p");
         };
-        if (handed && handed.hls) {
+        if (handed && handed.hls && video.videoWidth > 0) {
           started();
           preloadNeighbors(handle);
           return;
         }
+        if (handed && handed.hls) destroyHls();
         if (!info.hls && !info.flv && !(info.variants && info.variants.length)) { finishFail(); return; }
         attemptLive(video, info).then(started).catch(giveUp);
         preloadNeighbors(handle);
