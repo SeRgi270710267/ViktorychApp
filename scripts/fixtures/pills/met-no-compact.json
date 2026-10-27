@@ -1,0 +1,20 @@
+{
+  "properties": {
+    "timeseries": [
+      {
+        "time": "2026-10-27T15:00:00Z",
+        "data": {
+          "instant": {"details": {"air_temperature": 7.1, "relative_humidity": 80, "wind_speed": 4}},
+          "next_1_hours": {"summary": {"symbol_code": "rain"}, "details": {"precipitation_amount": 0.4}}
+        }
+      },
+      {
+        "time": "2026-10-27T16:00:00Z",
+        "data": {
+          "instant": {"details": {"air_temperature": 6.4, "relative_humidity": 84, "wind_speed": 5}},
+          "next_1_hours": {"summary": {"symbol_code": "partlycloudy_night"}, "details": {"precipitation_amount": 0}}
+        }
+      }
+    ]
+  }
+}

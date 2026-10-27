@@ -41,6 +41,16 @@ assert.strictEqual(storage.shouldCacheFeed("https://viktorych.example/feeds.json
 assert.strictEqual(storage.shouldCacheFeed("https://viktorych.example/discord/state.json"), true);
 assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/me"), false);
 assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/version.json"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://api.open-meteo.com/v1/forecast?latitude=59"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://www.thesportsdb.com/api/v1/json/123/eventsnext.php?id=133739"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=59&lon=18"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/pills/weather?lat=59&lon=18"), false);
+assert.strictEqual(storage.categoryOf("https://api.open-meteo.com/v1/forecast.json"), "");
+assert.strictEqual(storage.categoryOf("https://site.api.espn.com/scoreboard.json"), "");
+assert.strictEqual(storage.categoryOf("https://www.thesportsdb.com/events.json"), "");
+assert.strictEqual(storage.categoryOf("https://api.met.no/compact.json"), "");
+assert.strictEqual(storage.categoryOf("https://accounts.example/v1/pills/sports"), "");
 
 assert.strictEqual(storage.revalidateAction(304), "keep");
 assert.strictEqual(storage.revalidateAction(200), "store");

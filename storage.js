@@ -65,6 +65,9 @@
     if (/\/tg\/loop\//i.test(path)) return true;
     if (/\/loop\/current\.json$/i.test(path)) return true;
     if (/\/loop\/v[^/]+\//i.test(path)) return true;
+    if (/\/v1\/pills\//i.test(path)) return true;
+    var host = String(url.hostname || "").toLowerCase();
+    if (/(^|\.)open-meteo\.com$/.test(host) || /(^|\.)espn\.com$/.test(host) || /(^|\.)thesportsdb\.com$/.test(host) || /(^|\.)met\.no$/.test(host)) return true;
     return false;
   }
 
