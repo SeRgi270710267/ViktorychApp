@@ -66,6 +66,17 @@ async function loadPlaywright() {
 }
 
 async function tune(page, level, lang) {
+  await page.evaluate(() => {
+    if (window.ViktorychDevice && window.ViktorychDevice.normalize) return;
+    return new Promise((resolve, reject) => {
+      const tag = document.createElement("script");
+      tag.src = "device.js";
+      tag.onload = () => resolve();
+      tag.onerror = () => reject(new Error("device script failed"));
+      (document.body || document.documentElement).appendChild(tag);
+    });
+  });
+  await page.waitForFunction(() => window.ViktorychDevice && window.ViktorychDevice.normalize, null, { timeout: 15000 });
   await page.evaluate(({ level, lang }) => {
     const device = window.ViktorychDevice;
     const next = device.normalize(device.read());

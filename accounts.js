@@ -3018,13 +3018,13 @@ function signupPayload() {
   function mediaCard(item, kind) {
     var vis = item.visibility || "everyone";
     function opt(value, label) {
-      return '<option value="' + value + '"' + (vis === value ? " selected" : "") + ">" + esc(tr(label)) + "</option>";
+      return '<option value="' + value + '"' + (vis === value ? " selected" : "") + ">" + esc(label) + "</option>";
     }
     return '<div class="media-privacy-card">' +
       photoHtml(item.url, kind === "banner" ? "media-privacy-banner" : "media-privacy-photo") +
       '<label>' + esc(kind === "banner" ? tr("Who can see this banner") : tr("Who can see this photo")) +
       '<select data-acct="media-vis" data-id="' + esc(item.id) + '">' +
-      opt("everyone", "Everyone") + opt("followers", "Followers") + opt("friends", "Mutual follows") + opt("nobody", "Only you") +
+      opt("everyone", tr("Everyone")) + opt("followers", tr("Followers")) + opt("friends", tr("Mutual follows")) + opt("nobody", tr("Only you")) +
       "</select></label>" +
       '<p class="set-sub">' + esc(tr("People you allow can always see it. People you block never can.")) + "</p>" +
       '<label>' + esc(tr("Always allow")) + '<input data-media-allow="' + esc(item.id) + '" value="' + esc((item.allow || []).join(", ")) + '" placeholder="@handle"></label>' +
