@@ -9,16 +9,21 @@ export function thumbObjectKey(handle, room) {
   return "owner/live-thumbs/" + name.toLowerCase() + "/" + id + ".mp4";
 }
 
+export function videoQuality(name) {
+  const key = String(name || "").toLowerCase();
+  return key !== "ao" && key !== "audio" && key !== "audio_only";
+}
+
 export function lowestPreview(info) {
   const rows = info && Array.isArray(info.variants) ? info.variants : [];
   for (let i = rows.length - 1; i >= 0; i--) {
     const row = rows[i];
-    if (!row) continue;
+    if (!row || !videoQuality(row.quality)) continue;
     if (row.hls) return { kind: "hls", url: String(row.hls), quality: String(row.quality || "") };
     if (row.flv) return { kind: "flv", url: String(row.flv), quality: String(row.quality || "") };
   }
-  if (info && info.hls) return { kind: "hls", url: String(info.hls), quality: String(info.quality || "") };
-  if (info && info.flv) return { kind: "flv", url: String(info.flv), quality: String(info.quality || "") };
+  if (info && videoQuality(info.quality) && info.hls) return { kind: "hls", url: String(info.hls), quality: String(info.quality || "") };
+  if (info && videoQuality(info.quality) && info.flv) return { kind: "flv", url: String(info.flv), quality: String(info.quality || "") };
   return null;
 }
 

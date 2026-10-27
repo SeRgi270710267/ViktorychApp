@@ -916,6 +916,8 @@ SI18n.addPack("en", {
   "Live now": "Live now",
   "Past lives": "Past lives",
   "No past lives yet.": "No past lives yet.",
+  "No recordings yet.": "No recordings yet.",
+  "Couldn't load recordings.": "Couldn't load recordings.",
   "Loading past lives": "Loading past lives",
   "Size {size}": "Size {size}",
   "Download original": "Download original",

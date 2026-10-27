@@ -916,6 +916,8 @@ SI18n.addPack("ru", {
   "Live now": "Сейчас в эфире",
   "Past lives": "Прошедшие эфиры",
   "No past lives yet.": "Прошедших эфиров пока нет.",
+  "No recordings yet.": "Записей пока нет.",
+  "Couldn't load recordings.": "Не удалось загрузить записи.",
   "Loading past lives": "Загрузка прошедших эфиров",
   "Size {size}": "Размер {size}",
   "Download original": "Скачать оригинал",

@@ -256,7 +256,7 @@ assert(nowHtml.includes("Past lives"), "Past lives sub-tab is present");
 assert(nowHtml.indexOf("@pepsi") < nowHtml.indexOf("@gabii_g5"), "Fewer viewers stay above more viewers");
 assert(!nowHtml.includes('data-shorts="saved"'), "Live now does not embed past playback");
 const emptyPast = shorts.page({ live: true, livePane: "past" });
-assert(emptyPast.includes("No past lives yet."), "Empty past lives has its own list");
+assert(emptyPast.includes("No recordings yet."), "An empty past list says there are no recordings yet");
 shorts.setRecordings({
   cap: 12,
   active: 1,
@@ -284,7 +284,7 @@ assert.equal(shorts.previewsAllowed("auto", true, "all", "wifi"), false);
 assert.equal(shorts.previewsAllowed("on", true, "never", "cellular"), true);
 assert.equal(shorts.previewsAllowed("off", false, "all", "wifi"), false);
 assert.equal(shorts.previewsAllowed("auto", false, "never", "wifi"), false);
-assert.equal(shorts.lowestPreview({ variants: [{ quality: "origin", hls: "https://cdn.example/o.m3u8" }, { quality: "ld", hls: "https://cdn.example/l.m3u8" }] }).url, "https://cdn.example/l.m3u8");
+assert.equal(shorts.lowestPreview({ variants: [{ quality: "origin", hls: "https://cdn.example/o.m3u8" }, { quality: "ld", hls: "https://cdn.example/l.m3u8" }, { quality: "ao", flv: "https://cdn.example/a.flv" }] }).url, "https://cdn.example/l.m3u8");
 localStorage.setItem("viktorych_shorts_live_pane", "past");
 const remembered = shorts.page({ live: true });
 assert(remembered.includes('class="tab on" href="#/shorts/live/past"'), "The past sub-tab stays selected");
