@@ -2,8 +2,15 @@ name: backup-full
 
 # Manual private copy of the whole repository. The job prints sizes and
 # counts only. It does not upload an Actions artifact.
+# workflow_dispatch needs permission to start workflows. Pushing a change to
+# backup-full.once on main starts the same job when that permission is absent.
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/backup-full.once
 
 permissions:
   contents: read
