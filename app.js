@@ -1110,8 +1110,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       parsed.navLayout = parsed.navLayout === "bar" ? "bar" : "auto";
       parsed.navLayoutLand = parsed.navLayoutLand === true;
       parsed.navLayoutSync = parsed.navLayoutSync === true;
+      if (Number(parsed.version) > 1) {
+        removeStored(localStorage, "settings-v1");
+        return fresh();
+      }
       return parsed;
     } catch (err) {
+      removeStored(localStorage, "settings-v1");
       return fresh();
     }
   }
@@ -17471,7 +17476,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   window.ViktorychNotes = { beforeSignOut: beforeSignOut };
-  if (!window.ViktorychPresence) window.ViktorychPresence = { dnd: function () { return false; } };
+  /* presence.js owns ViktorychPresence. A partial stand-in threw on .wrap and left a black page. */
 
   function commitBellNotes(list) {
     const seen = {};
