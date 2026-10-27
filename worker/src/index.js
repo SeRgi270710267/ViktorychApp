@@ -879,6 +879,23 @@ async function handleSyncPut(request, env) {
     else delete payload.bottomNav;
   }
   if (payload.bottomNavCustom != null) payload.bottomNavCustom = payload.bottomNavCustom === true;
+  if (payload.navLayoutSync === true) {
+    payload.navLayout = payload.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = payload.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else if (payload.navLayoutSync === false) {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  } else if (previous && previous.navLayoutSync === true) {
+    payload.navLayout = previous.navLayout === "bar" ? "bar" : "auto";
+    payload.navLayoutLand = previous.navLayoutLand === true;
+    payload.navLayoutSync = true;
+  } else {
+    delete payload.navLayout;
+    delete payload.navLayoutLand;
+    delete payload.navLayoutSync;
+  }
   const text = JSON.stringify(payload);
   if (text.length > SYNC_MAX) return json(413, { error: "too_large" });
   const base = Number(body.baseUpdatedAt || 0);
