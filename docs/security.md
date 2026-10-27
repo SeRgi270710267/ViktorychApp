@@ -27,6 +27,8 @@ Settings → Security lists passkeys for the current site, and can add or remove
 
 Chrome still rejects an IP address as a relying party id (`This is an invalid domain`), including `127.0.0.1`. Local WebAuthn has to use `http://localhost`. The Worker accepts both hosts. The production hosts above are normal domains, so this limit is only for local testing.
 
+After the account number is shown, the page can also ask the browser to create a passkey with conditional mediation when `PublicKeyCredential.getClientCapabilities().conditionalCreate` is true. That uses the same register options and register verify routes as Settings. The sign-up and sign-in screens are real forms: a username field and the account number in a password field, then a submit and a history change, so the browser can offer to save them. Recovery codes are not put in that form. They have their own copy and download actions because a password manager will not keep them.
+
 A passkey created on one of those hosts is not offered on another. The Worker also stores `rp_id` and will not accept an assertion whose origin or rpId hash does not match the challenge. `http://` is rejected for every host except `localhost` and `127.0.0.1`.
 
 ## App lock
@@ -76,3 +78,11 @@ This repository does not contain a store package. A Trusted Web Activity (Bubble
 3. Ship that wrapper through a Play listing. `FLAG_SECURE` makes screenshots, the app-switcher thumbnail, and screen recording black on that Android activity.
 
 `FLAG_SECURE` does not exist for a normal browser tab, and it does not apply to Windows. Windows Hello is used for the passkey and the app lock, not for blocking screenshots.
+
+## Sign-up check and recovery codes
+
+The account Worker keeps the existing per-address limits. Turnstile still runs only when `TURNSTILE_SECRET` is set. The site key is public and lives in the accounts config used at deploy. The secret is set from `worker/` with `npx wrangler secret put TURNSTILE_SECRET`. Create the widget in the Cloudflare dashboard under Turnstile, copy the site key into that config, and store only the secret as a Worker secret. Both are free.
+
+`SIGNUP_GUARD` in `worker/wrangler.toml` is `on` in production. That adds a short proof of work, an empty honeypot field, and a minimum wait. No secret, no fingerprint, and no paid service. Leave the flag unset only in automated tests that post directly to sign-up.
+
+Recovery codes are created at sign-up and again from Settings. Ten codes are shown once. The database stores a salted hash, not the code. Using a code signs the account back in, replaces the account number, and replaces the code set. Copy and download are separate because a password manager does not save those codes.
