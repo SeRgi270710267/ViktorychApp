@@ -144,6 +144,24 @@ def honor_limit(status: int, headers: dict) -> None:
         time.sleep(min(30.0, max(0.5, reset)))
 
 
+def _note_owner_key(status: int, raw: bytes) -> bool:
+    """Mark a hold without switching. Return True only when the key is dead."""
+    try:
+        from owner_keys import decide_attempt, mark_attention, using
+    except Exception:
+        return False
+    if not using("reddit"):
+        return False
+    action, reason = decide_attempt(status, raw, True)
+    if action == "hold":
+        mark_attention("reddit", reason)
+        return False
+    if action == "advance":
+        mark_attention("reddit", reason or "unauthorized")
+        return True
+    return False
+
+
 def access_token(client_id: str, secret: str) -> str:
     basic = base64.b64encode(f"{client_id}:{secret}".encode("utf-8")).decode("ascii")
     body = urllib.parse.urlencode({"grant_type": "client_credentials"}).encode("utf-8")
@@ -154,13 +172,7 @@ def access_token(client_id: str, secret: str) -> str:
     })
     honor_limit(status, headers)
     if status != 200:
-        try:
-            from owner_keys import attention_reason, mark_attention, using
-            reason = attention_reason(status, raw)
-            if using("reddit") and (status in (401, 403) or reason):
-                mark_attention("reddit", reason or ("forbidden" if status == 403 else "unauthorized"))
-        except Exception:
-            pass
+        _note_owner_key(status, raw)
         return ""
     try:
         parsed = json.loads(raw.decode("utf-8"))
@@ -176,14 +188,8 @@ def api_get(token: str, path: str) -> dict | None:
         "User-Agent": UA,
     })
     honor_limit(status, headers)
-    try:
-        from owner_keys import attention_reason, mark_attention, using
-        reason = attention_reason(status, raw)
-        if using("reddit") and (status in (401, 403) or reason):
-            mark_attention("reddit", reason or ("forbidden" if status == 403 else "unauthorized"))
-            return None
-    except Exception:
-        pass
+    if _note_owner_key(status, raw):
+        return None
     if status == 429:
         status, headers, raw = _request(API + path, None, {
             "Authorization": "Bearer " + token,
