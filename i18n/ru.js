@@ -1307,5 +1307,19 @@ SI18n.addPack("ru", {
   "Unlock Offline": "Войти офлайн",
   "Invalid claim code.": "Неверный код подтверждения.",
   "Servers unreachable. Try Emergency Offline Access.": "Серверы недоступны. Попробуйте аварийный офлайн-доступ.",
-  "Not signed in": "Вход не выполнен"
+  "Not signed in": "Вход не выполнен",
+  "Update available": "Доступно обновление",
+  "What's new": "Что нового",
+  "Update now": "Обновить сейчас",
+  "Later": "Позже",
+  "You're up to date": "У вас последняя версия",
+  "Downloading": "Загрузка",
+  "Installing": "Установка",
+  "Activating": "Включение",
+  "Cleaning up": "Очистка",
+  "The update didn't finish.": "Обновление не завершилось.",
+  "Reload anyway": "Всё равно перезагрузить",
+  "Version {version}": "Версия {version}",
+  "{done} of {total} files": "{done} из {total} файлов",
+  "App update": "Обновление"
 });

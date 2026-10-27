@@ -1307,5 +1307,19 @@ SI18n.addPack("es", {
   "Unlock Offline": "Desbloquear sin conexión",
   "Invalid claim code.": "Código de reclamo no válido.",
   "Servers unreachable. Try Emergency Offline Access.": "Servidores no disponibles. Prueba el acceso de emergencia sin conexión.",
-  "Not signed in": "No has iniciado sesión"
+  "Not signed in": "No has iniciado sesión",
+  "Update available": "Actualización disponible",
+  "What's new": "Novedades",
+  "Update now": "Actualizar ahora",
+  "Later": "Más tarde",
+  "You're up to date": "Ya estás al día",
+  "Downloading": "Descargando",
+  "Installing": "Instalando",
+  "Activating": "Activando",
+  "Cleaning up": "Limpiando",
+  "The update didn't finish.": "La actualización no terminó.",
+  "Reload anyway": "Recargar de todos modos",
+  "Version {version}": "Versión {version}",
+  "{done} of {total} files": "{done} de {total} archivos",
+  "App update": "Actualización"
 });

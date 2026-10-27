@@ -13942,6 +13942,7 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   document.addEventListener("input", (event) => {
     const el = event.target;
     if (el.id === "compose-text") {
+      STATE.composeSeed = el.value;
       const btn = document.getElementById("compose-post");
       if (btn) btn.disabled = !el.value.trim();
       return;
@@ -15251,6 +15252,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showUpdate() {
+    if (window.ViktorychUpdate && window.ViktorychUpdate.offer) {
+      window.ViktorychUpdate.offer();
+      return;
+    }
     const el = document.getElementById("update");
     if (el) el.hidden = false;
     scheduleIdleReload();
@@ -15968,6 +15973,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
       if (reg && reg.update) reg.update().catch(() => {});
       syncWorkerState();
+      if (window.ViktorychUpdate && window.ViktorychUpdate.watch) window.ViktorychUpdate.watch(reg);
       if (STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted") registerPeriodic();
     }).catch(() => {});
     navigator.serviceWorker.addEventListener("message", (event) => {
@@ -16004,6 +16010,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         armServiceWorker();
         if (!hadController) { hadController = true; return; }
+        if (window.ViktorychUpdate && window.ViktorychUpdate.holdsReload && window.ViktorychUpdate.holdsReload()) return;
         if (readStored(sessionStorage, "sw-reload") === "1") return;
         writeStored(sessionStorage, "sw-reload", "1");
         location.reload();
@@ -16075,6 +16082,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
         if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
         pullBellQueue();
+        if (window.ViktorychUpdate && window.ViktorychUpdate.poke) window.ViktorychUpdate.poke();
         refreshFeeds(false);
         refreshLiveTimeline(false);
         const route = parseRoute();
