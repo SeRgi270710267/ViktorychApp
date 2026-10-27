@@ -1976,6 +1976,9 @@ def main() -> None:
     check(ig_ok is False and ig_item["url"] == "" and "media?size=l" in ig_item["poster"] and ig_row["detail"] == "image stand-in", "a stand-in url is cleared and reported")
     app = (ROOT / "app.js").read_text(encoding="utf-8")
     check("Watch on Instagram" in app and "function youtubeSources" in app and "function startPlayback" in app and 'toast("Video unavailable")' not in app and "hls.min.js" in app, "the player rotates sources and does not toast video unavailable")
+    check('src="video-embed.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "./video-embed.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "function playbackSource(" in (ROOT / "video-embed.js").read_text(encoding="utf-8") and "/v1/yt/manifest" not in app, "the official embed helper is in the shell and the page does not relay YouTube through the worker")
+    embed_flow = subprocess.run(["node", str(ROOT / "scripts" / "video_embed_test.js")], cwd=ROOT)
+    check(embed_flow.returncode == 0, "official embed urls, fallbacks, and combined-file selection pass")
     check("latest_version" not in (ROOT / "scripts" / "yt_remote.py").read_text(encoding="utf-8"), "sync does not bake an invidious itag url")
     from adapters.common import dates_moved_later, lock_publish_time, publish_date_from_html, relative_label
     from adapters.youtube_rss import backfill_youtube_dates

@@ -406,6 +406,7 @@
   </template>
   <script src="shared/mirror.js" defer></script>
   <script src="dock.js" defer></script>
+  <script src="video-embed.js" defer></script>
   <template id="late-scripts-rest">
     <script src="shared/pill-data.js" type="module"></script>
     <script src="scores.js" defer></script>
@@ -521,6 +522,37 @@
       var cfg = document.querySelector('script[src="accounts.config.js"]');
       if (cfg && !window.VIKTORYCH_ACCOUNTS) cfg.addEventListener("load", arm);
       arm();
+      document.addEventListener("click", function (event) {
+        if (window.__VIKTORYCH_CLICK) return;
+        var node = event.target && event.target.closest ? event.target.closest("[data-act='play']") : null;
+        if (!node) return;
+        var tile = node.closest(".vplay") || node;
+        if (!tile || !tile.classList || !tile.classList.contains("vplay") || tile.querySelector("iframe")) return;
+        start();
+        var img = tile.querySelector("img");
+        var src = img ? (img.currentSrc || img.getAttribute("src") || "") : "";
+        var found = String(src).match(/i\.ytimg\.com\/vi\/([A-Za-z0-9_-]{11})/);
+        if (!found) {
+          var link = tile.querySelector("a[href]");
+          var href = link ? link.getAttribute("href") || "" : "";
+          found = href.match(/(?:[?&]v=|youtu\.be\/|embed\/)([A-Za-z0-9_-]{11})/);
+        }
+        var id = found ? found[1] : "";
+        window.__VIKTORYCH_PLAY = { pid: tile.getAttribute("data-pid") || "", mi: tile.getAttribute("data-mi") || "", id: id };
+        var embed = window.ViktorychEmbed;
+        if (!id || !embed || !embed.youtubeEmbed || !embed.prepareFrame) return;
+        event.preventDefault();
+        event.stopPropagation();
+        var frame = document.createElement("iframe");
+        var origin = location.origin && String(location.origin).indexOf("http") === 0 ? location.origin : "https://viktorychapp.com";
+        var url = embed.youtubeEmbed(id, { origin: origin, controls: 1 });
+        embed.prepareFrame(frame, { url: url, title: "Video" });
+        var bound = embed.bindFrame ? embed.bindFrame(frame, {}) : null;
+        tile.appendChild(frame);
+        if (bound && bound.nudge) frame.addEventListener("load", function () { bound.nudge(); });
+        frame.src = url;
+        tile.classList.add("is-playing");
+      }, true);
     })();
   </script>
 </body>
