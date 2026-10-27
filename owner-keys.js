@@ -1,10 +1,11 @@
 /* Settings > Connected keys. Owner only, and only after the accounts wall is on.
-   The saved value is never copied back into the page. */
+   The saved value is never copied back into the page. Extra keys are backups. */
 (function () {
   var cache = null;
   var loading = false;
   var loadedAt = 0;
   var openSlot = "";
+  var openKey = "";
   var note = "";
   var notified = {};
 
@@ -48,7 +49,9 @@
     return tr("Key not tested");
   }
   function errorLabel(code) {
-    if (code === "unauthorized" || code === "forbidden") return tr("The key was rejected.");
+    if (code === "unauthorized") return tr("The key was rejected.");
+    if (code === "logged_out" || code === "session_invalid" || code === "auth_required") return tr("The key is no longer signed in.");
+    if (code === "rate_limit" || code === "forbidden") return tr("This service is slowing down. The same key stays in use.");
     if (code === "captcha" || code === "challenge") return tr("The site asked for a check.");
     if (code === "expired") return tr("This key is expired.");
     if (code === "unreachable" || code === "unreadable") return tr("The check did not connect.");
@@ -62,10 +65,11 @@
   }
   function alertText(row) {
     var name = row.label ? tr(row.label) : tr("Connected keys");
+    if (row.status === "slow") return tr("{service} is slowing down. The same key stays in use.", { service: name });
     return tr("{service} needs a new key. Open Connected keys and replace it.", { service: name });
   }
   function rememberAlert(row) {
-    var id = "key:" + row.slot + ":" + row.status + ":" + String(row.updatedAt || 0);
+    var id = "key:" + row.slot + ":" + row.status + ":" + String(row.keyId || "") + ":" + String(row.updatedAt || 0);
     if (notified[id]) return;
     var seen = "";
     try { seen = sessionStorage.getItem("viktorych-key-notes") || ""; }
@@ -132,8 +136,22 @@
   function fail(body) {
     if (body && body.error === "not_configured") note = tr("Setup needed");
     else if (body && body.error === "bad_paste") note = tr("That paste was not accepted.");
+    else if (body && body.error === "too_many") note = tr("This service already has enough backup keys.");
     else if (!body || !body.status) note = tr("Could not reach the key store.");
     else note = tr("Could not save that key.");
+  }
+  function keyLine(key) {
+    var line = statusLabel(key.status, true);
+    var used = key.lastUsed ? tr("Last used {time}", { time: when(key.lastUsed) }) : tr("Never used");
+    var err = errorLabel(key.lastError);
+    return line + " · " + used + (err ? " · " + err : "");
+  }
+  function pasteField(slot, keyId, label) {
+    var hint = slot.kind === "pair" ? tr("Paste the client id and the client secret from your own app, one on each line.") : tr("Paste a Cookie header or a Netscape cookies.txt file.");
+    if (slot.kind === "token") hint = tr("Paste the token from your own account.");
+    return '<label class="field"><span>' + esc(tr("Optional label")) + '</span><input class="keys-label" data-keys-label="' + esc(slot.id) + '" maxlength="40" autocomplete="off" spellcheck="false" value="' + esc(label || "") + '" aria-label="' + esc(tr("Key label")) + '"></label>' +
+      '<label class="field"><span>' + esc(hint) + '</span><textarea class="keys-paste" data-keys-paste="' + esc(slot.id) + '" autocomplete="off" spellcheck="false" maxlength="100000" aria-label="' + esc(tr(slot.label)) + '"></textarea></label>' +
+      '<button class="primary" type="button" data-act="keys-save" data-slot="' + esc(slot.id) + '" data-key="' + esc(keyId) + '">' + esc(tr("Save key")) + "</button>";
   }
   function sectionHtml() {
     if (!visible()) return '<div class="set-block"><p class="phandle">' + esc(tr("Keys are available only to the owner.")) + "</p></div>";
@@ -143,31 +161,46 @@
     }
     var slots = cache && cache.slots ? cache.slots : [];
     var blocks = slots.map(function (slot) {
-      var line = statusLabel(slot.status, slot.configured);
-      var used = slot.lastUsed ? tr("Last used {time}", { time: when(slot.lastUsed) }) : tr("Never used");
-      var err = errorLabel(slot.lastError);
-      var status = line + " · " + used + (err ? " · " + err : "");
-      var editing = openSlot === slot.id || !slot.configured;
+      var keys = Array.isArray(slot.keys) ? slot.keys : [];
+      var items = keys.map(function (key, index) {
+        var title = key.name ? '<p class="phandle">' + esc(key.name) + "</p>" : "";
+        var move = "";
+        if (keys.length > 1 && index > 0) {
+          move += '<button class="outline" type="button" data-act="keys-up" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Move up")) + "</button>";
+        }
+        if (keys.length > 1 && index < keys.length - 1) {
+          move += '<button class="outline" type="button" data-act="keys-down" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Move down")) + "</button>";
+        }
+        return '<article class="keys-item">' + title +
+          '<p class="phandle keys-status">' + esc(keyLine(key)) + "</p>" +
+          '<p class="phandle keys-mask" aria-label="' + esc(tr("Saved value hidden")) + '">' + esc(key.mask || "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022") + "</p>" +
+          '<div class="theme-row">' +
+          '<button class="outline" type="button" data-act="keys-test" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Test key")) + "</button>" +
+          '<button class="outline" type="button" data-act="keys-replace" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Replace key")) + "</button>" +
+          '<button class="outline" type="button" data-act="keys-delete" data-slot="' + esc(slot.id) + '" data-key="' + esc(key.id) + '">' + esc(tr("Delete")) + "</button>" +
+          move +
+          "</div></article>";
+      }).join("");
+      var adding = !keys.length || (openSlot === slot.id && openKey === "new");
+      var replacing = openSlot === slot.id && openKey && openKey !== "new";
+      var replaceName = "";
+      if (replacing) {
+        keys.forEach(function (key) { if (key.id === openKey) replaceName = key.name || ""; });
+      }
       var field = "";
-      if (editing) {
-        var hint = slot.kind === "pair" ? tr("Paste the client id and the client secret from your own app, one on each line.") : tr("Paste a Cookie header or a Netscape cookies.txt file.");
-        if (slot.kind === "token") hint = tr("Paste the token from your own account.");
-        field = '<label class="field"><span>' + esc(hint) + '</span><textarea class="keys-paste" data-keys-paste="' + esc(slot.id) + '" autocomplete="off" spellcheck="false" maxlength="100000" aria-label="' + esc(tr(slot.label)) + '"></textarea></label>' +
-          '<button class="primary" type="button" data-act="keys-save" data-slot="' + esc(slot.id) + '">' + esc(tr("Save key")) + "</button>";
+      if (adding) field = pasteField(slot, "new", "");
+      else if (replacing) field = pasteField(slot, openKey, replaceName);
+      var add = "";
+      if (keys.length && keys.length < 8 && !(openSlot === slot.id && openKey === "new")) {
+        add = '<button class="outline" type="button" data-act="keys-add" data-slot="' + esc(slot.id) + '">' + esc(tr("Add another key")) + "</button>";
       }
-      var actions = "";
-      if (slot.configured) {
-        actions = '<div class="theme-row">' +
-          '<button class="outline" type="button" data-act="keys-test" data-slot="' + esc(slot.id) + '">' + esc(tr("Test key")) + "</button>" +
-          '<button class="outline" type="button" data-act="keys-replace" data-slot="' + esc(slot.id) + '">' + esc(tr("Replace key")) + "</button>" +
-          '<button class="outline" type="button" data-act="keys-delete" data-slot="' + esc(slot.id) + '">' + esc(tr("Delete")) + "</button>" +
-          "</div>";
-      }
-      var mask = slot.configured ? '<p class="phandle keys-mask" aria-label="' + esc(tr("Saved value hidden")) + '">' + esc(slot.mask || "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022") + "</p>" : "";
-      return '<section class="keys-slot"><h2>' + esc(tr(slot.label)) + "</h2><p class=\"phandle\">" + esc(helpFor(slot.kind)) + "</p><p class=\"phandle keys-status\">" + esc(status) + "</p>" + mask + field + actions + "</section>";
+      var slow = slot.pace && slot.pace.reason
+        ? '<p class="phandle keys-status">' + esc(tr("Slowing down")) + " · " + esc(tr("This service is slowing down. The same key stays in use.")) + "</p>"
+        : "";
+      return '<section class="keys-slot"><h2>' + esc(tr(slot.label)) + "</h2><p class=\"phandle\">" + esc(helpFor(slot.kind)) + "</p>" + slow + items + field + add + "</section>";
     }).join("");
-    if (!blocks && note) blocks = "";
     return '<div class="set-block keys-settings"><p class="phandle">' + esc(tr("Paste keys from your own accounts. They stay encrypted, and the saved value is never shown again.")) + "</p>" +
+      '<p class="phandle">' + esc(tr("Keys are backups. One key is used at a time, highest priority first.")) + "</p>" +
       (note ? '<p class="phandle">' + esc(note) + "</p>" : "") + blocks + "</div>";
   }
   function pasteValue(slot) {
@@ -176,26 +209,60 @@
     if (field) field.value = "";
     return value;
   }
+  function labelValue(slot) {
+    var field = document.querySelector('[data-keys-label="' + slot + '"]');
+    var value = field ? String(field.value || "") : "";
+    if (field) field.value = "";
+    return value;
+  }
+  function slotKeys(slot) {
+    var found = cache && cache.slots ? cache.slots.filter(function (item) { return item.id === slot; })[0] : null;
+    return found && Array.isArray(found.keys) ? found.keys : [];
+  }
   function onAct(act, el) {
     if (!visible()) return false;
     var slot = el && el.dataset ? el.dataset.slot : "";
+    var key = el && el.dataset ? (el.dataset.key || "") : "";
     if (!slot) return false;
-    if (act === "keys-replace") {
+    if (act === "keys-add") {
       openSlot = slot;
+      openKey = "new";
       note = "";
       render();
       return true;
     }
+    if (act === "keys-replace") {
+      openSlot = slot;
+      openKey = key;
+      note = "";
+      render();
+      return true;
+    }
+    if (act === "keys-up" || act === "keys-down") {
+      var keys = slotKeys(slot);
+      var ids = keys.map(function (item) { return item.id; });
+      var index = ids.indexOf(key);
+      var next = index + (act === "keys-up" ? -1 : 1);
+      if (index < 0 || next < 0 || next >= ids.length) return true;
+      var swap = ids[index];
+      ids[index] = ids[next];
+      ids[next] = swap;
+      note = "";
+      send("/v1/owner/keys/" + encodeURIComponent(slot) + "/order", "POST", { ids: ids }).then(function (body) {
+        if (!body || body.status !== 200) fail(body);
+        load(true);
+      });
+      return true;
+    }
     if (act === "keys-delete") {
       note = "";
-      send("/v1/owner/keys/" + encodeURIComponent(slot), "DELETE").then(function (body) {
+      var path = "/v1/owner/keys/" + encodeURIComponent(slot) + (key ? "/" + encodeURIComponent(key) : "");
+      send(path, "DELETE").then(function (body) {
         if (!body || body.status !== 200) fail(body);
         else {
           note = tr("Deleted.");
           openSlot = "";
-          if (body.slot && cache && cache.slots) {
-            cache.slots = cache.slots.map(function (item) { return item.id === slot ? body.slot : item; });
-          }
+          openKey = "";
         }
         load(true);
       });
@@ -203,27 +270,38 @@
     }
     if (act === "keys-test") {
       note = "";
-      send("/v1/owner/keys/" + encodeURIComponent(slot) + "/test", "POST", {}).then(function (body) {
+      var testPath = "/v1/owner/keys/" + encodeURIComponent(slot) + (key ? "/" + encodeURIComponent(key) : "") + "/test";
+      send(testPath, "POST", {}).then(function (body) {
         if (!body || body.status !== 200) fail(body);
-        else note = statusLabel(body.slot && body.slot.status, true);
+        else {
+          var shown = body.slot && Array.isArray(body.slot.keys) ? body.slot.keys.filter(function (item) { return item.id === key; })[0] : null;
+          note = statusLabel(shown ? shown.status : body.slot && body.slot.status, true);
+        }
         load(true);
       });
       return true;
     }
     if (act === "keys-save") {
       var value = pasteValue(slot);
+      var label = labelValue(slot);
       if (!value.trim()) {
         note = tr("That paste was not accepted.");
         render();
         return true;
       }
       note = "";
-      send("/v1/owner/keys/" + encodeURIComponent(slot), "PUT", { value: value }).then(function (body) {
+      var savePath = "/v1/owner/keys/" + encodeURIComponent(slot);
+      if (key && key !== "new") savePath += "/" + encodeURIComponent(key);
+      var payload = { value: value };
+      if (label) payload.label = label;
+      send(savePath, "PUT", payload).then(function (body) {
         value = "";
+        label = "";
         if (!body || body.status !== 200) fail(body);
         else {
           note = tr("Saved.");
           openSlot = "";
+          openKey = "";
         }
         load(true);
       });

@@ -339,16 +339,29 @@ def http_get(url: str) -> tuple[int, bytes, str]:
     status, body, retry = _http_once(url, headers)
     if cookie:
         try:
-            from owner_keys import decide_attempt, drop_for_attention
+            from owner_keys import cookie_header, decide_attempt, drop_for_attention, mark_attention
             action, reason = decide_attempt(status, body, True)
         except Exception:
             action, reason = "keep", ""
-        if action == "fallback":
+        if action == "hold":
+            try:
+                mark_attention(slot, reason)
+            except Exception:
+                pass
+            return status, body, retry
+        if action == "advance":
             try:
                 drop_for_attention(slot, reason)
             except Exception:
                 pass
             headers.pop("Cookie", None)
+            nxt = ""
+            try:
+                nxt = cookie_header(slot)
+            except Exception:
+                nxt = ""
+            if nxt:
+                headers["Cookie"] = nxt
             return _http_once(url, headers)
     return status, body, retry
 

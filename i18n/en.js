@@ -1370,5 +1370,16 @@ SI18n.addPack("en", {
   "{service} needs a new key. Open Connected keys and replace it.": "{service} needs a new key. Open Connected keys and replace it.",
   "Keys are available only to the owner.": "Keys are available only to the owner.",
   "Saved value hidden": "Saved value hidden",
-  "Setup needed": "Setup needed"
+  "Setup needed": "Setup needed",
+  "Add another key": "Add another key",
+  "Optional label": "Optional label",
+  "Move up": "Move up",
+  "Move down": "Move down",
+  "Key label": "Key label",
+  "Keys are backups. One key is used at a time, highest priority first.": "Keys are backups. One key is used at a time, highest priority first.",
+  "Slowing down": "Slowing down",
+  "This service is slowing down. The same key stays in use.": "This service is slowing down. The same key stays in use.",
+  "{service} is slowing down. The same key stays in use.": "{service} is slowing down. The same key stays in use.",
+  "The key is no longer signed in.": "The key is no longer signed in.",
+  "This service already has enough backup keys.": "This service already has enough backup keys."
 });
