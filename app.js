@@ -1032,7 +1032,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1092,6 +1092,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       parsed.navCustom = cleanNavCustom(parsed.navCustom);
       parsed.bottomNav = cleanBottomNav(parsed.bottomNav);
       parsed.bottomNavCustom = parsed.bottomNavCustom === true;
+      parsed.navLayout = parsed.navLayout === "bar" ? "bar" : "auto";
+      parsed.navLayoutLand = parsed.navLayoutLand === true;
+      parsed.navLayoutSync = parsed.navLayoutSync === true;
       return parsed;
     } catch (err) {
       return fresh();
@@ -7128,7 +7131,15 @@ const here = parseRoute();
         <button type="button" class="bnav-switch${on ? " on" : ""}" role="switch" aria-checked="${on ? "true" : "false"}" data-act="bottom-nav-toggle" data-id="${esc(def.id)}" aria-label="${esc(switchLabel)}"${disabled ? " disabled" : ""}${title ? ` title="${esc(title)}"` : ""}><i></i></button>
       </div>`;
     }).join("");
-    return settingsHead(tr("Customize navigation"), "#/settings/display") + `<div class="bnav-screen"><div class="bottom-nav bottom-nav-preview" aria-hidden="true">${preview}</div><p class="phandle set-block">${esc(tr("Choose which icons appear in the bottom bar. Home always stays. You can show {min} to {max}.", { min: BOTTOM_NAV_MIN, max: BOTTOM_NAV_MAX }))}</p><div class="bnav-list">${rows}</div><div class="bnav-reset"><button class="outline" type="button" data-act="bottom-nav-reset">${esc(tr("Reset to default"))}</button></div></div>`;
+    const layout = STATE.settings && STATE.settings.navLayout === "bar" ? "bar" : "auto";
+    const landOn = !!(STATE.settings && STATE.settings.navLayoutLand);
+    const syncOn = !!(STATE.settings && STATE.settings.navLayoutSync);
+    const layoutRadio = (id, label) => {
+      const on = layout === id;
+      return `<button class="lang-row" type="button" role="radio" aria-checked="${on ? "true" : "false"}" data-act="nav-layout" data-layout="${id}"><span>${esc(label)}</span><span class="lang-radio${on ? " on" : ""}" aria-hidden="true"></span></button>`;
+    };
+    const layoutBlock = `<section class="bnav-layout"><h2>${esc(tr("Navigation layout"))}</h2><p class="phandle">${esc(tr("For tablets and other medium-width screens in portrait. Phones keep the bottom bar."))}</p><div class="lang-list" role="radiogroup" aria-label="${esc(tr("Navigation layout"))}">${layoutRadio("auto", tr("Auto (sidebar)"))}${layoutRadio("bar", tr("Bottom bar (phone style)"))}</div><button class="tab-switch${landOn ? " on" : ""}" type="button" role="switch" aria-checked="${landOn ? "true" : "false"}" data-act="nav-layout-land"${layout === "bar" ? "" : " disabled"}><span>${esc(tr("Use bottom bar in landscape too"))}</span><i></i></button><button class="tab-switch${syncOn ? " on" : ""}" type="button" role="switch" aria-checked="${syncOn ? "true" : "false"}" data-act="nav-layout-sync"><span>${esc(tr("Sync this choice"))}</span><i></i></button><p class="phandle">${esc(tr("Saved on this device. Sync uses the same layout on your other signed-in devices."))}</p></section>`;
+    return settingsHead(tr("Customize navigation"), "#/settings/display") + `<div class="bnav-screen">${layoutBlock}<div class="bottom-nav bottom-nav-preview" aria-hidden="true">${preview}</div><p class="phandle set-block">${esc(tr("Choose which icons appear in the bottom bar. Home always stays. You can show {min} to {max}.", { min: BOTTOM_NAV_MIN, max: BOTTOM_NAV_MAX }))}</p><div class="bnav-list">${rows}</div><div class="bnav-reset"><button class="outline" type="button" data-act="bottom-nav-reset">${esc(tr("Reset to default"))}</button></div></div>`;
   }
 
   function listSortOf(list) {
@@ -13225,6 +13236,30 @@ if (STATE.histClear) {
       toast(tr("Reset to default"));
       return;
     }
+    if (act === "nav-layout") {
+      if (!STATE.settings) STATE.settings = {};
+      STATE.settings.navLayout = el.dataset.layout === "bar" ? "bar" : "auto";
+      saveSettings();
+      applyNavLayout();
+      render();
+      return;
+    }
+    if (act === "nav-layout-land") {
+      if (!STATE.settings || STATE.settings.navLayout !== "bar") return;
+      STATE.settings.navLayoutLand = !STATE.settings.navLayoutLand;
+      saveSettings();
+      applyNavLayout();
+      render();
+      return;
+    }
+    if (act === "nav-layout-sync") {
+      if (!STATE.settings) STATE.settings = {};
+      STATE.settings.navLayoutSync = !STATE.settings.navLayoutSync;
+      if (!STATE.settings.navLayoutSync && window.ViktorychAccounts && window.ViktorychAccounts.releaseNavLayout) window.ViktorychAccounts.releaseNavLayout();
+      saveSettings();
+      render();
+      return;
+    }
     if (act === "nav-order-move") {
       const idx = Number(el.dataset.idx);
       const dir = Number(el.dataset.dir);
@@ -15143,9 +15178,18 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return THEME_COLORS[mode] ? mode : "lightsout";
   }
 
+  function applyNavLayout() {
+    const layout = STATE.settings && STATE.settings.navLayout === "bar" ? "bar" : "auto";
+    const land = layout === "bar" && !!(STATE.settings && STATE.settings.navLayoutLand);
+    document.documentElement.setAttribute("data-nav-layout", layout);
+    if (land) document.documentElement.setAttribute("data-nav-bar-land", "1");
+    else document.documentElement.removeAttribute("data-nav-bar-land");
+  }
+
   function applyTheme() {
     const theme = resolvedTheme();
     document.documentElement.setAttribute("data-theme", theme);
+    applyNavLayout();
     const color = THEME_COLORS[theme] || "#000000";
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
     const scheme = document.querySelector('meta[name="color-scheme"]');
@@ -17334,6 +17378,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("viktorych-settings-applied", () => {
     if (!STATE.settings) return;
     const next = loadSettings();
+    if (next.navLayoutSync || STATE.settings.navLayoutSync) {
+      STATE.settings.navLayout = next.navLayout;
+      STATE.settings.navLayoutLand = next.navLayoutLand;
+      STATE.settings.navLayoutSync = next.navLayoutSync;
+    }
+    applyNavLayout();
     const prevNav = JSON.stringify(STATE.settings.bottomNav || null);
     const nextNav = JSON.stringify(next.bottomNav || null);
     if (prevNav === nextNav && (STATE.settings.bottomNavCustom === true) === (next.bottomNavCustom === true)) return;
