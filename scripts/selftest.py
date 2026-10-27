@@ -1257,6 +1257,8 @@ def main() -> None:
     page_html = (ROOT / "index.html").read_text(encoding="utf-8")
     check('src="storage.js"' in page_html and "storage.js" in storage_workflow and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
     check('src="localfirst.js"' in page_html and 'src="direct.js"' in page_html and "localfirst.js" in storage_workflow and "direct.js" in storage_workflow and "mergeNotes" in (ROOT / "localfirst.js").read_text(encoding="utf-8") and "public.api.bsky.app" in (ROOT / "direct.js").read_text(encoding="utf-8"), "the shell restores from local snapshots and public APIs are fetched on the device")
+    local_src = (ROOT / "localfirst.js").read_text(encoding="utf-8")
+    check("orderPosts" in local_src and "playlistFirst" in local_src and "cacheFirstSegment" in local_src and 'saveDoc("shorts"' in (ROOT / "shorts.js").read_text(encoding="utf-8") and 'saveDoc("lives"' in (ROOT / "shorts.js").read_text(encoding="utf-8") and 'saveDoc("music"' in (ROOT / "music.js").read_text(encoding="utf-8") and 'saveDoc("messages"' in (ROOT / "discord-ui.js").read_text(encoding="utf-8") and 'order: "utc"' in (ROOT / "app.js").read_text(encoding="utf-8"), "every screen keeps an ordered local copy and the first video segment is cached")
     ia_backup_checks()
     feed_order_checks()
     gdrive_checks()

@@ -1620,6 +1620,7 @@
     state.channels.forEach(function (ch) { kept[ch.id] = !!ch.inaccessible; });
     if (!adoptServers(servers)) return;
     state.channels.forEach(function (ch) { if (kept[ch.id]) ch.inaccessible = true; });
+    rememberMessages();
   }
 
   function applyIndex(index) {
@@ -1820,6 +1821,7 @@
     messages.sort(function (a, b) { return cmpId(b.id, a.id); });
     state.files[id] = { messages: messages.slice(0, WINDOW), authors: authors, older: !!doc.older };
     state.olderNext[id] = doc.older ? (state.olderNext[id] || 1) : 0;
+    rememberMessages();
   }
 
   function mergeOlder(id, doc) {
@@ -1837,6 +1839,7 @@
     const messages = Array.from(bucket.values());
     messages.sort(function (a, b) { return cmpId(b.id, a.id); });
     state.files[id] = { messages: messages.slice(0, WINDOW), authors: authors, older: true };
+    rememberMessages();
   }
 
   function paintChannel(id) {
@@ -2293,6 +2296,21 @@
 
   function bind(next) { state.bound = next || null; }
 
+  function rememberMessages() {
+    const local = root.ViktorychLocal;
+    if (!local || !local.saveDoc) return;
+    const channels = (state.channels || []).filter(function (ch) { return ch && ch.mode === "messages"; }).slice(0, 40).map(function (ch) {
+      return { id: ch.id, name: ch.name || "", mode: "messages" };
+    });
+    local.saveDoc("messages", "channels", { channels: channels });
+    channels.forEach(function (ch) {
+      const rows = messagesFor(ch.id).slice(0, 30).map(function (row) {
+        return { id: row.id, text: row.body || "", name: row.name || "", date: row.date || "" };
+      });
+      if (rows.length) local.saveDoc("messages", "channel:" + ch.id, { id: ch.id, messages: rows });
+    });
+  }
+
   root.FeedsDiscord = {
     bind: bind,
     start: start,
@@ -2312,6 +2330,7 @@
     _openMenu: function (id, durations) { state.menu = { id: String(id || ""), durations: !!durations, x: 24, y: 72 }; },
     _openPins: function (id) { state.pinsOpen = String(id || ""); state.menu = null; },
     syncFromHash: syncFromHash,
-    _deliver: deliver
+    _deliver: deliver,
+    snapshot: rememberMessages
   };
 })(typeof window !== "undefined" ? window : globalThis);

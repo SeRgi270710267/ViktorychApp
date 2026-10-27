@@ -71,4 +71,42 @@ assert.ok(storage.usageHtml().indexOf("Hit rate") >= 0);
 assert.ok(storage.usageHtml().indexOf("Direct") >= 0);
 assert.ok(storage.usageHtml().indexOf("Profiles") >= 0);
 
-console.log("local first ok");
+const order = require("../shared/feed-order.js");
+const repost = { id: "a", platform: "x", kind: "repost", date: "2024-01-01T00:00:00Z", sortDate: "2024-08-01T00:00:00Z", repostedBy: { handle: "ada" }, text: "later" };
+const july = { id: "b", platform: "x", date: "2024-07-01T00:00:00Z", text: "july" };
+const copy = { id: "b", platform: "x", date: "2024-07-01T00:00:00Z", text: "copy" };
+const future = { id: "z", platform: "x", date: "2099-01-01T00:00:00Z", text: "future" };
+const ranked = localfirst.orderPosts([july, copy, future, repost], order.compare, order.key);
+assert.deepStrictEqual(ranked.map((post) => post.id), ["a", "b", "z"]);
+assert.strictEqual(ranked[1].text, "july");
+
+const media = localfirst.playlistFirst("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:2.0,\nseg0.m4s\n#EXTINF:2.0,\nseg1.m4s\n", "https://cdn.example/v/index.m3u8");
+assert.strictEqual(media.segment, "https://cdn.example/v/seg0.m4s");
+assert.strictEqual(media.map, "https://cdn.example/v/init.mp4");
+const master = localfirst.playlistFirst("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nlow.m3u8\n", "https://cdn.example/master.m3u8");
+assert.strictEqual(master.variant, "https://cdn.example/low.m3u8");
+assert.strictEqual(master.segment, "");
+
+localfirst.noteScroll("home:foryou", 10, { "home:foryou": 10, "home:following": 80, "notifications:all": 4 });
+const scrolls = localfirst.readScrolls();
+assert.strictEqual(scrolls["home:following"], 80);
+assert.strictEqual(scrolls["notifications:all"], 4);
+
+const quiet = { saveData: true, effectiveType: "4g", type: "wifi" };
+localfirst.cacheFirstSegment("https://cdn.example/master.m3u8", function () {
+  throw new Error("save-data still fetched a playlist");
+}, quiet).then(function (skipped) {
+  assert.deepStrictEqual(skipped, []);
+  return localfirst.cacheFirstSegment("https://cdn.example/master.m3u8", function (url) {
+    if (String(url).indexOf("master") >= 0) {
+      return Promise.resolve({ ok: true, text: function () { return Promise.resolve("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhttps://cdn.example/low.m3u8\n"); } });
+    }
+    return Promise.resolve({ ok: true, text: function () { return Promise.resolve("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:1,\nhttps://cdn.example/seg0.m4s\n#EXTINF:1,\nhttps://cdn.example/seg1.m4s\n"); } });
+  }, { saveData: false, effectiveType: "4g", type: "wifi" });
+}).then(function (urls) {
+  assert.deepStrictEqual(urls, ["https://cdn.example/init.mp4", "https://cdn.example/seg0.m4s"]);
+  console.log("local first ok");
+}).catch(function (err) {
+  console.error(err);
+  process.exit(1);
+});
