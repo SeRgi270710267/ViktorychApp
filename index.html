@@ -342,6 +342,7 @@
         }
         if (!html) return false;
         app.innerHTML = html;
+        app.setAttribute("data-local-timeline", "1");
         return true;
       }
       function paintScreen(saved) {
@@ -465,22 +466,61 @@
         }
         next();
       }
-      var wait = 0;
+      var started = false;
+      var scheduled = false;
+      function start() {
+        if (started) return;
+        started = true;
+        mount();
+      }
+      function warmTimeline() {
+        if (window.__VIKTORYCH_FEED) return;
+        try {
+          window.__VIKTORYCH_FEED = fetch("feeds.json", { credentials: "omit", priority: "low" }).then(function (res) {
+            if (!res.ok) throw new Error(String(res.status));
+            return res.text();
+          });
+        } catch (err) { window.__VIKTORYCH_FEED = null; }
+      }
+      function afterFirstPaint() {
+        warmTimeline();
+        var pending = true;
+        var hold = 0;
+        function go() {
+          if (!pending) return;
+          pending = false;
+          clearTimeout(hold);
+          warmTimeline();
+          start();
+        }
+        ["pointerdown", "keydown", "scroll"].forEach(function (type) {
+          window.addEventListener(type, go, { capture: true, passive: true, once: true });
+        });
+        window.addEventListener("hashchange", go);
+        window.addEventListener("popstate", go);
+        hold = setTimeout(function () {
+          if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 1500 });
+          else go();
+        }, 2500);
+      }
       function arm() {
         if (window.VIKTORYCH_ACCOUNTS && window.VIKTORYCH_ACCOUNTS.gate) {
-          clearTimeout(wait);
           var root = document.getElementById("app");
           if (root && root.querySelector("[data-boot-card]")) root.innerHTML = "";
-          mount();
+          start();
           return;
         }
-        if (wait) return;
-        wait = setTimeout(mount, 6500);
+        if (scheduled || started) return;
+        scheduled = true;
+        if (window.requestAnimationFrame) {
+          requestAnimationFrame(function () { requestAnimationFrame(afterFirstPaint); });
+        } else {
+          setTimeout(afterFirstPaint, 0);
+        }
       }
       var cfg = document.querySelector('script[src="accounts.config.js"]');
       if (cfg && !window.VIKTORYCH_ACCOUNTS) cfg.addEventListener("load", arm);
-      if (document.readyState === "complete") arm();
-      else window.addEventListener("load", arm);
+      arm();
     })();
   </script>
 </body>
