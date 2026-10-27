@@ -2244,18 +2244,139 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<img class="${cls}${face}"${src}${tg} alt="" referrerpolicy="no-referrer" data-pi="0" data-avatar="${esc(pack.avatar)}" data-falls="${esc(JSON.stringify(pack.urls))}">`;
   }
 
-  function feedFrame(post, media) {
-    if (media && media.round) return "";
-    let ratio = 16 / 9;
-    if (!youtubeId(post, media)) {
+  function frameNarrow() {
+    return (window.innerWidth || 390) < 700;
+  }
+
+  function frameSpec(width, height, narrow) {
+    const w = Number(width) || 0;
+    const h = Number(height) || 0;
+    if (!(w > 0 && h > 0)) return null;
+    const ratio = w / h;
+    const minRatio = narrow ? 9 / 16 : 4 / 5;
+    const maxRatio = 2;
+    let boxW = w;
+    let boxH = h;
+    let clamped = false;
+    if (ratio < minRatio) {
+      boxW = Math.round(minRatio * 1000);
+      boxH = 1000;
+      clamped = true;
+    } else if (ratio > maxRatio) {
+      boxW = Math.round(maxRatio * 1000);
+      boxH = 1000;
+      clamped = true;
+    } else {
+      boxW = Math.round(w);
+      boxH = Math.round(h);
+    }
+    return { ratio: ratio, boxW: boxW, boxH: boxH, clamped: clamped, narrow: !!narrow };
+  }
+
+  function frameAttrs(post, media) {
+    if (media && media.round) return { attr: "", cls: "", known: false, fit: "" };
+    let spec = null;
+    let fit = "";
+    if (youtubeId(post, media)) {
+      spec = { boxW: 16, boxH: 9, clamped: false };
+      fit = "feed";
+    } else {
       const w = Number(media && media.width) || 0;
       const h = Number(media && media.height) || 0;
-      if (w > 0 && h > 0) ratio = w / h;
+      spec = frameSpec(w, h, frameNarrow());
+      if (spec) fit = "feed";
     }
-    if (ratio < 0.75) ratio = 0.75;
-    if (ratio > 2) ratio = 2;
-    const rw = Math.round(ratio * 1000);
-    return "min(510px, calc(100cqw * 1000 / " + rw + "))";
+    if (!spec) return { attr: ' data-fit="pending"', cls: "", known: false, fit: "pending" };
+    const mw = Number(media && media.width) || spec.boxW;
+    const mh = Number(media && media.height) || spec.boxH;
+    return {
+      attr: ' style="aspect-ratio:' + spec.boxW + " / " + spec.boxH + '" data-fit="' + fit + '" data-mw="' + mw + '" data-mh="' + mh + '"',
+      cls: " has-ratio" + (spec.clamped ? " is-clamped" : ""),
+      known: true,
+      fit: fit
+    };
+  }
+
+  function feedFrame(post, media) {
+    const framed = frameAttrs(post, media);
+    if (!framed.known) return "";
+    const spec = frameSpec(Number(media && media.width) || 16, Number(media && media.height) || 9, false);
+    const rw = spec ? spec.boxW : 16;
+    const rh = spec ? spec.boxH : 9;
+    return "min(510px, calc(100cqw * " + rh + " / " + rw + "))";
+  }
+
+  function applyFrame(el, w, h, source) {
+    if (!el || !(w > 0 && h > 0)) return;
+    if (el.dataset.fit === "feed") return;
+    if (el.dataset.fit === "video" && source !== "video") return;
+    const spec = frameSpec(w, h, frameNarrow());
+    if (!spec) return;
+    el.style.aspectRatio = spec.boxW + " / " + spec.boxH;
+    el.classList.add("has-ratio");
+    el.classList.toggle("is-clamped", spec.clamped);
+    el.dataset.mw = String(Math.round(w));
+    el.dataset.mh = String(Math.round(h));
+    el.dataset.fit = source || "natural";
+  }
+
+  function watchFrame(el) {
+    if (!el || el.dataset.fit === "feed" || el.dataset.fitWatch === "1") return;
+    el.dataset.fitWatch = "1";
+    const img = el.tagName === "IMG" ? el : el.querySelector("img");
+    const video = el.tagName === "VIDEO" ? el : el.querySelector("video");
+    if (img) {
+      const read = () => applyFrame(el, img.naturalWidth, img.naturalHeight, "natural");
+      if (img.complete && img.naturalWidth) read();
+      else img.addEventListener("load", read, { once: true });
+    }
+    if (video) {
+      const read = () => applyFrame(el, video.videoWidth, video.videoHeight, "video");
+      if (video.videoWidth) read();
+      else video.addEventListener("loadedmetadata", read);
+    }
+  }
+
+  function bindMediaFrames(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll(".media.m1 > .tile[data-fit='pending'], .cm-reddit-photo[data-fit='pending'], .cm-reddit-video[data-fit='pending']").forEach(watchFrame);
+  }
+
+  window.ViktorychFrame = { spec: frameSpec, bind: bindMediaFrames, narrow: frameNarrow };
+
+  function refreshMediaFrames() {
+    document.querySelectorAll(".media.m1 > .tile.has-ratio[data-mw], .cm-reddit-photo.has-ratio[data-mw], .cm-reddit-video.has-ratio[data-mw]").forEach((el) => {
+      const w = Number(el.dataset.mw) || 0;
+      const h = Number(el.dataset.mh) || 0;
+      const spec = frameSpec(w, h, frameNarrow());
+      if (!spec) return;
+      el.style.aspectRatio = spec.boxW + " / " + spec.boxH;
+      el.classList.toggle("is-clamped", spec.clamped);
+    });
+  }
+
+  function stripLeadMentions(text) {
+    return String(text || "").replace(/^(?:@[A-Za-z0-9_]{1,30}(?:\s+|$))+/, "").replace(/^\s+/, "");
+  }
+
+  function stripLeadMentionHtml(html) {
+    let src = String(html || "");
+    let guard = 0;
+    while (guard < 12) {
+      const next = src.replace(/^(?:\s|<br\s*\/?>)*(?:<a\b[^>]*>\s*@[A-Za-z0-9_]{1,30}\s*<\/a>|@[A-Za-z0-9_]{1,30})(?=\s|<br|$)/i, "");
+      if (next === src) break;
+      src = next;
+      guard += 1;
+    }
+    return src.replace(/^(?:\s|<br\s*\/?>)+/i, "");
+  }
+
+  function mentionless(post) {
+    if (!post) return post;
+    const text = stripLeadMentions(post.text || "");
+    const html = post.html ? stripLeadMentionHtml(post.html) : (post.html || "");
+    if (text === String(post.text || "") && html === String(post.html || "")) return post;
+    return Object.assign({}, post, { text: text, html: html });
   }
 
   function clipLoops(media, seconds) {
@@ -2303,9 +2424,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const bar = mode === "feed" && !gif
       ? `<span class="vprog" style="width:${Math.max(0, Math.round(progress * 100))}%"></span>`
       : (progress > 0.02 ? `<span class="vprog" style="width:${Math.round(progress * 100)}%"></span>` : "");
-    const frameHeight = mode === "feed" && arguments[4] !== false ? feedFrame(post, media) : "";
-    const frame = frameHeight ? ` style="height:${frameHeight}"` : "";
-    return `<div class="tile vplay${round}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}"${frame}>
+    const framed = mode === "feed" && arguments[4] !== false ? frameAttrs(post, media) : { attr: "", cls: "" };
+    return `<div class="tile vplay${round}${framed.cls || ""}"${mode ? ` data-preview="${mode}"` : ""} data-act="play" data-pid="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}>
       ${posterImg(post, media, "vposter")}
       ${bar}
       ${shieldBadge}
@@ -2430,7 +2550,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       const loading = first ? "eager" : "lazy";
       const priority = first ? ` fetchpriority="high"` : "";
       const srcAttr = lead ? "" : ` src="${esc(src)}"${src === rawSrc ? imageSrcset(src) : ""}`;
-      return `<div class="tile" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
+      const framed = n === 1 ? frameAttrs(post, m) : { attr: "", cls: "" };
+      return `<div class="tile${framed.cls || ""}" data-act="view" data-id="${esc((post && post.id) || "")}" data-mi="${index}"${framed.attr || ""}><img${srcAttr}${refresh}${tgAttr}${sourceAttr} alt="${esc(m.alt || "")}" loading="${loading}" decoding="async"${priority} referrerpolicy="no-referrer">${alt}</div>`;
     }).join("");
     return `<div class="media ${cls}">${tiles}</div>` + files;
   }
@@ -3252,7 +3373,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       checkFrame();
     });
     video.addEventListener("loadedmetadata", () => {
-      if (el._gen !== gen || !opts.preview) return;
+      if (el._gen !== gen) return;
+      if (video.videoWidth > 0 && video.videoHeight > 0) applyFrame(el, video.videoWidth, video.videoHeight, "video");
+      if (!opts.preview) return;
       if (clipLoops(media, video.duration)) video.loop = true;
       checkFrame();
     });
@@ -6256,19 +6379,40 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return `<div class="repost-line">${icon("repost")}<span>Forwarded from ${who}</span></div>`;
   }
 
+  function threadParent(post) {
+    if (!post || post.tombstone) return null;
+    const embedded = post.replyParent;
+    if (embedded && embedded !== post && !bridgeErrorPost(embedded) && (embedded.text || embedded.title || embedded.author || embedded.handle || (embedded.media || []).length)) return embedded;
+    if (post.kind !== "reply" && !(post.replyingTo && post.replyingTo.id)) return null;
+    const id = String((post.replyingTo || {}).id || "");
+    if (!id) return null;
+    const found = findAnyPost(id);
+    if (!found || found === post || bridgeErrorPost(found)) return null;
+    return found;
+  }
+
+  function threadPair(parent, child, mode, opts) {
+    const parentHtml = card(parent, mode, Object.assign({}, opts, { inThread: true, continues: true, parentShown: false }));
+    const childHtml = card(child, mode, Object.assign({}, opts, { inThread: true, continues: false, parentShown: true, eager: false }));
+    return `<div class="thread">${parentHtml}${childHtml}</div>`;
+  }
+
   function card(post, mode, opts) {
     creditCarried(post);
     if (bridgeErrorPost(post)) return "";
     if (post && post.tombstone) return tombstoneCard(post);
     opts = opts || {};
+    if (!opts.inThread && mode !== "reply" && mode !== "status") {
+      const parent = threadParent(post);
+      if (parent) return threadPair(parent, post, mode, opts);
+    }
     const hideRepost = mode === "author" || mode === "status";
     const repost = repostBanner(post, hideRepost ? "author" : "");
     const sharedNote = repostQuote(post, hideRepost ? "author" : "");
     const forwarded = forwardLine(post);
-    const showReply = mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle);
+    const showReply = opts.parentShown ? false : (mode === "reply" ? relevantReply(post, opts.focus) : !!(post.replyingTo && post.replyingTo.handle));
     const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
     const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
-    const context = mode !== "status" && post.replyParent && (post.kind === "reply" || post.platform === "telegram") ? contextCard(post.replyParent) : "";
     const repostFeed = feedOf(post);
     const repostItem = repostFeed && repostFeed.id && isFollowed(repostFeed.id)
       ? `<button data-act="repost-off" data-id="${esc(repostFeed.id)}">${(STATE.settings.repostOff || []).indexOf(repostFeed.id) >= 0 ? tr("Turn on reposts") : tr("Turn off reposts")}</button>`
@@ -6284,7 +6428,7 @@ const here = parseRoute();
     const creator = isRepost(post) ? creatorOf(post) : null;
     const eager = !!opts.eager;
     watchArticle(post);
-    const shown = displayPost(post);
+    const shown = opts.parentShown ? mentionless(displayPost(post)) : displayPost(post);
     const dest = articleOf(post) ? articleHash(post) : (post.watch ? watchHash(post) : statusHash(post));
     const who = creator ? (post.profileHandle || creator.channelId || creator.handle || post.handle) : (post.profileHandle || post.handle);
     const displayName = creator ? (creator.name || post.author || post.handle) : (post.author || post.handle);
@@ -6297,7 +6441,6 @@ const here = parseRoute();
       ? `<a class="show-thread" href="${esc(statusHash(post))}" data-act="stop">${tr("Show this thread")}</a>` : "";
     const hydrate = (post.stub || needsXHydrate(post)) ? ` data-hydrate="${esc(postIdentity(post))}"` : "";
     return `<article class="post${continues ? " continues" : ""}${mode === "reply" ? " reply-card" : ""}" data-post="${esc(post.id)}" data-kind="${esc(post.kind || "post")}" data-date="${esc(post.date || "")}"${open}${hydrate}>
-      ${context}
       ${repost}
       ${sharedNote}
       ${forwarded}
@@ -8313,10 +8456,12 @@ const here = parseRoute();
     const talk = telegramTalk(post);
     const slice = talk == null ? replySlice(post) : { loading: false, shown: [] };
     const threaded = !slice.loading && slice.shown.length > 0 && sameThread(post, slice.shown[0]);
-    const replyLine = post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">${tr("Replying to")} <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(post.replyingTo.handle)}</a></div>` : "";
-    const parentCard = post.platform === "telegram" && post.replyParent ? contextCard(post.replyParent) : "";
-    const body = `${parentCard}${forwardLine(post)}${replyLine}
-        ${textBlock(post, post.id, true, "status-text")}
+    const parentShown = chain.nodes.length > 0;
+    const focusPost = parentShown ? mentionless(post) : post;
+    const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
+    const replyLine = !parentShown && post.replyingTo && post.replyingTo.handle ? `<div class="replying" style="margin-top:12px">${tr("Replying to")} <a data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform, post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
+    const body = `${forwardLine(post)}${replyLine}
+        ${textBlock(focusPost, post.id, true, "status-text")}
         ${hiddenPost(post) ? `<p class="phandle">${tr("Muted on this device.")}</p>` : ""}
         ${pollHtml(post)}
         ${discordMeta(post)}
@@ -11963,9 +12108,12 @@ if (STATE.histClear) {
       .then(() => render());
   }
 
-  function ancestorOf(id) {
+  function ancestorOf(id, hint) {
     const known = findAnyPost(id);
     if (known) return { post: known, loading: false, missing: false };
+    if (hint && (hint.text || hint.title || hint.author || hint.handle || (hint.media || []).length)) {
+      return { post: hint, loading: false, missing: false };
+    }
     const slot = STATE.chain[String(id)];
     if (!slot) {
       lookupAncestor(id);
@@ -11980,10 +12128,11 @@ if (STATE.histClear) {
     let loading = false;
     const seen = new Set([postKey(focus), String((focus && focus.id) || "")]);
     for (let guard = 0; guard < 12; guard++) {
-      const parentId = String((current.replyingTo || {}).id || "");
+      const parentId = String((current.replyingTo || {}).id || (current.replyParent && (current.replyParent.statusId || current.replyParent.id)) || "");
       if (!parentId || seen.has(parentId)) break;
       seen.add(parentId);
-      const slot = ancestorOf(parentId);
+      const hint = current.replyParent && String((current.replyParent.statusId || current.replyParent.id) || "") === parentId ? current.replyParent : null;
+      const slot = ancestorOf(parentId, hint);
       if (slot.loading) {
         loading = true;
         break;
@@ -12002,12 +12151,13 @@ if (STATE.histClear) {
     return (focus && focus.handle) || "";
   }
 
-  function ancestorCard(post) {
-    const showReply = !!(post.replyingTo && post.replyingTo.handle);
+  function ancestorCard(post, parentShown) {
+    const showReply = !parentShown && !!(post.replyingTo && post.replyingTo.handle);
     const replyHandle = post.replyingTo ? internalPostHandle(post.replyingTo.handle, post.replyingTo) : "";
     const reply = showReply ? `<div class="replying">${tr("Replying to")} <a data-act="stop" data-card="${esc((post.platform || "x") + ":" + post.replyingTo.handle)}" href="${esc(accountHash(post.platform || "x", post.replyingTo.handle))}">@${esc(replyHandle || post.replyingTo.handle)}</a></div>` : "";
     const face = authorFace(post);
     const ancHandle = internalPostHandle(post.handle || "", post);
+    const shown = parentShown ? mentionless(post) : post;
     return `<article class="ancestor" data-open="${esc(statusHash(post))}">
       <div class="ava-col"><a data-act="stop" data-card="${esc((post.platform || "x") + ":" + (post.handle || ""))}" href="${esc(accountHash(post.platform, post.handle))}" aria-label="${esc(post.author || post.handle || tr("Profile"))}">${avatar(face.avatar, post.author || post.handle)}</a><div class="thread-line"></div></div>
       <div class="ancestor-main">
@@ -12018,8 +12168,9 @@ if (STATE.histClear) {
           <a class="time" data-act="stop" href="${esc(statusHash(post))}">${esc(relTime(post.date))}</a>
         </div>
         ${reply}
-        ${textBlock(post, "anc:" + postKey(post), false)}
+        ${textBlock(shown, "anc:" + postKey(post), false)}
         ${mediaHtml(post.media, false, post)}
+        ${quoteCard(post.quoted)}
       </div>
     </article>`;
   }
@@ -12030,11 +12181,11 @@ if (STATE.histClear) {
     const id = postKey(focus);
     let html = "";
     if (chain.nodes.length > 3 && !STATE.threadMore[id]) {
-      html = ancestorCard(chain.nodes[0]) +
+      html = ancestorCard(chain.nodes[0], false) +
         `<div class="ancestor-gap"><div class="ava-col"><div class="thread-line"></div></div><button class="ancestor-more" type="button" data-act="thread-more" data-id="${esc(id)}">${tr("Show more")}</button></div>` +
-        ancestorCard(chain.nodes[chain.nodes.length - 1]);
+        ancestorCard(chain.nodes[chain.nodes.length - 1], false);
     } else {
-      html = chain.nodes.map(ancestorCard).join("");
+      html = chain.nodes.map((node, index) => ancestorCard(node, index > 0)).join("");
     }
     if (chain.loading) html += `<div class="ancestor-loading">${tr("Loading…")}</div>`;
     return html;
@@ -12555,6 +12706,7 @@ if (STATE.histClear) {
       if (window.SoccerScores && window.SoccerScores.afterRender) window.SoccerScores.afterRender(route);
       if (window.WeatherPills && window.WeatherPills.afterRender) window.WeatherPills.afterRender(route);
       bindPlayers();
+      bindMediaFrames();
       primeTelegramImages();
       resumePlayback();
       placeTabMenu();
@@ -14498,6 +14650,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  try {
+    matchMedia("(max-width: 699px)").addEventListener("change", () => refreshMediaFrames());
+  } catch (err) { /* older webviews keep the ratio from the last render */ }
   let routing = false;
   let scrollFreeze = false;
   window.addEventListener("scroll", () => {
