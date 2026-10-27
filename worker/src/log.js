@@ -6,6 +6,8 @@ function scrub(value) {
     .replace(/bearer\s+\S+/gi, "bearer [redacted]")
     .replace(/\b(?:token|secret|password|cookie|authorization)\b\s*[:=]\s*\S+/gi, "[redacted]")
     .replace(/[A-Za-z0-9_\-+/=]{24,}/g, "[redacted]")
+    .replace(/\b\d{4}(?:[ -]?\d{4}){3}\b/g, "[redacted]")
+    .replace(/\b[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}\b/g, "[redacted]")
     .replace(/[\r\n\t]+/g, " ")
     .slice(0, 160);
 }
