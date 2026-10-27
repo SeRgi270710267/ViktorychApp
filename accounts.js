@@ -186,6 +186,35 @@
   function hasApi() {
     return !!(currentApi() || (config().api || config().backupApi));
   }
+  function mirrorPageFetch(input, init, url) {
+    var api = window.ViktorychMirror;
+    if (!api || !api.mirrorHost(location.hostname)) return nativeFetch(input, init);
+    var method = (init && init.method) || (typeof input !== "string" && input && input.method) || "GET";
+    if (String(method).toUpperCase() !== "GET" || url.origin !== location.origin) return nativeFetch(input, init);
+    var root = api.appRoot(location.origin, location.pathname, location.hostname);
+    var rel = api.relativeTo(root, url.href);
+    if (!rel || /^(?:v1\/|tg\/|ap\/|\.well-known\/)/.test(rel)) return nativeFetch(input, init);
+    return nativeFetch(input, init).then(function (res) {
+      if (!api.failoverStatus(res.status)) return res;
+      return mirrorPageRetry(rel, res);
+    }).catch(function () {
+      return mirrorPageRetry(rel, null);
+    });
+  }
+  function mirrorPageRetry(rel, fallback) {
+    var api = window.ViktorychMirror;
+    var root = api.appRoot(location.origin, location.pathname, location.hostname);
+    var bases = api.bases(root, "", "").filter(function (base) { return base !== api.normalizeBase(root); });
+    var next = bases.length ? api.rewrite(bases[0], rel) : "";
+    if (!next) return fallback || Promise.reject(new Error("fetch"));
+    return nativeFetch(next, { method: "GET", mode: "cors", credentials: "omit", cache: "no-store" }).then(function (res) {
+      if (res && res.ok && res.type !== "opaque") return res;
+      return fallback || res;
+    }).catch(function () {
+      if (fallback) return fallback;
+      return Promise.reject(new Error("fetch"));
+    });
+  }
   function patchedFetch(input, init) {
     var raw = typeof input === "string" ? input : (input && input.url) || "";
     var url;
@@ -193,8 +222,7 @@
     catch (err) { return nativeFetch(input, init); }
     if (url.origin === location.origin && /(^|\/)v1\//.test(url.pathname)) return nativeFetch(input, init);
     var key = dataKey(url);
-    if (!key) return nativeFetch(input, init);
-    if (!config().gate) return nativeFetch(input, init);
+    if (!key || !config().gate) return mirrorPageFetch(input, init, url);
     var session = readSession();
     if (key === "BLOCK" || !session) return Promise.resolve(new Response("", { status: 401 }));
     var apiRoot = currentApi();

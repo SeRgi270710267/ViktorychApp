@@ -334,6 +334,8 @@ def selftest() -> int:
         "shared/feed-order.js",
         "localfirst.js",
         "direct.js",
+        "dock.js",
+        "dock.css",
         "index.html",
         "sw.js",
         "logo/v.svg",

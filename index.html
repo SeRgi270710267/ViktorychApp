@@ -140,6 +140,8 @@
   </script>
   <script src="accounts.config.js" async></script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="dock.css" media="print" onload="this.media='all'">
+  <noscript><link rel="stylesheet" href="dock.css"></noscript>
   <script>
     (function () {
       var isRu = false;
@@ -400,6 +402,10 @@
     <script src="tv.js" defer></script>
     <script src="split.js" defer></script>
     <script src="discord-ui.js" defer></script>
+  </template>
+  <script src="shared/mirror.js" defer></script>
+  <script src="dock.js" defer></script>
+  <template id="late-scripts-rest">
     <script src="shared/pill-data.js" type="module"></script>
     <script src="scores.js" defer></script>
     <script src="weather.js" defer></script>
@@ -423,16 +429,23 @@
   <script>
     (function () {
       function mount() {
-        var tpl = document.getElementById("late-scripts");
-        if (!tpl || !tpl.content || tpl.dataset.mounted) return;
-        tpl.dataset.mounted = "1";
-        Array.prototype.forEach.call(tpl.content.querySelectorAll("link"), function (node) {
+        var ids = ["late-scripts", "late-scripts-rest"];
+        var links = [];
+        var nodes = [];
+        for (var n = 0; n < ids.length; n++) {
+          var tpl = document.getElementById(ids[n]);
+          if (!tpl || !tpl.content || tpl.dataset.mounted) continue;
+          tpl.dataset.mounted = "1";
+          links.push.apply(links, Array.prototype.slice.call(tpl.content.querySelectorAll("link")));
+          nodes.push.apply(nodes, Array.prototype.slice.call(tpl.content.querySelectorAll("script")));
+        }
+        if (!links.length && !nodes.length) return;
+        links.forEach(function (node) {
           var el = document.createElement("link");
           el.rel = "stylesheet";
           el.href = node.getAttribute("href");
           document.head.appendChild(el);
         });
-        var nodes = Array.prototype.slice.call(tpl.content.querySelectorAll("script"));
         var i = 0;
         function next() {
           if (i >= nodes.length) {
@@ -462,7 +475,7 @@
           return;
         }
         if (wait) return;
-        wait = setTimeout(mount, document.readyState === "complete" ? 6500 : 6500);
+        wait = setTimeout(mount, 6500);
       }
       var cfg = document.querySelector('script[src="accounts.config.js"]');
       if (cfg && !window.VIKTORYCH_ACCOUNTS) cfg.addEventListener("load", arm);
