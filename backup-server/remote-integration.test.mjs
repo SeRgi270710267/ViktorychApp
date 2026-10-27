@@ -181,12 +181,13 @@ try {
   assert.equal(createdElsewhere.public_id, "primary-account");
 
   console.log("[test] 5. R2 objects are shared");
-  objects.set("feeds.json", { bytes: Buffer.from(JSON.stringify({ items: [] })), etag: "seed", type: "application/json" });
+  const sharedCatalog = { feeds: [{ id: "x:shared", platform: "x", handle: "shared" }], posts: [] };
+  objects.set("feeds.json", { bytes: Buffer.from(JSON.stringify(sharedCatalog)), etag: "shared", type: "application/json" });
   const dataRes = await fetch(`http://127.0.0.1:${APP_PORT}/v1/data/feeds.json`, {
     headers: { Authorization: "Bearer " + signup.token, Origin: ORIGIN }
   });
   assert.equal(dataRes.status, 200, "R2 data fetch failed with " + dataRes.status);
-  assert.deepEqual(await dataRes.json(), { items: [] });
+  assert.deepEqual(await dataRes.json(), sharedCatalog);
 
   console.log("[test] ALL REMOTE BACKUP INTEGRATION TESTS PASSED!");
 } finally {

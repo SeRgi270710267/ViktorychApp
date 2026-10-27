@@ -163,6 +163,14 @@ def collect(root: Path) -> dict[str, Path]:
     return found
 
 
+def catalog_seed(path: Path) -> bool:
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return False
+    return isinstance(doc, dict) and doc.get("catalogSeed") is True
+
+
 def upload(key: str, payload: bytes) -> None:
     account = _account()
     quoted = urllib.parse.quote(key, safe="/")
@@ -344,24 +352,37 @@ def publish(site: Path, source: Path, preserve_remote: bool = False) -> int:
         except (urllib.error.URLError, TimeoutError, OSError):
             keep_remote = False
     try:
+        if preserve_remote and not keep_remote:
+            from r2_catalog import read_catalog
+
+            keep_remote = read_catalog("feeds.json") is not None
         if keep_remote:
             # The feed refresh writes the catalog straight to R2. A shell
             # deploy must not replace that copy with the older git seed.
             print("remote catalog kept; this deploy updates the shell")
         else:
             from account_deletions import load_deletions, scrub_bytes
+            from r2_catalog import usable_catalog
 
             hashes, deletion_salt = load_deletions(api)
             for key in sorted(files):
                 payload = files[key].read_bytes()
+                if not usable_catalog(payload, key):
+                    continue
                 try:
                     payload = scrub_bytes(key, payload, hashes, deletion_salt)
                 except (TypeError, ValueError):
-                    print(f"deletion scrub skipped for {key}")
+                    print("[accounts] deletion scrub skipped")
+                if not usable_catalog(payload, key):
+                    continue
                 upload(key, payload)
+                upload("lastgood/" + key, payload)
             owner = source / "owner" / "tiktok.json"
             if owner.is_file():
-                upload("owner/tiktok.json", owner.read_bytes())
+                payload = owner.read_bytes()
+                if usable_catalog(payload, "owner/tiktok.json"):
+                    upload("owner/tiktok.json", payload)
+                    upload("lastgood/owner/tiktok.json", payload)
     except (urllib.error.URLError, TimeoutError, OSError):
         return unlocked("data upload failed;")
     turnstile = (os.environ.get("TURNSTILE_SITEKEY") or "").strip()
