@@ -207,7 +207,7 @@ def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:
         who = ((reposted or {}).get("handle") or "").lstrip("@").lower()
         if who and status_id:
             item_id = f"repost:{who}:{status_id}"
-    return post_shell(
+    post = post_shell(
         id=item_id,
         statusId=status_id,
         platform="x",
@@ -228,6 +228,12 @@ def convert_status(status: dict, feed: dict, nested: bool = False) -> dict:
         quoted=None if nested else quoted,
         article=article_from_status(status),
     )
+    if not nested and (status.get("pinned") or status.get("is_pinned")):
+        post["pinned"] = True
+        pin_at = status.get("pinned_at") or status.get("pinnedAt") or ""
+        if pin_at:
+            post["pinAt"] = to_iso(pin_at) or str(pin_at)
+    return post
 
 
 def _owned(post: dict, handle: str) -> bool:
@@ -281,6 +287,22 @@ def _is_account(person: dict, feed: dict) -> bool:
     return bool(screen) and (screen == want or screen in previous)
 
 
+def _unwrap(status: dict) -> dict:
+    """A pinned wrapper carries the tweet inside. The pin flag stays; the pin clock does not become created_at."""
+    inner = status.get("tweet")
+    if not isinstance(inner, dict):
+        return status
+    if status.get("id") or status.get("id_str") or status.get("created_at") or status.get("text") or status.get("full_text"):
+        return status
+    copy = dict(inner)
+    if status.get("pinned") or status.get("is_pinned"):
+        copy["pinned"] = True
+    pin_at = status.get("pinned_at") or status.get("pinnedAt")
+    if pin_at and not copy.get("pinned_at") and not copy.get("pinnedAt"):
+        copy["pinned_at"] = pin_at
+    return copy
+
+
 def parse(payload, feed: dict | None = None, now=None) -> dict:
     feed = feed or {}
     if isinstance(payload, str):
@@ -292,6 +314,7 @@ def parse(payload, feed: dict | None = None, now=None) -> dict:
     for status in _statuses(payload):
         if not isinstance(status, dict):
             continue
+        status = _unwrap(status)
         if status.get("type") in ("tombstone", "thread", "deleted", "unavailable"):
             continue
         post = convert_status(status, feed, nested=False)
