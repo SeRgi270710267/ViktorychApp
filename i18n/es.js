@@ -1506,5 +1506,15 @@ SI18n.addPack("es", {
   "Clear status": "Quitar estado",
   "Status saved": "Estado guardado",
   "Couldn’t save your status.": "No se pudo guardar el estado.",
-  "Your status": "Tu estado"
+  "Your status": "Tu estado",
+  "Install ViktorychApp": "Instala ViktorychApp",
+  "Not now": "Ahora no",
+  "Persistent storage isn’t available in this browser.": "Este navegador no puede guardar los datos de forma permanente.",
+  "Storage is nearly full on this device.": "El almacenamiento de este dispositivo está casi lleno.",
+  "You're offline. Saved posts stay on this device.": "Estás sin conexión. Las publicaciones guardadas siguen en este dispositivo.",
+  "Choose a contact": "Elegir un contacto",
+  "Play in a window": "Reproducir en una ventana",
+  "manifest.Home": "Inicio",
+  "manifest.Messages": "Mensajes",
+  "manifest.Post": "Publicar"
 });

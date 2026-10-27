@@ -531,9 +531,47 @@
     navigator.serviceWorker.ready.then(function (reg) { if (reg && reg.active) send(reg.active); }).catch(function () {});
   }
 
+  var persistState = "unknown";
+  var pressureState = "unknown";
+
+  function pressureLevel(usage, quota) {
+    usage = Number(usage) || 0;
+    quota = Number(quota) || 0;
+    if (quota <= 0) return "unknown";
+    var ratio = usage / quota;
+    if (ratio >= 0.9) return "critical";
+    if (ratio >= 0.75) return "warning";
+    return "ok";
+  }
+
+  function persistText(measured) {
+    if (measured === true || persistState === "granted") return tr("Kept on this device");
+    if (persistState === "unsupported") return tr("Persistent storage isn’t available in this browser.");
+    return tr("This browser can clear saved media when space is low.");
+  }
+
+  function notePressure(level) {
+    pressureState = level || "unknown";
+    if (level !== "critical" && level !== "warning") return;
+    try { document.dispatchEvent(new CustomEvent("viktorych-pressure", { detail: level })); } catch (err) { /* the storage screen still shows the level */ }
+    if (level === "critical") post({ type: "storage-pressure" });
+  }
+
   function askPersist() {
-    if (typeof navigator === "undefined" || !navigator.storage || !navigator.storage.persist) return Promise.resolve(false);
-    return navigator.storage.persist().then(function (ok) { return !!ok; }).catch(function () { return false; });
+    if (typeof navigator === "undefined" || !navigator.storage || !navigator.storage.persist) {
+      persistState = "unsupported";
+      requestRender();
+      return Promise.resolve(false);
+    }
+    return navigator.storage.persist().then(function (ok) {
+      persistState = ok ? "granted" : "denied";
+      requestRender();
+      return !!ok;
+    }).catch(function () {
+      persistState = "denied";
+      requestRender();
+      return false;
+    });
   }
 
   function stepIndex(saved) {
@@ -642,7 +680,8 @@
                 stats: stats,
                 quota: Number(est.quota) || 0,
                 usage: Number(est.usage) || 0,
-                persisted: !!pair[1]
+                persisted: !!pair[1],
+                pressure: pressureLevel(Number(est.usage) || 0, Number(est.quota) || 0)
               };
             });
           });
@@ -657,6 +696,7 @@
     measureNow().then(function (next) {
       snap = next;
       measuring = false;
+      notePressure(next && next.pressure);
       requestRender();
     }).catch(function () { measuring = false; });
   }
@@ -710,7 +750,9 @@
   function dataHtml() {
     var saved = currentPolicy();
     var sub = keepLabel(saved.keep) + " · " + (saved.unlimited ? tr("Unlimited") : stepLabel(stepIndex(saved)));
-    return '<div class="set-list"><a class="set-row" href="#/settings/storage/usage"><span class="set-copy"><b>' + esc(tr("Storage usage")) + "</b><span class=\"set-sub\">" + esc(sub) + '</span></span><span class="set-chev" aria-hidden="true">›</span></a></div>' + controlsHtml();
+    var pressureLine = pressureState === "critical" || pressureState === "warning" ? '<p class="phandle">' + esc(tr("Storage is nearly full on this device.")) + "</p>" : "";
+    return '<div class="set-list"><a class="set-row" href="#/settings/storage/usage"><span class="set-copy"><b>' + esc(tr("Storage usage")) + "</b><span class=\"set-sub\">" + esc(sub) + '</span></span><span class="set-chev" aria-hidden="true">›</span></a></div>' +
+      '<p class="phandle" id="stor-persist">' + esc(persistText(snap && snap.persisted)) + "</p>" + pressureLine + controlsHtml();
   }
 
   function usageHtml() {
@@ -719,7 +761,7 @@
     var summed = totals(rows);
     var free = snap && snap.quota > snap.usage ? snap.quota - snap.usage : 0;
     var freeLine = snap && snap.quota ? tr("{size} free", { size: formatBytes(free) }) : (measuring ? tr("Measuring storage…") : tr("Free on this device"));
-    var persistLine = snap && snap.persisted ? tr("Kept on this device") : tr("This browser can clear saved media when space is low.");
+    var persistLine = persistText(snap && snap.persisted);
     var stats = snap && snap.stats || { hits: 0, network: 0, savedBytes: 0, savedRequests: 0, direct: 0, server: 0 };
     if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.counts) {
       var live = window.ViktorychDirect.counts();
@@ -869,6 +911,9 @@
     sliceCached: sliceCached,
     byteLengthOf: byteLengthOf,
     formatBytes: formatBytes,
+    pressureLevel: pressureLevel,
+    persistText: persistText,
+    askPersist: askPersist,
     openDb: openDb,
     readPolicy: readPolicy,
     writePolicy: writePolicy,
