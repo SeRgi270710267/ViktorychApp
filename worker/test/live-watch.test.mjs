@@ -67,6 +67,18 @@ test("a dispatch that never opened its capture waits, then retries", () => {
   assert.equal(choice.part, 1);
 });
 
+test("a blocked empty capture retries after backoff, and a partial save can resume", () => {
+  const stuck = { active: { state: "blocked", roomId: "7699647509498710801", captureDone: true, segments: 0, capturing: false } };
+  assert.equal(watchDecision(stuck, {}, "7699647509498710801", NOW).why, "unblocked");
+  const waiting = { backoffUntil: ISO(NOW + 60 * 1000), active: { state: "blocked", roomId: "7699647509498710801", captureDone: false, segments: 0 } };
+  assert.equal(watchDecision(waiting, {}, "7699647509498710801", NOW).why, "backoff");
+  const partial = { saved: [{ roomId: "7699647509498710801", partial: true, parts: 2 }] };
+  assert.equal(watchDecision(partial, {}, "7699647509498710801", NOW).why, "partial");
+  assert.equal(watchDecision(partial, {}, "7699647509498710801", NOW).part, 3);
+  const done = { saved: [{ roomId: "7699647509498710801", parts: 2 }] };
+  assert.equal(watchDecision(done, {}, "7699647509498710801", NOW).why, "saved");
+});
+
 test("a blocked pick that left the row unlabeled still retries", () => {
   const job = { active: { state: "recording", roomId: "7699647509498710801", capturing: false, captureDone: false } };
   const choice = watchDecision(job, {}, "7699647509498710801", NOW);
