@@ -2,7 +2,10 @@ name: TikTok live
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    # The Worker cron checks lives every minute and starts a recorder or an
+    # uploader only when there is something to save. This hourly run is the
+    # backstop when that dispatch is missed.
+    - cron: "41 * * * *"
   workflow_dispatch:
   pull_request:
     paths:

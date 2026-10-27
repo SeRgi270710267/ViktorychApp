@@ -1011,7 +1011,7 @@ def selftest() -> int:
     check(video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1)[video_args("https://www.tiktok.com/@gabii_g5/video/1", Path("out"), Path("archive.txt"), selector_for("tiktok"), 1).index("--concurrent-fragments") + 1] == "1", "TikTok does not split a file across connections")
     check(tb.runner_blocked("HTTP Error 403: Forbidden") and tb.runner_blocked("captcha") and not tb.runner_blocked("private account"), "a 403 or captcha is a skip")
     workflow = (ROOT / ".github" / "workflows" / "media-extract.yml").read_text(encoding="utf-8")
-    check('cron: "17 */3 * * *"' in workflow and 'cron: "*/30 * * * *"' in workflow and "workflow_dispatch" in workflow and "yt-dlp==2026.10.21" in workflow and "gallery-dl==1.32.17" in workflow, "the workflow is scheduled every 3 hours and pins the tools")
+    check('cron: "17 */3 * * *"' in workflow and 'cron: "*/30 * * * *"' not in workflow and "workflow_dispatch" in workflow and "yt-dlp==2026.10.21" in workflow and "gallery-dl==1.32.17" in workflow, "the workflow is scheduled every 3 hours and pins the tools")
     check("cancel-in-progress: false" in workflow, "an upload that is already running is not cancelled")
     check(photos_allowed("blocked") is True, "a blocked video does not skip photos")
     queued = catalog_queue([

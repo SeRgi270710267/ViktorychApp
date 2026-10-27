@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fresh, uploaderStale, watchDecision, watchHandles } from "../src/live-watch.js";
+import { fresh, needsUpload, uploaderStale, watchDecision, watchHandles } from "../src/live-watch.js";
 
 const NOW = Date.parse("2026-10-26T12:00:00Z");
 const ISO = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -79,6 +79,15 @@ test("fresh rejects old and future stamps", () => {
   assert.equal(fresh(ISO(NOW - 6000), NOW, 5000), false);
   assert.equal(fresh(ISO(NOW + 6000), NOW, 5000), false);
   assert.equal(fresh("", NOW, 5000), false);
+});
+
+test("an uploader runs for buffered segments or a live capture, not a bare live flag", () => {
+  assert.equal(needsUpload(null, NOW), false);
+  assert.equal(needsUpload({ captureDone: true, segments: 0 }, NOW), false);
+  assert.equal(needsUpload({ state: "recording", segments: 0, capturing: false }, NOW), false);
+  assert.equal(needsUpload({ segments: 4, captureDone: true, capturing: false }, NOW), true);
+  assert.equal(needsUpload({ capturing: true, segments: 0, heartbeat: ISO(NOW - 60 * 1000) }, NOW), true);
+  assert.equal(needsUpload({ capturing: true, segments: 0, heartbeat: ISO(NOW - 30 * 60 * 1000) }, NOW), false);
 });
 
 test("the uploader heartbeat is stale after five quiet minutes", () => {
