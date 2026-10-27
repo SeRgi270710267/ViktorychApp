@@ -1861,10 +1861,11 @@ def build_hls(src: Path, dest: Path, copy_only: bool = False) -> tuple:
     raise RuntimeError(last)
 
 
-def curl_form(api_base: str, token: str, channel: str, path: Path, caption: str) -> dict:
+def curl_form(api_base: str, token: str, channel: str, path: Path, caption: str, max_time: int = 3600) -> dict:
     url = api_base.rstrip("/") + "/bot" + token + "/sendDocument"
+    limit = max(15, min(int(max_time or 3600), 3600))
     cmd = [
-        "curl", "-sS", "--max-time", "3600",
+        "curl", "-sS", "--max-time", str(limit),
         "-w", "\n%{http_code}",
         "-F", "chat_id=" + channel,
         "-F", "disable_notification=true",
@@ -1872,7 +1873,10 @@ def curl_form(api_base: str, token: str, channel: str, path: Path, caption: str)
         "-F", "caption=" + caption[:1024],
         url,
     ]
-    proc = subprocess.run(cmd, capture_output=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=limit + 15)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("telegram upload timed out")
     text = proc.stdout.decode("utf-8", "replace")
     err = scrub(proc.stderr.decode("utf-8", "replace"), current_secrets())
     if "\n" not in text:
@@ -1894,18 +1898,20 @@ def curl_form(api_base: str, token: str, channel: str, path: Path, caption: str)
     return parsed
 
 
-def send_document(api_base: str, token: str, channel: str, path: Path, caption: str, state: dict) -> dict:
+def send_document(api_base: str, token: str, channel: str, path: Path, caption: str, state: dict, max_time: int = 3600, max_wait: int | None = None) -> dict:
     bot_lasts = state.setdefault("bot_lasts", {})
     for _attempt in range(6):
         wait = gap_seconds(bot_lasts.get(token) or 0, time.time())
         if wait:
             time.sleep(wait)
-        parsed = curl_form(api_base, token, channel, path, caption)
+        parsed = curl_form(api_base, token, channel, path, caption, max_time)
         now = time.time()
         bot_lasts[token] = now
         state["last"] = now
         delay = retry_after(int(parsed.get("_status") or 0), parsed)
         if delay is not None:
+            if max_wait is not None and delay > int(max_wait):
+                raise RuntimeError("telegram rate limit")
             time.sleep(delay)
             now = time.time()
             bot_lasts[token] = now

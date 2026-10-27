@@ -428,6 +428,43 @@ test("recordings stay owner-only and hide backup channel ids", async () => {
   assert.deepEqual(stored.channels, ["-1004242"]);
 });
 
+test("a finished capture and an uploaded segment stay on the past list", async () => {
+  const bindings = await mf.getBindings();
+  const handle = "old_capture";
+  const key = "tiktok/old_capture/7699647509498710808/live";
+  await bindings.DATA.put("owner/recording-public/" + handle + ".json", JSON.stringify({
+    state: "recording",
+    roomId: "7699647509498710808",
+    startedAt: "2026-10-03T00:00:00Z"
+  }));
+  await bindings.DATA.put("owner/live-jobs/" + handle + ".json", JSON.stringify({
+    public: { state: "recording", roomId: "7699647509498710808", startedAt: "2026-10-03T00:00:00Z" },
+    active: {
+      state: "recording",
+      captureDone: true,
+      segments: 8,
+      key,
+      quality: "hd",
+      title: "kept",
+      roomId: "7699647509498710808",
+      startedAt: "2026-10-03T00:00:00Z",
+      viewers: 2,
+      part: 1
+    }
+  }));
+  await bindings.DB.prepare("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'segment', 0, 'viktorych-data', 'OLD1', 1, 4, 'abc', 'video/mp4', 2, 1, 1, 0, 1)").bind("tiktok/earlier_room/7699647509498710999/live/1").run();
+  const listed = await call("/v1/owner/tiktok/recordings", { ip: "203.0.113.116", token: ownerToken });
+  assert.equal(listed.status, 200);
+  const finished = listed.body.past.find((row) => row.handle === handle);
+  assert.equal(finished.state, "saved");
+  assert.equal(finished.key, key);
+  assert.equal(finished.title, "kept");
+  const earlier = listed.body.past.find((row) => row.roomId === "7699647509498710999");
+  assert.equal(earlier.handle, "earlier_room");
+  assert.equal(earlier.key, "tiktok/earlier_room/7699647509498710999/live");
+  assert.equal(earlier.state, "saved");
+});
+
 test("the live board is owner-only, etagged, and has no stream urls", async () => {
   const anon = await call("/v1/owner/tiktok/board", { ip: "203.0.113.120" });
   assert.equal(anon.status, 401);
@@ -452,4 +489,31 @@ test("the live board is owner-only, etagged, and has no stream urls", async () =
     headers: { "If-None-Match": listed.headers.get("etag") }
   });
   assert.equal(again.status, 304);
+
+  const thumbAnon = await call("/v1/owner/tiktok/thumb/few_viewers/7699647509498710805", { ip: "203.0.113.123" });
+  assert.equal(thumbAnon.status, 401);
+  await bindings.DATA.put("owner/live-thumbs/few_viewers/7699647509498710805.mp4", "keyframe");
+  const thumb = await call("/v1/owner/tiktok/thumb/few_viewers/7699647509498710805", { ip: "203.0.113.124", token: ownerToken });
+  assert.equal(thumb.status, 200);
+  assert.match(thumb.headers.get("content-type") || "", /mp4/);
+  assert.match(thumb.headers.get("cache-control") || "", /max-age=86400/);
+  assert.equal(thumb.text, "keyframe");
+  const resumeAnon = await call("/v1/owner/live-resume", { ip: "203.0.113.125" });
+  assert.equal(resumeAnon.status, 401);
+  const savedResume = await call("/v1/owner/live-resume", {
+    ip: "203.0.113.126",
+    token: ownerToken,
+    method: "PUT",
+    body: { items: { "few_viewers-7699647509498710805": { t: 12.2, at: 100 }, "https://secret": { t: 1, at: 1 } } }
+  });
+  assert.equal(savedResume.status, 200);
+  assert.equal(savedResume.body.items["few_viewers-7699647509498710805"].t, 12.2);
+  assert.equal(savedResume.body.items["https://secret"], undefined);
+  const older = await call("/v1/owner/live-resume", {
+    ip: "203.0.113.127",
+    token: ownerToken,
+    method: "PUT",
+    body: { items: { "few_viewers-7699647509498710805": { t: 4, at: 50 } } }
+  });
+  assert.equal(older.body.items["few_viewers-7699647509498710805"].t, 12.2);
 });
