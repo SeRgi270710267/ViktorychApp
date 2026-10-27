@@ -36,6 +36,18 @@
   var onLiveLevel = null;
   var climbTimer = 0;
   var recordings = { cap: 12, active: 0, items: {}, past: [] };
+  var hlsDead = false;
+  var qualityLock = false;
+  var stitchedPlay = false;
+  var PANE_KEY = "viktorych_shorts_live_pane";
+  function paneNow() { return "n" + "ow"; }
+  var livePane = paneNow();
+  var lastLiveOrder = [];
+  var swipeQueue = [];
+  var boardEtag = "";
+  var boardTimer = 0;
+  var wheelLock = 0;
+  var manifestWarm = {};
   var mpeg = null;
   var liveZoom = null;
   var prefetchCtrl = null;
@@ -267,6 +279,127 @@
     return null;
   }
 
+  function rememberedPane() {
+    try {
+      var stored = localStorage.getItem(PANE_KEY);
+      if (stored === "past" || stored === paneNow()) return stored;
+    } catch (err) { /* private browsing */ }
+    return paneNow();
+  }
+
+  function rememberPane(pane) {
+    livePane = pane === "past" ? "past" : paneNow();
+    try { localStorage.setItem(PANE_KEY, livePane); } catch (err) { /* private browsing */ }
+  }
+
+  function paneOf(route) {
+    if (route && route.livePane === "past") return "past";
+    if (route && route.livePane === paneNow()) return paneNow();
+    return "";
+  }
+
+  function currentPane(route) {
+    var explicit = paneOf(route);
+    if (explicit) return explicit;
+    if (route && route.live) return rememberedPane();
+    return livePane === "past" ? "past" : paneNow();
+  }
+
+  function orderLiveNow(rows, previous) {
+    var prior = Array.isArray(previous) ? previous.map(foldHandle) : [];
+    return (rows || []).slice().sort(function (a, b) {
+      var aLive = !!(a && a.live);
+      var bLive = !!(b && b.live);
+      if (aLive !== bLive) return aLive ? -1 : 1;
+      var dv = (Number(a && a.viewers) || 0) - (Number(b && b.viewers) || 0);
+      if (dv) return dv;
+      var ia = prior.indexOf(foldHandle(a && a.handle));
+      var ib = prior.indexOf(foldHandle(b && b.handle));
+      if (ia >= 0 && ib >= 0 && ia !== ib) return ia - ib;
+      var left = foldHandle(a && a.handle);
+      var right = foldHandle(b && b.handle);
+      if (left < right) return -1;
+      if (left > right) return 1;
+      return 0;
+    });
+  }
+
+  function neighborHandle(rows, handle, delta) {
+    var key = foldHandle(handle);
+    var index = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (foldHandle(rows[i] && rows[i].handle) === key) { index = i; break; }
+    }
+    if (index < 0) return "";
+    var next = rows[index + (Number(delta) || 0)];
+    return next && next.handle ? String(next.handle) : "";
+  }
+
+  function streamExpiresAt(url) {
+    try {
+      var parsed = new URL(String(url || ""));
+      var raw = parsed.searchParams.get("expire") || parsed.searchParams.get("expires") || "";
+      var n = Number(raw);
+      if (!isFinite(n) || n <= 0) return 0;
+      return n > 1000000000000 ? n : n * 1000;
+    } catch (err) { return 0; }
+  }
+
+  function streamFresh(url, now) {
+    var text = String(url || "");
+    if (!text) return false;
+    var exp = streamExpiresAt(text);
+    if (!exp) return true;
+    return exp > (Number(now) || Date.now()) + 20000;
+  }
+
+  function flvAsHls(url) {
+    try {
+      var parsed = new URL(String(url || ""));
+      if (!/\.flv$/i.test(parsed.pathname)) return "";
+      parsed.pathname = parsed.pathname.replace(/\.flv$/i, ".m3u8");
+      return parsed.toString();
+    } catch (err) { return ""; }
+  }
+
+  function playbackSteps(info, now) {
+    var rows = info && info.variants && info.variants.length ? info.variants : [];
+    if (!rows.length && info && (info.hls || info.flv)) rows = [{ quality: info.quality || "", hls: info.hls || "", flv: info.flv || "" }];
+    var steps = [];
+    var seen = {};
+    function push(kind, url, quality) {
+      var value = String(url || "");
+      if (!value || seen[kind + "\n" + value]) return;
+      seen[kind + "\n" + value] = true;
+      steps.push({ kind: kind, url: value, quality: String(quality || "") });
+    }
+    function collect(requireFresh) {
+      rows.forEach(function (row) {
+        if (!row) return;
+        var hlsUrl = String(row.hls || "");
+        var flvUrl = String(row.flv || "");
+        if (hlsUrl && (!requireFresh || streamFresh(hlsUrl, now))) push("hls", hlsUrl, row.quality);
+        if (flvUrl && (!requireFresh || streamFresh(flvUrl, now))) push("flv", flvUrl, row.quality);
+        if (flvUrl && !hlsUrl) {
+          var alt = flvAsHls(flvUrl);
+          if (alt && (!requireFresh || streamFresh(alt, now))) push("hls", alt, row.quality);
+        }
+      });
+    }
+    collect(true);
+    if (!steps.length) collect(false);
+    return steps;
+  }
+
+  function hlsFatalPlan(type, attempt, live) {
+    var kind = String(type || "");
+    var n = Number(attempt) || 0;
+    if (n >= 2) return "next";
+    if (kind === "mediaError") return n === 0 ? "recover-media" : (live ? "live-edge" : "next");
+    if (kind === "networkError") return n === 0 ? (live ? "live-edge" : "retry") : "next";
+    return "next";
+  }
+
   function liveRows() {
     var rows = [];
     var seen = {};
@@ -444,30 +577,72 @@
     }).catch(function () { return null; });
   }
 
+  function pastSource() {
+    var list = recordings && Array.isArray(recordings.past) ? recordings.past : [];
+    if (list.length) return list;
+    var items = recordings && recordings.items || {};
+    return Object.keys(items).map(function (name) {
+      var row = items[name];
+      if (!row || typeof row !== "object") return null;
+      return Object.assign({ handle: row.handle || name }, row);
+    }).filter(Boolean);
+  }
+
+  function pastRows() {
+    if (!ownerHere()) return [];
+    return pastSource().filter(function (row) {
+      if (!row || !row.handle) return false;
+      if (isLocked() && !isUnlocked(row.handle)) return false;
+      return row.state === "saved" || row.state === "recording" || row.state === "queued";
+    }).slice().sort(function (a, b) {
+      var left = String(a.endedAt || a.startedAt || "");
+      var right = String(b.endedAt || b.startedAt || "");
+      if (left !== right) return left < right ? 1 : -1;
+      var lh = foldHandle(a.handle);
+      var rh = foldHandle(b.handle);
+      return lh < rh ? -1 : lh > rh ? 1 : 0;
+    });
+  }
+
+  function pastCount() {
+    return pastRows().length;
+  }
+
+  function pastListHtml() {
+    var rows = pastRows();
+    if (!rows.length) return '<div class="shorts-past-empty">' + hooks.esc(tr("No past lives yet.")) + "</div>";
+    return '<ul class="shorts-past-list">' + rows.map(pastCard).join("") + "</ul>";
+  }
+
+  function subtabs(pane) {
+    if (!ownerHere()) return "";
+    var count = pastCount();
+    var badge = '<b class="shorts-past-badge" data-shorts="past-count"' + (count ? "" : " hidden") + ">" + (count > 99 ? "99+" : String(count || "")) + "</b>";
+    return '<div class="shorts-subtabs"><div class="tabs" role="tablist">' +
+      '<a class="tab' + (pane === "past" ? "" : " on") + '" href="#/shorts/live/now" role="tab" aria-selected="' + (pane === "past" ? "false" : "true") + '"><span>' + hooks.esc(tr("Live now")) + "</span></a>" +
+      '<a class="tab' + (pane === "past" ? " on" : "") + '" href="#/shorts/live/past" role="tab" aria-selected="' + (pane === "past" ? "true" : "false") + '"><span>' + hooks.esc(tr("Past lives")) + "</span>" + badge + "</a>" +
+      "</div></div>";
+  }
+
+  function orderedNow() {
+    var ordered = orderLiveNow(liveRows(), lastLiveOrder);
+    lastLiveOrder = ordered.map(function (row) { return foldHandle(row.handle); });
+    swipeQueue = ordered;
+    return ordered;
+  }
+
   function liveSlide(row) {
     var handle = String((row && row.handle) || "gabii_g5");
     var profile = "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live";
     var appProfile = "#/tiktok/" + encodeURIComponent(handle);
     var on = !!(row && row.live);
-    var rec = row && row.record || {};
-    var saved = !on && rec.state === "saved" && rec.key;
     var avatar = avatarFor(handle, row);
     var cover = avatar ? '<img class="shorts-poster" alt="" src="' + hooks.esc(avatar) + '" referrerpolicy="no-referrer">' : "";
-    var savedNote = "";
-    if (saved) {
-      var bits = [];
-      var label = qualityLabel(rec.quality);
-      if (label) bits.push(label);
-      if (rec.qualityNote) bits.push(tr("Best available"));
-      if (bits.length) savedNote = '<p class="shorts-caption">' + hooks.esc(bits.join(" · ")) + "</p>";
-    }
     var body = on
       ? cover + '<button class="shorts-hit" type="button" data-shorts="watch" aria-label="' + hooks.esc(tr("LIVE")) + '"></button>'
-      : (saved
-        ? cover + '<button class="shorts-hit" type="button" data-shorts="saved" aria-label="' + hooks.esc(tr("Saved")) + '"></button>'
-        : cover + '<div class="shorts-offline"><h2>' + hooks.esc(tr("Not live right now")) + "</h2>" +
-          (row && row.lastLiveAt ? "<p>" + hooks.esc(tr("Last live {time}", { time: hooks.fullTime(row.lastLiveAt) })) + "</p>" : "") +
-          '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a></div>");
+      : cover + '<div class="shorts-offline"><h2>' + hooks.esc(tr("Not live right now")) + "</h2>" +
+        (row && row.lastLiveAt ? "<p>" + hooks.esc(tr("Last live {time}", { time: hooks.fullTime(row.lastLiveAt) })) + "</p>" : "") +
+        '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a></div>";
     var viewers = on && row.viewers ? '<span class="shorts-viewers">' + hooks.esc(tr("{count} watching", { count: hooks.formatCount(row.viewers || 0, 1000) })) + "</span>" : "";
     var badge = on ? '<span class="shorts-live-tag">' + hooks.esc(tr("LIVE")) + "</span>" : "";
     var recText = recordLabel(row);
@@ -477,7 +652,6 @@
       '<div class="shorts-meta">' + badge + recBadge + viewers +
       '<div><a class="shorts-author" href="' + hooks.esc(appProfile) + '">@' + hooks.esc(handle) + "</a></div>" +
       (row && row.title ? '<p class="shorts-caption">' + hooks.esc(row.title) + "</p>" : "") +
-      savedNote +
       (on ? '<a class="shorts-open" target="_blank" rel="noopener noreferrer" href="' + hooks.esc(profile) + '">' + hooks.esc(tr("Open on TikTok")) + "</a>" : "") +
       "</div>" +
       (avatar ? '<a class="shorts-ava" style="position:absolute;right:12px;bottom:96px;z-index:2" href="' + hooks.esc(appProfile) + '">' + hooks.avatar(avatar, handle) + "</a>" : "") +
@@ -500,7 +674,7 @@
     var lockBtn = '<button type="button" class="shorts-lock' + (locked ? " is-locked" : "") + '" data-shorts="toggle-lock" aria-label="' + hooks.esc(locked ? tr("Unlock Shorts") : tr("Lock Shorts")) + '" title="' + hooks.esc(locked ? tr("Unlock Shorts") : tr("Lock Shorts")) + '">' +
       lockSvg(locked) + "<span>" + hooks.esc(locked ? tr("Locked") : tr("Unlocked")) + "</span></button>";
     return '<div class="shorts-tabs"><div class="tabs-bar"><div class="tabs" role="tablist">' +
-      '<a class="tab' + (live ? " on" : "") + '" href="#/shorts/live" role="tab" aria-selected="' + (live ? "true" : "false") + '"><span>' + hooks.esc(tr("Live")) + "</span></a>" +
+      '<a class="tab' + (live ? " on" : "") + '" href="#/shorts/live/' + rememberedPane() + '" role="tab" aria-selected="' + (live ? "true" : "false") + '"><span>' + hooks.esc(tr("Live")) + "</span></a>" +
       '<a class="tab' + (live ? "" : " on") + '" href="#/shorts" role="tab" aria-selected="' + (live ? "false" : "true") + '"><span>' + hooks.esc(tr("For you")) + "</span></a>" +
       "</div></div>" + lockBtn + add + "</div>";
   }
@@ -670,22 +844,10 @@
     return m + ":" + pad(s);
   }
 
-  function pastRows() {
-    if (!ownerHere()) return [];
-    var list = (recordings && recordings.past) || [];
-    return list.filter(function (row) {
-      if (!row || !row.handle) return false;
-      if (isLocked() && !isUnlocked(row.handle)) return false;
-      return row.state === "saved" || row.state === "recording" || row.state === "queued";
-    }).slice().sort(function (a, b) {
-      return String(b.startedAt || "").localeCompare(String(a.startedAt || ""));
-    });
-  }
-
   function pastCard(row, index) {
     var handle = String(row.handle || "");
     var recording = row.state === "recording" || row.state === "queued";
-    var tag = recording ? tr("Recording") : tr("Saved");
+    var tag = recording ? tr("Recording ({n} of {cap})", { n: recordings.active || 1, cap: recordings.cap || 12 }) : tr("Saved");
     var when = row.startedAt && hooks.fullTime ? hooks.fullTime(row.startedAt) : "";
     var dur = clock(row.duration);
     var cover = row.cover || avatarFor(handle, row);
@@ -707,43 +869,26 @@
       "</span>" + action + "</li>";
   }
 
-  function pastSection() {
-    if (!ownerHere()) return "";
-    var rows = pastRows();
-    var body = rows.length
-      ? '<ul class="shorts-past-list">' + rows.map(pastCard).join("") + "</ul>"
-      : '<p class="shorts-past-empty">' + hooks.esc(tr("No past lives yet.")) + "</p>";
-    return '<section class="shorts-slide shorts-past" data-kind="past"><div class="shorts-past-card"><h2>' + hooks.esc(tr("Past lives")) + "</h2>" + body + "</div></section>";
-  }
-
-  function liveFeedHtml() {
-    var slides = liveRows().map(liveSlide).join("");
-    if (!slides) slides = '<article class="shorts-slide" data-kind="live"><div class="shorts-stage"></div></article>';
-    return slides + pastSection();
-  }
-
-  function liveRowsSignature() {
-    return liveRows().map(function (row) {
-      var rec = row.record || {};
-      return [row.handle, row.live ? 1 : 0, row.viewers || 0, row.lastLiveAt || "", row.title || "", rec.state || "", rec.key || "", rec.quality || "", rec.parts || 0].join("\n");
-    }).join("\n");
-  }
-
-  function pastSignature() {
-    return pastRows().map(function (row) {
-      return [row.handle, row.state || "", row.roomId || "", row.startedAt || "", row.key || "", row.duration || 0, row.parts || 0, row.viewers || 0, row.title || ""].join("\n");
-    }).join("\n");
-  }
-
   function page(route) {
     if (!visible()) return '<div class="shorts-page"></div>';
     var live = !!(route && route.live);
-    var slides = live ? liveFeedHtml() : forYou().map(slide).join("");
-    if (!slides) {
-      slides = '<article class="shorts-slide"><div class="shorts-stage"><div class="shorts-offline"><h2>' + hooks.esc(tr("No posts yet")) + "</h2></div></div></article>";
+    var pane = paneNow();
+    if (live) {
+      var explicit = paneOf(route);
+      if (explicit) rememberPane(explicit);
+      pane = explicit || rememberedPane();
     }
-    return '<div class="shorts-page"><div class="shorts-top">' + mhead() + tabs(live) + "</div>" +
-      '<div class="shorts-feed" id="shorts-feed">' + slides + "</div>" + accountSheet() + captchaModalHtml() + "</div>";
+    var slides = "";
+    if (!live) slides = forYou().map(slide).join("");
+    else if (pane === "past") slides = pastListHtml();
+    else slides = orderedNow().map(liveSlide).join("");
+    if (!slides) {
+      slides = live
+        ? (pane === "past" ? pastListHtml() : '<article class="shorts-slide" data-kind="live"><div class="shorts-stage"></div></article>')
+        : '<article class="shorts-slide"><div class="shorts-stage"><div class="shorts-offline"><h2>' + hooks.esc(tr("No posts yet")) + "</h2></div></div></article>";
+    }
+    return '<div class="shorts-page"><div class="shorts-top">' + mhead() + tabs(live) + (live ? subtabs(pane) : "") + "</div>" +
+      '<div class="shorts-feed' + (live && pane === "past" ? " is-past" : "") + '" id="shorts-feed">' + slides + "</div>" + accountSheet() + captchaModalHtml() + "</div>";
   }
 
   function destroyHls() {
@@ -794,7 +939,7 @@
   function climbLive(player, pinned) {
     clearTimeout(climbTimer);
     climbTimer = setTimeout(function () {
-      if (hls !== player) return;
+      if (qualityLock || hls !== player) return;
       var current = player.currentLevel;
       if (current >= 0 && current < pinned) {
         player.currentLevel = current + 1;
@@ -807,7 +952,7 @@
   function watchStalls(player, Hls, pinned) {
     var stalls = 0;
     player.on(Hls.Events.ERROR, function (event, data) {
-      if (!data || data.fatal) return;
+      if (qualityLock || !data || data.fatal) return;
       var stall = data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR;
       if (!stall) return;
       stalls += 1;
@@ -823,9 +968,11 @@
     player.on(Hls.Events.FRAG_BUFFERED, function () { stalls = 0; });
   }
 
-  function playHls(video, url, authed, autoplay, forceMuted, pin) {
+  function playHls(video, url, authed, autoplay, forceMuted, pin, mode) {
+    var live = mode !== "vod";
     var start = autoplay !== false;
     var muted = forceMuted ? true : !sound;
+    hlsDead = false;
     return loadHls().then(function (Hls) {
       destroyHls();
       if (!Hls || !Hls.isSupported()) {
@@ -838,10 +985,13 @@
         }
         throw new Error("hls");
       }
+      var attempt = 0;
       var playerOpts = {
-        enableWorker: true,
+        enableWorker: false,
         capLevelToPlayerSize: false,
-        startLevel: 99,
+        startLevel: pin && !qualityLock ? 99 : -1,
+        startFragPrefetch: true,
+        maxBufferHole: 0.5,
         xhrSetup: function (xhr, target) {
           xhr.withCredentials = false;
           if (authed && sameApi(target)) {
@@ -850,9 +1000,13 @@
           }
         }
       };
-      if (!pin) {
+      if (live) playerOpts.liveSyncDurationCount = 3;
+      else {
+        playerOpts.maxSeekHole = 2;
+        playerOpts.backBufferLength = 90;
+        playerOpts.nudgeMaxRetry = 6;
         playerOpts.maxBufferLength = 30;
-        playerOpts.maxMaxBufferLength = 30;
+        playerOpts.maxMaxBufferLength = 60;
       }
       var player = new Hls(playerOpts);
       hls = player;
@@ -860,24 +1014,38 @@
       player.attachMedia(video);
       video.muted = muted;
       return new Promise(function (resolve, reject) {
+        var settled = false;
         player.on(Hls.Events.ERROR, function (event, data) {
-          if (!data || !data.fatal) return;
+          if (!data || !data.fatal || hls !== player) return;
           console.error("live playback", data.type, data.details, data);
-          reject(new Error(String(data.type || "hls") + " " + String(data.details || "")));
+          var plan = hlsFatalPlan(data.type, attempt, live);
+          attempt += 1;
+          if (plan === "recover-media") {
+            try { player.recoverMediaError(); return; } catch (err) { plan = "next"; }
+          } else if (plan === "live-edge") {
+            try { player.startLoad(-1); return; } catch (err) { plan = "next"; }
+          } else if (plan === "retry") {
+            try { player.startLoad(); return; } catch (err) { plan = "next"; }
+          }
+          hlsDead = true;
+          var err = new Error(String(data.type || "hls") + " " + String(data.details || ""));
+          if (!settled) { settled = true; reject(err); return; }
+          if (liveFatal) liveFatal(err);
         });
         player.on(Hls.Events.MANIFEST_PARSED, function () {
+          if (hls !== player) return;
           var top = topLevel(player);
           player.capLevelToPlayerSize = false;
-          if (top >= 0) {
+          if (pin && !qualityLock && top >= 0) {
             player.startLevel = top;
             player.currentLevel = top;
-          }
-          if (pin && top >= 0) {
             showLiveLevel(player, top, top);
             watchStalls(player, Hls, top);
           }
-          if (!start) { resolve(); return; }
-          video.play().then(resolve).catch(reject);
+          if (!start) { settled = true; resolve(); return; }
+          video.play().then(function () { settled = true; resolve(); }).catch(function (err) {
+            if (!settled) { settled = true; reject(err); }
+          });
         });
       });
     });
@@ -1068,7 +1236,7 @@
     });
   }
 
-  function playFlv(video, url, authed) {
+  function playFlv(video, url, authed, soft) {
     return loadMpeg().then(function (mpegts) {
       destroyHls();
       destroyMpeg();
@@ -1101,7 +1269,17 @@
           done = true;
           reject(err || new Error("flv"));
         }
-        if (mpegts.Events && mpegts.Events.ERROR) player.on(mpegts.Events.ERROR, fail);
+        if (mpegts.Events && mpegts.Events.ERROR) player.on(mpegts.Events.ERROR, function (err) {
+          var detail = String((err && (err.details || err.msg || err.message || err.type)) || err || "");
+          if (!soft && /EarlyEof|NETWORK_EXCEPTION|NETWORK_TIMEOUT/i.test(detail)) {
+            destroyMpeg();
+            playFlv(video, url, authed, true).then(function () {
+              if (!done) { done = true; resolve(player); }
+            }).catch(fail);
+            return;
+          }
+          fail(err);
+        });
         var started = video.play();
         if (started && started.then) started.then(function () { if (!done) { done = true; resolve(player); } }).catch(fail);
         else if (!done) { done = true; resolve(player); }
@@ -1158,13 +1336,13 @@
     livePaintKey = liveRowsSignature();
   }
 
-  function refreshLive(handle) {
-    var key = foldHandle(handle);
-    if (!key) return Promise.resolve(null);
+  function refreshLive(handle, fresh) {
+    var key = (fresh ? "fresh:" : "") + foldHandle(handle);
+    if (!key || key === "fresh:") return Promise.resolve(null);
     if (liveInflight[key]) return liveInflight[key];
     var base = apiBase();
     if (!base || !hooks.token()) return Promise.resolve(null);
-    var job = fetch(base + "/v1/owner/live/" + encodeURIComponent(handle), { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+    var job = fetch(base + "/v1/owner/live/" + encodeURIComponent(handle) + (fresh ? "?fresh=1" : ""), { headers: authHeaders(), cache: "no-store" }).then(function (res) {
       if (!res.ok) return null;
       return res.json();
     }).then(function (info) {
@@ -1262,24 +1440,93 @@
     renderAdded();
   }
 
+  function routePane() {
+    if (/#\/shorts\/live\/past(?:$|[?#])/.test(location.hash)) return "past";
+    if (new RegExp("#/shorts/live/" + paneNow() + "(?:$|[?#])").test(location.hash)) return paneNow();
+    return livePane === "past" ? "past" : paneNow();
+  }
+
+  function playingLive() {
+    var root = liveRoot();
+    return !!(root && root.getAttribute("data-mode") !== "saved");
+  }
+
+  function syncPastBadge() {
+    var badge = document.querySelector("[data-shorts='past-count']");
+    if (!badge) return;
+    var count = pastCount();
+    badge.hidden = !count;
+    badge.textContent = count > 99 ? "99+" : (count ? String(count) : "");
+  }
+
+  function patchViewerLabels(rows) {
+    var feed = document.getElementById("shorts-feed");
+    if (!feed) return;
+    rows.forEach(function (row) {
+      var slides = feed.querySelectorAll(".shorts-slide");
+      for (var i = 0; i < slides.length; i++) {
+        if (foldHandle(slides[i].getAttribute("data-handle")) !== foldHandle(row.handle)) continue;
+        var slot = slides[i].querySelector(".shorts-viewers");
+        var text = row.live && row.viewers ? tr("{count} watching", { count: hooks.formatCount(row.viewers, 1000) }) : "";
+        if (slot) slot.textContent = text;
+      }
+    });
+  }
+
+  function flipFeed(feed, html) {
+    var before = {};
+    var nodes = feed.querySelectorAll("[data-handle]");
+    for (var i = 0; i < nodes.length; i++) before[nodes[i].getAttribute("data-handle")] = nodes[i].getBoundingClientRect().top;
+    feed.innerHTML = html;
+    var after = feed.querySelectorAll("[data-handle]");
+    for (var j = 0; j < after.length; j++) {
+      var name = after[j].getAttribute("data-handle");
+      if (!Object.prototype.hasOwnProperty.call(before, name)) continue;
+      var dy = before[name] - after[j].getBoundingClientRect().top;
+      if (!dy) continue;
+      after[j].style.transform = "translateY(" + dy + "px)";
+      after[j].style.transition = "none";
+      (function (el) {
+        var frame = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+        frame(function () {
+          frame(function () {
+            el.style.transition = "transform 280ms ease";
+            el.style.transform = "";
+          });
+        });
+      })(after[j]);
+    }
+  }
+
   function paintLive() {
     var feed = document.getElementById("shorts-feed");
     if (!feed || !onLiveRoute()) return;
-    var liveKey = liveRowsSignature();
-    var pastKey = pastSignature();
-    var liveSame = liveKey === livePaintKey && !!feed.querySelector('.shorts-slide[data-kind="live"]');
-    var pastSame = pastKey === pastPaintKey && !!feed.querySelector(".shorts-past");
-    if (liveSame && pastSame) return;
-    livePaintKey = liveKey;
-    pastPaintKey = pastKey;
-    if (!liveSame) {
-      var slides = liveRows().map(liveSlide).join("");
-      if (!slides) slides = '<article class="shorts-slide" data-kind="live"><div class="shorts-stage"></div></article>';
-      feed.innerHTML = slides;
+    var pane = routePane();
+    syncPastBadge();
+    feed.classList.toggle("is-past", pane === "past");
+    if (pane === "past") {
+      var past = pastRows();
+      var pastKey = "past\n" + past.map(function (row) {
+        return [row.handle, row.state || "", row.roomId || "", row.key || "", row.endedAt || row.startedAt || "", row.viewers || 0, row.title || ""].join("\n");
+      }).join("\n");
+      if (pastKey === livePaintKey && feed.querySelector(".shorts-past-row, .shorts-past-empty")) return;
+      livePaintKey = pastKey;
+      feed.innerHTML = pastListHtml();
+      return;
     }
-    var old = feed.querySelector(".shorts-past");
-    if (old) old.remove();
-    if (ownerHere()) feed.insertAdjacentHTML("beforeend", pastSection());
+    var rows = orderedNow();
+    if (playingLive()) {
+      patchViewerLabels(rows);
+      return;
+    }
+    var key = "now\n" + rows.map(function (row) {
+      var rec = row.record || {};
+      return [row.handle, row.live ? 1 : 0, row.viewers || 0, row.lastLiveAt || "", row.title || "", rec.state || "", rec.key || ""].join("\n");
+    }).join("\n");
+    if (key === livePaintKey && feed.querySelector(".shorts-slide")) return;
+    livePaintKey = key;
+    var slides = rows.map(liveSlide).join("");
+    flipFeed(feed, slides || '<article class="shorts-slide" data-kind="live"><div class="shorts-stage"></div></article>');
   }
 
   function liveRoot() {
@@ -1346,7 +1593,7 @@
     }
     function onDown(event) {
       gesture = "";
-      var control = event.target.closest && event.target.closest("button, a");
+      var control = event.target.closest && event.target.closest("button, a, input, label");
       if (control && control.getAttribute("data-shorts") !== "stage") return;
       pts[event.pointerId] = { x: event.clientX, y: event.clientY };
       var points = list();
@@ -1395,7 +1642,7 @@
     function onUp(event) {
       var wasPinch = !!pinch && list().length >= 2;
       var moved = !!(drag && drag.moved);
-      var control = event.target.closest && event.target.closest("button, a");
+      var control = event.target.closest && event.target.closest("button, a, input, label");
       var onControl = control && control.getAttribute("data-shorts") !== "stage";
       delete pts[event.pointerId];
       if (list().length < 2) pinch = null;
@@ -1503,7 +1750,7 @@
     button.type = "button";
     button.className = "shorts-live-retry";
     button.setAttribute("data-shorts", "retry-live");
-    button.textContent = tr("Try again");
+    button.textContent = tr("Retry");
     var link = cover.querySelector("a");
     if (link) cover.insertBefore(button, link);
     else cover.appendChild(button);
@@ -1563,32 +1810,85 @@
       try { video.load(); } catch (err) { /* the cover stays */ }
     }
     showLiveMessage(handle, tr("Live ended"));
+    showWatchLink(handle);
   }
 
-  function attemptLive(video, info) {
-    var steps = [];
-    if (info.hls) {
-      steps.push(function () { return playHls(video, info.hls, false, true, true, true); });
-      steps.push(function () { return playHls(video, proxyUrl(info.hls), true, true, true, true); });
+  function savedRecording(handle) {
+    var want = foldHandle(handle);
+    var rows = pastRows();
+    for (var i = 0; i < rows.length; i++) {
+      if (foldHandle(rows[i].handle) === want && rows[i].state === "saved" && rows[i].key) return rows[i];
     }
-    if (info.flv) {
-      steps.push(function () { return playFlv(video, info.flv, false); });
-      steps.push(function () { return playFlv(video, proxyUrl(info.flv), true); });
+    var rec = recordOf(handle);
+    return rec && rec.state === "saved" && rec.key ? rec : null;
+  }
+
+  function showWatchLink(handle) {
+    var root = liveRoot();
+    if (!root || !savedRecording(handle)) return;
+    var cover = root.querySelector(".shorts-live-cover");
+    if (!cover || cover.querySelector("[data-shorts='watch-recording']")) {
+      var have = cover && cover.querySelector("[data-shorts='watch-recording']");
+      if (have) have.hidden = false;
+      return;
     }
+    var link = document.createElement("a");
+    link.href = "#/shorts/live/past?watch=" + encodeURIComponent(handle);
+    link.setAttribute("data-shorts", "watch-recording");
+    link.textContent = tr("Watch recording");
+    cover.appendChild(link);
+  }
+
+  function attemptSources(video, info, mode) {
+    var steps = playbackSteps(info);
     var index = 0;
-    function next(err) {
-      if (err) console.error("live playback", err && err.message ? err.message : err);
+    function one(step) {
+      var jobs = [function () {
+        return step.kind === "flv"
+          ? playFlv(video, step.url, false)
+          : playHls(video, step.url, false, true, mode !== "vod", mode !== "vod", mode);
+      }];
+      if (!sameApi(step.url)) {
+        var proxied = proxyUrl(step.url);
+        jobs.push(function () {
+          return step.kind === "flv"
+            ? playFlv(video, proxied, true)
+            : playHls(video, proxied, true, true, mode !== "vod", mode !== "vod", mode);
+        });
+      }
+      var job = 0;
+      function nextJob(err) {
+        if (err) console.error("live playback", err && err.message ? err.message : err);
+        if (job >= jobs.length) return Promise.reject(err || new Error("step"));
+        var fn = jobs[job];
+        job += 1;
+        return fn().catch(nextJob);
+      }
+      return nextJob();
+    }
+    function chain(err) {
       if (index >= steps.length) return Promise.reject(err || new Error("none"));
       var step = steps[index];
       index += 1;
-      return step().catch(next);
+      return one(step).catch(chain);
     }
     if (!steps.length) return Promise.reject(new Error("none"));
-    return next();
+    return chain();
+  }
+
+  function attemptLive(video, info) {
+    return attemptSources(video, info, "live");
   }
 
   function openSaved(handle, row) {
-    var rec = row || recordOf(handle);
+    if (!row) {
+      var want = foldHandle(handle);
+      var found = pastRows().filter(function (item) {
+        return item && foldHandle(item.handle) === want && item.key;
+      })[0];
+      row = found || recordOf(handle);
+    }
+    var rec = row;
     handle = String(handle || (rec && rec.handle) || "");
     if (!handle || !rec || !rec.key) return;
     if (rec.state !== "saved" && rec.state !== "recording" && rec.state !== "queued") return;
@@ -1605,6 +1905,7 @@
     root.setAttribute("role", "dialog");
     root.setAttribute("aria-modal", "true");
     root.setAttribute("data-handle", handle);
+    root.setAttribute("data-room", rec.roomId || "");
     root.setAttribute("data-mode", recording ? "recording" : "saved");
     root.innerHTML = '<div class="shorts-live-stage">' +
       '<video playsinline webkit-playsinline autoplay muted></video>' +
@@ -1615,7 +1916,7 @@
       "</div></div>" +
       '<div class="shorts-live-hud"><button type="button" data-shorts="close-live" aria-label="' + hooks.esc(tr("Close")) + '">×</button>' +
       '<span class="shorts-live-tag">' + hooks.esc(recording ? tr("Recording") : tr("Saved")) + "</span>" +
-      '<span class="shorts-live-q"></span>' +
+      '<button type="button" data-shorts="quality" class="shorts-live-q"></button>' +
       '<button type="button" data-shorts="mute" aria-label="' + hooks.esc(sound ? tr("Mute") : tr("Unmute")) + '">' + hooks.icon(sound ? "vol" : "volOff") + "</button></div>" +
       '<div class="shorts-live-foot"><b>@' + hooks.esc(handle) + "</b>" +
       (rec.title ? "<span>" + hooks.esc(rec.title) + "</span>" : "") +
@@ -1630,10 +1931,10 @@
       if (cover) cover.hidden = true;
     });
     video.addEventListener("ended", function () {
-      if (token !== liveToken) return;
+      if (token !== liveToken || stitchedPlay) return;
       if (part < parts) playPart(part + 1);
     });
-    var seek = root.querySelector(".shorts-live-seek");
+    var seek = root.querySelector("input.shorts-live-seek");
     var seeking = false;
     function syncSeek() {
       if (!seek || seeking || !video.duration || !isFinite(video.duration)) return;
@@ -1666,6 +1967,23 @@
         event.preventDefault();
         sound = !sound;
         syncMute(button);
+      } else if (kind === "retry-live") {
+        event.preventDefault();
+        var againHandle = root.getAttribute("data-handle") || handle;
+        var againRoom = root.getAttribute("data-room") || "";
+        var again = pastRows().filter(function (item) {
+          return item && foldHandle(item.handle) === foldHandle(againHandle) && String(item.roomId || "") === againRoom && item.key;
+        })[0];
+        openSaved(againHandle, again);
+      } else if (kind === "quality") {
+        event.preventDefault();
+        if (!hls || !hls.levels || !hls.levels.length) return;
+        qualityLock = true;
+        var nextLevel = hls.currentLevel + 1;
+        if (nextLevel >= hls.levels.length || nextLevel < 0) nextLevel = 0;
+        hls.currentLevel = nextLevel;
+        var level = hls.levels[nextLevel] || {};
+        button.textContent = level.height ? (level.height + "p") : (qualityLabel(rec.quality) || "");
       }
     });
     var quality = root.querySelector(".shorts-live-q");
@@ -1676,22 +1994,31 @@
       if (rec.qualityNote) bits.push(tr("Best available"));
       quality.textContent = bits.join(" · ");
     }
+    function failSaved(err) {
+      if (token !== liveToken) return;
+      if (err) console.error("live playback", err && err.message ? err.message : err);
+      showLiveMessage(handle, tr("Couldn't play this live"), true);
+    }
     function playPart(next) {
       part = next;
+      stitchedPlay = false;
       var key = String(rec.key || "").replace(/\/\d+$/, "") + "/" + part;
-      playHls(video, tgUrl(key) + "/index.m3u8", true, true, false, true).catch(function (err) {
-        if (token !== liveToken) return;
-        console.error("live playback", err && err.message ? err.message : err);
-        showLiveMessage(handle, tr("Couldn't play this live"), false);
-      });
+      playHls(video, tgUrl(key) + "/index.m3u8", true, true, false, false, "vod").catch(failSaved);
     }
-    playPart(1);
+    stitchedPlay = true;
+    playHls(video, tgUrl(String(rec.key || "").replace(/\/\d+$/, "")) + "/index.m3u8", true, true, false, false, "vod").catch(function () {
+      if (token !== liveToken) return;
+      playPart(1);
+    });
   }
 
   function closeLive() {
     liveToken += 1;
     liveFatal = null;
     onLiveLevel = null;
+    qualityLock = false;
+    hlsDead = false;
+    stitchedPlay = false;
     clearTimeout(climbTimer);
     climbTimer = 0;
     stopStats();
@@ -1740,7 +2067,10 @@
       '<span class="shorts-live-viewers"></span></div>';
     document.body.appendChild(root);
     document.documentElement.classList.add("shorts-live-open");
-    liveZoom = bindVideoZoom(root.querySelector(".shorts-live-stage"));
+    var stage = root.querySelector(".shorts-live-stage");
+    liveZoom = bindVideoZoom(stage);
+    bindLiveSwipe(stage);
+    root.addEventListener("wheel", onLiveWheel, { passive: false });
     var video = root.querySelector("video");
     video.addEventListener("playing", function () {
       if (token !== liveToken) return;
@@ -1765,73 +2095,183 @@
         openLive(againHandle);
       }
     });
-    function giveUp(err) {
+    var refreshed = false;
+    function finishFail() {
       if (token !== liveToken) return;
-      if (err) console.error("live playback", err && err.message ? err.message : err);
       destroyHls();
       destroyMpeg();
       showLiveMessage(handle, tr("Couldn't play this live"), true);
     }
-    liveFatal = function (err) { giveUp(err); };
-    refreshLive(handle).then(function (info) {
+    function giveUp(err) {
       if (token !== liveToken) return;
-      if (!info) {
-        showLiveMessage(handle, tr("Couldn't play this live"), true);
-        return;
-      }
-      var viewers = root.querySelector(".shorts-live-viewers");
-      if (viewers && info.viewers) viewers.textContent = tr("{count} watching", { count: hooks.formatCount(info.viewers, 1000) });
-      var quality = root.querySelector(".shorts-live-q");
-      if (quality) quality.textContent = qualityLabel(info.quality);
-      var badge = root.querySelector(".shorts-live-tag");
-      if (badge) badge.hidden = !info.live;
-      if (info.blocked) {
-        showLiveMessage(handle, tr("TikTok blocked this live."), false, true);
-        openCaptchaModal({
-          handle: handle,
-          url: "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live",
-          onRetry: function () {
-            var base = apiBase();
-            if (base && hooks.token()) {
-              fetch(base + "/v1/owner/live/" + encodeURIComponent(handle) + "?clear=1", { headers: authHeaders() }).catch(function () {});
-            }
-            refreshLive(handle).then(function () {
-              startLive(handle);
-            });
+      if (err) console.error("live playback", err && err.message ? err.message : err);
+      if (!refreshed) {
+        refreshed = true;
+        refreshLive(handle, true).then(function (info) {
+          if (token !== liveToken) return;
+          if (info && info.live === false) { endLive(handle); return; }
+          if (info && info.blocked) {
+            showLiveMessage(handle, tr("TikTok blocked this live."), false, true);
+            return;
           }
-        });
+          if (info && (info.hls || info.flv || (info.variants && info.variants.length))) {
+            attemptLive(video, info).then(started).catch(finishFail);
+            return;
+          }
+          finishFail();
+        }).catch(finishFail);
         return;
       }
-      if (!info.live) {
-        showLiveMessage(handle, tr("Not live right now"));
-        return;
+      finishFail();
+    }
+    function started() {
+      if (token !== liveToken) return;
+      if (sound) {
+        video.muted = false;
+        var again = video.play();
+        if (again && again.catch) again.catch(function () { video.muted = true; });
       }
-      startStats(handle, info.roomId || "");
-      onLiveLevel = function (atTop, height) {
+    }
+    function begin(nextHandle) {
+      handle = String(nextHandle || handle);
+      refreshed = false;
+      liveFatal = function (err) { giveUp(err); };
+      refreshLive(handle).then(function (info) {
         if (token !== liveToken) return;
-        var slot = root.querySelector(".shorts-live-q");
-        if (!slot) return;
-        slot.textContent = atTop || !height ? qualityLabel(info.quality) : (height + "p");
-      };
-      if (!info.hls && !info.flv) {
-        showLiveMessage(handle, tr("Couldn't play this live"), true);
-        return;
-      }
-      return attemptLive(video, info).then(function () {
-        if (token !== liveToken) return;
-        if (sound) {
-          video.muted = false;
-          var again = video.play();
-          if (again && again.catch) again.catch(function () { video.muted = true; });
-        }
-        if (hls && window.Hls) {
-          hls.on(window.Hls.Events.ERROR, function (event, data) {
-            if (!data || !data.fatal) return;
-            giveUp(new Error(String(data.type || "hls") + " " + String(data.details || "")));
+        if (!info) { finishFail(); return; }
+        var viewers = root.querySelector(".shorts-live-viewers");
+        if (viewers) viewers.textContent = info.viewers ? tr("{count} watching", { count: hooks.formatCount(info.viewers, 1000) }) : "";
+        var quality = root.querySelector(".shorts-live-q");
+        if (quality) quality.textContent = qualityLabel(info.quality);
+        var badge = root.querySelector(".shorts-live-tag");
+        if (badge) badge.hidden = !info.live;
+        if (info.blocked) {
+          showLiveMessage(handle, tr("TikTok blocked this live."), false, true);
+          openCaptchaModal({
+            handle: handle,
+            url: "https://www.tiktok.com/@" + encodeURIComponent(handle) + "/live",
+            onRetry: function () {
+              var base = apiBase();
+              if (base && hooks.token()) {
+                fetch(base + "/v1/owner/live/" + encodeURIComponent(handle) + "?clear=1", { headers: authHeaders() }).catch(function () {});
+              }
+              refreshLive(handle).then(function () { begin(handle); });
+            }
           });
+          return;
         }
-      }).catch(giveUp);
+        if (!info.live) {
+          showLiveMessage(handle, tr("Not live right now"));
+          showWatchLink(handle);
+          return;
+        }
+        onLiveLevel = function (atTop, height) {
+          if (token !== liveToken || qualityLock) return;
+          var slot = root.querySelector(".shorts-live-q");
+          if (!slot) return;
+          slot.textContent = atTop || !height ? qualityLabel(info.quality) : (height + "p");
+        };
+        if (!info.hls && !info.flv && !(info.variants && info.variants.length)) { finishFail(); return; }
+        attemptLive(video, info).then(started).catch(giveUp);
+        preloadNeighbors(handle);
+      });
+    }
+    swapLive = function (delta) {
+      if (!root.parentNode) return;
+      var rows = swipeQueue.length ? swipeQueue : orderedNow();
+      var next = neighborHandle(rows, root.getAttribute("data-handle") || handle, delta);
+      if (!next) return;
+      liveToken += 1;
+      token = liveToken;
+      handle = next;
+      root.setAttribute("data-handle", handle);
+      destroyHls();
+      destroyMpeg();
+      try { video.pause(); } catch (err) { /* switching */ }
+      video.removeAttribute("src");
+      try { video.load(); } catch (err) { /* the next stream replaces it */ }
+      var cover = root.querySelector(".shorts-live-cover");
+      if (cover) cover.hidden = false;
+      var note = root.querySelector(".shorts-live-note");
+      if (note) note.textContent = "";
+      var foot = root.querySelector(".shorts-live-foot b");
+      if (foot) foot.textContent = "@" + handle;
+      var face = avatarFor(handle, liveStatus(handle) || {});
+      var img = cover && cover.querySelector("img");
+      if (img && face) img.src = face;
+      if (liveZoom && liveZoom.scale() > 1) liveZoom.reset();
+      begin(handle);
+    };
+    begin(handle);
+  }
+
+  var swapLive = function () {};
+
+  function preloadNeighbors(handle) {
+    var rows = swipeQueue.length ? swipeQueue : orderedNow();
+    var index = -1;
+    for (var i = 0; i < rows.length; i++) {
+      if (foldHandle(rows[i].handle) === foldHandle(handle)) { index = i; break; }
+    }
+    [-1, 1].forEach(function (delta) {
+      var row = rows[index + delta];
+      if (!row || !row.live) return;
+      var key = foldHandle(row.handle);
+      if (!key || manifestWarm[key]) return;
+      manifestWarm[key] = true;
+      refreshLive(row.handle).then(function (info) {
+        var url = info && (info.hls || (info.variants && info.variants[0] && info.variants[0].hls));
+        if (!url) { manifestWarm[key] = false; return; }
+        var target = sameApi(url) ? url : proxyUrl(url);
+        var headers = sameApi(url) ? {} : authHeaders();
+        return fetch(target, { headers: headers }).then(function (res) { return res.text(); });
+      }).catch(function () { manifestWarm[key] = false; });
     });
+  }
+
+  function stepLive(delta) {
+    swapLive(delta);
+  }
+
+  function bindLiveSwipe(stage) {
+    if (!stage) return;
+    var start = null;
+    var pointers = 0;
+    var pinched = false;
+    stage.addEventListener("pointerdown", function (event) {
+      var control = event.target.closest && event.target.closest("button, a, input, label");
+      if (control) return;
+      pointers += 1;
+      if (pointers >= 2) { pinched = true; start = null; return; }
+      start = { x: event.clientX, y: event.clientY, id: event.pointerId };
+    });
+    function end(event) {
+      pointers = Math.max(0, pointers - 1);
+      if (pinched) {
+        if (!pointers) pinched = false;
+        start = null;
+        return;
+      }
+      if (!start || start.id !== event.pointerId) return;
+      var dx = event.clientX - start.x;
+      var dy = event.clientY - start.y;
+      start = null;
+      if (liveZoom && liveZoom.scale() > 1) return;
+      if (Math.abs(dy) < 56 || Math.abs(dy) < Math.abs(dx) * 1.2) return;
+      stepLive(dy > 0 ? 1 : -1);
+    }
+    stage.addEventListener("pointerup", end);
+    stage.addEventListener("pointercancel", end);
+  }
+
+  function onLiveWheel(event) {
+    if (event.ctrlKey || (liveZoom && liveZoom.scale() > 1)) return;
+    if (Math.abs(event.deltaY) < 24) return;
+    var now = Date.now();
+    if (now - wheelLock < 450) { event.preventDefault(); return; }
+    wheelLock = now;
+    event.preventDefault();
+    stepLive(event.deltaY > 0 ? 1 : -1);
   }
 
   function activeVideo() {
@@ -2030,7 +2470,7 @@
     }
     if (kind === "saved") {
       event.preventDefault();
-      openSaved((slideEl && slideEl.getAttribute("data-handle")) || "");
+      openSaved(button.getAttribute("data-handle") || (slideEl && slideEl.getAttribute("data-handle")) || "");
       return;
     }
     if (kind === "past") {
@@ -2115,7 +2555,14 @@
       closeLive();
       return;
     }
-    if (liveRoot()) return;
+    if (liveRoot()) {
+      var saved = liveRoot().getAttribute("data-mode") === "saved";
+      if (!saved && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+        event.preventDefault();
+        stepLive(event.key === "ArrowDown" ? 1 : -1);
+      }
+      return;
+    }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
     var feed = document.getElementById("shorts-feed");
     if (!feed) return;
@@ -2288,7 +2735,7 @@
             if (base && hooks.token()) {
               fetch(base + "/v1/owner/live/" + encodeURIComponent(cHandle) + "?clear=1", { headers: authHeaders() }).catch(function () {});
             }
-            refreshLive(cHandle).then(function () { startLive(cHandle); });
+            refreshLive(cHandle).then(function () { openLive(cHandle); });
           } else {
             playActive();
           }
@@ -2309,7 +2756,81 @@
     saveAccount(input ? input.value : "");
   }
 
+  function applyBoard(body) {
+    var items = body && body.items;
+    if (!items) return;
+    if (!cached) cached = { live: {} };
+    if (!cached.live) cached.live = {};
+    items.forEach(function (row) {
+      if (!row || !row.handle) return;
+      rememberLive(row.handle, {
+        handle: row.handle,
+        live: !!row.live,
+        viewers: row.viewers || 0,
+        title: row.title || "",
+        roomId: row.roomId || "",
+        lastLiveAt: row.lastLiveAt || "",
+        checkedAt: row.checkedAt || ""
+      }, true);
+    });
+    var root = liveRoot();
+    if (root && root.getAttribute("data-mode") !== "saved") {
+      var handle = root.getAttribute("data-handle") || "";
+      var match = null;
+      items.forEach(function (row) {
+        if (row && foldHandle(row.handle) === foldHandle(handle)) match = row;
+      });
+      if (match) applyPlayerStats(handle, match);
+    }
+    if (routePane() !== "past") schedulePaint();
+  }
+
+  function pullBoard() {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return Promise.resolve(null);
+    if (!onLiveRoute() || routePane() === "past") return Promise.resolve(null);
+    var base = apiBase();
+    if (!base || !hooks.token() || !ownerHere()) return Promise.resolve(null);
+    var headers = authHeaders();
+    if (boardEtag) headers["If-None-Match"] = boardEtag;
+    return fetch(base + "/v1/owner/tiktok/board", { headers: headers, cache: "no-cache" }).then(function (res) {
+      var next = res.headers.get("etag") || res.headers.get("ETag") || "";
+      if (next) boardEtag = next;
+      if (res.status === 304) { dropBody(res); return null; }
+      if (!res.ok) return null;
+      return res.json();
+    }).then(function (body) {
+      if (body) applyBoard(body);
+      return body;
+    }).catch(function () { return null; });
+  }
+
+  function armBoard() {
+    clearInterval(boardTimer);
+    boardTimer = 0;
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    if (!onLiveRoute() || routePane() === "past") return;
+    boardTimer = setInterval(pullBoard, 60000);
+  }
+
+  function alignLiveHash(route) {
+    if (!route || !route.live || route.livePane) return;
+    var pane = rememberedPane();
+    var hash = location.hash || "";
+    var query = "";
+    var q = hash.indexOf("?");
+    if (q >= 0) query = hash.slice(q);
+    var next = "#/shorts/live/" + pane + query;
+    if (location.hash === next) return;
+    try { history.replaceState(history.state, "", next); }
+    catch (err) { /* the remembered tab still renders */ }
+  }
+
   function mount(route) {
+    if (route && route.live) {
+      var explicit = paneOf(route);
+      if (explicit) rememberPane(explicit);
+      alignLiveHash(route);
+    }
     document.documentElement.classList.add("shorts-on");
     var root = document.querySelector(".shorts-page");
     if (root && !root.dataset.accountsBound) {
@@ -2364,7 +2885,6 @@
       if (onLiveRoute()) {
         paintLive();
         refreshRecordings();
-        liveRows().forEach(function (row) { if (row && row.handle) refreshLive(row.handle); });
       } else {
         paintForYou();
       }
@@ -2374,10 +2894,20 @@
       poll = setInterval(function () {
         if (document.visibilityState !== "visible") return;
         refreshRecordings();
-        liveRows().forEach(function (row) {
-          if (row && row.live && row.handle) refreshStats(row.handle, row.roomId);
-        });
       }, 60 * 1000);
+      if (routePane() !== "past") {
+        pullBoard();
+        armBoard();
+      }
+      var watchQuery = (route && route.query) || new URLSearchParams((location.hash.split("?")[1]) || "");
+      var watch = watchQuery.get ? watchQuery.get("watch") : "";
+      if (watch && (route.livePane === "past" || routePane() === "past")) {
+        refreshRecordings().then(function () {
+          var open = liveRoot();
+          if (open && open.getAttribute("data-mode") === "saved" && foldHandle(open.getAttribute("data-handle")) === foldHandle(watch)) return;
+          openSaved(watch);
+        });
+      }
     }
   }
 
@@ -2386,6 +2916,8 @@
     document.removeEventListener("keydown", onKey);
     clearInterval(poll);
     poll = 0;
+    clearInterval(boardTimer);
+    boardTimer = 0;
     clearTimeout(paintTimer);
     closeLive();
     destroyHls();
@@ -2399,7 +2931,13 @@
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") {
       pauseStats();
+      clearInterval(boardTimer);
+      boardTimer = 0;
       return;
+    }
+    if (onLiveRoute() && routePane() !== "past") {
+      pullBoard();
+      armBoard();
     }
     if (!statsHandle || !liveRoot()) return;
     statsTick();
@@ -2420,6 +2958,27 @@
     setLocked: setLocked,
     toggleLock: toggleLock,
     showCaptcha: openCaptchaModal,
-    closeCaptcha: closeCaptchaModal
+    closeCaptcha: closeCaptchaModal,
+    orderLiveNow: orderLiveNow,
+    neighborHandle: neighborHandle,
+    playbackSteps: playbackSteps,
+    hlsFatalPlan: hlsFatalPlan,
+    setRecordings: function (next) {
+      recordings = {
+        cap: (next && next.cap) || 12,
+        active: (next && next.active) || 0,
+        items: (next && next.items) || {},
+        past: (next && next.past) || []
+      };
+    },
+    setLiveState: function (items) {
+      if (!cached) cached = { live: {} };
+      cached.live = {};
+      (items || []).forEach(function (row) {
+        if (!row || !row.handle) return;
+        cached.live[row.handle] = row;
+      });
+      lastLiveOrder = [];
+    }
   };
 })();

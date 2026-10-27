@@ -229,4 +229,64 @@ assert.strictEqual(mockModal.hidden, false, "Modal must be shown after showCaptc
 shorts.closeCaptcha();
 assert.strictEqual(mockModal.hidden, true, "Modal must be hidden after closeCaptcha");
 
+console.log("Testing live order, past lives, and playback steps...");
+shorts.setLocked(false);
+const ordered = shorts.orderLiveNow([
+  { handle: "gabii_g5", live: true, viewers: 40 },
+  { handle: "pepsi", live: true, viewers: 2 },
+  { handle: "other", live: false, viewers: 0 }
+], []);
+assert.deepStrictEqual(ordered.map((row) => row.handle), ["pepsi", "gabii_g5", "other"]);
+assert.strictEqual(shorts.neighborHandle(ordered, "pepsi", 1), "gabii_g5");
+assert.strictEqual(shorts.neighborHandle(ordered, "gabii_g5", -1), "pepsi");
+assert.strictEqual(shorts.neighborHandle(ordered, "pepsi", -1), "");
+const tied = shorts.orderLiveNow([
+  { handle: "b_name", live: true, viewers: 5 },
+  { handle: "a_name", live: true, viewers: 5 }
+], ["b_name", "a_name"]);
+assert.strictEqual(tied[0].handle, "b_name");
+shorts.setLiveState([
+  { handle: "gabii_g5", live: true, viewers: 40 },
+  { handle: "pepsi", live: true, viewers: 2 }
+]);
+const nowHtml = shorts.page({ live: true, livePane: "now" });
+assert(nowHtml.includes("Live now"), "Live now sub-tab is present");
+assert(nowHtml.includes("Past lives"), "Past lives sub-tab is present");
+assert(nowHtml.indexOf("@pepsi") < nowHtml.indexOf("@gabii_g5"), "Fewer viewers stay above more viewers");
+assert(!nowHtml.includes('data-shorts="saved"'), "Live now does not embed past playback");
+const emptyPast = shorts.page({ live: true, livePane: "past" });
+assert(emptyPast.includes("No past lives yet."), "Empty past lives has its own list");
+shorts.setRecordings({
+  cap: 12,
+  active: 1,
+  items: {
+    gabii_g5: { state: "recording", endedAt: "2026-10-02T00:00:00Z", title: "current-only" },
+    pepsi: { state: "saved", key: "tiktok/pepsi/1/live", endedAt: "2026-10-01T00:00:00Z" }
+  },
+  past: [
+    { handle: "gabii_g5", state: "recording", startedAt: "2026-10-02T00:00:00Z", key: "tiktok/gabii_g5/1/live" },
+    { handle: "pepsi", state: "saved", startedAt: "2026-10-01T00:00:00Z", key: "tiktok/pepsi/1/live", title: "earlier" }
+  ]
+});
+const pastHtml = shorts.page({ live: true, livePane: "past" });
+assert(pastHtml.indexOf("@gabii_g5") < pastHtml.indexOf("@pepsi"), "Past lives are newest first");
+assert(pastHtml.includes("Recording ({n} of {cap})"), "In-progress captures are marked Recording");
+assert(pastHtml.includes("earlier"), "Past lives read the per-handle history");
+assert(!pastHtml.includes("current-only"), "Past lives do not fall back to the current row when history exists");
+assert(pastHtml.includes(">2<"), "Past lives count badge is shown");
+localStorage.setItem("viktorych_shorts_live_pane", "past");
+const remembered = shorts.page({ live: true });
+assert(remembered.includes('class="tab on" href="#/shorts/live/past"'), "The past sub-tab stays selected");
+assert.strictEqual(shorts.hlsFatalPlan("mediaError", 0, true), "recover-media");
+assert.strictEqual(shorts.hlsFatalPlan("networkError", 0, true), "live-edge");
+const steps = shorts.playbackSteps({
+  variants: [
+    { quality: "origin", hls: "https://cdn.example/o.m3u8?expire=1", flv: "" },
+    { quality: "hd", hls: "https://cdn.example/h.m3u8", flv: "" }
+  ]
+}, Date.now());
+assert.strictEqual(steps[0].url, "https://cdn.example/h.m3u8");
+const appSrc = fs.readFileSync(path.join(__dirname, "../app.js"), "utf8");
+assert(appSrc.includes("livePane"), "Shorts routes keep a live pane");
+
 console.log("All Shorts locked mode and site-wide isolation tests passed successfully!");

@@ -6,7 +6,7 @@ html.shorts-on .center {
   padding-top: 0;
   padding-bottom: 0;
 }
-.shorts-top { flex: 0 0 auto; background: var(--topbar); }
+.shorts-top { flex: 0 0 auto; position: sticky; top: 0; z-index: 5; background: var(--topbar); }
 html.shorts-on .app { min-height: 100dvh; align-items: stretch; }
 .shorts-page {
   display: flex;
@@ -54,6 +54,63 @@ html.shorts-on .app { min-height: 100dvh; align-items: stretch; }
   overflow: hidden;
   touch-action: none;
 }
+.shorts-feed.is-past { scroll-snap-type: none; }
+.shorts-subtabs {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--topbar);
+  border-bottom: 1px solid var(--line);
+}
+.shorts-subtabs .tabs { display: flex; }
+.shorts-past-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--blue, #1d9bf0);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+}
+.shorts-past-badge[hidden] { display: none !important; }
+.tab.on b.shorts-past-badge::after { content: none; }
+.shorts-past-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: default;
+}
+button.shorts-past-row { cursor: pointer; }
+.shorts-past-row img {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+.shorts-past-row b,
+.shorts-past-row small { display: block; }
+.shorts-past-row small { color: var(--muted); font-size: 13px; }
+.shorts-past-empty {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+.shorts-slide { transition: transform 280ms ease; }
 .shorts-hit {
   position: absolute;
   inset: 0;
@@ -467,6 +524,26 @@ html.shorts-live-open body { overflow: hidden; }
   color: #fff;
   font-weight: 700;
   text-decoration: none;
+}
+.shorts-live-retry,
+.shorts-live-seek,
+[data-shorts="quality"] {
+  pointer-events: auto;
+}
+.shorts-live-seek {
+  position: absolute;
+  left: 12px;
+  right: 72px;
+  bottom: 16px;
+  z-index: 4;
+}
+.shorts-live-seek input {
+  width: 100%;
+  pointer-events: auto;
+}
+[data-shorts="quality"] {
+  width: auto;
+  max-width: 46vw;
 }
 .shorts-live-retry {
   border: 0;
