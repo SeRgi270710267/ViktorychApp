@@ -16,6 +16,7 @@ on:
     paths:
       - "scripts/tiktok_record.py"
       - "scripts/tiktok_sync.py"
+      - "scripts/owner_keys.py"
       - "shared/tiktok-live.js"
       - ".github/workflows/tiktok-live.yml"
       - ".github/workflows/tiktok-record.yml"
@@ -45,7 +46,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Self-test
-        run: python3 scripts/tiktok_record.py --selftest
+        run: |
+          python3 scripts/owner_keys.py --selftest
+          python3 scripts/tiktok_record.py --selftest
 
   status:
     if: github.event_name == 'workflow_dispatch' && inputs.status == '1'
@@ -79,6 +82,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_DISPATCH_TOKEN: ${{ secrets.WORKER_DISPATCH_TOKEN }}
+          ACCOUNTS_API: ${{ vars.ACCOUNTS_API }}
         run: |
           if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
             echo "Cloudflare credentials are not set; skipping the live poll."

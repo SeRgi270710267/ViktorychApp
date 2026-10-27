@@ -877,7 +877,16 @@ def main() -> int:
     config = json.loads(config_path.read_text(encoding="utf-8"))
     servers = live_servers(config)
     server = servers[0] if servers else None
-    token = (os.environ.get("DISCORD_USER_TOKEN") or "").strip()
+    env_token = (os.environ.get("DISCORD_USER_TOKEN") or "").strip()
+    owned = ""
+    try:
+        from owner_keys import material
+        owned = material("discord")
+    except Exception:
+        owned = ""
+    if owned.startswith("Bot "):
+        owned = ""
+    token = owned or env_token
     if not token:
         print("[discord-live] waiting for token")
         write_status(ROOT, server, "waiting for token", "DISCORD_USER_TOKEN is not set", "")
@@ -893,6 +902,13 @@ def main() -> int:
         write_status(ROOT, server, exc.reason, exc.text, token)
         deploy(ROOT, token)
         if exc.reason in ("unauthorized", "forbidden", "captcha", "verification"):
+            if owned:
+                try:
+                    from owner_keys import mark_attention
+                    reason = "captcha" if exc.reason in ("captcha", "verification") else ("forbidden" if exc.reason == "forbidden" else "unauthorized")
+                    mark_attention("discord", reason)
+                except Exception:
+                    pass
             _account_issue(True, exc.text)
         return 0
 
