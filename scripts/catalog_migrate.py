@@ -6,8 +6,10 @@ catalog file and stores it only when R2 does not already have a usable
 object. Logs are counts and sizes. Values are never printed.
 
 Worker secrets that can be derived from those historical files are set
-with wrangler only when they are not already set. The values are piped
-on stdin and the command output is discarded.
+with wrangler only when they are not already set. The hash-list secret
+is the exception: once, when the R2 marker is absent, it is replaced
+with both derived hashes. The values are piped on stdin and the command
+output is discarded.
 """
 
 from __future__ import annotations
@@ -52,6 +54,9 @@ TRACKED_RE = re.compile(r"""^[ \t]*TRACKED = \[([^\]]*)\]""", re.M)
 UNLOCKED_RE = re.compile(r"""var unlockedAccounts = \[([^\]]*)\]""")
 QUOTED_RE = re.compile(r'"((?:\\.|[^"\\])*)"')
 WORKER_NAME = "viktorych-accounts"
+HASH_LIST_SECRET = "OWNER_ID_SHA256"
+HASH_LIST_MARKER = "migrate/hashlist-v2"
+HASH_LIST_BODY = b'{"v":2}\n'
 _JS_SIMPLE = {"n": "\n", "r": "\r", "t": "\t", "b": "\b", "f": "\f", "\\": "\\", '"': '"', "'": "'", "/": "/"}
 
 
@@ -233,13 +238,80 @@ def copy_catalog(root: Path, get, put) -> tuple[int, int, int, int, int]:
     return stored_n, stored_b, kept_n, kept_b, absent
 
 
-def apply_secrets(root: Path, secret_list, secret_put) -> tuple[int, int, int]:
+def _hash_parts(value: str) -> list[str]:
+    found: list[str] = []
+    for item in str(value or "").split(","):
+        item = item.strip().lower()
+        if re.fullmatch(r"[a-f0-9]{64}", item) and item not in found:
+            found.append(item)
+    return found
+
+
+def complete_hash_list(derived: dict[str, str]) -> str:
+    """Both owner hashes, or empty when either one is missing."""
+    parts = _hash_parts(derived.get(HASH_LIST_SECRET) or "")
+    if len(parts) < 2:
+        return ""
+    return ",".join(parts)
+
+
+def _marker_from_get(get) -> str:
+    try:
+        blob = get(HASH_LIST_MARKER)
+    except Exception:
+        return "error"
+    if blob is None or not bytes(blob).strip():
+        return "absent"
+    return "present"
+
+
+def r2_marker_state() -> str:
+    """present, absent, or error. A transport failure is not treated as absent."""
+    import urllib.error
+    import urllib.request
+
+    from tiktok_sync import cloudflare_env
+
+    token, account = cloudflare_env()
+    if not token or not account:
+        return "error"
+    quoted = urllib.request.quote(HASH_LIST_MARKER, safe="/")
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account}/r2/buckets/viktorych-data/objects/{quoted}"
+    req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as res:
+            body = res.read()
+    except urllib.error.HTTPError as err:
+        if err.code == 404:
+            return "absent"
+        return "error"
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return "error"
+    if not body or not bytes(body).strip():
+        return "absent"
+    return "present"
+
+
+def apply_secrets(root: Path, secret_list, secret_put, get, put, marker_state=None) -> tuple[int, int, int, int]:
     existing = secret_list()
     if existing is None:
         raise RuntimeError("secret list failed")
     derived = derived_secrets(root)
-    set_n = already = missing = 0
+    state_fn = marker_state or (lambda: _marker_from_get(get))
+    state = state_fn()
+    if state == "error":
+        raise RuntimeError("marker unread")
+    complete = complete_hash_list(derived)
+    refresh = bool(complete) and state == "absent"
+    set_n = already = missing = refreshed = 0
     for name in SECRET_NAMES:
+        if name == HASH_LIST_SECRET and refresh:
+            if not secret_put(name, complete):
+                raise RuntimeError("secret update failed")
+            if not put(HASH_LIST_MARKER, HASH_LIST_BODY):
+                raise RuntimeError("secret update failed")
+            refreshed = 1
+            continue
         if name in existing:
             already += 1
             continue
@@ -250,10 +322,10 @@ def apply_secrets(root: Path, secret_list, secret_put) -> tuple[int, int, int]:
         if not secret_put(name, value):
             raise RuntimeError("secret update failed")
         set_n += 1
-    return set_n, already, missing
+    return set_n, already, missing, refreshed
 
 
-def migrate(root: Path, *, get, put, secret_list=None, secret_put=None, catalog_only: bool = False) -> int:
+def migrate(root: Path, *, get, put, secret_list=None, secret_put=None, catalog_only: bool = False, marker_state=None) -> int:
     try:
         stored_n, stored_b, kept_n, kept_b, absent = copy_catalog(root, get, put)
     except RuntimeError:
@@ -267,11 +339,15 @@ def migrate(root: Path, *, get, put, secret_list=None, secret_put=None, catalog_
     lister = secret_list or wrangler_secret_names
     writer = secret_put or wrangler_secret_put
     try:
-        set_n, already, missing = apply_secrets(root, lister, writer)
-    except RuntimeError:
-        print("[migrate] secret update failed")
+        set_n, already, missing, refreshed = apply_secrets(root, lister, writer, get, put, marker_state)
+    except RuntimeError as err:
+        if str(err) == "marker unread":
+            print("[migrate] hash list marker unread")
+        else:
+            print("[migrate] secret update failed")
         return 1
     print(f"[migrate] secrets set {set_n}, already present {already}")
+    print(f"[migrate] hash list refreshed {refreshed}")
     if missing:
         print(f"[migrate] secrets not derived {missing}")
     return 0
@@ -291,6 +367,7 @@ def dry_run(root: Path) -> int:
     print(f"[migrate] dry-run candidates {candidates_n} objects, {candidates_b} bytes")
     print(f"[migrate] absent {absent}")
     print(f"[migrate] secrets derivable {len(derived)}")
+    print(f"[migrate] hash list parts {len(_hash_parts(derived.get(HASH_LIST_SECRET) or ''))}")
     return 0
 
 
@@ -358,14 +435,20 @@ def selftest() -> int:
             store[key] = bytes(payload)
             return True
 
-        secrets = {"OWNER_HANDLE": "already-set"}
+        login_only = _sha256(github)
+        secrets = {
+            "OWNER_HANDLE": "already-set",
+            "OWNER_ID_SHA256": login_only,
+            "OWNER_PUBLIC_ID": "already-public",
+        }
         written: list[str] = []
+        allow_hash_replace = {"ok": True}
 
         def secret_list():
             return set(secrets)
 
         def secret_put(name: str, value: str) -> bool:
-            if name in secrets:
+            if name in secrets and not (allow_hash_replace["ok"] and name == HASH_LIST_SECRET):
                 return False
             secrets[name] = value
             written.append(name)
@@ -391,20 +474,43 @@ def selftest() -> int:
         if community not in store or not usable_catalog(store[community], community):
             print("community files were not stored")
             return 1
-        if "OWNER_HANDLE" in written:
+        if "OWNER_HANDLE" in written or "OWNER_PUBLIC_ID" in written:
+            print("an existing secret was replaced")
+            return 1
+        if secrets["OWNER_HANDLE"] != "already-set" or secrets["OWNER_PUBLIC_ID"] != "already-public":
             print("an existing secret was replaced")
             return 1
         derived = derived_secrets(root)
-        for name in ("OWNER_ID_SHA256", "OWNER_GITHUB_SHA256", "OWNER_PUBLIC_ID", "TIKTOK_TRACKED", "TIKTOK_UNLOCKED"):
+        for name in ("OWNER_ID_SHA256", "OWNER_GITHUB_SHA256", "TIKTOK_TRACKED", "TIKTOK_UNLOCKED"):
             if secrets.get(name) != derived.get(name):
                 print("a derived secret was not set")
                 return 1
-        if secrets["OWNER_PUBLIC_ID"] != github or secrets["TIKTOK_UNLOCKED"] != "sampleclip":
+        if secrets["TIKTOK_UNLOCKED"] != "sampleclip":
             print("a derived secret did not match its source")
             return 1
         if _sha256(handle) not in secrets["OWNER_ID_SHA256"] or _sha256(github) not in secrets["OWNER_GITHUB_SHA256"]:
             print("owner hashes were not derived")
             return 1
+        if secrets["OWNER_ID_SHA256"] == login_only or store.get(HASH_LIST_MARKER) != HASH_LIST_BODY:
+            print("the hash list was not refreshed once")
+            return 1
+        if "hash list refreshed 1" not in text or _sha256(handle) in text or _sha256(github) in text:
+            print("the hash list log was wrong")
+            return 1
+        allow_hash_replace["ok"] = False
+        secrets["OWNER_ID_SHA256"] = login_only
+        written.clear()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            held = migrate(root, get=getter, put=putter, secret_list=secret_list, secret_put=secret_put)
+        held_text = buf.getvalue()
+        if held != 0 or secrets["OWNER_ID_SHA256"] != login_only or HASH_LIST_SECRET in written or "OWNER_HANDLE" in written:
+            print("the hash list was written again")
+            return 1
+        if "hash list refreshed 0" not in held_text or handle in held_text or _sha256(handle) in held_text:
+            print("the second hash list log was wrong")
+            return 1
+        secrets["OWNER_ID_SHA256"] = derived["OWNER_ID_SHA256"]
         if derived.get("OWNER_HANDLE") != handle:
             print("an escaped assignment was not decoded")
             return 1
@@ -415,14 +521,36 @@ def selftest() -> int:
         if again != 0 or store != before or "kept " not in buf.getvalue():
             print("a second copy replaced the stored catalog")
             return 1
-        if "orbitfox" in buf.getvalue():
+        if "orbitfox" in buf.getvalue() or "hash list" in buf.getvalue():
             print("the second log included a name")
+            return 1
+        puts = {"n": 0}
+
+        def refuse_put(name: str, value: str) -> bool:
+            puts["n"] += 1
+            return False
+
+        snap = dict(store)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            unread = migrate(
+                root,
+                get=getter,
+                put=putter,
+                secret_list=lambda: set(secrets),
+                secret_put=refuse_put,
+                marker_state=lambda: "error",
+            )
+        if unread != 0 and "hash list marker unread" in buf.getvalue() and puts["n"] == 0 and store == snap:
+            pass
+        else:
+            print("an unreadable marker still changed a secret")
             return 1
         buf = io.StringIO()
         with redirect_stdout(buf):
             dry = dry_run(root)
         dry_text = buf.getvalue()
-        if dry != 0 or "dry-run candidates " not in dry_text or "secrets derivable 6" not in dry_text:
+        if dry != 0 or "dry-run candidates " not in dry_text or "secrets derivable 6" not in dry_text or "hash list parts 2" not in dry_text:
             print("dry-run counts were wrong")
             return 1
         for banned in (handle, github, "orbitfox", "sampleclip", "lockclip", "sampleforum"):
@@ -448,8 +576,11 @@ def selftest() -> int:
         with redirect_stdout(buf):
             underived = migrate(bare, get=bare_get, put=bare_put, secret_list=lambda: set(), secret_put=lambda name, value: False)
         underived_text = buf.getvalue()
-        if underived != 0 or "secrets not derived 6" not in underived_text or "stored " not in underived_text:
+        if underived != 0 or "secrets not derived 6" not in underived_text or "stored " not in underived_text or "hash list refreshed 0" not in underived_text:
             print("an underived secret failed a successful copy")
+            return 1
+        if HASH_LIST_MARKER in bare_store:
+            print("an incomplete hash list stored the marker")
             return 1
         if handle in underived_text or "orbitfox" in underived_text:
             print("underived log included a name")
@@ -471,7 +602,7 @@ def main(argv: list[str] | None = None) -> int:
     if not token or not account:
         print("[migrate] cloudflare credentials are not configured")
         return 1
-    return migrate(ROOT, get=r2_get, put=r2_put, catalog_only=catalog_only)
+    return migrate(ROOT, get=r2_get, put=r2_put, catalog_only=catalog_only, marker_state=r2_marker_state)
 
 
 if __name__ == "__main__":
