@@ -30,6 +30,7 @@ export function buildPlaylist(rows, key, origin) {
     "#EXT-X-VERSION:" + (init ? "7" : "3"),
     "#EXT-X-TARGETDURATION:" + target,
     "#EXT-X-PLAYLIST-TYPE:VOD",
+    "#EXT-X-INDEPENDENT-SEGMENTS",
     "#EXT-X-MEDIA-SEQUENCE:0"
   ];
   if (init) lines.push('#EXT-X-MAP:URI="' + base + '/init"');
@@ -48,10 +49,19 @@ export function parseRange(header, size) {
   const raw = String(header || "").trim();
   const total = Number(size) || 0;
   if (!raw) return null;
-  const match = raw.match(/^bytes=(\d+)-(\d*)$/);
-  if (!match || total <= 0) return false;
-  const start = Number(match[1]);
-  let end = match[2] ? Number(match[2]) : total - 1;
+  const match = raw.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match || total <= 0 || (match[1] === "" && match[2] === "")) return false;
+  let start;
+  let end;
+  if (match[1] === "") {
+    const tail = Number(match[2]);
+    if (!Number.isFinite(tail) || tail <= 0) return false;
+    start = Math.max(0, total - tail);
+    end = total - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] === "" ? total - 1 : Number(match[2]);
+  }
   if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
   if (start >= total || start < 0 || end < start) return false;
   if (end >= total) end = total - 1;

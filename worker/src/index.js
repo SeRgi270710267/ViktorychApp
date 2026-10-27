@@ -12,7 +12,8 @@ import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from ".
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
 import { handleYtRoute } from "./ythls.js";
-import { fresh, needsUpload, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
+import { fresh, needsUpload, shouldRememberLive, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
+import { mediaMime, streamFresh, shouldSniffMedia, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -973,6 +974,90 @@ async function handleOwnerTiktok(request, env) {
   });
 }
 
+const LIVE_BOARD_CACHE = "https://live-board.internal/owner";
+
+function liveBoard(doc) {
+  const live = doc && doc.live && typeof doc.live === "object" ? doc.live : {};
+  const items = [];
+  Object.keys(live).forEach((name) => {
+    const row = live[name];
+    if (!row || typeof row !== "object") return;
+    const handle = String(row.handle || name || "");
+    if (!TIKTOK_HANDLE.test(handle)) return;
+    const on = !!row.live;
+    items.push({
+      handle,
+      live: on,
+      viewers: on ? (Number(row.viewers) || 0) : 0,
+      title: on ? String(row.title || "").slice(0, 180) : "",
+      roomId: /^[1-9][0-9]{5,24}$/.test(String(row.roomId || "")) ? String(row.roomId) : "",
+      lastLiveAt: String(row.lastLiveAt || ""),
+      checkedAt: String(row.checkedAt || "")
+    });
+  });
+  items.sort((a, b) => {
+    const aLive = a.live ? 0 : 1;
+    const bLive = b.live ? 0 : 1;
+    if (aLive !== bLive) return aLive - bLive;
+    if (a.viewers !== b.viewers) return a.viewers - b.viewers;
+    const left = a.handle.toLowerCase();
+    const right = b.handle.toLowerCase();
+    return left < right ? -1 : left > right ? 1 : 0;
+  });
+  return { items };
+}
+
+async function forgetLiveBoard() {
+  try { await caches.default.delete(new Request(LIVE_BOARD_CACHE)); }
+  catch (err) { /* the next read rebuilds the board */ }
+}
+
+async function handleLiveBoard(request, env) {
+  const gate = await requireTiktok(request, env);
+  if (gate.error) return gate.error;
+  if (!env.DATA) return json(503, { error: "not_configured" });
+  const paced = await rateHit(env, "live-board:" + gate.row.public_id, 120, 10 * 60 * 1000);
+  if (!paced.ok) return limited(paced);
+  let bodyText = "";
+  let etag = "";
+  try {
+    const hit = await caches.default.match(new Request(LIVE_BOARD_CACHE));
+    const at = hit ? Number(hit.headers.get("x-fetched-at") || 0) : 0;
+    if (hit && at && Date.now() - at < 30000) {
+      bodyText = await hit.text();
+      etag = hit.headers.get("etag") || "";
+    }
+  } catch (err) { bodyText = ""; }
+  if (!bodyText) {
+    const doc = await readOwnerDoc(env);
+    bodyText = JSON.stringify(liveBoard(doc));
+    etag = '"' + await sha256Hex(bodyText) + '"';
+    try {
+      await caches.default.put(new Request(LIVE_BOARD_CACHE), new Response(bodyText, {
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          etag,
+          "x-fetched-at": String(Date.now()),
+          "cache-control": "public, max-age=30"
+        }
+      }));
+    } catch (err) { /* this response is still returned */ }
+  }
+  const headers = {
+    "content-type": "application/json; charset=utf-8",
+    etag: etag,
+    "cache-control": "private, max-age=30",
+    "cdn-cache-control": "no-store",
+    vary: "Authorization",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
+  };
+  if (etag && etagMatches(request.headers.get("If-None-Match"), etag)) {
+    return new Response(null, { status: 304, headers });
+  }
+  return new Response(bodyText, { status: 200, headers });
+}
+
 async function fetchPublic(url) {
   const res = await fetch(url, {
     headers: {
@@ -1069,14 +1154,23 @@ async function rememberLive(env, handle, info) {
       backoffStep: 0
     };
     await env.DATA.put("owner/tiktok.json", JSON.stringify(doc));
+    await forgetLiveBoard();
   } catch (err) { /* the player still gets this response */ }
 }
 
 function serveMime(row) {
   const mime = String((row && row.mime) || "");
   const key = String((row && row.object_key) || "");
-  if (mime && mime !== "application/octet-stream") return mime;
-  if (/\/video$/.test(key) || /\.mp4$/i.test(key)) return "video/mp4";
+  const kind = String((row && row.kind) || "");
+  const lower = mime.toLowerCase();
+  if (kind === "segment" || kind === "init" || lower === "video/iso.segment" || lower === "application/mp4") {
+    if (!lower || lower === "application/octet-stream" || lower === "binary/octet-stream" || lower === "video/iso.segment" || lower === "application/mp4") {
+      return "video/mp4";
+    }
+  }
+  if (mime && lower !== "application/octet-stream" && lower !== "binary/octet-stream") return mime;
+  if (/\/video$/.test(key) || /\.(mp4|m4s|m4v)$/i.test(key)) return "video/mp4";
+  if (/\.m3u8$/i.test(key)) return "application/vnd.apple.mpegurl";
   return mime || "application/octet-stream";
 }
 
@@ -1193,6 +1287,36 @@ async function handleLiveStats(request, env, handle, gate, prev) {
   return json(200, { handle, live: body.live, viewers: body.viewers, title: body.title });
 }
 
+function publicStream(url) {
+  const text = String(url || "");
+  if (!text) return "";
+  let parsed = null;
+  try { parsed = new URL(text); } catch (err) { return ""; }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password || !mediaHostOk(parsed.hostname)) return "";
+  return parsed.toString();
+}
+
+function publicVariants(picked) {
+  const rows = picked && Array.isArray(picked.variants) ? picked.variants : [];
+  const out = [];
+  rows.forEach((row) => {
+    if (!row) return;
+    const hls = publicStream(row.hls);
+    const flv = publicStream(row.flv);
+    if (!hls && !flv) return;
+    out.push({ quality: String(row.quality || ""), hls, flv });
+  });
+  if (out.length) return out;
+  const hls = publicStream(picked && picked.hls);
+  const flv = publicStream(picked && picked.flv);
+  if (!hls && !flv) return [];
+  return [{ quality: String((picked && picked.quality) || ""), hls, flv }];
+}
+
+function usableStream(saved) {
+  return !!(saved && isTopQuality(saved.quality) && saved.hls && streamFresh(saved.hls));
+}
+
 function liveInfo(handle, prev, roomId, picked) {
   return {
     handle,
@@ -1205,6 +1329,7 @@ function liveInfo(handle, prev, roomId, picked) {
     qualityNote: picked.qualityNote || "",
     hls: picked.hls || "",
     flv: picked.flv || "",
+    variants: publicVariants(picked),
     lastLiveAt: picked.live ? stamp() : ((prev && prev.lastLiveAt) || ""),
     detail: ""
   };
@@ -1218,7 +1343,9 @@ async function handleOwnerLive(request, env, rawHandle) {
   if (!TIKTOK_HANDLE.test(handle)) return json(400, { error: "bad_handle" });
   const stored = await readOwnerDoc(env);
   const prev = stored && stored.live && stored.live[handle] ? stored.live[handle] : {};
-  const clearParam = new URL(request.url).searchParams.get("clear") === "1";
+  const requestUrl = new URL(request.url);
+  const clearParam = requestUrl.searchParams.get("clear") === "1";
+  const fresh = requestUrl.searchParams.get("fresh") === "1";
   if (clearParam && prev && (prev.backoffUntil || prev.backoffStep)) {
     prev.backoffUntil = "";
     prev.backoffStep = 0;
@@ -1228,7 +1355,7 @@ async function handleOwnerLive(request, env, rawHandle) {
       await env.DATA.put("owner/tiktok.json", JSON.stringify(stored)).catch(() => {});
     }
   }
-  const statsOnly = new URL(request.url).searchParams.get("stats") === "1";
+  const statsOnly = requestUrl.searchParams.get("stats") === "1";
   if (!clearParam && backoffActive(prev)) return json(200, blockedPayload(handle, prev, !statsOnly));
   if (statsOnly) return handleLiveStats(request, env, handle, gate, prev);
   const roomKey = "https://live-roomid.internal/" + handle.toLowerCase();
@@ -1239,9 +1366,9 @@ async function handleOwnerLive(request, env, rawHandle) {
     const checked = Date.parse(prev.checkedAt || "");
     if (Number.isFinite(checked) && Date.now() - checked < 5 * 60 * 1000) roomId = String(prev.roomId);
   }
-  if (roomId) {
+  if (!fresh && roomId) {
     const saved = await cacheRead("https://live-stream.internal/" + roomId, 10000);
-    if (saved && isTopQuality(saved.quality) && saved.hls) return json(200, liveInfo(handle, prev, roomId, saved));
+    if (usableStream(saved)) return json(200, liveInfo(handle, prev, roomId, saved));
   }
   const paced = await rateHit(env, "live:" + gate.row.public_id, 240, 10 * 60 * 1000);
   if (!paced.ok) return limited(paced);
@@ -1269,8 +1396,10 @@ async function handleOwnerLive(request, env, rawHandle) {
     await rememberLive(env, handle, info);
     return json(200, Object.assign({ handle, blocked: false }, info));
   }
-  const saved = await cacheRead("https://live-stream.internal/" + roomId, 10000);
-  if (saved && isTopQuality(saved.quality) && saved.hls) return json(200, liveInfo(handle, prev, roomId, saved));
+  if (!fresh) {
+    const saved = await cacheRead("https://live-stream.internal/" + roomId, 10000);
+    if (usableStream(saved)) return json(200, liveInfo(handle, prev, roomId, saved));
+  }
   let room = null;
   try {
     room = await fetchRoom(roomId);
@@ -1306,7 +1435,8 @@ async function handleOwnerLive(request, env, rawHandle) {
       quality: picked.quality || "",
       qualityNote: "",
       hls: picked.hls || "",
-      flv: picked.flv || ""
+      flv: picked.flv || "",
+      variants: publicVariants(picked)
     }, 10);
   }
   const info = liveInfo(handle, prev, roomId, picked);
@@ -1510,9 +1640,9 @@ function dropBody(upstream) {
   if (dropped && dropped.catch) dropped.catch(function () {});
 }
 
-function streamMedia(upstream) {
+function streamMedia(upstream, mime) {
   const headers = new Headers();
-  headers.set("content-type", upstream.headers.get("content-type") || "application/octet-stream");
+  headers.set("content-type", mime || upstream.headers.get("content-type") || "application/octet-stream");
   const length = upstream.headers.get("content-length");
   if (length) headers.set("content-length", length);
   const range = upstream.headers.get("content-range");
@@ -1561,36 +1691,39 @@ async function handleOwnerMedia(request, env, url) {
     return json(400, { error: "bad_url" });
   }
   const type = upstream.headers.get("content-type") || "";
-  const playlist = parsed.pathname.endsWith(".m3u8") || /mpegurl|m3u8/i.test(type);
-  if (!playlist) return streamMedia(upstream);
   const length = Number(upstream.headers.get("content-length") || 0);
+  if (!shouldSniffMedia(parsed.pathname, type, length)) {
+    return streamMedia(upstream, mediaMime(parsed.pathname, type, ""));
+  }
   if (length > 2000000) {
     dropBody(upstream);
     return json(413, { error: "too_large" });
   }
-  const text = await upstream.text();
-  if (text.length > 2000000) return json(413, { error: "too_large" });
-  if (text.indexOf("#EXTM3U") >= 0) {
+  const bytes = await upstream.arrayBuffer();
+  if (bytes.byteLength > 2000000) return json(413, { error: "too_large" });
+  const headBytes = new Uint8Array(bytes.slice(0, 16));
+  let head = "";
+  for (let i = 0; i < headBytes.length; i++) head += String.fromCharCode(headBytes[i]);
+  const sharedHeaders = {
+    "cache-control": "private, no-store",
+    "cdn-cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
+  };
+  if (head.indexOf("#EXTM3U") === 0) {
+    const text = new TextDecoder("utf-8").decode(bytes);
     return new Response(rewritePlaylist(text, upstream.url || parsed.toString(), request), {
       status: upstream.status,
-      headers: {
-        "content-type": "application/vnd.apple.mpegurl",
-        "cache-control": "private, no-store",
-        "cdn-cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
-      }
+      headers: Object.assign({ "content-type": "application/vnd.apple.mpegurl" }, sharedHeaders)
     });
   }
-  return new Response(text, {
+  const sniffed = mediaMime(parsed.pathname, type, head) || type || "application/octet-stream";
+  return new Response(bytes, {
     status: upstream.status,
-    headers: {
-      "content-type": type || "application/octet-stream",
-      "cache-control": "private, no-store",
-      "cdn-cache-control": "no-store",
-      "x-content-type-options": "nosniff",
-    "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
-    }
+    headers: Object.assign({
+      "content-type": sniffed,
+      "content-length": String(bytes.byteLength)
+    }, sharedHeaders)
   });
 }
 
@@ -1803,7 +1936,15 @@ function tiktokPlaybackKey(raw) {
 
 function tiktokLiveKey(raw) {
   const text = String(raw || "").replace(/\/(?:index\.m3u8|init|\d+)$/, "");
-  return /^tiktok\/[A-Za-z0-9._]{2,24}\/[1-9][0-9]{5,24}\/live\/[1-9][0-9]{0,3}$/.test(text);
+  return /^tiktok\/[A-Za-z0-9._]{2,24}\/[1-9][0-9]{5,24}\/live(?:\/[1-9][0-9]{0,3})?$/.test(text);
+}
+
+function isLiveParentKey(key) {
+  return /^tiktok\/[A-Za-z0-9._]{2,24}\/[1-9][0-9]{5,24}\/live$/.test(String(key || ""));
+}
+
+function livePartKey(key) {
+  return /^tiktok\/[A-Za-z0-9._]{2,24}\/[1-9][0-9]{5,24}\/live\/[1-9][0-9]{0,3}$/.test(String(key || ""));
 }
 
 function publicLoopCache() {
@@ -2033,7 +2174,204 @@ async function rangedTelegram(request, env, row, immutable) {
   }, extra || {}));
 }
 
-async function handleTelegram(request, env, path) {
+const liveBufCache = new Map();
+
+function liveBufPart(key) {
+  const match = /^tiktok\/([A-Za-z0-9._]{2,24})\/([1-9][0-9]{5,24})\/live\/([1-9][0-9]{0,3})$/.exec(String(key || ""));
+  if (!match) return null;
+  return { handle: match[1], room: match[2], part: match[3], key: match[0] };
+}
+
+async function liveBufferIndex(env, partKey) {
+  const part = liveBufPart(partKey);
+  if (!part || !env.DATA) return [];
+  const now = Date.now();
+  const hit = liveBufCache.get(part.key);
+  if (hit && now - hit.at < 30000) return hit.rows;
+  const rows = [];
+  try {
+    for (let slot = 0; slot <= 8; slot++) {
+      const prefix = "live-buf/" + slot + "/" + part.handle + "/" + part.room + "/" + part.part + "/";
+      let cursor = undefined;
+      do {
+        const listed = await env.DATA.list({ prefix, cursor, limit: 200 });
+        const objects = (listed && listed.objects) || [];
+        for (let i = 0; i < objects.length; i++) {
+          const object = objects[i];
+          if (!object || !object.key || !String(object.key).endsWith(".json")) continue;
+          const sidecar = await env.DATA.get(object.key);
+          if (!sidecar) continue;
+          let meta = null;
+          try { meta = JSON.parse(await sidecar.text()); } catch (err) { meta = null; }
+          if (!meta || String(meta.objectKey || "") !== part.key) continue;
+          const role = String(meta.role || "");
+          const index = Number(meta.index);
+          if (role !== "init" && role !== "segment") continue;
+          if (role === "init" && index !== -1) continue;
+          if (role === "segment" && (!Number.isFinite(index) || index < 0)) continue;
+          rows.push({
+            kind: role,
+            part_index: role === "init" ? -1 : index,
+            size: Number(meta.size) || 0,
+            duration: Number(meta.duration) || 0,
+            mime: "video/mp4",
+            object_key: part.key,
+            bufKey: String(object.key).replace(/\.json$/, "")
+          });
+        }
+        cursor = listed && listed.truncated ? listed.cursor : "";
+      } while (cursor);
+    }
+  } catch (err) {
+    liveBufCache.set(part.key, { at: now, rows: [] });
+    return [];
+  }
+  liveBufCache.set(part.key, { at: now, rows });
+  return rows;
+}
+
+async function partRows(env, key) {
+  const d1 = await telegramRows(env, key);
+  if (!livePartKey(key)) return d1;
+  const extra = await liveBufferIndex(env, key);
+  if (!extra.length) return d1;
+  const seen = {};
+  d1.forEach((row) => { if (row) seen[row.kind + ":" + row.part_index] = true; });
+  const merged = d1.slice();
+  extra.forEach((row) => {
+    const id = row.kind + ":" + row.part_index;
+    if (seen[id]) return;
+    seen[id] = true;
+    merged.push(row);
+  });
+  return merged;
+}
+
+async function cachedVod(key, build) {
+  const cacheKey = new Request("https://tg-cache.internal/vod/" + encodeURIComponent(key));
+  try {
+    const hit = await caches.default.match(cacheKey);
+    const at = hit ? Number(hit.headers.get("x-fetched-at") || 0) : 0;
+    if (hit && at && Date.now() - at < 120000) return await hit.text();
+  } catch (err) { /* rebuild */ }
+  const text = await build();
+  if (!text) return "";
+  try {
+    await caches.default.put(cacheKey, new Response(text, {
+      headers: {
+        "content-type": "application/vnd.apple.mpegurl",
+        "cache-control": "private, max-age=120",
+        "x-fetched-at": String(Date.now())
+      }
+    }));
+  } catch (err) { /* this playlist is still returned */ }
+  return text;
+}
+
+async function stitchedLivePlaylist(env, parent, origin) {
+  const parts = [];
+  let misses = 0;
+  for (let n = 1; n <= 48; n++) {
+    const key = parent + "/" + n;
+    const text = buildPlaylist(await partRows(env, key), key, origin);
+    if (!text) {
+      misses += 1;
+      if (parts.length && misses >= 2) break;
+      continue;
+    }
+    misses = 0;
+    parts.push(text);
+  }
+  return stitchPlaylists(parts);
+}
+
+async function serveR2Range(request, env, objectKey) {
+  const head = await env.DATA.head(objectKey);
+  if (!head) return null;
+  const size = Number(head.size || 0);
+  const mime = "video/mp4";
+  if (size > TG_DIRECT_MAX) {
+    const rangeHeader = request.headers.get("Range");
+    const range = rangeHeader ? archiveRange(rangeHeader, size) : null;
+    if (rangeHeader && !range) {
+      return new Response(null, { status: 416, headers: { "content-range": "bytes */" + size, "cache-control": "no-store" } });
+    }
+    const object = range
+      ? await env.DATA.get(objectKey, { range: { offset: range.offset, length: range.length } })
+      : await env.DATA.get(objectKey);
+    if (!object) return null;
+    const headers = {
+      "content-type": mime,
+      "accept-ranges": "bytes",
+      "cache-control": "private, max-age=31536000, immutable",
+      "x-content-type-options": "nosniff",
+      "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex"
+    };
+    if (range) {
+      headers["content-range"] = "bytes " + range.offset + "-" + range.end + "/" + size;
+      headers["content-length"] = String(range.length);
+      return new Response(object.body, { status: 206, headers });
+    }
+    if (size) headers["content-length"] = String(size);
+    return new Response(object.body, { status: 200, headers });
+  }
+  const cacheKey = new Request("https://tg-cache.internal/r2/" + encodeURIComponent(objectKey));
+  let full = null;
+  try { full = await caches.default.match(cacheKey); } catch (err) { full = null; }
+  if (!full) {
+    const object = await env.DATA.get(objectKey);
+    if (!object) return null;
+    const stored = await object.arrayBuffer();
+    full = new Response(stored, {
+      headers: {
+        "content-type": mime,
+        "content-length": String(stored.byteLength),
+        "cache-control": "public, max-age=31536000, immutable"
+      }
+    });
+    try { await caches.default.put(cacheKey, full.clone()); } catch (err) { /* still served */ }
+  }
+  const bytes = await full.arrayBuffer();
+  const span = parseRange(request.headers.get("Range"), bytes.byteLength);
+  if (span === false) {
+    return new Response(null, { status: 416, headers: { "content-range": "bytes */" + bytes.byteLength, "cache-control": "no-store" } });
+  }
+  if (!span) return mediaResponse(bytes, mime, 200, { "cache-control": "private, max-age=31536000, immutable" });
+  return mediaResponse(bytes.slice(span.start, span.end + 1), mime, 206, {
+    "content-range": "bytes " + span.start + "-" + span.end + "/" + bytes.byteLength,
+    "cache-control": "private, max-age=31536000, immutable"
+  });
+}
+
+async function serveLiveBuffer(request, env, key, index) {
+  if (!env.DATA) return null;
+  const rows = await liveBufferIndex(env, key);
+  const row = rows.find((item) => Number(item.part_index) === Number(index));
+  if (!row || !row.bufKey) return null;
+  return serveR2Range(request, env, row.bufKey);
+}
+
+async function prefetchLiveSegment(env, key, index) {
+  const row = await env.DB.prepare("SELECT object_key, kind, part_index, file_id, size, sha256, mime FROM telegram_files WHERE object_key = ? AND kind = 'segment' AND part_index = ? AND serve = 1 AND encrypted = 0").bind(key, index).first();
+  if (row && row.file_id && Number(row.size) > 0 && Number(row.size) <= TG_DIRECT_MAX) {
+    await telegramBody(env, row);
+    return;
+  }
+  const rows = await liveBufferIndex(env, key);
+  const buf = rows.find((item) => Number(item.part_index) === Number(index));
+  if (!buf || !buf.bufKey || Number(buf.size) > TG_DIRECT_MAX) return;
+  await serveR2Range(new Request("https://tg-cache.internal/prefetch"), env, buf.bufKey);
+}
+
+function withPrefetch(ctx, env, key, mode, index, response) {
+  if (ctx && ctx.waitUntil && mode === "segment" && livePartKey(key)) {
+    const job = prefetchLiveSegment(env, key, Number(index) + 1);
+    ctx.waitUntil(job.catch(() => {}));
+  }
+  return response;
+}
+
+async function handleTelegram(request, env, path, ctx) {
   if (!env.DB) return json(503, { error: "not_configured" });
   const raw = path.replace(/^\/tg\/?/, "");
   let decoded = raw;
@@ -2074,7 +2412,7 @@ async function handleTelegram(request, env, path) {
     const nested = decoded.match(/^(.*)\/(\d+)$/);
     if (nested) {
       const parent = await env.DB.prepare("SELECT part_index FROM telegram_files WHERE object_key = ? AND kind = 'segment' AND part_index = ? AND serve = 1 AND encrypted = 0").bind(nested[1], Number(nested[2])).first();
-      if (parent) {
+      if (parent || livePartKey(nested[1])) {
         key = nested[1];
         index = Number(nested[2]);
         mode = "segment";
@@ -2096,8 +2434,11 @@ async function handleTelegram(request, env, path) {
     }
   }
   if (mode === "playlist") {
-    const rows = await telegramRows(env, key);
-    const text = buildPlaylist(rows, key, new URL(request.url).origin);
+    const origin = new URL(request.url).origin;
+    let text = "";
+    if (isLiveParentKey(key)) text = await cachedVod(key, () => stitchedLivePlaylist(env, key, origin));
+    else if (livePartKey(key)) text = await cachedVod(key, async () => buildPlaylist(await partRows(env, key), key, origin));
+    else text = buildPlaylist(await telegramRows(env, key), key, origin);
     if (!text) {
       if (!publicLoop && !(viewer && viewer.owner === 1)) {
         const missed = await chargePlayback(env, request, verify);
@@ -2134,6 +2475,14 @@ async function handleTelegram(request, env, path) {
     }
     if (viewer && mode === "file" && row && row.file_id) await slideSession(env, request);
   }
+  if ((mode === "segment" || mode === "init") && livePartKey(key)) {
+    const tooBig = !!(row && Number(row.size) > TG_DIRECT_MAX);
+    if (!row || !row.file_id || tooBig) {
+      const buffered = await serveLiveBuffer(request, env, key, mode === "init" ? -1 : index);
+      if (buffered) return withPrefetch(ctx, env, key, mode, index, buffered);
+      if (tooBig) return json(502, { error: "unavailable" });
+    }
+  }
   if (!row || !row.file_id) {
     if (mode === "file") {
       const original = await serveKeptOriginal(request, env, key);
@@ -2141,7 +2490,7 @@ async function handleTelegram(request, env, path) {
     }
     return json(404, { error: "not_found" });
   }
-  return rangedTelegram(request, env, row, loopGroupKey(key));
+  return withPrefetch(ctx, env, key, mode, index, await rangedTelegram(request, env, row, loopGroupKey(key)));
 }
 
 async function serveKeptOriginal(request, env, key) {
@@ -2579,10 +2928,7 @@ async function watchTikTokLive(env, nowMs) {
     if (blocks) await writeJsonObject(env, markKey, Object.assign({}, mark, { blocks: 0, blockedAt: "" }));
 
     const info = liveInfo(handle, prev, seen.roomId || "", seen.picked || { live: false });
-    const quiet = !fresh(prev.checkedAt, nowMs, 5 * 60 * 1000);
-    if (prev.live !== info.live || String(prev.roomId || "") !== String(info.roomId || "") || quiet) {
-      await rememberLive(env, handle, info);
-    }
+    if (shouldRememberLive(prev, info, nowMs)) await rememberLive(env, handle, info);
 
     const job = await readJsonObject(env, WATCH_JOB_PREFIX + handle + ".json");
     const active = job && job.active && typeof job.active === "object" ? job.active : {};
@@ -3572,7 +3918,7 @@ async function handleFriendAction(request, env, action) {
   return json(400, { error: "bad_action" });
 }
 
-async function route(request, env) {
+async function route(request, env, ctx) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
@@ -3607,7 +3953,7 @@ async function route(request, env) {
     return json(200, { ok: true, ready: !!env.ACCOUNT_PEPPER, data: !!env.DATA, turnstile: !!env.TURNSTILE_SECRET, telegram: !!env.TELEGRAM_BOT_TOKEN });
   }
   if ((path === "/tg" || path.startsWith("/tg/")) && (request.method === "GET" || request.method === "HEAD")) {
-    return handleTelegram(request, env, path);
+    return handleTelegram(request, env, path, ctx);
   }
   const archiveMedia = path.match(/^\/v1\/archive\/([a-f0-9]{64}\.[a-z0-9]{1,8})$/);
   if (archiveMedia && (request.method === "GET" || request.method === "HEAD")) return handleArchive(request, env, archiveMedia[1]);
@@ -3623,6 +3969,7 @@ async function route(request, env) {
   if (path === "/v1/owner/tiktok/health" && request.method === "GET") return handleTikTokHealth(request, env);
   if (path === "/v1/owner/tiktok/recordings" && request.method === "GET") return handleRecordings(request, env);
   if (path === "/v1/owner/tiktok/channels" && (request.method === "GET" || request.method === "POST")) return handleBackupChannels(request, env);
+  if (path === "/v1/owner/tiktok/board" && request.method === "GET") return handleLiveBoard(request, env);
   if (path === "/v1/owner/tiktok" && request.method === "GET") return handleOwnerTiktok(request, env);
   if (path === "/v1/owner/play" && request.method === "GET") return handleOwnerPlay(request, env, url);
   if (path === "/v1/owner/media" && request.method === "GET") return handleOwnerMedia(request, env, url);
@@ -3680,13 +4027,13 @@ async function route(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     try {
       const url = new URL(request.url);
       const path = url.pathname;
       const origin = request.headers.get("Origin");
       if (origin && !isPublicFederationRoute(path) && allowedOrigins(env).indexOf(origin) < 0) return json(403, { error: "origin" });
-      const response = await route(request, env);
+      const response = await route(request, env, ctx);
       return withCors(request, env, response);
     } catch (err) {
       return json(500, { error: "unavailable" });

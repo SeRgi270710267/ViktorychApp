@@ -112,3 +112,15 @@ export function uploaderStale(beat, nowMs, ms = 5 * 60 * 1000) {
   if (!beat || !beat.at) return true;
   return !fresh(beat.at, nowMs, ms);
 }
+
+// Persist a detection the cron already paid for. Viewer and title changes
+// count; nothing here contacts TikTok.
+export function shouldRememberLive(prev, info, nowMs) {
+  const before = prev && typeof prev === "object" ? prev : {};
+  const next = info && typeof info === "object" ? info : {};
+  if (!!before.live !== !!next.live) return true;
+  if (String(before.roomId || "") !== String(next.roomId || "")) return true;
+  if ((Number(before.viewers) || 0) !== (Number(next.viewers) || 0)) return true;
+  if (String(before.title || "") !== String(next.title || "")) return true;
+  return !fresh(before.checkedAt, nowMs, 5 * 60 * 1000);
+}

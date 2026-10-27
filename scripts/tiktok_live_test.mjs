@@ -34,6 +34,8 @@ assert.equal(live.viewers, 40);
 assert.equal(live.hls, "https://cdn.example/origin.m3u8");
 assert.equal(live.flv, "https://cdn.example/origin.flv");
 assert.equal(live.quality, "origin");
+assert.equal(live.variants[0].quality, "origin");
+assert.equal(live.variants[1].quality, "hd");
 
 const flvOnly = pickStreams({
   data: {
@@ -63,6 +65,7 @@ const offline = pickStreams({ data: { status: 4, user_count: 3, stream_url: { hl
 assert.equal(offline.live, false);
 assert.equal(offline.hls, "");
 assert.equal(offline.flv, "");
+assert.equal(offline.variants.length, 0);
 assert.equal(offline.viewers, 0);
 
 const counted = roomStats({
