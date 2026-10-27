@@ -1,23 +1,10 @@
--- Social graph for internal accounts.
--- account_blocks, account_mutes, and account_content use the same columns as
--- the mentions work, so either migration can create them.
--- protected_account is added at runtime, not here, so a second ALTER cannot fail.
-
-CREATE TABLE IF NOT EXISTS account_blocks (
-  blocker_id TEXT NOT NULL,
-  blocked_id TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  PRIMARY KEY (blocker_id, blocked_id)
-);
+-- Runs after 0020_mentions.sql and 0020_passkeys.sql.
+-- account_blocks, account_mutes, and account_content are created there.
+-- This file only adds the follow-request and message tables, plus a
+-- lookup index on the shared block table. protected_account is also
+-- added by 0020_mentions.sql, so it is not altered again here.
 
 CREATE INDEX IF NOT EXISTS account_blocks_blocked ON account_blocks(blocked_id);
-
-CREATE TABLE IF NOT EXISTS account_mutes (
-  muter_id TEXT NOT NULL,
-  muted_id TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  PRIMARY KEY (muter_id, muted_id)
-);
 
 CREATE TABLE IF NOT EXISTS account_follow_requests (
   requester_id TEXT NOT NULL,
@@ -27,19 +14,6 @@ CREATE TABLE IF NOT EXISTS account_follow_requests (
 );
 
 CREATE INDEX IF NOT EXISTS account_follow_requests_target ON account_follow_requests(target_id, created_at DESC);
-
-CREATE TABLE IF NOT EXISTS account_content (
-  id TEXT PRIMARY KEY,
-  author_id TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  parent_id TEXT NOT NULL DEFAULT '',
-  body TEXT NOT NULL DEFAULT '',
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  deleted_at INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS account_content_author ON account_content(author_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS account_messages (
   id TEXT PRIMARY KEY,

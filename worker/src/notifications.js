@@ -16,7 +16,11 @@ import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 import { actorHidden, canMention } from "./social.js";
 
 const encoder = new TextEncoder();
-const KINDS = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, live: 1 };
+const KINDS = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, dm: 1, discord: 1, live: 1 };
+const PREF_KINDS = ["mentions", "replies", "quotes", "likes", "reposts", "follows", "dms"];
+const DEFAULT_PREFS = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
+const BACKOFF_MS = [2000, 10000, 60000, 300000, 1800000];
+const DEAD_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
 const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
 const NOTE_CAP = 200;
 
@@ -70,7 +74,43 @@ export const NOTIFICATION_SCHEMA = [
     PRIMARY KEY (public_id, endpoint_hash)
   )`,
   "CREATE TABLE IF NOT EXISTS push_vapid (id INTEGER PRIMARY KEY CHECK (id = 1), public_key TEXT NOT NULL, private_jwk TEXT NOT NULL, created_at INTEGER NOT NULL)",
-  "CREATE TABLE IF NOT EXISTS push_log (id INTEGER PRIMARY KEY AUTOINCREMENT, public_id TEXT NOT NULL, note_id TEXT NOT NULL, created_at INTEGER NOT NULL)"
+  "CREATE TABLE IF NOT EXISTS push_log (id INTEGER PRIMARY KEY AUTOINCREMENT, public_id TEXT NOT NULL, note_id TEXT NOT NULL, created_at INTEGER NOT NULL)",
+  `CREATE TABLE IF NOT EXISTS notification_prefs (
+    public_id TEXT PRIMARY KEY,
+    prefs TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS notification_events (
+    public_id TEXT NOT NULL,
+    event_key TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (public_id, event_key)
+  )`,
+  `CREATE TABLE IF NOT EXISTS notification_outbox (
+    delivery_id TEXT PRIMARY KEY,
+    public_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  "CREATE INDEX IF NOT EXISTS notification_outbox_due ON notification_outbox(next_at)",
+  `CREATE TABLE IF NOT EXISTS notification_dead (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_hash TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`,
+  "CREATE INDEX IF NOT EXISTS notification_dead_time ON notification_dead(created_at)",
+  `CREATE TABLE IF NOT EXISTS notification_tab_reads (
+    public_id TEXT NOT NULL,
+    tab_id TEXT NOT NULL,
+    read_until INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (public_id, tab_id)
+  )`
 ];
 
 let schemaReady = null;
@@ -257,6 +297,7 @@ function itemFromRow(row, readUntil) {
     platform: clip(extra.platform, 24),
     verified: extra.verified === true,
     mention: extra.mention === true || row.kind === "mention",
+    others: Math.max(0, Number(extra.others) || 0),
     ids: Array.isArray(extra.ids) ? extra.ids.map((id) => clip(id, 120)).filter(Boolean).slice(0, 12) : [],
     handles: Array.isArray(extra.handles) ? extra.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : [],
     actorId: clip(row.actor_id, 16)
@@ -306,9 +347,12 @@ async function unreadCount(env, publicId, readUntil, viewer) {
   const listed = await env.DB.prepare(
     "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? AND read_at = 0 AND at > ? ORDER BY at DESC LIMIT 200"
   ).bind(publicId, readUntil).all();
+  const prefs = await readPrefs(env, publicId);
+  const follows = await followedActorSet(env, publicId);
   const items = ((listed && listed.results) || []).map((row) => itemFromRow(row, readUntil));
-  const visible = await dropHiddenNotes(env, publicId, items.filter((item) => !tiktokNoteHidden(item, view)));
-  return visible.length;
+  const visible = items.filter((item) => !item.read && prefVisible(prefs, item, !!follows[item.actorId]) && !tiktokNoteHidden(item, view));
+  const kept = await dropHiddenNotes(env, publicId, visible);
+  return kept.length;
 }
 
 async function listBells(env, publicId) {
@@ -335,21 +379,61 @@ async function listBells(env, publicId) {
   return bells;
 }
 
-async function viewFor(env, publicId, lockedOverride) {
-  const state = await readState(env, publicId);
-  const viewer = await lockViewer(env, publicId, lockedOverride);
+async function followedActorSet(env, publicId) {
   const listed = await env.DB.prepare(
-    "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? ORDER BY at DESC, note_id ASC LIMIT 200"
+    "SELECT target_id FROM account_follows WHERE follower_id = ? LIMIT 500"
   ).bind(publicId).all();
-  const items = await dropHiddenNotes(env, publicId, ((listed && listed.results) || []).map((row) => itemFromRow(row, state.readUntil)).filter((item) => !tiktokNoteHidden(item, viewer)));
-  items.splice(80);
+  const set = {};
+  ((listed && listed.results) || []).forEach((row) => {
+    const id = String(row && row.target_id || "");
+    if (id.indexOf("app:") === 0) set[id.slice(4)] = true;
+  });
+  return set;
+}
+
+async function viewFor(env, publicId, since, lockedOverride) {
+  const state = await readState(env, publicId);
+  const prefs = await readPrefs(env, publicId);
+  const follows = await followedActorSet(env, publicId);
+  const viewer = await lockViewer(env, publicId, lockedOverride);
+  const sinceN = Number(since) || 0;
+  const listed = sinceN
+    ? await env.DB.prepare(
+      "SELECT note_id, kind, at, read_at, actor_id, payload, updated_at FROM notifications WHERE public_id = ? AND updated_at > ? ORDER BY updated_at ASC LIMIT 80"
+    ).bind(publicId, sinceN).all()
+    : await env.DB.prepare(
+      "SELECT note_id, kind, at, read_at, actor_id, payload, updated_at FROM notifications WHERE public_id = ? ORDER BY at DESC, note_id ASC LIMIT 200"
+    ).bind(publicId).all();
+  const raw = (listed && listed.results) || [];
+  const items = [];
+  let cursor = sinceN;
+  raw.forEach((row) => {
+    const at = Number(row.updated_at) || Number(row.at) || 0;
+    if (at > cursor) cursor = at;
+    const item = itemFromRow(row, state.readUntil);
+    if (!prefVisible(prefs, item, !!follows[item.actorId])) return;
+    if (tiktokNoteHidden(item, viewer)) return;
+    items.push(item);
+  });
+  if (!sinceN) {
+    const maxRow = await env.DB.prepare(
+      "SELECT MAX(updated_at) AS n FROM notifications WHERE public_id = ?"
+    ).bind(publicId).first();
+    cursor = Math.max(cursor, Number(maxRow && maxRow.n) || 0);
+  }
+  const visible = await dropHiddenNotes(env, publicId, items);
+  items.length = 0;
+  visible.forEach((item) => items.push(item));
   const unread = await unreadCount(env, publicId, state.readUntil, viewer);
   const bells = await listBells(env, publicId);
   const push = await vapidPublic(env);
   return {
-    items,
+    items: sinceN ? items : items.slice(0, 80),
     unread,
     readUntil: state.readUntil,
+    cursor,
+    more: !!(sinceN && raw.length === 80),
+    prefs,
     tabs: state.tabs ? state.tabs.tabs : null,
     noteTabsSame: state.tabs ? state.tabs.noteTabsSame : null,
     lastNoteTab: state.tabs ? state.tabs.lastNoteTab : null,
@@ -382,6 +466,11 @@ function payloadOf(input) {
     platform: clip(input.platform, 24),
     verified: input.verified === true,
     mention: input.mention === true,
+    others: Math.max(0, Number(input.others) || 0),
+    actors: Array.isArray(input.actors) ? input.actors.slice(0, 12).map((actor) => ({
+      name: clip(actor && actor.name, 80),
+      handle: clip(actor && actor.handle, 80).replace(/^@/, "")
+    })) : [],
     ids: Array.isArray(input.ids) ? input.ids.map((id) => clip(id, 120)).filter(Boolean).slice(0, 12) : [],
     handles: Array.isArray(input.handles) ? input.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : []
   });
@@ -537,18 +626,23 @@ async function sendPush(env, publicId, item, viewer) {
     const presence = await env.DB.prepare("SELECT preference FROM account_presence WHERE public_id = ?").bind(publicId).first();
     if (presence && presence.preference) account.presence = presence.preference;
   } catch (err) { /* presence is optional; the in-app list still updates */ }
-  if (pushSuppressed(account, Date.now())) return;
+  if (pushSuppressed(account, Date.now())) return { ok: true, skipped: true };
   const keys = await vapidPublic(env);
-  if (!keys.publicKey || !keys.privateJwk) return;
+  if (!keys.publicKey || !keys.privateJwk) return { ok: true, skipped: true };
   const subs = await env.DB.prepare(
     "SELECT endpoint_hash, endpoint, p256dh, auth, shorts_locked FROM push_subscriptions WHERE public_id = ? LIMIT 10"
   ).bind(publicId).all();
   const rows = (subs && subs.results) || [];
   const base = viewer || await lockViewer(env, publicId);
-  const titleKey = titleKeyFor(item.kind);
+  const titleKey = titleKeyFor(item);
+  if (!titleKey) return { ok: true, skipped: true };
   const payload = encoder.encode(JSON.stringify({
     titleKey,
-    titleVars: { name: item.name || (item.handle ? "@" + item.handle : "Someone"), handle: item.handle || "" },
+    titleVars: {
+      name: item.name || (item.handle ? "@" + item.handle : "Someone"),
+      handle: item.handle || "",
+      n: String(item.others || 0)
+    },
     body: item.text || "",
     hash: item.hash || "#/",
     id: item.id,
@@ -558,6 +652,7 @@ async function sendPush(env, publicId, item, viewer) {
     handle: item.handle || "",
     feedId: item.feedId || ""
   }));
+  let failed = false;
   for (let i = 0; i < rows.length; i++) {
     const sub = rows[i];
     const deviceLocked = sub.shorts_locked == null || sub.shorts_locked === "" ? true : Number(sub.shorts_locked) !== 0;
@@ -571,29 +666,39 @@ async function sendPush(env, publicId, item, viewer) {
           "content-type": "application/octet-stream",
           "content-encoding": "aes128gcm",
           authorization: "vapid t=" + jwt + ", k=" + keys.publicKey,
-          ttl: "86400"
+          ttl: "86400",
+          urgency: "normal"
         },
         body
       });
       if (res && (res.status === 404 || res.status === 410)) {
         await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ? AND endpoint_hash = ?").bind(publicId, sub.endpoint_hash).run();
-      }
+      } else if (res && res.status >= 500) failed = true;
       if (env.PUSH_SINK === "d1") {
         await env.DB.prepare("INSERT INTO push_log (public_id, note_id, created_at) VALUES (?, ?, ?)").bind(publicId, item.id, Date.now()).run();
       }
     } catch (err) {
+      failed = true;
       if (env.PUSH_SINK === "d1") {
         await env.DB.prepare("INSERT INTO push_log (public_id, note_id, created_at) VALUES (?, ?, ?)").bind(publicId, item.id, Date.now()).run();
       }
     }
   }
+  return { ok: !failed || !rows.length, skipped: !rows.length };
 }
 
-function titleKeyFor(kind) {
+function titleKeyFor(item) {
+  const kind = item && item.kind;
+  const others = Number(item && item.others) || 0;
+  if (kind === "like" && others > 0) return "{name} and {n} others liked your post";
   if (kind === "like") return "{name} liked your post";
+  if (kind === "repost" && others > 0) return "{name} and {n} others reposted your post";
   if (kind === "repost") return "{name} reposted your post";
+  if (kind === "quote") return "{name} quoted your post";
   if (kind === "reply") return "{name} replied to you";
   if (kind === "mention") return "{name} mentioned you";
+  if (kind === "dm") return "{name} sent you a message";
+  if (kind === "discord") return "Discord alert";
   if (kind === "follow") return "{name} followed you";
   if (kind === "follow_request") return "{name} requested to follow you";
   if (kind === "follow_accept") return "{name} accepted your follow request";
@@ -601,16 +706,107 @@ function titleKeyFor(kind) {
   return "New post notifications for @{handle}";
 }
 
-export async function emitNotification(env, input) {
-  await ensureNotificationSchema(env);
+export function nextBackoff(attempts) {
+  const n = Math.max(0, Number(attempts) || 0);
+  return BACKOFF_MS[Math.min(n, BACKOFF_MS.length - 1)];
+}
+
+function prefKind(kind) {
+  if (kind === "mention") return "mentions";
+  if (kind === "reply") return "replies";
+  if (kind === "quote") return "quotes";
+  if (kind === "like") return "likes";
+  if (kind === "repost") return "reposts";
+  if (kind === "follow" || kind === "follow_request" || kind === "follow_accept") return "follows";
+  if (kind === "dm") return "dms";
+  return "";
+}
+
+export async function readPrefs(env, publicId) {
+  const row = await env.DB.prepare("SELECT prefs FROM notification_prefs WHERE public_id = ?").bind(publicId).first();
+  let parsed = {};
+  try { parsed = JSON.parse((row && row.prefs) || "{}"); }
+  catch (err) { parsed = {}; }
+  if (!parsed || typeof parsed !== "object") parsed = {};
+  const out = Object.assign({}, DEFAULT_PREFS);
+  PREF_KINDS.forEach((key) => {
+    if (parsed[key] === "off" || parsed[key] === "inapp" || parsed[key] === "push") out[key] = parsed[key];
+  });
+  if (parsed.mentionsFrom === "following" || parsed.mentionsFrom === "all") out.mentionsFrom = parsed.mentionsFrom;
+  return out;
+}
+
+async function savePrefs(env, publicId, raw) {
+  const next = await readPrefs(env, publicId);
+  PREF_KINDS.forEach((key) => {
+    if (raw[key] === "off" || raw[key] === "inapp" || raw[key] === "push") next[key] = raw[key];
+  });
+  if (raw.mentionsFrom === "following" || raw.mentionsFrom === "all") next.mentionsFrom = raw.mentionsFrom;
+  await env.DB.prepare(
+    "INSERT INTO notification_prefs (public_id, prefs, updated_at) VALUES (?, ?, ?) ON CONFLICT(public_id) DO UPDATE SET prefs = excluded.prefs, updated_at = excluded.updated_at"
+  ).bind(publicId, JSON.stringify(next), Date.now()).run();
+  return next;
+}
+
+async function followsActor(env, publicId, actorId) {
+  if (!/^\d{12}$/.test(String(actorId || ""))) return false;
+  const row = await env.DB.prepare(
+    "SELECT target_id FROM account_follows WHERE follower_id = ? AND target_id = ?"
+  ).bind(publicId, "app:" + actorId).first();
+  return !!row;
+}
+
+function modeFor(prefs, kind, followOk) {
+  const key = prefKind(kind);
+  if (!key) return kind === "discord" ? "push" : "push";
+  const mode = prefs[key] || "push";
+  if (mode === "off") return "store";
+  if (kind === "mention" && prefs.mentionsFrom === "following" && !followOk) return "store";
+  return mode;
+}
+
+function prefVisible(prefs, item, followOk) {
+  const key = prefKind(item && item.kind);
+  if (!key) return true;
+  if ((prefs[key] || "push") === "off") return false;
+  if (item.kind === "mention" && prefs.mentionsFrom === "following" && !followOk) return false;
+  return true;
+}
+
+async function maskPublic(env, publicId) {
+  return (await sha256Hex(String((env && env.ACCOUNT_PEPPER) || "notes") + ":" + String(publicId || ""))).slice(0, 16);
+}
+
+async function deadLetter(env, publicId, kind, reason) {
+  const code = clip(reason, 40).replace(/[^a-z0-9_:-]/gi, "") || "push_failed";
+  await env.DB.prepare(
+    "INSERT INTO notification_dead (public_hash, kind, reason, created_at) VALUES (?, ?, ?, ?)"
+  ).bind(await maskPublic(env, publicId), clip(kind, 24) || "note", code, Date.now()).run();
+  logSafe(code);
+}
+
+function logSafe(code) {
+  try {
+    console.error(JSON.stringify({ at: "worker", area: "notes", code: String(code || "push_failed").slice(0, 40) }));
+  } catch (err) { /* logging must not throw */ }
+}
+
+function outboxStatement(env, publicId, noteId, deliveryId, nextAt) {
+  const now = Date.now();
+  return env.DB.prepare(
+    "INSERT INTO notification_outbox (delivery_id, public_id, note_id, attempts, next_at, created_at) VALUES (?, ?, ?, 0, ?, ?) ON CONFLICT(delivery_id) DO NOTHING"
+  ).bind(deliveryId, publicId, noteId, nextAt || now, now);
+}
+
+async function planPlain(env, input) {
   const publicId = String(input && input.publicId || "");
   const kind = cleanKind(input && input.kind);
   const key = clip(input && input.idempotencyKey, 160);
-  if (!/^\d{12}$/.test(publicId) || !kind || !key) return { created: false };
+  if (!/^\d{12}$/.test(publicId) || !kind || !key) return null;
   const actorId = String(input.actorId || "");
   if (/^\d{12}$/.test(actorId)) {
     try {
-      if (await actorHidden(env, publicId, actorId)) return { created: false, hidden: true };
+      if (await actorHidden(env, publicId, actorId)) return null;
     } catch (err) { /* a schema miss must not drop the note */ }
   }
   const now = Date.now();
@@ -620,41 +816,201 @@ export async function emitNotification(env, input) {
     const recent = await env.DB.prepare(
       "SELECT note_id FROM notifications WHERE public_id = ? AND kind = 'live' AND subject = ? AND at > ?"
     ).bind(publicId, subject, at - LIVE_WINDOW_MS).first();
-    if (recent) return { created: false, id: recent.note_id };
+    if (recent) return { created: false, id: recent.note_id, statements: [], deliveries: [] };
   }
   const existing = await env.DB.prepare(
     "SELECT note_id FROM notifications WHERE public_id = ? AND idempotency_key = ?"
   ).bind(publicId, key).first();
-  if (existing) return { created: false, id: existing.note_id };
+  if (existing) return { created: false, id: existing.note_id, statements: [], deliveries: [] };
+  const prefs = await readPrefs(env, publicId);
+  const followOk = kind === "mention" ? await followsActor(env, publicId, input.actorId) : true;
+  const mode = modeFor(prefs, kind, followOk);
   const state = await readState(env, publicId);
   const readAt = state.readUntil && at <= state.readUntil ? at : 0;
+  const quietUntil = Number(input.quietUntil) || 0;
   const payload = payloadOf(input);
+  const statements = [
+    env.DB.prepare(
+      "INSERT INTO notifications (public_id, note_id, kind, at, read_at, actor_id, subject, idempotency_key, payload, updated_at, pushed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, note_id) DO NOTHING"
+    ).bind(publicId, key, kind, at, readAt, clip(input.actorId, 16), subject, key, payload, now, 0)
+  ];
+  const item = itemFromRow({
+    note_id: key, kind, at, read_at: readAt, actor_id: clip(input.actorId, 16), payload
+  }, state.readUntil);
+  const deliveryId = "d:" + key;
+  const deliveries = [];
+  if (!readAt && mode === "push" && quietUntil > now) {
+    statements.push(outboxStatement(env, publicId, key, deliveryId, quietUntil));
+    deliveries.push({ mode: "inapp", publicId, item, deliveryId: "", readUntil: state.readUntil });
+  } else if (!readAt && mode === "push") {
+    statements.push(outboxStatement(env, publicId, key, deliveryId, now));
+    deliveries.push({ mode: "push", publicId, item, deliveryId, readUntil: state.readUntil });
+  } else if (!readAt && mode === "inapp") {
+    deliveries.push({ mode: "inapp", publicId, item, deliveryId: "", readUntil: state.readUntil });
+  }
+  return { created: true, id: key, statements, deliveries };
+}
+
+async function planGrouped(env, input) {
+  const publicId = String(input && input.publicId || "");
+  const kind = cleanKind(input && input.kind);
+  const groupKey = clip(input && input.groupKey, 160);
+  const eventKey = clip(input && input.idempotencyKey, 160);
+  if (!/^\d{12}$/.test(publicId) || !kind || !groupKey || !eventKey) return null;
+  const actorId = String(input.actorId || "");
+  if (/^\d{12}$/.test(actorId)) {
+    try {
+      if (await actorHidden(env, publicId, actorId)) return null;
+    } catch (err) { /* a schema miss must not drop the note */ }
+  }
+  const have = await env.DB.prepare(
+    "SELECT note_id FROM notification_events WHERE public_id = ? AND event_key = ?"
+  ).bind(publicId, eventKey).first();
+  if (have) return { created: false, id: have.note_id, statements: [], deliveries: [] };
+  const existing = await env.DB.prepare(
+    "SELECT payload, read_at FROM notifications WHERE public_id = ? AND note_id = ?"
+  ).bind(publicId, groupKey).first();
+  let actors = [];
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing.payload || "{}");
+      actors = Array.isArray(parsed.actors) ? parsed.actors : [];
+    } catch (err) { actors = []; }
+  }
+  const actor = { name: clip(input.name, 80), handle: clip(input.handle, 80).replace(/^@/, "") };
+  actors = [actor].concat(actors.filter((row) => row && row.handle !== actor.handle)).slice(0, 12);
+  const others = Math.max(0, actors.length - 1);
+  const now = Date.now();
+  const prefs = await readPrefs(env, publicId);
+  const mode = modeFor(prefs, kind, true);
+  const payload = payloadOf(Object.assign({}, input, { others, actors, name: actors[0].name, handle: actors[0].handle }));
+  const subject = clip(input.subject || input.handle || "", 80).replace(/^@/, "").toLowerCase();
+  const statements = [];
+  if (!existing) {
+    statements.push(env.DB.prepare(
+      "INSERT INTO notifications (public_id, note_id, kind, at, read_at, actor_id, subject, idempotency_key, payload, updated_at, pushed_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0) ON CONFLICT(public_id, note_id) DO NOTHING"
+    ).bind(publicId, groupKey, kind, now, clip(input.actorId, 16), subject, groupKey, payload, now));
+  } else {
+    statements.push(env.DB.prepare(
+      "UPDATE notifications SET payload = ?, at = ?, read_at = 0, actor_id = ?, updated_at = ?, pushed_at = 0 WHERE public_id = ? AND note_id = ?"
+    ).bind(payload, now, clip(input.actorId, 16), now, publicId, groupKey));
+  }
+  statements.push(env.DB.prepare(
+    "INSERT INTO notification_events (public_id, event_key, note_id, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(public_id, event_key) DO NOTHING"
+  ).bind(publicId, eventKey, groupKey, now));
+  const item = itemFromRow({
+    note_id: groupKey, kind, at: now, read_at: 0, actor_id: clip(input.actorId, 16), payload
+  }, 0);
+  const deliveryId = "d:" + groupKey + ":" + eventKey;
+  const deliveries = [];
+  if (mode === "push") {
+    statements.push(outboxStatement(env, publicId, groupKey, deliveryId, now));
+    deliveries.push({ mode: "push", publicId, item, deliveryId, readUntil: 0 });
+  } else if (mode === "inapp") {
+    deliveries.push({ mode: "inapp", publicId, item, deliveryId: "", readUntil: 0 });
+  }
+  return { created: true, id: groupKey, statements, deliveries };
+}
+
+export async function planNotification(env, input) {
+  await ensureNotificationSchema(env);
+  if (input && input.groupKey) return planGrouped(env, input);
+  return planPlain(env, input);
+}
+
+async function completeOutbox(env, deliveryId) {
+  if (!deliveryId) return;
+  await env.DB.prepare("DELETE FROM notification_outbox WHERE delivery_id = ?").bind(deliveryId).run();
+}
+
+async function failOutbox(env, delivery, kind) {
+  if (!delivery || !delivery.deliveryId) return;
+  const row = await env.DB.prepare(
+    "SELECT attempts FROM notification_outbox WHERE delivery_id = ?"
+  ).bind(delivery.deliveryId).first();
+  const attempts = (Number(row && row.attempts) || 0) + 1;
+  if (attempts > BACKOFF_MS.length) {
+    await deadLetter(env, delivery.publicId, kind, "push_failed");
+    await completeOutbox(env, delivery.deliveryId);
+    return;
+  }
+  const nextAt = Date.now() + nextBackoff(attempts - 1);
+  await env.DB.prepare(
+    "UPDATE notification_outbox SET attempts = ?, next_at = ? WHERE delivery_id = ?"
+  ).bind(attempts, nextAt, delivery.deliveryId).run();
+}
+
+export async function finishDeliveries(env, deliveries) {
+  const list = Array.isArray(deliveries) ? deliveries : [];
+  for (let i = 0; i < list.length; i++) {
+    const delivery = list[i];
+    if (!delivery || !delivery.publicId || !delivery.item) continue;
+    await trimNotes(env, delivery.publicId);
+    const state = await readState(env, delivery.publicId);
+    const viewer = await lockViewer(env, delivery.publicId);
+    const hidden = tiktokNoteHidden(delivery.item, viewer);
+    const unread = await unreadCount(env, delivery.publicId, state.readUntil, viewer);
+    try {
+      await publishNotes(env, delivery.publicId, {
+        type: "upsert",
+        items: hidden ? [] : [delivery.item],
+        unread,
+        readUntil: state.readUntil
+      });
+    } catch (err) { logSafe("channel_failed"); }
+    if (delivery.mode !== "push") continue;
+    const result = await sendPush(env, delivery.publicId, delivery.item, viewer);
+    if (result && result.ok) {
+      await env.DB.prepare(
+        "UPDATE notifications SET pushed_at = ? WHERE public_id = ? AND note_id = ?"
+      ).bind(Date.now(), delivery.publicId, delivery.item.id).run();
+      await completeOutbox(env, delivery.deliveryId);
+    } else await failOutbox(env, delivery, delivery.item.kind);
+  }
+}
+
+export async function emitNotification(env, input) {
+  const planned = await planNotification(env, input);
+  if (!planned || !planned.statements || !planned.statements.length) {
+    return { created: false, id: planned && planned.id };
+  }
   try {
-    await env.DB.prepare(
-      "INSERT INTO notifications (public_id, note_id, kind, at, read_at, actor_id, subject, idempotency_key, payload, updated_at, pushed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).bind(publicId, key, kind, at, readAt, clip(input.actorId, 16), subject, key, payload, now, readAt ? now : 0).run();
+    await env.DB.batch(planned.statements);
   } catch (err) {
-    if (/UNIQUE/i.test(String(err && err.message || err))) return { created: false, id: key };
+    if (/UNIQUE/i.test(String(err && err.message || err))) return { created: false, id: planned.id };
     throw err;
   }
-  await trimNotes(env, publicId);
-  const item = itemFromRow({
-    note_id: key,
-    kind,
-    at,
-    read_at: readAt,
-    actor_id: clip(input.actorId, 16),
-    payload
-  }, state.readUntil);
-  const viewer = await lockViewer(env, publicId);
-  const hidden = tiktokNoteHidden(item, viewer);
-  const unread = await unreadCount(env, publicId, state.readUntil, viewer);
-  if (!readAt) {
-    await env.DB.prepare("UPDATE notifications SET pushed_at = ? WHERE public_id = ? AND note_id = ?").bind(now, publicId, key).run();
-    await sendPush(env, publicId, item, viewer);
+  await finishDeliveries(env, planned.deliveries);
+  const unread = await unreadCount(env, String(input.publicId || ""), (await readState(env, String(input.publicId || ""))).readUntil);
+  return { created: !!planned.created, id: planned.id, unread };
+}
+
+export async function drainOutbox(env) {
+  await ensureNotificationSchema(env);
+  const now = Date.now();
+  await env.DB.prepare("DELETE FROM notification_dead WHERE created_at < ?").bind(now - DEAD_KEEP_MS).run();
+  const listed = await env.DB.prepare(
+    "SELECT delivery_id, public_id, note_id, attempts FROM notification_outbox WHERE next_at <= ? ORDER BY next_at ASC LIMIT 20"
+  ).bind(now).all();
+  const rows = (listed && listed.results) || [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const note = await env.DB.prepare(
+      "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? AND note_id = ?"
+    ).bind(row.public_id, row.note_id).first();
+    if (!note) {
+      await completeOutbox(env, row.delivery_id);
+      continue;
+    }
+    const item = itemFromRow(note, 0);
+    await finishDeliveries(env, [{
+      mode: "push",
+      publicId: row.public_id,
+      item,
+      deliveryId: row.delivery_id,
+      readUntil: 0
+    }]);
   }
-  await publishNotes(env, publicId, { type: "upsert", items: hidden ? [] : [item], unread, readUntil: state.readUntil });
-  return { created: true, id: key, unread };
 }
 
 export async function notifyLiveStarted(env, info) {
@@ -771,9 +1127,11 @@ async function saveTabs(env, publicId, body) {
   });
 }
 
-async function markRead(env, publicId, until, ids) {
+async function markRead(env, publicId, until, ids, tab) {
   const state = await readState(env, publicId);
-  const nextUntil = Math.max(state.readUntil, Number(until) || 0);
+  const tabId = clip(tab || "", 40);
+  const markAll = tabId === "all" || tab === true;
+  const nextUntil = markAll || !tabId ? Math.max(state.readUntil, Number(until) || 0) : state.readUntil;
   if (nextUntil > state.readUntil) await writeReadUntil(env, publicId, nextUntil);
   const cleanIds = [];
   (Array.isArray(ids) ? ids : []).slice(0, 80).forEach((id) => {
@@ -785,6 +1143,14 @@ async function markRead(env, publicId, until, ids) {
     await env.DB.prepare(
       "UPDATE notifications SET read_at = ?, updated_at = ? WHERE public_id = ? AND note_id = ? AND read_at = 0"
     ).bind(now, now, publicId, cleanIds[i]).run();
+  }
+  if (tabId === "mentions") {
+    await env.DB.prepare(
+      "UPDATE notifications SET read_at = ?, updated_at = ? WHERE public_id = ? AND kind IN ('mention', 'discord') AND read_at = 0"
+    ).bind(now, now, publicId).run();
+    await env.DB.prepare(
+      "INSERT INTO notification_tab_reads (public_id, tab_id, read_until, updated_at) VALUES (?, 'mentions', ?, ?) ON CONFLICT(public_id, tab_id) DO UPDATE SET read_until = excluded.read_until, updated_at = excluded.updated_at"
+    ).bind(publicId, now, now).run();
   }
   if (nextUntil > state.readUntil) {
     await env.DB.prepare(
@@ -844,9 +1210,13 @@ export async function handleNotificationRoutes(request, env, path, deps) {
   if (path === "/v1/notifications" && request.method === "GET") {
     const hit = await rateHit(env, "notes-read:" + row.public_id, 120, 10 * 60 * 1000);
     if (!hit.ok) return limited(hit);
-    const flag = new URL(request.url).searchParams.get("locked");
+    try { await drainOutbox(env); }
+    catch (err) { logSafe("drain_failed"); }
+    const url = new URL(request.url);
+    const since = Number(url.searchParams.get("since")) || 0;
+    const flag = url.searchParams.get("locked");
     if (flag === "0" || flag === "1") await writeShortsLocked(env, row.public_id, flag === "1");
-    return json(200, await viewFor(env, row.public_id, flag));
+    return json(200, await viewFor(env, row.public_id, since, flag));
   }
   if (path === "/v1/notifications" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
@@ -864,17 +1234,20 @@ export async function handleNotificationRoutes(request, env, path, deps) {
       }
       await emitNotification(env, cleaned);
     }
-    if (body.until || (Array.isArray(body.ids) && body.ids.length)) await markRead(env, row.public_id, body.until, body.ids);
+    if (body.prefs && typeof body.prefs === "object") await savePrefs(env, row.public_id, body.prefs);
+    if (body.all === true || body.tab || body.until || (Array.isArray(body.ids) && body.ids.length)) {
+      await markRead(env, row.public_id, body.all === true ? Date.now() : body.until, body.ids, body.all === true ? "all" : body.tab);
+    }
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
     if (body.bells && typeof body.bells === "object") await saveBells(env, row.public_id, body.bells, body.bellsAt);
-    return json(200, await viewFor(env, row.public_id, body.shortsLocked));
+    return json(200, await viewFor(env, row.public_id, 0, body.shortsLocked));
   }
   if (path === "/v1/notifications/read" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
     if (!hit.ok) return limited(hit);
     const body = await readJson(request, 40000);
     if (body.error) return json(400, { error: body.error });
-    await markRead(env, row.public_id, body.until, body.ids);
+    await markRead(env, row.public_id, body.all === true ? Date.now() : body.until, body.ids, body.all === true ? "all" : body.tab);
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
     return json(200, await viewFor(env, row.public_id));
   }
@@ -993,12 +1366,41 @@ export async function notifyRepost(env, actor, cleaned) {
   if (!checked.ok || !checked.skeleton) return;
   const author = await env.DB.prepare("SELECT public_id FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
   if (!author || author.public_id === actor.public_id) return;
+  const kind = cleaned.kind === "quote" ? "quote" : "repost";
+  const subjectId = clip((post && (post.id || post.statusId)) || cleaned.postKey, 80);
   await emitNotification(env, {
     publicId: author.public_id,
-    kind: "repost",
+    kind,
     at: Date.now(),
     actorId: actor.public_id,
-    idempotencyKey: "repost:" + actor.public_id + ":" + cleaned.postKey,
+    groupKey: kind + ":" + subjectId,
+    idempotencyKey: kind + ":" + actor.public_id + ":" + cleaned.postKey,
+    handle: actor.handle,
+    name: actor.display_name,
+    text: clip(cleaned.comment || post.text || "", 180),
+    hash: "#/" + encodeURIComponent(actor.handle || ""),
+    platform: "app",
+    feedId: "app:" + actor.public_id
+  });
+}
+
+export async function planRepostNotification(env, actor, cleaned) {
+  const post = cleaned && cleaned.post;
+  const handle = clip(post && post.handle, 80).replace(/^@/, "");
+  if (!handle) return null;
+  const checked = inspectHandle(handle);
+  if (!checked.ok || !checked.skeleton) return null;
+  const author = await env.DB.prepare("SELECT public_id FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
+  if (!author || author.public_id === actor.public_id) return null;
+  const kind = cleaned.kind === "quote" ? "quote" : "repost";
+  const subjectId = clip((post && (post.id || post.statusId)) || cleaned.postKey, 80);
+  return planNotification(env, {
+    publicId: author.public_id,
+    kind,
+    at: Date.now(),
+    actorId: actor.public_id,
+    groupKey: kind + ":" + subjectId,
+    idempotencyKey: kind + ":" + actor.public_id + ":" + cleaned.postKey,
     handle: actor.handle,
     name: actor.display_name,
     text: clip(cleaned.comment || post.text || "", 180),
