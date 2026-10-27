@@ -1,4 +1,4 @@
-/* Weather Pills & Row Pinning test suite */
+/* Weather pills: no baked cities, fresh observations only. */
 const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
@@ -24,6 +24,10 @@ const doc = {
 const context = {
   console,
   URL,
+  Date,
+  Math,
+  JSON,
+  Promise,
   document: doc,
   localStorage: {
     _data: {},
@@ -37,114 +41,108 @@ context.window = context;
 context.self = context;
 vm.createContext(context);
 
-// Load SoccerScores first
-vm.runInContext(fs.readFileSync("scores.js", "utf8"), context);
-assert.ok(context.SoccerScores, "scores.js loaded");
+function loadScript(file) {
+  let src = fs.readFileSync(file, "utf8");
+  src = src.replace(/export\s*\{[\s\S]*?\};/, "");
+  vm.runInContext(src, context);
+}
 
-// Load Spaces
-vm.runInContext(fs.readFileSync("spaces.js", "utf8"), context);
-assert.ok(context.Spaces, "spaces.js loaded");
+loadScript("shared/pill-data.js");
+assert.ok(context.PillData, "pill data is available to the page");
+loadScript("scores.js");
+loadScript("spaces.js");
+loadScript("weather.js");
 
-// Load WeatherPills
-vm.runInContext(fs.readFileSync("weather.js", "utf8"), context);
 const W = context.WeatherPills;
 const WL = context.WeatherPillsLogic;
+assert.ok(W && WL, "weather.js exports the pill API");
 
-assert.ok(W, "weather.js exports WeatherPills");
-assert.ok(WL, "weather.js exports WeatherPillsLogic");
+assert.strictEqual(WL.getDefaultPlaces().length, 0, "no baked default cities");
+assert.strictEqual(W.loadPlaces().length, 0, "an empty device shows no weather pill");
+assert.strictEqual(W.getPlace("tula"), null, "Tula is not seeded");
+assert.strictEqual(W.isPinned("weather:tula"), false, "Tula is not pinned by default");
+assert.strictEqual(W.isPinned("soccer:arsenal-tula"), true, "followed clubs stay pinned");
+assert.strictEqual(W.isPinned("soccer:fc-barcelona"), true, "Barcelona stays pinned");
+assert.strictEqual(W.isPinned("space:superintelmusic"), true, "the radio pill stays pinned");
 
-// 1. Test Default Places
-const places = W.loadPlaces();
-assert.ok(places.length >= 4, "Should have default places");
-const placeIds = places.map((p) => p.id);
-assert.ok(placeIds.includes("tula"), "Has Tula");
-assert.ok(placeIds.includes("barcelona"), "Has Barcelona");
-assert.ok(placeIds.includes("london"), "Has London");
-assert.ok(placeIds.includes("new-york"), "Has New York");
+const now = Date.now();
+const fresh = {
+  kind: "weather",
+  source: "open-meteo",
+  updatedAt: now - 2 * 60 * 1000,
+  temp: 14,
+  code: 0,
+  humidity: 70,
+  wind: 12,
+  feels: 12,
+  precipChance: 20,
+  precipMm: 0,
+  uv: 1,
+  tempMin: 8,
+  tempMax: 15,
+  hourly: [{ hour: "16:00", temp: 14, code: 0 }],
+  daily: [{ date: "2026-10-27", dayLabel: "Today", min: 8, max: 15, code: 0 }]
+};
+const place = WL.rememberPlace({ id: "stockholm", name: "Stockholm", country: "Sweden", lat: 59.33, lon: 18.07, explicit: true }, fresh);
+assert.ok(place, "a fresh observation is kept");
+const html = W.renderPill(place, "C", true);
+assert.ok(html.includes("wx-pill-stockholm"), "the chosen city is the pill");
+assert.ok(html.includes("14°"), "Celsius is shown by default");
+assert.ok(html.includes("pill-age"), "the pill carries an updated line");
+assert.ok(html.includes("Updated"), "the age is readable");
+assert.ok(html.includes("pill-pin-mark"), "a pinned pill is marked");
+const fahrenheit = W.renderPill(place, "F", false);
+assert.ok(fahrenheit.includes("57°"), "14 C is 57 F");
+assert.ok(!fahrenheit.includes("pill-pin-mark"), "an unpinned pill has no pin mark");
 
-// 2. Test Pill Rendering
-const tula = W.getPlace("tula");
-assert.ok(tula, "Tula found");
-const pillHtml = W.renderPill(tula, "C", true);
-assert.ok(pillHtml.includes("wx-pill-tula"), "Has Tula pill class");
-assert.ok(pillHtml.includes("14°"), "Has 14° temperature");
-assert.ok(pillHtml.includes("pill-pin-mark"), "Has pin badge when pinned");
+const stale = Object.assign({}, place, { updatedAt: now - 20 * 60 * 1000, temp: 99 });
+assert.strictEqual(W.renderPill(stale, "C", false), "", "a stale temperature is not painted");
+WL.rememberPlace({ id: "old", name: "Old", country: "", lat: 1, lon: 1, explicit: true }, stale);
+assert.strictEqual(W.getPlace("old"), null, "a stale saved place is hidden");
 
-// 3. Test Fahrenheit Formatting
-const fahrenheitHtml = W.renderPill(tula, "F", false);
-assert.ok(fahrenheitHtml.includes("57°"), "14°C converts to 57°F");
-assert.ok(!fahrenheitHtml.includes("pill-pin-mark"), "No pin badge when unpinned");
+W.addPlace("Tokyo").then(function (added) {
+  assert.strictEqual(added, null, "a failed lookup does not invent Tokyo weather");
+  assert.strictEqual(W.getPlace("tokyo"), null, "Tokyo was not stored");
+}).then(function () {
+  W.setHidden("weather:stockholm", true);
+  assert.ok(!W.unifiedRowHtml().includes("wx-pill-stockholm"), "a hidden weather pill leaves the row");
+  W.setHidden("weather:stockholm", false);
+  assert.ok(W.unifiedRowHtml().includes("wx-pill-stockholm"), "showing it paints it again");
 
-// 4. Test Pinning Functionality
-assert.strictEqual(W.isPinned("weather:tula"), true, "Tula is pinned by default");
-assert.strictEqual(W.isPinned("soccer:arsenal-tula"), true, "Arsenal Tula is pinned by default");
-assert.strictEqual(W.isPinned("soccer:fc-barcelona"), true, "FC Barcelona is pinned by default");
-assert.strictEqual(W.isPinned("space:superintelmusic"), true, "Music Space is pinned by default");
+  const live = context.PillData.bundleSports([{
+    id: "1",
+    league: "Spanish LALIGA",
+    status: "live",
+    kickoff: now - 30 * 60 * 1000,
+    minute: "31'",
+    home: "FC Barcelona",
+    away: "Villarreal",
+    homeScore: 1,
+    awayScore: 0,
+    venue: "",
+    source: "espn"
+  }], now);
+  context.SoccerScoresLogic.applyBundle(live);
+  assert.ok(W.unifiedRowHtml().includes("sc-pill-fc-barcelona"), "a fresh match still shares the row");
+  W.setTypeDisabled("soccer", true);
+  assert.ok(!W.unifiedRowHtml().includes("sc-pill-fc-barcelona"), "turning matches off removes them");
+  W.setTypeDisabled("soccer", false);
+  assert.ok(W.unifiedRowHtml().includes("sc-pill-fc-barcelona"), "turning matches on brings a fresh score back");
 
-// Toggle pin off
-W.togglePin("weather:tula");
-assert.strictEqual(W.isPinned("weather:tula"), false, "Tula can be unpinned");
+  W.togglePin("weather:stockholm");
+  W.reorderPill("weather:stockholm", 1);
+  assert.ok(W.loadPrefs().customOrder.includes("weather:stockholm"), "a real place can be reordered");
 
-// Toggle pin back on
-W.togglePin("weather:tula");
-assert.strictEqual(W.isPinned("weather:tula"), true, "Tula can be pinned again");
-
-// 5. Test Adding Custom Place
-W.addPlace("Tokyo");
-const tokyo = W.getPlace("tokyo");
-assert.ok(tokyo, "Tokyo was added as a custom place");
-assert.strictEqual(tokyo.name, "Tokyo", "Tokyo has correct name");
-assert.ok(tokyo.temp !== undefined, "Tokyo has temperature");
-assert.strictEqual(W.isPinned("weather:tokyo"), true, "Newly added place is pinned by default");
-
-// 6. Test Pill Reordering
-W.reorderPill("weather:tokyo", 1);
-const prefs = W.loadPrefs();
-assert.ok(prefs.customOrder.includes("weather:tokyo"), "Custom order contains Tokyo");
-
-// 7. Test Unified Row Construction
-const rowHtml = W.unifiedRowHtml();
-assert.ok(rowHtml.includes("sp-row-wrap"), "Unified row has sp-row-wrap container");
-assert.ok(rowHtml.includes("sp-row"), "Unified row has sp-row list");
-assert.ok(rowHtml.includes("wx-pill-tula"), "Row contains Tula weather pill");
-assert.ok(rowHtml.includes("wx-pill-tokyo"), "Row contains Tokyo weather pill");
-assert.ok(rowHtml.includes("sc-pill-arsenal-tula"), "Row contains Arsenal Tula soccer pill");
-assert.ok(rowHtml.includes("sc-pill-fc-barcelona"), "Row contains FC Barcelona soccer pill");
-assert.ok(rowHtml.includes("sp-pill-manage-btn"), "Row contains Manage/Customize Pills button");
-
-// 8. Test Removing a Place
-W.removePlace("tokyo");
-assert.strictEqual(W.getPlace("tokyo"), null, "Tokyo was removed");
-assert.strictEqual(W.isPinned("weather:tokyo"), false, "Tokyo is no longer pinned");
-
-// 9. Test Hiding A Single Pill
-W.setHidden("weather:tula", true);
-assert.strictEqual(W.isHidden("weather:tula"), true, "Tula pill can be hidden");
-let hiddenRow = W.unifiedRowHtml();
-assert.ok(!hiddenRow.includes("wx-pill-tula"), "Hidden pill is not rendered in the row");
-assert.ok(hiddenRow.includes("wx-pill-barcelona"), "Other weather pills still render");
-assert.ok(hiddenRow.includes("sp-pill-manage-btn"), "Manage button stays so pills can be restored");
-W.setHidden("weather:tula", false);
-hiddenRow = W.unifiedRowHtml();
-assert.ok(hiddenRow.includes("wx-pill-tula"), "Showing the pill again renders it");
-
-// 10. Test Disabling A Pill Category
-W.setTypeDisabled("soccer", true);
-assert.strictEqual(W.isTypeDisabled("soccer"), true, "Match pills can be switched off");
-let offRow = W.unifiedRowHtml();
-assert.ok(!offRow.includes("sc-pill-arsenal-tula"), "Disabled match pills are not rendered");
-assert.ok(offRow.includes("wx-pill-tula"), "Weather pills still render when matches are off");
-W.setTypeDisabled("soccer", false);
-offRow = W.unifiedRowHtml();
-assert.ok(offRow.includes("sc-pill-arsenal-tula"), "Re-enabled match pills render again");
-
-// 11. Test Reset Defaults
-W.setHidden("soccer:arsenal-tula", true);
-W.setTypeDisabled("weather", true);
-W.resetPrefs();
-assert.strictEqual(W.isPinned("weather:tula"), true, "Tula restored to pinned defaults");
-assert.strictEqual(W.isPinned("soccer:fc-barcelona"), true, "Barca restored to pinned defaults");
-assert.strictEqual(W.isHidden("soccer:arsenal-tula"), false, "Reset clears hidden pills");
-assert.strictEqual(W.isTypeDisabled("weather"), false, "Reset clears disabled categories");
-
-console.log("weather and pill pinning tests ok");
+  W.setHidden("soccer:fc-barcelona", true);
+  W.setTypeDisabled("weather", true);
+  W.resetPrefs();
+  assert.strictEqual(W.isPinned("weather:tula"), false, "reset does not restore a fake city");
+  assert.strictEqual(W.isPinned("soccer:fc-barcelona"), true, "reset restores the followed clubs");
+  assert.strictEqual(W.isHidden("soccer:fc-barcelona"), false, "reset clears hidden pills");
+  assert.strictEqual(W.isTypeDisabled("weather"), false, "reset clears disabled categories");
+  assert.ok(W.unifiedRowHtml().includes("sp-pill-manage-btn"), "the customize button stays");
+  console.log("weather and pill pinning tests ok");
+}).catch(function (err) {
+  console.error(err);
+  process.exit(1);
+});
