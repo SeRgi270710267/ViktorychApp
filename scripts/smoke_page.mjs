@@ -331,7 +331,14 @@ async function main() {
     ];
     const problems = [];
     for (const run of runs) {
-      const result = await probe(url, run);
+      let result;
+      try {
+        result = await probe(url, run);
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        if (!/did not open a debugger/.test(message)) throw err;
+        result = await probe(url, run);
+      }
       console.log(run.label + ": " + (result.text || "(empty)").slice(0, 120));
       result.problems.forEach((problem) => problems.push(run.label + " " + problem));
     }

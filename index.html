@@ -152,9 +152,28 @@
       } catch (err) {}
     })();
   </script>
-  <script src="accounts.config.js" async></script>
+  <script src="accounts.config.js"></script>
   <script>
     (function () {
+      var cfg = window.VIKTORYCH_ACCOUNTS || {};
+      var signed = false;
+      try {
+        signed = !!(localStorage.getItem("viktorychapp-account-v1") || localStorage.getItem("superintelapp-account-v1") || localStorage.getItem("rss-feeds-account-v1"));
+      } catch (err) { signed = false; }
+      if (cfg.gate === true && !signed) {
+        document.documentElement.setAttribute("data-wall", "1");
+        var theme = document.documentElement.getAttribute("data-theme");
+        var bg = theme === "default" ? "#fff" : theme === "dim" ? "#15202b" : "#000";
+        var fg = theme === "default" ? "#0f1419" : "#e7e9ea";
+        var style = document.createElement("style");
+        style.textContent = 'html[data-wall="1"] #app,html[data-wall="1"] #hover,html[data-wall="1"] #pull,html[data-wall="1"] #new-posts,html[data-wall="1"] #offline,html[data-wall="1"] #update,html[data-wall="1"] #viewer,html[data-wall="1"] #stories,html[data-wall="1"] #toast,html[data-wall="1"] #dock-root{display:none!important}html[data-wall="1"] body{background:' + bg + ";color:" + fg + "}";
+        document.head.appendChild(style);
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "accounts.css";
+        document.head.appendChild(link);
+        return;
+      }
       function emptyBody(key) {
         var body = key === "feeds.config.json" ? "{}" : '{"posts":[],"feeds":[]}';
         return new Response(body, { status: 200, headers: { "Content-Type": "application/json", "X-Catalog-Missing": "1" } });
@@ -167,7 +186,6 @@
         } catch (err) { return ""; }
       }
       function loadCatalog(key) {
-        var cfg = window.VIKTORYCH_ACCOUNTS || {};
         var api = String(cfg.api || "").replace(/\/$/, "");
         var gated = !!(cfg.gate && api);
         var url = gated ? api + "/v1/data/" + key.split("/").map(encodeURIComponent).join("/") : key;
@@ -179,19 +197,11 @@
           return res;
         }).catch(function () { return emptyBody(key); });
       }
-      function start() {
-        var boot = window.__homeFreshBoot || {};
-        if (boot.feeds) return;
-        boot.feeds = loadCatalog("feeds.json");
-        boot.config = loadCatalog("feeds.config.json");
-        window.__homeFreshBoot = boot;
-      }
-      if (window.VIKTORYCH_ACCOUNTS) start();
-      else {
-        var cfg = document.querySelector('script[src="accounts.config.js"]');
-        if (cfg) cfg.addEventListener("load", start);
-        else start();
-      }
+      var boot = window.__homeFreshBoot || {};
+      if (boot.feeds) return;
+      boot.feeds = loadCatalog("feeds.json");
+      boot.config = loadCatalog("feeds.config.json");
+      window.__homeFreshBoot = boot;
     })();
   </script>
   <link rel="stylesheet" href="styles.css">
@@ -421,6 +431,26 @@
     })();
   </script>
   <div id="account-layer"></div>
+  <script>
+    (function () {
+      if (document.documentElement.getAttribute("data-wall") !== "1") return;
+      var root = document.getElementById("account-layer");
+      if (!root || root.childElementCount) return;
+      var lang = document.documentElement.lang === "ru" || document.documentElement.lang === "es" ? document.documentElement.lang : "en";
+      var pack = {
+        en: ["Happening now", "Join today.", "Create account", "Already have an account?", "Sign in"],
+        es: ["Lo que está pasando", "Únete hoy.", "Crear cuenta", "¿Ya tienes una cuenta?", "Iniciar sesión"],
+        ru: ["Сейчас в сети", "Присоединяйтесь сегодня.", "Создать аккаунт", "Уже есть аккаунт?", "Войти"]
+      };
+      var t = pack[lang];
+      root.innerHTML = '<div class="x-shell boot-land"><div class="x-land"><div class="x-land-logo"><img alt="" src="favicon.svg"></div><div class="x-land-copy"><h1>' + t[0] + "</h1><h2>" + t[1] + '</h2><button class="acct-fill" type="button" data-acct="signup">' + t[2] + "</button><h3>" + t[3] + '</h3><button class="acct-line" type="button" data-acct="login">' + t[4] + "</button></div></div></div>";
+      root.addEventListener("click", function (event) {
+        var btn = event.target && event.target.closest ? event.target.closest("[data-acct]") : null;
+        if (!btn || window.ViktorychAccounts) return;
+        window.__VIKTORYCH_AUTH = btn.getAttribute("data-acct") || "";
+      });
+    })();
+  </script>
   <div id="hover"></div>
   <div id="x-tooltip" class="x-tooltip" role="tooltip" aria-hidden="true"></div>
   <div id="pull" aria-hidden="true"><span class="spin"></span></div>
@@ -499,6 +529,20 @@
           nodes.push.apply(nodes, Array.prototype.slice.call(tpl.content.querySelectorAll("script")));
         }
         if (!links.length && !nodes.length) return;
+        if (document.documentElement.getAttribute("data-wall") === "1") {
+          var first = ["i18n.js", "i18n/en.js", "i18n/ru.js", "i18n/es.js", "marks.js", "shared/handle-skeleton.js", "accounts.js"];
+          function rank(node) {
+            var src = node.getAttribute("src") || "";
+            var at = first.indexOf(src.replace(/^\.\//, ""));
+            return at < 0 ? first.length : at;
+          }
+          nodes.sort(function (a, b) { return rank(a) - rank(b); });
+          links.sort(function (a, b) {
+            var aAcct = (a.getAttribute("href") || "").indexOf("accounts.css") >= 0 ? 0 : 1;
+            var bAcct = (b.getAttribute("href") || "").indexOf("accounts.css") >= 0 ? 0 : 1;
+            return aAcct - bAcct;
+          });
+        }
         links.forEach(function (node) {
           var el = document.createElement("link");
           el.rel = "stylesheet";
