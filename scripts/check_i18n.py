@@ -27,6 +27,9 @@ UI_FILES = (
     "index.html",
     "404.html",
     "accounts.js",
+    "passkeys.js",
+    "app-lock.js",
+    "privacy-screen.js",
     "presence.js",
     "owner-keys.js",
     "shorts.js",
@@ -44,6 +47,7 @@ UI_FILES = (
     "native.js",
     "offline.html",
     "dock.js",
+    "feeds-page.js",
 )
 # Short words that also appear as data, and phrases that are allowed to stay
 # in English because they are product names or technical tokens.
@@ -71,6 +75,7 @@ ALLOW_IDENTICAL = {
     "Video",
     "Error",
     "No",
+    "Built with Llama. Llama 3.2 is licensed under the Llama 3.2 Community License, Copyright © Meta Platforms, Inc. All Rights Reserved.",
 }
 
 
