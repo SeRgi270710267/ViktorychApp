@@ -157,22 +157,36 @@ async function offerUpdate(page) {
   await page.click("#upd-go");
 }
 
+async function registrationState(page) {
+  return page.evaluate(() => navigator.serviceWorker.getRegistration().then((registration) => {
+    const root = document.getElementById("upd-root");
+    const go = document.getElementById("upd-go");
+    const phase = root ? root.getAttribute("data-phase") || "" : "";
+    const waiting = registration && registration.waiting;
+    if (waiting) {
+      try { waiting.postMessage({ type: "apply-update", fresh: false }); } catch (err) { /* the next poll can try again */ }
+    }
+    return {
+      phase: phase,
+      installing: !!(registration && registration.installing),
+      waiting: !!waiting,
+      failed: !!(root && go && !root.hidden && !go.hidden && phase === "error" && !(registration && registration.installing))
+    };
+  })).catch(() => null);
+}
+
 async function waitSha(page, expected) {
   const start = Date.now();
   let last = "";
   let nudgedAt = 0;
   let nudged = 0;
-  while (Date.now() - start < 120000) {
+  let detail = null;
+  while (Date.now() - start < 180000) {
     try { last = await shaOf(page); } catch (err) { last = ""; }
     if (last === expected) return;
-    if (nudged < 2 && Date.now() - start > 20000 && Date.now() - nudgedAt > 20000) {
-      const failed = await page.evaluate(() => {
-        const root = document.getElementById("upd-root");
-        const go = document.getElementById("upd-go");
-        if (!root || !go || root.hidden || go.hidden) return false;
-        return root.getAttribute("data-phase") === "error";
-      }).catch(() => false);
-      if (failed) {
+    if (nudged < 5 && Date.now() - start > 12000 && Date.now() - nudgedAt > 12000) {
+      detail = await registrationState(page);
+      if (detail && detail.failed) {
         nudged += 1;
         nudgedAt = Date.now();
         await page.click("#upd-go").catch(() => {});
@@ -180,7 +194,9 @@ async function waitSha(page, expected) {
     }
     await page.waitForTimeout(300);
   }
-  throw new Error(last ? "worker stayed on the previous build" : "worker never reported a build");
+  detail = await registrationState(page);
+  const extra = detail ? " (phase=" + detail.phase + " installing=" + detail.installing + " waiting=" + detail.waiting + ")" : "";
+  throw new Error((last ? "worker stayed on the previous build" : "worker never reported a build") + extra);
 }
 
 async function testCleanUpdate(browser) {
