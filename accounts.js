@@ -1906,6 +1906,11 @@ function signupPayload() {
     if (account.friendsCount != null && !graphCounts[id].fresh) graphCounts[id].friends = account.friendsCount;
     if (account.viewerFriendStatus != null) graphCounts[id].friendStatus = account.viewerFriendStatus;
     if (account.mutualFriendsCount != null) graphCounts[id].mutualFriendsCount = account.mutualFriendsCount;
+    graphCounts[id].pending = !!account.viewerPending;
+    graphCounts[id].viewerBlocks = !!account.viewerBlocks;
+    graphCounts[id].blockedBy = !!account.blockedBy;
+    graphCounts[id].muted = !!account.viewerMutes;
+    graphCounts[id].locked = !!account.locked;
   }
   function countLink(account, tab, n, label) {
     var href = tab === "friends" ? ("#/@" + encodeURIComponent(account.handle || "") + "?tab=friends") : ("#/@" + encodeURIComponent(account.handle || "") + "/" + tab);
@@ -1935,17 +1940,25 @@ function signupPayload() {
     }).catch(function () { countLoads[id] = false; });
   }
   function listPack(id, tab) {
-    return listCache[id + "|" + tab] || { loading: false, accounts: null, error: false, isPrivate: false };
+    return listCache[id + "|" + tab] || { loading: false, accounts: null, error: false, isPrivate: false, cursor: "", query: graphQuery[id + "|" + tab] || "" };
   }
-  function ensureList(id, tab) {
+  var graphQuery = {};
+  var graphTimer = {};
+  function ensureList(id, tab, more) {
     var session = readSession();
     var key = id + "|" + tab;
     if (!id || !session || !hasApi()) return;
     var pack = listCache[key];
-    if (pack && (pack.loading || (pack.accounts && !pack.dirty))) return;
+    if (pack && pack.loading) return;
+    if (pack && pack.accounts && !pack.dirty && !more) return;
     var epoch = followEpoch;
-    listCache[key] = { loading: true, accounts: pack && pack.accounts, error: false, dirty: false };
-    api("/v1/follows?id=" + encodeURIComponent(id) + "&tab=" + encodeURIComponent(tab), { token: session.token }).then(function (res) {
+    var q = graphQuery[key] || "";
+    var cursor = more && pack && pack.cursor ? pack.cursor : "";
+    listCache[key] = { loading: true, accounts: pack && pack.accounts, error: false, dirty: false, cursor: pack && pack.cursor, query: q, isPrivate: pack && pack.isPrivate, locked: pack && pack.locked, blocked: pack && pack.blocked };
+    var path = "/v1/follows?id=" + encodeURIComponent(id) + "&tab=" + encodeURIComponent(tab) + "&limit=20";
+    if (q) path += "&q=" + encodeURIComponent(q);
+    if (cursor) path += "&cursor=" + encodeURIComponent(cursor);
+    api(path, { token: session.token }).then(function (res) {
       if (epoch !== followEpoch) {
         if (listCache[key]) {
           listCache[key].loading = false;
@@ -1953,55 +1966,133 @@ function signupPayload() {
         }
         return;
       }
-      if (!res || res.status !== 200) listCache[key] = { loading: false, accounts: [], error: true, isPrivate: false };
+      if (!res || res.status !== 200) listCache[key] = { loading: false, accounts: [], error: true, isPrivate: false, cursor: "", query: q };
       else {
-        var isPriv = !!res.isPrivate;
-        listCache[key] = { loading: false, accounts: Array.isArray(res.accounts) ? res.accounts : [], error: false, isPrivate: isPriv };
+        var next = Array.isArray(res.accounts) ? res.accounts : [];
+        var prev = more && pack && Array.isArray(pack.accounts) ? pack.accounts : [];
+        listCache[key] = {
+          loading: false,
+          accounts: prev.concat(next),
+          error: false,
+          isPrivate: !!res.isPrivate,
+          locked: !!res.locked,
+          blocked: !!res.blocked,
+          cursor: res.cursor || "",
+          query: q
+        };
         graphCounts[id] = graphCounts[id] || {};
         if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
         if (res.followingCount != null) graphCounts[id].following = res.followingCount;
+        if (res.requestsCount != null) graphCounts[id].requests = res.requestsCount;
         graphCounts[id].fresh = true;
       }
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {
-      listCache[key] = { loading: false, accounts: [], error: true };
+      listCache[key] = { loading: false, accounts: (pack && pack.accounts) || [], error: true, cursor: "", query: q };
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     });
+  }
+  function setGraphQuery(id, tab, value) {
+    var key = id + "|" + tab;
+    graphQuery[key] = String(value || "");
+    if (listCache[key]) listCache[key].dirty = true;
+    clearTimeout(graphTimer[key]);
+    graphTimer[key] = setTimeout(function () { ensureList(id, tab, false); }, 200);
   }
   function dirtyLists() {
     Object.keys(listCache).forEach(function (key) {
       if (listCache[key]) listCache[key].dirty = true;
     });
   }
-  function changeFollow(id, follow, profile) {
+  var followInflight = {};
+  function pressFollow(id) {
+    if (!id || followInflight[id]) return false;
+    followInflight[id] = true;
+    return true;
+  }
+  function releaseFollow(id) {
+    if (id) followInflight[id] = false;
+  }
+  function previewFollow(id, follow) {
+    if (!id) return;
+    graphCounts[id] = graphCounts[id] || {};
+    var me = myAccountId();
+    if (graphCounts[id].followers != null) graphCounts[id].followers = Math.max(0, graphCounts[id].followers + (follow ? 1 : -1));
+    if (me && graphCounts[me] && graphCounts[me].following != null) graphCounts[me].following = Math.max(0, graphCounts[me].following + (follow ? 1 : -1));
+  }
+  function followErrorText(res) {
+    if (!res) return tr("Couldn’t update that follow. Try again.");
+    if (res.status === 429 || res.error === "rate_limited") return tr("Too many follows. Wait a few minutes and try again.");
+    if (res.status === 403 || res.error === "blocked") return tr("You can’t follow this account.");
+    if (res.status === 404) return tr("That account isn’t here.");
+    return tr("Couldn’t update that follow. Try again.");
+  }
+  function rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine) {
+    if (hadTarget) graphCounts[id].followers = prevTarget;
+    else if (graphCounts[id]) {
+      delete graphCounts[id].followers;
+      graphCounts[id].fresh = false;
+    }
+    if (hadMine && graphCounts[me]) graphCounts[me].following = prevMine;
+  }
+  function changeFollow(id, follow, profile, opts) {
     var session = readSession();
-    if (!session || !hasApi() || !id) return Promise.resolve(true);
-    if (id === myAccountId()) return Promise.resolve(false);
+    opts = opts || {};
+    var held = !!opts.held;
+    if (!id) return Promise.resolve(false);
+    if (!held && followInflight[id]) return Promise.resolve({ ok: true, ignored: true });
+    if (!held) followInflight[id] = true;
+    if (!session || !hasApi()) {
+      releaseFollow(id);
+      return Promise.resolve(true);
+    }
+    if (id === myAccountId()) {
+      releaseFollow(id);
+      return Promise.resolve(false);
+    }
     followEpoch += 1;
     var epoch = followEpoch;
     var me = myAccountId();
+    graphCounts[id] = graphCounts[id] || {};
+    var wasPending = !!graphCounts[id].pending;
+    var skipCounts = !!opts.replay || (follow && wasPending) || (!follow && wasPending);
     var hadTarget = !!(graphCounts[id] && graphCounts[id].followers != null);
     var prevTarget = hadTarget ? graphCounts[id].followers : 0;
     var hadMine = !!(me && graphCounts[me] && graphCounts[me].following != null);
     var prevMine = hadMine ? graphCounts[me].following : 0;
-    graphCounts[id] = graphCounts[id] || {};
-    graphCounts[id].followers = Math.max(0, prevTarget + (follow ? 1 : -1));
-    if (hadMine) graphCounts[me].following = Math.max(0, prevMine + (follow ? 1 : -1));
+    if (!skipCounts) {
+      graphCounts[id].followers = Math.max(0, prevTarget + (follow ? 1 : -1));
+      if (hadMine) graphCounts[me].following = Math.max(0, prevMine + (follow ? 1 : -1));
+    }
+    if (follow) graphCounts[id].pending = false;
     dirtyLists();
     var body = { id: id };
     if (profile && typeof profile === "object") body.profile = profile;
     return api("/v1/follows", { method: follow ? "PUT" : "DELETE", token: session.token, body: body }).then(function (res) {
-      if (epoch !== followEpoch) return res && res.status === 200;
+      releaseFollow(id);
+      if (epoch !== followEpoch) return res && res.status === 200 ? true : false;
       if (!res || res.status !== 200) {
-        if (hadTarget) graphCounts[id].followers = prevTarget;
-        else {
-          delete graphCounts[id].followers;
-          graphCounts[id].fresh = false;
-        }
-        if (hadMine) graphCounts[me].following = prevMine;
+        if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
+        else if (opts.replay) previewFollow(id, !follow);
+        if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(followErrorText(res));
+        if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
         return false;
       }
       graphCounts[id] = graphCounts[id] || {};
+      if (res.pending) {
+        if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
+        graphCounts[id].pending = true;
+        graphCounts[id].fresh = true;
+        if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
+        if (me && res.followingCount != null) {
+          graphCounts[me] = graphCounts[me] || {};
+          graphCounts[me].following = res.followingCount;
+        }
+        dirtyLists();
+        if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        return { pending: true };
+      }
+      graphCounts[id].pending = false;
       if (res.followersCount != null) graphCounts[id].followers = res.followersCount;
       graphCounts[id].fresh = true;
       if (me && res.followingCount != null) {
@@ -2014,12 +2105,28 @@ function signupPayload() {
       if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
       return true;
     }).catch(function () {
+      releaseFollow(id);
       if (epoch !== followEpoch) return false;
-      if (hadTarget) graphCounts[id].followers = prevTarget;
-      else delete graphCounts[id].followers;
-      if (hadMine) graphCounts[me].following = prevMine;
+      if (!skipCounts) rollbackCounts(id, me, hadTarget, prevTarget, hadMine, prevMine);
+      else if (opts.replay) previewFollow(id, !follow);
+      if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(tr("Couldn’t update that follow. Try again."));
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
       return false;
     });
+  }
+  function followControlHtml(id, large) {
+    var row = graphCounts[id] || {};
+    var busy = !!followInflight[id];
+    var size = large ? " lg" : "";
+    var attr = ' type="button" data-act="follow" data-id="' + esc(id) + '" aria-busy="' + (busy ? "true" : "false") + '"';
+    if (row.blockedBy) return "";
+    if (row.viewerBlocks) {
+      return '<button class="follow following' + size + '"' + attr.replace('data-act="follow"', 'data-act="graph-unblock"') + ' aria-pressed="false">' + esc(tr("Unblock")) + '</button>';
+    }
+    if (row.pending) {
+      return '<button class="follow pending' + size + '"' + attr + ' aria-pressed="false" aria-label="' + esc(tr("Pending")) + '"><span class="f">' + esc(tr("Pending")) + '</span><span class="u">' + esc(tr("Cancel request")) + '</span></button>';
+    }
+    return "";
   }
   function syncFollows() {
     var session = readSession();
@@ -2049,7 +2156,16 @@ function signupPayload() {
         graphCounts[me] = graphCounts[me] || {};
         if (res.followingCount != null) graphCounts[me].following = res.followingCount;
         if (res.followersCount != null) graphCounts[me].followers = res.followersCount;
+        if (res.requestsCount != null) graphCounts[me].requests = res.requestsCount;
         graphCounts[me].fresh = true;
+        var outgoing = Array.isArray(res.outgoingRequests) ? res.outgoingRequests : [];
+        Object.keys(graphCounts).forEach(function (key) {
+          if (graphCounts[key] && key !== me) graphCounts[key].pending = outgoing.indexOf(key) >= 0;
+        });
+        outgoing.forEach(function (oid) {
+          graphCounts[oid] = graphCounts[oid] || {};
+          graphCounts[oid].pending = true;
+        });
         if (window.ViktorychAccounts.onServerFollows) window.ViktorychAccounts.onServerFollows(Array.isArray(res.ids) ? res.ids : []);
         if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
       }
@@ -2428,6 +2544,37 @@ function signupPayload() {
       '<button class="acct-next" type="button" data-acct="gen-challenge">' + esc(linkIdentityForm.loading ? tr("Loading…") : tr("Generate verification code")) + '</button>';
   }
 
+  function graphListHtml(subjectId, tab, handle) {
+    ensureList(subjectId, tab, false);
+    var pack = listPack(subjectId, tab);
+    var q = graphQuery[subjectId + "|" + tab] || "";
+    var searchLabel = tab === "followers" ? tr("Search followers") : tab === "following" ? tr("Search following") : tab === "mutuals" ? tr("Search mutuals") : tr("Search followers");
+    var search = '<div class="friends-search-box"><input type="search" class="friends-search-input" data-graph-search="1" data-graph-id="' + esc(subjectId) + '" data-graph-tab="' + esc(tab) + '" placeholder="' + esc(searchLabel) + '" aria-label="' + esc(searchLabel) + '" value="' + esc(q) + '"></div>';
+    if (pack.loading && !pack.accounts) return search + '<div class="reply-empty">' + esc(tr("Loading…")) + '</div>';
+    if (pack.error) return search + '<div class="empty"><h2>' + esc(tr("Followers")) + '</h2><p>' + esc(tr("Couldn’t load this list.")) + '</p></div>';
+    if (pack.blocked) return '<div class="empty"><h2>' + esc(tr("You're blocked")) + '</h2><p>' + esc(tr("This account has blocked you. You can’t see their posts or profile.")) + '</p></div>';
+    if (pack.locked) return '<div class="empty"><h2>' + esc(tr("These posts are protected")) + '</h2><p>' + esc(tr("Follow this account and wait for approval to see their posts.")) + '</p></div>';
+    if (pack.isPrivate) return '<div class="empty"><h2>' + esc(tr("These lists are private")) + '</h2><p>' + esc(tr("Only @{handle} can see who they follow and who follows them.", { handle: handle || "" })) + '</p></div>';
+    var rows = pack.accounts || [];
+    if (!rows.length) {
+      var title = tab === "followers" ? tr("No followers yet") : tab === "mutuals" ? tr("No mutuals yet") : tab === "requests" ? tr("No follow requests") : tr("Not following anyone yet");
+      var copy = tab === "requests" ? tr("When someone asks to follow you, they’ll show up here.") : tab === "mutuals" ? tr("People you follow who follow you back show up here.") : tab === "followers" ? tr("When someone follows this account, they’ll show up here.") : tr("When this account follows someone, they’ll show up here.");
+      return search + '<div class="empty"><h2>' + esc(title) + '</h2><p>' + esc(copy) + '</p></div>';
+    }
+    var session = readSession();
+    var mine = session && session.account && ("app:" + session.account.publicId) === subjectId;
+    var html = rows.map(function (item) {
+      var button = window.ViktorychAccounts.followButton ? (window.ViktorychAccounts.followButton(item.id, false) || "") : "";
+      var badge = item.followsYou ? '<span class="pill-badge">' + esc(tr("Follows you")) + '</span>' : "";
+      var remove = mine && tab === "followers" && item.removable ? '<button class="outline" type="button" data-act="remove-follower" data-id="' + esc(item.id) + '">' + esc(tr("Remove follower")) + '</button>' : "";
+      var accept = mine && tab === "requests" ? '<button class="friend-btn friend-accept" type="button" data-act="accept-follow" data-id="' + esc(item.id) + '">' + esc(tr("Accept")) + '</button><button class="friend-btn friend-decline" type="button" data-act="decline-follow" data-id="' + esc(item.id) + '">' + esc(tr("Decline")) + '</button>' : "";
+      var name = item.name || item.handle || "";
+      var href = item.handle ? "#/@" + encodeURIComponent(item.handle) : (item.id ? "#/p/" + encodeURIComponent(item.id) : "#/");
+      return '<div class="connect-row"><a class="who-main" href="' + esc(href) + '"><span class="who-copy"><span class="name">' + esc(name) + badge + '</span><span class="handle">' + (item.handle ? "@" + esc(item.handle) : "") + '</span></span></a><span class="row-actions">' + accept + remove + button + '</span></div>';
+    }).join("");
+    var more = pack.cursor ? '<button class="outline" type="button" data-act="graph-more" data-id="' + esc(subjectId) + '" data-tab="' + esc(tab) + '">' + esc(tr("Load more")) + '</button>' : "";
+    return search + html + more;
+  }
   function galleryList(account, kind) {
     var list = kind === "banner" ? ((account && account.banners) || []) : ((account && account.photos) || []);
     var items = list.filter(function (item) { return item && item.url; });
@@ -2454,6 +2601,9 @@ function signupPayload() {
   function accountPage(account, route) {
     var mine = profileMine(account);
     var ref = accountRef(account);
+    if (account.blockedBy && !mine) {
+      return '<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" type="button" data-act="back" aria-label="' + esc(tr("Back")) + '"><svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M7.4 13l5.3 5.3-1.4 1.4L3.6 12l7.7-7.7 1.4 1.4L7.4 11H21v2H7.4z"/></svg></button><div class="head-text"><div class="pt-name">' + esc(account.displayName || account.handle) + '</div></div></div></div><div class="empty"><h2>' + esc(tr("You're blocked")) + '</h2><p>' + esc(tr("This account has blocked you. You can’t see their posts or profile.")) + '</p></div>';
+    }
     var photo = presenceWrap(mine ? account.publicId : "", publicAvatar(account.avatar, account.avatarFace, "pava"), mine);
     if ((account.photos && account.photos.length) || (account.banners && account.banners.length) || account.avatar || account.banner) {
       photo = photo.replace("<img", '<img data-acct="open-gallery" data-kind="photo"');
@@ -2471,6 +2621,8 @@ function signupPayload() {
     var count = String(pack.count || 0);
 
     var postsBody = pack.html || ('<div class="empty"><h2>' + esc(tr("No posts yet")) + "</h2><p>" + esc(mine ? tr("Add a photo and bio from Edit profile. Posts here come from feeds you follow.") : tr("Posts from this account will show up here.")) + "</p></div>");
+    if (!mine && account.viewerBlocks) postsBody = '<div class="empty"><h2>' + esc(tr("You blocked this account")) + '</h2><p>' + esc(tr("Posts from this account stay hidden.")) + '</p></div>';
+    else if (!mine && account.locked) postsBody = '<div class="empty"><h2>' + esc(tr("These posts are protected")) + '</h2><p>' + esc(tr("Follow this account and wait for approval to see their posts.")) + '</p></div>';
     var friendsBody = friendsSectionHtml(account);
     var body = activeTab === "friends" ? friendsBody : postsBody;
 
@@ -2989,6 +3141,7 @@ function signupPayload() {
       health = healthHtml() + channelsHtml();
     }
     return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle acct-id-row\"><span>" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</span> <button class="outline" type="button" data-acct="copy-id">' + esc(idCopied ? tr("Account ID copied") : tr("Copy account ID")) + "</button></p><button class=\"outline\" type=\"button\" data-acct=\"edit\">" + esc(tr("Edit profile")) + "</button><h2>" + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
+      '<h2>' + esc(tr("Protect your posts")) + '</h2><p class="set-sub">' + esc(tr("Only approved followers and friends can see your posts and lists.")) + '</p><button class="tab-switch' + (account.protected ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.protected ? "true" : "false") + '" data-acct="toggle-protected"><span>' + esc(tr("Protect your posts")) + '</span><i></i></button>' + relationSettingsHtml() +
       '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Recovery codes")) + '</h2><p class="set-sub">' + esc(tr("These codes are shown once. Old codes stop working when you create new ones.")) + '</p><button class="outline" type="button" data-acct="recovery-new">' + esc(tr("Create new recovery codes")) + "</button>" + (account.owner ? '<h2>' + esc(tr("Review reports")) + '</h2><button class="outline" type="button" data-acct="open-reports">' + esc(tr("Review reports")) + "</button>" : "") + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;  }
   function onClick(event) {
     var friendSub = event.target && event.target.closest ? event.target.closest("[data-friend-sub]") : null;
@@ -3216,6 +3369,11 @@ function signupPayload() {
     else if (act === "toggle-form-private") { form.privateFollows = !form.privateFollows; paint(); }
     else if (act === "toggle-form-profileless") { form.profileLess = !form.profileLess; paint(); }
     else if (act === "toggle-private-follows") { var s = readSession(); if (s && s.account) setPrivateFollows(!s.account.privateFollows); }
+    else if (act === "toggle-protected") { var sp = readSession(); if (sp && sp.account) setProtected(!sp.account.protected); }
+    else if (act === "unblock-account" || act === "unmute-account-server") {
+      var rid = acct.dataset.id;
+      relationWrite(act === "unblock-account" ? "blocks" : "mutes", rid, true);
+    }
     else if (act === "toggle-profileless") { var s = readSession(); if (s && s.account) setProfileLess(!s.account.profileLess); }
     else if (act === "toggle-fed-ap") toggleFederationAp();
     else if (act === "toggle-fed-nostr") toggleFederationNostr();
@@ -3314,6 +3472,63 @@ else if (act === "copy-id") copyAccountId();
       remember(res.account);
       dirtyLists();
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () {});
+  }
+  var relationCache = { blocks: null, mutes: null, loading: false };
+  function ensureRelations() {
+    var session = readSession();
+    if (!session || !hasApi() || relationCache.loading || relationCache.blocks) return;
+    relationCache.loading = true;
+    Promise.all([
+      api("/v1/blocks", { token: session.token }),
+      api("/v1/mutes", { token: session.token })
+    ]).then(function (pair) {
+      relationCache.loading = false;
+      relationCache.blocks = pair[0] && pair[0].status === 200 && Array.isArray(pair[0].accounts) ? pair[0].accounts : [];
+      relationCache.mutes = pair[1] && pair[1].status === 200 && Array.isArray(pair[1].accounts) ? pair[1].accounts : [];
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    }).catch(function () { relationCache.loading = false; });
+  }
+  function relationRows(list, act, label) {
+    if (!list || !list.length) return '<p class="set-sub">' + esc(label) + '</p>';
+    return list.map(function (item) {
+      var id = String(item.id || "").replace(/^app:/, "");
+      return '<div class="mute-row"><span>@' + esc(item.handle || item.name || "") + '</span><button type="button" data-acct="' + act + '" data-id="' + esc(id) + '">' + esc(act === "unblock-account" ? tr("Unblock") : tr("Unmute")) + '</button></div>';
+    }).join("");
+  }
+  function relationSettingsHtml() {
+    ensureRelations();
+    return '<h2>' + esc(tr("Blocked accounts")) + '</h2>' + relationRows(relationCache.blocks, "unblock-account", tr("No blocked accounts")) +
+      '<h2>' + esc(tr("Muted accounts")) + '</h2>' + relationRows(relationCache.mutes, "unmute-account-server", tr("No muted accounts"));
+  }
+  function relationWrite(kind, id, remove) {
+    var session = readSession();
+    if (!session || !id) return;
+    api("/v1/" + kind, { method: remove ? "DELETE" : "PUT", token: session.token, body: { id: id } }).then(function (res) {
+      relationCache.blocks = null;
+      relationCache.mutes = null;
+      if (res && res.status === 200 && window.ViktorychAccounts && window.ViktorychAccounts.toast) {
+        var note = tr("Account muted");
+        if (kind === "blocks" && remove) note = tr("Account unblocked");
+        else if (kind === "blocks") note = tr("Account blocked");
+        else if (remove) note = tr("Account unmuted");
+        window.ViktorychAccounts.toast(note);
+      }
+      if (!res || res.status !== 200) {
+        if (window.ViktorychAccounts && window.ViktorychAccounts.toast) window.ViktorychAccounts.toast(tr("You can’t do that with this account."));
+      }
+      ensureRelations();
+    }).catch(function () {});
+  }
+  function setProtected(val) {
+    var session = readSession();
+    if (!session) return;
+    api("/v1/profile", { method: "PATCH", token: session.token, body: { protected: !!val } }).then(function (res) {
+      if (!res || res.status !== 200 || !res.account) return;
+      session.account = res.account;
+      writeSession(session);
+      remember(res.account);
+      if (window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
     }).catch(function () {});
   }
   function setPrivateFollows(val) {
@@ -3614,6 +3829,11 @@ else if (act === "copy-id") copyAccountId();
       syncFriends();
     }
   });
+  document.addEventListener("input", function (event) {
+    var el = event.target && event.target.closest ? event.target.closest("[data-graph-search]") : null;
+    if (!el) return;
+    setGraphQuery(el.dataset.graphId, el.dataset.graphTab, el.value);
+  });
 
   window.ViktorychAccounts = {
     blocking: blocking,
@@ -3642,6 +3862,21 @@ else if (act === "copy-id") copyAccountId();
     followButton: null,
     onServerFollows: null,
     changeFollow: changeFollow,
+    pressFollow: pressFollow,
+    releaseFollow: releaseFollow,
+    previewFollow: previewFollow,
+    followControlHtml: followControlHtml,
+    graphListHtml: graphListHtml,
+    setGraphQuery: setGraphQuery,
+    relationWrite: relationWrite,
+    blockSet: function () {
+      var ids = {};
+      (relationCache.blocks || []).forEach(function (item) {
+        var id = String(item.id || "");
+        if (id) ids[id] = true;
+      });
+      return ids;
+    },
     syncFollows: syncFollows,
     syncFriends: syncFriends,
     friendButton: friendButtonHtml,

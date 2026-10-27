@@ -34,6 +34,7 @@ import { redactPublicIds } from "../../shared/profile-privacy.js";
 import { PROFILE_MEDIA_SCHEMA, applyViewer, rememberSlot, addMedia, updateMedia, removeMedia, readView, objectAllowed, mediaHeaders } from "./profile-media.js";
 import { handleOwnerFeeds, sweepOwnerFeeds } from "./owner-feeds.js";
 import { handleWebAuthn, WEBAUTHN_SCHEMA } from "./webauthn.js";
+import { SOCIAL_SCHEMA, prepareFollowPut, insertFollowRequest, deleteOutgoingRequest, importAllowed, readFollowRows, outgoingRequestIds, requestCount, followsYouSet, handleSocialRoutes, blockedProfile, stripBlockedView, blocksEither, pairState } from "./social.js";
 import { GUARD_SCHEMA, issueChallenge, verifySignupGuard } from "./signup-guard.js";
 import { RECOVERY_SCHEMA, issueRecoveryCodes, handleRecoveryRestore, handleRecoveryRegenerate } from "./recovery.js";
 import { POST_SCHEMA, handlePosts } from "./posts.js";
@@ -224,7 +225,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PROFILE_MEDIA_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(MENTION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DISCORD_ALERT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(WEBAUTHN_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(SOCIAL_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(GUARD_SCHEMA.concat(RECOVERY_SCHEMA, POST_SCHEMA).map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -517,7 +518,8 @@ async function sessionAccount(env, request) {
       avatar_empty: "default",
       banner_empty: "default",
       private_follows: 0,
-      profile_less: 0
+      profile_less: 0,
+      protected_account: 0
     };
   }
   const hash = await sha256Hex(token);
@@ -874,6 +876,28 @@ async function handleProfileGet(request, env, handle) {
     delete account.publicId;
   }
   await liveProfileCounts(env, row, account, viewer);
+  account.protected = row.protected_account === 1;
+  if (viewer && viewer.public_id !== row.public_id) {
+    const state = await pairState(env, viewer.public_id, row.public_id);
+    account.viewerFollows = state.following;
+    account.viewerPending = state.pending;
+    account.followsYou = state.followsYou;
+    account.viewerBlocks = state.viewerBlocks;
+    account.blockedBy = state.blockedBy;
+    account.viewerMutes = state.muted;
+    if (state.blockedBy) {
+      return json(200, { account: blockedProfile(account), reposts: [], identities: [] });
+    }
+    if (state.viewerBlocks) {
+      stripBlockedView(account);
+      reposts = [];
+    } else if (state.muted) {
+      reposts = [];
+    } else if (state.protected && !state.following && !state.friends) {
+      account.locked = true;
+      reposts = [];
+    }
+  }
   return json(200, { account, reposts, identities: account.identities || [] });
 }
 
@@ -985,7 +1009,7 @@ async function handleProfilePatch(request, env) {
   const bannerEmpty = body.bannerEmpty == null ? cleanGap(row.banner_empty) : cleanGap(body.bannerEmpty, row.banner_empty);
   const privateFollows = body.privateFollows == null ? (row.private_follows === 1 ? 1 : 0) : (body.privateFollows ? 1 : 0);
   const profileLess = (row.owner === 1) ? 0 : (body.profileLess == null ? (row.profile_less === 1 ? 1 : 0) : (body.profileLess ? 1 : 0));
-  const protectedAccount = body.protected == null ? (row.protected_account === 1 ? 1 : 0) : (body.protected ? 1 : 0);
+  const protectedAccount = (row.owner === 1) ? 0 : (body.protected == null ? (row.protected_account === 1 ? 1 : 0) : (body.protected ? 1 : 0));
   if (skeleton) {
     await env.DB.prepare("UPDATE accounts SET handle = ?, skeleton = ?, display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ?, profile_less = ?, protected_account = ? WHERE public_id = ?").bind(handle, skeleton, displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, profileLess, protectedAccount, row.public_id).run();
   } else {
@@ -4508,21 +4532,43 @@ async function resolveFollowTarget(env, id) {
   return { id: stored, account, shown: shownFollowId(account, stored) };
 }
 
+function followLimited(paced) {
+  return json(429, { error: "rate_limited", message: "Too many follows. Wait a few minutes and try again." }, { "retry-after": String(paced.retry || 60) });
+}
+
 async function handleFollowPut(request, env) {
   const gate = await requireFollowSession(request, env);
   if (gate.error) return gate.error;
-  const paced = await rateHit(env, "follow:" + gate.row.public_id, 80, 10 * 60 * 1000);
-  if (!paced.ok) return limited(paced);
+  const paced = await rateHit(env, "follow:" + gate.row.public_id, 30, 10 * 60 * 1000);
+  if (!paced.ok) return followLimited(paced);
   const body = await readJson(request, 8000);
   if (body.error) return json(400, { error: body.error });
   const rawId = cleanFollowId(body.id);
-  if (!rawId) return json(400, { error: "bad_follow" });
+  if (!rawId) return json(400, { error: "bad_follow", message: "That account can’t be followed." });
   const target = await resolveFollowTarget(env, rawId);
   if (target.error) return target.error;
   const id = target.id;
-  if (id === "app:" + gate.row.public_id) return json(400, { error: "bad_follow" });
+  if (id === "app:" + gate.row.public_id) return json(400, { error: "bad_follow", message: "That account can’t be followed." });
+  const decision = await prepareFollowPut(env, gate.row.public_id, id);
+  if (decision.mode === "blocked") return json(403, { error: "blocked", message: "You can’t follow this account." });
+  if (decision.mode === "request" || decision.mode === "pending-exists") {
+    let created = false;
+    if (decision.mode === "request") {
+      const wrote = await insertFollowRequest(env, gate.row.public_id, id.slice(4));
+      created = wrote.created;
+    }
+    if (created) {
+      try {
+        const notes = await import("./notifications.js");
+        await notes.notifyFollowRequest(env, gate.row, id.slice(4));
+      } catch (err) { /* the request is saved */ }
+    }
+    const followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", gate.row.public_id);
+    const followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", id);
+    return json(200, redactPublicIds({ ok: true, id: target.shown || id, pending: true, viewerFollows: false, followingCount, followersCount }));
+  }
   const snapshot = cleanFollowSnapshot(id, body.profile);
-  const existing = await env.DB.prepare("SELECT created_at FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(gate.row.public_id, id).first();
+  const existing = decision.mode === "already" ? { created_at: 1 } : await env.DB.prepare("SELECT created_at FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(gate.row.public_id, id).first();
   await env.DB.prepare("INSERT INTO account_follows (follower_id, target_id, snapshot, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(follower_id, target_id) DO UPDATE SET snapshot = CASE WHEN excluded.snapshot != '' THEN excluded.snapshot ELSE account_follows.snapshot END").bind(gate.row.public_id, id, snapshot, Date.now()).run();
   if (!existing) {
     try { await notifyFollow(env, gate.row, id, request); }
@@ -4534,12 +4580,12 @@ async function handleFollowPut(request, env) {
 async function handleFollowDelete(request, env) {
   const gate = await requireFollowSession(request, env);
   if (gate.error) return gate.error;
-  const paced = await rateHit(env, "follow:" + gate.row.public_id, 80, 10 * 60 * 1000);
-  if (!paced.ok) return limited(paced);
+  const paced = await rateHit(env, "follow:" + gate.row.public_id, 30, 10 * 60 * 1000);
+  if (!paced.ok) return followLimited(paced);
   const body = await readJson(request, 2000);
   if (body.error) return json(400, { error: body.error });
   const rawId = cleanFollowId(body.id);
-  if (!rawId) return json(400, { error: "bad_follow" });
+  if (!rawId) return json(400, { error: "bad_follow", message: "That account can’t be followed." });
   let id = rawId;
   let shown = rawId;
   if (rawId.indexOf("app:") === 0) {
@@ -4547,6 +4593,7 @@ async function handleFollowDelete(request, env) {
     if (!account) return json(404, { error: "not_found" });
     id = "app:" + account.public_id;
     shown = shownFollowId(account, id);
+    await deleteOutgoingRequest(env, gate.row.public_id, account.public_id);
   }
   await env.DB.prepare("DELETE FROM account_follows WHERE follower_id = ? AND target_id = ?").bind(gate.row.public_id, id).run();
   return followWriteResult(env, gate.row.public_id, id, shown, false);
@@ -4568,9 +4615,9 @@ async function handleFollowImport(request, env) {
     if (id.indexOf("app:") === 0) {
       const publicId = await accountIdFromRef(env, id);
       if (!publicId || publicId === gate.row.public_id) continue;
-      const account = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(publicId).first();
-      if (!account) continue;
       id = "app:" + publicId;
+      const allowed = await importAllowed(env, gate.row.public_id, id);
+      if (!allowed) continue;
     }
     ids.push(id);
   }
@@ -4605,7 +4652,7 @@ async function handleFollowGet(request, env, url) {
   const paced = await rateHit(env, "follow-read:" + gate.row.public_id, 120, 10 * 60 * 1000);
   if (!paced.ok) return limited(paced);
   const tabRaw = String(url.searchParams.get("tab") || "");
-  const tab = tabRaw === "followers" || tabRaw === "following" ? tabRaw : "";
+  const tab = tabRaw === "followers" || tabRaw === "following" || tabRaw === "mutuals" || tabRaw === "requests" ? tabRaw : "";
   let subject = String(url.searchParams.get("id") || "").trim();
   if (!subject) subject = "app:" + gate.row.public_id;
   else subject = cleanFollowId(subject);
@@ -4619,6 +4666,9 @@ async function handleFollowGet(request, env, url) {
   }
   const isOwner = !!(account && gate.row.public_id === account.public_id);
   const isPrivate = !!(account && account.private_follows === 1);
+  if (account && !isOwner && await blocksEither(env, gate.row.public_id, account.public_id)) {
+    return json(200, redactPublicIds({ id: shownFollowId(account, stored), kind: "account", blocked: true, followersCount: 0, followingCount: 0, viewerFollows: false, isPrivate: false, accounts: [] }));
+  }
   const body = {
     id: account ? shownFollowId(account, stored) : subject,
     kind: account ? "account" : "feed",
@@ -4631,33 +4681,51 @@ async function handleFollowGet(request, env, url) {
   }
   if (!tab && stored === "app:" + gate.row.public_id) {
     body.ids = await presentFollowIds(env, await listFollowIds(env, gate.row.public_id));
+    body.requestsCount = await requestCount(env, gate.row.public_id);
+    body.outgoingRequests = await presentFollowIds(env, await outgoingRequestIds(env, gate.row.public_id));
     return json(200, redactPublicIds(body));
   }
   if (!tab) return json(200, redactPublicIds(body));
-  if (!isOwner && isPrivate) {
+  const listed = await readFollowRows(env, gate.row, account, stored, tab, url);
+  if (listed.denied === "private") {
     body.accounts = [];
+    body.isPrivate = true;
     return json(200, redactPublicIds(body));
   }
-  if (tab === "followers") {
-    const listed = await env.DB.prepare("SELECT follower_id FROM account_follows WHERE target_id = ? ORDER BY created_at DESC LIMIT 200").bind(stored).all();
-    body.accounts = await followCards(env, request, ((listed && listed.results) || []).map((row) => row.follower_id));
-    return json(200, redactPublicIds(body));
-  }
-  if (!account) {
+  if (listed.denied === "blocked") {
     body.accounts = [];
+    body.blocked = true;
     return json(200, redactPublicIds(body));
   }
-  const listed = await env.DB.prepare("SELECT target_id, snapshot FROM account_follows WHERE follower_id = ? ORDER BY created_at DESC LIMIT 200").bind(account.public_id).all();
-  const rows = (listed && listed.results) || [];
+  if (listed.denied === "locked") {
+    body.accounts = [];
+    body.locked = true;
+    return json(200, redactPublicIds(body));
+  }
+  const rows = listed.rows || [];
+  const accountIds = [];
+  rows.forEach((row) => {
+    const id = String(row.id || "");
+    if (/^\d{12}$/.test(id)) accountIds.push(id);
+    else if (id.indexOf("app:") === 0) accountIds.push(id.slice(4));
+  });
+  const followsYou = await followsYouSet(env, gate.row.public_id, accountIds);
   const accounts = [];
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    if (String(row.target_id || "").indexOf("app:") === 0) {
-      const cards = await followCards(env, request, [row.target_id.slice(4)]);
-      if (cards[0]) accounts.push(cards[0]);
-    } else accounts.push(followFeedCard(row.target_id, row.snapshot));
+    const id = String(row.id || "");
+    if (/^\d{12}$/.test(id) || id.indexOf("app:") === 0) {
+      const publicId = id.indexOf("app:") === 0 ? id.slice(4) : id;
+      const cards = await followCards(env, request, [publicId]);
+      if (!cards[0]) continue;
+      cards[0].followsYou = followsYou.has(publicId);
+      if (isOwner && tab === "followers") cards[0].removable = true;
+      accounts.push(cards[0]);
+    } else accounts.push(followFeedCard(id, row.snapshot));
   }
   body.accounts = accounts;
+  body.cursor = listed.cursor || "";
+  if (isOwner) body.requestsCount = await requestCount(env, gate.row.public_id);
   return json(200, redactPublicIds(body));
 }
 
@@ -4743,6 +4811,10 @@ async function handleFriendsGet(request, env, url) {
 
   const isOwner = !!(viewer && viewer.public_id === targetAccount.public_id);
   if (targetAccount.profile_less === 1 && !isOwner) return json(404, { error: "not_found" });
+  if (!isOwner && await blocksEither(env, viewer.public_id, targetId)) {
+    const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
+    return json(200, redactPublicIds({ id: shown, friendsCount: 0, status: "none", mutualCount: 0, blocked: true, friends: [] }));
+  }
   const isPrivate = !!(targetAccount && targetAccount.private_follows === 1);
 
   const friendsCount = await friendCount(env, targetId);
@@ -4751,6 +4823,12 @@ async function handleFriendsGet(request, env, url) {
 
   if (tab === "friends") {
     const shown = targetAccount.handle ? "app:@" + targetAccount.handle : "";
+    if (!isOwner && targetAccount.protected_account === 1 && status !== "friends") {
+      const state = await pairState(env, viewer.public_id, targetId);
+      if (!state.following && !state.friends) {
+        return json(200, redactPublicIds({ id: shown, friendsCount, status, mutualCount, locked: true, friends: [] }));
+      }
+    }
     if (!isOwner && isPrivate && status !== "friends") {
       return json(200, redactPublicIds({
         id: shown,
@@ -4802,6 +4880,9 @@ async function handleFriendAction(request, env, action) {
 
   const targetRow = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(targetId).first();
   if (!targetRow) return json(404, { error: "not_found" });
+  if (await blocksEither(env, viewer.public_id, targetId)) {
+    return json(403, { error: "blocked", message: "You can’t do that with this account." });
+  }
 
   const now = Date.now();
 
@@ -4827,6 +4908,8 @@ async function handleFriendAction(request, env, action) {
   }
 
   if (action === "accept") {
+    const pending = await env.DB.prepare("SELECT sender_id FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(targetId, viewer.public_id).first();
+    if (!pending) return json(200, { ok: true, status: await getFriendStatus(env, viewer.public_id, targetId), friendsCount: await friendCount(env, viewer.public_id) });
     await env.DB.prepare("DELETE FROM account_friend_requests WHERE sender_id = ? AND receiver_id = ?").bind(targetId, viewer.public_id).run();
     await env.DB.batch([
       env.DB.prepare("INSERT INTO account_friends (user_id, friend_id, created_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING").bind(viewer.public_id, targetId, now),
@@ -4945,10 +5028,28 @@ async function route(request, env, ctx) {
       issueRecoveryCodes: (id) => issueRecoveryCodes(env, id, recoveryDeps())
     });
   }
-  const relationPost = (path === "/v1/blocks" || path === "/v1/mutes") && request.method === "POST";
-  if (path === "/v1/posts" || path.startsWith("/v1/posts/") || path.startsWith("/v1/moderation/") || relationPost) {
+  // Public posts use /v1/posts without an author id. Account posts are
+  // /v1/posts?id= and JSON that carries text. Blocks and mutes stay on the
+  // social routes so a block also drops follows, requests, and friends.
+  if (path.startsWith("/v1/moderation/") || (path.startsWith("/v1/posts/") && path !== "/v1/posts")) {
     const posted = await handlePosts(request, env, path, recoveryDeps());
     if (posted) return posted;
+  }
+  if (path === "/v1/posts" && request.method === "GET" && !url.searchParams.get("id") && !url.searchParams.get("author")) {
+    const posted = await handlePosts(request, env, path, recoveryDeps());
+    if (posted) return posted;
+  }
+  if (path === "/v1/posts" && request.method === "POST") {
+    const type = request.headers.get("content-type") || "";
+    let accountPost = false;
+    if (type.indexOf("multipart/form-data") === -1) {
+      const peeked = await request.clone().json().catch(() => null);
+      accountPost = !!(peeked && typeof peeked.text === "string" && !peeked.quoteId);
+    }
+    if (!accountPost) {
+      const posted = await handlePosts(request, env, path, recoveryDeps());
+      if (posted) return posted;
+    }
   }
   if (path === "/v1/account/delete" && request.method === "POST") {
     return handleAccountDelete(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });
@@ -4971,6 +5072,15 @@ async function route(request, env, ctx) {
   if (path === "/v1/sync" && request.method === "PUT") return handleSyncPut(request, env);
   if (path === "/v1/reposts" && request.method === "PUT") return handleRepostPut(request, env);
   if (path === "/v1/reposts" && (request.method === "POST" || request.method === "DELETE")) return handleRepostDelete(request, env);
+  const social = await handleSocialRoutes(request, env, path, url, {
+    json,
+    readJson,
+    rateHit,
+    sessionAccount,
+    followWriteResult,
+    cards: followCards
+  });
+  if (social) return social;
   if (path === "/v1/follows" && request.method === "GET") return handleFollowGet(request, env, url);
   if (path === "/v1/follows" && request.method === "PUT") return handleFollowPut(request, env);
   if (path === "/v1/follows" && request.method === "DELETE") return handleFollowDelete(request, env);

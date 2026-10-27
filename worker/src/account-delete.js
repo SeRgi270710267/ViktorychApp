@@ -3,7 +3,7 @@
    resumes anything left behind. After the job is done, the only lasting
    public record is a salted hash of the account id.
 
-   Tables audited against migrations 0001–0019 and the runtime schema:
+   Tables audited against migrations 0001–0021 and the runtime schema:
    accounts, sessions, sync_state (feed settings, groups, drafts, likes,
    bookmarks, resume and history), rate_limits, account_reposts,
    account_follows (both directions), drive_vault, drive_items, drive_chunks,
@@ -13,7 +13,11 @@
    vault_shares, owner_keys, owner_key_items, owner_key_pace, account_reauths,
    account_presence, account_status, channel_tickets, notifications,
    notification_state, notification_bells, push_subscriptions, push_log,
-   webauthn_credentials, webauthn_challenges.
+   webauthn_credentials, webauthn_challenges, account_blocks,
+   account_mutes, account_follow_requests, account_content,
+   account_messages, mentions, notification_prefs, notification_events,
+   notification_outbox, notification_tab_reads, discord_alert_prefs,
+   discord_alert_hits. notification_dead stores a salted hash only.
    push_vapid is the one global key and has no account column. The account
    channel object is wiped in the same database step. telegram_files is a
    shared media index with no account column, so it is left alone. There is
@@ -26,7 +30,7 @@ const encoder = new TextEncoder();
 const DAY_MS = 24 * 60 * 60 * 1000;
 const REAUTH_MS = 5 * 60 * 1000;
 const JOB_KEEP_MS = DAY_MS;
-const USER_COLUMNS = ["public_id", "follower_id", "target_id", "sender_id", "receiver_id", "user_id", "friend_id", "author_id", "owner_id", "recipient_id", "blocker_id", "blocked_id", "muter_id", "muted_id"];
+const USER_COLUMNS = ["public_id", "follower_id", "target_id", "sender_id", "receiver_id", "user_id", "friend_id", "author_id", "owner_id", "recipient_id", "requester_id", "blocker_id", "blocked_id", "muter_id", "muted_id"];
 const SKIP_TABLES = new Set(["account_deletion_jobs", "account_deletions", "handle_holds", "rate_limits", "telegram_files", "sqlite_sequence"]);
 const ID_FIELDS = ["publicId", "public_id", "userId", "user_id", "authorId", "author_id", "followerId", "follower_id", "accountId", "account_id", "senderId", "sender_id", "recipientId", "recipient_id", "ownerId", "owner_id"];
 const PUBLISH_KEYS = ["people.json", "feeds.json", "feeds.config.json", "suggestions.json", "follows.json", "data/follows.json"];

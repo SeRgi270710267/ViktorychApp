@@ -1193,12 +1193,14 @@ async function doPrecache(report, generation, signal) {
   }
 }
 
-async function runApply() {
+async function runApply(fresh) {
   updateReporting = true;
-  const task = precacheShell(true, true);
+  // A nudge with fresh:false must not abort a download that is already
+  // running. Retry omits the flag and replaces a download that is stuck.
+  const task = precacheShell(true, fresh !== false);
   const generation = task.generation;
   try {
-    broadcastProgress({ step: "download", files: 0, totalFiles: SHELL_FILES.length, bytes: 0, totalBytes: 0 }, true);
+    if (fresh !== false) broadcastProgress({ step: "download", files: 0, totalFiles: SHELL_FILES.length, bytes: 0, totalBytes: 0 }, true);
     const state = await task;
     if (generation !== precacheGeneration) return;
     broadcastProgress({ step: "install", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
@@ -1266,7 +1268,7 @@ self.addEventListener("message", (event) => {
     return;
   }
   if (data.type === "apply-update" || data.type === "skip-waiting") {
-    event.waitUntil(runApply());
+    event.waitUntil(runApply(data.type === "skip-waiting" || data.fresh !== false));
     return;
   }
   if (data.type === "ru_mode") {
