@@ -867,6 +867,7 @@
         image: httpsUrl(item.image),
         verified: item.verified === true,
         mention: item.mention === true,
+        partial: item.partial === true,
         hash: hash.charAt(0) === "#" && hash.length < 300 ? hash : "#/",
         feedId: String(item.feedId || "").slice(0, 120),
         platform: String(item.platform || "").slice(0, 24),
@@ -4564,9 +4565,13 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         <span class="ic">${icon(path)}</span>${count ? `<span class="count">${esc(count)}</span>` : ""}
       </button>`;
     const replyCount = shownCount(stats.replies, 0);
-    const replyLink = `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="${tr("Replies")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
+    const replyOnX = (post.platform || "x") === "x";
+    const replyLink = replyOnX
+      ? `<button class="action reply" type="button" data-act="xc-reply" data-id="${esc(id)}" aria-label="${tr("Reply")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</button>`
+      : `<a class="action reply" href="${esc(statusHash(post))}" data-act="stop" aria-label="${tr("Replies")}" data-tooltip="${tr("Reply")}"><span class="ic">${icon("reply")}</span>${replyCount ? `<span class="count">${esc(replyCount)}</span>` : ""}</a>`;
     const menuOpen = STATE.repostMenu === id;
-    const repostMenu = menuOpen ? `<div class="menu repost-menu" data-act="stop" role="menu" aria-label="${esc(tr("Repost"))}"><button type="button" data-act="repost-do" data-id="${esc(id)}">${reposted ? tr("Undo repost") : tr("Repost")}</button><button type="button" data-act="quote-open" data-id="${esc(id)}">${tr("Quote")}</button></div>` : "";
+    const quoteOnX = replyOnX ? `<button type="button" data-act="xc-quote" data-id="${esc(id)}">${tr("Quote on X")}</button>` : "";
+    const repostMenu = menuOpen ? `<div class="menu repost-menu" data-act="stop" role="menu" aria-label="${esc(tr("Repost"))}"><button type="button" data-act="repost-do" data-id="${esc(id)}">${reposted ? tr("Undo repost") : tr("Repost")}</button><button type="button" data-act="quote-open" data-id="${esc(id)}">${tr("Quote")}</button>${quoteOnX}</div>` : "";
     const repostBtn = `<span class="repost-wrap">${btn("repost", "repost", "repost", tr("Repost"), shownCount(stats.reposts, reposted ? 1 : 0), tr("Repost"))}${repostMenu}</span>`;
     return `<div class="actions">
       <div class="action-stats">
@@ -6737,6 +6742,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function composer(bridge, post) {
+    const platform = (post && post.platform) || "x";
+    if (platform === "x" && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml) {
+      const html = window.ViktorychXCompose.inlineHtml("reply", post);
+      if (html) return html;
+    }
     const key = post ? postKey(post) : "";
     return `<div class="composer${bridge ? " bridge" : ""}">
       <span class="ava initials">Y</span>
@@ -7972,7 +7982,10 @@ const here = parseRoute();
     ) + findAccounts;
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
     const bar = STATE.homeFreshBar ? `<div class="home-fresh" role="progressbar" aria-label="${esc(tr("Loading"))}"><span></span></div>` : "";
-    return homeHeader(tab) + bar + spaceCard + body + timelineSentinel(list.length, sorted.length);
+    const inline = (tab === "foryou" || tab === "following") && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
+      ? window.ViktorychXCompose.inlineHtml("home")
+      : "";
+    return homeHeader(tab) + bar + inline + spaceCard + body + timelineSentinel(list.length, sorted.length);
   }
 
   function pageHead(title, extra, back, action) {
@@ -11129,7 +11142,8 @@ const here = parseRoute();
     const who = note.handle || note.name || "account";
     const face = note.avatar ? avatar(note.avatar, note.name || who) : "";
     const image = note.image ? `<img class="note-img" src="${esc(note.image)}" alt="">` : "";
-    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${noteBody(note)}${image}</div></div></a></article>`;
+    const partial = note.partial ? `<p class="note-partial">${esc(tr("Partial. Replies on recent public posts, not X's mention inbox."))}</p>` : "";
+    return `<article class="note-row"><div class="note-ico">${icon("bellOn")}</div><a class="note-main" href="${esc(note.hash || "#/")}"><div class="note-title">${noteTitle(note)}</div><div class="note-post">${face}<div class="note-copy"><b>${esc(note.name || who)}</b>${noteBody(note)}${partial}${image}</div></div></a></article>`;
   }
 
   function notificationsView(route) {
@@ -11146,7 +11160,8 @@ const here = parseRoute();
     if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
     else if (!notes.length) body = emptyBlock(tr("Nothing in {name} yet", { name: current ? noteTabLabel(current) : tr("the current tab") }), tr("New posts from accounts in this tab show up here when their notification bell is on. Accounts with no tab stay in All."));
     else body = `<div class="notes">${notes.map(noteRow).join("")}</div>`;
-    return head + body;
+    const xBanner = window.ViktorychXCompose && window.ViktorychXCompose.mentionsBanner ? window.ViktorychXCompose.mentionsBanner() : "";
+    return head + xBanner + body;
   }
 
   function openFeedTabEditor(id, presetFeed) {
@@ -11568,6 +11583,12 @@ const here = parseRoute();
         : "";
       return settingsHead(tr("Delete account"), "#/settings") + body;
     }
+    if (section === "x-posting") {
+      const body = window.ViktorychXCompose && window.ViktorychXCompose.settingsHtml
+        ? window.ViktorychXCompose.settingsHtml()
+        : `<div class="set-block"><p class="phandle">${esc(tr("Direct posting stays off"))}</p></div>`;
+      return settingsHead(tr("Post to X"), "#/settings") + body;
+    }
     if (section === "keys") {
       const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
         ? window.OwnerKeys.sectionHtml()
@@ -11580,6 +11601,7 @@ const here = parseRoute();
     return settingsHead(tr("Settings"), "") + `<div class="set-block"><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list">
       ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
+      ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
@@ -11744,6 +11766,10 @@ if (STATE.histClear) {
       </div></div>`;
     }
     if (STATE.modal === "compose") {
+      if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
+        const composed = window.ViktorychXCompose.modalHtml();
+        if (composed) return composed;
+      }
       return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Post"))}" data-act="stop">
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div></div>
         <div class="modal-body" style="display:flex;gap:12px">
@@ -14202,6 +14228,7 @@ if (STATE.histClear) {
       if (window.Spaces && window.Spaces.afterRender) window.Spaces.afterRender(route);
       if (window.SoccerScores && window.SoccerScores.afterRender) window.SoccerScores.afterRender(route);
       if (window.WeatherPills && window.WeatherPills.afterRender) window.WeatherPills.afterRender(route);
+      if (window.ViktorychXCompose && window.ViktorychXCompose.afterRender) window.ViktorychXCompose.afterRender();
       bindPlayers();
       bindMediaFrames();
       primeTelegramImages();
@@ -14335,6 +14362,10 @@ if (STATE.histClear) {
   function onAct(el) {
     const act = el.dataset.act;
     if (act === "stop") return;
+    if (act && act.indexOf("xc-") === 0 && window.ViktorychXCompose && window.ViktorychXCompose.onAct) {
+      window.ViktorychXCompose.onAct(act, el);
+      return;
+    }
     if (act === "dock-pref") {
       if (window.ViktorychDock && window.ViktorychDock.setPref) window.ViktorychDock.setPref(el.dataset.key, el.dataset.value);
       render();
@@ -14472,6 +14503,7 @@ if (STATE.histClear) {
     if (act === "drawer") { STATE.drawer = true; render(); return; }
     if (act === "close-drawer") { STATE.drawer = false; render(); return; }
     if (act === "compose") {
+      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
       STATE.modal = "compose";
       const drafts = window.ViktorychLocal;
       if (!STATE.composeSeed && drafts && drafts.readDoc) {
@@ -14488,6 +14520,7 @@ if (STATE.histClear) {
     }
     if (act === "game-share") {
       STATE.composeSeed = window.ViktorychGames && window.ViktorychGames.shareText ? window.ViktorychGames.shareText() : "";
+      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
       STATE.modal = "compose";
       render();
       return;
@@ -18725,7 +18758,16 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     pullNotes();
   }
 
-  window.ViktorychNotes = { beforeSignOut: beforeSignOut, lockChanged: onTiktokLockChanged };
+  function ingestXNotes(list) {
+    const before = {};
+    (STATE.settings.bellNotes || []).forEach((note) => { if (note && note.id) before[String(note.id)] = true; });
+    commitBellNotes(list);
+    (list || []).forEach((note) => {
+      if (!note || !note.id || before[String(note.id)]) return;
+      showPageNotification(note);
+    });
+  }
+  window.ViktorychNotes = { beforeSignOut: beforeSignOut, lockChanged: onTiktokLockChanged, ingest: ingestXNotes };
   /* presence.js owns ViktorychPresence. A partial stand-in threw on .wrap and left a black page. */
 
   function commitBellNotes(list) {
@@ -19941,8 +19983,60 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       requestRender: function () { render(); }
     });
   }
+  function bindXCompose() {
+    if (!window.ViktorychXCompose || !window.ViktorychXCompose.bind) return;
+    window.ViktorychXCompose.bind({
+      render: function () { render(); },
+      toast: toast,
+      setSeed: function (text) { STATE.composeSeed = String(text || ""); },
+      faceHtml: function () {
+        const mine = signedAccount();
+        if (!mine) return '<span class="ava initials">Y</span>';
+        return avatar(mine.avatar, mine.displayName || mine.handle);
+      },
+      modalOpen: function () { return STATE.modal === "compose"; },
+      openModal: function () { STATE.modal = "compose"; render(); },
+      post: function (id) { return findAnyPost(id); },
+      suggest: function (kind) {
+        if (kind === "mention") {
+          const rows = [];
+          feeds().forEach((feed) => {
+            if ((feed.platform || "x") === "x" && feed.handle) rows.push(String(feed.handle).replace(/^@/, ""));
+          });
+          return rows;
+        }
+        const tags = [];
+        posts().forEach((post) => {
+          String((post && post.text) || "").replace(/#([A-Za-z0-9_]{1,50})/g, function (_, tag) { tags.push(tag); });
+        });
+        return tags;
+      },
+      recentPosts: function (handle) {
+        const clean = String(handle || "").replace(/^@/, "");
+        const key = clean.toLowerCase();
+        const local = posts().filter((post) => (post.platform || "x") === "x" && String(post.handle || "").replace(/^@/, "").toLowerCase() === key);
+        if (local.length) return Promise.resolve({ posts: local.slice(0, 3), limited: false });
+        const live = STATE.liveUsers && STATE.liveUsers[liveKey("x", clean)];
+        if (live && live.posts && live.posts.length) return Promise.resolve({ posts: live.posts.slice(0, 3), limited: false });
+        return fxTimeline(clean, "home").then((pack) => {
+          if (!pack) return { posts: [], limited: true };
+          return { posts: (pack.posts || []).slice(0, 3), limited: false };
+        });
+      },
+      conversation: function (id) {
+        return loadXThread({ id: id, platform: "x" }, false).then((pack) => {
+          if (!pack) return { replies: [], limited: false };
+          return { replies: pack.replies || [], limited: !!pack.limited };
+        });
+      },
+      ingest: function (list) {
+        if (window.ViktorychNotes && window.ViktorychNotes.ingest) window.ViktorychNotes.ingest(list);
+      }
+    });
+  }
   bindCommunitiesModule();
   bindShortsModule();
+  bindXCompose();
   window.addEventListener("vklazy", function (event) {
     const info = event.detail || {};
     if (info.name === "shorts") bindShortsModule();
