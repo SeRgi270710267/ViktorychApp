@@ -6,7 +6,8 @@ html[data-wall="1"] #offline,
 html[data-wall="1"] #update,
 html[data-wall="1"] #viewer,
 html[data-wall="1"] #stories,
-html[data-wall="1"] #toast {
+html[data-wall="1"] #toast,
+html[data-wall="1"] #dock-root {
   display: none !important;
 }
 html[data-wall="1"] body {
