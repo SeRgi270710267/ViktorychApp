@@ -680,6 +680,32 @@ self.addEventListener("message", (event) => {
     isRuVisitor = !!data.on;
     return;
   }
+  if (data.type === "account-deleted") {
+    accountsAuthed = false;
+    playToken = "";
+    event.waitUntil((async () => {
+      await wipeUserCaches(true);
+      const names = await caches.keys();
+      await Promise.all(names.filter((name) => name.indexOf("shell-") !== 0).map((name) => caches.delete(name)));
+      try {
+        const db = await idb();
+        await idbSet(db, "auth-state", { on: false, token: "" });
+        await idbSet(db, "follows", []);
+        await idbSet(db, "seen-at", 0);
+        await idbSet(db, "seen-ids", []);
+        await idbSet(db, "bells", {});
+        await idbSet(db, "bell-seen", []);
+        await idbSet(db, "bell-queue", []);
+        await idbSet(db, "muted-words", []);
+        await idbSet(db, "muted-accounts", []);
+        await idbSet(db, "repost-off", []);
+        await idbSet(db, "notify-all", false);
+        await idbSet(db, "media-index", []);
+        if (self.ViktorychStorage) await self.ViktorychStorage.replaceFiles(db, []);
+      } catch (err) { /* the page also deletes the database */ }
+    })());
+    return;
+  }
   if (data.type === "auth") {
     accountsAuthed = !!data.on;
     playToken = data.on && typeof data.token === "string" ? data.token : "";
