@@ -229,6 +229,94 @@
     return /\.(?:m4s|ts|cmfv|cmfa)(?:\?|$)/i.test(String(url || ""));
   }
 
+  function orderPosts(list, compare, keyOf) {
+    var seen = {};
+    var unique = [];
+    (list || []).forEach(function (post) {
+      if (!post) return;
+      var id = "";
+      try { id = keyOf ? String(keyOf(post) || "") : String(post.id || ""); }
+      catch (err) { id = String(post.id || ""); }
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      unique.push(post);
+    });
+    if (compare) unique.sort(compare);
+    return unique;
+  }
+
+  function resolveUrl(base, ref) {
+    var value = String(ref || "").trim();
+    if (!value || value.charAt(0) === "#") return "";
+    try { return new URL(value, base).href; }
+    catch (err) { return ""; }
+  }
+
+  function playlistFirst(text, baseUrl) {
+    var lines = String(text || "").split(/\r?\n/);
+    var map = "";
+    var variant = "";
+    var segment = "";
+    var expectVariant = false;
+    var expectSegment = false;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line) continue;
+      if (line.indexOf("#EXT-X-MAP:") === 0 && !map) {
+        var found = line.match(/URI="([^"]+)"/i);
+        if (found) map = resolveUrl(baseUrl, found[1]);
+        continue;
+      }
+      if (line.indexOf("#EXT-X-STREAM-INF") === 0) { expectVariant = true; continue; }
+      if (line.indexOf("#EXTINF") === 0) { expectSegment = true; continue; }
+      if (line.charAt(0) === "#") continue;
+      var abs = resolveUrl(baseUrl, line);
+      if (expectVariant && !variant) variant = abs;
+      else if ((expectSegment || isFirstSegment(abs)) && !segment) segment = abs;
+      expectVariant = false;
+      expectSegment = false;
+      if (segment) break;
+    }
+    return { map: map, variant: variant, segment: segment };
+  }
+
+  function cacheableInit(mapUrl, segmentUrl) {
+    if (!mapUrl || mapUrl === segmentUrl) return false;
+    if (!/^https:/.test(mapUrl) || /\.m3u8(?:\?|$)/i.test(mapUrl)) return false;
+    if (isFirstSegment(mapUrl)) return true;
+    return /init|map/i.test(String(mapUrl).split("?")[0]);
+  }
+
+  function cacheFirstSegment(url, fetcher, conn) {
+    var target = String(url || "");
+    if (!prefetchLimit(conn || null, prefetchEnabled())) return Promise.resolve([]);
+    if (isFirstSegment(target)) {
+      postCache([target]);
+      return Promise.resolve([target]);
+    }
+    if (!/\.m3u8(?:\?|$)/i.test(target)) return Promise.resolve([]);
+    var load = fetcher || (typeof fetch === "function" ? fetch : null);
+    if (!load) return Promise.resolve([]);
+    function readPlaylist(playlistUrl, depth) {
+      return Promise.resolve(load(playlistUrl, { credentials: "omit", cache: "force-cache" })).then(function (res) {
+        if (!res || !res.ok || typeof res.text !== "function") return [];
+        return res.text().then(function (body) {
+          var parsed = playlistFirst(body, playlistUrl);
+          if (parsed.segment && isFirstSegment(parsed.segment)) {
+            var urls = [];
+            if (cacheableInit(parsed.map, parsed.segment)) urls.push(parsed.map);
+            urls.push(parsed.segment);
+            postCache(urls);
+            return urls;
+          }
+          if (parsed.variant && depth < 1 && /\.m3u8(?:\?|$)/i.test(parsed.variant)) return readPlaylist(parsed.variant, depth + 1);
+          return [];
+        });
+      }).catch(function () { return []; });
+    }
+    return readPlaylist(target, 0);
+  }
+
   function mediaPlan(items, conn, enabled) {
     var limit = prefetchLimit(conn, enabled);
     var posters = [];
@@ -354,12 +442,26 @@
     try { worker.postMessage({ type: "cache-media", urls: list.slice(0, 24) }); } catch (err) { /* the worker may be restarting */ }
   }
 
+  function videoSources(video) {
+    var found = [];
+    if (!video) return found;
+    var direct = (video.getAttribute && (video.getAttribute("data-hls") || video.getAttribute("src"))) || video.currentSrc || "";
+    if (direct) found.push(direct);
+    var sources = video.querySelectorAll ? video.querySelectorAll("source") : [];
+    Array.prototype.forEach.call(sources, function (source) {
+      var from = source.getAttribute("src") || "";
+      if (from) found.push(from);
+    });
+    return found;
+  }
+
   function warmMedia(root) {
     if (typeof document === "undefined" || !root || !root.querySelectorAll) return [];
     var limit = prefetchLimit(null, prefetchEnabled());
     if (!limit) return [];
     var nodes = root.querySelectorAll("article");
     var urls = [];
+    var playlists = [];
     for (var i = 1; i < nodes.length && urls.length < limit; i++) {
       var img = nodes[i].querySelector("img");
       if (img) {
@@ -368,11 +470,14 @@
       }
       var video = nodes[i].querySelector("video");
       if (video && video.poster) urls.push(video.poster);
-      var source = video && (video.currentSrc || video.src || "");
-      if (source && isFirstSegment(source)) urls.push(source);
+      videoSources(video).forEach(function (url) {
+        if (isFirstSegment(url)) urls.push(url);
+        else if (/\.m3u8(?:\?|$)/i.test(url)) playlists.push(url);
+      });
     }
     postCache(urls);
-    return urls;
+    playlists.slice(0, limit).forEach(function (playlist) { cacheFirstSegment(playlist); });
+    return urls.concat(playlists);
   }
 
   function warmOpens() {
@@ -438,7 +543,12 @@
     document.addEventListener("play", function (event) {
       var el = event.target;
       if (!el || (el.tagName !== "VIDEO" && el.tagName !== "AUDIO")) return;
-      var url = el.currentSrc || el.src || "";
+      var listed = el.getAttribute ? (el.getAttribute("data-hls") || "") : "";
+      var url = listed || el.currentSrc || el.src || "";
+      if (/\.m3u8(?:\?|$)/i.test(url)) {
+        cacheFirstSegment(url);
+        return;
+      }
       if (/^https:/.test(url)) postCache([url]);
     }, true);
     window.addEventListener("online", function () { flush(syncSender); });
@@ -460,6 +570,9 @@
     prefetchLimit: prefetchLimit,
     displayImage: displayImage,
     isFirstSegment: isFirstSegment,
+    orderPosts: orderPosts,
+    playlistFirst: playlistFirst,
+    cacheFirstSegment: cacheFirstSegment,
     mediaPlan: mediaPlan,
     rankOpens: rankOpens,
     capture: capture,

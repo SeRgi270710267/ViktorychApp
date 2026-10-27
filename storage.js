@@ -85,7 +85,7 @@
     if (/record|\/live\//i.test(path)) return "live";
     if (/\/(?:past-lives|lives)(?:\/|$)/i.test(path) && !/\.(mp4|webm|mov|m4s|ts|mp3|m4a)$/i.test(path)) return "lives";
     if (/\/music\//i.test(path) || /\.(mp3|m4a|aac|flac|ogg|opus)$/i.test(path)) return "music";
-    if (/\.(mp4|webm|mov|m4s|ts)$/i.test(path) || host.indexOf("video.twimg.com") >= 0) return "videos";
+    if (/\.(mp4|webm|mov|m4s|ts|cmfv|cmfa)$/i.test(path) || host.indexOf("video.twimg.com") >= 0) return "videos";
     if (/\.(png|jpe?g|gif|webp|avif)$/i.test(path) || /(^|\.)pbs\.twimg\.com$/.test(host) || host === "i.ytimg.com" || /(^|\.)ggpht\.com$/.test(host) || /(^|\.)googleusercontent\.com$/.test(host) || /(^|\.)cdninstagram\.com$/.test(host) || /(^|\.)fbcdn\.net$/.test(host) || /\/v1\/media\/(?:avatars|banners)\//i.test(path)) return "photos";
     if (/\/notifications(?:\/|$)/i.test(path)) return "notifications";
     if (/\/shorts(?:\/|$)/i.test(path) && !/\.(mp4|webm|mov|m4s|ts|png|jpe?g|gif|webp|avif)$/i.test(path)) return "shorts";
@@ -107,7 +107,7 @@
     if (/\.(m3u8|json)$/i.test(path)) return false;
     var cat = categoryOf(url);
     if (cat === "videos" || cat === "photos" || cat === "live" || cat === "music") return true;
-    return cat === "messages" && /\.(png|jpe?g|gif|webp|avif|mp4|webm|mov|m4s|ts)$/i.test(path);
+    return cat === "messages" && /\.(png|jpe?g|gif|webp|avif|mp4|webm|mov|m4s|ts|cmfv|cmfa)$/i.test(path);
   }
 
   function feedV1(path) {
