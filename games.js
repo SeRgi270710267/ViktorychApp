@@ -239,7 +239,7 @@
     if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
   }
   function phone() {
-    return matchMedia("(max-width: 499px)").matches || matchMedia("(max-width: 900px) and (pointer: coarse)").matches;
+    return matchMedia("(max-width: 499px)").matches;
   }
   function toggleFull() {
     var host = hostEl();

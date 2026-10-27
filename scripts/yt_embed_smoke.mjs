@@ -5,6 +5,7 @@
    Playing (state 1) is required when YouTube allows the embed.
    Error 100, 101, or 150 is a refusal from YouTube. The test then
    requires the original watch link and does not try to get past it.
+   A player that stays silent is opened once more. A broken embed is not.
    A missing direct file must mount that same player before the check.
    Records player states and error codes only. Does not read titles. */
 import { spawn, spawnSync } from "node:child_process";
@@ -265,32 +266,39 @@ function accepted(row, needFile) {
   return refused && row.fallback === "link";
 }
 
-async function playCase(origin, path, width, height, label) {
+async function once(origin, path, width, height, label, needFile) {
   const session = await launch(width, height);
   try {
     await session.open(origin + path);
-    const result = await waitUntil(session, label, (row) => accepted(row, false), 45000);
-    const outcome = result.playing ? "playing" : "refused";
-    console.log(label + " " + outcome + " states=" + (result.states || []).join(",") + " errors=" + (result.errors || []).join(","));
+    return await waitUntil(session, label, (row) => accepted(row, needFile), 45000);
   } finally {
     await session.close();
   }
 }
 
+async function playCase(origin, path, width, height, label, needFile) {
+  let last = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await once(origin, path, width, height, label, needFile);
+      const outcome = result.playing ? "playing" : "refused";
+      const prefix = needFile ? "fallback file-error then " : label + " ";
+      console.log(prefix + outcome + " states=" + (result.states || []).join(",") + " errors=" + (result.errors || []).join(","));
+      return;
+    } catch (err) {
+      last = err;
+      if (attempt === 0) console.log(label + " stalled, trying the player again");
+    }
+  }
+  throw last;
+}
+
 const root = resolve(arg("--root", "."));
 const served = await serve(root);
 try {
-  await playCase(served.origin, "/play.html", 1366, 768, "desktop");
-  await playCase(served.origin, "/play.html", 390, 844, "mobile");
-  const session = await launch(1366, 768);
-  try {
-    await session.open(served.origin + "/fallback.html");
-    const result = await waitUntil(session, "fallback", (row) => accepted(row, true), 45000);
-    const outcome = result.playing ? "playing" : "refused";
-    console.log("fallback file-error then " + outcome + " states=" + (result.states || []).join(",") + " errors=" + (result.errors || []).join(","));
-  } finally {
-    await session.close();
-  }
+  await playCase(served.origin, "/play.html", 1366, 768, "desktop", false);
+  await playCase(served.origin, "/play.html", 390, 844, "mobile", false);
+  await playCase(served.origin, "/fallback.html", 1366, 768, "fallback", true);
 } finally {
   served.server.close();
 }
