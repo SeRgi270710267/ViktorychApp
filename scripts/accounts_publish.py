@@ -30,6 +30,7 @@ DATA_KEY = re.compile(
     r"|^discord/(?:index|state)\.json$"
     r"|^discord/(?:messages|pins)/\d{1,22}\.json$"
     r"|^data/communities/(?:index|[a-z0-9_]{2,21})\.json$"
+    r"|^data/communities/[a-z0-9_]{2,21}/\d{1,20}\.json$"
 )
 SKIP_KEYS = {"archive/ia-state.json", "archive/ia-manifest.json"}
 SKIP_DIRS = {".git", "node_modules", "worker", "_site", "scripts", ".github", ".wrangler"}
