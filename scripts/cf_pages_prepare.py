@@ -1,18 +1,21 @@
 """Copy a built site into a Cloudflare Pages upload.
 
-Pages Free allows 20,000 files and 25 MiB each. Oversized objects and, if
-the tree is still too large, generated data and media are left out. The
-service worker loads a missing file from the other origin.
+The file list is the bundle from assemble_site.py. Pages Free allows
+20,000 files and 25 MiB each, so generated data may be left out. A shell
+file from that bundle is never dropped, and the upload fails if one is
+missing. The service worker loads a trimmed data file from the other origin.
 """
 
 from __future__ import annotations
 
 import argparse
-import re
 import shutil
 import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import assemble_site  # noqa: E402
 
 MAX_FILES = 20000
 MAX_BYTES = 25 * 1024 * 1024
@@ -74,84 +77,18 @@ def collect(site: Path) -> list[tuple[str, int]]:
     return found
 
 
-def local_ref(value: str) -> str:
-    text = str(value or "").strip()
-    if not text or text in {".", "./", "/"}:
-        return ""
-    lower = text.lower()
-    if lower.startswith(("http://", "https://", "data:", "mailto:", "javascript:", "//", "#")):
-        return ""
-    text = text.split("#", 1)[0].split("?", 1)[0].strip()
-    if text.startswith("/"):
-        text = text[1:]
-    while text.startswith("./"):
-        text = text[2:]
-    if not text or text.endswith("/") or ".." in text.split("/"):
-        return ""
-    return text
+def bundle_required(site: Path) -> set[str]:
+    """Shell files named by assemble_site, plus the extras that build copies."""
+    needed = set(assemble_site.shell_files(site))
+    for name in assemble_site.REQUIRED_EXTRAS:
+        if (site / name).is_file():
+            needed.add(name)
+    return needed
 
 
-def html_refs(text: str) -> list[str]:
-    found = []
-    for match in re.finditer(r"""(?:src|href)\s*=\s*["']([^"']+)["']""", text, re.I):
-        rel = local_ref(match.group(1))
-        if rel:
-            found.append(rel)
-    return found
-
-
-def shell_refs(text: str) -> list[str]:
-    found = []
-    start = text.find("SHELL_FILES")
-    end = text.find("];", start) if start >= 0 else -1
-    block = text[start:end] if start >= 0 and end > start else ""
-    for match in re.finditer(r"""["']([^"']+)["']""", block):
-        rel = local_ref(match.group(1))
-        if rel:
-            found.append(rel)
-    for call in re.finditer(r"importScripts\(([^)]*)\)", text):
-        for match in re.finditer(r"""["']([^"']+)["']""", call.group(1)):
-            rel = local_ref(match.group(1))
-            if rel:
-                found.append(rel)
-    return found
-
-
-def referenced_paths(index_html: str, service_worker: str) -> list[str]:
-    found = []
-    seen = set()
-    for rel in html_refs(index_html) + shell_refs(service_worker):
-        if rel in seen:
-            continue
-        seen.add(rel)
-        found.append(rel)
-    return found
-
-
-def workflow_ships(assemble: str, rel: str) -> bool:
-    name = rel.rsplit("/", 1)[-1]
-    if re.search(r"(?:^|[\s/])" + re.escape(name) + r"(?:$|[\s])", assemble):
-        return True
-    parent = rel.split("/", 1)[0]
-    if parent != rel and (f"cp {parent}/" in assemble or f"cp {parent}/*" in assemble or f"{parent}/*.js" in assemble):
-        return True
-    return False
-
-
-def missing_referenced(upload: Path) -> list[str]:
-    index_path = upload / "index.html"
-    sw_path = upload / "sw.js"
-    index_html = index_path.read_text(encoding="utf-8") if index_path.is_file() else ""
-    service_worker = sw_path.read_text(encoding="utf-8") if sw_path.is_file() else ""
-    missing = []
-    if not index_path.is_file():
-        missing.append("index.html")
-    if not sw_path.is_file():
-        missing.append("sw.js")
-    for rel in referenced_paths(index_html, service_worker):
-        if not (upload / rel).is_file():
-            missing.append(rel)
-    return missing
+def missing_bundle(upload: Path, expected: set[str] | None = None) -> list[str]:
+    needed = expected if expected is not None else bundle_required(upload)
+    return [rel for rel in sorted(needed) if not (upload / rel).is_file()]
 
 
 def choose(files: list[tuple[str, int]], max_files: int, max_bytes: int, required: set[str] | None = None) -> tuple[list[str], list[str]]:
@@ -198,9 +135,7 @@ def prepare(site: Path, out: Path, max_files: int = MAX_FILES, max_bytes: int = 
     if out.exists():
         shutil.rmtree(out)
     out.mkdir(parents=True)
-    index_html = (site / "index.html").read_text(encoding="utf-8") if (site / "index.html").is_file() else ""
-    service_worker = (site / "sw.js").read_text(encoding="utf-8") if (site / "sw.js").is_file() else ""
-    required = set(referenced_paths(index_html, service_worker))
+    required = bundle_required(site)
     kept, dropped = choose(collect(site), max(1, max_files - 2), max_bytes, required)
     for rel in kept:
         src = site / rel
@@ -278,8 +213,8 @@ def selftest() -> int:
         (shell / "data" / "extra.json").write_text("{}", encoding="utf-8")
         prepare(shell, root / "shell-out", max_files=3, max_bytes=MAX_BYTES)
         shipped = root / "shell-out"
-        if missing_referenced(shipped):
-            print("referenced shell was dropped", missing_referenced(shipped))
+        if missing_bundle(shipped):
+            print("referenced shell was dropped", missing_bundle(shipped))
             return 1
         for name in ("presence.js", "presence.css", "shared/presence.js", "shared/mirror.js", "storage.js", "splash/iphone-se.png"):
             if not (shipped / name).is_file():
@@ -289,40 +224,22 @@ def selftest() -> int:
             print("unreferenced file was kept past the cap")
             return 1
         (shipped / "presence.css").unlink()
-        gone = missing_referenced(shipped)
+        gone = missing_bundle(shipped)
         if "presence.css" not in gone:
             print("missing presence.css was not reported", gone)
             return 1
         repo = Path(__file__).resolve().parents[1]
-        live_index = (repo / "index.html").read_text(encoding="utf-8")
-        live_sw = (repo / "sw.js").read_text(encoding="utf-8")
-        live_refs = referenced_paths(live_index, live_sw)
-        for name in ("presence.js", "presence.css", "shared/presence.js"):
-            if name not in live_refs:
-                print("live shell does not reference", name)
+        bundle = assemble_site.shell_files(repo)
+        for name in ("presence.js", "presence.css", "shared/presence.js", "shared/mirror.js"):
+            if name not in bundle:
+                print("generated bundle does not include", name)
                 return 1
-        absent = [rel for rel in live_refs if not (repo / rel).is_file()]
-        if absent:
-            print("referenced source missing", absent)
-            return 1
-        sync = (repo / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
-        assemble = sync.split("Assemble the site", 1)[-1].split("pages-mirror:", 1)[0]
-        uncovered = [rel for rel in live_refs if not workflow_ships(assemble, rel)]
-        if uncovered:
-            print("site assemble does not ship", uncovered)
-            return 1
-        live = root / "live"
-        live.mkdir()
-        (live / "index.html").write_text(live_index, encoding="utf-8")
-        (live / "sw.js").write_text(live_sw, encoding="utf-8")
-        for rel in live_refs:
-            dest = live / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(repo / rel, dest)
-        prepare(live, root / "live-out", max_files=3, max_bytes=MAX_BYTES)
-        live_missing = missing_referenced(root / "live-out")
+        built = root / "built"
+        assemble_site.build(repo, built)
+        prepare(built, root / "live-out", max_files=3, max_bytes=MAX_BYTES)
+        live_missing = missing_bundle(root / "live-out", bundle_required(built))
         if live_missing:
-            print("live pages upload missed", live_missing)
+            print("pages upload missed the generated bundle", live_missing)
             return 1
     print("pages mirror prepare selftest ok")
     return 0
@@ -339,13 +256,15 @@ def main() -> int:
     if not args.site or not args.out:
         print("pass --site and --out, or --selftest")
         return 1
+    site = Path(args.site)
+    expected = bundle_required(site)
     out = Path(args.out)
-    dropped = prepare(Path(args.site), out)
+    dropped = prepare(site, out)
     copied = sum(1 for _path in out.rglob("*") if _path.is_file())
     print(f"pages mirror files: {copied} (excluded {len(dropped)})")
-    missing = missing_referenced(out)
+    missing = missing_bundle(out, expected)
     if missing:
-        print("[pages] The Pages upload is missing assets referenced by index.html or sw.js.", file=sys.stderr)
+        print("[pages] The Pages upload is missing files from the generated site bundle.", file=sys.stderr)
         for rel in missing:
             print("[pages] missing " + rel, file=sys.stderr)
         return 1

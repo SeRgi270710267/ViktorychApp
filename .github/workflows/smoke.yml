@@ -1,0 +1,41 @@
+name: Page smoke
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Chrome
+        run: |
+          if ! command -v google-chrome >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y google-chrome-stable
+          fi
+          google-chrome --version
+
+      - name: Build the shell and fail if a referenced file is missing
+        run: |
+          python3 scripts/assemble_site.py --selftest
+          python3 scripts/assemble_site.py --site _site
+          python3 scripts/cf_pages_prepare.py --site _site --out _mirror
+
+      - name: Load the built site fresh and with old saved data
+        run: node scripts/smoke_page.mjs --site _site
+
+      - name: Load the Pages upload fresh and with old saved data
+        run: node scripts/smoke_page.mjs --site _mirror
