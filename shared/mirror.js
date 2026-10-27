@@ -98,6 +98,8 @@
     rewrite: rewrite,
     failoverStatus: failoverStatus
   };
-  root.ViktorychMirror = api;
+  var host = root;
+  if (!host && typeof globalThis !== "undefined") host = globalThis;
+  if (host) host.ViktorychMirror = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-})(typeof self !== "undefined" ? self : this);
+})(typeof self !== "undefined" ? self : (typeof globalThis !== "undefined" ? globalThis : this));

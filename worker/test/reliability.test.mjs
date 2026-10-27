@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Miniflare } from "miniflare";
 import { logError } from "../src/log.js";
 import { backupKey, backupSlot, exportDatabase, maybeBackupD1, pruneBackups } from "../src/d1-backup.js";
+import "../../shared/mirror.js";
 
-const require = createRequire(import.meta.url);
-const mirror = require("../../shared/mirror.js");
+const mirror = globalThis.ViktorychMirror;
 
 let mf;
 
