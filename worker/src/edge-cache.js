@@ -4,9 +4,9 @@
    the account stays under the free 1,000 KV writes. A miss or a KV error
    reads D1. Viewer-specific fields are not stored here. */
 
-const FRESH_MS = 120 * 1000;
+const FRESH_MS = 60 * 1000;
 const KV_TTL_SECONDS = 24 * 60 * 60;
-const EDGE_MAX_AGE = 60;
+const EDGE_MAX_AGE = 30;
 const WRITE_CAP = 900;
 
 let writeDay = "";
