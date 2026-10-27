@@ -85,6 +85,7 @@
     try {
       localStorage.setItem(LOCKED_KEY, lockedMode ? "1" : "0");
     } catch (err) { /* private mode */ }
+    tellShortsLock();
     livePaintKey = "";
     pastPaintKey = "";
     if (onLiveRoute()) {
@@ -109,8 +110,16 @@
     });
     return next;
   }
+  function tellShortsLock() {
+    try {
+      var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (!worker) return;
+      worker.postMessage({ type: "shorts-lock", locked: !!lockedMode, unlocked: unlockedAccounts.slice() });
+    } catch (err) { /* the page still filters its own list */ }
+  }
   function setUnlocked(list) {
     unlockedAccounts = foldList(list);
+    tellShortsLock();
   }
   function setAdded(list) {
     addedAccounts = (list || []).filter(function (row) { return row && row.handle; });
@@ -3593,6 +3602,7 @@
     absorb: absorb,
     isLocked: isLocked,
     isUnlocked: isUnlocked,
+    unlockedHandles: function () { return unlockedAccounts.slice(); },
     setUnlocked: setUnlocked,
     setAdded: setAdded,
     setLocked: setLocked,

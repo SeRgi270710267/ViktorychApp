@@ -1298,7 +1298,12 @@ self.addEventListener("message", (event) => {
   }
   if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
   if (data.type === "cache-bookmark" || data.type === "cache-media") event.waitUntil(cacheBookmark(data.urls));
+  if (data.type === "shorts-lock") {
+    rememberShortsLock(data);
+    return;
+  }
   if (data.type === "seen" || data.type === "state") {
+    rememberShortsLock(data);
     event.waitUntil(idb().then(async (db) => {
       await idbSet(db, "seen-at", data.type === "seen" ? Date.now() : Number(data.seen || 0));
       if (Array.isArray(data.follows)) await idbSet(db, "follows", data.follows);
@@ -1666,6 +1671,28 @@ function noteFromPost(post, row) {
 }
 
 let bellChain = Promise.resolve();
+let shortsLocked = true;
+const shortsUnlocked = new Set();
+
+function shortsHidden(note) {
+  if (!note || note.platform !== "tiktok") return false;
+  if (!shortsLocked) return false;
+  const handle = String(note.handle || (note.titleVars && note.titleVars.handle) || "").replace(/^@/, "").toLowerCase();
+  return !shortsUnlocked.has(handle);
+}
+
+function rememberShortsLock(data) {
+  if (!data || typeof data !== "object") return;
+  if (typeof data.shortsLocked === "boolean") shortsLocked = data.shortsLocked;
+  else if (data.type === "shorts-lock") shortsLocked = data.locked !== false;
+  const list = Array.isArray(data.shortsUnlocked) ? data.shortsUnlocked : (data.type === "shorts-lock" && Array.isArray(data.unlocked) ? data.unlocked : null);
+  if (!list) return;
+  shortsUnlocked.clear();
+  list.forEach((name) => {
+    const handle = String(name || "").replace(/^@/, "").toLowerCase();
+    if (handle) shortsUnlocked.add(handle);
+  });
+}
 
 async function pushIsDnd(flag) {
   if (flag) return true;
@@ -1696,7 +1723,7 @@ async function deliverBellNotesNow(notes, dnd) {
   const delivered = [];
   for (const note of list) {
     const id = String(note.id);
-    if (!id || !note.at || seen.has(id)) continue;
+    if (!id || !note.at || seen.has(id) || shortsHidden(note)) continue;
     seen.add(id);
     delivered.push(note);
     if (quiet || Notification.permission !== "granted") continue;
@@ -1912,6 +1939,9 @@ self.addEventListener("push", (event) => {
     try { data = event.data ? event.data.json() : {}; }
     catch (err) { data = {}; }
     if (await pushIsDnd(!!(data && data.dnd))) return;
+    if (data && data.silent) return;
+    const hasCopy = !!(data && (data.titleKey || data.body));
+    if (!hasCopy) return;
     const noteId = String((data && data.id) || "");
     if (noteId) {
       try {
@@ -1924,6 +1954,15 @@ self.addEventListener("push", (event) => {
     }
     const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     const visible = open.some((client) => client.visibilityState === "visible");
+    if (shortsHidden(data)) {
+      if (visible) {
+        open.forEach((client) => {
+          try { client.postMessage({ type: "push-note", note: data }); }
+          catch (err) { /* the page polls when it is next visible */ }
+        });
+      }
+      return;
+    }
     if (visible) {
       open.forEach((client) => {
         try { client.postMessage({ type: "push-note", note: data }); }

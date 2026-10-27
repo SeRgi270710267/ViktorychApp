@@ -846,7 +846,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, dm: 1, discord: 1, live: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -859,7 +859,8 @@
         avatar: httpsUrl(item.avatar),
         image: httpsUrl(item.image),
         verified: item.verified === true,
-        mention: item.mention === true,
+        mention: item.mention === true || item.kind === "mention" || item.kind === "discord",
+        others: Math.max(0, Number(item.others) || 0),
         hash: hash.charAt(0) === "#" && hash.length < 300 ? hash : "#/",
         feedId: String(item.feedId || "").slice(0, 120),
         platform: String(item.platform || "").slice(0, 24),
@@ -945,9 +946,16 @@
     return deleted < (Number(tab.updatedAt) || 0);
   }
 
+  function builtinNoteTab(kind) {
+    return { id: kind, name: kind, kind: kind, emoji: "", color: "", showHome: false, showNotes: true, members: [], readAt: Number((STATE.settings && STATE.settings.builtinNoteRead && STATE.settings.builtinNoteRead[kind]) || 0), sort: "recent" };
+  }
+
   function visibleNoteTabs() {
-    const list = noteTabsSame() ? feedTabs() : noteTabs();
-    return list.filter((tab) => tabAlive(tab) && tab.showNotes !== false);
+    const list = (noteTabsSame() ? feedTabs() : noteTabs()).filter((tab) => tabAlive(tab) && tab.showNotes !== false);
+    const verified = list.find((tab) => tab.kind === "verified") || builtinNoteTab("verified");
+    const mentions = list.find((tab) => tab.kind === "mentions") || builtinNoteTab("mentions");
+    const rest = list.filter((tab) => tab !== verified && tab !== mentions && tab.kind !== "verified" && tab.kind !== "mentions");
+    return [verified, mentions].concat(rest);
   }
 
   function noteTabById(id) {
@@ -6851,12 +6859,13 @@ const here = parseRoute();
   }
 
   function bellUnread() {
-    if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
-      const server = notesServer();
-      return Number(server.unread) > 0 ? Number(server.unread) : 0;
+    const read = Math.max(Number(STATE.settings && STATE.settings.bellRead) || 0, Number(notesServer().readUntil) || 0);
+    const notes = shownNotes((STATE.settings && STATE.settings.bellNotes) || []);
+    if (notes.length || ((STATE.settings && STATE.settings.bellNotes) || []).length) {
+      return notes.filter((note) => !note.read && (Number(note.at) || 0) > read).length;
     }
-    const read = Number(STATE.settings && STATE.settings.bellRead) || 0;
-    return ((STATE.settings && STATE.settings.bellNotes) || []).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
+    const server = notesServer();
+    return Number(server.unread) > 0 ? Number(server.unread) : 0;
   }
 
   function bellBadgeHtml() {
@@ -10762,16 +10771,25 @@ const here = parseRoute();
     return !!(feed && feed.verifiedType && feed.verifiedType !== "none");
   }
 
+  function noteHidden(note) {
+    if (!note) return true;
+    return isLockedTiktok({ platform: note.platform, handle: note.handle });
+  }
+
+  function shownNotes(list) {
+    return (Array.isArray(list) ? list : []).filter((note) => !noteHidden(note));
+  }
+
   function noteIsMention(note) {
-    if (!note) return false;
-    if (note.mention === true) return true;
+    if (!note || noteHidden(note)) return false;
+    if (note.mention === true || note.kind === "discord") return true;
     const me = viewerHandle().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (!me) return false;
     return new RegExp("(^|[^A-Za-z0-9_])@" + me + "(?![A-Za-z0-9_])", "i").test(String(note.text || ""));
   }
 
   function notesForTab(tab) {
-    const notes = (STATE.settings && STATE.settings.bellNotes) || [];
+    const notes = shownNotes((STATE.settings && STATE.settings.bellNotes) || []);
     if (!tab) return notes;
     if (tab.kind === "verified") return notes.filter(noteIsVerified);
     if (tab.kind === "mentions") return notes.filter(noteIsMention);
@@ -10860,8 +10878,25 @@ const here = parseRoute();
       scheduleNoteSync();
       return;
     }
-    const tab = noteTabById(active);
+    const tab = noteTabById(active) || (active === "mentions" || active === "verified" ? { id: active, kind: active, readAt: 0 } : null);
     if (!tab) return;
+    if (tab.kind === "mentions" || tab.kind === "verified") {
+      const ids = notesForTab(tab).filter((note) => note && !note.read && note.id).map((note) => note.id);
+      if (!ids.length) return;
+      (STATE.settings.bellNotes || []).forEach((note) => {
+        if (ids.indexOf(note.id) >= 0) note.read = true;
+      });
+      if (!STATE.settings.builtinNoteRead) STATE.settings.builtinNoteRead = {};
+      STATE.settings.builtinNoteRead[tab.kind] = Date.now();
+      const pending = notePending();
+      pending.ids = (pending.ids || []).concat(ids).slice(-80);
+      pending.tab = tab.kind;
+      writeNotePending(pending);
+      saveSettings();
+      scheduleNoteSync();
+      paintBellBadge();
+      return;
+    }
     const newest = notesForTab(tab).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
     if (newest && (Number(tab.readAt) || 0) < newest) {
       tab.readAt = newest;
@@ -10884,9 +10919,15 @@ const here = parseRoute();
   function noteTitle(note) {
     const who = esc((note && (note.name || note.handle)) || tr("Someone"));
     const kind = note && note.kind;
+    const others = Number(note && note.others) || 0;
+    if (kind === "like" && others > 0) return tr("{name} and {n} others liked your post", { name: who, n: others });
     if (kind === "like") return tr("{name} liked your post", { name: who });
+    if (kind === "repost" && others > 0) return tr("{name} and {n} others reposted your post", { name: who, n: others });
     if (kind === "repost") return tr("{name} reposted your post", { name: who });
+    if (kind === "quote") return tr("{name} quoted your post", { name: who });
     if (kind === "reply") return tr("{name} replied to you", { name: who });
+    if (kind === "dm") return tr("{name} sent you a message", { name: who });
+    if (kind === "discord") return tr("Discord alert");
     if (kind === "mention" || (note && note.mention)) return tr("{name} mentioned you", { name: who });
     if (kind === "follow") return tr("{name} followed you", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
@@ -10905,10 +10946,10 @@ const here = parseRoute();
     markNoteTabRead(active);
     const tabs = visibleNoteTabs();
     const current = active === "all" ? null : noteTabById(active);
-    const notes = current ? notesForTab(current) : ((STATE.settings && STATE.settings.bellNotes) || []);
+    const notes = current ? notesForTab(current) : shownNotes((STATE.settings && STATE.settings.bellNotes) || []);
     const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
+    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
     let body = "";
     if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
@@ -11247,12 +11288,29 @@ const here = parseRoute();
         ${peerMediaSettingsHtml()}
       </div>`;
     }
+    if (section === "notifications" && sub === "discord") return discordAlertsView();
     if (section === "notifications") {
       const shared = noteTabsSame();
       const sameSwitch = `<button class="tab-switch${shared ? " on" : ""}" type="button" role="switch" aria-checked="${shared ? "true" : "false"}" data-act="note-tabs-same"><span>${esc(tr("Same tabs as Feed"))}</span><i></i></button>`;
       const rows = shared ? "" : noteTabs().map((tab) => `<div class="tab-edit-row"><span>${esc(noteTabLabel(tab))}</span><button class="outline" type="button" data-act="feed-tab-edit" data-scope="notes" data-id="${esc(tab.id)}">${esc(tr("Edit"))}</button></div>`).join("") + `<button class="outline" type="button" data-act="feed-tab-new" data-scope="notes">${esc(tr("New tab"))}</button>`;
+      const prefs = notePrefs();
+      const prefRow = (kind, label) => {
+        const mode = prefs[kind] || "push";
+        const btn = (id, text) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="note-pref" data-kind="${kind}" data-mode="${id}">${esc(text)}</button>`;
+        return `<h2>${esc(label)}</h2><div class="theme-row" role="group" aria-label="${esc(label)}">${btn("inapp", tr("In app"))}${btn("push", tr("Push"))}${btn("off", tr("Off"))}</div>`;
+      };
+      const followOnly = prefs.mentionsFrom === "following";
       return settingsHead(tr("Notifications"), "#/settings") + `<div class="set-block">
         <button class="primary" type="button" data-act="notify">${esc(notifyOn ? tr("Notifications on") : tr("Notify me about new posts"))}</button>
+        ${settingsRow("#/settings/notifications/discord", tr("Discord alerts"), tr("Mentions and keywords from channels this app already shows."))}
+        ${prefRow("mentions", tr("Mentions"))}
+        <button class="tab-switch${followOnly ? " on" : ""}" type="button" role="switch" aria-checked="${followOnly ? "true" : "false"}" data-act="note-mentions-from"><span>${esc(tr("Only from people you follow"))}</span><i></i></button>
+        ${prefRow("replies", tr("Replies"))}
+        ${prefRow("quotes", tr("Quotes"))}
+        ${prefRow("likes", tr("Likes"))}
+        ${prefRow("reposts", tr("Reposts"))}
+        ${prefRow("follows", tr("Follows"))}
+        ${prefRow("dms", tr("Direct messages"))}
         ${sameSwitch}
         <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
         ${rows}
@@ -14805,6 +14863,69 @@ if (STATE.histClear) {
       enableNotifications();
       return;
     }
+    if (act === "note-pref") {
+      const kind = el.dataset.kind;
+      const mode = el.dataset.mode;
+      const prefs = notePrefs();
+      if (!Object.prototype.hasOwnProperty.call(prefs, kind) || kind === "mentionsFrom") return;
+      if (mode !== "off" && mode !== "inapp" && mode !== "push") return;
+      prefs[kind] = mode;
+      saveNotePrefs(prefs);
+      render();
+      return;
+    }
+    if (act === "note-mentions-from") {
+      const prefs = notePrefs();
+      prefs.mentionsFrom = prefs.mentionsFrom === "following" ? "all" : "following";
+      saveNotePrefs(prefs);
+      render();
+      return;
+    }
+    if (act === "note-mark-all") {
+      markNoteTabRead("all");
+      render();
+      return;
+    }
+    if (act === "discord-flag") {
+      const key = el.dataset.key;
+      const allowed = { mentionUser: 1, mentionRoles: 1, mentionEveryone: 1, mentionHere: 1 };
+      if (!allowed[key]) return;
+      const rule = discordRuleDraft();
+      rule[key] = !rule[key];
+      STATE.discordRule = rule;
+      render();
+      return;
+    }
+    if (act === "discord-keyword-flag") {
+      if (el.dataset.key === "regex") STATE.discordKeywordRegex = !STATE.discordKeywordRegex;
+      else STATE.discordKeywordWhole = !STATE.discordKeywordWhole;
+      render();
+      return;
+    }
+    if (act === "discord-keyword-remove") {
+      const index = Number(el.dataset.index);
+      const rule = discordRuleDraft();
+      if (!Array.isArray(rule.keywords) || !(index >= 0) || index >= rule.keywords.length) return;
+      rule.keywords = rule.keywords.filter((row, at) => at !== index);
+      STATE.discordRule = rule;
+      render();
+      return;
+    }
+    if (act === "discord-scope") {
+      const rule = discordRuleDraft();
+      rule.scope = el.dataset.scope === "selected" ? "selected" : "all";
+      STATE.discordRule = rule;
+      render();
+      return;
+    }
+    if (act === "discord-alert-save") {
+      saveDiscordAlerts();
+      return;
+    }
+    if (act === "discord-alert-preview") {
+      previewDiscordAlerts();
+      return;
+    }
     if (act === "bell") {
       const id = el.dataset.id || "";
       if (STATE.bellMenu && STATE.bellMenu.id === id) STATE.bellMenu = null;
@@ -15681,6 +15802,21 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       return;
     }
     const muteForm = event.target.closest("form.mute-form");
+    if (muteForm && muteForm.dataset.mute === "discord-keyword") {
+      event.preventDefault();
+      const input = muteForm.querySelector("input");
+      const phrase = input ? input.value.trim().slice(0, 80) : "";
+      if (!phrase) return;
+      const rule = discordRuleDraft();
+      const keywords = Array.isArray(rule.keywords) ? rule.keywords.slice() : [];
+      if (keywords.length < 12 && !keywords.some((row) => row && row.phrase === phrase)) {
+        keywords.push({ phrase: phrase, whole: !!STATE.discordKeywordWhole, regex: !!STATE.discordKeywordRegex });
+      }
+      rule.keywords = keywords;
+      STATE.discordRule = rule;
+      render();
+      return;
+    }
     if (muteForm) {
       event.preventDefault();
       const input = muteForm.querySelector("input");
@@ -17708,6 +17844,211 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   }
 
+  function notePrefs() {
+    const saved = STATE.settings && STATE.settings.notePrefs;
+    const base = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
+    if (!saved || typeof saved !== "object") return base;
+    const out = Object.assign({}, base);
+    Object.keys(base).forEach((key) => {
+      if (key === "mentionsFrom") {
+        if (saved.mentionsFrom === "following" || saved.mentionsFrom === "all") out.mentionsFrom = saved.mentionsFrom;
+        return;
+      }
+      if (saved[key] === "off" || saved[key] === "inapp" || saved[key] === "push") out[key] = saved[key];
+    });
+    return out;
+  }
+
+  function saveNotePrefs(next) {
+    if (!STATE.settings) return;
+    STATE.settings.notePrefs = next;
+    saveSettings();
+    const pending = notePending();
+    pending.prefs = true;
+    writeNotePending(pending);
+    scheduleNoteSync();
+  }
+
+  function snowList(value, max) {
+    const out = [];
+    String(value || "").split(/[\s,]+/).forEach((part) => {
+      const id = part.trim();
+      if (/^\d{2,22}$/.test(id) && out.indexOf(id) < 0 && out.length < max) out.push(id);
+    });
+    return out;
+  }
+
+  function wordList(value, max) {
+    const out = [];
+    String(value || "").split(",").forEach((part) => {
+      const word = part.trim().slice(0, 80);
+      if (!word || out.some((item) => item.toLowerCase() === word.toLowerCase()) || out.length >= max) return;
+      out.push(word);
+    });
+    return out;
+  }
+
+  function collectDiscordRule() {
+    const draft = discordRuleDraft();
+    const read = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.value : "";
+    };
+    const startHour = Math.max(0, Math.min(23, Number(read("discord-quiet-start")) || 0));
+    const endHour = Math.max(0, Math.min(23, Number(read("discord-quiet-end")) || 0));
+    const user = read("discord-user-id").replace(/\D/g, "").slice(0, 22);
+    return {
+      mentionUser: draft.mentionUser === true,
+      mentionRoles: draft.mentionRoles === true,
+      mentionEveryone: draft.mentionEveryone === true,
+      mentionHere: draft.mentionHere === true,
+      discordUserId: user,
+      roleIds: snowList(read("discord-role-ids") || draft.roleIds, 20),
+      keywords: (draft.keywords || []).slice(0, 12).map((row) => ({
+        phrase: String(row && row.phrase || "").trim().slice(0, 80),
+        whole: !!(row && row.whole),
+        regex: !!(row && row.regex)
+      })).filter((row) => row.phrase),
+      exclude: wordList(read("discord-exclude") || draft.exclude, 20),
+      scope: draft.scope === "selected" ? "selected" : "all",
+      channels: snowList(read("discord-channels") || draft.channels, 100),
+      fromUsers: snowList(read("discord-from") || draft.fromUsers, 40),
+      quietStart: startHour * 60,
+      quietEnd: endHour * 60,
+      quietOffset: -new Date().getTimezoneOffset()
+    };
+  }
+
+  function ensureDiscordAlerts() {
+    if (STATE.discordRuleLoading || STATE.discordRuleLoaded) return;
+    STATE.discordRuleLoading = true;
+    accountCall("/v1/discord/alerts").then((res) => {
+      STATE.discordRuleLoading = false;
+      STATE.discordRuleLoaded = true;
+      if (res && res.status === 200 && res.rule) STATE.discordRule = res.rule;
+      const route = parseRoute();
+      if (route.name === "settings" && route.section === "notifications" && route.sub === "discord") render();
+    }).catch(() => {
+      STATE.discordRuleLoading = false;
+      STATE.discordRuleLoaded = true;
+    });
+  }
+
+  function saveDiscordAlerts() {
+    const rule = collectDiscordRule();
+    STATE.discordRule = rule;
+    accountCall("/v1/discord/alerts", { method: "PUT", body: { rule: rule } }).then((res) => {
+      if (res && res.rule) STATE.discordRule = res.rule;
+      STATE.discordPreview = res && res.status === 200 ? tr("Saved") : "";
+      render();
+    }).catch(() => {});
+  }
+
+  function previewDiscordAlerts() {
+    const rule = collectDiscordRule();
+    STATE.discordRule = rule;
+    const snap = window.FeedsDiscord && window.FeedsDiscord.alertSnapshot ? window.FeedsDiscord.alertSnapshot() : null;
+    accountCall("/v1/discord/alerts/preview", {
+      method: "POST",
+      body: {
+        rule: rule,
+        messages: snap && Array.isArray(snap.messages) ? snap.messages : [],
+        mutedChannels: snap && Array.isArray(snap.mutedChannels) ? snap.mutedChannels : [],
+        mutedServers: snap && Array.isArray(snap.mutedServers) ? snap.mutedServers : []
+      }
+    }).then((res) => {
+      const count = res && Array.isArray(res.matches) ? res.matches.length : 0;
+      STATE.discordPreview = tr("{n} recent messages match", { n: count });
+      render();
+    }).catch(() => {});
+  }
+
+  let discordIngestTimer = 0;
+  let discordIngestSnap = null;
+
+  function scheduleDiscordIngest(snap) {
+    if (!snap || !Array.isArray(snap.messages) || !snap.messages.length) return;
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    discordIngestSnap = snap;
+    clearTimeout(discordIngestTimer);
+    discordIngestTimer = setTimeout(sendDiscordIngest, 1200);
+  }
+
+  function sendDiscordIngest() {
+    const snap = discordIngestSnap;
+    discordIngestSnap = null;
+    if (!snap) return;
+    const seen = STATE.discordSeenIds || (STATE.discordSeenIds = {});
+    const fresh = snap.messages.filter((row) => row && row.id && !seen[row.id]).slice(0, 40);
+    if (!fresh.length) return;
+    accountCall("/v1/discord/alerts/ingest", {
+      method: "POST",
+      body: {
+        messages: fresh,
+        mutedChannels: snap.mutedChannels || [],
+        mutedServers: snap.mutedServers || []
+      }
+    }).then((res) => {
+      if (!res || res.status !== 200) return;
+      fresh.forEach((row) => { seen[row.id] = 1; });
+      const keys = Object.keys(seen);
+      if (keys.length > 400) keys.slice(0, keys.length - 400).forEach((id) => { delete seen[id]; });
+      pullNotes();
+    }).catch(() => {});
+  }
+
+  function discordRuleDraft() {
+    const empty = { mentionUser: true, mentionRoles: false, mentionEveryone: false, mentionHere: false, discordUserId: "", roleIds: "", keywords: [], exclude: "", scope: "all", channels: "", fromUsers: "", quietStart: 0, quietEnd: 0 };
+    const saved = STATE.discordRule;
+    if (!saved || typeof saved !== "object") return empty;
+    return Object.assign(empty, saved, {
+      roleIds: Array.isArray(saved.roleIds) ? saved.roleIds.join(", ") : String(saved.roleIds || ""),
+      exclude: Array.isArray(saved.exclude) ? saved.exclude.join(", ") : String(saved.exclude || ""),
+      channels: Array.isArray(saved.channels) ? saved.channels.join(", ") : String(saved.channels || ""),
+      fromUsers: Array.isArray(saved.fromUsers) ? saved.fromUsers.join(", ") : String(saved.fromUsers || ""),
+      keywords: Array.isArray(saved.keywords) ? saved.keywords : []
+    });
+  }
+
+  function discordAlertsView() {
+    if (!STATE.discordRuleLoaded) ensureDiscordAlerts();
+    const rule = discordRuleDraft();
+    const keywords = (rule.keywords || []).map((row, index) => `<div class="mute-row"><span>${esc(row.phrase || "")}</span><button type="button" data-act="discord-keyword-remove" data-index="${index}">${esc(tr("Remove"))}</button></div>`).join("");
+    const flag = (key, label) => `<button class="tab-switch${rule[key] ? " on" : ""}" type="button" role="switch" aria-checked="${rule[key] ? "true" : "false"}" data-act="discord-flag" data-key="${key}"><span>${esc(label)}</span><i></i></button>`;
+    const scopeAll = rule.scope !== "selected";
+    return settingsHead(tr("Discord alerts"), "#/settings/notifications") + `<div class="set-block">
+      <p class="phandle">${esc(tr("Matches run on messages this app has already loaded. Nothing here sends a request to Discord."))}</p>
+      ${flag("mentionUser", tr("When my linked Discord account is mentioned"))}
+      <label class="field"><span>${esc(tr("Discord user id"))}</span><input id="discord-user-id" inputmode="numeric" maxlength="22" value="${esc(rule.discordUserId || "")}"></label>
+      ${flag("mentionRoles", tr("When one of my roles is mentioned"))}
+      <label class="field"><span>${esc(tr("Role ids"))}</span><input id="discord-role-ids" value="${esc(rule.roleIds || "")}"></label>
+      ${flag("mentionEveryone", tr("When everyone is mentioned"))}
+      ${flag("mentionHere", tr("When here is mentioned"))}
+      <h2>${esc(tr("Keywords"))}</h2>
+      <form class="mute-form" data-mute="discord-keyword"><label class="search"><input id="discord-keyword" maxlength="80" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Word or phrase"))}"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      <button class="tab-switch${STATE.discordKeywordWhole ? " on" : ""}" type="button" role="switch" data-act="discord-keyword-flag" data-key="whole"><span>${esc(tr("Whole word"))}</span><i></i></button>
+      <button class="tab-switch${STATE.discordKeywordRegex ? " on" : ""}" type="button" role="switch" data-act="discord-keyword-flag" data-key="regex"><span>${esc(tr("Regular expression"))}</span><i></i></button>
+      ${keywords}
+      <label class="field"><span>${esc(tr("Exclude words"))}</span><input id="discord-exclude" value="${esc(rule.exclude || "")}"></label>
+      <h2>${esc(tr("Channels"))}</h2>
+      <div class="theme-row">
+        <button class="outline${scopeAll ? " on" : ""}" type="button" data-act="discord-scope" data-scope="all">${esc(tr("All channels"))}</button>
+        <button class="outline${!scopeAll ? " on" : ""}" type="button" data-act="discord-scope" data-scope="selected">${esc(tr("Selected channels"))}</button>
+      </div>
+      <label class="field"><span>${esc(tr("Channel ids"))}</span><input id="discord-channels" value="${esc(rule.channels || "")}"></label>
+      <p class="phandle">${esc(tr("Muted channels and servers stay quiet."))}</p>
+      <label class="field"><span>${esc(tr("Only from these users"))}</span><input id="discord-from" value="${esc(rule.fromUsers || "")}"></label>
+      <h2>${esc(tr("Quiet hours"))}</h2>
+      <label class="field"><span>${esc(tr("Start"))}</span><input id="discord-quiet-start" type="number" min="0" max="23" value="${esc(String(Math.floor((Number(rule.quietStart) || 0) / 60)))}"></label>
+      <label class="field"><span>${esc(tr("End"))}</span><input id="discord-quiet-end" type="number" min="0" max="23" value="${esc(String(Math.floor((Number(rule.quietEnd) || 0) / 60)))}"></label>
+      <div class="theme-row">
+        <button class="primary" type="button" data-act="discord-alert-save">${esc(tr("Save"))}</button>
+        <button class="outline" type="button" data-act="discord-alert-preview">${esc(tr("Preview"))}</button>
+      </div>
+      <p class="phandle" id="discord-preview-note">${esc(STATE.discordPreview || "")}</p>
+    </div>`;
+  }
+
   function notesServer() {
     try {
       const doc = JSON.parse(readStored(localStorage, "notes-server") || "null");
@@ -17791,6 +18132,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   let noteSyncTimer = 0;
+  let notePages = 0;
   let noteApplying = false;
   let hubPoll = 0;
   let channelBound = false;
@@ -17836,7 +18178,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function clientNoteItem(note) {
-    const kind = note.kind === "mention" || note.kind === "live" || note.kind === "like" || note.kind === "repost" ? note.kind : "post";
+    const kept = { mention: 1, live: 1, like: 1, repost: 1, quote: 1, dm: 1, discord: 1 };
+    const kind = kept[note.kind] ? note.kind : "post";
     const item = {
       id: note.id,
       kind: kind,
@@ -17874,7 +18217,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const server = notesServer();
     server.unread = Number(view.unread) || 0;
     server.readUntil = until;
+    server.cursor = Math.max(Number(server.cursor) || 0, Number(view.cursor) || 0);
     server.fetchedAt = Date.now();
+    if (view.prefs && typeof view.prefs === "object") STATE.settings.notePrefs = view.prefs;
     writeNotesServer(server);
     saveSettings();
     paintBellBadge();
@@ -17924,6 +18269,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!accounts || !accounts.token || !accounts.token() || noteApplying) return;
     noteApplying = true;
     const sent = notePending();
+    let again = false;
     try {
       const acked = {};
       noteAcked().forEach((id) => { acked[id] = true; });
@@ -17943,8 +18289,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         body.bells = cleanBells(STATE.settings.bells);
         body.bellsAt = Number(STATE.settings.bellsAt) || Date.now();
       }
+      if (sent.prefs && STATE.settings) body.prefs = notePrefs();
+      if (sent.tab) body.tab = sent.tab;
       const posting = Object.keys(body).length > 0;
-      const res = await accountCall("/v1/notifications", posting ? { method: "POST", body: body } : { method: "GET" });
+      const since = Number(notesServer().cursor) || 0;
+      const path = "/v1/notifications" + (since ? "?since=" + encodeURIComponent(String(since)) : "");
+      const res = await accountCall(path, posting ? { method: "POST", body: body } : { method: "GET" });
       if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
       applyServerNotes(res);
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
@@ -17952,6 +18302,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (sent.until && Number(nowPending.until) === Number(sent.until)) delete nowPending.until;
       if (sent.tabs) delete nowPending.tabs;
       if (sent.bells) delete nowPending.bells;
+      if (sent.prefs) delete nowPending.prefs;
+      if (sent.tab) delete nowPending.tab;
+      writeNotePending(nowPending);
+      if (res.more && notePages < 4) {
+        notePages += 1;
+        again = true;
+      } else notePages = 0;
       if (Array.isArray(sent.ids)) {
         const sentIds = {};
         sent.ids.forEach((id) => { sentIds[id] = true; });
@@ -17967,6 +18324,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       writeNotePending(nowPending);
     } catch (err) { /* the next visible fetch tries again */ }
     finally { noteApplying = false; }
+    if (again) pullNotes();
   }
 
   function channelOpen() {
@@ -18415,7 +18773,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       repostOff: STATE.settings.repostOff || [],
       notifyAll: !!STATE.settings.notify,
       uiLang: window.SI18n ? window.SI18n.getLang() : "en",
-      ruMode: isRuVisitor()
+      ruMode: isRuVisitor(),
+      shortsLocked: isShortsLocked(),
+      shortsUnlocked: window.ViktorychShorts && window.ViktorychShorts.unlockedHandles ? window.ViktorychShorts.unlockedHandles() : []
     });
   }
 
@@ -19162,7 +19522,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         noteHash: (hash) => {
           lastKey = hash || (location.hash || "#/");
           STATE.scrollKey = "#/messages";
-        }
+        },
+        onDiscordMessages: (snap) => { scheduleDiscordIngest(snap); }
       });
       if (!blocked) window.FeedsDiscord.start();
     }
@@ -19225,7 +19586,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
       productName: function () { return productName("app"); },
       logo: function () { return markSvg("app", "logo-full") + markSvg("appShort", "logo-short"); },
-      requestRender: function () { render(); }
+      requestRender: function () { syncWorkerState(); render(); }
     });
   }
   bindCommunitiesModule();
