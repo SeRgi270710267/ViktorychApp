@@ -54,7 +54,12 @@ test("lockout steps and which local keys are sealed", () => {
 test("privacy cover decisions", () => {
   assert.equal(privacy.splitView({ screenWidth: 1000, screenHeight: 2000, windowWidth: 400, windowHeight: 1900 }), true);
   assert.equal(privacy.splitView({ screenWidth: 2000, screenHeight: 1000, windowWidth: 1900, windowHeight: 400 }), true);
+  assert.equal(privacy.splitView({ screenWidth: 1920, screenHeight: 1080, windowWidth: 960, windowHeight: 1000 }), true);
   assert.equal(privacy.splitView({ screenWidth: 1920, screenHeight: 1080, windowWidth: 800, windowHeight: 600 }), false);
+  assert.equal(privacy.splitView({ screenWidth: 1920, screenHeight: 1080, windowWidth: 1440, windowHeight: 900 }), false);
+  assert.equal(privacy.splitView({ screenWidth: 1920, screenHeight: 1080, windowWidth: 1920, windowHeight: 900 }), false);
+  assert.equal(privacy.splitView({ screenWidth: 412, screenHeight: 915, windowWidth: 390, windowHeight: 700 }), false);
+  assert.equal(privacy.splitView({ screenWidth: 360, screenHeight: 800, windowWidth: 360, windowHeight: 640 }), false);
   assert.equal(privacy.splitView({ screenWidth: 100, screenHeight: 100, windowWidth: 40, windowHeight: 40 }), false);
 
   assert.deepEqual(privacy.decide({ mode: "off", hidden: true, sensitive: true }), { cover: false, scope: "off", reason: "" });
