@@ -53,6 +53,14 @@ const SHELL_FILES = [
   "./update.js",
   "./storage.js",
   "./storage.css",
+  "./localfirst.js",
+  "./direct.js",
+  "./logo/v.svg",
+  "./logo/v-music.svg",
+  "./logo/viktorychapp.svg",
+  "./logo/viktorychapp-short.svg",
+  "./logo/viktorychmusic.svg",
+  "./logo/viktorychmusic-short.svg",
   "./translate.js",
   "./translate.css",
   "./people.js",
@@ -351,6 +359,10 @@ async function trimMedia() {
   const plan = self.ViktorychStorage.planEviction(rows, max, Date.now(), self.ViktorychStorage.keepMs(saved.keep));
   await Promise.all(plan.drop.map(async (row) => {
     try {
+      if ((row.cacheName || "") === "idb-docs") {
+        await self.ViktorychStorage.deleteDoc(db, row.url);
+        return;
+      }
       const cache = await caches.open(row.cacheName || MEDIA);
       await cache.delete(row.url);
     } catch (err) { /* a missing cache is already gone */ }
@@ -425,6 +437,7 @@ async function wipeUserCaches(full) {
   try {
     const db = await idb();
     await self.ViktorychStorage.replaceFiles(db, []);
+    await self.ViktorychStorage.clearDocs(db, "all");
     await idbSet(db, "media-index", []);
   } catch (err) { /* the page clears the same stores */ }
 }
@@ -444,7 +457,6 @@ async function staleWhileRevalidate(request, extraHeaders) {
   const update = (async () => {
     const db = await idb();
     try {
-      await self.ViktorychStorage.bump(db, "network");
       const res = await mirrorFetch(new Request(request.url, { method: "GET", headers: headers, cache: "no-store", redirect: "follow" }));
       const action = self.ViktorychStorage.revalidateAction(res && res.status);
       if (action === "keep" && cached) {
@@ -452,6 +464,7 @@ async function staleWhileRevalidate(request, extraHeaders) {
         broadcast({ type: "storage-online" });
         return cached;
       }
+      if (action === "store") await self.ViktorychStorage.bump(db, "network");
       if (action === "store" && self.ViktorychStorage.shouldCacheFeed(request.url)) {
         await cache.put(cacheReq, res.clone());
         await rememberMedia(request.url, self.ViktorychStorage.byteLengthOf(res), self.ViktorychStorage.categoryOf(request.url), DATA);
@@ -467,6 +480,8 @@ async function staleWhileRevalidate(request, extraHeaders) {
   if (cached) {
     const db = await idb();
     await self.ViktorychStorage.bump(db, "hits");
+    await self.ViktorychStorage.bump(db, "savedRequests");
+    await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
     await self.ViktorychStorage.touch(db, request.url);
     update.then((res) => {
       if (!res || res === cached) return;
@@ -503,6 +518,8 @@ async function serveMedia(request, extraHeaders) {
   }
   if (cached && !rangeHeader) {
     await self.ViktorychStorage.bump(db, "hits");
+    await self.ViktorychStorage.bump(db, "savedRequests");
+    await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
     await self.ViktorychStorage.touch(db, request.url);
     return cached;
   }
@@ -510,6 +527,8 @@ async function serveMedia(request, extraHeaders) {
     const partial = await self.ViktorychStorage.sliceCached(cached, rangeHeader);
     if (partial) {
       await self.ViktorychStorage.bump(db, "hits");
+      await self.ViktorychStorage.bump(db, "savedRequests");
+      await self.ViktorychStorage.bump(db, "savedBytes", self.ViktorychStorage.byteLengthOf(cached));
       await self.ViktorychStorage.touch(db, request.url);
       return partial;
     }
@@ -776,6 +795,10 @@ self.addEventListener("message", (event) => {
         await idbSet(db, "media-index", []);
         if (self.ViktorychStorage) await self.ViktorychStorage.replaceFiles(db, []);
       } catch (err) { /* the page also deletes the database */ }
+      try {
+        const sub = await self.registration.pushManager.getSubscription();
+        if (sub) await sub.unsubscribe();
+      } catch (err) { /* a deleted account has no server subscription left */ }
     })());
     return;
   }
@@ -787,7 +810,20 @@ self.addEventListener("message", (event) => {
         const db = await idb();
         await idbSet(db, "auth-state", { on: accountsAuthed, token: playToken });
       } catch (err) { /* the page still signs out */ }
-      if (!data.on) await wipeUserCaches(data.wipe === "signout");
+      if (!data.on) {
+        await wipeUserCaches(data.wipe === "signout");
+        try {
+          const db = await idb();
+          await idbSet(db, "bells", {});
+          await idbSet(db, "bell-seen", []);
+          await idbSet(db, "bell-queue", []);
+          await idbSet(db, "notify-all", false);
+        } catch (err) { /* the page cleared the same keys */ }
+        try {
+          const sub = await self.registration.pushManager.getSubscription();
+          if (sub) await sub.unsubscribe();
+        } catch (err) { /* push is already gone */ }
+      }
     })());
     if (event.ports && event.ports[0]) {
       try { event.ports[0].postMessage({ ok: !!playToken }); } catch (err) { /* the page already continued */ }
@@ -803,7 +839,7 @@ self.addEventListener("message", (event) => {
     event.waitUntil(wipeUserCaches(true));
   }
   if (data.type === "reload-armed" && event.source) armedClients.add(event.source.id);
-  if (data.type === "cache-bookmark") event.waitUntil(cacheBookmark(data.urls));
+  if (data.type === "cache-bookmark" || data.type === "cache-media") event.waitUntil(cacheBookmark(data.urls));
   if (data.type === "seen" || data.type === "state") {
     event.waitUntil(idb().then(async (db) => {
       await idbSet(db, "seen-at", data.type === "seen" ? Date.now() : Number(data.seen || 0));
@@ -822,7 +858,7 @@ self.addEventListener("message", (event) => {
     }));
   }
   if (data.type === "bell-deliver") {
-    event.waitUntil(deliverBellNotes(data.notes || []).then((delivered) => {
+    event.waitUntil(deliverBellNotes(data.notes || [], !!data.dnd).then((delivered) => {
       if (event.source) event.source.postMessage({ type: "bell-delivered", notes: delivered });
     }));
   }
@@ -983,7 +1019,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|update\.js|storage\.js|storage\.css|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|app\.js|update\.js|storage\.js|storage\.css|localfirst\.js|direct\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|owner-keys\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/logo\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
@@ -1077,17 +1113,24 @@ function postImageUrl(post) {
 
 function noteFromPost(post, row) {
   const text = String(post.text || post.title || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  const platform = post.platform || "x";
+  const handle = String((row && row.handle) || post.handle || "").replace(/^@/, "");
+  const raw = canonicalNotifyId(post) || String(post.id || "");
+  const live = !!(row && row.mode === "live");
+  const id = !raw ? "" : (live ? ("live:" + platform + ":" + handle.toLowerCase() + ":" + raw) : ("post:" + raw));
   return {
-    id: canonicalNotifyId(post) || String(post.id || ""),
-    at: Date.now(),
-    handle: (row && row.handle) || post.handle || "",
+    id: id,
+    at: Date.parse(post.date || "") || 0,
+    kind: live ? "live" : "post",
+    read: false,
+    handle: handle,
     name: post.author || (row && row.name) || post.handle || "",
     text: text,
     avatar: /^https:\/\//.test(post.avatar || "") ? post.avatar : "",
     image: postImageUrl(post),
     hash: statusHash(post),
     feedId: String(post.feedId || ""),
-    platform: post.platform || "x",
+    platform: platform,
     ids: (row && row.ids) || [],
     handles: (row && row.handles) || []
   };
@@ -1095,32 +1138,46 @@ function noteFromPost(post, row) {
 
 let bellChain = Promise.resolve();
 
-function deliverBellNotes(notes) {
-  const run = bellChain.then(() => deliverBellNotesNow(notes));
+async function pushIsDnd(flag) {
+  if (flag) return true;
+  try {
+    const db = await idb();
+    const presence = await idbGet(db, "presence");
+    if (!presence || typeof presence !== "object") return false;
+    if (presence.state === "dnd" || presence.dnd === true || presence.presence === "dnd") return true;
+    const until = Number(presence.until || presence.dndUntil || 0);
+    if (until > Date.now()) return true;
+  } catch (err) { /* a missing store still buzzes */ }
+  return false;
+}
+
+function deliverBellNotes(notes, dnd) {
+  const run = bellChain.then(() => deliverBellNotesNow(notes, dnd));
   bellChain = run.then(() => {}, () => {});
   return run;
 }
 
-async function deliverBellNotesNow(notes) {
+async function deliverBellNotesNow(notes, dnd) {
   await ensureUiLang();
   const list = (notes || []).filter((note) => note && note.id);
   if (!list.length) return [];
   const db = await idb();
+  const quiet = await pushIsDnd(dnd);
   const seen = new Set((await idbGet(db, "bell-seen")) || []);
   const delivered = [];
   for (const note of list) {
     const id = String(note.id);
-    if (!id || seen.has(id)) continue;
+    if (!id || !note.at || seen.has(id)) continue;
     seen.add(id);
     delivered.push(note);
-    if (Notification.permission !== "granted") continue;
+    if (quiet || Notification.permission !== "granted") continue;
     try {
       await self.registration.showNotification(note.name || ("@" + (note.handle || "post")), {
         body: note.text || tr("New post"),
         icon: note.avatar || "icons/icon-192.png",
         image: note.image || undefined,
         tag: "bell-" + id,
-        data: { hash: note.hash || "#/" }
+        data: { hash: note.hash || "#/", id: id }
       });
     } catch (err) { /* the page still keeps the in-app row */ }
   }
@@ -1211,12 +1268,42 @@ self.addEventListener("periodicsync", (event) => {
   if (event.tag === "feeds") event.waitUntil(refreshAndNotify());
 });
 
+self.addEventListener("push", (event) => {
+  event.waitUntil((async () => {
+    let data = {};
+    try { data = event.data ? event.data.json() : {}; }
+    catch (err) { data = {}; }
+    if (await pushIsDnd(!!(data && data.dnd))) return;
+    const open = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    const visible = open.some((client) => client.visibilityState === "visible");
+    if (visible) {
+      open.forEach((client) => {
+        try { client.postMessage({ type: "push-note", note: data }); }
+        catch (err) { /* the page polls when it is next visible */ }
+      });
+      return;
+    }
+    await ensureUiLang();
+    const vars = data && data.titleVars && typeof data.titleVars === "object" ? data.titleVars : {};
+    const title = data && data.titleKey ? tr(data.titleKey, vars) : tr("New post");
+    await self.registration.showNotification(title, {
+      body: (data && data.body) || "",
+      icon: (data && data.icon) || "icons/icon-192.png",
+      tag: (data && data.tag) || ("note-" + ((data && data.id) || "")),
+      data: { hash: (data && data.hash) || "#/", id: (data && data.id) || "" }
+    });
+  })());
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   event.waitUntil((async () => {
+    const payload = event.notification.data || {};
+    const hash = payload.hash || "#/";
     const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    const hash = (event.notification.data && event.notification.data.hash) || "#/";
     if (clients[0]) {
+      try { clients[0].postMessage({ type: "note-open", id: payload.id || "", hash: hash }); }
+      catch (err) { /* navigation still opens the post */ }
       await clients[0].focus();
       if (clients[0].navigate) await clients[0].navigate("./" + hash);
       return;

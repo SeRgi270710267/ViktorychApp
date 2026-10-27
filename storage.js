@@ -12,7 +12,7 @@
   var MAX_STEPS = [1 * GB, 5 * GB, 10 * GB, 20 * GB];
   var POLICY_KEY = "viktorychapp-storage";
   var DB_NAME = "superintelapp-sw";
-  var DB_VERSION = 2;
+  var DB_VERSION = 3;
   var PINNED_CACHE = "sintel-music-offline";
   var MEDIA_CATS = { videos: 1, photos: 1, live: 1, music: 1 };
   var COLORS = {
@@ -21,10 +21,18 @@
     live: "#e85d4c",
     music: "#a46cff",
     feeds: "#e8a33d",
+    profiles: "#d48b5a",
+    threads: "#c46b8a",
+    search: "#7d8cff",
+    explore: "#e0c45a",
+    notifications: "#ef6d8a",
+    shorts: "#ff8a3d",
+    lives: "#d96b4c",
     messages: "#5ac8fa",
+    drafts: "#9aa0a6",
     other: "#8e8e93"
   };
-  var ORDER = ["videos", "photos", "live", "music", "feeds", "messages", "other"];
+  var ORDER = ["videos", "photos", "live", "music", "feeds", "profiles", "threads", "search", "explore", "notifications", "shorts", "lives", "messages", "drafts", "other"];
   var RANGE_LIMIT = 48 * 1024 * 1024;
   var policy = null;
   var snap = null;
@@ -61,6 +69,7 @@
     if (/owner-keys/i.test(path)) return true;
     if (/\/v1\/owner\/play$/i.test(path)) return true;
     if (/\/v1\/(?:session|login|logout|logout-all|auth|account|me)(?:\/|$)/i.test(path)) return true;
+    if (/\/v1\/(?:notifications|push|channel|presence)(?:\/|$)/i.test(path)) return true;
     if (/\/v1\/owner\/keys(?:\/|$)/i.test(path)) return true;
     if (/\/tg\/loop\//i.test(path)) return true;
     if (/\/loop\/current\.json$/i.test(path)) return true;
@@ -75,10 +84,19 @@
     var host = String(url.hostname || "").toLowerCase();
     if (/discord/i.test(host) || /\/discord\//i.test(path) || /\/tg\/social\//i.test(path)) return "messages";
     if (/record|\/live\//i.test(path)) return "live";
+    if (/\/(?:past-lives|lives)(?:\/|$)/i.test(path) && !/\.(mp4|webm|mov|m4s|ts|mp3|m4a)$/i.test(path)) return "lives";
     if (/\/music\//i.test(path) || /\.(mp3|m4a|aac|flac|ogg|opus)$/i.test(path)) return "music";
-    if (/\.(mp4|webm|mov|m4s|ts)$/i.test(path) || host.indexOf("video.twimg.com") >= 0) return "videos";
+    if (/\.(mp4|webm|mov|m4s|ts|cmfv|cmfa)$/i.test(path) || host.indexOf("video.twimg.com") >= 0) return "videos";
     if (/\.(png|jpe?g|gif|webp|avif)$/i.test(path) || /(^|\.)pbs\.twimg\.com$/.test(host) || host === "i.ytimg.com" || /(^|\.)ggpht\.com$/.test(host) || /(^|\.)googleusercontent\.com$/.test(host) || /(^|\.)cdninstagram\.com$/.test(host) || /(^|\.)fbcdn\.net$/.test(host) || /\/v1\/media\/(?:avatars|banners)\//i.test(path)) return "photos";
-    if (/\.json$/i.test(path) || /\/(?:feeds|people|suggestions|stories)\.json$/i.test(path)) return "feeds";
+    if (/\/notifications(?:\/|$)/i.test(path)) return "notifications";
+    if (/\/shorts(?:\/|$)/i.test(path) && !/\.(mp4|webm|mov|m4s|ts|png|jpe?g|gif|webp|avif)$/i.test(path)) return "shorts";
+    if (/\/(?:search|recent-searches)(?:\/|$)/i.test(path)) return "search";
+    if (/\/(?:explore|trends)(?:\/|$)/i.test(path)) return "explore";
+    if (/\/(?:messages|dm)(?:\/|$)/i.test(path)) return "messages";
+    if (/\/(?:profile|profiles|people|users)(?:\/|$|\.)/i.test(path)) return "profiles";
+    if (/\/(?:status|statuses|thread|replies|posts)(?:\/|$)/i.test(path)) return "threads";
+    if (/\/drafts(?:\/|$)/i.test(path)) return "drafts";
+    if (/\.json$/i.test(path) || /\/(?:feeds|suggestions|stories)\.json$/i.test(path)) return "feeds";
     if (/\/tg\//i.test(path)) return "videos";
     return "other";
   }
@@ -90,17 +108,25 @@
     if (/\.(m3u8|json)$/i.test(path)) return false;
     var cat = categoryOf(url);
     if (cat === "videos" || cat === "photos" || cat === "live" || cat === "music") return true;
-    return cat === "messages" && /\.(png|jpe?g|gif|webp|avif|mp4|webm|mov|m4s|ts)$/i.test(path);
+    return cat === "messages" && /\.(png|jpe?g|gif|webp|avif|mp4|webm|mov|m4s|ts|cmfv|cmfa)$/i.test(path);
+  }
+
+  function feedV1(path) {
+    return /\/v1\/(?:notifications|feed|feeds|timeline|home|following|lists|communities|profile|profiles|users|status|statuses|posts|thread|replies|search|trends|explore|messages|dm|shorts|music|live|drafts)(?:\/|$)/i.test(path);
   }
 
   function shouldCacheFeed(value) {
     var url = toUrl(value);
     if (!url || blockedPath(url) || tiktokHost(url.hostname)) return false;
     if (shouldCacheMedia(url)) return false;
-    if (/\/v1\/presence(?:\/|$|\?)/i.test(url.pathname) || /\/v1\/channel(?:\/|$|\?)/i.test(url.pathname)) return false;
-    if (/\/v1\//i.test(url.pathname) && !/\/v1\/owner\/tiktok\/recordings$/i.test(url.pathname)) return false;
+    var path = url.pathname || "";
+    if (/\/v1\/presence(?:\/|$|\?)/i.test(path) || /\/v1\/channel(?:\/|$|\?)/i.test(path)) return false;
+    if (/\/v1\//i.test(path) && !feedV1(path) && !/\/v1\/owner\/tiktok\/recordings$/i.test(path)) return false;
     var cat = categoryOf(url);
-    return cat === "feeds" || cat === "messages" || (cat === "live" && /\.json$/i.test(url.pathname));
+    if (cat === "feeds" || cat === "messages" || cat === "profiles" || cat === "threads" || cat === "search" || cat === "explore" || cat === "notifications" || cat === "shorts" || cat === "drafts" || cat === "lives") {
+      return /\.json$/i.test(path) || /\/v1\//i.test(path);
+    }
+    return cat === "live" && /\.json$/i.test(path);
   }
 
   function revalidateAction(status) {
@@ -131,10 +157,11 @@
   function normalizePolicy(raw, quota) {
     var fallback = defaultMaxBytes(quota);
     var keep = raw && (raw.keep === "3d" || raw.keep === "week" || raw.keep === "month" || raw.keep === "forever") ? raw.keep : "week";
-    if (raw && raw.unlimited) return { keep: keep, maxBytes: 0, unlimited: true };
+    var prefetch = !(raw && raw.prefetch === false);
+    if (raw && raw.unlimited) return { keep: keep, maxBytes: 0, unlimited: true, prefetch: prefetch };
     var maxBytes = raw ? Number(raw.maxBytes) : 0;
     if (MAX_STEPS.indexOf(maxBytes) < 0) maxBytes = fallback;
-    return { keep: keep, maxBytes: maxBytes, unlimited: false };
+    return { keep: keep, maxBytes: maxBytes, unlimited: false, prefetch: prefetch };
   }
 
   function planEviction(rows, maxBytes, now, keepFor) {
@@ -248,6 +275,8 @@
         var db = req.result;
         if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
         if (!db.objectStoreNames.contains("files")) db.createObjectStore("files");
+        if (!db.objectStoreNames.contains("docs")) db.createObjectStore("docs");
+        if (!db.objectStoreNames.contains("actions")) db.createObjectStore("actions");
       };
       req.onsuccess = function () { resolve(req.result); };
       req.onerror = function () { reject(req.error); };
@@ -337,19 +366,139 @@
     });
   }
 
-  function bump(db, field) {
+  function emptyStats(stats) {
+    var src = stats && typeof stats === "object" ? stats : {};
+    return {
+      hits: Number(src.hits) || 0,
+      network: Number(src.network) || 0,
+      savedBytes: Number(src.savedBytes) || 0,
+      savedRequests: Number(src.savedRequests) || 0,
+      direct: Number(src.direct) || 0,
+      server: Number(src.server) || 0
+    };
+  }
+
+  function bump(db, field, amount) {
     return metaGet(db, "storage-stats").then(function (stats) {
-      var next = stats && typeof stats === "object" ? { hits: Number(stats.hits) || 0, network: Number(stats.network) || 0 } : { hits: 0, network: 0 };
-      next[field] = (Number(next[field]) || 0) + 1;
+      var next = emptyStats(stats);
+      if (field === "savedBytes") next.savedBytes += Math.max(0, Number(amount) || 0);
+      else if (field === "savedRequests") next.savedRequests += 1;
+      else next[field] = (Number(next[field]) || 0) + 1;
       return metaSet(db, "storage-stats", next).then(function () { return next; });
     });
   }
 
   function readStats(db) {
-    return metaGet(db, "storage-stats").then(function (stats) {
-      if (!stats || typeof stats !== "object") return { hits: 0, network: 0 };
-      return { hits: Number(stats.hits) || 0, network: Number(stats.network) || 0 };
+    return metaGet(db, "storage-stats").then(function (stats) { return emptyStats(stats); });
+  }
+
+  function hitRate(stats) {
+    var hits = Number(stats && stats.hits) || 0;
+    var network = Number(stats && stats.network) || 0;
+    var total = hits + network;
+    if (!total) return 0;
+    return Math.round(hits / total * 100);
+  }
+
+  function docKey(category, id) {
+    return "idb:" + category + ":" + id;
+  }
+
+  function putDoc(db, doc) {
+    if (!doc || !doc.category || doc.id == null) return Promise.resolve();
+    var key = docKey(doc.category, doc.id);
+    var text = "";
+    try { text = JSON.stringify(doc.body == null ? null : doc.body); } catch (err) { text = ""; }
+    var now = Date.now();
+    var row = {
+      category: doc.category,
+      id: String(doc.id),
+      body: doc.body == null ? null : doc.body,
+      etag: doc.etag || "",
+      at: doc.at || now,
+      saved: doc.saved || now,
+      bytes: Number(doc.bytes) || text.length
+    };
+    return new Promise(function (resolve) {
+      try {
+        var tx = db.transaction(["docs", "files"], "readwrite");
+        tx.objectStore("docs").put(row, key);
+        tx.objectStore("files").put({
+          url: key,
+          bytes: row.bytes,
+          category: row.category,
+          at: row.at,
+          saved: row.saved,
+          cacheName: "idb-docs"
+        }, key);
+        tx.oncomplete = function () { resolve(row); };
+        tx.onerror = function () { resolve(row); };
+      } catch (err) { resolve(row); }
     });
+  }
+
+  function listDocs(db) {
+    return new Promise(function (resolve) {
+      try {
+        if (!db.objectStoreNames.contains("docs")) { resolve([]); return; }
+        var req = db.transaction("docs", "readonly").objectStore("docs").getAll();
+        req.onsuccess = function () { resolve(req.result || []); };
+        req.onerror = function () { resolve([]); };
+      } catch (err) { resolve([]); }
+    });
+  }
+
+  function deleteDoc(db, url) {
+    return new Promise(function (resolve) {
+      try {
+        if (!db.objectStoreNames.contains("docs")) { resolve(); return; }
+        var tx = db.transaction("docs", "readwrite");
+        tx.objectStore("docs").delete(url);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { resolve(); };
+      } catch (err) { resolve(); }
+    });
+  }
+
+  function clearDocs(db, category) {
+    return listDocs(db).then(function (docs) {
+      return new Promise(function (resolve) {
+        try {
+          if (!db.objectStoreNames.contains("docs")) { resolve(); return; }
+          var tx = db.transaction(["docs", "actions"], "readwrite");
+          var store = tx.objectStore("docs");
+          if (category === "all") {
+            store.clear();
+            try { tx.objectStore("actions").clear(); } catch (err) { /* the queue store may be missing */ }
+          } else {
+            (docs || []).forEach(function (doc) {
+              if (doc && doc.category === category) store.delete(docKey(doc.category, doc.id));
+            });
+          }
+          tx.oncomplete = function () { resolve(); };
+          tx.onerror = function () { resolve(); };
+        } catch (err) { resolve(); }
+      });
+    });
+  }
+
+  function mergeDocRows(rows, docs) {
+    var seen = {};
+    (rows || []).forEach(function (row) { if (row && row.url) seen[row.url] = true; });
+    (docs || []).forEach(function (doc) {
+      if (!doc || !doc.category || doc.id == null) return;
+      var url = docKey(doc.category, doc.id);
+      if (seen[url]) return;
+      rows.push({
+        url: url,
+        bytes: doc.bytes || 0,
+        category: ORDER.indexOf(doc.category) >= 0 ? doc.category : "other",
+        cacheName: "idb-docs",
+        at: doc.at || Date.now(),
+        saved: doc.saved || doc.at || Date.now()
+      });
+    });
+    return rows;
   }
 
   function currentPolicy() {
@@ -408,7 +557,15 @@
     if (cat === "live") return tr("Live recordings");
     if (cat === "music") return tr("Music");
     if (cat === "feeds") return tr("Feeds and posts");
+    if (cat === "profiles") return tr("Profiles");
+    if (cat === "threads") return tr("Post threads");
+    if (cat === "search") return tr("Recent searches");
+    if (cat === "explore") return tr("Trends and explore");
+    if (cat === "notifications") return tr("Notifications");
+    if (cat === "shorts") return tr("Shorts");
+    if (cat === "lives") return tr("Past lives");
     if (cat === "messages") return tr("Messages");
+    if (cat === "drafts") return tr("Drafts");
     return tr("Other");
   }
 
@@ -431,7 +588,9 @@
       return listFiles(db).then(function (prev) {
         var known = {};
         prev.forEach(function (row) { if (row && row.url) known[row.url] = row; });
-        if (typeof caches === "undefined") return { db: db, rows: prev };
+        if (typeof caches === "undefined") {
+          return listDocs(db).then(function (docs) { return { db: db, rows: mergeDocRows(prev.slice(), docs) }; });
+        }
         return caches.keys().then(function (names) {
           var rows = [];
           var chain = Promise.resolve();
@@ -462,7 +621,9 @@
               return inner;
             });
           });
-          return chain.then(function () { return { db: db, rows: rows }; });
+          return chain.then(function () {
+            return listDocs(db).then(function (docs) { return { db: db, rows: mergeDocRows(rows, docs) }; });
+          });
         });
       }).then(function (measured) {
         return replaceFiles(measured.db, measured.rows).then(function () {
@@ -537,7 +698,10 @@
       "</div><h2>" + esc(tr("Maximum cache size")) + "</h2>" +
       '<p class="phandle" id="stor-max-label">' + esc(stepLabel(index)) + "</p>" +
       '<input class="stor-slider" id="stor-max" type="range" min="0" max="' + MAX_STEPS.length + '" step="1" value="' + index + '" aria-label="' + esc(tr("Maximum cache size")) + '" aria-valuetext="' + esc(stepLabel(index)) + '">' +
-      '<button class="outline danger" type="button" data-stor="clear-all">' + esc(tr("Clear cache")) + "</button></div>";
+      '<button class="outline danger" type="button" data-stor="clear-all">' + esc(tr("Clear cache")) + "</button>" +
+      "<h2>" + esc(tr("Prefetch media")) + "</h2>" +
+      '<p class="phandle">' + esc(tr("Prefetch the next posts when the connection is fast.")) + "</p>" +
+      '<button class="outline' + (saved.prefetch === false ? "" : " on") + '" type="button" data-stor="prefetch">' + esc(tr("Prefetch media")) + "</button></div>";
   }
 
   function dataHtml() {
@@ -553,7 +717,12 @@
     var free = snap && snap.quota > snap.usage ? snap.quota - snap.usage : 0;
     var freeLine = snap && snap.quota ? tr("{size} free", { size: formatBytes(free) }) : (measuring ? tr("Measuring storage…") : tr("Free on this device"));
     var persistLine = snap && snap.persisted ? tr("Kept on this device") : tr("This browser can clear saved media when space is low.");
-    var stats = snap && snap.stats || { hits: 0, network: 0 };
+    var stats = snap && snap.stats || { hits: 0, network: 0, savedBytes: 0, savedRequests: 0, direct: 0, server: 0 };
+    if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.counts) {
+      var live = window.ViktorychDirect.counts();
+      stats.direct = Math.max(stats.direct || 0, Number(live.direct) || 0);
+      stats.server = Math.max(stats.server || 0, Number(live.server) || 0);
+    }
     var list = ORDER.map(function (cat) {
       var bytes = summed.by[cat] || 0;
       var width = summed.total ? Math.max(2, Math.round(bytes / summed.total * 100)) : 0;
@@ -563,7 +732,7 @@
     return '<div class="stor-hero"><div class="stor-donut" style="' + donutStyle(summed.by, summed.total) + '" role="img" aria-label="' + esc(tr("{size} used", { size: formatBytes(summed.total) })) + '"><div class="stor-hole"><b>' + esc(formatBytes(summed.total)) + "</b><span>" + esc(tr("Storage usage")) + "</span></div></div>" +
       '<p class="stor-free">' + esc(freeLine) + "</p><p class=\"phandle\">" + esc(persistLine) + "</p></div>" +
       '<div class="stor-list">' + list + "</div>" + controlsHtml() +
-      '<p class="stor-debug">' + esc(tr("Cache hits {count}", { count: String(stats.hits) })) + " · " + esc(tr("Network requests {count}", { count: String(stats.network) })) + "</p>";
+      '<p class="stor-debug">' + esc(tr("Cache hits {count}", { count: String(stats.hits) })) + " · " + esc(tr("Network requests {count}", { count: String(stats.network) })) + " · " + esc(tr("Hit rate {percent}", { percent: hitRate(stats) + "%" })) + " · " + esc(tr("Saved {size}", { size: formatBytes(stats.savedBytes || 0) })) + " · " + esc(tr("Saved requests {count}", { count: String(stats.savedRequests || 0) })) + " · " + esc(tr("Direct {count}", { count: String(stats.direct || 0) })) + " · " + esc(tr("Server {count}", { count: String(stats.server || 0) })) + "</p>";
   }
 
   function clearStored(category) {
@@ -589,10 +758,12 @@
         return chain;
       }).then(function () {
         return openDb().then(function (db) {
-          if (category === "all") return replaceFiles(db, []);
-          return listFiles(db).then(function (rows) {
-            return replaceFiles(db, rows.filter(function (row) { return row.category !== category; }));
-          });
+          var files = category === "all"
+            ? replaceFiles(db, [])
+            : listFiles(db).then(function (rows) {
+              return replaceFiles(db, rows.filter(function (row) { return row.category !== category && !(category === "all"); }));
+            });
+          return files.then(function () { return clearDocs(db, category); });
         });
       }).then(function () {
         snap = null;
@@ -610,6 +781,13 @@
     event.preventDefault();
     event.stopPropagation();
     var kind = el.getAttribute("data-stor");
+    if (kind === "prefetch") {
+      var toggled = currentPolicy();
+      toggled.prefetch = toggled.prefetch === false;
+      saveLocal(toggled);
+      requestRender();
+      return;
+    }
     if (kind === "keep") {
       var next = currentPolicy();
       next.keep = el.getAttribute("data-keep") || "week";
@@ -698,6 +876,12 @@
     touch: touch,
     bump: bump,
     readStats: readStats,
+    hitRate: hitRate,
+    docKey: docKey,
+    putDoc: putDoc,
+    listDocs: listDocs,
+    deleteDoc: deleteDoc,
+    clearDocs: clearDocs,
     dataHtml: dataHtml,
     usageHtml: usageHtml,
     start: start

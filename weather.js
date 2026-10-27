@@ -981,6 +981,7 @@
     if (typeof document === "undefined") return;
     /* The row is rebuilt below, so remember where the user scrolled to and
        paint it back, otherwise the pills jump to the start on every update. */
+    if (typeof window !== "undefined" && window.ViktorychHScroll && window.ViktorychHScroll.remember) window.ViktorychHScroll.remember();
     var prevRow = document.querySelector(".sp-row");
     var prevLeft = prevRow ? prevRow.scrollLeft : 0;
     var rowWrap = document.querySelector(".sp-row-wrap");

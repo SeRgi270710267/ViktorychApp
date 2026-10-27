@@ -3,17 +3,18 @@
    resumes anything left behind. After the job is done, the only lasting
    public record is a salted hash of the account id.
 
-   Tables audited against migrations 0001–0018 and the runtime schema:
-   accounts, sessions, sync_state (notification tabs, feed settings, groups,
-   drafts, likes, bookmarks, resume and history), rate_limits,
-   account_reposts, account_follows (both directions), drive_vault,
-   drive_items, drive_chunks, community_posts, community_likes,
-   community_members, community_notes, account_friend_requests,
-   account_friends, account_federation, ap_followers, account_identities,
-   identity_challenges, vault_configs, vault_items, vault_shares, owner_keys,
-   owner_key_items, owner_key_pace, account_reauths, account_presence,
-   account_status, channel_tickets. The account channel object is wiped
-   in the same database step. telegram_files is a
+   Tables audited against migrations 0001–0019 and the runtime schema:
+   accounts, sessions, sync_state (feed settings, groups, drafts, likes,
+   bookmarks, resume and history), rate_limits, account_reposts,
+   account_follows (both directions), drive_vault, drive_items, drive_chunks,
+   community_posts, community_likes, community_members, community_notes,
+   account_friend_requests, account_friends, account_federation, ap_followers,
+   account_identities, identity_challenges, vault_configs, vault_items,
+   vault_shares, owner_keys, owner_key_items, owner_key_pace, account_reauths,
+   account_presence, account_status, channel_tickets, notifications,
+   notification_state, notification_bells, push_subscriptions, push_log.
+   push_vapid is the one global key and has no account column. The account
+   channel object is wiped in the same database step. telegram_files is a
    shared media index with no account column, so it is left alone. There is
    no invites table. */
 

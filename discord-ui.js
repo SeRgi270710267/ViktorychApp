@@ -1628,6 +1628,7 @@
     state.channels.forEach(function (ch) { kept[ch.id] = !!ch.inaccessible; });
     if (!adoptServers(servers)) return;
     state.channels.forEach(function (ch) { if (kept[ch.id]) ch.inaccessible = true; });
+    rememberMessages();
   }
 
   function applyIndex(index) {
@@ -1729,19 +1730,30 @@
   function fetchDoc(path, etag) {
     const headers = { Accept: "application/json" };
     if (etag) headers["If-None-Match"] = etag;
-    const same = function () {
-      return fetch(path, { cache: "no-cache", headers: headers });
-    };
     const api = accountsBase();
     const token = accountsToken();
-    if (!api || !token) return same();
-    return fetch(api + "/v1/data/" + path, {
-      cache: "no-store",
-      headers: Object.assign({ Authorization: "Bearer " + token }, headers)
-    }).then(function (res) {
+    const workerUrl = api && token ? api + "/v1/data/" + path : "";
+    const same = function () {
+      if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.fetch) {
+        return window.ViktorychDirect.fetch(path, "", { headers: headers });
+      }
+      return fetch(path, { cache: "no-cache", headers: headers });
+    };
+    const worker = function () {
+      if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.noteServer) window.ViktorychDirect.noteServer();
+      return fetch(workerUrl, {
+        cache: "no-store",
+        headers: Object.assign({ Authorization: "Bearer " + token }, headers)
+      });
+    };
+    return same().then(function (res) {
       if (res && (res.status === 200 || res.status === 304)) return res;
-      return same();
-    }, function () { return same(); });
+      if (!workerUrl) return res;
+      if (res && res.status && res.status < 500 && res.status !== 404) return res;
+      return worker();
+    }, function () {
+      return workerUrl ? worker() : Promise.reject(new Error("network"));
+    });
   }
 
   function loadDoc(path, onBody) {
@@ -1817,6 +1829,7 @@
     messages.sort(function (a, b) { return cmpId(b.id, a.id); });
     state.files[id] = { messages: messages.slice(0, WINDOW), authors: authors, older: !!doc.older };
     state.olderNext[id] = doc.older ? (state.olderNext[id] || 1) : 0;
+    rememberMessages();
   }
 
   function mergeOlder(id, doc) {
@@ -1834,6 +1847,7 @@
     const messages = Array.from(bucket.values());
     messages.sort(function (a, b) { return cmpId(b.id, a.id); });
     state.files[id] = { messages: messages.slice(0, WINDOW), authors: authors, older: true };
+    rememberMessages();
   }
 
   function paintChannel(id) {
@@ -2290,6 +2304,21 @@
 
   function bind(next) { state.bound = next || null; }
 
+  function rememberMessages() {
+    const local = root.ViktorychLocal;
+    if (!local || !local.saveDoc) return;
+    const channels = (state.channels || []).filter(function (ch) { return ch && ch.mode === "messages"; }).slice(0, 40).map(function (ch) {
+      return { id: ch.id, name: ch.name || "", mode: "messages" };
+    });
+    local.saveDoc("messages", "channels", { channels: channels });
+    channels.forEach(function (ch) {
+      const rows = messagesFor(ch.id).slice(0, 30).map(function (row) {
+        return { id: row.id, text: row.body || "", name: row.name || "", date: row.date || "" };
+      });
+      if (rows.length) local.saveDoc("messages", "channel:" + ch.id, { id: ch.id, messages: rows });
+    });
+  }
+
   root.FeedsDiscord = {
     bind: bind,
     start: start,
@@ -2309,6 +2338,7 @@
     _openMenu: function (id, durations) { state.menu = { id: String(id || ""), durations: !!durations, x: 24, y: 72 }; },
     _openPins: function (id) { state.pinsOpen = String(id || ""); state.menu = null; },
     syncFromHash: syncFromHash,
-    _deliver: deliver
+    _deliver: deliver,
+    snapshot: rememberMessages
   };
 })(typeof window !== "undefined" ? window : globalThis);
