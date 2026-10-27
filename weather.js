@@ -28,7 +28,9 @@
       .replace(/"/g, "&quot;");
   }
 
-  var STORAGE_PLACES = "viktorychapp-weather-places-v2";
+  var STORAGE_PLACES = "viktorychapp-weather-places-v3";
+  var STORAGE_OBS = "viktorychapp-weather-obs-v1";
+  var STORAGE_HOME = "viktorychapp-weather-home-v1";
   var STORAGE_PREFS = "viktorychapp-pills-prefs-v2";
 
   /* Weather SVG Icons */
@@ -58,134 +60,12 @@
     return { name: tr("Partly Cloudy"), icon: "partly-cloudy", css: "wx-partly-cloudy" };
   }
 
-  /* Default Places Data */
+  /* Saved places are cities the user chose. Temperatures are not stored here. */
   function getDefaultPlaces() {
-    return [
-      {
-        id: "tula",
-        name: "Tula",
-        country: "Russia",
-        lat: 54.1961,
-        lon: 37.6182,
-        temp: 14,
-        tempMin: 8,
-        tempMax: 17,
-        code: 2,
-        humidity: 68,
-        wind: 12,
-        precipitation: 10,
-        uv: 3,
-        hourly: [
-          { hour: "12:00", temp: 15, code: 1 },
-          { hour: "14:00", temp: 17, code: 2 },
-          { hour: "16:00", temp: 16, code: 2 },
-          { hour: "18:00", temp: 14, code: 3 },
-          { hour: "20:00", temp: 12, code: 3 },
-          { hour: "22:00", temp: 10, code: 2 }
-        ],
-        daily: [
-          { dayKey: "today", dayLabel: tr("Today"), min: 8, max: 17, code: 2 },
-          { dayKey: "tomorrow", dayLabel: tr("Tomorrow"), min: 9, max: 18, code: 1 },
-          { dayKey: "tue", dayLabel: tr("Tue"), min: 7, max: 15, code: 3 },
-          { dayKey: "wed", dayLabel: tr("Wed"), min: 6, max: 14, code: 61 },
-          { dayKey: "thu", dayLabel: tr("Thu"), min: 8, max: 16, code: 2 }
-        ]
-      },
-      {
-        id: "barcelona",
-        name: "Barcelona",
-        country: "Spain",
-        lat: 41.3888,
-        lon: 2.159,
-        temp: 21,
-        tempMin: 15,
-        tempMax: 23,
-        code: 0,
-        humidity: 58,
-        wind: 15,
-        precipitation: 0,
-        uv: 5,
-        hourly: [
-          { hour: "12:00", temp: 20, code: 0 },
-          { hour: "14:00", temp: 23, code: 0 },
-          { hour: "16:00", temp: 22, code: 0 },
-          { hour: "18:00", temp: 21, code: 1 },
-          { hour: "20:00", temp: 19, code: 1 },
-          { hour: "22:00", temp: 17, code: 0 }
-        ],
-        daily: [
-          { dayKey: "today", dayLabel: tr("Today"), min: 15, max: 23, code: 0 },
-          { dayKey: "tomorrow", dayLabel: tr("Tomorrow"), min: 16, max: 24, code: 0 },
-          { dayKey: "tue", dayLabel: tr("Tue"), min: 15, max: 22, code: 1 },
-          { dayKey: "wed", dayLabel: tr("Wed"), min: 14, max: 21, code: 2 },
-          { dayKey: "thu", dayLabel: tr("Thu"), min: 16, max: 23, code: 0 }
-        ]
-      },
-      {
-        id: "london",
-        name: "London",
-        country: "United Kingdom",
-        lat: 51.5074,
-        lon: -0.1278,
-        temp: 16,
-        tempMin: 11,
-        tempMax: 18,
-        code: 51,
-        humidity: 78,
-        wind: 18,
-        precipitation: 40,
-        uv: 2,
-        hourly: [
-          { hour: "12:00", temp: 16, code: 51 },
-          { hour: "14:00", temp: 18, code: 3 },
-          { hour: "16:00", temp: 17, code: 61 },
-          { hour: "18:00", temp: 15, code: 3 },
-          { hour: "20:00", temp: 14, code: 2 },
-          { hour: "22:00", temp: 12, code: 2 }
-        ],
-        daily: [
-          { dayKey: "today", dayLabel: tr("Today"), min: 11, max: 18, code: 51 },
-          { dayKey: "tomorrow", dayLabel: tr("Tomorrow"), min: 10, max: 17, code: 61 },
-          { dayKey: "tue", dayLabel: tr("Tue"), min: 9, max: 16, code: 3 },
-          { dayKey: "wed", dayLabel: tr("Wed"), min: 11, max: 18, code: 2 },
-          { dayKey: "thu", dayLabel: tr("Thu"), min: 10, max: 17, code: 1 }
-        ]
-      },
-      {
-        id: "new-york",
-        name: "New York",
-        country: "United States",
-        lat: 40.7128,
-        lon: -74.0060,
-        temp: 18,
-        tempMin: 12,
-        tempMax: 20,
-        code: 0,
-        humidity: 50,
-        wind: 14,
-        precipitation: 5,
-        uv: 4,
-        hourly: [
-          { hour: "12:00", temp: 18, code: 0 },
-          { hour: "14:00", temp: 20, code: 0 },
-          { hour: "16:00", temp: 19, code: 1 },
-          { hour: "18:00", temp: 17, code: 1 },
-          { hour: "20:00", temp: 15, code: 0 },
-          { hour: "22:00", temp: 13, code: 0 }
-        ],
-        daily: [
-          { dayKey: "today", dayLabel: tr("Today"), min: 12, max: 20, code: 0 },
-          { dayKey: "tomorrow", dayLabel: tr("Tomorrow"), min: 13, max: 21, code: 1 },
-          { dayKey: "tue", dayLabel: tr("Tue"), min: 14, max: 22, code: 2 },
-          { dayKey: "wed", dayLabel: tr("Wed"), min: 11, max: 19, code: 3 },
-          { dayKey: "thu", dayLabel: tr("Thu"), min: 12, max: 20, code: 0 }
-        ]
-      }
-    ];
+    return [];
   }
 
   var DEFAULT_PINNED = [
-    "weather:tula",
     "soccer:arsenal-tula",
     "soccer:fc-barcelona",
     "space:superintelmusic"
@@ -193,34 +73,97 @@
 
   /* State Management */
   var placesState = null;
+  var obsState = null;
+  var homeState = null;
   var prefsState = null;
   var activeWeatherModalId = null;
   var manageModalOpen = false;
+  var weatherTimer = null;
+  var weatherFetching = false;
 
-  function loadPlaces() {
-    if (placesState) return placesState;
-    if (typeof localStorage !== "undefined") {
-      try {
-        var raw = localStorage.getItem(STORAGE_PLACES);
-        if (raw) {
-          var parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length) {
-            placesState = parsed;
-            return placesState;
-          }
-        }
-      } catch (err) {}
+  function pillApi() {
+    return root.PillData || (typeof globalThis !== "undefined" ? globalThis.PillData : null);
+  }
+
+  function readJson(key) {
+    if (typeof localStorage === "undefined") return null;
+    try {
+      var raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      return null;
     }
-    placesState = getDefaultPlaces();
-    savePlaces();
+  }
+
+  function writeJson(key, value) {
+    if (typeof localStorage === "undefined") return;
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (err) {}
+  }
+
+  function identities() {
+    if (placesState) return placesState;
+    var parsed = readJson(STORAGE_PLACES);
+    placesState = Array.isArray(parsed) ? parsed.filter(function (place) {
+      return place && place.explicit && place.lat != null && place.lon != null;
+    }) : [];
     return placesState;
   }
 
+  function saveIdentities() {
+    writeJson(STORAGE_PLACES, identities());
+  }
+
+  function loadObs() {
+    if (obsState) return obsState;
+    var parsed = readJson(STORAGE_OBS);
+    obsState = parsed && typeof parsed === "object" ? parsed : {};
+    return obsState;
+  }
+
+  function saveObsMap() {
+    writeJson(STORAGE_OBS, loadObs());
+  }
+
+  function loadHome() {
+    if (homeState) return homeState;
+    var parsed = readJson(STORAGE_HOME);
+    homeState = parsed && typeof parsed === "object" ? parsed : { setting: null };
+    if (!homeState.setting) homeState.setting = null;
+    return homeState;
+  }
+
+  function saveHome() {
+    writeJson(STORAGE_HOME, loadHome());
+  }
+
+  function freshPlace(identity, now) {
+    var api = pillApi();
+    if (!api || !identity) return null;
+    var obs = loadObs()[identity.id];
+    if (!obs) return null;
+    var record = {
+      kind: "weather",
+      id: identity.id,
+      updatedAt: obs.updatedAt
+    };
+    if (api.presentRecord(record, now) == null) return null;
+    var place = {};
+    Object.keys(identity).forEach(function (key) { place[key] = identity[key]; });
+    Object.keys(obs).forEach(function (key) { place[key] = obs[key]; });
+    place.fresh = true;
+    return place;
+  }
+
+  function loadPlaces() {
+    var now = Date.now();
+    var home = resolvedHome();
+    var list = identities().slice();
+    if (home && !list.some(function (place) { return place.id === home.id; })) list.unshift(home);
+    return list.map(function (place) { return freshPlace(place, now); }).filter(Boolean);
+  }
+
   function savePlaces() {
-    if (!placesState || typeof localStorage === "undefined") return;
-    try {
-      localStorage.setItem(STORAGE_PLACES, JSON.stringify(placesState));
-    } catch (err) {}
+    saveIdentities();
   }
 
   function getPlace(placeId) {
@@ -229,6 +172,35 @@
       if (list[i].id === placeId) return list[i];
     }
     return null;
+  }
+
+  function rememberPlace(identity, obs) {
+    var list = identities();
+    var next = {
+      id: identity.id,
+      name: identity.name,
+      country: identity.country || "",
+      lat: identity.lat,
+      lon: identity.lon,
+      explicit: true
+    };
+    var replaced = false;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === next.id) {
+        list[i] = next;
+        replaced = true;
+      }
+    }
+    if (!replaced) list.push(next);
+    placesState = list;
+    saveIdentities();
+    if (obs) {
+      var map = loadObs();
+      map[next.id] = obs;
+      obsState = map;
+      saveObsMap();
+    }
+    return freshPlace(next, Date.now());
   }
 
   function loadPrefs() {
@@ -414,185 +386,248 @@
     notify(tr("Reset to default"));
   }
 
-  /* Add Custom Place */
+  var weatherGeo = null;
+
+  function resolvedHome() {
+    var api = pillApi();
+    if (!api || identities().length) return null;
+    var geo = weatherGeo && weatherGeo.granted ? {
+      id: "here",
+      name: tr("Current location"),
+      country: "",
+      lat: weatherGeo.lat,
+      lon: weatherGeo.lon
+    } : null;
+    var setting = loadHome().setting;
+    return api.resolveLocation({
+      chosen: null,
+      geoGranted: !!(weatherGeo && weatherGeo.granted),
+      geo: geo,
+      setting: setting
+    });
+  }
+
+  function viewObs(parsed) {
+    var api = pillApi();
+    var zone = parsed.timezone || (api ? api.viewerZone() : "UTC");
+    var today = api ? api.civilDay(Date.now(), zone) : "";
+    var daily = (parsed.daily || []).map(function (day) {
+      return {
+        date: day.date,
+        dayLabel: day.date === today ? tr("Today") : (day.date || ""),
+        min: day.min,
+        max: day.max,
+        code: day.code
+      };
+    });
+    var first = daily[0] || {};
+    return {
+      kind: "weather",
+      source: parsed.source,
+      updatedAt: parsed.updatedAt,
+      timezone: zone,
+      temp: parsed.temp,
+      code: parsed.code,
+      humidity: parsed.humidity,
+      wind: parsed.wind,
+      feels: parsed.feels,
+      precipChance: parsed.precipChance,
+      precipMm: parsed.precipMm,
+      uv: parsed.uv,
+      tempMin: first.min == null ? parsed.temp : first.min,
+      tempMax: first.max == null ? parsed.temp : first.max,
+      hourly: parsed.hourly || [],
+      daily: daily
+    };
+  }
+
+  function fetchJson(url) {
+    return fetch(url, { method: "GET", credentials: "omit", cache: "no-store", redirect: "follow" }).then(function (res) {
+      if (!res.ok) throw new Error("status");
+      return res.json();
+    });
+  }
+
+  function acceptWeather(json) {
+    var api = pillApi();
+    if (!api || !json) return null;
+    var fetched = Number(json.fetchedAt) || Date.now();
+    var body = json.payload && typeof json.payload === "object" ? json.payload : json;
+    var parsed = api.parseOpenMeteo(body, fetched) || api.parseMetNo(body, fetched, api.viewerZone());
+    if (!parsed) return null;
+    parsed.updatedAt = fetched;
+    var view = viewObs(parsed);
+    if (api.flagStale(view, Date.now()).stale) return null;
+    return view;
+  }
+
+  function fetchObservation(place) {
+    var api = pillApi();
+    if (!api || typeof fetch !== "function" || !place) return Promise.resolve(null);
+    var direct = api.openMeteoUrl(place.lat, place.lon);
+    return fetchJson(direct).then(function (json) {
+      var obs = acceptWeather(json);
+      if (!obs) throw new Error("bad");
+      return obs;
+    }).catch(function () {
+      var base = api.apiBase(root);
+      if (!base) return null;
+      return fetchJson(base + "/v1/pills/weather?lat=" + encodeURIComponent(place.lat) + "&lon=" + encodeURIComponent(place.lon)).then(function (json) {
+        return acceptWeather(json);
+      }).catch(function () { return null; });
+    });
+  }
+
+  function geocodeName(name) {
+    var api = pillApi();
+    if (!api || typeof fetch !== "function") return Promise.resolve(null);
+    return fetchJson(api.geocodeUrl(name)).then(function (data) {
+      var row = data && data.results && data.results[0];
+      if (!row || row.latitude == null) throw new Error("empty");
+      return { name: row.name, country: row.country || "", lat: row.latitude, lon: row.longitude };
+    }).catch(function () {
+      var base = api.apiBase(root);
+      if (!base) return null;
+      return fetchJson(base + "/v1/pills/geocode?name=" + encodeURIComponent(name)).then(function (data) {
+        var row = data && data.results && data.results[0];
+        if (!row || row.lat == null) return null;
+        return { name: row.name, country: row.country || "", lat: Number(row.lat), lon: Number(row.lon) };
+      }).catch(function () { return null; });
+    });
+  }
+
+  function storeObs(id, obs) {
+    var map = loadObs();
+    map[id] = obs;
+    obsState = map;
+    saveObsMap();
+  }
+
+  /* Add a city the user named. A failed lookup does not invent a temperature. */
   function addPlace(cityName, cb) {
     var name = String(cityName || "").trim();
     if (!name) {
       notify(tr("Enter a city name"));
       return;
     }
-
     var id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     if (!id) id = "place-" + Date.now();
-
     var existing = getPlace(id);
     if (existing) {
       if (!isPinned("weather:" + id)) togglePin("weather:" + id);
       openWeatherModal(id);
+      if (cb) cb(existing);
+      return existing;
+    }
+    return geocodeName(name).then(function (hit) {
+      if (!hit) {
+        notify(tr("Weather is unavailable"));
+        if (cb) cb(null);
+        return null;
+      }
+      var identity = { id: id, name: hit.name || name, country: hit.country || "", lat: hit.lat, lon: hit.lon, explicit: true };
+      return fetchObservation(identity).then(function (obs) {
+        if (!obs) {
+          notify(tr("Weather is unavailable"));
+          if (cb) cb(null);
+          return;
+        }
+        var place = rememberPlace(identity, obs);
+        var prefs = loadPrefs();
+        var pillId = "weather:" + identity.id;
+        if (prefs.pinnedIds.indexOf(pillId) === -1) prefs.pinnedIds.unshift(pillId);
+        if (prefs.customOrder.indexOf(pillId) === -1) prefs.customOrder.unshift(pillId);
+        savePrefs(prefs);
+        refreshUI();
+        notify(tr("Place added") + ": " + identity.name);
+        if (cb) cb(place);
+      });
+    });
+  }
+
+  function setFallbackCity(cityName) {
+    var name = String(cityName || "").trim();
+    if (!name) {
+      notify(tr("Enter a city name"));
+      return Promise.resolve(null);
+    }
+    return geocodeName(name).then(function (hit) {
+      if (!hit) {
+        notify(tr("Weather is unavailable"));
+        return null;
+      }
+      var setting = { id: "fallback", name: hit.name || name, country: hit.country || "", lat: hit.lat, lon: hit.lon };
+      loadHome().setting = setting;
+      saveHome();
+      return fetchObservation(setting).then(function (obs) {
+        if (!obs) {
+          notify(tr("Weather is unavailable"));
+          return;
+        }
+        storeObs(setting.id, obs);
+        refreshUI();
+        notify(tr("Place added") + ": " + setting.name);
+      });
+    });
+  }
+
+  function useMyLocation() {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      notify(tr("Location is off"));
       return;
     }
-
-    var hasFetch = typeof window !== "undefined" && typeof window.fetch === "function";
-    if (hasFetch && typeof navigator !== "undefined" && navigator.onLine) {
-      var geoUrl = "https://geocoding-api.open-meteo.com/v1/search?name=" + encodeURIComponent(name) + "&count=1&language=en&format=json";
-      window.fetch(geoUrl)
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (data && data.results && data.results.length) {
-            var r = data.results[0];
-            fetchForecast(r.latitude, r.longitude, r.name, r.country || "", id, cb);
-          } else {
-            fallbackAddPlace(name, id, cb);
-          }
-        })
-        .catch(function () {
-          fallbackAddPlace(name, id, cb);
-        });
-    } else {
-      fallbackAddPlace(name, id, cb);
-    }
-  }
-
-  function fetchForecast(lat, lon, name, country, id, cb) {
-    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + lat + "&longitude=" + lon + "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max&timezone=auto";
-    window.fetch(url)
-      .then(function (res) { return res.json(); })
-      .then(function (res) {
-        var cur = res.current || {};
-        var daily = res.daily || {};
-        var temp = Math.round(cur.temperature_2m || 15);
-        var min = (daily.temperature_2m_min && daily.temperature_2m_min[0]) ? Math.round(daily.temperature_2m_min[0]) : temp - 5;
-        var max = (daily.temperature_2m_max && daily.temperature_2m_max[0]) ? Math.round(daily.temperature_2m_max[0]) : temp + 4;
-        var code = cur.weather_code || 0;
-
-        var dailyItems = [];
-        var days = [tr("Today"), tr("Tomorrow"), tr("Tue"), tr("Wed"), tr("Thu")];
-        for (var i = 0; i < Math.min(5, (daily.time || []).length); i++) {
-          dailyItems.push({
-            dayLabel: days[i] || tr("Today"),
-            min: Math.round(daily.temperature_2m_min[i] || min),
-            max: Math.round(daily.temperature_2m_max[i] || max),
-            code: daily.weather_code ? daily.weather_code[i] : code
-          });
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      weatherGeo = { granted: true, lat: pos.coords.latitude, lon: pos.coords.longitude };
+      var identity = {
+        id: "here",
+        name: tr("Current location"),
+        country: "",
+        lat: weatherGeo.lat,
+        lon: weatherGeo.lon,
+        explicit: true
+      };
+      fetchObservation(identity).then(function (obs) {
+        if (!obs) {
+          notify(tr("Weather is unavailable"));
+          return;
         }
-
-        var newPlace = {
-          id: id,
-          name: name,
-          country: country,
-          lat: lat,
-          lon: lon,
-          temp: temp,
-          tempMin: min,
-          tempMax: max,
-          code: code,
-          humidity: cur.relative_humidity_2m || 60,
-          wind: Math.round(cur.wind_speed_10m || 10),
-          precipitation: Math.round(cur.precipitation || 0),
-          uv: (daily.uv_index_max && daily.uv_index_max[0]) ? Math.round(daily.uv_index_max[0]) : 4,
-          hourly: [
-            { hour: "12:00", temp: temp, code: code },
-            { hour: "15:00", temp: max, code: code },
-            { hour: "18:00", temp: temp - 1, code: code },
-            { hour: "21:00", temp: min + 2, code: code }
-          ],
-          daily: dailyItems.length ? dailyItems : [
-            { dayLabel: tr("Today"), min: min, max: max, code: code },
-            { dayLabel: tr("Tomorrow"), min: min + 1, max: max + 1, code: code }
-          ]
-        };
-
-        saveNewPlace(newPlace);
-        if (cb) cb(newPlace);
-      })
-      .catch(function () {
-        fallbackAddPlace(name, id, cb);
+        rememberPlace(identity, obs);
+        refreshUI();
       });
-  }
-
-  function fallbackAddPlace(name, id, cb) {
-    var hash = 0;
-    for (var i = 0; i < name.length; i++) hash = ((hash << 5) - hash) + name.charCodeAt(i);
-    var baseTemp = 12 + Math.abs(hash % 16);
-    var codes = [0, 1, 2, 3, 51, 61];
-    var code = codes[Math.abs(hash) % codes.length];
-
-    var newPlace = {
-      id: id,
-      name: name,
-      country: "",
-      lat: 0,
-      lon: 0,
-      temp: baseTemp,
-      tempMin: baseTemp - 5,
-      tempMax: baseTemp + 4,
-      code: code,
-      humidity: 55 + Math.abs(hash % 35),
-      wind: 8 + Math.abs(hash % 15),
-      precipitation: (code >= 51) ? 35 : 0,
-      uv: 3 + Math.abs(hash % 5),
-      hourly: [
-        { hour: "12:00", temp: baseTemp, code: code },
-        { hour: "15:00", temp: baseTemp + 3, code: code },
-        { hour: "18:00", temp: baseTemp + 1, code: code },
-        { hour: "21:00", temp: baseTemp - 2, code: code }
-      ],
-      daily: [
-        { dayLabel: tr("Today"), min: baseTemp - 5, max: baseTemp + 4, code: code },
-        { dayLabel: tr("Tomorrow"), min: baseTemp - 4, max: baseTemp + 5, code: code },
-        { dayLabel: tr("Tue"), min: baseTemp - 6, max: baseTemp + 3, code: code },
-        { dayLabel: tr("Wed"), min: baseTemp - 5, max: baseTemp + 2, code: code },
-        { dayLabel: tr("Thu"), min: baseTemp - 4, max: baseTemp + 4, code: code }
-      ]
-    };
-
-    saveNewPlace(newPlace);
-    if (cb) cb(newPlace);
-  }
-
-  function saveNewPlace(newPlace) {
-    var list = loadPlaces();
-    list.push(newPlace);
-    savePlaces();
-
-    var prefs = loadPrefs();
-    var pillId = "weather:" + newPlace.id;
-    if (prefs.pinnedIds.indexOf(pillId) === -1) {
-      prefs.pinnedIds.unshift(pillId);
-    }
-    if (prefs.customOrder.indexOf(pillId) === -1) {
-      prefs.customOrder.unshift(pillId);
-    }
-    savePrefs(prefs);
-
-    refreshUI();
-    notify(tr("Place added") + ": " + newPlace.name);
+    }, function () {
+      notify(tr("Location is off"));
+    }, { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 8000 });
   }
 
   function removePlace(placeId) {
-    var list = loadPlaces();
+    var list = identities();
     var idx = -1;
     for (var i = 0; i < list.length; i++) {
-      if (list[i].id === placeId) {
-        idx = i;
-        break;
-      }
+      if (list[i].id === placeId) { idx = i; break; }
     }
-    if (idx !== -1) {
-      var removed = list.splice(idx, 1)[0];
-      savePlaces();
-      var pillId = "weather:" + placeId;
-      var prefs = loadPrefs();
-      var pinIdx = prefs.pinnedIds.indexOf(pillId);
-      if (pinIdx !== -1) prefs.pinnedIds.splice(pinIdx, 1);
-      var ordIdx = prefs.customOrder.indexOf(pillId);
-      if (ordIdx !== -1) prefs.customOrder.splice(ordIdx, 1);
-      savePrefs(prefs);
-
-      if (activeWeatherModalId === placeId) closeWeatherModal();
-      refreshUI();
-      notify(tr("Place removed") + ": " + (removed ? removed.name : placeId));
+    if (idx === -1) return;
+    var removed = list.splice(idx, 1)[0];
+    placesState = list;
+    saveIdentities();
+    var map = loadObs();
+    delete map[placeId];
+    obsState = map;
+    saveObsMap();
+    var home = loadHome();
+    if (home.setting && home.setting.id === placeId) {
+      home.setting = null;
+      saveHome();
     }
+    var prefs = loadPrefs();
+    var pillId = "weather:" + placeId;
+    var pinIdx = prefs.pinnedIds.indexOf(pillId);
+    if (pinIdx !== -1) prefs.pinnedIds.splice(pinIdx, 1);
+    var ordIdx = prefs.customOrder.indexOf(pillId);
+    if (ordIdx !== -1) prefs.customOrder.splice(ordIdx, 1);
+    savePrefs(prefs);
+    if (activeWeatherModalId === placeId) closeWeatherModal();
+    refreshUI();
+    notify(tr("Place removed") + ": " + (removed ? removed.name : placeId));
   }
 
   /* HTML Generators */
@@ -600,21 +635,32 @@
     return WEATHER_ICONS[iconName] || WEATHER_ICONS["generic"];
   }
 
+  function ageText(updatedAt) {
+    var api = pillApi();
+    if (!api) return "";
+    var phrase = api.updatedPhrase(updatedAt, Date.now());
+    return tr(phrase.key, { count: phrase.count });
+  }
+
   function renderPill(place, unit, pinned) {
+    if (!place || place.temp == null || place.updatedAt == null) return "";
+    var api = pillApi();
+    if (!api || api.flagStale({ kind: "weather", updatedAt: place.updatedAt }, Date.now()).stale) return "";
     var cond = codeToCondition(place.code);
     var u = unit || getUnit();
     var tempStr = formatTemp(place.temp, u);
     var rangeStr = formatTemp(place.tempMax, u) + " / " + formatTemp(place.tempMin, u);
     var condLabel = cond.name;
-
+    var age = ageText(place.updatedAt);
     var pinBadge = pinned ? '<span class="pill-pin-mark" title="' + esc(tr("Pinned")) + '">📌</span>' : "";
 
-    return '<button class="sc-pill wx-pill ' + esc(cond.css) + ' wx-pill-' + esc(place.id) + '" type="button" data-wx-id="' + esc(place.id) + '" aria-label="' + esc(place.name) + " " + esc(tempStr) + " " + esc(condLabel) + '">'
+    return '<button class="sc-pill wx-pill ' + esc(cond.css) + ' wx-pill-' + esc(place.id) + '" type="button" data-wx-id="' + esc(place.id) + '" data-updated="' + esc(place.updatedAt) + '" aria-label="' + esc(place.name) + " " + esc(tempStr) + " " + esc(condLabel) + " " + esc(age) + '">'
       + '<span class="wx-icon-ring">' + getWeatherIcon(cond.icon) + '</span>'
       + '<span class="sc-pill-content">'
       + '<span class="sc-pill-top"><span class="sc-badge is-live wx-badge is-temp">' + esc(tempStr) + '</span><span class="sc-pill-title">' + esc(place.name) + '</span>' + pinBadge + '</span>'
       + '<span class="sc-pill-bottom"><span class="wx-cond">' + esc(condLabel) + '</span><span class="wx-range">' + esc(rangeStr) + '</span></span>'
       + '</span>'
+      + '<span class="pill-age">' + esc(age) + '</span>'
       + '<span class="sc-pill-arrow"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"/></svg></span>'
       + '</button>';
   }
@@ -627,7 +673,9 @@
       var id = "weather:" + place.id;
       if (isHidden(id)) return "";
       var pinned = isPinned(id);
-      return '<div class="sp-row-item" role="listitem">' + renderPill(place, u, pinned) + '</div>';
+      var html = renderPill(place, u, pinned);
+      if (!html) return "";
+      return '<div class="sp-row-item" role="listitem">' + html + '</div>';
     }).join("");
   }
 
@@ -664,11 +712,13 @@
         var pinned = isPinned(id);
         var renderFn = root.SoccerScores.renderPill || (root.SoccerScoresLogic && root.SoccerScoresLogic.renderPill);
         var rendered = renderFn ? renderFn(team) : "";
+        if (!rendered) return;
+        var live = team.match && (team.match.status === "live" || team.match.status === "halftime");
         pills.push({
           id: id,
           type: "soccer",
           title: team.nameKey,
-          badgeText: team.isLive ? tr("LIVE") : tr("Full Time"),
+          badgeText: live ? tr("LIVE") : (team.match && team.match.status === "scheduled" ? tr("Scheduled") : tr("Full Time")),
           isPinned: pinned,
           html: '<div class="sp-row-item" role="listitem">' + rendered + '</div>'
         });
@@ -726,6 +776,21 @@
 
   function homeRow() {
     return unifiedRowHtml();
+  }
+
+  function precipLabel(place) {
+    if (place && place.precipChance != null && place.precipChance !== "") return tr("Rain chance");
+    return tr("Precipitation");
+  }
+
+  function precipValue(place) {
+    if (!place) return "—";
+    if (place.precipChance != null && place.precipChance !== "") return Math.round(Number(place.precipChance)) + "%";
+    if (place.precipMm != null && place.precipMm !== "") {
+      var mm = Math.round(Number(place.precipMm) * 10) / 10;
+      return mm + " mm";
+    }
+    return "—";
   }
 
   /* Weather Details Modal HTML */
@@ -789,7 +854,7 @@
       + '</div>'
       + '</div>'
       + '<span class="wx-hero-cond">' + esc(cond.name) + '</span>'
-      + '<span class="wx-hero-sub">' + esc(tr("High")) + " " + esc(formatTemp(place.tempMax, u)) + " • " + esc(tr("Low")) + " " + esc(formatTemp(place.tempMin, u)) + " • " + esc(tr("Feels like")) + " " + esc(formatTemp(place.temp - 1, u)) + '</span>'
+      + '<span class="wx-hero-sub">' + esc(tr("High")) + " " + esc(formatTemp(place.tempMax, u)) + " • " + esc(tr("Low")) + " " + esc(formatTemp(place.tempMin, u)) + (place.feels == null ? "" : " • " + esc(tr("Feels like")) + " " + esc(formatTemp(place.feels, u))) + " • " + esc(ageText(place.updatedAt)) + '</span>'
       + '</div>'
       + '<div class="wx-toolbar">'
       + '<button class="wx-action-btn' + (pinned ? " is-pinned-on" : "") + '" type="button" data-wx-act="toggle-pin" data-id="' + esc(place.id) + '">'
@@ -803,10 +868,10 @@
       + '</button>'
       + '</div>'
       + '<div class="wx-stats-grid">'
-      + '<div class="wx-stat-card"><span class="wx-stat-label">💧 ' + esc(tr("Humidity")) + '</span><span class="wx-stat-val">' + esc(place.humidity) + '%</span></div>'
-      + '<div class="wx-stat-card"><span class="wx-stat-label">💨 ' + esc(tr("Wind")) + '</span><span class="wx-stat-val">' + esc(place.wind) + " km/h</span></div>"
-      + '<div class="wx-stat-card"><span class="wx-stat-label">☔ ' + esc(tr("Precipitation")) + '</span><span class="wx-stat-val">' + esc(place.precipitation) + '%</span></div>'
-      + '<div class="wx-stat-card"><span class="wx-stat-label">☀️ ' + esc(tr("UV Index")) + '</span><span class="wx-stat-val">' + esc(place.uv) + '</span></div>'
+      + '<div class="wx-stat-card"><span class="wx-stat-label">💧 ' + esc(tr("Humidity")) + '</span><span class="wx-stat-val">' + (place.humidity == null ? "—" : esc(place.humidity) + "%") + '</span></div>'
+      + '<div class="wx-stat-card"><span class="wx-stat-label">💨 ' + esc(tr("Wind")) + '</span><span class="wx-stat-val">' + (place.wind == null ? "—" : esc(Math.round(place.wind)) + " km/h") + '</span></div>'
+      + '<div class="wx-stat-card"><span class="wx-stat-label">☔ ' + esc(precipLabel(place)) + '</span><span class="wx-stat-val">' + esc(precipValue(place)) + '</span></div>'
+      + '<div class="wx-stat-card"><span class="wx-stat-label">☀️ ' + esc(tr("UV Index")) + '</span><span class="wx-stat-val">' + (place.uv == null ? "—" : esc(place.uv)) + '</span></div>'
       + '</div>'
       + (hourlyHtml ? '<div class="wx-section-heading">' + esc(tr("Hourly Forecast")) + '</div>' + hourlyHtml : '')
       + (dailyHtml ? '<div class="wx-section-heading">' + esc(tr("Daily Forecast")) + '</div>' + dailyHtml : '')
@@ -917,6 +982,12 @@
       + '<div class="wx-section-heading">' + esc(tr("Add Place")) + '</div>'
       + '<form class="wx-add-form" data-act="add-form">'
       + '<input id="wx-add-input" class="wx-add-input" type="text" placeholder="' + esc(tr("Enter city or place name...")) + '" autocomplete="off" />'
+      + '<button class="wx-add-btn" type="submit">' + esc(tr("Add")) + '</button>'
+      + '</form>'
+      + '<div class="wx-section-heading">' + esc(tr("Home city")) + '</div>'
+      + '<button class="wx-action-btn" type="button" data-act="use-location">' + esc(tr("Use my location")) + '</button>'
+      + '<form class="wx-add-form" data-act="fallback-form">'
+      + '<input id="wx-fallback-input" class="wx-add-input" type="text" placeholder="' + esc(tr("Home city")) + '" autocomplete="off" />'
       + '<button class="wx-add-btn" type="submit">' + esc(tr("Add")) + '</button>'
       + '</form>'
       + '<div class="wx-section-heading" style="padding-top:4px">' + esc(tr("Popular Places")) + '</div>'
@@ -1095,6 +1166,9 @@
           event.preventDefault();
           var city = mActBtn.getAttribute("data-city");
           addPlace(city);
+        } else if (mAct === "use-location") {
+          event.preventDefault();
+          useMyLocation();
         } else if (mAct === "reset-defaults") {
           event.preventDefault();
           resetPrefs();
@@ -1104,12 +1178,20 @@
 
     document.addEventListener("submit", function (event) {
       var target = event.target;
-      if (target && target.matches && target.matches("[data-act='add-form']")) {
+      if (!target || !target.matches) return;
+      if (target.matches("[data-act='add-form']")) {
         event.preventDefault();
         var input = document.getElementById("wx-add-input");
         if (input && input.value) {
           addPlace(input.value);
           input.value = "";
+        }
+      } else if (target.matches("[data-act='fallback-form']")) {
+        event.preventDefault();
+        var fallback = document.getElementById("wx-fallback-input");
+        if (fallback && fallback.value) {
+          setFallbackCity(fallback.value);
+          fallback.value = "";
         }
       }
     });
@@ -1122,37 +1204,78 @@
     });
   }
 
+  function readGrantedGeo() {
+    if (typeof navigator === "undefined" || !navigator.permissions || typeof navigator.permissions.query !== "function") return Promise.resolve();
+    return navigator.permissions.query({ name: "geolocation" }).then(function (status) {
+      if (!status || status.state !== "granted" || !navigator.geolocation) return null;
+      return new Promise(function (resolve) {
+        navigator.geolocation.getCurrentPosition(function (pos) {
+          weatherGeo = { granted: true, lat: pos.coords.latitude, lon: pos.coords.longitude };
+          resolve(weatherGeo);
+        }, function () { resolve(null); }, { enableHighAccuracy: false, maximumAge: 10 * 60 * 1000, timeout: 8000 });
+      });
+    }).catch(function () { return null; });
+  }
+
+  function weatherTargets() {
+    var list = identities().slice();
+    var home = resolvedHome();
+    if (home && !list.some(function (place) { return place.id === home.id; })) list.unshift(home);
+    return list;
+  }
+
+  function armWeather() {
+    if (weatherTimer) clearTimeout(weatherTimer);
+    if (typeof setTimeout !== "function") return;
+    weatherTimer = setTimeout(function () {
+      weatherTimer = null;
+      refreshWeather();
+    }, 12 * 60 * 1000);
+  }
+
+  function refreshWeather() {
+    var api = pillApi();
+    if (!api || weatherFetching || typeof fetch !== "function") return Promise.resolve(false);
+    if (isTypeDisabled("weather")) return Promise.resolve(false);
+    weatherFetching = true;
+    return readGrantedGeo().then(function () {
+      var jobs = weatherTargets().map(function (place) {
+        var existing = loadObs()[place.id];
+        if (existing && !api.flagStale({ kind: "weather", updatedAt: existing.updatedAt }, Date.now()).stale) return Promise.resolve(false);
+        return fetchObservation(place).then(function (obs) {
+          if (!obs) return false;
+          if (place.explicit) rememberPlace(place, obs);
+          else storeObs(place.id, obs);
+          return true;
+        });
+      });
+      return Promise.all(jobs).then(function (flags) {
+        weatherFetching = false;
+        if (flags.some(Boolean)) refreshUI();
+        armWeather();
+        return true;
+      });
+    }).catch(function () {
+      weatherFetching = false;
+      armWeather();
+      return false;
+    });
+  }
+
   function afterRender(route) {
-    if (route && route.name === "home") {
-      if (isTypeDisabled("weather")) return;
-      if (typeof window !== "undefined" && typeof window.fetch === "function" && typeof navigator !== "undefined" && navigator.onLine) {
-        var list = loadPlaces();
-        var updated = false;
-        var p = list.map(function (place) {
-          if (place.lat && place.lon) {
-            var url = "https://api.open-meteo.com/v1/forecast?latitude=" + place.lat + "&longitude=" + place.lon + "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min,uv_index_max&timezone=auto";
-            return window.fetch(url)
-              .then(function (r) { return r.json(); })
-              .then(function (data) {
-                var cur = data.current || {};
-                if (cur.temperature_2m != null) {
-                  place.temp = Math.round(cur.temperature_2m);
-                  place.code = cur.weather_code || 0;
-                  if (cur.relative_humidity_2m != null) place.humidity = cur.relative_humidity_2m;
-                  if (cur.wind_speed_10m != null) place.wind = Math.round(cur.wind_speed_10m);
-                  if (cur.precipitation != null) place.precipitation = Math.round(cur.precipitation);
-                  updated = true;
-                }
-              })
-              .catch(function () {});
-          }
-          return Promise.resolve();
-        });
-        Promise.all(p).then(function () {
-          if (updated) refreshUI();
-        });
-      }
+    if (route && route.name && route.name !== "home") return;
+    if (isTypeDisabled("weather")) return;
+    var api = pillApi();
+    if (!api) return;
+    var needs = weatherTargets().some(function (place) {
+      var obs = loadObs()[place.id];
+      return !obs || api.flagStale({ kind: "weather", updatedAt: obs.updatedAt }, Date.now()).stale;
+    });
+    if (!needs) {
+      armWeather();
+      return;
     }
+    refreshWeather();
   }
 
   var api = {
@@ -1161,6 +1284,10 @@
     getPlace: getPlace,
     addPlace: addPlace,
     removePlace: removePlace,
+    setFallbackCity: setFallbackCity,
+    useMyLocation: useMyLocation,
+    rememberPlace: rememberPlace,
+    refreshWeather: refreshWeather,
     loadPrefs: loadPrefs,
     savePrefs: savePrefs,
     isPinned: isPinned,
@@ -1208,7 +1335,12 @@
     unifiedRowHtml: unifiedRowHtml,
     codeToCondition: codeToCondition,
     formatTemp: formatTemp,
-    getDefaultPlaces: getDefaultPlaces
+    getDefaultPlaces: getDefaultPlaces,
+    rememberPlace: rememberPlace,
+    resolvedHome: resolvedHome,
+    setFallbackCity: setFallbackCity,
+    useMyLocation: useMyLocation,
+    refreshWeather: refreshWeather
   };
 
   if (typeof module !== "undefined" && module.exports) {

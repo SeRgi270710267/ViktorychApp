@@ -1437,5 +1437,16 @@ SI18n.addPack("en", {
   "1 GB": "1 GB",
   "5 GB": "5 GB",
   "10 GB": "10 GB",
-  "20 GB": "20 GB"
+  "20 GB": "20 GB",
+  "Updated {count} min ago": "Updated {count} min ago",
+  "Updated {count} h ago": "Updated {count} h ago",
+  "Halftime": "Halftime",
+  "Kickoff": "Kickoff",
+  "Use my location": "Use my location",
+  "Home city": "Home city",
+  "Current location": "Current location",
+  "Rain chance": "Rain chance",
+  "Weather is unavailable": "Weather is unavailable",
+  "Location is off": "Location is off",
+  "League matches": "League matches"
 });

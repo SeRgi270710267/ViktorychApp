@@ -1437,5 +1437,16 @@ SI18n.addPack("ru", {
   "1 GB": "1 ГБ",
   "5 GB": "5 ГБ",
   "10 GB": "10 ГБ",
-  "20 GB": "20 ГБ"
+  "20 GB": "20 ГБ",
+  "Updated {count} min ago": "Обновлено {count} мин назад",
+  "Updated {count} h ago": "Обновлено {count} ч назад",
+  "Halftime": "Перерыв",
+  "Kickoff": "Начало",
+  "Use my location": "Моё местоположение",
+  "Home city": "Домашний город",
+  "Current location": "Текущее место",
+  "Rain chance": "Вероятность дождя",
+  "Weather is unavailable": "Погода недоступна",
+  "Location is off": "Геолокация выключена",
+  "League matches": "Матчи лиги"
 });
