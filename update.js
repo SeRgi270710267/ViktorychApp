@@ -185,6 +185,7 @@
     waiting: null
   };
   var applying = null;
+  var updateFlight = null;
   var started = false;
   var checking = false;
   var reloadTimer = 0;
@@ -451,7 +452,21 @@
       noteFailure("", "timeout");
       state.phase = "error";
       paint();
-    }, 25000);
+    }, 45000);
+  }
+
+  function requestUpdate(reg) {
+    if (!reg || !reg.update) return Promise.resolve(reg || null);
+    if (reg.installing || reg.waiting) return Promise.resolve(reg);
+    // One check at a time. A second update() while the first script is still
+    // downloading drops that worker, and the page stays on the old build.
+    if (updateFlight) return updateFlight.then(function () { return reg; });
+    var flight = reg.update().catch(function () { return null; }).then(function () {
+      if (updateFlight === flight) updateFlight = null;
+      return reg;
+    });
+    updateFlight = flight;
+    return flight;
   }
 
   function waitForWorker(reg) {
@@ -460,7 +475,13 @@
       var timer = setInterval(function () {
         if (!reg) { clearInterval(timer); resolve(null); return; }
         if (reg.waiting) { clearInterval(timer); resolve(reg.waiting); return; }
-        if (Date.now() - startedAt > 8000) { clearInterval(timer); resolve(reg.waiting || null); }
+        var worker = reg.installing;
+        if (worker && worker.state === "redundant") { clearInterval(timer); resolve(null); return; }
+        var idleFor = Date.now() - startedAt;
+        var stillChecking = !!updateFlight;
+        var idle = !worker && !stillChecking && idleFor > 5000;
+        var cap = idleFor > 90000;
+        if (idle || cap) { clearInterval(timer); resolve(reg.waiting || null); }
       }, 200);
     });
   }
@@ -539,18 +560,17 @@
     state.expectingController = true;
     state.reloaded = false;
     paint();
-    armStall();
     var ready = state.reg ? Promise.resolve(state.reg) : navigator.serviceWorker.getRegistration();
     ready.then(function (reg) {
       state.reg = reg || null;
-      if (reg && reg.update) return reg.update().catch(function () { return null; }).then(function () { return reg; });
-      return reg;
+      return requestUpdate(reg);
     }).then(function (reg) {
       return waitForWorker(reg);
     }).then(function (worker) {
       if (applying !== attempt) return;
       if (worker) {
         state.waiting = worker;
+        armStall();
         worker.postMessage({ type: "apply-update" });
         return;
       }
@@ -724,7 +744,8 @@
       paint();
     }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
       checking = false;
-      if (state.reg && state.reg.update) state.reg.update().catch(function () {});
+      if (applying) return;
+      requestUpdate(state.reg);
     });
   }
 
