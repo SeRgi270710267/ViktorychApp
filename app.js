@@ -61,7 +61,7 @@
   const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const COLORS = ["#1d9bf0", "#7856ff", "#f91880", "#00ba7c", "#ff7a00", "#333639"];
-  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok" };
+  const PLATFORM = { x: "X", threads: "Threads", instagram: "Instagram", rss: "RSS", youtube: "YouTube", vk: "VK", discord: "Discord", telegram: "Telegram", tiktok: "TikTok", reddit: "Reddit", bluesky: "Bluesky", mastodon: "Mastodon" };
 
   const PATH = {
     home: "M21.591 7.146L12.52 1.157c-.316-.21-.724-.21-1.04 0l-9.071 5.99c-.26.173-.409.456-.409.757v13.183c0 .502.418.913.929.913h6.638v-7.075h4.874v7.075h6.639c.51 0 .928-.41.928-.913V7.904c0-.301-.158-.584-.408-.758zM20 20.044h-4.153v-7.075h-7.694v7.075H4V8.31l8-5.31 8 5.31v11.734z",
@@ -804,7 +804,8 @@
     const seen = {};
     full.forEach((post) => { seen[postIdentity(post)] = true; });
     const extra = ARCHIVE.posts.filter((post) => !seen[postIdentity(post)]).map((post) => HYDRATED[postIdentity(post)] || post);
-    let list = collapseSameUrl(full.concat(extra)).filter((post) => !bridgeErrorPost(post));
+    const owned = catalogLivePosts().filter((post) => !seen[postIdentity(post)]);
+    let list = collapseSameUrl(full.concat(extra).concat(owned)).filter((post) => !bridgeErrorPost(post));
     if (isShortsLocked()) {
       list = list.filter((post) => !isLockedTiktok(post));
     }
@@ -1603,6 +1604,26 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       }
       const copy = fillOwnerProfile(have, pending);
       rows[rows.indexOf(have)] = copy;
+    });
+    ((STATE.ownerCatalog && STATE.ownerCatalog.accounts) || []).forEach((row) => {
+      if (!row || !row.id || !row.handle) return;
+      const pending = {
+        id: row.id,
+        platform: row.platform || "x",
+        handle: String(row.handle).replace(/^@/, ""),
+        name: row.label || row.name || row.handle,
+        avatar: row.avatar || "",
+        url: row.url || "",
+        channelId: row.channelId || "",
+        configured: false,
+        ownerAdded: true
+      };
+      const have = rows.find((item) => item && item.id === pending.id);
+      if (!have) rows.push(pending);
+      else {
+        if (!have.avatar && pending.avatar) have.avatar = pending.avatar;
+        if (pending.name) have.name = pending.name;
+      }
     });
     if (isShortsLocked()) {
       rows = rows.filter((feed) => !isLockedTiktok(feed));
@@ -4691,8 +4712,48 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return false;
   }
 
+  function catalogLivePosts() {
+    const accounts = (STATE.ownerCatalog && STATE.ownerCatalog.accounts) || [];
+    const out = [];
+    accounts.forEach((account) => {
+      if (!account || account.paused === true || account.muted === true) return;
+      (account.posts || []).forEach((post) => {
+        if (!post || !post.text || !post.id) return;
+        out.push({
+          id: account.id + ":" + post.id,
+          statusId: String(post.id),
+          feedId: account.id,
+          platform: account.platform,
+          handle: account.handle,
+          author: account.label || account.name || account.handle,
+          avatar: account.avatar || "",
+          text: post.text,
+          date: post.date || "",
+          url: post.url || "",
+          kind: "post"
+        });
+      });
+    });
+    return out;
+  }
+
+  function catalogRowHidden(post) {
+    const doc = STATE.ownerCatalog;
+    if (!doc || !post) return false;
+    const id = String(post.feedId || "");
+    const handle = String(post.handle || "").replace(/^@/, "").toLowerCase();
+    const platform = post.platform || "";
+    const rows = (doc.accounts || []).concat(doc.places || []);
+    return rows.some((row) => {
+      if (!row || (row.paused !== true && row.muted !== true)) return false;
+      if (id && row.id === id) return true;
+      return row.platform === platform && handle && String(row.handle || "").replace(/^@/, "").toLowerCase() === handle;
+    });
+  }
+
   function hiddenPost(post) {
     if (!post) return false;
+    if (catalogRowHidden(post)) return true;
     if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) return true;
     if (wordMuted(post.text)) return true;
     return repostsOff(post);
@@ -9960,6 +10021,11 @@ const here = parseRoute();
   }
 
   function feedsView() {
+    if (window.FeedsPage && window.FeedsPage.view) return window.FeedsPage.view();
+    return feedsViewLegacy();
+  }
+
+  function feedsViewLegacy() {
     if (signedOwner()) loadOwnerAccounts();
     const ownerFeeds = signedOwner() ? ownerFeedRows() : [];
     const ownerIds = new Set(ownerFeeds.map((feed) => feed.id));
@@ -11505,6 +11571,12 @@ const here = parseRoute();
         ${rows}
       </div>`;
     }
+    if (section === "security") {
+      const pass = window.ViktorychPasskeys && window.ViktorychPasskeys.settingsHtml ? window.ViktorychPasskeys.settingsHtml() : "";
+      const lock = window.ViktorychAppLock && window.ViktorychAppLock.settingsHtml ? window.ViktorychAppLock.settingsHtml() : "";
+      const screen = window.ViktorychPrivacy && window.ViktorychPrivacy.settingsHtml ? window.ViktorychPrivacy.settingsHtml() : "";
+      return settingsHead(tr("Security"), "#/settings") + `<div class="set-block">${pass}${lock}${screen}</div>`;
+    }
     if (section === "privacy") {
       const acct = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
       const privSection = acct ? `<h2>${esc(tr("Private followers and following"))}</h2>
@@ -11603,6 +11675,7 @@ const here = parseRoute();
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/x-posting", tr("Post to X"), tr("Direct posting stays off"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
+      ${settingsRow("#/settings/security", tr("Security"), tr("Passkeys, app lock, and the privacy screen."))}
       ${settingsRow("#/settings/storage", tr("Data and storage"), tr("Storage usage"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
@@ -11616,7 +11689,7 @@ const here = parseRoute();
     const music = parseRoute().name === "music" && window.SIntelMusic;
     const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().filter((def) => def.id !== "games" && def.id !== "music").map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
     const menuLinks = `<a href="#/games">${icon("games")} ${esc(tr("Games"))}</a>${music ? "" : `<a href="#/music">${icon("muNote")} ${esc(tr("Music"))}</a>`}`;
-    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
+    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop" data-privacy="sensitive">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
       ${menuLinks}
@@ -11881,8 +11954,9 @@ if (STATE.histClear) {
     const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
+    const sensitive = route.name === "messages" || route.name === "notifications" || (route.name === "settings" && route.section === "privacy");
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px">${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
 
   function toggleReaction(act, id) {
@@ -14152,6 +14226,7 @@ if (STATE.histClear) {
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
       commitApp(shell(view(route), route));
+      if (window.ViktorychPrivacy && window.ViktorychPrivacy.paint) window.ViktorychPrivacy.paint();
       if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
       if (window.ViktorychShorts) {
         if (route.name === "shorts") window.ViktorychShorts.mount(route);
@@ -16052,6 +16127,7 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     const addForm = event.target.closest("form.add-account");
     if (addForm) {
       event.preventDefault();
+      if (window.FeedsPage && window.FeedsPage.onAdd && window.FeedsPage.onAdd(addForm)) return;
       const input = addForm.querySelector("input");
       const parsed = parseAccountInput(input && input.value);
       if (!parsed) {
@@ -20333,6 +20409,30 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   });
 
+  if (window.FeedsPage) {
+    window.FeedsPage.attach({
+      tr: tr,
+      esc: esc,
+      icon: icon,
+      avatar: avatar,
+      pageHead: pageHead,
+      signedOwner: signedOwner,
+      accountsApi: accountsApi,
+      accountToken: accountToken,
+      catalogRows: catalogRows,
+      feedTabs: feedTabs,
+      saveSettings: saveSettings,
+      applyFollow: applyFollow,
+      toast: toast,
+      render: render,
+      readStored: readStored,
+      writeStored: writeStored,
+      removeStored: removeStored,
+      relTime: relTime,
+      accountHash: accountHash,
+      STATE: STATE
+    });
+  }
   initTooltipController();
   hscrollInstall();
   boot();

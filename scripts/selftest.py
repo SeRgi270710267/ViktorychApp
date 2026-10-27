@@ -1465,7 +1465,7 @@ def main() -> None:
     check("Mute and block" in app and "mutedWords" in app and "mutedAccounts" in app and "repostOff" in app and "Turn off reposts" in app and "function hiddenPost(" in app and "Muted on this device." in app, "muted words, muted accounts, and reposts stay on this device")
     follows_workflow = (ROOT / ".github" / "workflows" / "follows.yml").read_text(encoding="utf-8")
     music_workflow = (ROOT / ".github" / "workflows" / "music.yml").read_text(encoding="utf-8")
-    check("github.actor ==" not in follows_workflow and "OWNER_ACTOR_SHA256" in follows_workflow and "github.actor == github.repository_owner" not in follows_workflow and "OWNER: ${{ github.repository_owner }}" not in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "follow, group, and link issues are applied only for the human owner, not the organization")
+    check("github.actor ==" not in follows_workflow and "OWNER_ACTOR_SHA256" in follows_workflow and "github.actor == github.repository_owner" not in follows_workflow and "OWNER: ${{ github.repository_owner }}" not in follows_workflow and "startsWith(github.event.issue.title, 'Follow request')" not in follows_workflow and "startsWith(github.event.issue.title, 'Unfollow request')" not in follows_workflow and "startsWith(github.event.issue.title, 'Subscription groups')" in follows_workflow and "startsWith(github.event.issue.title, 'Link accounts')" in follows_workflow, "group and link issues stay owner-only, and follow requests are not public issues")
     check("github.actor ==" not in music_workflow and "OWNER_ACTOR_SHA256" in music_workflow and "github.actor == github.repository_owner" not in music_workflow and "REPO: ${{ github.repository }}" in music_workflow, "the music catalog issue is applied only for the human owner")
     check((ROOT / ".github" / "ISSUE_TEMPLATE" / "groups.yml").is_file(), "subscription group issue form exists")
     published = deployed_paths()
@@ -1580,7 +1580,9 @@ def main() -> None:
         check("old &lt;i&gt;note&lt;/i&gt;" in stub_html and "should not replace" not in post_html, "a stub fills a missing post and does not replace a stored one")
         check('og:type" content="profile"' in profile_html and "Hello &amp; welcome" in profile_html and 'icons/og-card.png' not in profile_html, "a profile page uses the account and keeps its bio")
         check((share_root / "icons" / "og-card.png").is_file(), "the branded fallback card is written into the artifact")
-    check((ROOT / ".github" / "ISSUE_TEMPLATE" / "follow-request.yml").is_file() and (ROOT / ".github" / "ISSUE_TEMPLATE" / "unfollow-request.yml").is_file(), "follow and unfollow issue forms exist")
+    check(not (ROOT / ".github" / "ISSUE_TEMPLATE" / "follow-request.yml").is_file() and not (ROOT / ".github" / "ISSUE_TEMPLATE" / "unfollow-request.yml").is_file(), "follow and unfollow are not public issue forms")
+    feeds_page = (ROOT / "feeds-page.js").read_text(encoding="utf-8")
+    check("issues/new" not in feeds_page and "/v1/owner/feeds" in feeds_page and "api.x.com" not in feeds_page and "api.twitter.com" not in feeds_page, "adding a feed stays on the private owner API")
     import follow_request as follow_req
 
     check(not follow_req.allowed("stranger", "riverquoll") and follow_req.allowed("riverquoll", "riverquoll") and not follow_req.allowed("", "riverquoll"), "only the repository owner can change follows")
