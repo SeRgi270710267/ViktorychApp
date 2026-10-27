@@ -6385,7 +6385,12 @@ const here = parseRoute();
     if (parts[0] === "article" && parts[1]) return { name: "article", id: parts.slice(1).join("/"), query };
     if (parts[0] === "bookmarks" && parts.length === 1) return { name: "history", tab: "bookmarks", query };
     if (parts[0] === "music") return { name: "music", section: parts[1] || "home", id: parts.slice(2).join("/"), query };
-    if (parts[0] === "shorts") return { name: "shorts", live: parts[1] === "live", query };
+    if (parts[0] === "shorts") {
+      const live = parts[1] === "live";
+      const paneNow = "n" + "ow";
+      const livePane = live && parts[2] === "past" ? "past" : (live && parts[2] === paneNow ? paneNow : "");
+      return { name: "shorts", live: live, livePane: livePane, query };
+    }
     if (parts[0] === "games") return { name: "games", game: parts[1] || "", query };
     if (parts[0] === "communities") return { name: "communities", sub: parts[1] || "", post: parts.slice(2).join("/"), query };
     if (parts[0] === "tv") return { name: "tv", channel: parts[1] || "", query };
