@@ -14,6 +14,7 @@ page skips that live and the Live tab keeps Open on TikTok.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -228,6 +229,98 @@ def split_args(src: Path, dest: Path, seconds: int) -> list:
     return ffmpeg_args(str(src), dest, seconds, 0)
 
 
+def keyframe_args(src: Path, dest: Path) -> list:
+    """Copy the first video packet into a tiny file. The recording itself is not re-encoded."""
+    return [
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+        "-i", str(src),
+        "-map", "0:v:0",
+        "-an",
+        "-sn",
+        "-c", "copy",
+        "-frames:v", "1",
+        str(dest),
+    ]
+
+
+def grab_keyframe(src: Path, dest: Path) -> bool:
+    args = keyframe_args(src, dest)
+    if not copy_only(args) or shutil.which("ffmpeg") is None or not src.is_file():
+        return False
+    try:
+        proc = subprocess.run(args, capture_output=True, timeout=30, check=False)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0 and dest.is_file() and dest.stat().st_size > 0
+
+
+def store_keyframe(src: Path, meta: dict) -> None:
+    if meta.get("thumbDone"):
+        return
+    handle = str(meta.get("handle") or "")
+    room = str(meta.get("room") or "")
+    if not HANDLE_RE.fullmatch(handle) or not re.fullmatch(r"[1-9][0-9]{5,24}", room):
+        return
+    dest = src.parent / "thumb.mp4"
+    if not grab_keyframe(src, dest):
+        return
+    key = "owner/live-thumbs/%s/%s.mp4" % (handle.lower(), room)
+    if not r2_put_file(key, dest, "video/mp4"):
+        return
+    meta["thumbDone"] = True
+    meta["thumbKey"] = key
+    mirror_thumb_b2(key, dest)
+    try:
+        dest.unlink()
+    except OSError:
+        pass
+
+
+def b2_configured() -> bool:
+    return bool(os.environ.get("B2_KEY_ID") and os.environ.get("B2_APP_KEY") and os.environ.get("B2_BUCKET"))
+
+
+def mirror_thumb_b2(key: str, path: Path) -> bool:
+    """Best-effort copy of the keyframe. A missing account does nothing."""
+    if not b2_configured() or not path.is_file():
+        return False
+    try:
+        token = (os.environ["B2_KEY_ID"] + ":" + os.environ["B2_APP_KEY"]).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.backblazeb2.com/b2api/v2/b2_authorize_account",
+            headers={"Authorization": "Basic " + base64.b64encode(token).decode("ascii")},
+        )
+        with urllib.request.urlopen(req, timeout=20) as res:
+            auth = json.loads(res.read().decode("utf-8"))
+        bucket_id = str((auth.get("allowed") or {}).get("bucketId") or "")
+        if not bucket_id or not auth.get("authorizationToken") or not auth.get("apiUrl"):
+            return False
+        slot_req = urllib.request.Request(
+            auth["apiUrl"] + "/b2api/v2/b2_get_upload_url",
+            data=json.dumps({"bucketId": bucket_id}).encode("utf-8"),
+            headers={"Authorization": auth["authorizationToken"], "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(slot_req, timeout=20) as res:
+            slot = json.loads(res.read().decode("utf-8"))
+        blob = path.read_bytes()
+        put = urllib.request.Request(
+            slot["uploadUrl"],
+            data=blob,
+            method="POST",
+            headers={
+                "Authorization": slot["authorizationToken"],
+                "X-Bz-File-Name": urllib.parse.quote(key, safe="/"),
+                "Content-Type": "video/mp4",
+                "X-Bz-Content-Sha1": hashlib.sha1(blob).hexdigest(),
+            },
+        )
+        with urllib.request.urlopen(put, timeout=60):
+            return True
+    except (urllib.error.URLError, TimeoutError, OSError, KeyError, ValueError):
+        return False
+
+
 def copy_only(args: list) -> bool:
     banned = {"libx264", "libx265", "libsvtav1", "crf", "preset", "-c:v", "-c:a", "concurrent", "http_multiple"}
     if any(str(item) in banned for item in args):
@@ -295,6 +388,8 @@ def public_view(job: dict | None) -> dict:
         "parts": int(source.get("parts") or (1 if playable else 0)) if playable or state == "saved" else int(source.get("part") or 0),
         "key": base if playable else "",
         "blocked": state == "blocked",
+        "bytes": int(source.get("bytes") or 0),
+        "thumb": str(source.get("thumb") or ""),
     }
 
 
@@ -935,6 +1030,7 @@ def publish_local(dest: Path, sent: set, meta: dict, closed: bool = False) -> in
     A segment is removed only after R2 has accepted every piece.
     """
     stored = 0
+    meta["addedBytes"] = 0
     playlist = durations_from_playlist(dest / "index.m3u8")
     init = dest / "init.mp4"
     if init.is_file() and "init.mp4" not in sent:
@@ -956,6 +1052,9 @@ def publish_local(dest: Path, sent: set, meta: dict, closed: bool = False) -> in
         if path.name in sent:
             continue
         index = int(path.stem.replace("seg", "") or "0")
+        piece_bytes = path.stat().st_size
+        if not meta.get("thumbDone"):
+            store_keyframe(path, meta)
         pieces = [path]
         oversize = False
         if path.stat().st_size >= SMALL_BYTES:
@@ -980,6 +1079,7 @@ def publish_local(dest: Path, sent: set, meta: dict, closed: bool = False) -> in
                 wrote += 1
         if wrote != len(pieces):
             continue
+        meta["addedBytes"] = int(meta.get("addedBytes") or 0) + piece_bytes
         stored += wrote
         sent.add(path.name)
         try:
@@ -1049,6 +1149,8 @@ def past_entries(job: dict | None) -> list:
             "roomId": str(active.get("roomId") or ""),
             "parts": int(active.get("part") or 1),
             "key": str(active.get("key") or "") if int(active.get("segments") or 0) > 0 else "",
+            "bytes": int(active.get("bytes") or 0),
+            "thumb": str(active.get("thumb") or ""),
         })
     for item in row.get("saved") or []:
         if not isinstance(item, dict):
@@ -1067,6 +1169,8 @@ def past_entries(job: dict | None) -> list:
             "roomId": str(item.get("roomId") or ""),
             "parts": int(item.get("parts") or 1),
             "key": str(item.get("key") or ""),
+            "bytes": int(item.get("bytes") or 0),
+            "thumb": str(item.get("thumb") or ""),
         })
     found.sort(key=lambda item: str(item.get("startedAt") or ""), reverse=True)
     return found
@@ -1136,6 +1240,8 @@ def mark_saved_room(job: dict) -> None:
         "duration": int(active.get("duration") or current.get("duration") or 0),
         "viewers": max(int(active.get("viewers") or 0), int(current.get("viewers") or 0)),
         "partial": bool(active.get("partial")),
+        "bytes": max(int(active.get("bytes") or 0), int(current.get("bytes") or 0)),
+        "thumb": active.get("thumb") or current.get("thumb") or "",
     })
     job["saved"] = saved
     job["active"] = {}
@@ -1161,6 +1267,8 @@ def write_manifest(job: dict, row: dict) -> None:
         "parts": int(row.get("parts") or 0),
         "key": str(row.get("key") or ""),
         "partial": bool(row.get("partial")),
+        "bytes": int(row.get("bytes") or 0),
+        "thumb": str(row.get("thumb") or ""),
     }
     r2_put("owner/live-manifests/%s/%s.json" % (handle, room), json.dumps(payload, ensure_ascii=False).encode("utf-8"))
 
@@ -1289,6 +1397,9 @@ def cmd_record(handle: str, part: str, room: str) -> int:
     except Exception:
         accounts = {"added": []}
     seq = 0 if int(active.get("segmentPart") or 0) != part_n else int(active.get("segmentSeq") or 0)
+    if str(active.get("roomId") or "") != str(room_id or ""):
+        active["thumb"] = ""
+        active["bytes"] = 0
     active.update({
         "state": "recording",
         "roomId": room_id,
@@ -1331,6 +1442,8 @@ def cmd_record(handle: str, part: str, room: str) -> int:
             "buf": "%s%s/%s/%s/%s" % (BUF_PREFIX, active["channelSlot"], name, room_id, part_n),
             "channelSlot": active["channelSlot"],
             "seconds": seconds,
+            "handle": name,
+            "room": room_id,
         }
         before = int(active.get("segments") or 0)
         last_live = 0.0
@@ -1343,6 +1456,9 @@ def cmd_record(handle: str, part: str, room: str) -> int:
             stored = publish_local(dest, sent, meta, closed=False)
             if stored:
                 active["segments"] = int(active.get("segments") or 0) + stored
+                active["bytes"] = int(active.get("bytes") or 0) + int(meta.get("addedBytes") or 0)
+            if meta.get("thumbKey"):
+                active["thumb"] = meta["thumbKey"]
             try:
                 free = shutil.disk_usage(str(dest)).free
             except OSError:
@@ -1381,6 +1497,9 @@ def cmd_record(handle: str, part: str, room: str) -> int:
             stored = publish_local(dest, sent, meta, closed=True)
             if stored:
                 active["segments"] = int(active.get("segments") or 0) + stored
+                active["bytes"] = int(active.get("bytes") or 0) + int(meta.get("addedBytes") or 0)
+            if meta.get("thumbKey"):
+                active["thumb"] = meta["thumbKey"]
             for path in dest.glob("seg*.m4s"):
                 try:
                     seq = max(seq, int(path.stem.replace("seg", "")) + 1)
@@ -1765,6 +1884,14 @@ def selftest() -> int:
     check(UA in args and "-user_agent" in args, "ffmpeg uses the Chrome user agent")
     check("concurrent" not in " ".join(args) and args.count("-i") == 1, "ffmpeg opens one connection and does not split ranges")
     check(copy_only(split_args(Path("big.m4s"), dest, 2)), "an oversize segment is split with stream copy")
+    frame = keyframe_args(Path("seg00000.m4s"), Path("thumb.mp4"))
+    check(copy_only(frame), "a card thumbnail is one copied video packet")
+    check(frame[frame.index("-frames:v") + 1] == "1" and "-an" in frame, "the thumbnail keeps a single video frame")
+    saved_b2 = {name: os.environ.pop(name, None) for name in ("B2_KEY_ID", "B2_APP_KEY", "B2_BUCKET")}
+    check(b2_configured() is False, "thumbnail mirror stays off without B2 secrets")
+    for name, value in saved_b2.items():
+        if value is not None:
+            os.environ[name] = value
 
     now = "2026-10-23T01:00:00Z"
     added = ["b_name", "a_name", "c_name"]

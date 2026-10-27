@@ -1,7 +1,7 @@
 /* ViktorychApp service worker. Cache names are viktorych- plus the deploy SHA.
    Older superintel caches are dropped on activate. Offline music stays in sintel-music-offline. */
 const VERSION = "viktorych-a20-__SW_VERSION__";
-// cache-bust: 2026-10-25T11:00:00Z-communities-fix
+// cache-bust: 2026-10-27T12:00:00Z-live-preview
 const ACCOUNTS_WALL = false;
 let accountsAuthed = false;
 let playToken = "";
@@ -79,6 +79,8 @@ const SHELL_FILES = [
   "./communities.css",
   "./yt-player.js",
   "./yt-player.css",
+  "./hls-1.7.3.min.js",
+  "./mpegts-1.8.0.min.js",
   "./scores.js",
   "./scores.css",
   "./weather.js",

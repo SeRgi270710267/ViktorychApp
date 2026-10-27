@@ -250,6 +250,7 @@ shorts.setLiveState([
   { handle: "pepsi", live: true, viewers: 2 }
 ]);
 const nowHtml = shorts.page({ live: true, livePane: "now" });
+assert(nowHtml.includes("shorts-preview"), "A live card has a muted preview video");
 assert(nowHtml.includes("Live now"), "Live now sub-tab is present");
 assert(nowHtml.includes("Past lives"), "Past lives sub-tab is present");
 assert(nowHtml.indexOf("@pepsi") < nowHtml.indexOf("@gabii_g5"), "Fewer viewers stay above more viewers");
@@ -265,7 +266,7 @@ shorts.setRecordings({
   },
   past: [
     { handle: "gabii_g5", state: "recording", startedAt: "2026-10-02T00:00:00Z", key: "tiktok/gabii_g5/1/live" },
-    { handle: "pepsi", state: "saved", startedAt: "2026-10-01T00:00:00Z", key: "tiktok/pepsi/1/live", title: "earlier" }
+    { handle: "pepsi", state: "saved", startedAt: "2026-10-01T00:00:00Z", key: "tiktok/pepsi/1/live", title: "earlier", bytes: 2 * 1024 * 1024, duration: 125, roomId: "7699647509498710805", thumb: "owner/live-thumbs/pepsi/7699647509498710805.mp4" }
   ]
 });
 const pastHtml = shorts.page({ live: true, livePane: "past" });
@@ -274,6 +275,16 @@ assert(pastHtml.includes("Recording ({n} of {cap})"), "In-progress captures are 
 assert(pastHtml.includes("earlier"), "Past lives read the per-handle history");
 assert(!pastHtml.includes("current-only"), "Past lives do not fall back to the current row when history exists");
 assert(pastHtml.includes(">2<"), "Past lives count badge is shown");
+assert(pastHtml.includes("Size {size}"), "Past lives show the recording size");
+assert(pastHtml.includes("2:05"), "Past lives show the duration");
+assert(pastHtml.includes("data-thumb="), "A stored keyframe is the card thumbnail");
+assert(pastHtml.includes("Download original") === false, "Download stays inside the player");
+assert.strictEqual(shorts.formatBytes(1536), "1.5 KB");
+assert.equal(shorts.previewsAllowed("auto", true, "all", "wifi"), false);
+assert.equal(shorts.previewsAllowed("on", true, "never", "cellular"), true);
+assert.equal(shorts.previewsAllowed("off", false, "all", "wifi"), false);
+assert.equal(shorts.previewsAllowed("auto", false, "never", "wifi"), false);
+assert.equal(shorts.lowestPreview({ variants: [{ quality: "origin", hls: "https://cdn.example/o.m3u8" }, { quality: "ld", hls: "https://cdn.example/l.m3u8" }] }).url, "https://cdn.example/l.m3u8");
 localStorage.setItem("viktorych_shorts_live_pane", "past");
 const remembered = shorts.page({ live: true });
 assert(remembered.includes('class="tab on" href="#/shorts/live/past"'), "The past sub-tab stays selected");
