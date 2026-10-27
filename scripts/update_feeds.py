@@ -1105,6 +1105,22 @@ def build(config: dict, use_fixtures: bool, download: bool) -> dict:
             feed_rows.extend(extra_feeds(config))
         except Exception as exc:
             print(f"[people] feeds: {exc}", file=sys.stderr)
+        try:
+            from owner_catalog import load_masked
+
+            _catalog, cat_rows, cat_ids = load_masked()
+            have = {(row.get("platform"), str(row.get("handle") or "").lower()) for row in feed_rows if isinstance(row, dict)}
+            have_ids = {row.get("id") for row in feed_rows if isinstance(row, dict)}
+            for row in cat_rows:
+                key = (row.get("platform"), str(row.get("handle") or "").lower())
+                if row.get("id") in have_ids or key in have:
+                    continue
+                feed_rows.append(row)
+                have_ids.add(row.get("id"))
+                have.add(key)
+            config["_catalogIds"] = cat_ids
+        except Exception:
+            print("[catalog] unavailable", file=sys.stderr)
         for row in feed_rows:
             if isinstance(row, dict):
                 ensure_x_lanes(row, config)
@@ -1591,6 +1607,14 @@ def main() -> None:
             print("[stories] " + redact_story(str(exc)), file=sys.stderr)
             stories_health = [{"platform": "instagram", "ok": False, "detail": "Stories sync failed."}]
     doc["storiesHealth"] = stories_health
+    catalog_ids = list(config.pop("_catalogIds", []) or [])
+    if catalog_ids and not args.fixtures:
+        try:
+            from owner_catalog import sink_private_health
+
+            sink_private_health(doc, catalog_ids)
+        except Exception:
+            print("[catalog] health unavailable", file=sys.stderr)
     from sync_health import write_report
 
     write_report(doc)
