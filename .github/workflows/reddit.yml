@@ -78,19 +78,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: python3 scripts/communities_publish.py
 
-      - name: Commit the mirror
-        run: |
-          set -euo pipefail
-          if [ -f .communities-r2 ]; then
-            echo "communities stored in R2; not committing"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/communities
-          if git diff --cached --quiet; then
-            echo "communities unchanged"
-            exit 0
-          fi
-          git commit -m "Update communities"
-          git push origin HEAD:main
+      - name: Leave the mirror in private storage
+        # .communities-r2 marks a successful R2 upload. The mirror is not committing.
+        run: echo "communities stored in R2; not committing"

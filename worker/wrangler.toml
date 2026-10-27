@@ -24,7 +24,11 @@ workers_dev = true
 # The default is 30. Set it to 0 to free the handle immediately.
 # DELETION_SALT, when set as a secret, salts deletion hashes. Otherwise
 # ACCOUNT_PEPPER is used. OWNER_PUBLIC_ID, when set, cannot be deleted.
-# The owner handle and owner-account are refused by the delete route.
+# OWNER_HANDLE is the owner account handle. OWNER_ID_SHA256 is one or more
+# sha256 hex digests of owner ids. The delete route compares hashes and
+# never keeps those ids in this file.
+# TIKTOK_TRACKED lists accounts the sync follows. TIKTOK_UNLOCKED lists
+# which of those stay visible while Shorts is locked. Both are secrets.
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io,https://viktorychapp.pages.dev"
 PBKDF2_ITERATIONS = "8000"

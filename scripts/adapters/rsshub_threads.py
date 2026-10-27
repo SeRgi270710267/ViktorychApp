@@ -43,7 +43,7 @@ def parse(payload, feed: dict | None = None) -> dict:
     root = parse_xml(payload) if isinstance(payload, str) else payload
     channel = _channel(root)
     handle = feed.get("handle") or child_text(channel, "dc:creator") or "threads"
-    # dc:creator lives on items; channel title looks like "redacted_handle (@redacted_handle) on Threads"
+    # dc:creator lives on items; channel title looks like "birchlane (@birchlane) on Threads"
     title = child_text(channel, "title")
     match = re.search(r"@([\w.]+)", title)
     if not feed.get("handle") and match:

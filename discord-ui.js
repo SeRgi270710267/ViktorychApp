@@ -43,31 +43,31 @@
   const WINDOW = 300;
   const CATALOG_SERVERS = [
     {
-      id: "169256939211980800",
+      id: "100000000000000355",
       name: "Discord Town Hall",
       channels: [
-        { id: "1502285163009409175", name: "rules", category: tr("Information"), mode: "messages" },
-        { id: "739179537933533264", name: "support", category: tr("Information"), mode: "messages" },
-        { id: "1106365828842139668", name: "account-safety", category: tr("Information"), mode: "messages" },
-        { id: "1514784753293852702", name: "wellbeing-resources", category: tr("Information"), mode: "messages" },
-        { id: "889949624218042420", name: "product-updates", category: "Announcements", mode: "posts" },
-        { id: "889960284020699156", name: "discord-updates", category: "Announcements", mode: "posts" },
-        { id: "1337485085737484360", name: "collab-announcements", category: "Announcements", mode: "posts" },
-        { id: "1539700463715487854", name: "drops-and-deals", category: "Announcements", mode: "posts" },
-        { id: "1539705311697309727", name: "wellbeing-bulletin", category: "Announcements", mode: "posts" },
-        { id: "169256939211980800", name: "general-chat", category: "Town Hall General", mode: "messages" },
-        { id: "1539754628575404213", name: "discord-discussion", category: "Town Hall General", mode: "messages" },
-        { id: "889950993352110160", name: "peer-help", category: "Town Hall General", mode: "messages" },
-        { id: "1537598337367146597", name: "profile-aesthetic", category: "Community Fun", mode: "messages" },
-        { id: "1539719926573703321", name: "community-polls", category: "Community Fun", mode: "messages" },
-        { id: "1544031346077339790", name: "fun-apps", category: "Community Fun", mode: "messages" },
-        { id: "1219742162175131658", name: "giveaway-corner", category: "Community Fun", mode: "messages" }
+        { id: "0100000000000000372", name: "rules", category: tr("Information"), mode: "messages" },
+        { id: "100000000000000389", name: "support", category: tr("Information"), mode: "messages" },
+        { id: "0100000000000000406", name: "account-safety", category: tr("Information"), mode: "messages" },
+        { id: "0100000000000000423", name: "wellbeing-resources", category: tr("Information"), mode: "messages" },
+        { id: "100000000000000440", name: "product-updates", category: "Announcements", mode: "posts" },
+        { id: "100000000000000457", name: "discord-updates", category: "Announcements", mode: "posts" },
+        { id: "0100000000000000474", name: "collab-announcements", category: "Announcements", mode: "posts" },
+        { id: "0100000000000000491", name: "drops-and-deals", category: "Announcements", mode: "posts" },
+        { id: "0100000000000000508", name: "wellbeing-bulletin", category: "Announcements", mode: "posts" },
+        { id: "100000000000000355", name: "general-chat", category: "Town Hall General", mode: "messages" },
+        { id: "0100000000000000576", name: "discord-discussion", category: "Town Hall General", mode: "messages" },
+        { id: "100000000000000593", name: "peer-help", category: "Town Hall General", mode: "messages" },
+        { id: "0100000000000000610", name: "profile-aesthetic", category: "Community Fun", mode: "messages" },
+        { id: "0100000000000000627", name: "community-polls", category: "Community Fun", mode: "messages" },
+        { id: "0100000000000000644", name: "fun-apps", category: "Community Fun", mode: "messages" },
+        { id: "0100000000000000661", name: "giveaway-corner", category: "Community Fun", mode: "messages" }
       ]
     }
   ];
 
   const FIXTURE = {
-    "169256939211980800": [
+    "100000000000000355": [
       msg("1530000000000000001", "1001", "Ada", "#5865f2", "0", "2026-10-21T16:40:00.000Z", "Welcome in. The **rules** channel is the place to start."),
       msg("1530000000000000002", "1002", "Wumpus", "#eb459e", "1", "2026-10-21T16:41:00.000Z", "Hello @Ada — glad you are here. Peek at ||the spoiler|| and `town-hall`."),
       msg("1530000000000000003", "1002", "Wumpus", "#eb459e", "1", "2026-10-21T16:42:00.000Z", "Same note, still me. *Town Hall* stays read-only on this page."),
@@ -81,13 +81,13 @@
         reactions: [{ e: "👍", n: 4 }, { e: "💙", n: 2 }]
       })
     ],
-    "889950993352110160": [
+    "100000000000000593": [
       msg("1530000000000000101", "1001", "Ada", "#5865f2", "0", "2026-10-21T15:05:00.000Z", "Has anyone tried the new profile layout?")
     ]
   };
 
   const FIXTURE_PINS = {
-    "169256939211980800": [
+    "100000000000000355": [
       { id: "1530000000000000004", author: "Clyde", text: "Replying with a photo, a custom wave, and a link", date: "2026-10-21T16:48:00.000Z" },
       { id: "1530000000000000001", author: "Ada", text: "Welcome in. The rules channel is the place to start.", date: "2026-10-21T16:40:00.000Z" }
     ]

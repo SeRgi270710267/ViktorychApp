@@ -11,7 +11,7 @@ import {
 } from "../../shared/owner-keys.js";
 import { migrateOwnerKeys } from "../src/owner-keys.js";
 
-const OWNER = "S\u0435\u0420g\u0418";
+const OWNER = "mirathorn";
 const SECRET = "sessionid=super-secret-cookie-value";
 const BACKUP = "sessionid=backup-secret-cookie-value";
 const LEGACY = "sessionid=legacy-kept-cookie-value";
@@ -30,6 +30,7 @@ function workerOptions(hits) {
     bindings: {
       ACCOUNT_PEPPER: "pepper-test",
       OWNER_CLAIM_CODE: "claim-test",
+      OWNER_HANDLE: "mirathorn",
       ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080",
       PBKDF2_ITERATIONS: "1000",
       KEYS_ENC_KEY: ENC,
