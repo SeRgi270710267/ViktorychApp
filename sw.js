@@ -61,6 +61,8 @@ const SHELL_FILES = [
   "./device.js",
   "./device-search.js",
   "./device-ai.js",
+  "./ondevice-ai.js",
+  "./ondevice-ai-worker.js",
   "./device-media.js",
   "./device-record.js",
   "./logo/v.svg",
@@ -121,6 +123,7 @@ const SHELL_FILES = [
   "./feeds-page.js",
   "./shared/home-fresh.js",
   "./shared/pill-data.js",
+  "./shared/tiktok-lock.js",
   "./shared/lazy-modules.js",
   "./favicon.svg",
   "./favicon.ico",
@@ -1316,6 +1319,15 @@ self.addEventListener("message", (event) => {
         await idbSet(db, "ui-lang", data.uiLang);
         if (self.SI18n) self.SI18n.setLang(data.uiLang);
       }
+      if (data.tiktokLock && typeof data.tiktokLock === "object") {
+        const lock = data.tiktokLock;
+        await idbSet(db, "tiktok-lock", {
+          owner: lock.owner === true,
+          audienceAll: lock.audienceAll === true,
+          locked: lock.locked !== false,
+          unlocked: Array.isArray(lock.unlocked) ? lock.unlocked.slice(0, 200) : []
+        });
+      }
     }));
   }
   if (data.type === "bell-deliver") {
@@ -1355,8 +1367,12 @@ self.addEventListener("message", (event) => {
   if (data.type === "bell-pull") {
     event.waitUntil(idb().then(async (db) => {
       const notes = (await idbGet(db, "bell-queue")) || [];
+      const kept = [];
+      for (let i = 0; i < notes.length; i++) {
+        if (!(await swNoteHidden(notes[i]))) kept.push(notes[i]);
+      }
       await idbSet(db, "bell-queue", []);
-      if (event.source) event.source.postMessage({ type: "bell-queue", notes: notes });
+      if (event.source) event.source.postMessage({ type: "bell-queue", notes: kept });
     }));
   }
 });
@@ -1672,6 +1688,36 @@ function noteFromPost(post, row) {
   };
 }
 
+let tiktokLockLoad = null;
+
+function loadTiktokLock() {
+  if (!tiktokLockLoad) tiktokLockLoad = import("./shared/tiktok-lock.js").catch(() => null);
+  return tiktokLockLoad;
+}
+
+function noteLooksTiktok(note) {
+  if (!note || typeof note !== "object") return false;
+  const platform = String(note.platform || "").toLowerCase();
+  const feedId = String(note.feedId || "");
+  const hash = String(note.hash || "");
+  const id = String(note.id || "");
+  return platform === "tiktok" || feedId.indexOf("tiktok:") === 0 || hash.indexOf("#/tiktok/") === 0 || id.indexOf("tiktok:") === 0 || id.indexOf("live:tiktok:") === 0;
+}
+
+async function swNoteHidden(note) {
+  if (!note) return false;
+  let viewer = { owner: false, audienceAll: false, locked: true, unlocked: [] };
+  try {
+    const db = await idb();
+    const saved = await idbGet(db, "tiktok-lock");
+    if (saved && typeof saved === "object") viewer = saved;
+  } catch (err) { /* stay locked until the page reports */ }
+  const api = await loadTiktokLock();
+  if (!api || typeof api.tiktokNoteHidden !== "function") return noteLooksTiktok(note);
+  try { return !!api.tiktokNoteHidden(note, viewer); }
+  catch (err) { return noteLooksTiktok(note); }
+}
+
 let bellChain = Promise.resolve();
 
 async function pushIsDnd(flag) {
@@ -1704,6 +1750,10 @@ async function deliverBellNotesNow(notes, dnd) {
   for (const note of list) {
     const id = String(note.id);
     if (!id || !note.at || seen.has(id)) continue;
+    if (await swNoteHidden(note)) {
+      seen.add(id);
+      continue;
+    }
     seen.add(id);
     delivered.push(note);
     if (quiet || Notification.permission !== "granted") continue;
@@ -1753,7 +1803,11 @@ async function bellNotesFor(doc) {
       break;
     }
   });
-  return notes;
+  const kept = [];
+  for (let i = 0; i < notes.length; i++) {
+    if (!(await swNoteHidden(notes[i]))) kept.push(notes[i]);
+  }
+  return kept;
 }
 
 async function refreshData(request) {
@@ -1866,13 +1920,17 @@ async function refreshAndNotify() {
     if (notes.length) await deliverBellNotes(notes);
   }
   const notifyAll = await idbGet(db, "notify-all");
-  if (!fresh.length || notifyAll !== true) return;
+  const visibleFresh = [];
+  for (let i = 0; i < fresh.length; i++) {
+    if (!(await swNoteHidden(fresh[i]))) visibleFresh.push(fresh[i]);
+  }
+  if (!visibleFresh.length || notifyAll !== true) return;
   if (navigator.setAppBadge) {
-    try { await navigator.setAppBadge(fresh.length); } catch (err) { /* badges are optional */ }
+    try { await navigator.setAppBadge(visibleFresh.length); } catch (err) { /* badges are optional */ }
   }
   if (Notification.permission === "granted") {
     await self.registration.showNotification(tr("New posts"), {
-      body: trn("newPosts", fresh.length),
+      body: trn("newPosts", visibleFresh.length),
       icon: "icons/icon-192.png",
       tag: "feeds",
       data: { hash: "#/" }
@@ -1999,6 +2057,7 @@ self.addEventListener("push", (event) => {
     try { data = event.data ? event.data.json() : {}; }
     catch (err) { data = {}; }
     if (await pushIsDnd(!!(data && data.dnd))) return;
+    if (await swNoteHidden(data)) return;
     const noteId = String((data && data.id) || "");
     if (noteId) {
       try {
