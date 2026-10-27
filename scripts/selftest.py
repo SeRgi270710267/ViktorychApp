@@ -124,6 +124,17 @@ def accounts_wall_checks() -> None:
     check("paths-ignore:" in workflow and "data/communities/**" in workflow, "data-only commits do not start a deploy")
     check("python3 scripts/assemble_site.py --site _site" in workflow and "shared/lazy-modules.js" in deployed_paths(), "the deploy publishes the lazy route loader")
     check(workflow.count("python3 scripts/catalog_migrate.py --catalog-only") >= 2 and workflow.index("python3 scripts/catalog_migrate.py --catalog-only") < workflow.index("python3 scripts/accounts_publish.py") and workflow.index("python3 scripts/catalog_migrate.py --catalog-only") < workflow.rindex("python3 scripts/r2_catalog.py pull"), "the live catalog is copied into R2 before the shell switch and before refresh")
+    migrate_wf = (ROOT / ".github" / "workflows" / "catalog-migrate.yml").read_text(encoding="utf-8")
+    check(
+        "pull_request:" in migrate_wf
+        and "workflow_dispatch:" in migrate_wf
+        and "\n      - main\n" in migrate_wf
+        and "github.event_name == 'pull_request'" in migrate_wf
+        and "python3 scripts/catalog_migrate.py --dry-run" in migrate_wf
+        and "github.event_name == 'push' || github.event_name == 'workflow_dispatch'" in migrate_wf
+        and "python3 scripts/catalog_migrate.py\n" in migrate_wf,
+        "a pull request only counts the catalog, and main copies it before the shell can switch",
+    )
     check(
         accounts_publish.DEFAULT_HEALTH_ATTEMPTS >= 24 and accounts_publish.DEFAULT_HEALTH_INTERVAL >= 15,
         "health is retried for longer than a worker deploy",
