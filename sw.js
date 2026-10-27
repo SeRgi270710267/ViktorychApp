@@ -105,6 +105,7 @@ const SHELL_FILES = [
   "./shared/handle-skeleton.js",
   "./shared/reposts.js",
   "./shared/feed-order.js",
+  "./shared/pill-data.js",
   "./shared/lazy-modules.js",
   "./favicon.svg",
   "./favicon.ico",
