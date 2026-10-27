@@ -7,3 +7,6 @@ PBKDF2_ITERATIONS=1000
 # Optional. When set, /v1/x/... requires this value in the X-Viktorych-Token
 # header. Leave it out to keep the cached X mirror open.
 # X_PROXY_TOKEN=local-dev-mirror-token
+# Optional local stand-in for Connected keys. Generate a throwaway value.
+# Do not paste a production KEYS_ENC_KEY here.
+# KEYS_ENC_KEY=

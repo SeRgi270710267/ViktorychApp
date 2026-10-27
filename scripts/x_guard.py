@@ -55,7 +55,12 @@ def _x_cookie_target(url: str) -> bool:
 
 def auth_cookie_header(url: str) -> dict:
     """Optional user cookie for Nitter and RSSHub X routes. Empty for everything else."""
-    token = (os.environ.get("TWITTER_AUTH_TOKEN") or "").strip()
+    token = ""
+    try:
+        from owner_keys import credential
+        token = credential("x", "TWITTER_AUTH_TOKEN")
+    except Exception:
+        token = (os.environ.get("TWITTER_AUTH_TOKEN") or "").strip()
     if not token or not _x_cookie_target(url):
         return {}
     cookie = token if "auth_token=" in token else f"auth_token={token}"
@@ -81,7 +86,30 @@ def proxy_token_header(url: str) -> dict:
 def open_url(request: urllib.request.Request, timeout: int = 30):
     assert_not_x_api(request.full_url)
     opener = urllib.request.build_opener(_RefuseXApi)
-    return opener.open(request, timeout=timeout)
+    used = bool(request.get_header("Cookie"))
+    try:
+        return opener.open(request, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        if not used:
+            raise
+        body = b""
+        try:
+            body = exc.read() or b""
+        except OSError:
+            body = b""
+        try:
+            from owner_keys import attention_reason, drop_for_attention
+            reason = attention_reason(exc.code, body)
+        except Exception:
+            reason = ""
+        if not reason:
+            raise
+        try:
+            drop_for_attention("x", reason)
+        except Exception:
+            pass
+        request.remove_header("Cookie")
+        return opener.open(request, timeout=timeout)
 
 
 def conversation_search(status_id: str, timeout: int = 20) -> str | None:

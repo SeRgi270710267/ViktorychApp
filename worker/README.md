@@ -20,6 +20,13 @@ Add these in the GitHub repository settings. Do not commit them, and do not put 
 | `TELEGRAM_BOT_TOKEN` | Worker secret | no; `GET /tg/…` stays 503 until it is set. From `worker/`: `npx wrangler secret put TELEGRAM_BOT_TOKEN` |
 | `TELEGRAM_CHANNEL_ID` | GitHub Actions secret, then Worker secret | no; Drive uploads need it. The Accounts workflow copies it with `wrangler secret put` when the GitHub secret is set, and does not print it |
 | `WORKER_DISPATCH_TOKEN` | GitHub Actions secret | no; fine-grained token with Actions read and write. GitHub rejects a name that starts with `GITHUB_`. `.github/workflows/worker-dispatch-secret.yml` copies it into the Worker secret `GITHUB_DISPATCH_TOKEN` and does not print it |
+| `KEYS_ENC_KEY` | Worker secret | no; encrypts owner-pasted keys in D1. From `worker/`, generate `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` and then `npx wrangler secret put KEYS_ENC_KEY`. Do not commit the value |
+
+## Connected keys
+
+After the accounts wall is on, the owner can paste their own cookies, tokens, and API client pairs under Settings > Connected keys. The page sends them over HTTPS with the owner session. The Worker encrypts each value with AES-GCM (the additional data is the slot id) using `KEYS_ENC_KEY` and stores only the ciphertext in D1 table `owner_keys`. The settings page shows a fixed mask and a status (working, expired, needs attention, last used, last error). It never returns the saved value. Until `KEYS_ENC_KEY` is stored, that page shows only "Setup needed". The rest of the Worker does not read the secret, and `npx wrangler deploy` does not require it.
+
+Jobs that already have `WORKER_DISPATCH_TOKEN` and the `ACCOUNTS_API` variable read one slot at runtime from `GET /v1/owner/keys/:slot/material`. That route accepts only the dispatch token, not an owner session. The job prints `::add-mask::` and keeps the value in memory or a mode `0600` temp file that is wiped on exit. When a key is stored, the fetcher tries it once and then uses the existing anonymous path. A 401, 403, captcha, or challenge marks the slot needs attention (`POST /v1/owner/keys/:slot/attention`) and stops using that key. Expired Netscape cookies are marked expired without another request. There is no proxy rotation and no captcha solving. Stream copy stays `ffmpeg -c copy`.
 
 `OWNER_CLAIM_CODE` and `ACCOUNT_PEPPER` should be long random strings. The Accounts workflow writes them with `wrangler secret put` and does not print them. An empty value is skipped, not stored.
 
