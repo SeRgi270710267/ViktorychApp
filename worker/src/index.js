@@ -12,7 +12,7 @@ import { handleIdentitiesRoute, IDENTITY_SCHEMA, listAccountIdentities } from ".
 import { handleVaultRoute, VAULT_SCHEMA } from "./vault.js";
 import { handleXProxy } from "./xproxy.js";
 import { handleYtRoute } from "./ythls.js";
-import { fresh, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
+import { fresh, needsUpload, uploaderStale, watchDecision, watchHandles } from "./live-watch.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -2587,13 +2587,9 @@ async function watchTikTokLive(env, nowMs) {
     const job = await readJsonObject(env, WATCH_JOB_PREFIX + handle + ".json");
     const active = job && job.active && typeof job.active === "object" ? job.active : {};
 
-    if (!info.live) {
-      // The last segments of a live still need an uploader after it ends.
-      if (Number(active.segments || 0) > 0 || active.captureDone) uploader = true;
-      continue;
-    }
+    if (needsUpload(active, nowMs)) uploader = true;
+    if (!info.live) continue;
 
-    uploader = true;
     const choice = watchDecision(job, mark, seen.roomId, nowMs);
     if (choice.action !== "record" && choice.action !== "part") continue;
     const ok = await dispatchWorkflow(env, "tiktok-record.yml", {

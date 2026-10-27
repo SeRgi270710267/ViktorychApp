@@ -3015,7 +3015,7 @@ if (resumed.includes("Discord paused")) throw new Error("resumed");
     check(stopped_reason == "forbidden", "a user-level 403 stops the live read")
     live_workflow = (ROOT / ".github" / "workflows" / "discord-live.yml").read_text(encoding="utf-8")
     live_script = (ROOT / "scripts" / "discord_live.py").read_text(encoding="utf-8")
-    check("group: discord-live" in live_workflow and "cancel-in-progress: false" in live_workflow and "add-mask" in live_workflow and "timeout-minutes: 350" in live_workflow and 'cron: "*/5 * * * *"' in live_workflow, "the live workflow is one long job that does not cancel itself")
+    check("group: discord-live" in live_workflow and "cancel-in-progress: false" in live_workflow and "add-mask" in live_workflow and "timeout-minutes: 350" in live_workflow and 'cron: "23 */6 * * *"' in live_workflow, "the live workflow is one long job that does not cancel itself")
     old_site = "rss-" + "feeds"
     check("github.repository" in live_workflow and "SuperintelApp" not in live_workflow and old_site not in live_workflow and old_site not in live_script, "the live job follows the repository and no old feed URL")
     check("/pins" not in live_script, "the live poller does not read pins")
