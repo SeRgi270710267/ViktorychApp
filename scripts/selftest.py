@@ -1260,11 +1260,16 @@ def main() -> None:
     check(storage_flow.returncode == 0, "the storage cache helpers pass")
     local_flow = subprocess.run(["node", str(ROOT / "scripts" / "localfirst_test.js")], cwd=ROOT)
     direct_flow = subprocess.run(["node", str(ROOT / "scripts" / "direct_test.js")], cwd=ROOT)
+    device_flow = subprocess.run(["node", str(ROOT / "scripts" / "device_test.js")], cwd=ROOT)
     check(local_flow.returncode == 0, "a blocked reload paints home, a profile, a post, and notifications from cache")
     check(direct_flow.returncode == 0, "public reads run on the device and fall back to the server")
+    check(device_flow.returncode == 0, "device performance levels, toggles, and fallbacks pass")
     page_html = (ROOT / "index.html").read_text(encoding="utf-8")
-    check('src="storage.js"' in page_html and "storage.js" in deployed_paths() and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
-    check('src="localfirst.js"' in page_html and 'src="direct.js"' in page_html and "localfirst.js" in deployed_paths() and "direct.js" in deployed_paths() and "mergeNotes" in (ROOT / "localfirst.js").read_text(encoding="utf-8") and "public.api.bsky.app" in (ROOT / "direct.js").read_text(encoding="utf-8"), "the shell restores from local snapshots and public APIs are fetched on the device")
+    published = deployed_paths()
+    check('src="storage.js"' in page_html and "storage.js" in published and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
+    check('src="localfirst.js"' in page_html and 'src="direct.js"' in page_html and 'src="device.js"' not in page_html and "localfirst.js" in published and "direct.js" in published and "device.js" in published and "device-search.js" in published and "device-ai.js" in published and "device-media.js" in published and "device-record.js" in published and "mergeNotes" in (ROOT / "localfirst.js").read_text(encoding="utf-8") and "public.api.bsky.app" in (ROOT / "direct.js").read_text(encoding="utf-8"), "the shell restores from local snapshots and public APIs are fetched on the device")
+    app_boot = (ROOT / "app.js").read_text(encoding="utf-8")
+    check("requestIdleCallback(fire, { timeout: 1200 })" in app_boot and '"pointerdown"' in app_boot and '"keydown"' in app_boot and '"scroll"' in app_boot and '"hashchange"' in app_boot and "setTimeout(fire, 6500)" not in app_boot and "holdDevice(true)" in app_boot and "holdDevice" in (ROOT / "direct.js").read_text(encoding="utf-8"), "device work starts after first paint or the first interaction, and the first feed read stays on the existing path")
     local_src = (ROOT / "localfirst.js").read_text(encoding="utf-8")
     check("orderPosts" in local_src and "playlistFirst" in local_src and "cacheFirstSegment" in local_src and 'saveDoc("shorts"' in (ROOT / "shorts.js").read_text(encoding="utf-8") and 'saveDoc("lives"' in (ROOT / "shorts.js").read_text(encoding="utf-8") and 'saveDoc("music"' in (ROOT / "music.js").read_text(encoding="utf-8") and 'saveDoc("messages"' in (ROOT / "discord-ui.js").read_text(encoding="utf-8") and 'order: "utc"' in (ROOT / "app.js").read_text(encoding="utf-8"), "every screen keeps an ordered local copy and the first video segment is cached")
     ia_backup_checks()
@@ -1308,7 +1313,9 @@ def main() -> None:
         if not path.is_file() or "fixtures" in path.parts or path.suffix not in {".js", ".py", ".html", ".yml", ".md", ".webmanifest", ".css", ".json"}:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        if stale_re.search(text) or old_repo in text:
+        # Account deletion still clears data saved under the previous name.
+        cleaned = text.replace('"' + old_repo + '-"', "").replace("'" + old_repo + "-'", "")
+        if stale_re.search(cleaned) or old_repo in cleaned:
             stale.append(str(path.relative_to(ROOT)))
     check(not stale, "the previous site name is gone: " + ", ".join(stale))
     check(str(manifest["start_url"]).endswith("#/home"), "the manifest opens the home timeline")
