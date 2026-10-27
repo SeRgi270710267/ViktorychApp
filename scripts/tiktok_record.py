@@ -977,8 +977,11 @@ def offer_segment(buf_key: str, meta: dict) -> None:
     if not object_key:
         return
     role = "init" if meta.get("role") == "init" else "segment"
-    part_index = int(meta.get("index") or 0)
+    part_index = int(meta.get("index") if meta.get("index") is not None else 0)
     kind = "init" if role == "init" else "segment"
+    if role == "init" and not init_ready(blob):
+        log("init skipped")
+        return
     digest = hashlib.sha256(blob).hexdigest()
     local = Path(tempfile.mkdtemp(prefix="tiktok-offer-")) / Path(buf_key).name
     try:
@@ -1043,6 +1046,15 @@ def split_oversize(local: Path, dest: Path) -> list:
     return pieces
 
 
+def init_ready(blob: bytes) -> bool:
+    """A fragment is not playable until this fMP4 init exists. An empty file is not one."""
+    data = blob if isinstance(blob, (bytes, bytearray)) else b""
+    if len(data) < 32 or len(data) >= SMALL_BYTES:
+        return False
+    ftyp = data.find(b"ftyp")
+    return 0 <= ftyp <= 32 and data.find(b"moov") > ftyp
+
+
 def publish_local(dest: Path, sent: set, meta: dict, closed: bool = False) -> int:
     """Store finished segments and drop the local files.
 
@@ -1054,17 +1066,24 @@ def publish_local(dest: Path, sent: set, meta: dict, closed: bool = False) -> in
     playlist = durations_from_playlist(dest / "index.m3u8")
     init = dest / "init.mp4"
     if init.is_file() and "init.mp4" not in sent:
-        piece = {
-            "objectKey": meta["objectKey"],
-            "role": "init",
-            "index": -1,
-            "duration": 0,
-            "channelSlot": meta["channelSlot"],
-            "oversize": False,
-        }
-        if store_piece(init, meta["buf"] + "/init.mp4", piece):
-            sent.add("init.mp4")
-            stored += 1
+        try:
+            blob = init.read_bytes()
+        except OSError:
+            blob = b""
+        if init_ready(blob):
+            snap = dest / "init-stable.mp4"
+            snap.write_bytes(blob)
+            piece = {
+                "objectKey": meta["objectKey"],
+                "role": "init",
+                "index": -1,
+                "duration": 0,
+                "channelSlot": meta["channelSlot"],
+                "oversize": False,
+            }
+            if store_piece(snap, meta["buf"] + "/init.mp4", piece):
+                sent.add("init.mp4")
+                stored += 1
     paths = sorted(dest.glob("seg*.m4s"))
     if not closed and paths:
         paths = paths[:-1]
@@ -1744,8 +1763,14 @@ def cmd_upload(slot: str) -> int:
                 r2_put(key, json.dumps(meta).encode("utf-8"))
                 continue
             role = "init" if meta.get("role") == "init" else "segment"
-            part_index = int(meta.get("index") or 0)
+            part_index = int(meta.get("index") if meta.get("index") is not None else 0)
             kind = "init" if role == "init" else "segment"
+            if role == "init" and not init_ready(blob):
+                meta["held"] = True
+                dead.add(key)
+                r2_put(key, json.dumps(meta).encode("utf-8"))
+                log("init skipped")
+                continue
             existing = d1_rows(token, account, database, "SELECT file_id FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? LIMIT 1", [object_key, kind, part_index])
             if not existing:
                 sent = send_document("https://api.telegram.org", bot, channel, local, object_key, pace, max_time=90, max_wait=20)
@@ -1933,6 +1958,8 @@ def selftest() -> int:
     check(args[args.index("-map") + 1] == "0:v:0" and "0:a:0?" in args and "-sn" in args, "ffmpeg copies video and audio and drops the text stream")
     check(UA in args and "-user_agent" in args, "ffmpeg uses the Chrome user agent")
     check("concurrent" not in " ".join(args) and args.count("-i") == 1, "ffmpeg opens one connection and does not split ranges")
+    check(init_ready(b"\x00\x00\x00\x18ftypisom\x00\x00\x00\x00moov" + b"\x00" * 16), "a finished init is what gets stored")
+    check(not init_ready(b"") and not init_ready(b"\x00" * 64), "an empty init is not stored")
     check(copy_only(split_args(Path("big.m4s"), dest, 2)), "an oversize segment is split with stream copy")
     frame = keyframe_args(Path("seg00000.m4s"), Path("thumb.mp4"))
     check(copy_only(frame), "a card thumbnail is one copied video packet")
