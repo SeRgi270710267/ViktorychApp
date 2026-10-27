@@ -13,6 +13,8 @@
 // X_PROXY_TOKEN, when set as a Worker secret, is required in the
 // X-Viktorych-Token header. The sync sends it only to this route.
 
+import { assertNotPaidX } from "./x-guard.js";
+
 const UPSTREAM = "https://api.fxtwitter.com";
 const PREFIX = "/v1/x";
 const PROFILE = /^2\/profile\/([A-Za-z0-9_]{1,15})\/(statuses|media|articles)$/;
@@ -99,6 +101,7 @@ export async function handleXProxy(request, env, url) {
   const controller = typeof AbortController === "function" ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), TIMEOUT_MS) : null;
   try {
+    assertNotPaidX(target.toString());
     upstream = await fetch(target.toString(), {
       headers: { accept: "application/json", "user-agent": "ViktorychAppXMirror/1" },
       signal: controller ? controller.signal : undefined

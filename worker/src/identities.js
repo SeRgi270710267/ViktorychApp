@@ -6,6 +6,7 @@
  */
 
 import { invalidate } from "./edge-cache.js";
+import { assertNotPaidX } from "./x-guard.js";
 
 export const IDENTITY_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS account_identities (id INTEGER PRIMARY KEY AUTOINCREMENT, public_id TEXT NOT NULL, platform TEXT NOT NULL, handle TEXT NOT NULL, display_name TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '', proof_url TEXT NOT NULL DEFAULT '', verification_type TEXT NOT NULL DEFAULT 'challenge', verified INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL, UNIQUE(public_id, platform, handle))",
@@ -112,6 +113,7 @@ async function verifyExternalProof(platform, handle, code, proofUrl) {
       }
       try {
         const fetchUrl = statusId ? "https://api.fxtwitter.com/status/" + statusId : ("https://api.fxtwitter.com/" + encodeURIComponent(handle));
+        assertNotPaidX(fetchUrl);
         const res = await fetch(fetchUrl, {
           headers: { "user-agent": "ViktorychApp-IdentityVerifier/1.0", accept: "application/json" }
         });
@@ -176,7 +178,9 @@ async function verifyExternalProof(platform, handle, code, proofUrl) {
   // 2. Profile Bio / Description verification (user placed the verification code in their public bio)
   if (platform === "x") {
     try {
-      const res = await fetch("https://api.fxtwitter.com/" + encodeURIComponent(handle), {
+      const profileUrl = "https://api.fxtwitter.com/" + encodeURIComponent(handle);
+      assertNotPaidX(profileUrl);
+      const res = await fetch(profileUrl, {
         headers: { "user-agent": "ViktorychApp-IdentityVerifier/1.0", accept: "application/json" }
       });
       if (res.ok) {
