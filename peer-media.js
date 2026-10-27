@@ -57,7 +57,18 @@ function visible() {
 }
 
 function refreshSettings() {
-  settings = peerSettings(loadDevicePerformance(typeof localStorage !== "undefined" ? localStorage : null));
+  const store = typeof localStorage !== "undefined" ? localStorage : null;
+  let raw = loadDevicePerformance(store);
+  try {
+    const saved = store ? JSON.parse(store.getItem("viktorychapp-settings-v1") || "null") : null;
+    if (saved && saved.devicePerf && typeof saved.devicePerf === "object") raw = Object.assign({}, saved.devicePerf, raw);
+  } catch (err) { /* the dedicated record still decides */ }
+  settings = peerSettings(raw);
+  if (typeof window !== "undefined" && window.ViktorychDevice && window.ViktorychDevice.effectiveLevel && window.ViktorychDevice.signals) {
+    const level = window.ViktorychDevice.effectiveLevel(raw, window.ViktorychDevice.signals());
+    settings.level = level === "max" ? "max" : (level === "light" ? "light" : "balanced");
+    settings.profile = settings.level === "light" ? "lite" : settings.level;
+  }
   const on = gate().on;
   if (typeof navigator !== "undefined" && navigator.serviceWorker && navigator.serviceWorker.controller) {
     try { navigator.serviceWorker.controller.postMessage({ type: "peer-flag", on: on }); }
