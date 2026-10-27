@@ -854,7 +854,7 @@
     list.forEach((item) => {
       if (!item || !item.id || out.length >= 80) return;
       const hash = String(item.hash || "#/");
-      const kinds = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
+      const kinds = { post: 1, mention: 1, reply: 1, quote: 1, like: 1, repost: 1, follow: 1, dm: 1, discord: 1, live: 1 };
       out.push({
         id: String(item.id).slice(0, 160),
         at: Number(item.at) || 0,
@@ -867,7 +867,8 @@
         avatar: httpsUrl(item.avatar),
         image: httpsUrl(item.image),
         verified: item.verified === true,
-        mention: item.mention === true,
+        mention: item.mention === true || item.kind === "mention" || item.kind === "discord",
+        others: Math.max(0, Number(item.others) || 0),
         partial: item.partial === true,
         hash: hash.charAt(0) === "#" && hash.length < 300 ? hash : "#/",
         feedId: String(item.feedId || "").slice(0, 120),
@@ -954,9 +955,16 @@
     return deleted < (Number(tab.updatedAt) || 0);
   }
 
+  function builtinNoteTab(kind) {
+    return { id: kind, name: kind, kind: kind, emoji: "", color: "", showHome: false, showNotes: true, members: [], readAt: Number((STATE.settings && STATE.settings.builtinNoteRead && STATE.settings.builtinNoteRead[kind]) || 0), sort: "recent" };
+  }
+
   function visibleNoteTabs() {
-    const list = noteTabsSame() ? feedTabs() : noteTabs();
-    return list.filter((tab) => tabAlive(tab) && tab.showNotes !== false);
+    const list = (noteTabsSame() ? feedTabs() : noteTabs()).filter((tab) => tabAlive(tab) && tab.showNotes !== false);
+    const verified = list.find((tab) => tab.kind === "verified") || builtinNoteTab("verified");
+    const mentions = list.find((tab) => tab.kind === "mentions") || builtinNoteTab("mentions");
+    const rest = list.filter((tab) => tab !== verified && tab !== mentions && tab.kind !== "verified" && tab.kind !== "mentions");
+    return [verified, mentions].concat(rest);
   }
 
   function noteTabById(id) {
@@ -4608,17 +4616,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     </div>`;
   }
 
-  function internalPostHandle(handle, post, creator) {
-    const raw = String(handle || "").replace(/^@/, "");
-    if (!raw) return "";
-    const isInternal = (post && (post.platform === "app" || (post.feedId && post.feedId.startsWith("app:")) || !!post.publicId)) ||
-      (creator && (creator.platform === "app" || (creator.feedId && creator.feedId.startsWith("app:")) || !!creator.publicId));
-    if (!isInternal) return raw;
-    const pid = String((post && (post.publicId || post.authorId)) || (creator && creator.publicId) ||
-      (post && post.feedId && post.feedId.startsWith("app:") && /^\d+$/.test(post.feedId.slice(4)) ? post.feedId.slice(4) : "") ||
-      (creator && creator.feedId && creator.feedId.startsWith("app:") && /^\d+$/.test(creator.feedId.slice(4)) ? creator.feedId.slice(4) : "") || "").replace(/^app:/, "");
-    if (pid && !raw.endsWith(pid)) return raw + pid;
-    return raw;
+  function internalPostHandle(handle) {
+    return String(handle || "").replace(/^@/, "");
   }
 
   function quoteCard(quoted) {
@@ -7112,11 +7111,12 @@ const here = parseRoute();
   }
 
   function bellUnread() {
-    const read = Number(STATE.settings && STATE.settings.bellRead) || 0;
+    const serverNotes = typeof notesServer === "function" ? notesServer() : null;
+    const read = Math.max(Number(STATE.settings && STATE.settings.bellRead) || 0, Number(serverNotes && serverNotes.readUntil) || 0);
     const notes = (STATE.settings && STATE.settings.bellNotes) || [];
     const visibleUnread = visibleNotes(notes).filter((note) => !note.read && (Number(note.at) || 0) > read).length;
     if (window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token()) {
-      const server = Number(notesServer().unread) || 0;
+      const server = Number(serverNotes && serverNotes.unread) || 0;
       const hiddenUnread = notes.filter((note) => noteHidden(note) && !note.read && (Number(note.at) || 0) > read).length;
       return Math.max(visibleUnread, Math.max(0, server - hiddenUnread));
     }
@@ -8027,6 +8027,156 @@ const here = parseRoute();
     return archiveSentinel();
   }
 
+  const WELCOME_KEY = "viktorychapp-welcome-v1";
+  let publicPosts = [];
+  let publicStamp = 0;
+  let welcomePhoto = "";
+  const welcomeFollows = {};
+
+  function readWelcome() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(WELCOME_KEY) || "null");
+      if (raw && typeof raw === "object") return { step: Number(raw.step) || 0, done: !!raw.done };
+    } catch (err) { /* start at the first step */ }
+    return { step: 0, done: false };
+  }
+
+  function writeWelcome(doc) {
+    try { localStorage.setItem(WELCOME_KEY, JSON.stringify({ step: doc.step || 0, done: !!doc.done })); } catch (err) { /* the sheet can still close */ }
+  }
+
+  function samePublicPosts(next) {
+    if (publicPosts.length !== next.length) return false;
+    for (let i = 0; i < next.length; i++) if (!publicPosts[i] || publicPosts[i].id !== next[i].id) return false;
+    return true;
+  }
+
+  function schedulePublicPosts() {
+    if (document.documentElement.getAttribute("data-wall") === "1") return;
+    if (!accountToken()) return;
+    const now = Date.now();
+    if (now - publicStamp < 20000) return;
+    publicStamp = now;
+    accountCall("/v1/posts").then((res) => {
+      if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      if (samePublicPosts(res.posts)) return;
+      publicPosts = res.posts;
+      render();
+    }).catch(() => {});
+  }
+
+  function hydratePublicMedia() {
+    const token = accountToken();
+    const root = accountsApi();
+    if (!token || !root) return;
+    document.querySelectorAll("[data-public-media]").forEach((el) => {
+      if (el.getAttribute("data-public-tried")) return;
+      const path = el.getAttribute("data-public-media") || "";
+      if (path.charAt(0) !== "/") return;
+      el.setAttribute("data-public-tried", "1");
+      fetch(root + path, { headers: { Authorization: "Bearer " + token }, credentials: "omit" }).then((res) => {
+        if (!res.ok) return null;
+        return res.blob();
+      }).then((blob) => {
+        if (blob) el.src = URL.createObjectURL(blob);
+      }).catch(() => {});
+    });
+  }
+
+  function publicPostSpam(post) {
+    const mine = signedAccount();
+    if (mine && mine.publicId && mine.publicId === post.authorId) return false;
+    const ai = window.ViktorychOnDeviceAi;
+    if (!ai) return false;
+    if (ai.likelySpam && ai.likelySpam(post.body || "", "post", { force: true })) return true;
+    if (typeof ai.spamScore === "function" && ai.spamScore(post.body || "") >= 0.45) return true;
+    return false;
+  }
+
+  function publicMediaHtml(item) {
+    const mime = String(item.mime || "");
+    const tag = mime.indexOf("video/") === 0 ? "video" : mime.indexOf("audio/") === 0 ? "audio" : mime.indexOf("image/") === 0 ? "img" : "";
+    if (!tag) return "";
+    const extra = tag === "img" ? ' alt=""' : " controls";
+    return `<${tag}${extra} data-public-media="${esc(item.url || "")}"></${tag}>`;
+  }
+
+  function publicPostHtml(post) {
+    if (!STATE.publicSpam) STATE.publicSpam = {};
+    if (publicPostSpam(post) && !STATE.publicSpam[post.id]) {
+      return `<article class="card public-post" data-post="${esc(post.id)}"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></article>`;
+    }
+    const media = (post.media || []).map(publicMediaHtml).join("");
+    const quote = post.quote ? `<blockquote class="public-quote"><strong>${esc(post.quote.authorName || "")}</strong><p>${esc(post.quote.body || "")}</p></blockquote>` : "";
+    const mine = signedAccount();
+    const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
+    const tools = self ? "" : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>`;
+    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
+  }
+
+  function welcomeHtml(route) {
+    if (!route || route.name !== "home") return "";
+    if (document.documentElement.getAttribute("data-wall") === "1") return "";
+    if (!accountToken()) return "";
+    const doc = readWelcome();
+    if (doc.done) return "";
+    const step = doc.step || 0;
+    let body = "";
+    if (step <= 0) {
+      body = `<h2>${esc(tr("Add a photo and a short bio"))}</h2><label class="field"><span>${esc(tr("Name"))}</span><input id="welcome-name" maxlength="50" value="${esc(STATE.welcomeName || "")}"></label><label class="field"><span>${esc(tr("Bio"))}</span><textarea id="welcome-bio" maxlength="160">${esc(STATE.welcomeBio || "")}</textarea></label><label class="field"><span>${esc(tr("Add media"))}</span><input id="welcome-photo" type="file" accept="image/*"></label>`;
+    } else if (step === 1) {
+      const picks = feeds().slice(0, 6).map((feed) => {
+        const on = !!welcomeFollows[feed.id];
+        const label = feed.name || feed.handle || "";
+        return `<button type="button" data-act="welcome-follow" data-id="${esc(feed.id)}" aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
+      }).join("");
+      body = `<h2>${esc(tr("Pick feeds to follow"))}</h2><div class="welcome-feeds">${picks}</div>`;
+    } else {
+      body = `<h2>${esc(tr("Notifications can wait until you ask"))}</h2><button class="save" type="button" data-act="welcome-notify">${esc(tr("Notify me about new posts"))}</button>`;
+    }
+    return `<section class="welcome-sheet" data-welcome>${body}<div class="welcome-actions"><button type="button" data-act="welcome-skip">${esc(tr("Not now"))}</button><button class="save" type="button" data-act="welcome-next">${esc(tr("Next"))}</button></div></section>`;
+  }
+
+  function publishPublicPost(text, parentId, quoteId, file) {
+    const token = accountToken();
+    const root = accountsApi();
+    const finishOk = (post) => {
+      if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
+      if (post && post.id) publicPosts = [post].concat(publicPosts.filter((item) => item.id !== post.id));
+      publicStamp = Date.now();
+      toast(tr("Your post was sent."));
+      render();
+    };
+    const finishFail = () => {
+      if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
+      toast(tr("Could not send that post. It is still saved on this device."));
+    };
+    if (file && token && root) {
+      const data = new FormData();
+      if (text) data.set("body", text);
+      if (parentId) data.set("parentId", parentId);
+      if (quoteId) data.set("quoteId", quoteId);
+      data.set("file", file, file.name || "upload");
+      fetch(root + "/v1/posts", { method: "POST", headers: { Authorization: "Bearer " + token }, body: data, credentials: "omit" }).then((res) => {
+        return res.json().catch(() => ({})).then((body) => {
+          body.status = res.status;
+          return body;
+        });
+      }).then((res) => {
+        if (res && res.status === 201 && res.post) finishOk(res.post);
+        else finishFail();
+      }).catch(finishFail);
+      return;
+    }
+    const body = { body: text };
+    if (parentId) body.parentId = parentId;
+    if (quoteId) body.quoteId = quoteId;
+    accountCall("/v1/posts", { method: "POST", body: body }).then((res) => {
+      if (res && res.status === 201 && res.post) finishOk(res.post);
+      else finishFail();
+    }).catch(finishFail);
+  }
+
   function homeView(route) {
     const tab = route.tab || "foryou";
     const sorted = homeSorted(route);
@@ -8036,13 +8186,14 @@ const here = parseRoute();
     const findAccounts = !list.length && (tab === "following" || tab === "foryou")
       ? `<p class="empty-action"><a class="save" href="#/feeds">${esc(tr("Find accounts to follow"))}</a></p>`
       : "";
-    const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const published = tab === "foryou" ? publicPosts.map(publicPostHtml).join("") : "";
+    const body = published + (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
-    ) + findAccounts;
+    ) + findAccounts);
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
     const bar = STATE.homeFreshBar ? `<div class="home-fresh" role="progressbar" aria-label="${esc(tr("Loading"))}"><span></span></div>` : "";
-    const inline = (tab === "foryou" || tab === "following") && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
+    const inline = (tab === "foryou" || tab === "following") && STATE.modal !== "compose" && window.ViktorychXCompose && window.ViktorychXCompose.inlineHtml
       ? window.ViktorychXCompose.inlineHtml("home")
       : "";
     return homeHeader(tab) + bar + inline + spaceCard + body + timelineSentinel(list.length, sorted.length);
@@ -11059,8 +11210,8 @@ const here = parseRoute();
   }
 
   function noteIsMention(note) {
-    if (!note) return false;
-    if (note.mention === true) return true;
+    if (!note || noteHidden(note)) return false;
+    if (note.mention === true || note.kind === "discord") return true;
     const me = viewerHandle().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (!me) return false;
     return new RegExp("(^|[^A-Za-z0-9_])@" + me + "(?![A-Za-z0-9_])", "i").test(String(note.text || ""));
@@ -11156,8 +11307,25 @@ const here = parseRoute();
       scheduleNoteSync();
       return;
     }
-    const tab = noteTabById(active);
+    const tab = noteTabById(active) || (active === "mentions" || active === "verified" ? { id: active, kind: active, readAt: 0 } : null);
     if (!tab) return;
+    if (tab.kind === "mentions" || tab.kind === "verified") {
+      const ids = notesForTab(tab).filter((note) => note && !note.read && note.id).map((note) => note.id);
+      if (!ids.length) return;
+      (STATE.settings.bellNotes || []).forEach((note) => {
+        if (ids.indexOf(note.id) >= 0) note.read = true;
+      });
+      if (!STATE.settings.builtinNoteRead) STATE.settings.builtinNoteRead = {};
+      STATE.settings.builtinNoteRead[tab.kind] = Date.now();
+      const pending = notePending();
+      pending.ids = (pending.ids || []).concat(ids).slice(-80);
+      pending.tab = tab.kind;
+      writeNotePending(pending);
+      saveSettings();
+      scheduleNoteSync();
+      paintBellBadge();
+      return;
+    }
     const newest = notesForTab(tab).reduce((max, note) => Math.max(max, Number(note.at) || 0), 0);
     if (newest && (Number(tab.readAt) || 0) < newest) {
       tab.readAt = newest;
@@ -11180,9 +11348,15 @@ const here = parseRoute();
   function noteTitle(note) {
     const who = esc((note && (note.name || note.handle)) || tr("Someone"));
     const kind = note && note.kind;
+    const others = Number(note && note.others) || 0;
+    if (kind === "like" && others > 0) return tr("{name} and {n} others liked your post", { name: who, n: others });
     if (kind === "like") return tr("{name} liked your post", { name: who });
+    if (kind === "repost" && others > 0) return tr("{name} and {n} others reposted your post", { name: who, n: others });
     if (kind === "repost") return tr("{name} reposted your post", { name: who });
+    if (kind === "quote") return tr("{name} quoted your post", { name: who });
     if (kind === "reply") return tr("{name} replied to you", { name: who });
+    if (kind === "dm") return tr("{name} sent you a message", { name: who });
+    if (kind === "discord") return tr("Discord alert");
     if (kind === "mention" || (note && note.mention)) return tr("{name} mentioned you", { name: who });
     if (kind === "follow") return tr("{name} followed you", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
@@ -11219,7 +11393,7 @@ const here = parseRoute();
     const notes = current ? notesForTab(current) : visibleNotes((STATE.settings && STATE.settings.bellNotes) || []);
     const buttons = noteTabButton("all", tr("All"), active === "all") + tabs.map((tab) => noteTabButton(tab.id, noteTabLabel(tab), active === tab.id)).join("");
     const bar = `<div class="tabs-bar notes-tabs"><button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button><div class="tabs" role="tablist" aria-label="${tr("Notification tabs")}">${buttons}</div><button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button></div>`;
-    const gear = `<button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button><button type="button" class="show-more odai-btn" data-act="odai-catch" data-scope="notification">${tr("Catch me up")}</button>`;
+    const gear = `<button class="outline note-read-all" type="button" data-act="note-mark-all">${esc(tr("Mark all as read"))}</button><button class="icon-btn note-gear" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${menuIcon("gear")}</button><button type="button" class="show-more odai-btn" data-act="odai-catch" data-scope="notification">${tr("Catch me up")}</button>`;
     const head = `<div class="topbar tall notes-top"><div class="mhead"><button class="m-ava" data-act="drawer" aria-label="${tr("Menu")}"><span class="ava initials">Y</span></button><a class="m-icon" href="#/settings" aria-label="${tr("Settings")}">${icon("spark")}</a></div><div class="page-head"><div class="head-text grow"><h1>${tr("Notifications")}</h1></div>${gear}</div>${bar}</div>`;
     let body = "";
     if (!notes.length && active === "all") body = emptyBlock(tr("Nothing to see here — yet"), tr("From likes to reposts and a whole lot more, this is where all the action happens."));
@@ -11390,6 +11564,36 @@ const here = parseRoute();
     return `<button class="primary" type="button" data-act="install">${tr("Install app")}</button>`;
   }
 
+  function setMeta(selector, value) {
+    const el = document.head && document.head.querySelector(selector);
+    if (el) el.setAttribute("content", value == null ? "" : String(value));
+  }
+  function setProfileShareMeta(route) {
+    const fallbackTitle = document.title || productName("app");
+    const icon = "icons/icon-512.png?v=7";
+    let title = fallbackTitle;
+    let description = "";
+    let image = icon;
+    let url = location.origin + location.pathname;
+    if (route && route.name === "profile" && window.ViktorychAccounts && window.ViktorychAccounts.storedAccount) {
+      const account = window.ViktorychAccounts.storedAccount(route.handle);
+      if (account && account.handle) {
+        const name = account.displayName || account.handle;
+        title = name + " (@" + account.handle + ")";
+        description = account.bio || "";
+        url += "#/@" + encodeURIComponent(account.handle);
+        const avatar = String(account.avatar || "");
+        if (avatar && !/\/v1\/media\/(?:avatars|banners)\/\d{12}\//.test(avatar)) image = avatar;
+      }
+    }
+    setMeta('meta[property="og:title"]', title);
+    setMeta('meta[name="twitter:title"]', title);
+    setMeta('meta[property="og:description"]', description);
+    setMeta('meta[name="twitter:description"]', description);
+    setMeta('meta[property="og:url"]', url);
+    setMeta('meta[property="og:image"]', image);
+    setMeta('meta[name="twitter:image"]', image);
+  }
   function routeTitle(route, liveName, personName, discordTitle) {
     const titleSuffix = " / " + productName("app");
     if (discordTitle) return discordTitle + titleSuffix;
@@ -11397,6 +11601,15 @@ const here = parseRoute();
     const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
     if (route.name === "explore") return (exploreQ ? tr("{q} - Explore", { q: exploreQ }) : tr("Explore")) + titleSuffix;
     if (route.name === "user") return (liveName || route.handle || tr("Profile")) + titleSuffix;
+    if (route.name === "profile") {
+      const stored = window.ViktorychAccounts && window.ViktorychAccounts.storedAccount && window.ViktorychAccounts.storedAccount(route.handle);
+      if (stored && stored.handle) {
+        const name = stored.displayName || stored.handle;
+        return name + " (@" + stored.handle + ")" + titleSuffix;
+      }
+      const bare = String(route.handle || "").replace(/\d{12}$/, "");
+      return (bare ? "@" + bare : tr("Profile")) + titleSuffix;
+    }
     let key = "";
     if (route.name === "home") key = tr("Home");
     else if (route.name === "status") key = tr("Post noun");
@@ -11559,12 +11772,29 @@ const here = parseRoute();
         ${peerMediaSettingsHtml()}
       </div>`;
     }
+    if (section === "notifications" && sub === "discord") return discordAlertsView();
     if (section === "notifications") {
       const shared = noteTabsSame();
       const sameSwitch = `<button class="tab-switch${shared ? " on" : ""}" type="button" role="switch" aria-checked="${shared ? "true" : "false"}" data-act="note-tabs-same"><span>${esc(tr("Same tabs as Feed"))}</span><i></i></button>`;
       const rows = shared ? "" : noteTabs().map((tab) => `<div class="tab-edit-row"><span>${esc(noteTabLabel(tab))}</span><button class="outline" type="button" data-act="feed-tab-edit" data-scope="notes" data-id="${esc(tab.id)}">${esc(tr("Edit"))}</button></div>`).join("") + `<button class="outline" type="button" data-act="feed-tab-new" data-scope="notes">${esc(tr("New tab"))}</button>`;
+      const prefs = notePrefs();
+      const prefRow = (kind, label) => {
+        const mode = prefs[kind] || "push";
+        const btn = (id, text) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="note-pref" data-kind="${kind}" data-mode="${id}">${esc(text)}</button>`;
+        return `<h2>${esc(label)}</h2><div class="theme-row" role="group" aria-label="${esc(label)}">${btn("inapp", tr("In app"))}${btn("push", tr("Push"))}${btn("off", tr("Off"))}</div>`;
+      };
+      const followOnly = prefs.mentionsFrom === "following";
       return settingsHead(tr("Notifications"), "#/settings") + `<div class="set-block">
         <button class="primary" type="button" data-act="notify">${esc(notifyOn ? tr("Notifications on") : tr("Notify me about new posts"))}</button>
+        ${settingsRow("#/settings/notifications/discord", tr("Discord alerts"), tr("Mentions and keywords from channels this app already shows."))}
+        ${prefRow("mentions", tr("Mentions"))}
+        <button class="tab-switch${followOnly ? " on" : ""}" type="button" role="switch" aria-checked="${followOnly ? "true" : "false"}" data-act="note-mentions-from"><span>${esc(tr("Only from people you follow"))}</span><i></i></button>
+        ${prefRow("replies", tr("Replies"))}
+        ${prefRow("quotes", tr("Quotes"))}
+        ${prefRow("likes", tr("Likes"))}
+        ${prefRow("reposts", tr("Reposts"))}
+        ${prefRow("follows", tr("Follows"))}
+        ${prefRow("dms", tr("Direct messages"))}
         ${sameSwitch}
         <p class="phandle">${esc(tr("Notifications uses the Home tabs. Turn this off to keep a separate list."))}</p>
         ${rows}
@@ -11589,6 +11819,7 @@ const here = parseRoute();
       const presenceBlock = window.ViktorychPresence ? window.ViktorychPresence.settingsHtml() : "";
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
         ${presenceBlock}
+        ${(window.ViktorychAccounts && window.ViktorychAccounts.privacyHtml) ? window.ViktorychAccounts.privacyHtml() : ""}
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
@@ -11838,15 +12069,18 @@ if (STATE.histClear) {
       </div></div>`;
     }
     if (STATE.modal === "compose") {
-      if (window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
+      if (STATE.composeVia === "x" && window.ViktorychXCompose && window.ViktorychXCompose.modalHtml) {
         const composed = window.ViktorychXCompose.modalHtml();
         if (composed) return composed;
       }
+      const mine = signedAccount();
+      const face = mine ? avatar(mine.avatar, mine.displayName || mine.handle) : `<span class="ava initials">Y</span>`;
       return `<div class="modal-back" data-act="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-label="${esc(tr("Post"))}" data-act="stop">
-        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div></div>
+        <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div><button class="outline" type="button" data-act="compose-x">${tr("Post to X")}</button></div>
         <div class="modal-body" style="display:flex;gap:12px">
-          <span class="ava initials">Y</span>
-          <div style="flex:1"><p class="phandle" id="compose-note">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          ${face}
+          <div style="flex:1"><p class="phandle" id="compose-note">${tr("Posts here are public inside the app. Offline notes stay on this device.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <label class="field"><span>${esc(tr("Add media"))}</span><input id="compose-file" type="file" accept="image/*,video/*,audio/*"></label>
           <div class="odai-chips"><button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="compose-text" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="clear" data-field="compose-text" data-scope="post">${tr("Tone")}</button></div>
           <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div></div>
         </div></div></div>`;
@@ -11965,7 +12199,7 @@ if (STATE.histClear) {
     const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const sensitive = route.name === "messages" || route.name === "notifications" || (route.name === "settings" && route.section === "privacy");
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
 
   function toggleReaction(act, id) {
@@ -14241,6 +14475,8 @@ if (STATE.histClear) {
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
       commitApp(shell(view(route), route));
+      schedulePublicPosts();
+      hydratePublicMedia();
       if (window.ViktorychPrivacy && window.ViktorychPrivacy.paint) window.ViktorychPrivacy.paint();
       if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
       if (window.ViktorychShorts) {
@@ -14275,8 +14511,9 @@ if (STATE.histClear) {
       const personName = window.FeedsPeople && window.FeedsPeople.titleFor ? window.FeedsPeople.titleFor(route) : "";
       const discordTitle = window.FeedsDiscord && window.FeedsDiscord.titleFor ? window.FeedsDiscord.titleFor(route) : "";
       const exploreQ = route.name === "explore" ? (route.query.get("q") || "").trim() : "";
-      if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = withUnreadTitle(window.SIntelMusic.titleFor(route));
+if (route.name === "music" && window.SIntelMusic && window.SIntelMusic.titleFor) document.title = withUnreadTitle(window.SIntelMusic.titleFor(route));
       else document.title = withUnreadTitle(routeTitle(route, liveName, personName, discordTitle));
+      setProfileShareMeta(route);
       window.scrollTo(0, y);
       if (explicitY && window.requestAnimationFrame) {
         window.requestAnimationFrame(() => {
@@ -14593,7 +14830,7 @@ if (STATE.histClear) {
     if (act === "drawer") { STATE.drawer = true; render(); return; }
     if (act === "close-drawer") { STATE.drawer = false; render(); return; }
     if (act === "compose") {
-      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
+      STATE.composeVia = "app";
       STATE.modal = "compose";
       const drafts = window.ViktorychLocal;
       if (!STATE.composeSeed && drafts && drafts.readDoc) {
@@ -14601,7 +14838,6 @@ if (STATE.histClear) {
           const text = saved && saved.text ? String(saved.text) : "";
           if (STATE.modal === "compose" && text && !STATE.composeSeed) {
             STATE.composeSeed = text;
-            if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(text);
             render();
           }
         }).catch(() => {});
@@ -14611,7 +14847,7 @@ if (STATE.histClear) {
     }
     if (act === "game-share") {
       STATE.composeSeed = window.ViktorychGames && window.ViktorychGames.shareText ? window.ViktorychGames.shareText() : "";
-      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
+      STATE.composeVia = "app";
       STATE.modal = "compose";
       render();
       return;
@@ -14794,7 +15030,7 @@ if (STATE.histClear) {
     }
     if (act === "close-modal" || act === "close-remove") {
       if (STATE.modal === "compose" && String(STATE.composeSeed || "").trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: STATE.composeSeed });
-      STATE.modal = null; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return;
+      STATE.modal = null; STATE.composeVia = ""; STATE.tabScope = ""; STATE.composeSeed = ""; STATE.confirm = null; STATE.histClear = ""; STATE.removeFeed = null; STATE.navNewFolderOpen = false; render(); return;
     }
     if (act === "ask-remove") {
       const id = el.dataset.id || "";
@@ -14821,24 +15057,123 @@ if (STATE.histClear) {
       else render();
       return;
     }
+    if (act === "welcome-skip") {
+      writeWelcome({ step: 0, done: true });
+      render();
+      return;
+    }
+    if (act === "welcome-follow") {
+      const id = el.dataset.id || "";
+      if (id) welcomeFollows[id] = !welcomeFollows[id];
+      render();
+      return;
+    }
+    if (act === "welcome-notify") {
+      writeWelcome({ step: 2, done: true });
+      enableNotifications();
+      return;
+    }
+    if (act === "welcome-next") {
+      const doc = readWelcome();
+      const step = doc.step || 0;
+      if (step <= 0) {
+        const nameEl = document.getElementById("welcome-name");
+        const bioEl = document.getElementById("welcome-bio");
+        const name = nameEl ? nameEl.value : (STATE.welcomeName || "");
+        const bio = bioEl ? bioEl.value : (STATE.welcomeBio || "");
+        const body = {};
+        if (String(name).trim()) body.displayName = String(name).trim();
+        if (String(bio).trim()) body.bio = String(bio);
+        if (welcomePhoto) body.avatar = welcomePhoto;
+        const advance = () => { writeWelcome({ step: 1, done: false }); render(); };
+        if (Object.keys(body).length) accountCall("/v1/profile", { method: "PATCH", body: body }).then(advance, advance);
+        else advance();
+        return;
+      }
+      if (step === 1) {
+        const ids = Object.keys(welcomeFollows).filter((id) => welcomeFollows[id]);
+        if (ids.length) applyFollow(ids, true);
+        writeWelcome({ step: 2, done: false });
+        render();
+        return;
+      }
+      writeWelcome({ step: 2, done: true });
+      render();
+      return;
+    }
+    if (act === "show-public-spam") {
+      if (!STATE.publicSpam) STATE.publicSpam = {};
+      STATE.publicSpam[el.dataset.id || ""] = true;
+      render();
+      return;
+    }
+    if (act === "public-reply" || act === "public-quote") {
+      STATE.composeParent = act === "public-reply" ? (el.dataset.id || "") : "";
+      STATE.composeQuote = act === "public-quote" ? (el.dataset.id || "") : "";
+      STATE.composeVia = "app";
+      STATE.modal = "compose";
+      STATE.composeSeed = "";
+      render();
+      return;
+    }
+    if (act === "public-report") {
+      const reason = tr("Report this post");
+      accountCall("/v1/posts/report", { method: "POST", body: { postId: el.dataset.id || "", reason: reason } }).then(() => {
+        toast(tr("Report this post"));
+      }).catch(() => {});
+      return;
+    }
+    if (act === "public-block" || act === "public-mute") {
+      const path = act === "public-block" ? "/v1/blocks" : "/v1/mutes";
+      accountCall(path, { method: "POST", body: { accountId: el.dataset.id || "" } }).then(() => {
+        publicStamp = 0;
+        schedulePublicPosts();
+      }).catch(() => {});
+      return;
+    }
+    if (act === "compose-x") {
+      STATE.composeVia = "x";
+      if (window.ViktorychXCompose && window.ViktorychXCompose.preparePost) window.ViktorychXCompose.preparePost(STATE.composeSeed || "");
+      STATE.modal = "compose";
+      render();
+      return;
+    }
     if (act === "compose-post") {
       const seed = STATE.composeSeed || "";
+      const parentId = STATE.composeParent || "";
+      const quoteId = STATE.composeQuote || "";
+      const fileEl = document.getElementById("compose-file");
+      const file = fileEl && fileEl.files && fileEl.files[0] ? fileEl.files[0] : null;
       STATE.modal = null;
       if (window.ViktorychCommunities && window.ViktorychCommunities.takeCompose && window.ViktorychCommunities.takeCompose(seed)) {
         STATE.composeSeed = "";
         render();
         return;
       }
-      if (seed.trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
-      if (!navigator.onLine && seed.trim()) {
-        queueOffline({ type: "reply", id: "compose", on: true, body: seed });
+      if (!seed.trim() && !file) {
         STATE.composeSeed = "";
+        STATE.composeParent = "";
+        STATE.composeQuote = "";
         render();
+        toast(tr("Posts come from your feeds"));
         return;
       }
+      if (!navigator.onLine || !accountToken()) {
+        if (seed.trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
+        if (!navigator.onLine && seed.trim()) queueOffline({ type: "reply", id: "compose", on: true, body: seed });
+        STATE.composeSeed = "";
+        STATE.composeParent = "";
+        STATE.composeQuote = "";
+        render();
+        if (navigator.onLine && !accountToken()) toast(tr("Saved on this device. This reader doesn’t publish."));
+        return;
+      }
+      const text = seed;
       STATE.composeSeed = "";
+      STATE.composeParent = "";
+      STATE.composeQuote = "";
       render();
-      toast(seed.trim() ? tr("Saved on this device. This reader doesn’t publish.") : tr("Posts come from your feeds"));
+      publishPublicPost(text, parentId, quoteId, file);
       return;
     }
     if (act === "close-tab-menu") {
@@ -15239,6 +15574,69 @@ if (STATE.histClear) {
     }
     if (act === "notify") {
       enableNotifications();
+      return;
+    }
+    if (act === "note-pref") {
+      const kind = el.dataset.kind;
+      const mode = el.dataset.mode;
+      const prefs = notePrefs();
+      if (!Object.prototype.hasOwnProperty.call(prefs, kind) || kind === "mentionsFrom") return;
+      if (mode !== "off" && mode !== "inapp" && mode !== "push") return;
+      prefs[kind] = mode;
+      saveNotePrefs(prefs);
+      render();
+      return;
+    }
+    if (act === "note-mentions-from") {
+      const prefs = notePrefs();
+      prefs.mentionsFrom = prefs.mentionsFrom === "following" ? "all" : "following";
+      saveNotePrefs(prefs);
+      render();
+      return;
+    }
+    if (act === "note-mark-all") {
+      markNoteTabRead("all");
+      render();
+      return;
+    }
+    if (act === "discord-flag") {
+      const key = el.dataset.key;
+      const allowed = { mentionUser: 1, mentionRoles: 1, mentionEveryone: 1, mentionHere: 1 };
+      if (!allowed[key]) return;
+      const rule = discordRuleDraft();
+      rule[key] = !rule[key];
+      STATE.discordRule = rule;
+      render();
+      return;
+    }
+    if (act === "discord-keyword-flag") {
+      if (el.dataset.key === "regex") STATE.discordKeywordRegex = !STATE.discordKeywordRegex;
+      else STATE.discordKeywordWhole = !STATE.discordKeywordWhole;
+      render();
+      return;
+    }
+    if (act === "discord-keyword-remove") {
+      const index = Number(el.dataset.index);
+      const rule = discordRuleDraft();
+      if (!Array.isArray(rule.keywords) || !(index >= 0) || index >= rule.keywords.length) return;
+      rule.keywords = rule.keywords.filter((row, at) => at !== index);
+      STATE.discordRule = rule;
+      render();
+      return;
+    }
+    if (act === "discord-scope") {
+      const rule = discordRuleDraft();
+      rule.scope = el.dataset.scope === "selected" ? "selected" : "all";
+      STATE.discordRule = rule;
+      render();
+      return;
+    }
+    if (act === "discord-alert-save") {
+      saveDiscordAlerts();
+      return;
+    }
+    if (act === "discord-alert-preview") {
+      previewDiscordAlerts();
       return;
     }
     if (act === "bell") {
@@ -16032,14 +16430,46 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     if (event.target && event.target.closest && event.target.closest(".gsuggest")) event.preventDefault();
   });
 
+  document.addEventListener("change", (event) => {
+    const el = event.target;
+    if (!el) return;
+    if (el.id === "compose-file") {
+      const btn = document.getElementById("compose-post");
+      if (btn) btn.disabled = !(el.files && el.files[0]) && !(STATE.composeSeed || "").trim();
+      return;
+    }
+    if (el.id !== "welcome-photo" || !el.files || !el.files[0]) return;
+    const file = el.files[0];
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const edge = 512;
+      const scale = Math.min(1, edge / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      try { welcomePhoto = canvas.toDataURL("image/webp", 0.86); } catch (err) { welcomePhoto = ""; }
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  });
+
   document.addEventListener("input", (event) => {
     const el = event.target;
     if (el.id === "compose-text") {
+      if (STATE.composeVia === "x") return;
       STATE.composeSeed = el.value;
       const btn = document.getElementById("compose-post");
-      if (btn) btn.disabled = !el.value.trim();
+      const fileEl = document.getElementById("compose-file");
+      const hasFile = !!(fileEl && fileEl.files && fileEl.files[0]);
+      if (btn) btn.disabled = !el.value.trim() && !hasFile;
       return;
     }
+    if (el.id === "welcome-name") { STATE.welcomeName = el.value; return; }
+    if (el.id === "welcome-bio") { STATE.welcomeBio = el.value; return; }
     if (el.id === "quote-text") {
       const btn = document.getElementById("quote-post");
       if (btn) btn.disabled = !String(el.value || "").trim();
@@ -16117,6 +16547,21 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
       return;
     }
     const muteForm = event.target.closest("form.mute-form");
+    if (muteForm && muteForm.dataset.mute === "discord-keyword") {
+      event.preventDefault();
+      const input = muteForm.querySelector("input");
+      const phrase = input ? input.value.trim().slice(0, 80) : "";
+      if (!phrase) return;
+      const rule = discordRuleDraft();
+      const keywords = Array.isArray(rule.keywords) ? rule.keywords.slice() : [];
+      if (keywords.length < 12 && !keywords.some((row) => row && row.phrase === phrase)) {
+        keywords.push({ phrase: phrase, whole: !!STATE.discordKeywordWhole, regex: !!STATE.discordKeywordRegex });
+      }
+      rule.keywords = keywords;
+      STATE.discordRule = rule;
+      render();
+      return;
+    }
     if (muteForm) {
       event.preventDefault();
       const input = muteForm.querySelector("input");
@@ -16323,6 +16768,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (event.key === "Escape" && STATE.viewer && STATE.viewer.video) { closeViewer(); return; }
     if (event.key === "Escape" && (STATE.modal || STATE.drawer || STATE.menu || STATE.share || STATE.groupMenu || STATE.tabMenu || STATE.bellMenu || STATE.removeFeed || STATE.tabAssign || STATE.tabContext || (STATE.confirm && STATE.confirm.kind === "feed-tab"))) {
       STATE.modal = null;
+      STATE.composeVia = "";
       STATE.drawer = false;
       STATE.menu = null;
       STATE.share = null;
@@ -18269,6 +18715,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       try { location.hash = detail.hash; } catch (err) { /* the current screen stays */ }
     }
     if (detail.compose) {
+      STATE.composeVia = "app";
       STATE.modal = "compose";
       if (detail.text) STATE.composeSeed = detail.text;
     }
@@ -18280,6 +18727,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const posting = params.get("post") === "1";
     if (!params.has("url") && !params.has("text") && !params.has("title") && !media && !posting) return;
     if ((posting || media) && !params.has("url")) {
+      STATE.composeVia = "app";
       STATE.modal = "compose";
       STATE.composeSeed = [params.get("title") || "", params.get("text") || ""].filter(Boolean).join("\n");
       history.replaceState(null, "", location.pathname + "#/home");
@@ -18453,6 +18901,211 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     });
   }
 
+  function notePrefs() {
+    const saved = STATE.settings && STATE.settings.notePrefs;
+    const base = { mentions: "push", replies: "push", quotes: "push", likes: "inapp", reposts: "inapp", follows: "push", dms: "push", mentionsFrom: "all" };
+    if (!saved || typeof saved !== "object") return base;
+    const out = Object.assign({}, base);
+    Object.keys(base).forEach((key) => {
+      if (key === "mentionsFrom") {
+        if (saved.mentionsFrom === "following" || saved.mentionsFrom === "all") out.mentionsFrom = saved.mentionsFrom;
+        return;
+      }
+      if (saved[key] === "off" || saved[key] === "inapp" || saved[key] === "push") out[key] = saved[key];
+    });
+    return out;
+  }
+
+  function saveNotePrefs(next) {
+    if (!STATE.settings) return;
+    STATE.settings.notePrefs = next;
+    saveSettings();
+    const pending = notePending();
+    pending.prefs = true;
+    writeNotePending(pending);
+    scheduleNoteSync();
+  }
+
+  function snowList(value, max) {
+    const out = [];
+    String(value || "").split(/[\s,]+/).forEach((part) => {
+      const id = part.trim();
+      if (/^\d{2,22}$/.test(id) && out.indexOf(id) < 0 && out.length < max) out.push(id);
+    });
+    return out;
+  }
+
+  function wordList(value, max) {
+    const out = [];
+    String(value || "").split(",").forEach((part) => {
+      const word = part.trim().slice(0, 80);
+      if (!word || out.some((item) => item.toLowerCase() === word.toLowerCase()) || out.length >= max) return;
+      out.push(word);
+    });
+    return out;
+  }
+
+  function collectDiscordRule() {
+    const draft = discordRuleDraft();
+    const read = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.value : "";
+    };
+    const startHour = Math.max(0, Math.min(23, Number(read("discord-quiet-start")) || 0));
+    const endHour = Math.max(0, Math.min(23, Number(read("discord-quiet-end")) || 0));
+    const user = read("discord-user-id").replace(/\D/g, "").slice(0, 22);
+    return {
+      mentionUser: draft.mentionUser === true,
+      mentionRoles: draft.mentionRoles === true,
+      mentionEveryone: draft.mentionEveryone === true,
+      mentionHere: draft.mentionHere === true,
+      discordUserId: user,
+      roleIds: snowList(read("discord-role-ids") || draft.roleIds, 20),
+      keywords: (draft.keywords || []).slice(0, 12).map((row) => ({
+        phrase: String(row && row.phrase || "").trim().slice(0, 80),
+        whole: !!(row && row.whole),
+        regex: !!(row && row.regex)
+      })).filter((row) => row.phrase),
+      exclude: wordList(read("discord-exclude") || draft.exclude, 20),
+      scope: draft.scope === "selected" ? "selected" : "all",
+      channels: snowList(read("discord-channels") || draft.channels, 100),
+      fromUsers: snowList(read("discord-from") || draft.fromUsers, 40),
+      quietStart: startHour * 60,
+      quietEnd: endHour * 60,
+      quietOffset: -new Date().getTimezoneOffset()
+    };
+  }
+
+  function ensureDiscordAlerts() {
+    if (STATE.discordRuleLoading || STATE.discordRuleLoaded) return;
+    STATE.discordRuleLoading = true;
+    accountCall("/v1/discord/alerts").then((res) => {
+      STATE.discordRuleLoading = false;
+      STATE.discordRuleLoaded = true;
+      if (res && res.status === 200 && res.rule) STATE.discordRule = res.rule;
+      const route = parseRoute();
+      if (route.name === "settings" && route.section === "notifications" && route.sub === "discord") render();
+    }).catch(() => {
+      STATE.discordRuleLoading = false;
+      STATE.discordRuleLoaded = true;
+    });
+  }
+
+  function saveDiscordAlerts() {
+    const rule = collectDiscordRule();
+    STATE.discordRule = rule;
+    accountCall("/v1/discord/alerts", { method: "PUT", body: { rule: rule } }).then((res) => {
+      if (res && res.rule) STATE.discordRule = res.rule;
+      STATE.discordPreview = res && res.status === 200 ? tr("Saved") : "";
+      render();
+    }).catch(() => {});
+  }
+
+  function previewDiscordAlerts() {
+    const rule = collectDiscordRule();
+    STATE.discordRule = rule;
+    const snap = window.FeedsDiscord && window.FeedsDiscord.alertSnapshot ? window.FeedsDiscord.alertSnapshot() : null;
+    accountCall("/v1/discord/alerts/preview", {
+      method: "POST",
+      body: {
+        rule: rule,
+        messages: snap && Array.isArray(snap.messages) ? snap.messages : [],
+        mutedChannels: snap && Array.isArray(snap.mutedChannels) ? snap.mutedChannels : [],
+        mutedServers: snap && Array.isArray(snap.mutedServers) ? snap.mutedServers : []
+      }
+    }).then((res) => {
+      const count = res && Array.isArray(res.matches) ? res.matches.length : 0;
+      STATE.discordPreview = tr("{n} recent messages match", { n: count });
+      render();
+    }).catch(() => {});
+  }
+
+  let discordIngestTimer = 0;
+  let discordIngestSnap = null;
+
+  function scheduleDiscordIngest(snap) {
+    if (!snap || !Array.isArray(snap.messages) || !snap.messages.length) return;
+    if (!(window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token())) return;
+    discordIngestSnap = snap;
+    clearTimeout(discordIngestTimer);
+    discordIngestTimer = setTimeout(sendDiscordIngest, 1200);
+  }
+
+  function sendDiscordIngest() {
+    const snap = discordIngestSnap;
+    discordIngestSnap = null;
+    if (!snap) return;
+    const seen = STATE.discordSeenIds || (STATE.discordSeenIds = {});
+    const fresh = snap.messages.filter((row) => row && row.id && !seen[row.id]).slice(0, 40);
+    if (!fresh.length) return;
+    accountCall("/v1/discord/alerts/ingest", {
+      method: "POST",
+      body: {
+        messages: fresh,
+        mutedChannels: snap.mutedChannels || [],
+        mutedServers: snap.mutedServers || []
+      }
+    }).then((res) => {
+      if (!res || res.status !== 200) return;
+      fresh.forEach((row) => { seen[row.id] = 1; });
+      const keys = Object.keys(seen);
+      if (keys.length > 400) keys.slice(0, keys.length - 400).forEach((id) => { delete seen[id]; });
+      pullNotes();
+    }).catch(() => {});
+  }
+
+  function discordRuleDraft() {
+    const empty = { mentionUser: true, mentionRoles: false, mentionEveryone: false, mentionHere: false, discordUserId: "", roleIds: "", keywords: [], exclude: "", scope: "all", channels: "", fromUsers: "", quietStart: 0, quietEnd: 0 };
+    const saved = STATE.discordRule;
+    if (!saved || typeof saved !== "object") return empty;
+    return Object.assign(empty, saved, {
+      roleIds: Array.isArray(saved.roleIds) ? saved.roleIds.join(", ") : String(saved.roleIds || ""),
+      exclude: Array.isArray(saved.exclude) ? saved.exclude.join(", ") : String(saved.exclude || ""),
+      channels: Array.isArray(saved.channels) ? saved.channels.join(", ") : String(saved.channels || ""),
+      fromUsers: Array.isArray(saved.fromUsers) ? saved.fromUsers.join(", ") : String(saved.fromUsers || ""),
+      keywords: Array.isArray(saved.keywords) ? saved.keywords : []
+    });
+  }
+
+  function discordAlertsView() {
+    if (!STATE.discordRuleLoaded) ensureDiscordAlerts();
+    const rule = discordRuleDraft();
+    const keywords = (rule.keywords || []).map((row, index) => `<div class="mute-row"><span>${esc(row.phrase || "")}</span><button type="button" data-act="discord-keyword-remove" data-index="${index}">${esc(tr("Remove"))}</button></div>`).join("");
+    const flag = (key, label) => `<button class="tab-switch${rule[key] ? " on" : ""}" type="button" role="switch" aria-checked="${rule[key] ? "true" : "false"}" data-act="discord-flag" data-key="${key}"><span>${esc(label)}</span><i></i></button>`;
+    const scopeAll = rule.scope !== "selected";
+    return settingsHead(tr("Discord alerts"), "#/settings/notifications") + `<div class="set-block">
+      <p class="phandle">${esc(tr("Matches run on messages this app has already loaded. Nothing here sends a request to Discord."))}</p>
+      ${flag("mentionUser", tr("When my linked Discord account is mentioned"))}
+      <label class="field"><span>${esc(tr("Discord user id"))}</span><input id="discord-user-id" inputmode="numeric" maxlength="22" value="${esc(rule.discordUserId || "")}"></label>
+      ${flag("mentionRoles", tr("When one of my roles is mentioned"))}
+      <label class="field"><span>${esc(tr("Role ids"))}</span><input id="discord-role-ids" value="${esc(rule.roleIds || "")}"></label>
+      ${flag("mentionEveryone", tr("When everyone is mentioned"))}
+      ${flag("mentionHere", tr("When here is mentioned"))}
+      <h2>${esc(tr("Keywords"))}</h2>
+      <form class="mute-form" data-mute="discord-keyword"><label class="search"><input id="discord-keyword" maxlength="80" placeholder="${esc(tr("Word or phrase"))}" aria-label="${esc(tr("Word or phrase"))}"></label><button class="follow" type="submit">${esc(tr("Add"))}</button></form>
+      <button class="tab-switch${STATE.discordKeywordWhole ? " on" : ""}" type="button" role="switch" data-act="discord-keyword-flag" data-key="whole"><span>${esc(tr("Whole word"))}</span><i></i></button>
+      <button class="tab-switch${STATE.discordKeywordRegex ? " on" : ""}" type="button" role="switch" data-act="discord-keyword-flag" data-key="regex"><span>${esc(tr("Regular expression"))}</span><i></i></button>
+      ${keywords}
+      <label class="field"><span>${esc(tr("Exclude words"))}</span><input id="discord-exclude" value="${esc(rule.exclude || "")}"></label>
+      <h2>${esc(tr("Channels"))}</h2>
+      <div class="theme-row">
+        <button class="outline${scopeAll ? " on" : ""}" type="button" data-act="discord-scope" data-scope="all">${esc(tr("All channels"))}</button>
+        <button class="outline${!scopeAll ? " on" : ""}" type="button" data-act="discord-scope" data-scope="selected">${esc(tr("Selected channels"))}</button>
+      </div>
+      <label class="field"><span>${esc(tr("Channel ids"))}</span><input id="discord-channels" value="${esc(rule.channels || "")}"></label>
+      <p class="phandle">${esc(tr("Muted channels and servers stay quiet."))}</p>
+      <label class="field"><span>${esc(tr("Only from these users"))}</span><input id="discord-from" value="${esc(rule.fromUsers || "")}"></label>
+      <h2>${esc(tr("Quiet hours"))}</h2>
+      <label class="field"><span>${esc(tr("Start"))}</span><input id="discord-quiet-start" type="number" min="0" max="23" value="${esc(String(Math.floor((Number(rule.quietStart) || 0) / 60)))}"></label>
+      <label class="field"><span>${esc(tr("End"))}</span><input id="discord-quiet-end" type="number" min="0" max="23" value="${esc(String(Math.floor((Number(rule.quietEnd) || 0) / 60)))}"></label>
+      <div class="theme-row">
+        <button class="primary" type="button" data-act="discord-alert-save">${esc(tr("Save"))}</button>
+        <button class="outline" type="button" data-act="discord-alert-preview">${esc(tr("Preview"))}</button>
+      </div>
+      <p class="phandle" id="discord-preview-note">${esc(STATE.discordPreview || "")}</p>
+    </div>`;
+  }
+
   function notesServer() {
     try {
       const doc = JSON.parse(readStored(localStorage, "notes-server") || "null");
@@ -18536,6 +19189,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   let noteSyncTimer = 0;
+  let notePages = 0;
   let noteApplying = false;
   let hubPoll = 0;
   let channelBound = false;
@@ -18581,7 +19235,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function clientNoteItem(note) {
-    const kind = note.kind === "mention" || note.kind === "live" || note.kind === "like" || note.kind === "repost" ? note.kind : "post";
+    const kept = { mention: 1, live: 1, like: 1, repost: 1, quote: 1, dm: 1, discord: 1 };
+    const kind = kept[note.kind] ? note.kind : "post";
     const item = {
       id: note.id,
       kind: kind,
@@ -18619,7 +19274,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const server = notesServer();
     server.unread = Number(view.unread) || 0;
     server.readUntil = until;
+    server.cursor = Math.max(Number(server.cursor) || 0, Number(view.cursor) || 0);
     server.fetchedAt = Date.now();
+    if (view.prefs && typeof view.prefs === "object") STATE.settings.notePrefs = view.prefs;
     writeNotesServer(server);
     saveSettings();
     paintBellBadge();
@@ -18669,6 +19326,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     if (!accounts || !accounts.token || !accounts.token() || noteApplying) return;
     noteApplying = true;
     const sent = notePending();
+    let again = false;
     try {
       const acked = {};
       noteAcked().forEach((id) => { acked[id] = true; });
@@ -18688,10 +19346,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         body.bells = cleanBells(STATE.settings.bells);
         body.bellsAt = Number(STATE.settings.bellsAt) || Date.now();
       }
+      if (sent.prefs && STATE.settings) body.prefs = notePrefs();
+      if (sent.tab) body.tab = sent.tab;
       const lockedFlag = isShortsLocked() ? "1" : "0";
       const posting = Object.keys(body).length > 0;
       if (posting) body.shortsLocked = lockedFlag === "1" ? 1 : 0;
-      const res = await accountCall("/v1/notifications?locked=" + lockedFlag, posting ? { method: "POST", body: body } : { method: "GET" });
+      const since = Number(notesServer().cursor) || 0;
+      const path = "/v1/notifications?locked=" + lockedFlag + (since ? "&since=" + encodeURIComponent(String(since)) : "");
+      const res = await accountCall(path, posting ? { method: "POST", body: body } : { method: "GET" });
       if (!res || res.status !== 200 || !Array.isArray(res.items)) return;
       applyServerNotes(res);
       rememberAcked(items.map((item) => item.id).concat((res.items || []).map((item) => item.id)));
@@ -18699,6 +19361,13 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (sent.until && Number(nowPending.until) === Number(sent.until)) delete nowPending.until;
       if (sent.tabs) delete nowPending.tabs;
       if (sent.bells) delete nowPending.bells;
+      if (sent.prefs) delete nowPending.prefs;
+      if (sent.tab) delete nowPending.tab;
+      writeNotePending(nowPending);
+      if (res.more && notePages < 4) {
+        notePages += 1;
+        again = true;
+      } else notePages = 0;
       if (Array.isArray(sent.ids)) {
         const sentIds = {};
         sent.ids.forEach((id) => { sentIds[id] = true; });
@@ -18714,6 +19383,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       writeNotePending(nowPending);
     } catch (err) { /* the next visible fetch tries again */ }
     finally { noteApplying = false; }
+    if (again) pullNotes();
   }
 
   function channelOpen() {
@@ -20009,7 +20679,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         noteHash: (hash) => {
           lastKey = hash || (location.hash || "#/");
           STATE.scrollKey = "#/messages";
-        }
+        },
+        onDiscordMessages: (snap) => { scheduleDiscordIngest(snap); }
       });
       if (!blocked) window.FeedsDiscord.start();
     }
@@ -20072,7 +20743,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       token: function () { return window.ViktorychAccounts && window.ViktorychAccounts.token ? window.ViktorychAccounts.token() : ""; },
       productName: function () { return productName("app"); },
       logo: function () { return markSvg("app", "logo-full") + markSvg("appShort", "logo-short"); },
-      requestRender: function () { render(); }
+      requestRender: function () { syncWorkerState(); render(); }
     });
   }
   function bindXCompose() {
@@ -20086,10 +20757,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         if (!mine) return '<span class="ava initials">Y</span>';
         return avatar(mine.avatar, mine.displayName || mine.handle);
       },
-      modalOpen: function () { return STATE.modal === "compose"; },
-      openModal: function () { STATE.modal = "compose"; render(); },
+      modalOpen: function () { return STATE.modal === "compose" && STATE.composeVia === "x"; },
+      openModal: function () { STATE.composeVia = "x"; STATE.modal = "compose"; render(); },
       closeModal: function () {
         if (STATE.modal === "compose") STATE.modal = null;
+        STATE.composeVia = "";
         render();
       },
       saveLocal: function (text) {

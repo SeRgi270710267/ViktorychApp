@@ -3,6 +3,7 @@
 
 import { inspectHandle, ownerHandle } from "../../shared/handle-skeleton.js";
 import { blockDeletedLogin, handleHeld } from "./account-delete.js";
+import { verifySignupGuard } from "./signup-guard.js";
 import {
   CHALLENGE_MS,
   b64urlToBytes,
@@ -262,6 +263,8 @@ export async function handleWebAuthn(request, env, path, deps) {
     const body = await deps.readJson(request, 8000);
     if (body.error) return deps.json(400, { error: body.error });
     if (!(await deps.verifyTurnstile(request, env, body.turnstileToken))) return deps.json(403, { error: "turnstile" });
+    const guard = await verifySignupGuard(env, body);
+    if (!guard.ok) return deps.json(guard.status || 400, { error: guard.error || "guard_required" });
     const fields = await signupFields(env, body);
     if (fields.error) return deps.json(fields.status, { error: fields.error });
     const publicId = await freshPublicId(env);
@@ -340,7 +343,8 @@ export async function handleWebAuthn(request, env, path, deps) {
       return deps.json(409, { error: "passkey_exists" });
     }
     await deps.rateHit(env, "su-ok:" + ip, 100, 60 * 60 * 1000);
-    return deps.json(201, { token: created.token, accountNumber: created.accountNumber, account: created.account });
+    const recoveryCodes = deps.issueRecoveryCodes ? await deps.issueRecoveryCodes(created.account.publicId) : [];
+    return deps.json(201, { token: created.token, accountNumber: created.accountNumber, recoveryCodes: recoveryCodes, account: created.account });
   }
 
   if (path === "/v1/webauthn/login/options" && request.method === "POST") {

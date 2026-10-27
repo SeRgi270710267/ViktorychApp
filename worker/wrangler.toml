@@ -32,6 +32,9 @@ workers_dev = true
 [vars]
 ALLOWED_ORIGINS = "https://viktorychgroup.github.io,https://viktorychapp.pages.dev"
 PBKDF2_ITERATIONS = "8000"
+# Free sign-up check: proof of work, honeypot, and a short wait.
+# Keep this "on". Tests that post straight to /v1/signup leave it unset.
+SIGNUP_GUARD = "on"
 # One flag. "owner" hides TikTok and Shorts except for the owner account.
 # "all" shows them to everyone. Keep this in step with accounts.config.js.
 TIKTOK_AUDIENCE = "owner"
