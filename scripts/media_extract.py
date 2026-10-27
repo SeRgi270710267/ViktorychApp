@@ -943,7 +943,16 @@ def extract() -> int:
                             break
                         if result == "ok":
                             stored += 1
-                            links.append({"key": item["key"], "platform": account["platform"], "handle": account["handle"], "id": item["post"].get("statusId") or "", "stats": item["stats"]})
+                            probe = tb.probe_saved(item["path"])
+                            if not (probe.get("width") and probe.get("height")):
+                                try:
+                                    from update_feeds import stored_media_size
+                                    found_w, found_h = stored_media_size(item["path"])
+                                    if found_w and found_h:
+                                        probe = {"width": found_w, "height": found_h}
+                                except Exception:
+                                    probe = probe or {}
+                            links.append({"key": item["key"], "platform": account["platform"], "handle": account["handle"], "id": item["post"].get("statusId") or "", "probe": probe, "stats": item["stats"]})
                             log("[media-extract] linked %s" % item["key"])
             if stored == gained and not videos_blocked:
                 log("[media-extract] no file %s/%s" % (account["platform"], account["handle"]))
@@ -1085,7 +1094,8 @@ def selftest() -> int:
         check(sample.read_bytes()[99:100] == b"\x89" and text_file(sample).startswith("SQLite"), "a sqlite archive survives a binary byte")
     finally:
         sample.unlink(missing_ok=True)
-    check("store_community_originals" in Path(__file__).read_text(encoding="utf-8") and "backup_originals" in Path(__file__).read_text(encoding="utf-8"), "community originals go through the media pipeline")
+    check("store_community_originals" in source and "backup_originals" in source, "community originals go through the media pipeline")
+    check(source.count("probe_saved(") >= 2 and "stored_media_size" in source, "stored photos and videos keep probed width and height without re-encoding")
     print("media extract selftest ok")
     return 0
 
