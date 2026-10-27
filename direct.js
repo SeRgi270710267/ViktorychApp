@@ -22,6 +22,7 @@
   var lastAt = {};
   var memory = {};
   var fetcher = null;
+  var deviceHeld = false;
 
   function parse(url) {
     var base = (typeof location !== "undefined" && location.href) ? location.href : "https://app.local";
@@ -58,12 +59,39 @@
     if (sameOriginJson(url)) return true;
     if (url.protocol !== "https:") return false;
     if (ALLOW[url.hostname]) return true;
+    if (readOnlyHost(url)) return true;
     return mastodonApi(url);
+  }
+
+  function deviceApi() {
+    if (typeof self !== "undefined" && self.ViktorychDevice) return self.ViktorychDevice;
+    if (typeof window !== "undefined" && window.ViktorychDevice) return window.ViktorychDevice;
+    if (typeof require === "function") {
+      try { return require("./device.js"); } catch (err) { return null; }
+    }
+    return null;
+  }
+
+  var PACE = {
+    "www.reddit.com": 2000,
+    "old.reddit.com": 2000,
+    "discord.com": 2000,
+    "api.vk.com": 2000
+  };
+
+  function readOnlyHost(url) {
+    var host = url.hostname;
+    var path = url.pathname || "";
+    if (host === "www.reddit.com" || host === "old.reddit.com") return /\.json$/i.test(path);
+    if (host === "discord.com") return /^\/api\/guilds\/\d{1,22}\/widget\.json$/i.test(path);
+    if (host === "api.vk.com") return path === "/method/wall.get" || path === "/method/groups.getById" || path === "/method/users.get";
+    return false;
   }
 
   function gapFor(hostname) {
     var row = ALLOW[hostname];
     if (row) return row.gap;
+    if (PACE[hostname]) return PACE[hostname];
     return 1100;
   }
 
@@ -174,7 +202,7 @@
     var headers = safeHeaders(init);
     return new Promise(function (resolve) { setTimeout(resolve, wait); }).then(function () {
       markPace(parsed.hostname, Date.now());
-      return callFetch(parsed.href, { method: "GET", headers: headers, credentials: "omit", mode: "cors", cache: "no-store", redirect: "follow" });
+      return callFetch(parsed.href, { method: "GET", headers: headers, credentials: "omit", mode: "cors", cache: "no-store", redirect: "follow", signal: init && init.signal });
     });
   }
 
@@ -190,6 +218,78 @@
       if (next && next !== primary) return fallbackFetch(next);
       return Promise.reject(new Error("network"));
     });
+  }
+
+  function jsonSize(body) {
+    try { return JSON.stringify(body).length; }
+    catch (err) { return 0; }
+  }
+
+  function fetchSource(url, server, init) {
+    var primary = String(url || "");
+    var dev = deviceApi();
+    var settings = dev && dev.read ? dev.read() : null;
+    var signals = dev && dev.signals ? dev.signals() : {};
+    var enabled = !dev || !dev.featureOn || dev.featureOn(settings || dev.normalize(null), "direct", signals);
+    var fresh = !!(init && init.fresh);
+    var hit = !fresh && cacheGet(primary, Date.now());
+    if (hit && enabled) {
+      note("direct");
+      if (dev && dev.noteStat) dev.noteStat("local", "direct", jsonSize(hit), 1);
+      return Promise.resolve(hit);
+    }
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    function local() {
+      var nextInit = init || {};
+      if (ctrl && !nextInit.signal) nextInit = Object.assign({}, nextInit, { signal: ctrl.signal });
+      return once(primary, nextInit).then(function (res) {
+        if (!res || !res.ok) {
+          var err = new Error("status");
+          err.status = res && res.status;
+          throw err;
+        }
+        return res.json().then(function (body) {
+          if (body == null || body === "") throw new Error("empty");
+          if (typeof body !== "object") throw new Error("invalid");
+          cacheSet(primary, body, Date.now());
+          note("direct");
+          return body;
+        });
+      });
+    }
+    function remote() {
+      if (typeof server === "function") {
+        note("server");
+        return Promise.resolve().then(server).then(function (body) {
+          if (body == null || body === "") throw new Error("empty");
+          return body;
+        });
+      }
+      var next = typeof server === "string" && server ? server : githubMirror(primary);
+      if (!next || next === primary) {
+        var err = new Error("both");
+        err.both = true;
+        throw err;
+      }
+      note("server");
+      return callFetch(next, { method: "GET", credentials: "omit", mode: "cors", cache: "no-store" }).then(function (res) {
+        if (!res || !res.ok) throw new Error("status");
+        return res.json();
+      });
+    }
+    if (!allows(primary)) return remote().catch(function (err) { err.both = true; throw err; });
+    if (!enabled) return remote().catch(function () { return json(primary); });
+    if (deviceHeld || !dev || !dev.runLocal) return json(primary, typeof server === "string" ? server : githubMirror(primary), init);
+    var host = "";
+    try { host = new URL(primary).hostname; } catch (err) { host = primary; }
+    var distinct = typeof server === "function" || (typeof server === "string" && server && server !== primary) || !!githubMirror(primary);
+    return dev.runLocal("direct", host, local, remote, {
+      settings: settings || dev.normalize(null),
+      signals: signals,
+      timeout: distinct ? dev.TIMEOUT_MS : 8000,
+      abort: function () { if (ctrl) ctrl.abort(); },
+      valid: function (value) { return value != null && typeof value === "object"; }
+    }).then(function (out) { return out.value; });
   }
 
   function json(url, fallback, opts) {
@@ -260,11 +360,16 @@
     fetcher = fn;
   }
 
+  function holdDevice(on) {
+    deviceHeld = on !== false;
+  }
+
   function reset() {
     counts.direct = 0;
     counts.server = 0;
     lastAt = {};
     memory = {};
+    deviceHeld = false;
   }
 
   function audit() {
@@ -287,12 +392,15 @@
 
   return {
     allows: allows,
+    candidate: allows,
+    readOnlyHost: readOnlyHost,
     paceWait: paceWait,
     markPace: markPace,
     safeHeaders: safeHeaders,
     shouldFallback: shouldFallback,
     githubMirror: githubMirror,
     fetch: fetchPublic,
+    fetchSource: fetchSource,
     json: json,
     bskyProfileUrl: bskyProfileUrl,
     bskyFeedUrl: bskyFeedUrl,
@@ -303,6 +411,7 @@
     noteServer: noteServer,
     counts: countsNow,
     setFetch: setFetch,
+    holdDevice: holdDevice,
     reset: reset,
     audit: audit,
     cacheGet: cacheGet,

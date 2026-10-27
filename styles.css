@@ -4830,3 +4830,22 @@ header.nav.nav-land { display: none; }
   }
   html[data-nav-layout="bar"][data-nav-bar-land="1"] .fab { display: none !important; }
 }
+
+.device-screen { padding-bottom: 28px; }
+.device-seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 12px 0 8px; padding: 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--hover); }
+.device-seg button { border: 0; border-radius: 999px; background: transparent; color: inherit; margin: 0; min-height: 36px; padding: 8px 6px; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.device-seg button.on { background: var(--blue); color: #fff; }
+.device-seg button:focus-visible, .device-switch:focus-visible, .device-actions button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.device-note { margin-top: 0; color: var(--muted); font-size: 13px; line-height: 18px; }
+.device-switch { align-items: flex-start; gap: 12px; padding-top: 12px; padding-bottom: 12px; cursor: pointer; }
+.device-switch span { min-width: 0; }
+.device-switch b { display: block; font-size: 15px; line-height: 20px; }
+.device-switch .set-sub { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; font-weight: 400; line-height: 18px; }
+.device-switch i { margin-top: 2px; }
+.device-banner, .device-warn { margin: 8px 0 12px; padding: 12px 14px; border-radius: 16px; background: var(--hover); font-size: 14px; line-height: 20px; }
+.device-warn { border: 1px solid var(--line); }
+.device-stat { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.device-stat b { font-size: 15px; }
+.device-stat .set-sub { color: var(--muted); font-size: 13px; line-height: 18px; }
+.device-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+.device-ai textarea { width: 100%; min-height: 96px; box-sizing: border-box; resize: vertical; }
