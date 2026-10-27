@@ -117,7 +117,7 @@ def deploy(directory: Path) -> int:
         wrangler, "wrangler", "pages", "deploy", str(directory),
         "--project-name", PROJECT,
         "--branch", "main",
-        "--commit-dirty=true",
+        "--commit-dirty",
     ]
     sha = (os.environ.get("GITHUB_SHA") or "").strip()
     if re.fullmatch(r"[0-9a-f]{7,64}", sha):
