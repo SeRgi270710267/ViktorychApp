@@ -12,6 +12,7 @@
 import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { tiktokNoteHidden, visibleNotes } from "../../shared/tiktok-lock.js";
 import { publishToAccount } from "./channel.js";
+import { visibleAvatarUrl } from "./profile-media.js";
 import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 
 const encoder = new TextEncoder();
@@ -274,6 +275,34 @@ async function writeReadUntil(env, publicId, until) {
   ).bind(publicId, next, now).run();
 }
 
+function legacyMedia(value) {
+  return /\/v1\/media\/(?:avatars|banners)\/\d{12}\//.test(String(value || "")) || /^media\/(?:avatars|banners)\/\d{12}\//.test(String(value || ""));
+}
+
+async function presentNote(env, request, viewer, item) {
+  const next = Object.assign({}, item);
+  next.actorId = "";
+  if (legacyMedia(next.avatar)) next.avatar = "";
+  if (legacyMedia(next.image)) next.image = "";
+  const feed = String(next.feedId || "");
+  const match = /^app:(\d{12})$/.exec(feed);
+  if (match) {
+    const row = await env.DB.prepare("SELECT handle FROM accounts WHERE public_id = ?").bind(match[1]).first();
+    next.feedId = row && row.handle ? "app:@" + row.handle : "";
+  }
+  if (legacyMedia(next.hash) || /\d{12}/.test(String(next.hash || ""))) {
+    next.hash = String(next.hash || "").replace(/([A-Za-z0-9_\u0400-\u04FF]{1,32})\d{12}\b/g, "$1");
+  }
+  if (next.handle && request && viewer) {
+    const shown = await visibleAvatarUrl(env, request, viewer, next.handle);
+    if (shown === null) {
+      if (legacyMedia(next.avatar)) next.avatar = "";
+    } else next.avatar = shown || "";
+  }
+  if (legacyMedia(next.avatar)) next.avatar = "";
+  return next;
+}
+
 function itemFromRow(row, readUntil) {
   let extra = {};
   try { extra = JSON.parse(row.payload || "{}"); }
@@ -388,11 +417,12 @@ async function followedActorSet(env, publicId) {
   return set;
 }
 
-async function viewFor(env, publicId, since, lockedOverride) {
+async function viewFor(env, publicId, since, lockedOverride, request) {
   const state = await readState(env, publicId);
   const prefs = await readPrefs(env, publicId);
   const follows = await followedActorSet(env, publicId);
   const viewer = await lockViewer(env, publicId, lockedOverride);
+  const mediaViewer = { public_id: publicId };
   const sinceN = Number(since) || 0;
   const listed = sinceN
     ? await env.DB.prepare(
@@ -404,14 +434,15 @@ async function viewFor(env, publicId, since, lockedOverride) {
   const raw = (listed && listed.results) || [];
   const items = [];
   let cursor = sinceN;
-  raw.forEach((row) => {
+  for (let i = 0; i < raw.length; i++) {
+    const row = raw[i];
     const at = Number(row.updated_at) || Number(row.at) || 0;
     if (at > cursor) cursor = at;
     const item = itemFromRow(row, state.readUntil);
-    if (!prefVisible(prefs, item, !!follows[item.actorId])) return;
-    if (tiktokNoteHidden(item, viewer)) return;
-    items.push(item);
-  });
+    if (!prefVisible(prefs, item, !!follows[item.actorId])) continue;
+    if (tiktokNoteHidden(item, viewer)) continue;
+    items.push(await presentNote(env, request, mediaViewer, item));
+  }
   if (!sinceN) {
     const maxRow = await env.DB.prepare(
       "SELECT MAX(updated_at) AS n FROM notifications WHERE public_id = ?"
@@ -640,11 +671,11 @@ async function sendPush(env, publicId, item, viewer) {
     body: item.text || "",
     hash: item.hash || "#/",
     id: item.id,
-    icon: item.avatar || "",
+    icon: legacyMedia(item.avatar) ? "" : (item.avatar || ""),
     tag: "note-" + item.id,
     platform: item.platform || "",
     handle: item.handle || "",
-    feedId: item.feedId || ""
+    feedId: /^app:\d{12}$/.test(String(item.feedId || "")) ? "" : (item.feedId || "")
   }));
   let failed = false;
   for (let i = 0; i < rows.length; i++) {
@@ -920,7 +951,7 @@ async function failOutbox(env, delivery, kind) {
   ).bind(attempts, nextAt, delivery.deliveryId).run();
 }
 
-export async function finishDeliveries(env, deliveries) {
+export async function finishDeliveries(env, deliveries, request) {
   const list = Array.isArray(deliveries) ? deliveries : [];
   for (let i = 0; i < list.length; i++) {
     const delivery = list[i];
@@ -928,18 +959,19 @@ export async function finishDeliveries(env, deliveries) {
     await trimNotes(env, delivery.publicId);
     const state = await readState(env, delivery.publicId);
     const viewer = await lockViewer(env, delivery.publicId);
-    const hidden = tiktokNoteHidden(delivery.item, viewer);
+    const item = await presentNote(env, request, { public_id: delivery.publicId }, delivery.item);
+    const hidden = tiktokNoteHidden(item, viewer);
     const unread = await unreadCount(env, delivery.publicId, state.readUntil, viewer);
     try {
       await publishNotes(env, delivery.publicId, {
         type: "upsert",
-        items: hidden ? [] : [delivery.item],
+        items: hidden ? [] : [item],
         unread,
         readUntil: state.readUntil
       });
     } catch (err) { logSafe("channel_failed"); }
     if (delivery.mode !== "push") continue;
-    const result = await sendPush(env, delivery.publicId, delivery.item, viewer);
+    const result = await sendPush(env, delivery.publicId, item, viewer);
     if (result && result.ok) {
       await env.DB.prepare(
         "UPDATE notifications SET pushed_at = ? WHERE public_id = ? AND note_id = ?"
@@ -960,7 +992,7 @@ export async function emitNotification(env, input) {
     if (/UNIQUE/i.test(String(err && err.message || err))) return { created: false, id: planned.id };
     throw err;
   }
-  await finishDeliveries(env, planned.deliveries);
+  await finishDeliveries(env, planned.deliveries, input && input.request);
   const unread = await unreadCount(env, String(input.publicId || ""), (await readState(env, String(input.publicId || ""))).readUntil);
   return { created: !!planned.created, id: planned.id, unread };
 }
@@ -1196,7 +1228,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     const since = Number(url.searchParams.get("since")) || 0;
     const flag = url.searchParams.get("locked");
     if (flag === "0" || flag === "1") await writeShortsLocked(env, row.public_id, flag === "1");
-    return json(200, await viewFor(env, row.public_id, since, flag));
+    return json(200, await viewFor(env, row.public_id, since, flag, request));
   }
   if (path === "/v1/notifications" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
@@ -1220,7 +1252,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     }
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
     if (body.bells && typeof body.bells === "object") await saveBells(env, row.public_id, body.bells, body.bellsAt);
-    return json(200, await viewFor(env, row.public_id, 0, body.shortsLocked));
+    return json(200, await viewFor(env, row.public_id, 0, body.shortsLocked, request));
   }
   if (path === "/v1/notifications/read" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
@@ -1229,7 +1261,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     if (body.error) return json(400, { error: body.error });
     await markRead(env, row.public_id, body.all === true ? Date.now() : body.until, body.ids, body.all === true ? "all" : body.tab);
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
-    return json(200, await viewFor(env, row.public_id));
+    return json(200, await viewFor(env, row.public_id, 0, null, request));
   }
   if (path === "/v1/push/vapid" && request.method === "GET") {
     const keys = await vapidPublic(env);
@@ -1267,11 +1299,13 @@ export async function handleNotificationRoutes(request, env, path, deps) {
   return null;
 }
 
-export async function notifyFollow(env, actor, targetId) {
+export async function notifyFollow(env, actor, targetId, request) {
   if (!targetId || String(targetId).indexOf("app:") !== 0) return;
   const publicId = String(targetId).slice(4);
   if (!/^\d{12}$/.test(publicId) || publicId === actor.public_id) return;
   const now = Date.now();
+  let avatar = "";
+  if (request) avatar = await visibleAvatarUrl(env, request, { public_id: publicId }, actor.handle) || "";
   await emitNotification(env, {
     publicId,
     kind: "follow",
@@ -1281,9 +1315,11 @@ export async function notifyFollow(env, actor, targetId) {
     handle: actor.handle,
     name: actor.display_name,
     text: "",
+    avatar,
     hash: "#/" + encodeURIComponent(actor.handle || ""),
     platform: "app",
-    feedId: "app:" + actor.public_id
+    feedId: actor.handle ? "app:@" + actor.handle : "",
+    request
   });
 }
 
@@ -1309,7 +1345,7 @@ export async function notifyRepost(env, actor, cleaned) {
     text: clip(cleaned.comment || post.text || "", 180),
     hash: "#/" + encodeURIComponent(actor.handle || ""),
     platform: "app",
-    feedId: "app:" + actor.public_id
+    feedId: actor.handle ? "app:@" + actor.handle : ""
   });
 }
 
@@ -1335,7 +1371,7 @@ export async function planRepostNotification(env, actor, cleaned) {
     text: clip(cleaned.comment || post.text || "", 180),
     hash: "#/" + encodeURIComponent(actor.handle || ""),
     platform: "app",
-    feedId: "app:" + actor.public_id
+    feedId: actor.handle ? "app:@" + actor.handle : ""
   });
 }
 
@@ -1368,7 +1404,7 @@ export async function notifyMentions(env, actor, text, except, idempotencyPrefix
       text: clip(text, 180),
       hash: hash || "#/",
       platform: "app",
-      feedId: "app:" + actor.public_id,
+      feedId: actor.handle ? "app:@" + actor.handle : "",
       mention: true
     });
   }
