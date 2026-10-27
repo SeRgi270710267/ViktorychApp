@@ -34,6 +34,55 @@ function flvAsHls(url) {
   }
 }
 
+function videoQuality(name) {
+  const key = String(name || "").toLowerCase();
+  return key !== "ao" && key !== "audio" && key !== "audio_only";
+}
+
+function levelCodec(level) {
+  if (!level) return "";
+  if (level.videoCodec) return String(level.videoCodec);
+  const attrs = level.attrs && level.attrs.CODECS ? String(level.attrs.CODECS) : "";
+  if (attrs) return attrs.split(",")[0].trim();
+  return "";
+}
+
+function videoCodecOk(codecs, isTypeSupported) {
+  const video = String(codecs || "").split(",")[0].trim();
+  if (!video) return true;
+  if (/^(mp4a|aac|opus|mp3)/i.test(video)) return false;
+  const ask = typeof isTypeSupported === "function" ? isTypeSupported : null;
+  if (ask) {
+    try {
+      if (!ask('video/mp4; codecs="' + video + '"')) return false;
+    } catch (err) { /* an unknown checker still rejects HEVC names */ }
+  }
+  if (!ask && /hvc1|hev1|hevc|bytevc1|h265/i.test(video)) return false;
+  return true;
+}
+
+function bestPlayableLevel(levels, isTypeSupported) {
+  const rows = Array.isArray(levels) ? levels : [];
+  let top = -1;
+  let best = -1;
+  let fallback = 0;
+  let fallbackScore = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const score = (Number(rows[i] && rows[i].bitrate) || 0) * 100000 + (Number(rows[i] && rows[i].height) || 0);
+    if (score >= fallbackScore) {
+      fallbackScore = score;
+      fallback = i;
+    }
+    if (!videoCodecOk(levelCodec(rows[i]), isTypeSupported)) continue;
+    if (score >= best) {
+      best = score;
+      top = i;
+    }
+  }
+  if (!rows.length) return -1;
+  return top >= 0 ? top : fallback;
+}
+
 function variantRows(info) {
   const rows = info && Array.isArray(info.variants) ? info.variants : [];
   if (rows.length) return rows;
@@ -55,7 +104,7 @@ function playbackSteps(info, now) {
   }
   function collect(requireFresh) {
     rows.forEach((row) => {
-      if (!row) return;
+      if (!row || !videoQuality(row.quality)) return;
       const hls = String(row.hls || "");
       const flv = String(row.flv || "");
       if (hls && (!requireFresh || streamFresh(hls, now))) push("hls", hls, row.quality);
@@ -156,6 +205,10 @@ export {
   streamExpiresAt,
   streamFresh,
   flvAsHls,
+  videoQuality,
+  levelCodec,
+  videoCodecOk,
+  bestPlayableLevel,
   playbackSteps,
   hlsFatalPlan,
   mediaMime,
