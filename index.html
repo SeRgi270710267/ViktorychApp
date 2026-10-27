@@ -478,9 +478,9 @@
         if (window.__VIKTORYCH_FEED) return;
         try {
           window.__VIKTORYCH_FEED = fetch("feeds.json", { credentials: "omit", priority: "low" }).then(function (res) {
-            if (!res.ok) throw new Error(String(res.status));
+            if (!res.ok) return "";
             return res.text();
-          });
+          }).catch(function () { return ""; });
         } catch (err) { window.__VIKTORYCH_FEED = null; }
       }
       function afterFirstPaint() {
