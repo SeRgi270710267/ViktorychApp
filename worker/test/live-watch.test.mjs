@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fresh, needsUpload, uploaderStale, watchDecision, watchHandles } from "../src/live-watch.js";
+import { admitRecord, fresh, needsUpload, uploaderStale, watchDecision, watchHandles } from "../src/live-watch.js";
 
 const NOW = Date.parse("2026-10-26T12:00:00Z");
 const ISO = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z");
@@ -108,4 +108,21 @@ test("the uploader heartbeat is stale after five quiet minutes", () => {
   assert.equal(uploaderStale({ at: ISO(NOW - 60 * 1000) }, NOW), false);
   assert.equal(uploaderStale({ at: ISO(NOW - 10 * 60 * 1000) }, NOW), true);
   assert.equal(uploaderStale(null, NOW), true);
+});
+
+test("sixteen recorders leave a new live queued and keep a live that already started", () => {
+  const full = Array.from({ length: 16 }, (_, index) => "h" + String(index).padStart(2, "0"));
+  const fresh = { action: "record", why: "new", part: 1 };
+  const queued = { action: "record", why: "queued", part: 1 };
+  const again = { action: "record", why: "stale", part: 2 };
+  const part = { action: "part", why: "part", part: 2 };
+  assert.equal(admitRecord(fresh, "new_name", full, 16), false);
+  assert.equal(admitRecord(queued, "new_name", full, 16), false);
+  assert.equal(admitRecord(fresh, "h00", full, 16), true);
+  assert.equal(admitRecord(again, "h00", full, 16), true);
+  assert.equal(admitRecord(part, "h00", full, 16), true);
+  assert.equal(admitRecord(fresh, "new_name", full.slice(0, 15), 16), true);
+  const waiting = { active: { state: "queued", roomId: "7699647509498710801", part: 1, capturing: false } };
+  assert.equal(watchDecision(waiting, {}, "7699647509498710801", NOW).why, "queued");
+  assert.equal(watchDecision(waiting, {}, "7699647509498710801", NOW).action, "record");
 });

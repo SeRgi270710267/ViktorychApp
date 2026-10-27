@@ -101,5 +101,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          TIKTOK_RECORD_CAP: "12"
+          TIKTOK_RECORD_CAP: "16"
         run: python3 scripts/tiktok_record.py --plan --dispatch
