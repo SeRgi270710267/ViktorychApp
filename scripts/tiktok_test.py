@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -255,6 +257,23 @@ def main() -> int:
     ids = [row["statusId"] for row in mirrored["posts"]]
     assert "15" in ids and "12" in ids
     assert mirrored["backfills"]["pepsi"]["stage"] == 2  # unchanged by the lane
+
+    import types
+
+    sys.modules.setdefault("yt_dlp", types.SimpleNamespace(YoutubeDL=object))
+
+    def timed_out(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd="yt-dlp", timeout=1)
+
+    real_limited = sync_module.extract_info_limited
+    sync_module.extract_info_limited = timed_out
+    try:
+        started = time.monotonic()
+        entries, info = sync_module.fetch_playlist("pepsi", 8)
+        elapsed = time.monotonic() - started
+    finally:
+        sync_module.extract_info_limited = real_limited
+    assert entries is None and info is None and elapsed < 5, elapsed
 
     print("tiktok normalize ok")
     return 0

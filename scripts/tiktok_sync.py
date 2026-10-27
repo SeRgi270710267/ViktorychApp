@@ -611,18 +611,21 @@ def patch_extractor():
     TikTokBaseIE._parse_aweme_video_web = patched
 
 
-def fetch_playlist(handle: str, playlistend: int | None = None) -> tuple[list[dict] | None, dict | None]:
-    """Public posts, plus the playlist info the sync already downloads.
+_EXTRACT_CHILD = r"""
+import json, sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd() / "scripts"))
+import tiktok_sync
+payload = json.loads(sys.stdin.buffer.read().decode("utf-8") or "{}")
+info = tiktok_sync.extract_info_blocking(str(payload.get("url") or ""), payload.get("playlistend"))
+sys.stdout.buffer.write(json.dumps(info, default=str).encode("utf-8"))
+"""
 
-    The list is None when TikTok blocks the runner. The playlist info can
-    carry the numeric user id and secUid. Callers that only need posts use
-    fetch_entries.
-    """
-    try:
-        from yt_dlp import YoutubeDL
-    except ImportError:
-        print("[tiktok] yt-dlp is not installed")
-        return None, None
+
+def extract_info_blocking(url: str, playlistend) -> dict | None:
+    """One yt-dlp playlist read. Runs in a child process so a hang can be killed."""
+    from yt_dlp import YoutubeDL
+
     patch_extractor()
 
     class Quiet:
@@ -649,24 +652,64 @@ def fetch_playlist(handle: str, playlistend: int | None = None) -> tuple[list[di
         "socket_timeout": 20,
         "logger": Quiet(),
     }
-    # playlistend=None walks every page of the public profile playlist (full
-    # backfill). Routine syncs only pull the newest posts.
     if playlistend is not None:
         opts["playlistend"] = int(playlistend)
+    with YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    return info if isinstance(info, dict) else None
+
+
+def extract_info_limited(url: str, playlistend, timeout: float) -> dict | None:
+    payload = json.dumps({"url": url, "playlistend": playlistend}).encode("utf-8")
+    proc = subprocess.run(
+        [sys.executable, "-c", _EXTRACT_CHILD],
+        input=payload,
+        capture_output=True,
+        timeout=timeout,
+        cwd=str(ROOT),
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    try:
+        parsed = json.loads(proc.stdout.decode("utf-8", "replace"))
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def fetch_playlist(handle: str, playlistend: int | None = None) -> tuple[list[dict] | None, dict | None]:
+    """Public posts, plus the playlist info the sync already downloads.
+
+    The list is None when TikTok blocks the runner. The playlist info can
+    carry the numeric user id and secUid. Callers that only need posts use
+    fetch_entries. One profile cannot hold the runner: the extractor is killed
+    at the timeout, then the mirror lane runs.
+    """
+    import os
+
+    try:
+        from yt_dlp import YoutubeDL  # noqa: F401
+    except ImportError:
+        print("[tiktok] yt-dlp is not installed")
+        return None, None
+    budget = os.environ.get("TIKTOK_BUDGET") == "1"
+    pauses = (5.0,) if budget else (8.0,)
+    timeout = 25.0 if budget else 40.0
+    url = "https://www.tiktok.com/@" + handle
     info: dict | None = None
-    pauses = (120.0, 300.0)
     for attempt in range(len(pauses) + 1):
         try:
-            with YoutubeDL(opts) as ydl:
-                info = ydl.extract_info("https://www.tiktok.com/@" + handle, download=False)
+            info = extract_info_limited(url, playlistend, timeout)
+        except subprocess.TimeoutExpired:
+            print("[tiktok] " + handle + " timed out")
+            return None, None
         except Exception:
             info = None
         if isinstance(info, dict):
             break
         if attempt < len(pauses):
-            pause = pauses[attempt] + random.uniform(0.0, 45.0)
-            print("[tiktok] " + BLOCKED + ", retrying " + handle + " in " + str(int(pause)) + "s")
-            time.sleep(pause)
+            print("[tiktok] " + BLOCKED + ", retrying " + handle)
+            time.sleep(pauses[attempt])
     if not isinstance(info, dict):
         print("[tiktok] " + BLOCKED)
         return None, None
@@ -988,7 +1031,15 @@ def merge_handle_posts(old: list[dict], built: list[dict]) -> list[dict]:
 
 
 def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config: dict | None = None, accounts: dict | None = None, force_full: set[str] | None = None) -> dict:
+    import os
+
     previous = previous if isinstance(previous, dict) else {}
+    budget = os.environ.get("TIKTOK_BUDGET") == "1"
+    try:
+        budget_seconds = float(os.environ.get("TIKTOK_BUDGET_SECONDS") or 240)
+    except ValueError:
+        budget_seconds = 240.0
+    budget_left = time.monotonic() + max(30.0, budget_seconds)
     prev_live = previous.get("live") if isinstance(previous.get("live"), dict) else {}
     feeds = []
     posts = []
@@ -1007,7 +1058,21 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
             if not isinstance(stage, int) or not 0 <= stage < len(BACKFILL_LADDER):
                 stage = 0 if (never or forced or not state.get("done")) else -1
             final_stage = stage == len(BACKFILL_LADDER) - 1
-            entries, info = fetch_playlist(handle, None if final_stage else (RECENT_PLAYLIST if stage < 0 else BACKFILL_LADDER[stage]))
+            playlistend = None if final_stage else (RECENT_PLAYLIST if stage < 0 else BACKFILL_LADDER[stage])
+            # A scheduled refresh only needs the newest posts. A full ladder
+            # walk is what held the runner until the job was killed.
+            capped = False
+            if budget and (playlistend is None or (isinstance(playlistend, int) and playlistend > RECENT_PLAYLIST)):
+                playlistend = RECENT_PLAYLIST
+                capped = True
+            if budget and time.monotonic() > budget_left:
+                print("[tiktok] " + handle + " skipped; budget spent")
+                old_posts = [row for row in (previous.get("posts") or []) if row.get("handle") == handle]
+                old_feeds = [row for row in (previous.get("feeds") or []) if row.get("handle") == handle]
+                posts.extend(old_posts)
+                feeds.extend(old_feeds)
+                continue
+            entries, info = fetch_playlist(handle, playlistend)
             lane_used = False
             if entries is None:
                 lane = lane_entries(handle)
@@ -1045,7 +1110,7 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
             if not built and not avatar:
                 print("[tiktok] no public posts for " + handle)
             merged = merge_handle_posts(old, built)
-            walked = stage >= 0 and entries is not None and not lane_used
+            walked = stage >= 0 and entries is not None and not lane_used and not capped
             if walked:
                 if final_stage:
                     backfills[active] = {"done": True, "at": now_iso(), "posts": len(merged)}
@@ -1065,8 +1130,14 @@ def build_doc(handles: list[str], previous: dict | None, posts_ok: bool, config:
             posts.extend(merged)
             if walked:
                 # Pace consecutive walks; TikTok rate limits the next
-                # profile right after a long crawl.
-                time.sleep(45.0 + random.uniform(0.0, 30.0))
+                # profile right after a long crawl. A recent-only pass does
+                # not need that wait, and a budgeted run must not sit here.
+                if budget:
+                    time.sleep(2.0)
+                elif playlistend is None or (isinstance(playlistend, int) and playlistend > RECENT_PLAYLIST):
+                    time.sleep(45.0 + random.uniform(0.0, 30.0))
+                else:
+                    time.sleep(2.0)
         handles = sync_handles(config, accounts)
     else:
         feeds = list(previous.get("feeds") or [])
