@@ -164,6 +164,11 @@
     if (raw && raw.unlimited) return { keep: keep, maxBytes: 0, unlimited: true, prefetch: prefetch };
     var maxBytes = raw ? Number(raw.maxBytes) : 0;
     if (MAX_STEPS.indexOf(maxBytes) < 0) maxBytes = fallback;
+    var dev = null;
+    if (typeof self !== "undefined" && self.ViktorychDevice) dev = self.ViktorychDevice;
+    else if (typeof window !== "undefined" && window.ViktorychDevice) dev = window.ViktorychDevice;
+    var cap = dev && dev.capForPolicy ? Number(dev.capForPolicy()) : 0;
+    if (cap > 0 && maxBytes > cap) maxBytes = cap;
     return { keep: keep, maxBytes: maxBytes, unlimited: false, prefetch: prefetch };
   }
 
@@ -914,6 +919,16 @@
     askPersist();
   }
 
+  function applyDeviceCap() {
+    var saved = loadLocal();
+    if (saved && saved.unlimited) return policy;
+    var next = normalizePolicy(saved || policy);
+    policy = next;
+    if (!saved || saved.maxBytes !== next.maxBytes || saved.unlimited !== next.unlimited) saveLocal(policy);
+    post({ type: "storage-policy", policy: policy });
+    return policy;
+  }
+
   function start() {
     policy = loadLocal() || normalizePolicy(null);
     if (!loadLocal() && typeof navigator !== "undefined" && navigator.storage && navigator.storage.estimate) {
@@ -945,6 +960,7 @@
     keepMs: keepMs,
     defaultMaxBytes: defaultMaxBytes,
     normalizePolicy: normalizePolicy,
+    applyDeviceCap: applyDeviceCap,
     planEviction: planEviction,
     mediaFresh: mediaFresh,
     parseByteRange: parseByteRange,
