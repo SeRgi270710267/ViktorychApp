@@ -21,7 +21,7 @@ workers_dev = true
 # ACCOUNT_PEPPER is used. OWNER_PUBLIC_ID, when set, cannot be deleted.
 # The owner handle and owner-account are refused by the delete route.
 [vars]
-ALLOWED_ORIGINS = "https://viktorychgroup.github.io,https://viktorych-app.pages.dev"
+ALLOWED_ORIGINS = "https://viktorychgroup.github.io,https://viktorychapp.pages.dev"
 PBKDF2_ITERATIONS = "8000"
 # One flag. "owner" hides TikTok and Shorts except for the owner account.
 # "all" shows them to everyone. Keep this in step with accounts.config.js.

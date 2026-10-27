@@ -391,7 +391,7 @@
       if (!seg || seg === "s" || seg === "u") return "";
       return owner + "/" + seg;
     }
-    const pagesHost = "viktorych-app.pages.dev";
+    const pagesHost = "viktorychapp.pages.dev";
     if (host === pagesHost || (host.length > pagesHost.length + 1 && host.slice(-(pagesHost.length + 1)) === "." + pagesHost)) {
       return "ViktorychGroup/ViktorychApp";
     }
