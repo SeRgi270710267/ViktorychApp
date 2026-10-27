@@ -5,7 +5,7 @@
    once with saved data from before the presence deploy. */
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { extname, join, resolve, sep } from "node:path";
 
@@ -141,17 +141,21 @@ function get(url) {
 async function probe(pageUrl, opts) {
   const dir = mkdtempSync(join(tmpdir(), "viktorych-smoke-"));
   const port = 9300 + Math.floor(Math.random() * 500);
-  const chrome = spawn(chromeBin(), [
+  const logPath = join(dir, "chrome.log");
+  const logFd = openSync(logPath, "a");
+  const bin = chromeBin();
+  const chrome = spawn(bin, [
     "--headless=new",
     "--disable-gpu",
     "--no-sandbox",
     "--disable-dev-shm-usage",
     "--no-first-run",
+    "--remote-allow-origins=*",
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${dir}`,
     `--window-size=${opts.width},${opts.height}`,
     "about:blank"
-  ], { stdio: "ignore" });
+  ], { stdio: ["ignore", logFd, logFd] });
   try {
     let wsUrl = "";
     for (let i = 0; i < 50; i++) {
@@ -163,7 +167,11 @@ async function probe(pageUrl, opts) {
         await sleep(200);
       }
     }
-    if (!wsUrl) throw new Error("Chrome did not open a debugger");
+    if (!wsUrl) {
+      let detail = "";
+      try { detail = readFileSync(logPath, "utf8").trim().slice(-800); } catch (err) { detail = ""; }
+      throw new Error("Chrome did not open a debugger (" + bin + ")" + (detail ? "\n" + detail : ""));
+    }
     const targets = JSON.parse(await get(`http://127.0.0.1:${port}/json/list`));
     const page = targets.find((item) => item.type === "page") || targets[0];
     const ws = new WebSocket(page.webSocketDebuggerUrl);
