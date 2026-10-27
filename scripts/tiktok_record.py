@@ -434,11 +434,11 @@ def plan_uploads(jobs: dict, heartbeats: dict, slots: int, now: str) -> list:
         active = job.get("active") if isinstance(job, dict) and isinstance(job.get("active"), dict) else {}
         if not active:
             continue
-        if active.get("settled"):
+        if active.get("settled") or str(active.get("state") or "") == "blocked":
             continue
-        segments = int(active.get("segments") or 0)
+        segments = int(active.get("segments") or 0) > 0
         capturing = bool(active.get("capturing")) and fresh_iso(str(active.get("heartbeat") or ""), now, 8 * 60)
-        if segments > 0 or capturing:
+        if capturing or (segments and (active.get("captureDone") or active.get("needsPart"))):
             need = True
     if not need:
         return []
@@ -1353,6 +1353,10 @@ def selftest() -> int:
     check(plan_uploads(live_cap, {}, 1, moment) == [0], "an open capture with a fresh heartbeat starts an uploader")
     stale_cap = {"a_name": {"active": {"capturing": True, "segments": 0, "heartbeat": "2026-10-23T00:00:00Z"}}}
     check(plan_uploads(stale_cap, {}, 1, moment) == [], "a stale capture does not start an uploader")
+    stuck = {"a_name": {"active": {"state": "recording", "segments": 4, "capturing": False, "captureDone": False}}}
+    check(plan_uploads(stuck, {}, 1, moment) == [], "a dead row with a segment count does not start an uploader")
+    blocked_count = {"a_name": {"active": {"state": "blocked", "segments": 4, "captureDone": True, "capturing": False}}}
+    check(plan_uploads(blocked_count, {}, 1, moment) == [], "a blocked row does not start an uploader")
 
     check(channel_slot("7699647509498710804", 2) == channel_slot("7699647509498710804", 2), "a room stays on the same channel")
     check(channel_ok("-1004242") and not channel_ok("4242"), "a backup channel id is a private -100 id")
