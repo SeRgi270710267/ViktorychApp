@@ -1,0 +1,132 @@
+/* Presence dot. The ring matches the surface behind the avatar. */
+.ava-presence {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  vertical-align: middle;
+  line-height: 0;
+}
+.presence-dot {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: clamp(8px, 22%, 18px);
+  height: clamp(8px, 22%, 18px);
+  border-radius: 9999px;
+  box-sizing: border-box;
+  border: 2px solid var(--presence-ring, var(--bg));
+  background: var(--muted);
+  pointer-events: none;
+}
+.ava-presence[data-presence="online"] .presence-dot { background: var(--green); }
+.ava-presence[data-presence="idle"] .presence-dot { background: #f5a623; }
+.ava-presence[data-presence="dnd"] .presence-dot { background: var(--red); }
+.ava-presence[data-presence="offline"] .presence-dot,
+.ava-presence[data-presence="invisible"] .presence-dot { background: var(--muted); }
+.hcard,
+.drawer { --presence-ring: var(--sheet); }
+.friend-card { --presence-ring: var(--card); }
+.presence-lines {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 20px;
+  margin-top: 2px;
+  min-height: 0;
+}
+.presence-lines:empty { display: none; }
+.presence-settings { margin-bottom: 8px; }
+.presence-form { display: flex; flex-direction: column; gap: 8px; }
+.presence-kicker {
+  margin: 12px 0 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+.presence-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 18px; }
+.presence-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+}
+.presence-choice b { font-size: 15px; }
+.presence-choice span { color: var(--muted); font-size: 13px; line-height: 16px; }
+.presence-choice.on { background: var(--blue-dim); }
+.presence-choice:hover { background: var(--hover); }
+.presence-status { display: flex; gap: 8px; }
+.presence-status input,
+.presence-clear select {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  font: inherit;
+  padding: 8px 10px;
+}
+.presence-status input:first-child { width: 72px; flex: none; }
+.presence-status input:last-child { flex: 1; min-width: 0; }
+.presence-clear { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 13px; }
+.presence-actions { display: flex; gap: 8px; align-items: center; }
+.presence-save {
+  border: 0;
+  background: var(--text);
+  color: var(--bg);
+  border-radius: 9999px;
+  font: inherit;
+  font-weight: 700;
+  padding: 8px 16px;
+}
+.presence-textbtn {
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: inherit;
+  padding: 8px;
+}
+.presence-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.4);
+}
+.presence-sheet[hidden] { display: none; }
+.presence-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 86vh;
+  overflow: auto;
+  background: var(--sheet);
+  color: var(--text);
+  border-radius: 16px 16px 0 0;
+  padding: 8px 16px 24px;
+}
+.presence-grab {
+  width: 36px;
+  height: 4px;
+  border-radius: 9999px;
+  background: var(--line);
+  margin: 4px auto 8px;
+}
+.presence-sheet.presence-pop { background: transparent; }
+.presence-sheet.presence-pop .presence-card {
+  right: auto;
+  width: 320px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  box-shadow: 0 0 16px var(--shadow);
+  padding-top: 12px;
+}
+.presence-sheet.presence-pop .presence-grab { display: none; }
+.presence-set {
+  width: 100%;
+  margin-top: 8px;
+}

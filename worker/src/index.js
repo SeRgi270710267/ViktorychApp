@@ -18,6 +18,8 @@ import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
+import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 
 const encoder = new TextEncoder();
@@ -55,6 +57,7 @@ function json(status, body, extra) {
 }
 
 function withCors(request, env, response) {
+  if (response && (response.status === 101 || response.webSocket)) return response;
   const url = new URL(request.url);
   if (isPublicFederationRoute(url.pathname)) return response;
   const origin = request.headers.get("Origin");
@@ -171,7 +174,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(PRESENCE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(CHANNEL_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -4472,6 +4475,12 @@ async function route(request, env, ctx) {
     return handleIdentitiesRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
   }
 
+  if (path === "/v1/presence") {
+    return handlePresence(request, env, url, { json, sessionAccount, readJson, rateHit, limited });
+  }
+  if (path === "/v1/channel" || path === "/v1/channel/ticket") {
+    return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
+  }
   if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
 
     return handleVaultRoute(request, env, path, url, { json, sessionAccount, readJson, rateHit, limited });
@@ -4479,6 +4488,8 @@ async function route(request, env, ctx) {
   }
   return json(404, { error: "not_found" });
 }
+
+export { AccountChannel };
 
 export default {
   async fetch(request, env, ctx) {
@@ -4495,7 +4506,7 @@ export default {
   },
   async scheduled(event, env, ctx) {
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
