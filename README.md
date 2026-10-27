@@ -272,7 +272,7 @@ Edit `feeds.config.json` and add an object under `feeds`. A push to `main` runs 
 
 The new account is followed in a fresh browser. An existing browser keeps its saved follow list until you follow the account from the Feeds page.
 
-Follow on a profile that is not in the private catalog, or Add account on the Feeds page, opens a prefilled GitHub issue (`Follow request` or `Unfollow request`). The workflow applies it only when the actor hash matches the `OWNER_ACTOR_SHA256` secret. The repository belongs to an organization, so the organization login is not that check. It checks the source, writes the private catalog, closes the issue, and starts a sync. Issues from anyone else are ignored.
+Add account on the Feeds page is owner-only. The signed-in owner pastes a profile URL or @handle. The Worker detects the source, checks that it can be read through the existing public fetchers, shows a preview, then stores the row in the private R2 catalog. A sync starts without putting the account in the workflow inputs or in a GitHub issue. Anonymous callers get 404. Any other account gets 403. Facebook has no public feed without a paid API, and Discord still needs the bot already configured for that server, so those two cannot be added from the paste box.
 
 Subscription groups are saved on this device immediately. **Save groups to the site** opens a prefilled issue titled `Subscription groups`. The same owner-only workflow writes the `groups` field in the private catalog and starts a sync, so the groups show up on every device. Edits on this device win until the published list matches. Issues from anyone else are ignored.
 
