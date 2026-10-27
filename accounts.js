@@ -988,6 +988,7 @@
     };
     api("/v1/signup", { method: "POST", body: body }).then(function (res) {
       if (res.status !== 201 || !res.token || !res.accountNumber) {
+        if (res.error === "claim_required") form.claimOpen = true;
         errorText = errorMessage(res.error);
         paint();
         return;
@@ -1041,7 +1042,7 @@
         emergency: true,
         account: {
           publicId: "emergency_owner",
-          handle: "S\u0435\u0420g\u0418",
+          handle: "",
           displayName: "Owner",
           owner: true
         }
@@ -2078,11 +2079,12 @@
     var rows = body && body.backoffs || [];
     var accounts = body && body.accounts || [];
     if (locked) {
+      var allow = window.ViktorychShorts && window.ViktorychShorts.isUnlocked;
       rows = rows.filter(function (r) {
-        return String(r && r.handle || "").toLowerCase().replace(/^@/, "") === "pepsi";
+        return allow ? allow(r && r.handle) : false;
       });
       accounts = accounts.filter(function (r) {
-        return String(r && r.handle || "").toLowerCase().replace(/^@/, "") === "pepsi";
+        return allow ? allow(r && r.handle) : false;
       });
     }
     var checked = body && body.checkedAt ? healthWhen(body.checkedAt) : "";
@@ -2162,9 +2164,9 @@
   function isOwnerAccount(account) {
     if (!account) return false;
     if (account.owner) return true;
-    var handle = String(account.handle || "");
     var id = String(account.publicId || "");
-    if (id === "emergency_owner" || handle === "SeRgi270710267" || id === "SeRgi270710267") return true;
+    if (id === "emergency_owner") return true;
+    var handle = String(account.handle || "");
     var checked = window.HandleSkeleton && window.HandleSkeleton.inspectHandle ? window.HandleSkeleton.inspectHandle(handle) : null;
     return !!(checked && checked.owner);
   }

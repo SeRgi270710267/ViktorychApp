@@ -6,7 +6,7 @@
 import https from "node:https";
 import { Miniflare } from "miniflare";
 
-const OWNER = "S\u0435\u0420g\u0418";
+const OWNER = "mirathorn";
 const LIVE_PATH = "/repos/ViktorychGroup/ViktorychApp/actions/workflows/tiktok-live.yml/dispatches";
 
 function redact(text) {
@@ -93,6 +93,7 @@ async function main() {
     bindings: {
       ACCOUNT_PEPPER: "pepper-test",
       OWNER_CLAIM_CODE: "claim-test",
+      OWNER_HANDLE: "mirathorn",
       ALLOWED_ORIGINS: "https://viktorychgroup.github.io",
       PBKDF2_ITERATIONS: "1000",
       GITHUB_DISPATCH_TOKEN: token

@@ -17,7 +17,7 @@ body:
       label: Accounts
       description: One account per line. Use a profile URL or platform:handle. Platforms are x, threads, instagram, youtube, vk, telegram, and rss.
       placeholder: |
-        x:PrepperCanadian
-        instagram:canadian_prepper
+        x:cedarhill
+        instagram:orbitfox
     validations:
       required: true

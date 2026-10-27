@@ -11,6 +11,7 @@ runs once without it. No impersonation package and no captcha bypass.
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 import subprocess
@@ -24,7 +25,6 @@ from pathlib import Path
 
 from adapters.common import feed_sort_key, post_shell, trusted_time
 
-TRACKED = ["gabii_g5", "pepsi"]
 HANDLE_RE = re.compile(r"^[A-Za-z0-9._]{2,24}$")
 ROOT = Path(__file__).resolve().parents[1]
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -892,7 +892,9 @@ def r2_put(key: str, payload: bytes) -> bool:
 def load_added_accounts(path: Path | None = None) -> dict:
     """Owner list from R2 when the Actions token is set, else a local file."""
     path = path or accounts_path()
-    blob = r2_get("owner/tiktok-accounts.json")
+    from r2_catalog import read_catalog
+
+    blob = read_catalog("owner/tiktok-accounts.json")
     if blob is not None:
         return parse_accounts(blob.decode("utf-8", "replace"))
     if path.is_file():
@@ -908,7 +910,9 @@ def save_added_accounts(doc: dict, path: Path | None = None) -> None:
         "removed": doc.get("removed") or [],
     }, ensure_ascii=False) + "\n").encode("utf-8")
     path.write_bytes(payload)
-    r2_put("owner/tiktok-accounts.json", payload)
+    from r2_catalog import store_usable
+
+    store_usable("owner/tiktok-accounts.json", payload)
 
 
 def removed_handles(doc: dict | None) -> set[str]:
@@ -919,6 +923,22 @@ def removed_handles(doc: dict | None) -> set[str]:
         name = norm_handle(item)
         if name:
             found.add(name.casefold())
+    return found
+
+
+def env_tracked() -> list[str]:
+    """Handles named by the TIKTOK_TRACKED secret. Empty when it is unset."""
+    from account_identity import norm_handle
+
+    found = []
+    seen = set()
+    raw = os.environ.get("TIKTOK_TRACKED") or ""
+    for part in re.split(r"[\s,]+", raw):
+        name = norm_handle(part)
+        if not HANDLE_RE.fullmatch(name) or name.casefold() in seen:
+            continue
+        seen.add(name.casefold())
+        found.append(name)
     return found
 
 
@@ -953,13 +973,14 @@ def sync_handles(config: dict | None, accounts: dict | None = None) -> list[str]
             continue
         add(str(row.get("handle") or ""))
         alias(row)
-    for row in config.get("tiktok") or []:
-        if not isinstance(row, dict):
-            continue
-        add(str(row.get("handle") or ""))
-        alias(row)
-    for row in TRACKED:
-        add(row)
+    if not config.get("catalogSeed"):
+        for row in config.get("tiktok") or []:
+            if not isinstance(row, dict):
+                continue
+            add(str(row.get("handle") or ""))
+            alias(row)
+    for part in env_tracked():
+        add(part)
     return handles
 
 
@@ -1261,9 +1282,12 @@ def load_owner(path: Path) -> dict:
 def upload_owner(path: Path) -> None:
     if not path.is_file():
         return
-    if r2_put("owner/tiktok.json", path.read_bytes()):
+    from r2_catalog import store_usable
+
+    state = store_usable("owner/tiktok.json", path.read_bytes())
+    if state == "ok":
         print("[tiktok] live status updated")
-    elif cloudflare_env()[0] and cloudflare_env()[1]:
+    elif state == "fail" and cloudflare_env()[0] and cloudflare_env()[1]:
         print("[tiktok] live status upload failed")
 
 
@@ -1272,11 +1296,17 @@ def publish_live_catalogs(feeds: Path, owner: Path) -> None:
     token, account = cloudflare_env()
     if not token or not account:
         return
+    from r2_catalog import store_usable
+
     ok = True
     if feeds.is_file():
-        ok = r2_put("feeds.json", feeds.read_bytes()) and ok
+        state = store_usable("feeds.json", feeds.read_bytes())
+        if state == "fail":
+            ok = False
     if owner.is_file():
-        ok = r2_put("owner/tiktok.json", owner.read_bytes()) and ok
+        state = store_usable("owner/tiktok.json", owner.read_bytes())
+        if state == "fail":
+            ok = False
     print("[tiktok] catalogs stored" if ok else "[tiktok] catalog upload failed")
 
 
@@ -1316,8 +1346,20 @@ def main(argv: list[str] | None = None) -> int:
     accounts = load_added_accounts()
     before_accounts = json.dumps(accounts, sort_keys=True, ensure_ascii=False)
     handles = sync_handles(config, accounts)
+    try:
+        from log_redact import collect, install
+
+        quiet = set(handles)
+        collect(config, quiet)
+        collect(accounts, quiet)
+        install(quiet)
+    except Exception:
+        pass
+    seeded = isinstance(config, dict) and config.get("catalogSeed") is True
     owner_path = ROOT / "owner" / "tiktok.json"
-    downloaded = r2_get("owner/tiktok.json")
+    from r2_catalog import read_catalog
+
+    downloaded = read_catalog("owner/tiktok.json")
     if downloaded is not None:
         owner_path.parent.mkdir(parents=True, exist_ok=True)
         owner_path.write_bytes(downloaded)
@@ -1334,7 +1376,7 @@ def main(argv: list[str] | None = None) -> int:
             doc["posts"] = previous.get("posts") or []
             doc["audience"] = previous.get("audience") or mode
         place(doc, "owner" if live_only else mode, ROOT / "feeds.json", owner_path)
-        if not live_only and config_path.is_file():
+        if not live_only and config_path.is_file() and not seeded:
             commit_file(config_path, config)
         if json.dumps(accounts, sort_keys=True, ensure_ascii=False) != before_accounts:
             save_added_accounts(accounts)
