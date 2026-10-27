@@ -1,8 +1,8 @@
-/* One keyed attempt for the live detector, then the anonymous request.
-   The player and the media proxy do not call primeLiveCookies, so they
-   stay on the anonymous path. */
+/* One keyed attempt for the live detector. A signed-out key is replaced
+   once. A rate limit, captcha, or challenge keeps that same key. The player
+   and the media proxy do not call primeLiveCookies, so they stay anonymous. */
 
-import { attentionReason } from "../../shared/owner-keys.js";
+import { decideAttempt } from "../../shared/owner-keys.js";
 import { readUsableKey, markKeyAttention } from "./owner-keys.js";
 
 let primed = null;
@@ -22,11 +22,22 @@ async function fetchPlain(url, headers, redirectMode) {
   return { status: res.status, text: await res.text(), retryAfter: retryAfterSeconds(res) };
 }
 
+async function fetchKeyed(url, headers, redirectMode, cookie) {
+  const res = await fetch(url, {
+    headers: Object.assign({}, headers, { cookie: cookie }),
+    redirect: redirectMode || "follow"
+  });
+  return { status: res.status, text: await res.text(), retryAfter: retryAfterSeconds(res) };
+}
+
 export async function primeLiveCookies(env) {
-  primed = { env: env, cookie: "", dropped: false };
+  primed = { env: env, cookie: "", keyId: "", dropped: false };
   try {
     const row = await readUsableKey(env, "tiktok");
-    if (row && row.value) primed.cookie = row.value;
+    if (row && row.value) {
+      primed.cookie = row.value;
+      primed.keyId = row.keyId || "";
+    }
   } catch (err) {
     primed.cookie = "";
   }
@@ -36,12 +47,10 @@ export function releaseLiveCookies() {
   primed = null;
 }
 
-async function drop(reason) {
-  if (!primed || primed.dropped) return;
-  primed.dropped = true;
-  primed.cookie = "";
-  try { await markKeyAttention(primed.env, "tiktok", reason || "forbidden"); }
-  catch (err) { /* the anonymous retry still runs */ }
+async function note(reason) {
+  if (!primed) return;
+  try { await markKeyAttention(primed.env, "tiktok", reason || "forbidden", primed.keyId || ""); }
+  catch (err) { /* the detector still applies its own backoff */ }
 }
 
 export async function liveFetch(url, headers, redirectMode, keyed) {
@@ -51,18 +60,43 @@ export async function liveFetch(url, headers, redirectMode, keyed) {
   if (!cookie || host.indexOf("tiktok.com") < 0) return fetchPlain(url, base, redirectMode);
   let res = null;
   try {
-    res = await fetch(url, {
-      headers: Object.assign({}, base, { cookie: cookie }),
-      redirect: redirectMode || "follow"
-    });
+    res = await fetchKeyed(url, base, redirectMode, cookie);
   } catch (err) {
     return fetchPlain(url, base, redirectMode);
   }
-  const text = await res.text();
-  const reason = attentionReason(res.status, text.slice(0, 20000));
-  if (reason) {
-    await drop(reason);
+  const decision = decideAttempt(res.status, res.text, true);
+  if (decision.action === "hold") {
+    await note(decision.reason);
+    return res;
+  }
+  if (decision.action !== "advance") return res;
+  const used = primed.keyId || "";
+  primed.dropped = true;
+  primed.cookie = "";
+  await note(decision.reason);
+  let next = null;
+  try { next = await readUsableKey(primed.env, "tiktok"); }
+  catch (err) { next = null; }
+  if (!next || !next.value || !next.keyId || next.keyId === used) return fetchPlain(url, base, redirectMode);
+  primed.cookie = next.value;
+  primed.keyId = next.keyId;
+  primed.dropped = false;
+  let second = null;
+  try {
+    second = await fetchKeyed(url, base, redirectMode, next.value);
+  } catch (err) {
     return fetchPlain(url, base, redirectMode);
   }
-  return { status: res.status, text: text, retryAfter: retryAfterSeconds(res) };
+  const again = decideAttempt(second.status, second.text, true);
+  if (again.action === "hold") {
+    await note(again.reason);
+    return second;
+  }
+  if (again.action === "advance") {
+    primed.dropped = true;
+    primed.cookie = "";
+    await note(again.reason);
+    return fetchPlain(url, base, redirectMode);
+  }
+  return second;
 }

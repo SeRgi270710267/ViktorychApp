@@ -26,6 +26,8 @@ SITE_FILES = (
     "index.html",
     "accounts.js",
     "owner-keys.js",
+    "storage.js",
+    "storage.css",
     "accounts.css",
     "accounts.config.js",
     "shorts.js",

@@ -1246,7 +1246,13 @@ def main() -> None:
     combined = skipped.stdout + skipped.stderr
     check(skipped.returncode == 0 and "skipping the upload" in skipped.stdout, "missing Internet Archive keys skip the upload")
     check("sentinel-secret-value" not in combined and "IA_SECRET_KEY" not in combined, "the skip path does not print a secret")
+    storage_worker = (ROOT / "sw.js").read_text(encoding="utf-8")
+    storage_workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
+    storage_flow = subprocess.run(["node", str(ROOT / "scripts" / "storage_test.js")], cwd=ROOT)
+    check(storage_flow.returncode == 0, "the storage cache helpers pass")
+    check('src="storage.js"' in (ROOT / "index.html").read_text(encoding="utf-8") and "storage.js" in storage_workflow and "navigator.storage.persist" in (ROOT / "storage.js").read_text(encoding="utf-8") and "If-None-Match" in storage_worker and "storage-wipe" in storage_worker, "settings show storage usage and feeds revalidate with ETag")
     ia_backup_checks()
+    feed_order_checks()
     gdrive_checks()
     telegram_checks()
 
@@ -1649,12 +1655,15 @@ def main() -> None:
     import subprocess
     update_flow = subprocess.run(["node", str(ROOT / "scripts" / "update_flow_test.js")], cwd=ROOT)
     check(update_flow.returncode == 0, "the update flow helpers pass")
-    check("function posterList(" in app and "function posterOrder(" in app and "function feedFrame(" in app and "100cqw" in app and "function clipLoops(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.5" in app and "el._hold" in app and "lockHlsTop(" in app and "capLevelToPlayerSize: false" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 50 percent visible")
+    check("function posterList(" in app and "function posterOrder(" in app and "function feedFrame(" in app and "function frameSpec(" in app and "100cqw" in app and "function clipLoops(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.5" in app and "el._hold" in app and "lockHlsTop(" in app and "capLevelToPlayerSize: false" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 50 percent visible")
+    check("function stripLeadMentions(" in app and "function threadPair(" in app and "parentShown" in app and 'class="thread"' in app and "function quoteCard(" in app, "a reply with its parent is a thread and a quote stays a quote card")
+    frame_test = subprocess.run(["node", str(ROOT / "scripts" / "media_frame_test.js")], cwd=ROOT)
+    check(frame_test.returncode == 0, "media frames keep each ratio and a reply thread strips only leading mentions")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
     follow_fn = app[app.index("function followedFeeds()"):app.index("function followedFeeds()") + 500]
     check("elonmusk" not in follow_fn and "finkd" not in follow_fn and "CanadianPrepper" not in follow_fn, "live refresh has no per-account special case")
-    check("return !isSelfReply(post);" in app and "replyParent" in app and "pill-faces" in css and "reply-context" in css, "home shows replies to other people and the new-posts pill can show avatars")
+    check("return !isSelfReply(post);" in app and "replyParent" in app and "pill-faces" in css and "reply-context" in css and ".thread > .post.continues" in css and "--thread:" in css, "home shows replies to other people and the new-posts pill can show avatars")
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
     community_src = (ROOT / "scripts" / "adapters" / "youtube_community.py").read_text(encoding="utf-8")
     check("rsshub.rssforever.com" not in config_text and "rsshub.pseudoyu.com" not in config_text and "hub.slarker.me" not in config_text, "public RSSHub mirrors are not feed sources")
@@ -4345,7 +4354,10 @@ def story_checks() -> None:
     check("drive-photos.js" in worker, "the service worker precaches the Photos library")
     nav_fn = app.split("function navItemDef(id)", 1)[1].split("function shownFeeds", 1)[0]
     bottom_fn = app.split("function bottom(route)", 1)[1].split("function listSortOf", 1)[0]
-    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and "#/storage" not in nav_fn and "#/storage" not in bottom_fn, "storage stays out of the main nav")
+    bottom_ids = app.split("const BOTTOM_NAV_IDS", 1)[1].split("];", 1)[0]
+    bottom_default = app.split("const BOTTOM_NAV_DEFAULT_ON", 1)[1].split("];", 1)[0]
+    side_ids = app.split("const ALL_NAV_IDS", 1)[1].split("];", 1)[0]
+    check("#/drive" not in nav_fn and "#/drive" not in bottom_fn and "#/storage" not in bottom_fn and '"storage"' not in side_ids and '"storage"' not in bottom_default and '"storage"' in bottom_ids and 'href: "#/storage"' in nav_fn, "storage stays off the default nav and can be pinned on the bottom bar")
     check('href="#/storage"' in app and 'icon("storage")' in app and "ViktorychDrive.visible" in app and 'parts[0] === "storage"' in app and 'bare === "#/drive"' in app, "storage opens from the owner account menu and the old drive route redirects")
     games_js = (ROOT / "games.js").read_text(encoding="utf-8")
     check('games.js", "games.css"' in lazy and 'id="game-host"' in page and "games.js" in worker and "games.css" in worker, "the page and the service worker load Games on demand")
@@ -4693,6 +4705,59 @@ def story_checks() -> None:
         blocked["defaultFollow"] = False
         incoming.write_text(json.dumps({"feeds": [blocked]}), encoding="utf-8")
         check(auto_add.merge_into_file(base, incoming) == [], "a removed account is not committed again")
+
+
+def feed_order_checks() -> None:
+    import subprocess
+    from datetime import datetime, timezone
+
+    from adapters.common import dedupe_posts, order_ms, parse_time
+
+    moment = datetime(2026, 10, 27, tzinfo=timezone.utc)
+    same = datetime(2026, 10, 21, 17, tzinfo=timezone.utc)
+    check(parse_time("2026-10-21T17:00:00") == same, "a timestamp without an offset is UTC")
+    check(parse_time("2026-10-21 17:00:00") == same, "a VK wall time is UTC")
+    check(parse_time("Wed Oct 21 17:00:00 +0000 2026") == same, "an X created_at is UTC")
+    check(parse_time("1761066000.0") == parse_time(1761066000), "a fractional unix time is a timestamp")
+    later = {"id": "b", "platform": "x", "date": "2026-10-21T17:00:00Z"}
+    earlier = {"id": "a", "platform": "x", "date": "2026-10-21T19:00:00+03:00"}
+    future = {"id": "z", "platform": "x", "date": "2099-01-01T00:00:00Z"}
+    missing = {"id": "m", "platform": "x", "date": ""}
+    repost = {"id": "r", "platform": "x", "kind": "repost", "date": "2026-10-20T00:00:00Z", "sortDate": "2026-10-21T18:00:00Z", "repostedBy": {"handle": "someone"}}
+    duplicate = {"id": "yt:video:abcdefghijk", "platform": "youtube", "url": "https://youtu.be/abcdefghijk", "date": "2026-10-21T17:00:00+00:00"}
+    mirror = {"id": "abcdefghijk", "platform": "youtube", "date": "2026-10-21T18:00:00Z"}
+    check(order_ms(later, now=moment) > order_ms(earlier, now=moment), "17:00 UTC sorts ahead of 16:00 UTC even when the offset reads 19:00")
+    check(order_ms(future, now=moment) == 0 and order_ms(missing, now=moment) == 0, "a future or missing time sorts last")
+    check(order_ms(repost, now=moment) > order_ms(later, now=moment), "a repost is ordered by its repost time")
+    ranked = dedupe_posts([earlier, future, later, missing, repost, duplicate, mirror])
+    check([post["id"] for post in ranked] == ["r", "abcdefghijk", "b", "a", "z", "m"], "mixed sources, reposts, and mirrors keep one row in UTC order")
+    check(next(post for post in ranked if post["id"] == "abcdefghijk")["date"] == "2026-10-21T17:00:00+00:00", "dedupe keeps the earlier real publish time")
+    import r2_catalog
+
+    class _Path:
+        def __init__(self, stamp):
+            self._stamp = stamp
+
+        def stat(self):
+            class _Stat:
+                pass
+
+            row = _Stat()
+            row.st_mtime = self._stamp
+            return row
+
+    ordered = r2_catalog.ordered_keys({
+        "archive/2020-01.json": _Path(10),
+        "feeds.json": _Path(1),
+        "data/communities/a.json": _Path(50),
+        "people.json": _Path(2),
+    })
+    check([key for key, _path in ordered] == ["feeds.json", "people.json", "data/communities/a.json", "archive/2020-01.json"], "the live catalog is uploaded before archive JSON, newest extras first")
+    proc = subprocess.run(["node", str(ROOT / "scripts" / "feed_order_test.mjs")], check=False)
+    check(proc.returncode == 0, "feed order fixtures")
+    app = (ROOT / "app.js").read_text(encoding="utf-8")
+    check("shared/feed-order.js" in (ROOT / "index.html").read_text(encoding="utf-8") and "./shared/feed-order.js" in (ROOT / "sw.js").read_text(encoding="utf-8") and "cp shared/feed-order.js _site/shared/" in (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8"), "the feed order helper is published with the shell")
+    check('trn("showPosts"' in app and "function mergeCatalog(" in app and "function revealMoreTimeline(" in app and "followsPost" in (ROOT / "shared" / "feed-order.js").read_text(encoding="utf-8"), "new posts merge in place and the Following tab uses the signed-in accounts")
 
 
 def gdrive_checks() -> None:

@@ -24,9 +24,9 @@ Add these in the GitHub repository settings. Do not commit them, and do not put 
 
 ## Connected keys
 
-After the accounts wall is on, the owner can paste their own cookies, tokens, and API client pairs under Settings > Connected keys. The page sends them over HTTPS with the owner session. The Worker encrypts each value with AES-GCM (the additional data is the slot id) using `KEYS_ENC_KEY` and stores only the ciphertext in D1 table `owner_keys`. The settings page shows a fixed mask and a status (working, expired, needs attention, last used, last error). It never returns the saved value. Until `KEYS_ENC_KEY` is stored, that page shows only "Setup needed". The rest of the Worker does not read the secret, and `npx wrangler deploy` does not require it.
+After the accounts wall is on, the owner can paste their own cookies, tokens, and API client pairs under Settings > Connected keys. A service can hold several keys. They are backups: a job uses one key at a time, the highest-priority healthy key, at the same pace as before. The page sends them over HTTPS with the owner session. The Worker encrypts each value with AES-GCM (the additional data is the slot id) using `KEYS_ENC_KEY` and stores only the ciphertext in D1 table `owner_key_items`. A migration copies any existing one-per-slot row from `owner_keys` and leaves that ciphertext unchanged. The settings page shows a fixed mask and a per-key status (working, expired, needs attention, last used, last error). It never returns the saved value. Until `KEYS_ENC_KEY` is stored, that page shows only "Setup needed". The rest of the Worker does not read the secret, and `npx wrangler deploy` does not require it.
 
-Jobs that already have `WORKER_DISPATCH_TOKEN` and the `ACCOUNTS_API` variable read one slot at runtime from `GET /v1/owner/keys/:slot/material`. That route accepts only the dispatch token, not an owner session. The job prints `::add-mask::` and keeps the value in memory or a mode `0600` temp file that is wiped on exit. When a key is stored, the fetcher tries it once and then uses the existing anonymous path. A 401, 403, captcha, or challenge marks the slot needs attention (`POST /v1/owner/keys/:slot/attention`) and stops using that key. Expired Netscape cookies are marked expired without another request. There is no proxy rotation and no captcha solving. Stream copy stays `ffmpeg -c copy`.
+Jobs that already have `WORKER_DISPATCH_TOKEN` and the `ACCOUNTS_API` variable read the active key at runtime from `GET /v1/owner/keys/:slot/material`. That route accepts only the dispatch token, not an owner session. The job prints `::add-mask::` and keeps the value in memory or a mode `0600` temp file that is wiped on exit. The next backup is used only when the current key is expired, logged out, or rejected with 401 or a session-invalid response. A 429, rate limit, captcha, or challenge does not switch keys: the job backs off, the service is marked as slowing down, and the owner is notified. There is no proxy rotation and no captcha solving. Stream copy stays `ffmpeg -c copy`.
 
 `OWNER_CLAIM_CODE` and `ACCOUNT_PEPPER` should be long random strings. The Accounts workflow writes them with `wrangler secret put` and does not print them. An empty value is skipped, not stored.
 
@@ -76,6 +76,16 @@ On the free plan that is at most 210 KB of R2 per account (60 KB + 150 KB). The 
 Drive is a private file store for the owner account only. The Photos section uses the same vault, the same trash, and the same storage total. Albums are drive rows with no plaintext name. The browser encrypts each file with AES-256-GCM. A random file key is wrapped by a master key from the owner’s passphrase (PBKDF2-SHA256, 600000 iterations). The passphrase and the master key stay on the device. The Worker stores wrapped keys and ciphertext in D1 and sends each chunk to the backup channel with `sendDocument`. Those rows are not `telegram_files`, and `GET /tg/…` does not serve them.
 
 A missing session gets 404. Any other session gets 403. Chunks stay under 19 MB. A file can be up to 2 GiB. The browser waits about 1.1 seconds between Telegram calls.
+
+## Presence
+
+`GET /v1/presence` is your own status. `GET /v1/presence?ids=` reads up to 40 accounts. Exact last-seen times follow Telegram: if either person would hide that time, both see a recent placeholder and `lastSeen` is 0. Custom status text is at most 80 characters and is not hidden by that setting. `POST /v1/presence` is the heartbeat (`active`, `idle`, or `hidden`). The same preference, activity, and privacy inside 55 seconds does not write again. `PATCH /v1/presence` sets the preference (`online`, `idle`, `dnd`, `invisible`), who can see last seen (`everyone`, `follows`, `nobody`), and a custom status.
+
+Reads are cached at the edge for about 20 seconds as raw rows. The response is `private, max-age=15` so a shared cache cannot reuse one viewer's answer. The page does not keep those responses in the local feed cache.
+
+`POST /v1/channel/ticket` returns a single-use ticket. `GET /v1/channel?ticket=` upgrades to a hibernating WebSocket on that account's Durable Object. The socket subscribes to topics (`presence`, `notifications`) and can watch other account ids. A change is pushed only when the visible state, privacy, or custom status changes. The one-minute heartbeat stays the fallback when the socket is down. The page connects only while it is visible.
+
+Deleting an account removes `account_presence`, `account_status`, `channel_tickets`, and that account's channel object.
 
 ## Local checks
 
