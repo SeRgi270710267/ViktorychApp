@@ -504,15 +504,15 @@ test("past lives stitch parts and stream held segments", async () => {
     await db.DB.prepare("UPDATE accounts SET owner = 1 WHERE handle = ?").bind("owner_live").run();
     const insert = "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'segment', ?, 'viktorych-data', ?, 9, ?, ?, 'video/iso.segment', 2, 1, 1, 0, 1)";
     const initInsert = "INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES (?, 'init', -1, 'viktorych-data', ?, 8, 800, ?, 'video/mp4', 0, 1, 1, 0, 1)";
-    const room = "tiktok/some_name/7699647509498710804/live";
+    const room = "tiktok/some_name/7100000000000000002/live";
     await db.DB.prepare(initInsert).bind(room + "/1", "INIT1", "sha-init-1").run();
     await db.DB.prepare(initInsert).bind(room + "/2", "INIT2", "sha-init-2").run();
     await db.DB.prepare(insert).bind(room + "/1", 1, "PART1", 4, "sha-part-1").run();
     await db.DB.prepare(insert).bind(room + "/2", 1, "PART2", 4, "sha-part-2").run();
     await db.DB.prepare(insert).bind(room + "/1", 3, "TOOBIG", 20 * 1024 * 1024, "sha-big").run();
     const objectKey = room + "/1";
-    await db.DATA.put("live-buf/0/some_name/7699647509498710804/1/seg00003.m4s", new Uint8Array([1, 2, 3, 4, 5]));
-    await db.DATA.put("live-buf/0/some_name/7699647509498710804/1/seg00003.m4s.json", JSON.stringify({
+    await db.DATA.put("live-buf/0/some_name/7100000000000000002/1/seg00003.m4s", new Uint8Array([1, 2, 3, 4, 5]));
+    await db.DATA.put("live-buf/0/some_name/7100000000000000002/1/seg00003.m4s.json", JSON.stringify({
       objectKey,
       index: 3,
       role: "segment",
