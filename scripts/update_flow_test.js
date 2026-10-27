@@ -36,6 +36,19 @@ const fields = update.fieldSnapshot([
 assert.deepStrictEqual(fields.map((row) => row.id || row.field), ["compose-text", "q"]);
 assert.ok(!JSON.stringify(fields).includes("nope"));
 
+assert.strictEqual(update.manifestPending("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "2026-10-27T00:00:00Z", "2020-01-01T00:00:00Z"), true);
+assert.strictEqual(update.manifestPending("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "2020-01-01T00:00:00Z", "2026-10-27T00:00:00Z"), false);
+assert.strictEqual(update.manifestPending("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "", ""), true);
+assert.strictEqual(update.manifestPending("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "2026-10-27T00:00:00Z", "2020-01-01T00:00:00Z"), false);
+assert.strictEqual(update.shouldOfferReset(1), false);
+assert.strictEqual(update.shouldOfferReset(2), true);
+assert.strictEqual(update.shouldFallback(2), false);
+assert.strictEqual(update.shouldFallback(3), true);
+assert.deepStrictEqual(update.safeFailure({ url: "./styles.css?sw=1", reason: "http-503" }), { url: "styles.css", reason: "http-503" });
+assert.deepStrictEqual(update.safeFailure({ url: "https://example.test/app.js", reason: "typed text" }), { url: "app.js", reason: "network" });
+assert.strictEqual(update.safeFailure({ url: "../secret", reason: "http-404" }).url, "");
+assert.strictEqual(update.safeFailure({ url: "shared/mirror.js", reason: "quota" }).reason, "quota");
+
 assert.strictEqual(update.restoreFresh({ at: now, hash: "#/home", y: 10 }, now + 1000), true);
 assert.strictEqual(update.restoreFresh({ at: now - update.SNOOZE_MS, hash: "#/" }, now), false);
 assert.strictEqual(update.restoreFresh(null, now), false);

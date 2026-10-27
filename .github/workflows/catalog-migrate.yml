@@ -6,6 +6,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - ".github/workflows/actions-cleanup.once"
+      - ".github/workflows/actions-cleanup.yml"
+      - "scripts/actions_cleanup.py"
 
 permissions:
   contents: read

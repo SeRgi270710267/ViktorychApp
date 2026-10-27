@@ -19,12 +19,15 @@ on:
       - main
     paths-ignore:
       # Community and catalog commits are data. The app reads them from R2,
-      # so they must not start a Pages deploy.
+      # so they must not start a Pages deploy. Cleanup marker pushes are not deploys.
       - "data/communities/**"
       - "feeds.json"
       - "stories.json"
       - "people.json"
       - "suggestions.json"
+      - ".github/workflows/actions-cleanup.once"
+      - ".github/workflows/actions-cleanup.yml"
+      - "scripts/actions_cleanup.py"
 
 # Deploy and refresh each cancel their own outdated run. A push must not
 # cancel a feed refresh, and a refresh must not hold the Pages deploy.
@@ -243,8 +246,11 @@ jobs:
         run: |
           rm -rf _site
           python3 scripts/assemble_site.py --site _site
-          if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s/__SW_VERSION__/${GITHUB_SHA}/" _site/sw.js; fi
-          python3 scripts/write_version.py --out _site/version.json
+          export VERSION_BUILT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if [ -n "${GITHUB_SHA:-}" ]; then sed -i "s|__SW_VERSION__|${GITHUB_SHA}|g; s|__SW_BUILT__|${VERSION_BUILT}|g" _site/sw.js; fi
+          mkdir -p version-next
+          python3 scripts/write_version.py --out version-next/version.json
+          python3 scripts/write_version.py --previous --out _site/version.json
           python3 scripts/share_pages.py --site _site
           python3 - <<'PY'
           import os
@@ -294,6 +300,13 @@ jobs:
           name: cf-pages-site
           path: _site
           include-hidden-files: true
+          retention-days: 1
+
+      - name: Keep the version manifest until the assets are live
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-next
+          path: version-next/version.json
           retention-days: 1
 
       - name: Record whether the login wall is on
@@ -716,6 +729,73 @@ jobs:
         env:
           PAGE_URL: ${{ needs.deploy.outputs.page_url }}
         run: node scripts/smoke_page.mjs --url "${PAGE_URL:-https://viktorychgroup.github.io/ViktorychApp/}" --retry 18
+
+  # Assets are already live. This job publishes version.json after that,
+  # so a client cannot be told to update before the files exist.
+  publish-version:
+    needs: [gate, verify-live, pages-mirror]
+    if: always() && needs.gate.outputs.go == 'true' && needs.verify-live.result == 'success' && (needs.pages-mirror.result == 'success' || needs.pages-mirror.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Install wrangler
+        working-directory: worker
+        run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: cf-pages-site
+          path: _site
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: version-next
+          path: version-next
+
+      - name: Publish the version manifest after the assets
+        run: |
+          found=$(find version-next -name version.json -type f | head -n 1)
+          test -n "$found"
+          cp "$found" _site/version.json
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          name: app-shell-version
+          path: _site
+
+      - name: Deploy the version manifest
+        id: deploy
+        uses: actions/deploy-pages@v4
+        with:
+          artifact_name: app-shell-version
+
+      - name: Deploy the version manifest to the Pages mirror
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          python3 scripts/cf_pages_prepare.py --site _site --out _mirror
+          python3 scripts/cf_pages_deploy.py --dir "$GITHUB_WORKSPACE/_mirror"
 
   # Start the Telegram upload from this run. workflow_run can miss a chained
   # start, so the backup is started here with workflow_dispatch.
