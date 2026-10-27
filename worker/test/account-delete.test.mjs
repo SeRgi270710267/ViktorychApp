@@ -112,7 +112,7 @@ function columnsFromSql(sql) {
 
 async function leftovers(publicId, handle) {
   const tables = await bindings.DB.prepare("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all();
-  const cols = ["public_id", "follower_id", "target_id", "sender_id", "receiver_id", "user_id", "friend_id", "author_id", "owner_id", "recipient_id", "actor_handle"];
+  const cols = ["public_id", "follower_id", "target_id", "sender_id", "receiver_id", "user_id", "friend_id", "author_id", "owner_id", "recipient_id", "actor_handle", "requester_id", "blocker_id", "blocked_id", "muter_id", "muted_id"];
   const hits = [];
   for (const table of tables.results) {
     const name = table.name;

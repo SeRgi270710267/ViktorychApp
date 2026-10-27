@@ -1659,7 +1659,12 @@ a.follow { display: inline-flex; align-items: center; justify-content: center; w
 }
 .pinfo { padding: 12px 16px 0; position: relative; }
 .pava-row { display: flex; align-items: flex-end; justify-content: space-between; margin-top: -67px; min-height: 67px; }
-.pactions { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: nowrap; }
+.pactions { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; justify-content: flex-end; }
+.follow.pending { background: transparent; color: var(--text); border-color: #536471; }
+.follow.pending .u { display: none; }
+.follow.pending:hover .f { display: none; }
+.follow.pending:hover .u { display: inline; }
+.follow[aria-busy="true"] { opacity: 0.7; }
 .pactions .outline {
   display: inline-flex;
   align-items: center;
