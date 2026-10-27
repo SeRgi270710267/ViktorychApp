@@ -1242,20 +1242,33 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   function applyFollow(ids, on) {
     const list = (ids || []).map((item) => String(item || "").trim()).filter(Boolean);
     if (!list.length) return;
-    list.forEach((item) => setFollowed(item, on));
+    const accounts = window.ViktorychAccounts;
+    const ready = [];
+    list.forEach((item) => {
+      if (accounts && accounts.pressFollow) {
+        if (accounts.pressFollow(item)) ready.push(item);
+        return;
+      }
+      ready.push(item);
+    });
+    if (!ready.length) return;
+    ready.forEach((item) => setFollowed(item, on));
     saveSettings();
     if (!navigator.onLine) {
-      list.forEach((item) => queueOffline({ type: "follow", id: item, on: !!on, snapshot: followSnapshot(item) }));
+      ready.forEach((item) => {
+        if (accounts && accounts.previewFollow) accounts.previewFollow(item, on);
+        queueOffline({ type: "follow", id: item, on: !!on, snapshot: followSnapshot(item) });
+        if (accounts && accounts.releaseFollow) accounts.releaseFollow(item);
+      });
       render();
       return;
     }
-    const accounts = window.ViktorychAccounts;
     if (accounts && accounts.changeFollow) {
-      Promise.all(list.map((item) => accounts.changeFollow(item, on, followSnapshot(item)))).then((results) => {
+      Promise.all(ready.map((item) => accounts.changeFollow(item, on, followSnapshot(item), { held: true }))).then((results) => {
         let reverted = false;
         results.forEach((ok, index) => {
-          if (ok === false) {
-            setFollowed(list[index], !on);
+          if (ok === false || (ok && ok.pending)) {
+            setFollowed(ready[index], false);
             reverted = true;
           }
         });
@@ -1263,7 +1276,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         if (accounts.syncFollows) accounts.syncFollows();
         render();
       });
-    }
+    } else ready.forEach((item) => { if (accounts && accounts.releaseFollow) accounts.releaseFollow(item); });
     render();
   }
   function followSnapshot(id) {
@@ -4521,7 +4534,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (String(id || "").indexOf("app:") === 0) {
       const me = window.ViktorychAccounts && window.ViktorychAccounts.account && window.ViktorychAccounts.account();
       if (me && id === "app:" + me.publicId) return "";
-      const attr = ` data-id="${esc(id)}"`;
+      const special = window.ViktorychAccounts && window.ViktorychAccounts.followControlHtml && window.ViktorychAccounts.followControlHtml(id, large);
+      if (special) return special;
+      const attr = ` type="button" data-id="${esc(id)}" aria-pressed="${isFollowed(id) ? "true" : "false"}"`;
       if (isFollowed(id)) return `<button class="follow following${large ? " lg" : ""}" data-act="follow"${attr}><span class="f">${tr("state.Following")}</span><span class="u">${tr("Unfollow")}</span></button>`;
       return `<button class="follow${large ? " lg" : ""}" data-act="follow"${attr}>${tr("Follow")}</button>`;
     }
@@ -4755,6 +4770,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (!post) return false;
     if (catalogRowHidden(post)) return true;
     if (matchesMute((STATE.settings && STATE.settings.mutedAccounts) || [], post.handle, post.platform, post.feedId)) return true;
+    const blocks = window.ViktorychAccounts && window.ViktorychAccounts.blockSet && window.ViktorychAccounts.blockSet();
+    if (blocks && post && (blocks[post.feedId] || blocks["app:" + post.authorId] || blocks[post.authorId])) return true;
     if (wordMuted(post.text)) return true;
     return repostsOff(post);
   }
@@ -7017,11 +7034,11 @@ const here = parseRoute();
     if (parts[0] === "status" && parts.length === 1) return { name: "sources", query };
     if (parts[0] === "u" && parts[1] && parts[2]) {
       const platform = parts[1] === "twitter" ? "x" : parts[1];
-      if (parts[3] === "followers" || parts[3] === "following" || parts[3] === "friends") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
+      if (parts[3] === "followers" || parts[3] === "following" || parts[3] === "friends" || parts[3] === "mutuals" || parts[3] === "requests") return { name: "connections", platform: platform, handle: parts[2], tab: parts[3], query };
       return { name: "user", platform: platform, handle: parts[2], query };
     }
     if (parts[0] === "p" && parts[1]) {
-      if (parts[2] === "followers" || parts[2] === "following") return { name: "connections", personId: parts[1], tab: parts[2], platform: "", handle: "", query };
+      if (parts[2] === "followers" || parts[2] === "following" || parts[2] === "mutuals" || parts[2] === "requests") return { name: "connections", personId: parts[1], tab: parts[2], platform: "", handle: "", query };
       return { name: "person", id: parts[1], query };
     }
     if (parts[0] === "messages") {
@@ -7075,7 +7092,7 @@ const here = parseRoute();
       return { name: "home", tab: "foryou", query };
     }
     if (rest[0] === "status" && rest[1]) return { name: "status", platform, handle, id: rest.slice(1).join("/"), query };
-    if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "friends") return { name: "connections", platform, handle, tab: rest[0], query };
+    if (rest[0] === "followers" || rest[0] === "following" || rest[0] === "friends" || rest[0] === "mutuals" || rest[0] === "requests") return { name: "connections", platform, handle, tab: rest[0], query };
     return { name: "profile", platform, handle, query };
   }
 
@@ -9233,12 +9250,15 @@ const here = parseRoute();
     if (route.platform === "tiktok" && isShortsLocked() && !isTiktokUnlocked(route.handle)) {
       return pageHead(tr("Profile"), "", true) + emptyBlock(tr("Profile isn’t available"), tr("This account is currently locked."));
     }
-    const tab = (route.tab === "followers" || route.tab === "friends") ? route.tab : "following";
+    const tab = (route.tab === "followers" || route.tab === "friends" || route.tab === "mutuals" || route.tab === "requests") ? route.tab : "following";
     const subject = connectionsSubject(route);
     const name = subject.name || subject.handle || route.handle || "";
     const sub = subject.handle ? "@" + subject.handle : "";
     const head = `<div class="topbar profile-bar"><div class="page-head"><button class="icon-btn" data-act="back" aria-label="${esc(tr("Back"))}">${icon("back")}</button><div class="head-text"><div class="pt-name">${esc(name)}</div>${sub ? `<div class="pt-count">${esc(sub)}</div>` : ""}</div></div></div>`;
-    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a>` : "";
+    const mineGraph = subject.kind === "account" && window.ViktorychAccounts && window.ViktorychAccounts.account && subject.id === "app:" + (window.ViktorychAccounts.account() || {}).publicId;
+    const requestN = mineGraph && window.ViktorychAccounts.listPack ? (window.ViktorychAccounts.listPack(subject.id, "requests").accounts ? window.ViktorychAccounts.listPack(subject.id, "requests").accounts.length : 0) : 0;
+    const requestBadge = requestN > 0 ? ` <span class="pill-badge">${requestN}</span>` : "";
+    const friendsTabHtml = subject.kind === "account" ? `<a class="tab${tab === "friends" ? " on" : ""}" role="tab" aria-selected="${tab === "friends" ? "true" : "false"}" href="${esc(connectionsHash(route, "friends"))}"><span>${esc(tr("Friends"))}</span></a><a class="tab${tab === "mutuals" ? " on" : ""}" role="tab" aria-selected="${tab === "mutuals" ? "true" : "false"}" href="${esc(connectionsHash(route, "mutuals"))}"><span>${esc(tr("Mutuals"))}</span></a>${mineGraph ? `<a class="tab${tab === "requests" ? " on" : ""}" role="tab" aria-selected="${tab === "requests" ? "true" : "false"}" href="${esc(connectionsHash(route, "requests"))}"><span>${esc(tr("Follow requests"))}${requestBadge}</span></a>` : ""}` : "";
     const tabs = `<div class="tabs ptabs" role="tablist" aria-label="${esc(tr("Profile"))}"><a class="tab${tab === "followers" ? " on" : ""}" role="tab" aria-selected="${tab === "followers" ? "true" : "false"}" href="${esc(connectionsHash(route, "followers"))}"><span>${esc(tr("Followers"))}</span></a><a class="tab${tab === "following" ? " on" : ""}" role="tab" aria-selected="${tab === "following" ? "true" : "false"}" href="${esc(connectionsHash(route, "following"))}"><span>${esc(tr("Following count"))}</span></a>${friendsTabHtml}</div>`;
     if (tab === "friends") {
       if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
@@ -9251,6 +9271,10 @@ const here = parseRoute();
     }
     if (subject.pending) return head + tabs + `<div class="reply-empty">${esc(tr("Loading…"))}</div>`;
     const signed = window.ViktorychAccounts && window.ViktorychAccounts.token && window.ViktorychAccounts.token();
+    if (subject.kind === "account" && subject.id && window.ViktorychAccounts && window.ViktorychAccounts.graphListHtml) {
+      if (!signed) return head + tabs + emptyBlock(tr("Followers"), tr("Sign in to see this list."));
+      return head + tabs + window.ViktorychAccounts.graphListHtml(subject.id, tab, subject.handle || name);
+    }
     if (!signed) return head + tabs + emptyBlock(tr("Followers"), tr("Sign in to see this list."));
     if (!subject.id || !window.ViktorychAccounts.ensureList) {
       const title = tab === "followers" ? tr("No followers yet") : tr("Not following anyone yet");
@@ -11186,6 +11210,8 @@ const here = parseRoute();
     if (kind === "reply") return tr("{name} replied to you", { name: who });
     if (kind === "mention" || (note && note.mention)) return tr("{name} mentioned you", { name: who });
     if (kind === "follow") return tr("{name} followed you", { name: who });
+    if (kind === "follow_request") return tr("{name} requested to follow you", { name: who });
+    if (kind === "follow_accept") return tr("{name} accepted your follow request", { name: who });
     if (kind === "live") return tr("{name} is live", { name: who });
     return tr("New post notifications for @{handle}", { handle: who });
   }
@@ -15020,8 +15046,45 @@ if (STATE.histClear) {
     if (act === "follow") {
       const ids = String(el.dataset.ids || el.dataset.id || "").split(",").map((part) => part.trim()).filter(Boolean);
       if (!ids.length) return;
+      const rowPending = ids.some((item) => {
+        const html = window.ViktorychAccounts && window.ViktorychAccounts.followControlHtml && window.ViktorychAccounts.followControlHtml(item, false);
+        return html && html.indexOf("pending") >= 0;
+      });
+      if (rowPending) {
+        applyFollow(ids, false);
+        return;
+      }
       const on = ids.some((item) => isFollowed(item));
       applyFollow(ids, !on);
+      return;
+    }
+    if (act === "graph-unblock" || act === "graph-block" || act === "graph-mute" || act === "graph-unmute") {
+      const accounts = window.ViktorychAccounts;
+      if (!accounts || !accounts.relationWrite) return;
+      const id = String(el.dataset.id || "").replace(/^app:/, "");
+      if (act === "graph-unblock") accounts.relationWrite("blocks", id, true);
+      else if (act === "graph-block") accounts.relationWrite("blocks", id, false);
+      else if (act === "graph-unmute") accounts.relationWrite("mutes", id, true);
+      else accounts.relationWrite("mutes", id, false);
+      return;
+    }
+    if (act === "remove-follower" || act === "accept-follow" || act === "decline-follow" || act === "graph-more") {
+      const accounts = window.ViktorychAccounts;
+      if (!accounts || !accounts.call) return;
+      if (act === "graph-more") {
+        accounts.ensureList(el.dataset.id, el.dataset.tab, true);
+        return;
+      }
+      const path = act === "remove-follower" ? "/v1/follows/remove" : act === "accept-follow" ? "/v1/follows/accept" : "/v1/follows/decline";
+      accounts.call(path, { method: "POST", token: accounts.token(), body: { id: el.dataset.id } }).then((res) => {
+        if (!res || res.status !== 200) {
+          toast(tr("You can’t do that with this account."));
+          return;
+        }
+        if (act === "remove-follower") toast(tr("Follower removed"));
+        if (accounts.syncFollows) accounts.syncFollows();
+        render();
+      });
       return;
     }
     if (act === "subs-layout") {
@@ -19500,7 +19563,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function syncOffline(action) {
     if (!action) return false;
     if (action.type === "follow" && window.ViktorychAccounts && window.ViktorychAccounts.changeFollow) {
-      window.ViktorychAccounts.changeFollow(action.id, !!action.on, action.snapshot || null);
+      window.ViktorychAccounts.changeFollow(action.id, !!action.on, action.snapshot || null, { replay: true });
     } else if (action.type === "repost") {
       const on = !!action.on;
       const req = on

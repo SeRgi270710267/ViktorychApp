@@ -3,6 +3,7 @@
 import { invalidate, readThrough } from "./edge-cache.js";
 import { logError } from "./log.js";
 import { notifyCommunity, notifyMentions } from "./notifications.js";
+import { blocksEither, hiddenAuthorSet } from "./social.js";
 
 export const COMMUNITY_SCHEMA = [
   "CREATE TABLE IF NOT EXISTS community_posts (id TEXT PRIMARY KEY, community_id TEXT NOT NULL, author_id TEXT NOT NULL, parent_id TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created_at INTEGER NOT NULL, deleted_at INTEGER NOT NULL DEFAULT 0)",
@@ -225,6 +226,8 @@ async function readFeed(request, env, name, row, json, rateHit, limited, present
       mine: authorId === row.public_id
     });
   }
+  const hiddenAuthors = await hiddenAuthorSet(env, row.public_id, out.map((item) => item.authorId));
+  const visible = out.filter((item) => !item.authorId || !hiddenAuthors.has(item.authorId));
   const counts = {};
   for (const item of likes.results || []) counts[item.item_id] = Number(item.n) || 0;
   const notes = await unread(env, row.public_id);
@@ -232,7 +235,7 @@ async function readFeed(request, env, name, row, json, rateHit, limited, present
     community: name,
     joined: !!joined,
     members: Number(member && member.n) || 0,
-    posts: out,
+    posts: visible,
     likes: counts,
     mine: (mine.results || []).map((item) => item.item_id),
     notes
@@ -252,6 +255,9 @@ async function createPost(request, env, name, row, json, readJson, rateHit, limi
   if (parent.indexOf("va_") === 0) {
     const existing = await env.DB.prepare("SELECT id, author_id, community_id FROM community_posts WHERE id = ? AND deleted_at = 0").bind(parent).first();
     if (!existing || existing.community_id !== name) return json(404, { error: "not_found" });
+    if (await blocksEither(env, row.public_id, existing.author_id)) {
+      return json(403, { error: "blocked", message: "You can’t do that with this account." });
+    }
     parentAuthor = existing.author_id;
   }
   const id = newId();

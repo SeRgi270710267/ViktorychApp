@@ -13,9 +13,10 @@ import { inspectHandle } from "../../shared/handle-skeleton.js";
 import { tiktokNoteHidden, visibleNotes } from "../../shared/tiktok-lock.js";
 import { publishToAccount } from "./channel.js";
 import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
+import { actorHidden, canMention } from "./social.js";
 
 const encoder = new TextEncoder();
-const KINDS = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
+const KINDS = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, follow_request: 1, follow_accept: 1, live: 1 };
 const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
 const NOTE_CAP = 200;
 
@@ -306,7 +307,8 @@ async function unreadCount(env, publicId, readUntil, viewer) {
     "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? AND read_at = 0 AND at > ? ORDER BY at DESC LIMIT 200"
   ).bind(publicId, readUntil).all();
   const items = ((listed && listed.results) || []).map((row) => itemFromRow(row, readUntil));
-  return items.filter((item) => !tiktokNoteHidden(item, view)).length;
+  const visible = await dropHiddenNotes(env, publicId, items.filter((item) => !tiktokNoteHidden(item, view)));
+  return visible.length;
 }
 
 async function listBells(env, publicId) {
@@ -339,7 +341,8 @@ async function viewFor(env, publicId, lockedOverride) {
   const listed = await env.DB.prepare(
     "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? ORDER BY at DESC, note_id ASC LIMIT 200"
   ).bind(publicId).all();
-  const items = ((listed && listed.results) || []).map((row) => itemFromRow(row, state.readUntil)).filter((item) => !tiktokNoteHidden(item, viewer)).slice(0, 80);
+  const items = await dropHiddenNotes(env, publicId, ((listed && listed.results) || []).map((row) => itemFromRow(row, state.readUntil)).filter((item) => !tiktokNoteHidden(item, viewer)));
+  items.splice(80);
   const unread = await unreadCount(env, publicId, state.readUntil, viewer);
   const bells = await listBells(env, publicId);
   const push = await vapidPublic(env);
@@ -592,6 +595,8 @@ function titleKeyFor(kind) {
   if (kind === "reply") return "{name} replied to you";
   if (kind === "mention") return "{name} mentioned you";
   if (kind === "follow") return "{name} followed you";
+  if (kind === "follow_request") return "{name} requested to follow you";
+  if (kind === "follow_accept") return "{name} accepted your follow request";
   if (kind === "live") return "{name} is live";
   return "New post notifications for @{handle}";
 }
@@ -602,6 +607,12 @@ export async function emitNotification(env, input) {
   const kind = cleanKind(input && input.kind);
   const key = clip(input && input.idempotencyKey, 160);
   if (!/^\d{12}$/.test(publicId) || !kind || !key) return { created: false };
+  const actorId = String(input.actorId || "");
+  if (/^\d{12}$/.test(actorId)) {
+    try {
+      if (await actorHidden(env, publicId, actorId)) return { created: false, hidden: true };
+    } catch (err) { /* a schema miss must not drop the note */ }
+  }
   const now = Date.now();
   const at = Number(input.at) > 0 ? Number(input.at) : now;
   const subject = clip(input.subject || input.handle || "", 80).replace(/^@/, "").toLowerCase();
@@ -903,6 +914,21 @@ export async function handleNotificationRoutes(request, env, path, deps) {
   return null;
 }
 
+async function dropHiddenNotes(env, publicId, items) {
+  const out = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const actorId = String(item && item.actorId || "");
+    if (/^\d{12}$/.test(actorId)) {
+      try {
+        if (await actorHidden(env, publicId, actorId)) continue;
+      } catch (err) { /* keep the note */ }
+    }
+    out.push(item);
+  }
+  return out;
+}
+
 export async function notifyFollow(env, actor, targetId) {
   if (!targetId || String(targetId).indexOf("app:") !== 0) return;
   const publicId = String(targetId).slice(4);
@@ -914,6 +940,42 @@ export async function notifyFollow(env, actor, targetId) {
     at: now,
     actorId: actor.public_id,
     idempotencyKey: "follow:" + actor.public_id + ":" + now,
+    handle: actor.handle,
+    name: actor.display_name,
+    text: "",
+    hash: "#/" + encodeURIComponent(actor.handle || ""),
+    platform: "app",
+    feedId: "app:" + actor.public_id
+  });
+}
+
+export async function notifyFollowRequest(env, actor, targetPublicId) {
+  if (!/^\d{12}$/.test(String(targetPublicId || "")) || targetPublicId === actor.public_id) return;
+  const now = Date.now();
+  await emitNotification(env, {
+    publicId: targetPublicId,
+    kind: "follow_request",
+    at: now,
+    actorId: actor.public_id,
+    idempotencyKey: "followreq:" + actor.public_id + ":" + now,
+    handle: actor.handle,
+    name: actor.display_name,
+    text: "",
+    hash: "#/" + encodeURIComponent(actor.handle || ""),
+    platform: "app",
+    feedId: "app:" + actor.public_id
+  });
+}
+
+export async function notifyFollowAccept(env, actor, requesterPublicId) {
+  if (!/^\d{12}$/.test(String(requesterPublicId || "")) || requesterPublicId === actor.public_id) return;
+  const now = Date.now();
+  await emitNotification(env, {
+    publicId: requesterPublicId,
+    kind: "follow_accept",
+    at: now,
+    actorId: actor.public_id,
+    idempotencyKey: "followok:" + actor.public_id + ":" + now,
     handle: actor.handle,
     name: actor.display_name,
     text: "",
@@ -964,6 +1026,9 @@ export async function notifyMentions(env, actor, text, except, idempotencyPrefix
     const author = await env.DB.prepare("SELECT public_id, handle FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
     if (!author || seen[author.public_id]) continue;
     seen[author.public_id] = true;
+    try {
+      if (!(await canMention(env, actor.public_id, author.public_id))) continue;
+    } catch (err) { /* mention checks must not drop every note */ }
     await emitNotification(env, {
       publicId: author.public_id,
       kind: "mention",
