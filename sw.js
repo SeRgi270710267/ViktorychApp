@@ -48,6 +48,7 @@ const SHELL_FILES = [
   "./i18n/ru.js",
   "./i18n/es.js",
   "./app.js",
+  "./update.js",
   "./translate.js",
   "./translate.css",
   "./people.js",
@@ -101,52 +102,50 @@ const SHELL_FILES = [
   "./icons/music-maskable-512.png"
 ];
 
+let updateReporting = false;
+let shellTask = null;
+const armedClients = new Set();
+
+function versionSha(version) {
+  const text = String(version || "");
+  const prefix = "viktorych-a20-";
+  if (text.indexOf(prefix) !== 0) return "";
+  const sha = text.slice(prefix.length).trim().toLowerCase();
+  return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
+}
+
+function broadcast(msg) {
+  self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    clients.forEach((client) => {
+      try { client.postMessage(msg); } catch (err) { /* the page may already be closing */ }
+    });
+  }).catch(() => {});
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
-    const cache = await caches.open(SHELL);
-    await Promise.all(SHELL_FILES.map(async (path) => {
-      try {
-        const res = await fetch(new Request(path, { cache: "reload" }));
-        if (res && res.ok) await cache.put(path, res);
-      } catch (err) { /* one missing icon must not leave the previous worker in control */ }
-    }));
+    // An open app already has a worker. Stay waiting so the page can show
+    // the update and download the shell with a real progress count.
+    // The first visit has no active worker, so the shell is cached quietly.
+    if (self.registration.active) return;
+    await precacheShell(false);
     await self.skipWaiting();
   })());
 });
 
-const armedClients = new Set();
-
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
+    if (updateReporting) broadcastProgress({ step: "activate" }, true);
     const keys = await caches.keys();
     await Promise.all(keys.filter((key) => key !== SHELL && key !== DATA && key !== MEDIA && key !== LIVE && key !== OFFLINE_MUSIC).map((key) => caches.delete(key)));
     try { await forgetLoopCaches(); } catch (err) { /* a stuck loop playlist must not block the new shell */ }
+    if (updateReporting) broadcastProgress({ step: "clean" }, true);
     await self.clients.claim();
-    await takeOverClients();
+    const sha = versionSha(VERSION);
+    if (updateReporting) broadcast({ type: "update-ready", version: VERSION, sha: sha });
+    else broadcast({ type: "sw-version", version: VERSION, sha: sha });
   })());
 });
-
-// The page that was open still has the previous app.js after claim. Reload
-// every window once, including a visible installed PWA, so translate.js loads
-// without a manual cache clear. reload-armed must not block that.
-// client.navigate is not awaited: waiting for it inside activate deadlocks
-// the navigation on this worker.
-async function takeOverClients() {
-  try {
-    const db = await idb();
-    const prev = await idbGet(db, "shell-reload-at");
-    const at = typeof prev === "number" ? prev : Number(prev && prev.at) || 0;
-    const version = prev && typeof prev === "object" ? prev.version : "";
-    if (version === VERSION && at && Date.now() - at < 15000) return;
-    await idbSet(db, "shell-reload-at", { version: VERSION, at: Date.now() });
-  } catch (err) { /* a missed guard still reloads at most once per window */ }
-  const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-  for (const client of windows) {
-    try { client.postMessage({ type: "reload-when-idle" }); } catch (err) { /* the page may already be closing */ }
-    if (!client.navigate) continue;
-    client.navigate(client.url).catch(() => {});
-  }
-}
 
 function isArchiveStore(url) {
   return /\/v1\/archive\/[a-f0-9]{64}\.[a-z0-9]{1,8}$/i.test(url.pathname);
@@ -448,9 +447,140 @@ async function cacheBookmark(urls) {
   await trimMedia(cache);
 }
 
+let lastReportAt = 0;
+let progressState = { files: 0, totalFiles: SHELL_FILES.length, bytes: 0, totalBytes: 0 };
+
+function shellOptional(path) {
+  return /\.(?:png|ico|svg)$/i.test(String(path || ""));
+}
+
+function broadcastProgress(extra, force) {
+  const now = Date.now();
+  if (!force && now - lastReportAt < 80) return;
+  lastReportAt = now;
+  const msg = {
+    type: "update-progress",
+    step: (extra && extra.step) || "download",
+    files: extra && typeof extra.files === "number" ? extra.files : progressState.files,
+    totalFiles: extra && typeof extra.totalFiles === "number" ? extra.totalFiles : progressState.totalFiles,
+    bytes: extra && typeof extra.bytes === "number" ? extra.bytes : progressState.bytes,
+    totalBytes: extra && typeof extra.totalBytes === "number" ? extra.totalBytes : progressState.totalBytes
+  };
+  progressState = { files: msg.files, totalFiles: msg.totalFiles, bytes: msg.bytes, totalBytes: msg.totalBytes };
+  broadcast(msg);
+}
+
+async function readCounted(res, onChunk) {
+  const reader = res.body && res.body.getReader ? res.body.getReader() : null;
+  const chunks = [];
+  let size = 0;
+  if (!reader) {
+    const buf = await res.arrayBuffer();
+    size = buf.byteLength;
+    chunks.push(new Uint8Array(buf));
+    if (onChunk) onChunk(size);
+    return { chunks: chunks, size: size };
+  }
+  while (true) {
+    const step = await reader.read();
+    if (step.done) break;
+    if (!step.value) continue;
+    chunks.push(step.value);
+    size += step.value.byteLength;
+    if (onChunk) onChunk(step.value.byteLength);
+  }
+  return { chunks: chunks, size: size };
+}
+
+async function precacheShell(report) {
+  if (shellTask) return shellTask;
+  shellTask = doPrecache(report).catch((err) => {
+    shellTask = null;
+    throw err;
+  });
+  return shellTask;
+}
+
+async function doPrecache(report) {
+  const cache = await caches.open(SHELL);
+  const files = SHELL_FILES.slice();
+  const state = { files: 0, totalFiles: files.length, bytes: 0, totalBytes: 0 };
+  let failed = null;
+  const pull = async () => {
+    while (files.length && !failed) {
+      const path = files.shift();
+      try {
+        const res = await fetch(new Request(path, { cache: "reload" }));
+        if (!res || !res.ok) throw new Error(path);
+        const declared = Number(res.headers.get("content-length")) || 0;
+        if (declared) state.totalBytes += declared;
+        const counted = await readCounted(res, (n) => {
+          state.bytes += n;
+          if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, false);
+        });
+        if (!declared) state.totalBytes += counted.size;
+        const headers = new Headers(res.headers);
+        headers.delete("content-encoding");
+        headers.delete("content-length");
+        await cache.put(path, new Response(new Blob(counted.chunks), { status: 200, headers: headers }));
+        state.files += 1;
+        if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
+      } catch (err) {
+        if (shellOptional(path)) {
+          state.files += 1;
+          if (report) broadcastProgress({ step: "download", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
+          continue;
+        }
+        failed = err || new Error(path);
+      }
+    }
+  };
+  const workers = [];
+  const width = Math.min(4, SHELL_FILES.length);
+  for (let i = 0; i < width; i++) workers.push(pull());
+  await Promise.all(workers);
+  if (failed) throw failed;
+  progressState = state;
+  return state;
+}
+
+async function runApply() {
+  if (updateReporting && shellTask) return;
+  updateReporting = true;
+  try {
+    broadcastProgress({ step: "download", files: 0, totalFiles: SHELL_FILES.length, bytes: 0, totalBytes: 0 }, true);
+    const state = await precacheShell(true);
+    broadcastProgress({ step: "install", files: state.files, totalFiles: state.totalFiles, bytes: state.bytes, totalBytes: state.totalBytes }, true);
+    await self.skipWaiting();
+  } catch (err) {
+    updateReporting = false;
+    shellTask = null;
+    broadcast({ type: "update-progress", step: "error" });
+  }
+}
+
 idb().then((db) => idbGet(db, "auth-state")).then((saved) => { if (saved && typeof saved === "object") { if (!accountsAuthed && saved.on) accountsAuthed = true; if (!playToken && saved.token) playToken = String(saved.token); } }).catch(() => {});
 self.addEventListener("message", (event) => {
   const data = event.data || {};
+  if (data.type === "sw-version") {
+    const sha = versionSha(VERSION);
+    if (event.source) {
+      try { event.source.postMessage({ type: "sw-version", version: VERSION, sha: sha }); } catch (err) { /* the page already continued */ }
+    }
+    return;
+  }
+  if (data.type === "prime") {
+    event.waitUntil((async () => {
+      if (self.registration.active) return;
+      await precacheShell(false);
+      await self.skipWaiting();
+    })().catch(() => {}));
+    return;
+  }
+  if (data.type === "apply-update") {
+    event.waitUntil(runApply());
+    return;
+  }
   if (data.type === "ru_mode") {
     isRuVisitor = !!data.on;
     return;
@@ -508,6 +638,10 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.protocol !== "http:" && url.protocol !== "https:") return;
+  if (url.origin === self.location.origin && /\/version\.json$/i.test(url.pathname)) {
+    event.respondWith(fetch(new Request(request.url, { method: "GET", cache: "no-store" })).catch(() => new Response("", { status: 504, headers: { "cache-control": "no-store" } })));
+    return;
+  }
   if (isGameHost(url)) return;
   if (isTikTokCdn(url)) return;
   if (isArchiveStore(url)) return;
@@ -626,7 +760,7 @@ function shellDocument(url) {
 function isShell(url) {
   if (url.origin !== self.location.origin) return false;
   const path = url.pathname;
-  return /\/(?:index\.html|app\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
+  return /\/(?:index\.html|app\.js|update\.js|styles\.css|translate\.js|translate\.css|people\.js|people\.css|tv\.js|tv\.css|tv-page\.js|tv-page\.css|split\.js|discord-ui\.js|discord-ui\.css|spaces\.js|spaces\.css|music\.js|music\.css|games\.js|games\.css|yt-player\.js|yt-player\.css|scores\.js|scores\.css|weather\.js|weather\.css|stories\.js|stories\.css|shorts\.js|shorts\.css|drive\.js|drive\.css|communities\.js|communities\.css|marks\.js|accounts\.js|accounts\.css|accounts\.config\.js|hls-1\.7\.3\.min\.js|mpegts-1\.8\.0\.min\.js|favicon\.svg|favicon\.ico|manifest\.webmanifest|i18n\.js)$/.test(path) || /\/i18n\//.test(path) || /\/icons\//.test(path) || /\/splash\//.test(path) || /\/shared\//.test(path);
 }
 
 function isGameHost(url) {
