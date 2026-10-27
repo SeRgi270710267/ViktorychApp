@@ -2482,8 +2482,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const yt = youtubeId(post, media);
     const dur = formatDur(media && media.duration);
     const gif = media && media.type === "animated_gif";
-    const label = watchOn(yt ? "youtube" : platform);
-    const href = originalOf(post, media);
+    const xId = platform === "x" && window.ViktorychEmbed && window.ViktorychEmbed.xStatusId ? window.ViktorychEmbed.xStatusId(post) : "";
+    const label = xId ? tr("Open on X") : watchOn(yt ? "youtube" : platform);
+    const href = xId && window.ViktorychEmbed.xOpenUrl ? window.ViktorychEmbed.xOpenUrl(xId) : originalOf(post, media);
     const mode = preview === "feed" || preview === "subs" ? preview : "";
     const chrome = mode === "feed" && !gif
       ? `<button class="vmute" type="button" data-act="mute" aria-label="${tr("Unmute")}" aria-pressed="false" hidden>${icon("volOff")}</button><span class="vleft" hidden>${esc(dur || "")}</span>`
@@ -2581,6 +2582,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function linkCard(link) {
     if (!link || !link.url) return "";
+    const external = window.ViktorychEmbed && window.ViktorychEmbed.xExternal ? window.ViktorychEmbed.xExternal(link.url) : null;
+    if (external && external.kind === "link" && external.openUrl) {
+      const id = arguments[1] && arguments[1].id ? ` data-id="${esc(arguments[1].id)}"` : "";
+      return `<a class="link-card" data-act="open-link"${id} target="_blank" rel="noopener noreferrer" href="${esc(external.openUrl)}"><span class="link-card-copy"><span class="link-title">${esc(tr("Open on X"))}</span></span></a>`;
+    }
     const image = link.image ? `<img class="link-card-img" src="${esc(link.image)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "";
     const site = link.site ? `<span class="link-site">${esc(link.site)}</span>` : "";
     const title = `<span class="link-title">${esc(link.title || link.url)}</span>`;
@@ -3327,6 +3333,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
 
   function clearPlayer(el) {
     releasePeer(el);
+    if (el._xEmbedStop) {
+      try { el._xEmbedStop(); } catch (err) { /* the embed watch can already be cleared */ }
+      el._xEmbedStop = null;
+    }
     if (el._stall) { clearTimeout(el._stall); el._stall = 0; }
     if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
     el.querySelectorAll("video, audio").forEach((m) => {
@@ -3339,7 +3349,10 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       try { el._ytPlayer.destroy(); } catch (err) {}
       el._ytPlayer = null;
     }
-    el.querySelectorAll("video, iframe, .html5-video-player, .vshield").forEach((node) => node.remove());
+    el.classList.remove("is-x-embed");
+    el.querySelectorAll("video, iframe, .html5-video-player, .vshield, .ytp-video-click-target, a.x-open").forEach((node) => node.remove());
+    const play = el.querySelector(":scope > .play");
+    if (play && !el.classList.contains("is-failed")) play.hidden = false;
   }
 
   function showVideoCard(el, post, media) {
@@ -3870,6 +3883,128 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     startPlayback(el, { muted: saved.muted, resume: saved.time });
   }
 
+  function xPlaybackPlan(post, media) {
+    const helper = window.ViktorychEmbed;
+    if (!helper || !helper.xPlan || !helper.xRoute) return null;
+    if (youtubeId(post, media)) return null;
+    const blob = [media && media.url, media && media.open, media && media.fallback, media && media.hls, post && post.url, post && post.link && post.link.url].join(" ");
+    const platform = String((post && post.platform) || "");
+    const xish = platform === "x" || /video\.twimg\.com/i.test(blob) || /\/i\/spaces\//i.test(blob) || /\/i\/broadcasts\//i.test(blob) || /platform\.twitter\.com\/embed\/Tweet\.html/i.test(blob);
+    if (!xish) return null;
+    const mode = (STATE.settings && STATE.settings.networkMode) || "auto";
+    const api = accountsApi();
+    const dev = window.ViktorychDevice;
+    const plan = helper.xPlan({
+      post: post,
+      media: media,
+      text: blob,
+      expired: oePast,
+      route: (url) => {
+        let relay = "";
+        try {
+          const host = new URL(url).hostname;
+          if (api && /(^|\.)video\.twimg\.com$/i.test(host)) relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(url);
+        } catch (err) { relay = ""; }
+        return helper.xRoute(url, {
+          networkMode: mode,
+          relay: relay,
+          preferRelay: mode === "auto" && isRuVisitor(),
+          playbackUrl: dev && dev.playbackUrl ? (direct, relayUrl) => dev.playbackUrl(direct, relayUrl, {
+            preferRelay: false,
+            settings: dev.read(),
+            signals: dev.signals()
+          }) : null
+        });
+      }
+    });
+    if (!plan || (!plan.primary && !plan.embedUrl && !plan.openUrl)) return null;
+    return plan;
+  }
+
+  function attachXHls(el, video, url, fail, start) {
+    loadHls().then((Hls) => {
+      if (!el.isConnected || !video.isConnected) return;
+      if (!Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) { fail(); return; }
+      const hls = new Hls(hlsAhead());
+      el._hls = hls;
+      armPeer(el, hls, url);
+      const wait = setTimeout(() => fail(), 3000);
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data && (data.fatal || (data.response && Number(data.response.code) >= 400))) { clearTimeout(wait); fail(); }
+      });
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (!el.isConnected || !video.isConnected) return;
+        clearTimeout(wait);
+        lockHlsTop(hls);
+        start();
+      });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+    }).catch(() => fail());
+  }
+
+  function noteXProgress(el, video, post, media, opts) {
+    if (!el || !video || !el.classList.contains("vplay")) return;
+    if (!isFinite(video.duration) || video.duration <= 0) return;
+    const label = clock(Math.max(0, Math.ceil(video.duration - video.currentTime)));
+    const left = el.querySelector(".vleft");
+    if (left && opts && opts.preview) { left.hidden = false; left.textContent = label; }
+    const bar = el.querySelector(".vprog");
+    if (bar && opts && opts.preview) bar.style.width = Math.min(100, (video.currentTime / video.duration) * 100) + "%";
+    if (!opts.loop && !(media && media.type === "animated_gif") && video.currentTime >= 3) {
+      const dur = video.duration;
+      noteVideo(post, { position: video.currentTime, duration: dur, progress: dur > 0 ? video.currentTime / dur : 0, touch: false });
+    }
+  }
+
+  function startXPlayback(el, post, media, plan, opts) {
+    const helper = window.ViktorychEmbed;
+    if (!helper || !helper.runXPlayback) return;
+    opts = opts || {};
+    const gif = !!(opts.gif || (media && media.type === "animated_gif"));
+    const preview = !!opts.preview;
+    notePlay(el, plan.primary ? "x-file" : (plan.embedUrl ? "x-embed" : "x-link"));
+    const link = el.querySelector(".vfallback");
+    if (link) link.hidden = true;
+    const retry = el.querySelector(".vretry");
+    if (retry) retry.hidden = true;
+    helper.runXPlayback(el, {
+      plan: plan,
+      gif: gif,
+      preview: preview,
+      muted: gif || !!opts.muted,
+      loop: gif || !!opts.loop,
+      resume: opts.resume || 0,
+      stallMs: helper.X_STALL_MS || 3000,
+      linkLabel: tr("Open on X"),
+      title: (post && (post.title || post.text)) || tr("Video"),
+      active: opts.active,
+      onFrame: (video) => {
+        if (!el.classList.contains("vplay")) return;
+        markShown(el);
+        if (video.videoWidth > 0) applyFrame(el, video.videoWidth, video.videoHeight, "video");
+      },
+      onTime: (video) => noteXProgress(el, video, post, media, Object.assign({ preview: preview, loop: gif || !!opts.loop }, opts)),
+      onVideo: (video, source) => {
+        armPeer(el, null, source.url);
+        if (!preview && !gif && typeof window.YtPlayer === "function") {
+          el._ytPlayer = new window.YtPlayer(el, { video: video, post: post, media: media });
+        }
+      },
+      onStop: () => {
+        releasePeer(el);
+        if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
+        if (el._ytPlayer && el._ytPlayer.destroy) { try { el._ytPlayer.destroy(); } catch (err) { /* already gone */ } el._ytPlayer = null; }
+      },
+      onFail: (source) => {
+        const dev = window.ViktorychDevice;
+        if (!dev || !dev.rememberFail || !source || !source.origin || source.url !== source.origin) return;
+        dev.rememberFail("media", source.origin, Date.now(), "source");
+      },
+      loadHls: (video, url, fail, start) => attachXHls(el, video, url, fail, start)
+    });
+  }
+
   function startPlayback(el, opts) {
     if (!el) return;
     opts = opts || {};
@@ -3919,6 +4054,11 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     if (yt) {
       notePlay(el, "youtube-embed");
       playSource(el, { kind: "iframe", url: embedUrl(yt, previewing, opts) }, post, media, opts, gen, giveUp);
+      return;
+    }
+    const xplan = xPlaybackPlan(post, media);
+    if (xplan) {
+      startXPlayback(el, post, media, xplan, opts);
       return;
     }
     const helper = window.ViktorychEmbed;
@@ -4194,7 +4334,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       video.preload = "none";
     }
     clearPlayer(el);
-    el.classList.remove("is-shown", "is-playing");
+    el.classList.remove("is-shown", "is-playing", "is-x-embed");
     const mute = el.querySelector(".vmute");
     const left = el.querySelector(".vleft");
     if (mute) mute.hidden = true;
@@ -4465,7 +4605,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       </div>
       ${shown.text ? textBlock(shown, key, false, "quote-text") : ""}
       ${articleCardHtml(asQuoted)}
-      ${mediaHtml(quoted.media, false, quoted)}
+      ${mediaHtml(asQuoted.media, false, asQuoted)}
     </div>`;
   }
 
@@ -17469,6 +17609,19 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         box._ytPlayer = null;
       }
       box.innerHTML = `<button class="viewer-x" type="button" data-act="close-viewer" aria-label="${tr("Close")}">×</button>`;
+      const known = post || { platform: view.platform || "", statusId: view.statusId || "", id: view.statusId || view.id || "", url: view.url || "" };
+      const xplan = xPlaybackPlan(known, media);
+      if (xplan) {
+        box._gen = (box._gen || 0) + 1;
+        startXPlayback(box, known, media, xplan, {
+          preview: false,
+          muted: !!(media && media.type === "animated_gif"),
+          loop: !!(media && media.type === "animated_gif"),
+          resume: view.time || 0,
+          active: () => !!(STATE.viewer && STATE.viewer.video)
+        });
+        return;
+      }
       let video;
       const viewerPoster = (media && (media.poster || media.url)) || (post && post.poster) || "";
       if (typeof window.YtPlayer === "function") {
@@ -17654,7 +17807,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.autoEl = null;
     document.querySelectorAll(".vplay.is-playing").forEach((el) => pausePreview(el));
     const clean = src && src.indexOf("about:blank") < 0 ? src : "";
-    STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null };
+    STATE.viewer = { id: post.id, index: 0, scale: 1, x: 0, y: 0, video: true, time: time || 0, src: clean, media: media || null, platform: post.platform || "", statusId: post.statusId || post.id || "", url: post.url || "" };
     paintViewer();
   }
 
@@ -17670,6 +17823,11 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function closeViewer() {
     const box = document.getElementById("viewer");
     if (box) {
+      box._gen = (box._gen || 0) + 1;
+      if (box._xEmbedStop) {
+        try { box._xEmbedStop(); } catch (err) { /* the embed watch can already be cleared */ }
+        box._xEmbedStop = null;
+      }
       releasePeer(box);
       if (box._hls && box._hls.destroy) {
         try { box._hls.destroy(); } catch (err) {}

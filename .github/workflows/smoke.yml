@@ -53,3 +53,12 @@ jobs:
 
       - name: YouTube embed plays muted on desktop and mobile
         run: node scripts/yt_embed_smoke.mjs --root _site
+
+      - name: X video falls back to the official embed
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          npm install --no-save --prefix "${RUNNER_TEMP:-/tmp}/pw" playwright-core@1.49.1
+          PLAYWRIGHT_CORE="${RUNNER_TEMP:-/tmp}/pw/node_modules/playwright-core/index.mjs" node scripts/x_video_play.mjs --root _site
