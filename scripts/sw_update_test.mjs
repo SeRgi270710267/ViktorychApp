@@ -189,10 +189,10 @@ async function waitSha(page, expected) {
     try { last = await shaOf(page); } catch (err) { last = ""; }
     if (last === expected) return;
     if (nudged < 5 && Date.now() - start > 12000 && Date.now() - nudgedAt > 12000) {
+      nudgedAt = Date.now();
       detail = await registrationState(page);
       if (detail && detail.failed) {
         nudged += 1;
-        nudgedAt = Date.now();
         await page.click("#upd-go").catch(() => {});
       }
     }
