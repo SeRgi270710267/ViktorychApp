@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Miniflare } from "miniflare";
 
-const OWNER = "S\u0435\u0420g\u0418";
+const OWNER = "mirathorn";
 const ORIGIN = "https://viktorychgroup.github.io";
 
 let mf;
@@ -25,6 +25,7 @@ function workerOptions() {
     bindings: {
       ACCOUNT_PEPPER: "pepper-test",
       OWNER_CLAIM_CODE: "claim-test",
+      OWNER_HANDLE: "mirathorn",
       ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080",
       PBKDF2_ITERATIONS: "1000"
     }

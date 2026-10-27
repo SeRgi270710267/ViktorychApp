@@ -4,7 +4,7 @@ import test from "node:test";
 import { Miniflare } from "miniflare";
 import { decryptFile, encryptFile, encryptJson, newItemKey, setupVault } from "../../shared/drive-crypto.js";
 
-const OWNER = "S\u0435\u0420g\u0418";
+const OWNER = "mirathorn";
 const BOT = "123456:probe-token";
 const CHANNEL = "-1004242";
 
@@ -20,6 +20,7 @@ function workerOptions(files, deleted, names) {
     bindings: {
       ACCOUNT_PEPPER: "pepper-test",
       OWNER_CLAIM_CODE: "claim-test",
+      OWNER_HANDLE: "mirathorn",
       ALLOWED_ORIGINS: "https://viktorychgroup.github.io,http://127.0.0.1:8080",
       PBKDF2_ITERATIONS: "1000",
       TELEGRAM_BOT_TOKEN: BOT,

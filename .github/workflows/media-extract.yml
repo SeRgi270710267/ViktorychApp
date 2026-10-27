@@ -146,6 +146,7 @@ jobs:
           MEDIA_EXTRACT_CAP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.cap || '80' }}
           MEDIA_EXTRACT_PER: "2"
           MEDIA_EXTRACT_PACE: "3"
+          TIKTOK_TRACKED: ${{ secrets.TIKTOK_TRACKED }}
           PYTHONUNBUFFERED: "1"
           WORKER_DISPATCH_TOKEN: ${{ secrets.WORKER_DISPATCH_TOKEN }}
           ACCOUNTS_API: ${{ vars.ACCOUNTS_API }}

@@ -29,6 +29,39 @@ localStorage.setItem("viktorych-screen-v1", "{");
 localStorage.setItem("viktorychapp-storage", "nope");
 `;
 
+const OWNER_STATE = `
+localStorage.setItem("viktorychapp-account-v1", JSON.stringify({token:"t", account:{publicId:"123456789012", handle:"mirathorn", displayName:"Owner", owner:true}}));
+`;
+
+const OWNER_CHECK = `(() => {
+  const accounts = window.ViktorychAccounts;
+  const account = accounts && accounts.account ? accounts.account() : null;
+  let settings = "";
+  try { settings = accounts && accounts.settingsHtml ? accounts.settingsHtml() : ""; }
+  catch (err) { settings = ""; }
+  const shorts = window.ViktorychShorts || null;
+  let unlocks = false;
+  let shown = false;
+  if (shorts && shorts.setUnlocked && shorts.isUnlocked) {
+    shorts.setUnlocked(["sampleclip"]);
+    unlocks = shorts.isUnlocked("sampleclip") === true && shorts.isUnlocked("otherclip") === false;
+  }
+  if (shorts && shorts.visible && account && account.owner) {
+    const prev = window.VIKTORYCH_ACCOUNTS;
+    window.VIKTORYCH_ACCOUNTS = Object.assign({}, prev || {}, { gate: true, api: "https://example.test", tiktokAudience: "owner" });
+    try { shown = shorts.visible() === true; }
+    finally { window.VIKTORYCH_ACCOUNTS = prev; }
+  }
+  return {
+    owner: !!(account && account.owner === true && account.handle === "mirathorn"),
+    health: settings.indexOf("TikTok health") >= 0,
+    kept: settings.indexOf('data-acct="open-delete"') < 0,
+    shorts: !!(shorts && shorts.isUnlocked && shorts.setUnlocked),
+    unlocks,
+    shown
+  };
+})()`;
+
 function arg(name, fallback) {
   const i = process.argv.indexOf(name);
   if (i < 0) return fallback;
@@ -210,6 +243,16 @@ async function probe(pageUrl, opts) {
       await sleep(200);
     }
     await sleep(3500);
+    let ownerInfo = null;
+    if (opts.owner) {
+      const started = Date.now();
+      while (Date.now() - started < 8000) {
+        const checked = await send("Runtime.evaluate", { expression: OWNER_CHECK, returnByValue: true });
+        ownerInfo = checked && checked.result && checked.result.value || null;
+        if (ownerInfo && ownerInfo.owner && ownerInfo.health && ownerInfo.kept && ownerInfo.shorts && ownerInfo.unlocks && ownerInfo.shown) break;
+        await sleep(400);
+      }
+    }
     const info = await send("Runtime.evaluate", {
       expression: `(() => {
         const text = (document.body && document.body.innerText || "").replace(/\\s+/g, " ").trim();
@@ -242,7 +285,16 @@ async function probe(pageUrl, opts) {
     if (failed.length) problems.push("request: " + failed[0]);
     if (pageInfo.guard) problems.push("boot guard is showing");
     if (!pageInfo.text || pageInfo.text.length < 8) problems.push("empty render");
-    return { problems, text: pageInfo.text || "", label: opts.label };
+    if (opts.owner) {
+      const row = ownerInfo || {};
+      if (!row.owner) problems.push("owner session was not recognized");
+      if (!row.health) problems.push("owner menu missing");
+      if (!row.kept) problems.push("owner account was deletable");
+      if (!row.shorts) problems.push("shorts module missing");
+      if (!row.unlocks) problems.push("shorts unlock list missing");
+      if (!row.shown) problems.push("shorts hidden from the owner");
+    }
+    return { problems, text: opts.owner ? "" : (pageInfo.text || ""), label: opts.label };
   } finally {
     try { chrome.kill("SIGKILL"); } catch (err) { /* already gone */ }
     await sleep(300);
@@ -274,7 +326,8 @@ async function main() {
     const runs = [
       { label: "fresh-desktop", width: 1366, height: 768 },
       { label: "fresh-mobile", width: 412, height: 860 },
-      { label: "old-state", width: 1366, height: 768, init: OLD_STATE }
+      { label: "old-state", width: 1366, height: 768, init: OLD_STATE },
+      { label: "owner", width: 1366, height: 768, init: OWNER_STATE, owner: true }
     ];
     const problems = [];
     for (const run of runs) {

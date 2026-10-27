@@ -1171,7 +1171,7 @@ SI18n.addPack("ru", {
   "Lock": "Заблокировать",
   "Locked": "Заблокировано",
   "Locked mode": "Заблокированный режим",
-  "When locked, only unlocked accounts (@pepsi) are visible.": "При блокировке видны только разблокированные аккаунты (@pepsi).",
+  "When locked, only unlocked accounts are visible.": "При блокировке видны только разблокированные аккаунты.",
   "Unlocked accounts": "Разблокированные аккаунты",
   "Unlocked": "Разблокировано",
   "Locked behind": "Под замком",

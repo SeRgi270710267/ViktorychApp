@@ -22,17 +22,22 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # Files the old deploy always published, even when no script tag names them.
+# Private catalogs stay in R2. The shell must not publish them.
 REQUIRED_EXTRAS = (
     "sw.js",
     "404.html",
     "robots.txt",
     ".nojekyll",
+)
+
+PRIVATE_PUBLICATION = {
     "feeds.json",
     "stories.json",
     "people.json",
     "suggestions.json",
     "feeds.config.json",
-)
+    "status.json",
+}
 
 HTML_REF = re.compile(r"""(?:src|href)\s*=\s*['"]([^'"]+)['"]""", re.I)
 QUOTED = re.compile(r"""['"]([^'"]+)['"]""")
@@ -165,24 +170,24 @@ def shell_files(root: Path) -> list[str]:
     return ordered
 
 
+def published_shell(root: Path) -> list[str]:
+    """Shell files that are safe to publish. Catalog JSON stays in R2."""
+    return [path for path in shell_files(root) if path not in PRIVATE_PUBLICATION]
+
+
 def published_text(root: Path) -> str:
     """Names the deploy publishes, one per line, for checks."""
-    lines = list(shell_files(root))
+    lines = list(published_shell(root))
     lines.extend(REQUIRED_EXTRAS)
     lines.extend(
         (
             "data/music.json",
-            "status.json",
-            "fallback/",
-            "comments/",
-            "archive/",
-            "discord/",
             "live/",
             "icons/",
             "splash/",
             "screenshots/",
             "i18n/",
-            "data/communities/",
+            "data/communities/index.json",
         )
     )
     return "\n".join(lines)
@@ -194,7 +199,7 @@ def _copy_file(src: Path, dest: Path) -> None:
 
 
 def copy_shell(root: Path, dest: Path) -> list[str]:
-    files = shell_files(root)
+    files = published_shell(root)
     missing = [path for path in files if not (root / path).is_file()]
     if missing:
         raise SystemExit("referenced assets missing from the checkout:\n" + "\n".join(missing))
@@ -247,21 +252,16 @@ def copy_payload(root: Path, dest: Path) -> None:
     music = root / "data" / "music.json"
     if music.is_file():
         _copy_file(music, dest / "data" / "music.json")
-    # Nested community JSON (mindepth 2) keeps its path. Top-level files do too.
-    _copy_parents(root / "data" / "communities", root, dest, "*.json")
+    # The public index only. Comment pages stay in R2.
+    index = root / "data" / "communities" / "index.json"
+    if index.is_file():
+        _copy_file(index, dest / "data" / "communities" / "index.json")
     live = root / "live"
     if live.is_dir():
         (dest / "live").mkdir(parents=True, exist_ok=True)
         for path in live.glob("*.json"):
             if path.is_file() and not path.is_symlink():
                 _copy_file(path, dest / "live" / path.name)
-    status = root / "status.json"
-    if status.is_file():
-        _copy_file(status, dest / "status.json")
-    _copy_json_flat(root / "fallback", dest / "fallback")
-    _copy_json_flat(root / "comments", dest / "comments")
-    _copy_json_flat(root / "archive", dest / "archive", skip={"ia-state.json"})
-    _copy_parents(root / "discord", root, dest, "*.json")
 
 
 def verify_site(dest: Path, files: list[str]) -> None:
@@ -279,35 +279,8 @@ def stamp_worker(dest: Path, sha: str) -> None:
 
 
 def copy_sidecar(root: Path, dest: Path) -> None:
-    """Data the workflow used to copy after the shell. These files are
-    produced during the job and are not referenced by index.html."""
-    status = root / "status.json"
-    if status.is_file():
-        shutil.copy2(status, dest / "status.json")
-    for name in ("fallback", "comments"):
-        folder = root / name
-        if not folder.is_dir():
-            continue
-        target = dest / name
-        target.mkdir(parents=True, exist_ok=True)
-        for path in folder.rglob("*.json"):
-            if path.is_file() and not path.is_symlink():
-                shutil.copy2(path, target / path.name)
-    archive = root / "archive"
-    if archive.is_dir():
-        target = dest / "archive"
-        target.mkdir(parents=True, exist_ok=True)
-        for path in archive.rglob("*.json"):
-            if path.is_file() and not path.is_symlink() and path.name != "ia-state.json":
-                shutil.copy2(path, target / path.name)
-    discord = root / "discord"
-    if discord.is_dir():
-        for path in discord.rglob("*.json"):
-            if not path.is_file() or path.is_symlink():
-                continue
-            out = dest / path.relative_to(root)
-            out.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, out)
+    """Status, fallback, comments, archive, and discord stay in R2."""
+    return None
 
 
 def build(root: Path, dest: Path, sha: str = "") -> list[str]:
