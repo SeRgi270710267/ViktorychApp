@@ -75,7 +75,10 @@
       var parsed = raw ? JSON.parse(raw) : null;
       if (!parsed || !parsed.token || !parsed.account) return null;
       return parsed;
-    } catch (err) { return null; }
+    } catch (err) {
+      removeStored("account-v1");
+      return null;
+    }
   }
   function writeSession(session) {
     writeStored("account-v1", JSON.stringify(session));
@@ -401,8 +404,9 @@
     return src ? "photo" : "default";
   }
   function presenceWrap(id, html, opener) {
-    if (!window.ViktorychPresence || !/^\d{12}$/.test(String(id || ""))) return html;
-    return window.ViktorychPresence.wrap(id, html, opener ? ' data-acct="presence-open"' : "");
+    var api = window.ViktorychPresence;
+    if (!api || typeof api.wrap !== "function" || !/^\d{12}$/.test(String(id || ""))) return html;
+    return api.wrap(id, html, opener ? ' data-acct="presence-open"' : "");
   }
   function publicAvatar(src, accountFace, cls) {
     var mode = faceOf("picture", src, accountFace);

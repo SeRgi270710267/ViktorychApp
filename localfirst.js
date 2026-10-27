@@ -37,13 +37,23 @@
     return null;
   }
 
+  var LOCAL_SCHEMA = 1;
+
   function readJson(storage, key) {
     try {
       if (!storage) return null;
       var raw = storage.getItem(key);
       if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (err) { return null; }
+      var parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && parsed.schema != null && Number(parsed.schema) !== LOCAL_SCHEMA) {
+        storage.removeItem(key);
+        return null;
+      }
+      return parsed;
+    } catch (err) {
+      try { if (storage) storage.removeItem(key); } catch (ignore) { /* the next read starts empty */ }
+      return null;
+    }
   }
 
   function writeJson(storage, key, value) {
@@ -347,6 +357,7 @@
     var html = String(info && info.html || "");
     if (html.length > SCREEN_LIMIT) html = html.slice(0, SCREEN_LIMIT);
     var screen = {
+      schema: LOCAL_SCHEMA,
       hash: info && info.hash || "#/",
       html: html,
       scrollKey: info && info.scrollKey || "",
