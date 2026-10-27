@@ -37,6 +37,7 @@ let polledAt = 0;
 let sheet = null;
 let sheetAnchor = null;
 let audioCtx = null;
+const noteListeners = [];
 
 function tr(key, vars) {
   const fn = window.t || (window.SI18n && window.SI18n.t);
@@ -227,11 +228,33 @@ function armPoll() {
   pollTimer = setInterval(function () { poll(true); }, HEARTBEAT_MS);
 }
 
+function notifyChannel(msg) {
+  for (let i = 0; i < noteListeners.length; i++) {
+    try { noteListeners[i](msg); }
+    catch (err) { /* a listener cannot break presence */ }
+  }
+}
+
+function onChannel(fn) {
+  if (typeof fn !== "function" || noteListeners.indexOf(fn) >= 0) return;
+  noteListeners.push(fn);
+}
+
+function offChannel(fn) {
+  const at = noteListeners.indexOf(fn);
+  if (at >= 0) noteListeners.splice(at, 1);
+}
+
 function onSocketMessage(event) {
   let msg = null;
   try { msg = JSON.parse(String(event.data || "")); }
   catch (err) { return; }
-  if (!msg || msg.op !== "event" || msg.topic !== "presence") return;
+  if (!msg) return;
+  if (msg.op === "event" && msg.topic === "notifications") {
+    notifyChannel(msg);
+    return;
+  }
+  if (msg.op !== "event" || msg.topic !== "presence") return;
   const view = msg.data || {};
   view.id = msg.id || view.id;
   remember(view);
@@ -266,10 +289,12 @@ function connect() {
         ws.send(JSON.stringify({ op: "watch", topic: "presence", ids: currentIds() }));
       } catch (err) { /* close reconnects */ }
       clearInterval(pollTimer);
+      notifyChannel({ op: "state", open: true });
     });
     ws.addEventListener("message", onSocketMessage);
     ws.addEventListener("close", function () {
       if (socket === ws) socket = null;
+      notifyChannel({ op: "state", open: false });
       if (wantSocket && visible()) {
         armPoll();
         scheduleReconnect();
@@ -627,7 +652,10 @@ const api = {
   close: close,
   mutesNotices: mutesNotices,
   chime: chime,
-  dnd: mutesNotices
+  dnd: mutesNotices,
+  onChannel: onChannel,
+  offChannel: offChannel,
+  channelOpen: socketOpen
 };
 window.ViktorychPresence = api;
 
