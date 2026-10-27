@@ -1355,58 +1355,41 @@
     if (!fromUser) paint();
   }
 
-  function ensureYouTube(done) {
-    if (root.YT && root.YT.Player) { done(); return; }
-    var previous = root.onYouTubeIframeAPIReady;
-    root.onYouTubeIframeAPIReady = function () {
-      if (typeof previous === "function") previous();
-      ytReady = true;
-      done();
-    };
-    if (!document.getElementById("mu-yt-api")) {
-      var script = document.createElement("script");
-      script.id = "mu-yt-api";
-      script.src = "https://www.youtube.com/iframe_api";
-      document.head.appendChild(script);
-    }
-  }
-
   function startYouTube(song, fromUser) {
     destroyHls();
     if (audio) { audio.pause(); }
     var id = youtubeId(song.source);
     if (!id) { hooks.toast(tr("That YouTube link has no video id")); return; }
+    var host = document.getElementById("mu-yt");
+    if (!host) return;
     ytPending = id;
-    ensureYouTube(function () {
-      if (!document.getElementById("mu-yt")) return;
-      if (!yt) {
-        yt = new root.YT.Player("mu-yt", {
-          host: "https://www.youtube-nocookie.com",
-          width: 200,
-          height: 200,
-          videoId: id,
-          playerVars: { autoplay: 1, controls: 0, playsinline: 1, rel: 0, modestbranding: 1, origin: location.origin },
-          events: {
-            onReady: function (event) {
-              ytReady = true;
-              event.target.setVolume(Math.round(local.volume * 100));
-              if (ytPending) event.target.loadVideoById(ytPending);
-            },
-            onStateChange: function (event) {
-              var state = event.data;
-              if (state === 1) { play.playing = true; paint(); }
-              else if (state === 2) { play.playing = false; paint(); }
-              else if (state === 0) next(true);
-            }
-          }
-        });
-      } else if (yt.loadVideoById) {
-        yt.loadVideoById(id);
+    var embed = root.ViktorychEmbed;
+    if (!yt || !yt.loadVideoById) {
+      if (!embed || !embed.youtubePlayer) {
+        ytPending = "";
+        hooks.toast(tr("Couldn’t play that song"));
+        return;
       }
-      play.playing = true;
-      paint();
-      session(song);
-    });
+      yt = embed.youtubePlayer(host, {
+        videoId: id,
+        volume: Math.round(local.volume * 100),
+        origin: location.origin,
+        onReady: function (player) {
+          ytReady = true;
+          player.setVolume(Math.round(local.volume * 100));
+        },
+        onState: function (state) {
+          if (state === 1) { ytPending = ""; play.playing = true; paint(); }
+          else if (state === 2) { play.playing = false; paint(); }
+          else if (state === 0) next(true);
+        }
+      });
+    } else {
+      yt.loadVideoById(id);
+    }
+    play.playing = true;
+    paint();
+    session(song);
     if (!fromUser) paint();
   }
 

@@ -1,0 +1,42 @@
+name: backup-full
+
+# Manual private copy of the whole repository. The job prints sizes and
+# counts only. It does not upload an Actions artifact.
+# workflow_dispatch needs permission to start workflows. Pushing a change to
+# backup-full.once on main starts the same job when that permission is absent.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/backup-full.once
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  actions: read
+
+concurrency:
+  group: backup-full
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Bundle every branch and upload the private copy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          KEYS_ENC_KEY: ${{ secrets.KEYS_ENC_KEY }}
+          PYTHONUNBUFFERED: "1"
+        run: python3 scripts/backup_full.py

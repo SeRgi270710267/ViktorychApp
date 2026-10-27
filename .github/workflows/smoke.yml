@@ -41,3 +41,6 @@ jobs:
 
       - name: Load the Pages upload fresh and with old saved data
         run: node scripts/smoke_page.mjs --site _mirror
+
+      - name: YouTube embed plays muted on desktop and mobile
+        run: node scripts/yt_embed_smoke.mjs --root _site
