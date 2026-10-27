@@ -7894,7 +7894,6 @@ const here = parseRoute();
         <button class="tab-arrow right" type="button" data-act="tab-scroll" data-dir="1" aria-label="${tr("Scroll tabs right")}" hidden>${icon("chevR")}</button>
         <button class="tab-manage" type="button" data-act="manage-tabs" aria-label="${tr("Manage tabs")}">${icon("sliders")}</button>
       </div>
-      <div class="odai-bar"><button type="button" class="show-more" data-act="odai-catch" data-scope="post">${tr("Catch me up")}</button></div>
       ${window.Stories && window.Stories.homeTray ? window.Stories.homeTray() : ""}
       ${homeLivePillsRow()}
     </div>`;
@@ -11689,7 +11688,7 @@ const here = parseRoute();
     const music = parseRoute().name === "music" && window.SIntelMusic;
     const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().filter((def) => def.id !== "games" && def.id !== "music").map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
     const menuLinks = `<a href="#/games">${icon("games")} ${esc(tr("Games"))}</a>${music ? "" : `<a href="#/music">${icon("muNote")} ${esc(tr("Music"))}</a>`}`;
-    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop" data-privacy="sensitive">
+    return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
       ${menuLinks}
@@ -11945,13 +11944,23 @@ if (STATE.histClear) {
     return "";
   }
 
+  function homeRowExtra() {
+    /* The home header always shows the pills row: weather, scores, or the
+       live station. The phone header is fixed, so this height has to be
+       reserved or the row covers the first card. */
+    if (window.WeatherPills && window.WeatherPills.homeRow) return 65;
+    if (window.Spaces && (window.Spaces.homeRow || window.Spaces.homePillsHtml)) return 65;
+    if (window.SoccerScores && window.SoccerScores.pillsHtml) return 65;
+    return 0;
+  }
+
   function shell(main, route) {
     const gamePlay = route.name === "games" && !!route.game;
     const wide = route.name === "subscriptions" || route.name === "watch" || route.name === "messages" || route.name === "shorts" || route.name === "drive" || route.name === "vault" || route.name === "tv" || gamePlay;
     const explore = route.name === "explore";
     const musicHome = route.name === "music" && (route.section || "home") === "home";
     const tall = route.name === "home" || wide || ["feeds", "lists", "bookmarks", "history", "settings", "notifications", "messages", "music", "games", "communities", "tv", "vault"].includes(route.name);
-    const rowExtra = route.name === "home" && window.Spaces && window.Spaces.rowExtra ? window.Spaces.rowExtra() : 0;
+    const rowExtra = route.name === "home" ? homeRowExtra() : 0;
     const storyExtra = route.name === "home" && window.Stories && window.Stories.trayExtra ? window.Stories.trayExtra() : 0;
     const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const sensitive = route.name === "messages" || route.name === "notifications" || (route.name === "settings" && route.section === "privacy");
@@ -13503,7 +13512,13 @@ if (STATE.histClear) {
     if (route.name === "watch") return watchView(route);
     if (route.name === "settings") return settingsView();
     if (route.name === "incoming") return incomingView();
-    if (route.name === "notifications") return notificationsView(route);
+    if (route.name === "notifications") {
+      try {
+        return notificationsView(route);
+      } catch (err) {
+        return pageHead(tr("Notifications")) + `<div class="error-box"><h2>${tr("Notifications aren’t available")}</h2><p>${tr("Reload the page.")}</p><button class="retry" type="button" data-act="reload">${tr("Retry")}</button></div>`;
+      }
+    }
     if (route.name === "messages" && window.FeedsDiscord) return window.FeedsDiscord.page(route);
     if (route.name === "messages") return notesView(tr("Messages"), tr("Welcome to your inbox"), tr("Private conversations aren’t part of this reader."));
     if (route.name === "sources") return sourcesView();
