@@ -448,6 +448,29 @@ async function main() {
   await assertLandscape(915, 412);
   await assertLandscape(740, 360);
 
+  // A feed or subscriber-count paint can land in the same moment as the
+  // rotation. Wait until the column stops changing, then check that the
+  // rotation itself keeps the playing node.
+  await evaluate(`(() => {
+    window.__navMut = 0;
+    if (window.__navObs) window.__navObs.disconnect();
+    window.__navObs = new MutationObserver(() => { window.__navMut += 1; });
+    window.__navObs.observe(document.body, { childList: true, subtree: true });
+    return true;
+  })()`);
+  let lastMut = -1;
+  let quiet = 0;
+  const quietStart = Date.now();
+  while (Date.now() - quietStart < 8000) {
+    const now = await evaluate(`window.__navMut || 0`);
+    if (now === lastMut) {
+      quiet += 1;
+      if (quiet >= 5) break;
+    } else quiet = 0;
+    lastMut = now;
+    await sleep(100);
+  }
+
   const beforeScroll = await evaluate(`(() => {
     const main = document.querySelector("main.center") || document.querySelector(".center");
     main.insertAdjacentHTML("beforeend", '<video id="land-keep" data-token="stay"></video>');

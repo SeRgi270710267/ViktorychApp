@@ -108,7 +108,11 @@ npm run dev
 
 `.dev.vars.example` uses 1000 PBKDF2 iterations so local checks finish quickly. Production defaults to 8000 (`PBKDF2_ITERATIONS` in `wrangler.toml`). Workers free tier CPU is tight; lower that variable if sign-up starts failing on CPU time. The local claim code and pepper in the example file are not the production secrets.
 
-CORS allows `https://viktorychgroup.github.io`. The example file also allows `http://127.0.0.1:8080` and `http://localhost:8080` for local screenshots.
+CORS allows `https://viktorychgroup.github.io` and `https://viktorychapp.pages.dev`. Preview hosts `*.viktorychapp.pages.dev` are allowed in code as well. The example file also allows `http://127.0.0.1:8080` and `http://localhost:8080` for local screenshots. A signed-in account uses the same Worker on both site origins. Browser storage stays on the origin you signed in from; signing in on the other origin restores follows and settings through sync.
+
+Workers Logs are on in `wrangler.toml` (`head_sampling_rate = 1`). Error lines are short codes. Tokens and account numbers are not written. No extra secret is required. Daily D1 copies live in R2; see [docs/d1-backup.md](../docs/d1-backup.md). D1 Time Travel is still the 7-day point-in-time restore.
+
+The same `CLOUDFLARE_API_TOKEN` needs Account → Cloudflare Pages → Edit to publish the `viktorychapp` mirror, and Account → Workers KV Storage → Edit to bind the `viktorych-cache` namespace. If either permission is missing, that step skips and the rest of the deploy continues. Web Analytics is cookieless and uses that token when the analytics API accepts it. If it does not, add the site under Analytics & logs → Web Analytics and enable it on the Pages project. The beacon token is public. Do not store it as a GitHub secret.
 
 ## TikTok and Shorts
 

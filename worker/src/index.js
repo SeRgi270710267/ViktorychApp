@@ -23,6 +23,9 @@ import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presenc
 import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 import { handlePills } from "./pills.js";
+import { logError } from "./log.js";
+import { invalidate, readThrough } from "./edge-cache.js";
+import { maybeBackupD1 } from "./d1-backup.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -45,6 +48,38 @@ function iterationsOf(env) {
 function allowedOrigins(env) {
   const raw = String(env.ALLOWED_ORIGINS || "https://viktorychgroup.github.io");
   return raw.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function pagesMirrorOrigin(origin) {
+  let host = "";
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "https:") return false;
+    host = url.hostname.toLowerCase().replace(/\.+$/, "");
+  } catch (err) {
+    return false;
+  }
+  const pagesHost = "viktorychapp.pages.dev";
+  if (host === pagesHost) return true;
+  const mark = "." + pagesHost;
+  return host.length > mark.length && host.slice(-mark.length) === mark;
+}
+
+function originAllowed(env, origin) {
+  if (!origin) return true;
+  if (allowedOrigins(env).indexOf(origin) >= 0) return true;
+  return pagesMirrorOrigin(origin);
+}
+
+function areaFor(path, method) {
+  const text = String(path || "");
+  if (text === "/v1/signup" || text === "/v1/login" || text === "/v1/logout" || text === "/v1/logout-all" || text === "/v1/session" || text.startsWith("/v1/session/")) return "auth";
+  if (text === "/v1/sync" || text.startsWith("/v1/sync/")) return "sync";
+  if (text === "/v1/owner/keys" || text.startsWith("/v1/owner/keys/")) return "owner-keys";
+  if (text.startsWith("/v1/media/") || (text === "/v1/profile" && method === "PATCH")) return "upload";
+  if (text === "/v1/profile" || text.startsWith("/v1/profile/")) return "profile";
+  if (text.startsWith("/v1/communities")) return "feed";
+  return "worker";
 }
 
 function json(status, body, extra) {
@@ -71,7 +106,7 @@ function withCors(request, env, response) {
     bareHeaders.set("x-robots-tag", "noindex, nofollow, noarchive, nosnippet, noimageindex");
     return new Response(response.body, { status: response.status, headers: bareHeaders });
   }
-  if (allowedOrigins(env).indexOf(origin) < 0) {
+  if (!originAllowed(env, origin)) {
     return json(403, { error: "origin" });
   }
   const headers = new Headers(response.headers);
@@ -355,7 +390,13 @@ async function acceptUpload(env, row, kind, value, maxBytes, maxChars) {
   const decoded = decodeDataImage(text, maxChars, maxBytes, ["webp"]);
   if (!decoded || decoded.empty) return { error: "too_large", status: 413 };
   if (!env.DATA) return { error: "not_configured", status: 503 };
-  const key = await writeMedia(env, row.public_id, kind, decoded, previous);
+  let key = "";
+  try {
+    key = await writeMedia(env, row.public_id, kind, decoded, previous);
+  } catch (err) {
+    logError("upload", err);
+    throw err;
+  }
   if (!key) return { error: "unavailable", status: 503 };
   return { key };
 }
@@ -718,6 +759,22 @@ async function trimReposts(env, publicId) {
   }
 }
 
+async function liveProfileCounts(env, row, account, viewer) {
+  account.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", row.public_id);
+  account.followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", "app:" + row.public_id);
+  account.viewerFollows = !!(viewer && viewer.public_id !== row.public_id && await followExists(env, viewer.public_id, "app:" + row.public_id));
+  account.friendsCount = await friendCount(env, row.public_id);
+  account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
+  account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await mutualFriendCount(env, viewer.public_id, row.public_id) : 0;
+  return account;
+}
+
+async function publicProfileText(env, request, row) {
+  const account = await presentAccount(env, request, row, false);
+  const reposts = await listReposts(env, row.public_id);
+  return JSON.stringify({ account: account, reposts: reposts });
+}
+
 async function handleProfileGet(request, env, handle) {
   const checked = inspectHandle(handle);
   const skel = checked.skeleton || "";
@@ -733,14 +790,26 @@ async function handleProfileGet(request, env, handle) {
   const viewer = await sessionAccount(env, request);
   const own = !!(viewer && viewer.public_id === row.public_id);
   if (row.profile_less === 1 && !own) return json(404, { error: "not_found" });
-  const account = await presentAccount(env, request, row, own);
-  account.followingCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE follower_id = ?", row.public_id);
-  account.followersCount = await followCount(env, "SELECT COUNT(*) AS n FROM account_follows WHERE target_id = ?", "app:" + row.public_id);
-  account.viewerFollows = !!(viewer && viewer.public_id !== row.public_id && await followExists(env, viewer.public_id, "app:" + row.public_id));
-  account.friendsCount = await friendCount(env, row.public_id);
-  account.viewerFriendStatus = viewer ? await getFriendStatus(env, viewer.public_id, row.public_id) : "none";
-  account.mutualFriendsCount = (viewer && viewer.public_id !== row.public_id) ? await mutualFriendCount(env, viewer.public_id, row.public_id) : 0;
-  return json(200, { account, reposts: await listReposts(env, row.public_id), identities: account.identities || [] });
+  let account = null;
+  let reposts = [];
+  if (own) {
+    account = await presentAccount(env, request, row, true);
+    reposts = await listReposts(env, row.public_id);
+  } else {
+    try {
+      const text = await readThrough(env, "p:" + row.public_id, () => publicProfileText(env, request, row));
+      const parsed = JSON.parse(text);
+      if (!parsed || !parsed.account) throw new Error("profile_cache");
+      account = parsed.account;
+      reposts = Array.isArray(parsed.reposts) ? parsed.reposts : [];
+    } catch (err) {
+      logError("profile", err);
+      account = await presentAccount(env, request, row, false);
+      reposts = await listReposts(env, row.public_id);
+    }
+  }
+  await liveProfileCounts(env, row, account, viewer);
+  return json(200, { account, reposts, identities: account.identities || [] });
 }
 
 async function handleRepostPut(request, env) {
@@ -757,6 +826,7 @@ async function handleRepostPut(request, env) {
   const created = existing ? Number(existing.created_at) : now;
   await env.DB.prepare("INSERT INTO account_reposts (public_id, post_key, kind, comment, snapshot, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, post_key) DO UPDATE SET kind = excluded.kind, comment = excluded.comment, snapshot = excluded.snapshot").bind(row.public_id, cleaned.postKey, cleaned.kind, cleaned.comment, JSON.stringify(cleaned.post), created).run();
   await trimReposts(env, row.public_id);
+  await invalidate(env, "p:" + row.public_id);
   if (!existing) {
     try { await notifyRepost(env, row, cleaned); }
     catch (err) { /* the repost is saved; the note can be rebuilt from it */ }
@@ -772,6 +842,7 @@ async function handleRepostDelete(request, env) {
   const postKey = cleanRepostKey(body.postKey);
   if (!postKey) return json(400, { error: "bad_repost" });
   await env.DB.prepare("DELETE FROM account_reposts WHERE public_id = ? AND post_key = ?").bind(row.public_id, postKey).run();
+  await invalidate(env, "p:" + row.public_id);
   return json(200, { ok: true });
 }
 
@@ -824,6 +895,7 @@ async function handleProfilePatch(request, env) {
     await env.DB.prepare("UPDATE accounts SET display_name = ?, bio = ?, location = ?, website = ?, avatar = ?, banner = ?, hide_avatar = ?, avatar_empty = ?, banner_empty = ?, private_follows = ?, profile_less = ? WHERE public_id = ?").bind(displayName, bio, location, website, avatar, banner, hideAvatar, avatarEmpty, bannerEmpty, privateFollows, profileLess, row.public_id).run();
   }
   const next = await env.DB.prepare("SELECT " + ACCOUNT_COLS + " FROM accounts WHERE public_id = ?").bind(row.public_id).first();
+  await invalidate(env, "p:" + row.public_id);
   return json(200, { account: await presentAccount(env, request, next, true) });
 }
 
@@ -4537,14 +4609,16 @@ export { AccountChannel };
 
 export default {
   async fetch(request, env, ctx) {
+    let path = "";
     try {
       const url = new URL(request.url);
-      const path = url.pathname;
+      path = url.pathname;
       const origin = request.headers.get("Origin");
-      if (origin && !isPublicFederationRoute(path) && allowedOrigins(env).indexOf(origin) < 0) return json(403, { error: "origin" });
+      if (origin && !isPublicFederationRoute(path) && !originAllowed(env, origin)) return json(403, { error: "origin" });
       const response = await route(request, env, ctx);
       return withCors(request, env, response);
     } catch (err) {
+      logError(areaFor(path, request.method), err);
       return json(500, { error: "unavailable" });
     }
   },
@@ -4552,9 +4626,15 @@ export default {
     const at = Number(event && event.scheduledTime) || Date.now();
     const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env), sweepExpiredStatuses(env, at)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
-    // fifteen minute rhythm.
+    // fifteen minute rhythm. The D1 export uses the same minute and only
+    // writes after 04:17 UTC, once a day.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
-    const all = Promise.allSettled(jobs);
+    jobs.push(maybeBackupD1(env, at));
+    const all = Promise.allSettled(jobs).then((results) => {
+      for (let i = 0; i < results.length; i++) {
+        if (results[i].status === "rejected") logError("cron", results[i].reason);
+      }
+    });
     if (ctx && ctx.waitUntil) ctx.waitUntil(all);
     else await all;
   }

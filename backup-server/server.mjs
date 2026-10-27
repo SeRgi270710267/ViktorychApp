@@ -21,7 +21,7 @@ if (!scriptPath) {
 const PORT = parseInt(process.env.PORT || "10000", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, "./data");
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS || "https://viktorychgroup.github.io,http://127.0.0.1:8080,http://localhost:8080,http://localhost:5173";
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS || "https://viktorychgroup.github.io,https://viktorychapp.pages.dev,http://127.0.0.1:8080,http://localhost:8080,http://localhost:5173";
 
 const stats = {
   mode: "local",

@@ -32,6 +32,10 @@ jobs:
         run: |
           python3 scripts/assemble_site.py --selftest
           python3 scripts/assemble_site.py --site _site
+          python3 scripts/cf_pages_prepare.py --site _site --out _mirror
 
       - name: Load the built site fresh and with old saved data
         run: node scripts/smoke_page.mjs --site _site
+
+      - name: Load the Pages upload fresh and with old saved data
+        run: node scripts/smoke_page.mjs --site _mirror
