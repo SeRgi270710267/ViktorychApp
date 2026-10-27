@@ -1032,7 +1032,7 @@
 
   function loadSettings() {
     const configured = feeds().filter((f) => f.configured).map((f) => f.id);
-const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false });
+const fresh = () => ({ version: 1, initialized: true, follows: configured.slice(), seenFeeds: configured.slice(), seenDefaults: configured.slice(), lists: [], likes: {}, bookmarks: {}, reposts: {}, savedPosts: {}, privacyEmbedShield: false, privacyWebRTC: true, privacyNoReferrer: true, privacyStripTrackers: true, privacyZeroTrace: false, privacyAntiFingerprint: true, appearance: "lightsout", showPictures: "show", showBanners: "show", notify: false, autoplay: "all", mutedWords: [], mutedAccounts: [], repostOff: [], groups: [], groupsOwn: false, subsGroup: "", followingSort: "recent", forYouReposts: true, forYouReplies: true, tabViews: {}, translateTo: "ui", translateAuto: true, translateNever: [], bells: {}, bellNotes: [], bellSeen: [], bellRead: 0, historyPause: { videos: false, articles: false }, feedTabs: [], lastNoteTab: "all", networkMode: "auto", navCustom: cleanNavCustom(null), bottomNav: cleanBottomNav(null), bottomNavCustom: false, navLayout: "auto", navLayoutLand: false, navLayoutSync: false });
     try {
       const raw = readStored(localStorage, "settings-v1");
       if (!raw) return fresh();
@@ -1092,6 +1092,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       parsed.navCustom = cleanNavCustom(parsed.navCustom);
       parsed.bottomNav = cleanBottomNav(parsed.bottomNav);
       parsed.bottomNavCustom = parsed.bottomNavCustom === true;
+      parsed.navLayout = parsed.navLayout === "bar" ? "bar" : "auto";
+      parsed.navLayoutLand = parsed.navLayoutLand === true;
+      parsed.navLayoutSync = parsed.navLayoutSync === true;
       return parsed;
     } catch (err) {
       return fresh();
@@ -7128,7 +7131,15 @@ const here = parseRoute();
         <button type="button" class="bnav-switch${on ? " on" : ""}" role="switch" aria-checked="${on ? "true" : "false"}" data-act="bottom-nav-toggle" data-id="${esc(def.id)}" aria-label="${esc(switchLabel)}"${disabled ? " disabled" : ""}${title ? ` title="${esc(title)}"` : ""}><i></i></button>
       </div>`;
     }).join("");
-    return settingsHead(tr("Customize navigation"), "#/settings/display") + `<div class="bnav-screen"><div class="bottom-nav bottom-nav-preview" aria-hidden="true">${preview}</div><p class="phandle set-block">${esc(tr("Choose which icons appear in the bottom bar. Home always stays. You can show {min} to {max}.", { min: BOTTOM_NAV_MIN, max: BOTTOM_NAV_MAX }))}</p><div class="bnav-list">${rows}</div><div class="bnav-reset"><button class="outline" type="button" data-act="bottom-nav-reset">${esc(tr("Reset to default"))}</button></div></div>`;
+    const layout = STATE.settings && STATE.settings.navLayout === "bar" ? "bar" : "auto";
+    const landOn = !!(STATE.settings && STATE.settings.navLayoutLand);
+    const syncOn = !!(STATE.settings && STATE.settings.navLayoutSync);
+    const layoutRadio = (id, label) => {
+      const on = layout === id;
+      return `<button class="lang-row" type="button" role="radio" aria-checked="${on ? "true" : "false"}" data-act="nav-layout" data-layout="${id}"><span>${esc(label)}</span><span class="lang-radio${on ? " on" : ""}" aria-hidden="true"></span></button>`;
+    };
+    const layoutBlock = `<section class="bnav-layout"><h2>${esc(tr("Navigation layout"))}</h2><p class="phandle">${esc(tr("For tablets and other medium-width screens in portrait. Phones keep the bottom bar."))}</p><div class="lang-list" role="radiogroup" aria-label="${esc(tr("Navigation layout"))}">${layoutRadio("auto", tr("Auto (sidebar)"))}${layoutRadio("bar", tr("Bottom bar (phone style)"))}</div><button class="tab-switch${landOn ? " on" : ""}" type="button" role="switch" aria-checked="${landOn ? "true" : "false"}" data-act="nav-layout-land"${layout === "bar" ? "" : " disabled"}><span>${esc(tr("Use bottom bar in landscape too"))}</span><i></i></button><button class="tab-switch${syncOn ? " on" : ""}" type="button" role="switch" aria-checked="${syncOn ? "true" : "false"}" data-act="nav-layout-sync"><span>${esc(tr("Sync this choice"))}</span><i></i></button><p class="phandle">${esc(tr("Saved on this device. Sync uses the same layout on your other signed-in devices."))}</p></section>`;
+    return settingsHead(tr("Customize navigation"), "#/settings/display") + `<div class="bnav-screen">${layoutBlock}<div class="bottom-nav bottom-nav-preview" aria-hidden="true">${preview}</div><p class="phandle set-block">${esc(tr("Choose which icons appear in the bottom bar. Home always stays. You can show {min} to {max}.", { min: BOTTOM_NAV_MIN, max: BOTTOM_NAV_MAX }))}</p><div class="bnav-list">${rows}</div><div class="bnav-reset"><button class="outline" type="button" data-act="bottom-nav-reset">${esc(tr("Reset to default"))}</button></div></div>`;
   }
 
   function listSortOf(list) {
@@ -8510,7 +8521,10 @@ const here = parseRoute();
     const bio = row.bio ? `<span class="connect-bio">${esc(row.bio)}</span>` : "";
     const button = self ? "" : followButtonClean(row.id);
     const handle = row.handle ? "@" + esc(row.handle) : "";
-    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${avatar(row.avatar, row.name || row.handle, "", row.avatarFace)}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span><span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
+    const appId = String(row.id || "").startsWith("app:") ? String(row.id).slice(4) : "";
+    let face = avatar(row.avatar, row.name || row.handle, "", row.avatarFace);
+    if (/^\d{12}$/.test(appId) && window.ViktorychPresence) face = window.ViktorychPresence.wrap(appId, face);
+    return `<div class="connect-row"><a class="who-main" href="${esc(connectTarget(row))}">${face}<span class="who-copy"><span class="name">${esc(row.name || row.handle || row.id)}${badge(row.verifiedType)}</span><span class="handle">${handle}</span>${bio}</span></a>${button}</div>`;
   }
 
   function connectionsHash(route, tab) {
@@ -10774,7 +10788,9 @@ const here = parseRoute();
         return `<button class="tab-switch${val ? " on" : ""}" type="button" role="switch" aria-checked="${val ? "true" : "false"}" data-act="toggle-privacy-pref" data-key="${key}"><span>${esc(label)}</span><i></i></button>
         <p class="phandle set-desc">${esc(desc)}</p>`;
       };
+      const presenceBlock = window.ViktorychPresence ? window.ViktorychPresence.settingsHtml() : "";
       return settingsHead(tr("Privacy and safety"), "#/settings") + `<div class="set-block">
+        ${presenceBlock}
         ${privSection}
         ${isTorBrowser() ? `<div class="tor-banner">${icon("shield")} <div><b>${esc(tr("Tor Browser mode active"))}</b><p class="phandle">${esc(tr("Maximum privacy defenses and zero-canvas protections are enabled."))}</p></div></div>` : ""}
         <h2>${esc(tr("Privacy shield & anti-tracking"))}</h2>
@@ -13349,8 +13365,10 @@ if (STATE.histClear) {
       else if (STATE.holdY != null) y = STATE.holdY;
       else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
       /* The shell swap used to throw away every horizontal row. Tab rows are
-         patched in place; every other row gets its scrollLeft written back. */
+         patched in place; every other row, including the live pills, gets its
+         scrollLeft written back. Presence then paints dots on the new shell. */
       commitApp(shell(view(route), route));
+      if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
       if (window.ViktorychShorts) {
         if (route.name === "shorts") window.ViktorychShorts.mount(route);
         else window.ViktorychShorts.unmount();
@@ -13629,6 +13647,30 @@ if (STATE.histClear) {
       saveSettings();
       render();
       toast(tr("Reset to default"));
+      return;
+    }
+    if (act === "nav-layout") {
+      if (!STATE.settings) STATE.settings = {};
+      STATE.settings.navLayout = el.dataset.layout === "bar" ? "bar" : "auto";
+      saveSettings();
+      applyNavLayout();
+      render();
+      return;
+    }
+    if (act === "nav-layout-land") {
+      if (!STATE.settings || STATE.settings.navLayout !== "bar") return;
+      STATE.settings.navLayoutLand = !STATE.settings.navLayoutLand;
+      saveSettings();
+      applyNavLayout();
+      render();
+      return;
+    }
+    if (act === "nav-layout-sync") {
+      if (!STATE.settings) STATE.settings = {};
+      STATE.settings.navLayoutSync = !STATE.settings.navLayoutSync;
+      if (!STATE.settings.navLayoutSync && window.ViktorychAccounts && window.ViktorychAccounts.releaseNavLayout) window.ViktorychAccounts.releaseNavLayout();
+      saveSettings();
+      render();
       return;
     }
     if (act === "nav-order-move") {
@@ -15421,6 +15463,15 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     }
   });
 
+  function presenceIdOf(profile) {
+    const raw = String((profile && profile.publicId) || "");
+    if (/^\d{12}$/.test(raw)) return raw;
+    const id = String((profile && profile.id) || "");
+    if (id.startsWith("app:") && /^\d{12}$/.test(id.slice(4))) return id.slice(4);
+    if (profile && profile.platform === "app" && /^\d{12}$/.test(String(profile.handle || ""))) return String(profile.handle);
+    return "";
+  }
+
   function paintHover(el, profile) {
     const rect = el.getBoundingClientRect();
     const box = document.getElementById("hover");
@@ -15429,7 +15480,14 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const id = liveFollowId(profile);
     const bannerFace = faceChoice("banner", profile.banner, profile.bannerFace);
     const banner = bannerFace === "none" ? "" : (bannerFace === "photo" ? `<div class="hbanner" style="background:url(${encodeURI(profile.banner)}) center/cover"></div>` : `<div class="hbanner"></div>`);
-    box.innerHTML = `<div class="hcard">${banner}<div class="hbody"><div class="pava-row">${avatar(profile.avatar, profile.name, "pava", profile.avatarFace)}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
+    const pid = presenceIdOf(profile);
+    let face = avatar(profile.avatar, profile.name, "pava", profile.avatarFace);
+    let seen = "";
+    if (pid && window.ViktorychPresence) {
+      face = window.ViktorychPresence.wrap(pid, face);
+      seen = window.ViktorychPresence.linesHtml(pid);
+    }
+    box.innerHTML = `<div class="hcard">${banner}<div class="hbody"><div class="pava-row">${face}${followButtonClean(id)}</div><div class="name" style="font-weight:800;margin-top:8px">${esc(profile.name || profile.handle || "")}${badge(profile.verifiedType)}</div>${handle ? `<div class="phandle">@${esc(handle)}</div>` : ""}${seen}${profile.bio ? `<div class="hbio">${esc(profile.bio)}</div>` : ""}${audienceCounts(profile)}</div></div>`;
     const left = Math.min(rect.left, window.innerWidth - 320);
     box.style.left = Math.max(8, left) + "px";
     box.style.top = (rect.bottom + 8) + "px";
@@ -15552,9 +15610,18 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     return THEME_COLORS[mode] ? mode : "lightsout";
   }
 
+  function applyNavLayout() {
+    const layout = STATE.settings && STATE.settings.navLayout === "bar" ? "bar" : "auto";
+    const land = layout === "bar" && !!(STATE.settings && STATE.settings.navLayoutLand);
+    document.documentElement.setAttribute("data-nav-layout", layout);
+    if (land) document.documentElement.setAttribute("data-nav-bar-land", "1");
+    else document.documentElement.removeAttribute("data-nav-bar-land");
+  }
+
   function applyTheme() {
     const theme = resolvedTheme();
     document.documentElement.setAttribute("data-theme", theme);
+    applyNavLayout();
     const color = THEME_COLORS[theme] || "#000000";
     document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute("content", color));
     const scheme = document.querySelector('meta[name="color-scheme"]');
@@ -16227,7 +16294,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       const since = Number(readStored(localStorage, "seen-at") || 0);
       const fresh = merged.added.filter((post) => followedSince(post, since) && !coveredByBell(post));
       if (document.hidden) updateBadge(Math.max(fresh.length, bellUnread()));
-      if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length) {
+      if (document.hidden && STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted" && fresh.length && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
+        if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
         try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* permission can change */ }
       }
       ensureVideoOwners();
@@ -16828,6 +16896,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showLocalNotification(note) {
+    if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
+    if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
+    if (document.visibilityState === "visible") {
+      toast((note && note.text) || tr("New post"));
+      return;
+    }
     if (!note || typeof Notification === "undefined" || Notification.permission !== "granted") return;
     try {
       const item = new Notification(note.name || ("@" + (note.handle || "post")), {
@@ -16844,6 +16918,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showPageNotification(note) {
+    if (window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices()) return;
+    if (document.visibilityState === "visible") {
+      showLocalNotification(note);
+      return;
+    }
+    if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
     const payload = {
       body: note.text || tr("New post"),
       icon: note.avatar || "icons/icon-192.png",
@@ -17357,8 +17437,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       });
       const fresh = (STATE.data.posts || []).filter((post) => followedSince(post, since) && !seenIds[canonicalPostId(post)] && !seenIds[String(post.id || "")] && !coveredByBell(post));
       const periodic = "serviceWorker" in navigator && "periodicSync" in ServiceWorkerRegistration.prototype;
-      if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted") {
-        try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
+      if (since && fresh.length && STATE.settings.notify && !periodic && typeof Notification !== "undefined" && Notification.permission === "granted" && !(window.ViktorychPresence && window.ViktorychPresence.mutesNotices && window.ViktorychPresence.mutesNotices())) {
+        if (window.ViktorychPresence && window.ViktorychPresence.chime) window.ViktorychPresence.chime();
+        if (document.visibilityState === "visible") toast(trn("newPosts", fresh.length));
+        else try { new Notification(tr("New posts"), { body: trn("newPosts", fresh.length), icon: "icons/icon-192.png", tag: "feeds" }); } catch (err) { /* already handled by the pill when a later refresh arrives */ }
       }
       if (document.visibilityState === "visible") {
         writeStored(localStorage, "seen-at", String(Date.now()));
@@ -17751,6 +17833,12 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("viktorych-settings-applied", () => {
     if (!STATE.settings) return;
     const next = loadSettings();
+    if (next.navLayoutSync || STATE.settings.navLayoutSync) {
+      STATE.settings.navLayout = next.navLayout;
+      STATE.settings.navLayoutLand = next.navLayoutLand;
+      STATE.settings.navLayoutSync = next.navLayoutSync;
+    }
+    applyNavLayout();
     const prevNav = JSON.stringify(STATE.settings.bottomNav || null);
     const nextNav = JSON.stringify(next.bottomNav || null);
     if (prevNav === nextNav && (STATE.settings.bottomNavCustom === true) === (next.bottomNavCustom === true)) return;

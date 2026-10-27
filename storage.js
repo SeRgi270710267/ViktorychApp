@@ -97,6 +97,7 @@
     var url = toUrl(value);
     if (!url || blockedPath(url) || tiktokHost(url.hostname)) return false;
     if (shouldCacheMedia(url)) return false;
+    if (/\/v1\/presence(?:\/|$|\?)/i.test(url.pathname) || /\/v1\/channel(?:\/|$|\?)/i.test(url.pathname)) return false;
     if (/\/v1\//i.test(url.pathname) && !/\/v1\/owner\/tiktok\/recordings$/i.test(url.pathname)) return false;
     var cat = categoryOf(url);
     return cat === "feeds" || cat === "messages" || (cat === "live" && /\.json$/i.test(url.pathname));

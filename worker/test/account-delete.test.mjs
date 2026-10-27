@@ -235,6 +235,12 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   await sql("INSERT INTO owner_key_pace (owner_id, slot, reason, until_at, updated_at) VALUES (?, 'tiktok', 'slow', ?, ?)", a, now + 1000, now);
   await sql("INSERT INTO owner_key_pace (owner_id, slot, reason, until_at, updated_at) VALUES (?, 'youtube', 'slow', ?, ?)", o, now + 1000, now);
   await sql("INSERT INTO account_reauths (token_hash, public_id, expires_at) VALUES ('reauth-ada', ?, ?)", a, now + 1000);
+  await sql("INSERT INTO account_presence (public_id, preference, activity, seen_privacy, last_seen, last_beat, updated_at) VALUES (?, 'online', 'active', 'everyone', ?, ?, ?)", a, now, now, now);
+  await sql("INSERT INTO account_presence (public_id, preference, activity, seen_privacy, last_seen, last_beat, updated_at) VALUES (?, 'online', 'active', 'everyone', ?, ?, ?)", b, now, now, now);
+  await sql("INSERT INTO account_status (public_id, emoji, text, clear_at, updated_at) VALUES (?, '✨', 'here', 0, ?)", a, now);
+  await sql("INSERT INTO account_status (public_id, emoji, text, clear_at, updated_at) VALUES (?, '✨', 'here', 0, ?)", b, now);
+  await sql("INSERT INTO channel_tickets (token_hash, public_id, expires_at) VALUES ('ticket-ada', ?, ?)", a, now + 1000);
+  await sql("INSERT INTO channel_tickets (token_hash, public_id, expires_at) VALUES ('ticket-bee', ?, ?)", b, now + 1000);
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + a, now + 100000);
   await sql("INSERT INTO rate_limits (bucket, hits, reset_at) VALUES (?, 1, ?)", "follow:" + b, now + 100000);
   await sql("INSERT INTO telegram_files (object_key, kind, part_index, bucket, file_id, message_id, size, sha256, mime, duration, serve, verified, encrypted, updated_at) VALUES ('shared.bin', 'file', 0, '', 'fid', 1, 4, 'abc', 'application/octet-stream', 0, 0, 0, 0, ?)", now);
@@ -313,6 +319,11 @@ test("deletes one account everywhere and leaves everyone else", async () => {
   assert.equal(dumped.includes(ada.accountNumber), false);
 
   assert.deepEqual(await leftovers(a, "ada_wipe"), []);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM account_presence WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM account_status WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM channel_tickets WHERE public_id = ?", a), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM account_presence WHERE public_id = ?", b), 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM account_status WHERE public_id = ?", b), 1);
   assert.ok(await one("SELECT public_id FROM accounts WHERE public_id = ?", b));
   assert.ok(await one("SELECT public_id FROM accounts WHERE public_id = ?", o));
   const beeSession = await call("/v1/session", { ip: "198.51.100.32", token: bee.token });

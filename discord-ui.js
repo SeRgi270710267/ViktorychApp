@@ -427,7 +427,8 @@
       embeds: Array.isArray(row.cards) ? row.cards : [],
       emojis: Array.isArray(row.emojis) ? row.emojis : [],
       reactions: reactions,
-      edited: !!row.edited
+      edited: !!row.edited,
+      publicId: /^\d{12}$/.test(String(row.publicId || row.public_id || "")) ? String(row.publicId || row.public_id) : ""
     };
   }
 
@@ -447,6 +448,7 @@
       embeds: m.emb || [],
       emojis: [],
       reactions: m.rx || [],
+      publicId: /^\d{12}$/.test(String((m.author && (m.author.publicId || m.author.public_id)) || m.publicId || "")) ? String((m.author && (m.author.publicId || m.author.public_id)) || m.publicId) : "",
       edited: !!m.edited
     };
   }
@@ -608,9 +610,12 @@
 
   function avatarHtml(row) {
     const mode = faceMode(row.avatar);
-    if (mode === "none") return '<span class="ava-none"></span>';
-    if (mode === "default" || !row.avatar) return silhouetteHtml("dmsg-ava ava");
-    return '<img class="dmsg-ava" src="' + esc(row.avatar) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">';
+    let html = "";
+    if (mode === "none") html = '<span class="ava-none"></span>';
+    else if (mode === "default" || !row.avatar) html = silhouetteHtml("dmsg-ava ava");
+    else html = '<img class="dmsg-ava" src="' + esc(row.avatar) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">';
+    if (row.publicId && window.ViktorychPresence) return window.ViktorychPresence.wrap(row.publicId, html);
+    return html;
   }
 
   function mediaHtml(row) {
@@ -1071,11 +1076,14 @@
     const server = serverById(ch.serverId);
     const who = messagesFor(id)[0];
     const headMode = faceMode(who && who.avatar);
-    const face = headMode === "none" ? "" : (headMode === "photo" ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>' : silhouetteHtml("dmsgs-head-face"));
+    let face = headMode === "none" ? "" : (headMode === "photo" ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>' : silhouetteHtml("dmsgs-head-face"));
+    const whoId = who && /^\d{12}$/.test(String(who.publicId || "")) ? who.publicId : "";
+    if (whoId && face && window.ViktorychPresence) face = window.ViktorychPresence.wrap(whoId, face);
     const pinBtn = pinsBlocked(ch) ? "" : '<button type="button" class="dmsgs-iconbtn dmsgs-pins' + (state.pinsOpen === id ? " on" : "") + '" data-discord="pins" data-id="' + esc(id) + ("\" " + "aria-label=\"" + tr("Pinned messages") + "\"" + " aria-expanded=\"") + (state.pinsOpen === id ? "true" : "false") + '">' + iconSvg("pin") + "</button>";
     const place = (server && server.name) || ch.category || "Discord";
+    const sub = whoId && window.ViktorychPresence ? window.ViktorychPresence.dmSubHtml(whoId, place) : esc(place);
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + esc(place) + "</span></div>" + pinBtn + "</header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + sub + "</span></div>" + pinBtn + "</header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
       pinPanelHtml(id) +
       ("<button type=\"button\" class=\"dmsgs-jump\" hidden" + ">" + tr("Jump to present") + "<" + "/button>") +
