@@ -222,6 +222,8 @@ jobs:
           TG_SHARD: ${{ github.event.inputs.shard || matrix.shard }}
           TELEGRAM_LOCAL: ${{ steps.preflight.outputs.local == 'true' && '1' || '0' }}
           PYTHONUNBUFFERED: "1"
+          WORKER_DISPATCH_TOKEN: ${{ secrets.WORKER_DISPATCH_TOKEN }}
+          ACCOUNTS_API: ${{ vars.ACCOUNTS_API }}
         run: |
           set -euo pipefail
           cleanup() {
@@ -321,4 +323,6 @@ jobs:
           TG_MAX_MB: ${{ vars.TG_MAX_MB }}
           TG_DELETE_FROM_R2: ${{ vars.TG_DELETE_FROM_R2 }}
           PYTHONUNBUFFERED: "1"
+          WORKER_DISPATCH_TOKEN: ${{ secrets.WORKER_DISPATCH_TOKEN }}
+          ACCOUNTS_API: ${{ vars.ACCOUNTS_API }}
         run: python3 scripts/telegram_backup.py --loop

@@ -16,6 +16,8 @@ import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, wat
 import { mediaMime, streamFresh, shouldSniffMedia, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
+import { handleOwnerKeys, KEYS_SCHEMA } from "./owner-keys.js";
+import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 
 const encoder = new TextEncoder();
 const SESSION_MS = 60 * 24 * 60 * 60 * 1000;
@@ -168,7 +170,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -1060,16 +1062,12 @@ async function handleLiveBoard(request, env) {
   return new Response(bodyText, { status: 200, headers });
 }
 
-async function fetchPublic(url) {
-  const res = await fetch(url, {
-    headers: {
-      "user-agent": PLAY_UA,
-      accept: "text/html,application/json",
-      "accept-language": "en-US,en;q=0.9"
-    },
-    redirect: "follow"
-  });
-  return { status: res.status, text: await res.text(), retryAfter: retryAfterSeconds(res) };
+async function fetchPublic(url, keyed) {
+  return liveFetch(url, {
+    "user-agent": PLAY_UA,
+    accept: "text/html,application/json",
+    "accept-language": "en-US,en;q=0.9"
+  }, "follow", keyed);
 }
 
 const BACKOFF_MINUTES = [5, 15, 60, 180, 360];
@@ -1271,12 +1269,12 @@ async function handleTikTokHealth(request, env) {
   return json(200, view);
 }
 
-async function fetchRoom(roomId) {
-  const upstream = await fetch("https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=" + encodeURIComponent(roomId), {
-    headers: { "user-agent": PLAY_UA, accept: "application/json", "accept-language": "en-US,en;q=0.9" }
-  });
-  const text = await upstream.text();
-  return { status: upstream.status, text, retryAfter: retryAfterSeconds(upstream) };
+async function fetchRoom(roomId, keyed) {
+  return liveFetch("https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=" + encodeURIComponent(roomId), {
+    "user-agent": PLAY_UA,
+    accept: "application/json",
+    "accept-language": "en-US,en;q=0.9"
+  }, "follow", keyed);
 }
 
 async function handleLiveStats(request, env, handle, gate, prev) {
@@ -2842,18 +2840,18 @@ function roomShaped(parsed) {
   return !!(data.stream_url && typeof data.stream_url === "object");
 }
 
-async function fetchEnter(roomId) {
-  const upstream = await fetch("https://webcast.tiktok.com/webcast/room/enter/?aid=1988&room_id=" + encodeURIComponent(roomId), {
-    headers: { "user-agent": PLAY_UA, accept: "application/json", "accept-language": "en-US,en;q=0.9" }
-  });
-  const text = await upstream.text();
-  return { status: upstream.status, text, retryAfter: retryAfterSeconds(upstream) };
+async function fetchEnter(roomId, keyed) {
+  return liveFetch("https://webcast.tiktok.com/webcast/room/enter/?aid=1988&room_id=" + encodeURIComponent(roomId), {
+    "user-agent": PLAY_UA,
+    accept: "application/json",
+    "accept-language": "en-US,en;q=0.9"
+  }, "follow", keyed);
 }
 
 async function apiLiveRoomId(handle) {
   let res = null;
   try {
-    res = await fetchPublic("https://www.tiktok.com/api-live/user/room/?aid=1988&uniqueId=" + encodeURIComponent(handle) + "&sourceType=54");
+    res = await fetchPublic("https://www.tiktok.com/api-live/user/room/?aid=1988&uniqueId=" + encodeURIComponent(handle) + "&sourceType=54", true);
   } catch (err) {
     return "";
   }
@@ -2883,13 +2881,13 @@ async function roomProbe(prev, handle) {
   let seen = null;
   if (cached && /^[1-9][0-9]{5,24}$/.test(cached)) {
     let room = null;
-    try { room = await fetchRoom(cached); } catch (err) { room = null; }
+    try { room = await fetchRoom(cached, true); } catch (err) { room = null; }
     if (room && !challengeKind(room.status, room.text)) {
       seen = Object.assign(verdict(cached, room), { prev });
       if (seen.live) return seen;
     } else {
       let enter = null;
-      try { enter = await fetchEnter(cached); } catch (err) { enter = null; }
+      try { enter = await fetchEnter(cached, true); } catch (err) { enter = null; }
       if (enter && !challengeKind(enter.status, enter.text)) {
         let parsed = {};
         try { parsed = JSON.parse(enter.text || "{}"); } catch (err) { parsed = {}; }
@@ -2906,7 +2904,7 @@ async function roomProbe(prev, handle) {
   const fresh = await apiLiveRoomId(handle || "");
   if (fresh && fresh !== cached) {
     let room = null;
-    try { room = await fetchRoom(fresh); } catch (err) { room = null; }
+    try { room = await fetchRoom(fresh, true); } catch (err) { room = null; }
     if (room && !challengeKind(room.status, room.text)) return Object.assign(verdict(fresh, room), { prev });
   }
   if (seen) return seen;
@@ -2917,7 +2915,7 @@ async function roomProbe(prev, handle) {
 // profile page is the second chance, the same fallback the owner route uses.
 async function watchLiveOne(env, handle, prev) {
   let page = null;
-  try { page = await fetchPublic("https://www.tiktok.com/@" + handle + "/live"); }
+  try { page = await fetchPublic("https://www.tiktok.com/@" + handle + "/live", true); }
   catch (err) { return null; }
   const pageKind = challengeKind(page.status, page.text);
   if (pageKind) {
@@ -2928,7 +2926,7 @@ async function watchLiveOne(env, handle, prev) {
   let roomId = parseRoomId(page.text);
   if (!roomId) {
     let profile = null;
-    try { profile = await fetchPublic("https://www.tiktok.com/@" + handle); }
+    try { profile = await fetchPublic("https://www.tiktok.com/@" + handle, true); }
     catch (err) { return null; }
     const profileKind = challengeKind(profile.status, profile.text);
     if (profileKind) {
@@ -2940,7 +2938,7 @@ async function watchLiveOne(env, handle, prev) {
   }
   if (!roomId) return { live: false, roomId: "" };
   let room = null;
-  try { room = await fetchRoom(roomId); } catch (err) { return null; }
+  try { room = await fetchRoom(roomId, true); } catch (err) { return null; }
   const roomKind = challengeKind(room.status, room.text);
   if (roomKind) {
     const probe = await roomProbe(prev, handle);
@@ -2972,6 +2970,8 @@ function watchAccountNote(handle, status, job, prev) {
 
 async function watchTikTokLive(env, nowMs) {
   if (!env.DATA || !String(env.GITHUB_DISPATCH_TOKEN || "").trim()) return;
+  await primeLiveCookies(env);
+  try {
   const doc = await readOwnerDoc(env);
   if (!doc) return;
   const minute = new Date(Number(nowMs) || Date.now()).getUTCMinutes();
@@ -3056,6 +3056,9 @@ async function watchTikTokLive(env, nowMs) {
     if (!uploaderStale(beat, nowMs)) continue;
     await dispatchWorkflow(env, "tiktok-live-upload.yml", { slot: String(slot) });
     break;
+  }
+  } finally {
+    releaseLiveCookies();
   }
 }
 
@@ -4188,6 +4191,9 @@ async function route(request, env, ctx) {
   const accountMedia = path.match(/^\/v1\/media\/(avatars|banners)\/(\d{12})\/([a-f0-9]{64}\.(?:webp|jpg|png))$/);
   if (accountMedia && request.method === "GET") return handleAccountMedia(request, env, accountMedia[1], accountMedia[2], accountMedia[3]);
   if (path.startsWith("/v1/data/") && request.method === "GET") return handleData(request, env, path);
+  if (path === "/v1/owner/keys" || path.startsWith("/v1/owner/keys/")) {
+    return handleOwnerKeys(request, env, path, { json, readJson, rateHit, limited, sessionAccount, timingEqual });
+  }
   if (path === "/v1/owner/accounts" && (request.method === "GET" || request.method === "POST")) return handleAddedAccounts(request, env, url);
   const addedAccount = path.match(/^\/v1\/owner\/accounts\/([^/]+)$/);
   if (addedAccount && request.method === "DELETE") return handleAddedAccountDelete(request, env, addedAccount[1]);

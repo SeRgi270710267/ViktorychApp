@@ -3,9 +3,11 @@
 
 Added accounts are the profiles in feeds.config.json (cuentas añadidas,
 добавленные аккаунты). The GitHub Actions workflow runs this on a schedule.
-It does not use cookies, a captcha solver, a WAF bypass, or anything that
-would add views. A 403 or a captcha skips that added account and the run
-continues. TikTok lives are not recorded.
+When the owner has saved a cookie for that service, the first try sends it.
+A 401, 403, captcha, or challenge marks the key and the same download runs
+once without it. No captcha solver, no proxy, and nothing that would add
+views. A blocked anonymous download skips that account and the run continues.
+TikTok lives are not recorded. The saved file is the original, not a re-encode.
 """
 
 from __future__ import annotations
@@ -501,7 +503,7 @@ def list_tiktok_entries(ytdlp: list, page: str, limit: int) -> tuple:
         "--socket-timeout", "30",
         page,
     ]
-    return run_tool(cmd, 180)
+    return run_tool(cmd, 180, page)
 
 
 def download_tiktok(ytdlp: list, account: dict, work: Path, archive: Path, limit: int) -> tuple:
@@ -521,7 +523,7 @@ def download_tiktok(ytdlp: list, account: dict, work: Path, archive: Path, limit
     if not entries and info.get("id"):
         entries = [info]
     if not entries:
-        _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for("tiktok"), limit), 600)
+        _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for("tiktok"), limit), 600, account["url"])
         text = out + "\n" + err
         return ("blocked" if tb.runner_blocked(text) else "ok"), text
     for entry in entries:
@@ -535,7 +537,7 @@ def download_tiktok(ytdlp: list, account: dict, work: Path, archive: Path, limit
         selector = tiktok_download_selector(entry.get("formats") or [])
         args = video_args(page, work, archive, selector, 1)
         args.insert(1, "--no-playlist")
-        _code, out, err = run_tool(ytdlp + args, 600)
+        _code, out, err = run_tool(ytdlp + args, 600, page)
         text = out + "\n" + err
         if tb.runner_blocked(text):
             return "blocked", text
@@ -559,7 +561,7 @@ def download_x(ytdlp: list, account: dict, work: Path, archive: Path, limit: int
     if not entries and info.get("id"):
         entries = [info]
     if not entries:
-        _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for("x"), limit), 600)
+        _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for("x"), limit), 600, account["url"])
         text = out + "\n" + err
         return ("blocked" if tb.runner_blocked(text) else "ok"), text
     for entry in entries:
@@ -573,7 +575,7 @@ def download_x(ytdlp: list, account: dict, work: Path, archive: Path, limit: int
         args.insert(1, "--no-playlist")
         if "--recode-video" in args:
             return "blocked", "recode"
-        _code, out, err = run_tool(ytdlp + args, 600)
+        _code, out, err = run_tool(ytdlp + args, 600, page)
         text = out + "\n" + err
         if tb.runner_blocked(text):
             return "blocked", text
@@ -669,8 +671,23 @@ def photo_groups(work: Path, account: dict) -> list:
     return rows
 
 
-def run_tool(cmd: list, timeout: int) -> tuple:
-    code, out, err = tb.run_captured(cmd, timeout)
+def run_tool(cmd: list, timeout: int, page: str = "") -> tuple:
+    argv = list(cmd)
+    if page:
+        try:
+            from owner_keys import prepare_argv
+            argv = prepare_argv(cmd, page)
+        except Exception:
+            argv = list(cmd)
+    code, out, err = tb.run_captured(argv, timeout)
+    if page:
+        try:
+            from owner_keys import fallback_argv
+            again = fallback_argv(argv, page, code, (out or "") + "\n" + (err or ""))
+        except Exception:
+            again = None
+        if again is not None:
+            code, out, err = tb.run_captured(again, timeout)
     return code, out, err
 
 
@@ -856,7 +873,7 @@ def extract() -> int:
             elif account["platform"] == "x":
                 status, text = download_x(ytdlp, account, work, archive, room)
             else:
-                _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for(account["platform"]), room), 600)
+                _code, out, err = run_tool(ytdlp + video_args(account["url"], work, archive, selector_for(account["platform"]), room), 600, account["url"])
                 text = out + "\n" + err
                 status = "blocked" if tb.runner_blocked(text) else "ok"
             videos_blocked = status == "blocked"
@@ -903,7 +920,7 @@ def extract() -> int:
                 photo_cmd = gallery + photo_args(account["url"], photo_dir, photos, min(each, limit - stored))
                 if account["platform"] == "x":
                     photo_cmd = gallery + ["-o", "twitter.size=orig"] + photo_args(account["url"], photo_dir, photos, min(each, limit - stored))
-                _code, out, err = run_tool(photo_cmd, 300)
+                _code, out, err = run_tool(photo_cmd, 300, account["url"])
                 if tb.runner_blocked(out + "\n" + err):
                     log("[media-extract] skipped_blocked %s/%s" % (account["platform"], account["handle"]))
                     tally["blocked"] += 1

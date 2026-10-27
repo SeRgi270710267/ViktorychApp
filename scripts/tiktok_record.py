@@ -8,8 +8,9 @@ or fill the runner disk. The same job offers each segment to Telegram and
 checks its sha256. One uploader job drains anything that offer left behind.
 Extra channels are an owner-only list; the same bot posts to each of them.
 
-No cookies, no proxy, and no captcha bypass. A 403, 429, 503, or captcha
-page skips that live and the Live tab keeps Open on TikTok.
+An owner cookie is sent on the first pull when Connected keys has one.
+A 401, 403, or captcha marks that key and the pull continues once without
+it. No proxy and no captcha bypass. The copy stays lossless (`ffmpeg -c copy`).
 """
 
 from __future__ import annotations
@@ -201,6 +202,13 @@ def ffmpeg_args(url: str, dest: Path, seconds: int, start: int = 0) -> list:
             "-reconnect_delay_max", "4",
             "-rw_timeout", "15000000",
         ]
+        try:
+            from owner_keys import stream_cookie
+            cookie = stream_cookie("tiktok")
+        except Exception:
+            cookie = ""
+        if cookie:
+            args += ["-headers", "Cookie: " + cookie.replace("\r", "").replace("\n", "") + "\r\n"]
     args += [
         "-probesize", "5000000",
         "-analyzeduration", "3000000",
@@ -1514,6 +1522,15 @@ def cmd_record(handle: str, part: str, room: str) -> int:
             failure = pull_failure(tail)
             if tail.strip():
                 log("ffmpeg %s %s" % (name, tail.strip().splitlines()[-1][:180]))
+        if failure == "blocked":
+            try:
+                from owner_keys import drop_for_attention
+                if drop_for_attention("tiktok", "forbidden"):
+                    log("owner key needs attention; continuing without it")
+                    failure = ""
+                    continue
+            except Exception:
+                pass
         decision = record_decision(still["live"], gained, reason, failure)
         if decision == "save":
             return finish_save()

@@ -5,6 +5,9 @@ workers_dev = true
 
 # TELEGRAM_BOT_TOKEN is a Worker secret, not a var:
 # npx wrangler secret put TELEGRAM_BOT_TOKEN
+# KEYS_ENC_KEY encrypts owner-pasted keys at rest. It is a Worker secret, not a var.
+# From worker/: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+# npx wrangler secret put KEYS_ENC_KEY
 # GITHUB_DISPATCH_TOKEN is a Worker secret, not a var.
 # The repository Actions secret is WORKER_DISPATCH_TOKEN (fine-grained PAT,
 # repository ViktorychGroup/ViktorychApp, Actions: Read and write).

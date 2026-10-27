@@ -1,0 +1,734 @@
+/* Full-screen update for the installed app. The worker stays waiting until
+   Update now, then reports real precache progress. Drafts, the route, and
+   the scroll position are written down before the reload. */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  if (root) root.ViktorychUpdate = api;
+  if (typeof document !== "undefined") api.start();
+})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+  var PREFIX = "viktorych-a20-";
+  var SNOOZE_MS = 30 * 60 * 1000;
+  var CHECK_MS = 3 * 60 * 1000;
+  var RESTORE_MS = 2 * 60 * 1000;
+  var SNOOZE_KEY = "viktorychapp-update-snooze";
+  var RESTORE_KEY = "viktorychapp-update-restore";
+  var RELOAD_KEY = "viktorychapp-sw-reload";
+  var RING = 2 * Math.PI * 44;
+
+  function tr(key, vars) {
+    var fn = (typeof window !== "undefined" && window.t) ? window.t : null;
+    return fn ? fn(key, vars) : key;
+  }
+
+  function shaFromVersion(version) {
+    var text = String(version || "");
+    if (text.indexOf(PREFIX) !== 0) return "";
+    var sha = text.slice(PREFIX.length).trim().toLowerCase();
+    return /^[0-9a-f]{7,64}$/.test(sha) ? sha : "";
+  }
+
+  function notesOf(doc) {
+    var list = doc && Array.isArray(doc.changelog) ? doc.changelog : [];
+    var out = [];
+    var seen = {};
+    var i;
+    for (i = 0; i < list.length && out.length < 8; i++) {
+      var text = String(list[i] || "").replace(/\s+/g, " ").trim();
+      if (text.length > 180) text = text.slice(0, 177).trim() + "…";
+      var key = text.toLowerCase();
+      if (!text || seen[key]) continue;
+      seen[key] = 1;
+      out.push(text);
+    }
+    return out;
+  }
+
+  function decide(s, now) {
+    if (!s || !s.pending) return "idle";
+    if (s.phase === "working" || s.phase === "done" || s.phase === "error") return "overlay";
+    if (s.snoozeUntil && now < s.snoozeUntil) return "idle";
+    if (s.forced) return "overlay";
+    if (s.busy) return "pill";
+    return "overlay";
+  }
+
+  function progressRatio(p) {
+    var files = Number(p && p.files) || 0;
+    var totalFiles = Number(p && p.totalFiles) || 0;
+    var bytes = Number(p && p.bytes) || 0;
+    var totalBytes = Number(p && p.totalBytes) || 0;
+    var filePart = totalFiles > 0 ? files / totalFiles : 0;
+    var bytePart = totalBytes > 0 ? Math.min(1, bytes / totalBytes) : filePart;
+    var ratio;
+    if (totalBytes > 0 && totalFiles > 0) ratio = bytePart * 0.85 + filePart * 0.15;
+    else if (totalBytes > 0) ratio = bytePart;
+    else ratio = filePart;
+    if (ratio < 0) return 0;
+    if (ratio > 1) return 1;
+    return ratio;
+  }
+
+  function formatBytes(n) {
+    var value = Math.max(0, Number(n) || 0);
+    if (value < 1024) return String(Math.round(value)) + " B";
+    if (value < 1024 * 1024) {
+      var kb = value / 1024;
+      return (kb < 10 ? kb.toFixed(1) : String(Math.round(kb))) + " KB";
+    }
+    var mb = value / (1024 * 1024);
+    return (mb < 10 ? mb.toFixed(1) : String(Math.round(mb))) + " MB";
+  }
+
+  function fieldSnapshot(elements) {
+    var out = [];
+    var nodes = elements || [];
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (!el) continue;
+      var type = String(el.type || "").toLowerCase();
+      if (type === "password" || type === "hidden") continue;
+      var value = String(el.value || "");
+      if (!value) continue;
+      if (value.length > 20000) value = value.slice(0, 20000);
+      out.push({
+        id: el.id || "",
+        name: el.name || "",
+        field: el.field || "",
+        ce: !!el.ce,
+        value: value
+      });
+    }
+    return out;
+  }
+
+  function restoreFresh(payload, now) {
+    if (!payload || typeof payload !== "object") return false;
+    var at = Number(payload.at) || 0;
+    if (!at || now - at > RESTORE_MS || at - now > 5000) return false;
+    return true;
+  }
+
+  function stepRank(step) {
+    if (step === "download") return 0;
+    if (step === "install") return 1;
+    if (step === "activate") return 2;
+    if (step === "clean") return 3;
+    if (step === "ready") return 4;
+    return -1;
+  }
+
+  var state = {
+    pending: false,
+    phase: "offer",
+    step: "download",
+    files: 0,
+    totalFiles: 0,
+    bytes: 0,
+    totalBytes: 0,
+    short: "",
+    notes: [],
+    snoozeUntil: 0,
+    forced: false,
+    busy: false,
+    currentSha: "",
+    remoteSha: "",
+    reg: null,
+    waiting: null
+  };
+  var started = false;
+  var checking = false;
+  var reloadTimer = 0;
+  var stallTimer = 0;
+  var userScrolled = false;
+  var pendingRestore = null;
+  var dom = null;
+
+  function reducedMotion() {
+    try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+    catch (err) { return false; }
+  }
+
+  function readStore(store, key) {
+    try { return store.getItem(key); } catch (err) { return null; }
+  }
+
+  function writeStore(store, key, value) {
+    try { store.setItem(key, value); } catch (err) { /* private mode keeps the memory copy */ }
+  }
+
+  function loadSnooze() {
+    var raw = readStore(localStorage, SNOOZE_KEY);
+    var until = Number(raw) || 0;
+    state.snoozeUntil = until > Date.now() ? until : 0;
+  }
+
+  function mode() {
+    return decide(state, Date.now());
+  }
+
+  function mediaBusy() {
+    var viewer = document.getElementById("viewer");
+    var videos = document.querySelectorAll("video");
+    var hash = String(location.hash || "");
+    var focused = /^#\/(watch|shorts|tv)(\/|$)/.test(hash);
+    var i;
+    for (i = 0; i < videos.length; i++) {
+      var video = videos[i];
+      if (!video || video.paused || video.ended) continue;
+      if (viewer && !viewer.hidden && viewer.contains(video)) return true;
+      if (focused) return true;
+      if (!video.muted && video.volume > 0) return true;
+      if (document.fullscreenElement && document.fullscreenElement.contains && document.fullscreenElement.contains(video)) return true;
+    }
+    try { if (window.Spaces && window.Spaces.playing && window.Spaces.playing()) return true; } catch (err) { /* the player is optional */ }
+    try { if (window.SIntelMusic && window.SIntelMusic.playing && window.SIntelMusic.playing()) return true; } catch (err) { /* music is optional */ }
+    return false;
+  }
+
+  function typingBusy() {
+    var el = document.activeElement;
+    if (!el || el === document.body || el === document.documentElement) return false;
+    if (el.closest && el.closest("#upd-root")) return false;
+    var tag = el.tagName;
+    if (tag === "TEXTAREA" || el.isContentEditable) return true;
+    if (tag === "INPUT") {
+      var type = String(el.getAttribute("type") || "text").toLowerCase();
+      return type === "text" || type === "search" || type === "email" || type === "url" || type === "password" || type === "tel";
+    }
+    return false;
+  }
+
+  function refreshBusy() {
+    var next = mediaBusy() || typingBusy();
+    if (next === state.busy) return;
+    state.busy = next;
+    paint();
+  }
+
+  function ensure() {
+    if (dom) return dom;
+    var rootEl = document.createElement("div");
+    rootEl.id = "upd-root";
+    rootEl.className = "upd-root";
+    rootEl.hidden = true;
+    rootEl.innerHTML = ''
+      + '<button type="button" id="upd-pill" class="upd-pill" hidden></button>'
+      + '<div id="upd-overlay" class="upd-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="upd-title">'
+      + '<div class="upd-card">'
+      + '<div class="upd-logo-wrap"><svg class="upd-ring" viewBox="0 0 100 100" aria-hidden="true"><circle class="upd-track" cx="50" cy="50" r="44"></circle><circle class="upd-arc" cx="50" cy="50" r="44"></circle></svg><img class="upd-logo" alt="" src="icons/icon-192.png" width="72" height="72"></div>'
+      + '<p class="upd-brand" id="upd-brand"></p>'
+      + '<h1 id="upd-title"></h1>'
+      + '<p class="upd-version" id="upd-version" hidden></p>'
+      + '<div class="upd-progress" id="upd-progress" hidden><div class="upd-bar" aria-hidden="true"><i id="upd-bar"></i></div><p class="upd-count" id="upd-count"></p><ol class="upd-steps" id="upd-steps"></ol></div>'
+      + '<section class="upd-notes" id="upd-notes" hidden><h2 id="upd-notes-title"></h2><ul id="upd-notes-list"></ul></section>'
+      + '<p class="upd-error" id="upd-error" hidden></p>'
+      + '<div class="upd-actions"><button type="button" class="upd-go" id="upd-go"></button><button type="button" class="upd-later" id="upd-later"></button><button type="button" class="upd-later" id="upd-hard" hidden></button></div>'
+      + '</div></div>';
+    document.body.appendChild(rootEl);
+    var steps = rootEl.querySelector("#upd-steps");
+    ["download", "install", "activate", "clean"].forEach(function (name) {
+      var li = document.createElement("li");
+      li.className = "upd-step";
+      li.setAttribute("data-step", name);
+      var mark = document.createElement("span");
+      mark.className = "upd-mark";
+      mark.setAttribute("aria-hidden", "true");
+      var label = document.createElement("span");
+      label.className = "upd-label";
+      li.appendChild(mark);
+      li.appendChild(label);
+      steps.appendChild(li);
+    });
+    rootEl.querySelector("#upd-pill").addEventListener("click", function () {
+      state.forced = true;
+      state.phase = state.phase === "error" ? "error" : "offer";
+      paint();
+    });
+    rootEl.querySelector("#upd-go").addEventListener("click", function () {
+      if (state.phase === "error") applyNow();
+      else if (state.phase !== "working" && state.phase !== "done") applyNow();
+    });
+    rootEl.querySelector("#upd-later").addEventListener("click", snooze);
+    rootEl.querySelector("#upd-hard").addEventListener("click", hardReload);
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || mode() !== "overlay" || state.phase !== "offer") return;
+      event.preventDefault();
+      event.stopPropagation();
+      snooze();
+    }, true);
+    dom = {
+      root: rootEl,
+      pill: rootEl.querySelector("#upd-pill"),
+      overlay: rootEl.querySelector("#upd-overlay"),
+      brand: rootEl.querySelector("#upd-brand"),
+      title: rootEl.querySelector("#upd-title"),
+      version: rootEl.querySelector("#upd-version"),
+      progress: rootEl.querySelector("#upd-progress"),
+      bar: rootEl.querySelector("#upd-bar"),
+      count: rootEl.querySelector("#upd-count"),
+      notes: rootEl.querySelector("#upd-notes"),
+      notesTitle: rootEl.querySelector("#upd-notes-title"),
+      notesList: rootEl.querySelector("#upd-notes-list"),
+      error: rootEl.querySelector("#upd-error"),
+      go: rootEl.querySelector("#upd-go"),
+      later: rootEl.querySelector("#upd-later"),
+      hard: rootEl.querySelector("#upd-hard"),
+      arc: rootEl.querySelector(".upd-arc"),
+      logo: rootEl.querySelector(".upd-logo")
+    };
+    dom.arc.style.strokeDasharray = String(RING);
+    return dom;
+  }
+
+  function stepLabel(name) {
+    if (name === "download") return tr("Downloading");
+    if (name === "install") return tr("Installing");
+    if (name === "activate") return tr("Activating");
+    return tr("Cleaning up");
+  }
+
+  function paint() {
+    if (!document.body) return;
+    var box = ensure();
+    var shown = mode();
+    var reduce = reducedMotion();
+    box.root.hidden = shown === "idle";
+    box.root.classList.toggle("upd-reduce", reduce);
+    box.root.setAttribute("data-phase", state.phase);
+    document.body.classList.toggle("upd-open", shown === "overlay");
+    box.pill.hidden = shown !== "pill";
+    box.overlay.hidden = shown !== "overlay";
+    box.pill.textContent = tr("App update");
+    box.brand.textContent = tr("ViktorychApp");
+    box.logo.alt = tr("ViktorychApp");
+    var title = tr("Update available");
+    if (state.phase === "done") title = tr("You're up to date");
+    else if (state.phase === "error") title = tr("The update didn't finish.");
+    box.title.textContent = title;
+    if (state.short) {
+      box.version.hidden = false;
+      box.version.textContent = tr("Version {version}", { version: state.short });
+    } else box.version.hidden = true;
+    var working = state.phase === "working" || state.phase === "done";
+    box.progress.hidden = !working && state.phase !== "error";
+    var ratio = state.phase === "done" ? 1 : progressRatio(state);
+    if (state.phase === "offer") ratio = 0.18;
+    box.bar.style.width = Math.round(ratio * 100) + "%";
+    box.arc.style.strokeDashoffset = String(RING * (1 - ratio));
+    var files = state.files || 0;
+    var total = state.totalFiles || 0;
+    box.count.textContent = total
+      ? formatBytes(state.bytes) + " · " + tr("{done} of {total} files", { done: String(files), total: String(total) })
+      : formatBytes(state.bytes);
+    var rank = state.phase === "done" ? 4 : stepRank(state.step);
+    var items = box.root.querySelectorAll(".upd-step");
+    var n;
+    for (n = 0; n < items.length; n++) {
+      var item = items[n];
+      var name = item.getAttribute("data-step");
+      item.querySelector(".upd-label").textContent = stepLabel(name);
+      var here = stepRank(name);
+      item.classList.toggle("is-done", rank > here || state.phase === "done");
+      item.classList.toggle("is-now", state.phase === "working" && rank === here);
+    }
+    var showNotes = state.phase === "offer" && state.notes.length > 0;
+    box.notes.hidden = !showNotes;
+    box.notesTitle.textContent = tr("What's new");
+    if (showNotes) {
+      var list = box.notesList;
+      var same = list.childNodes.length === state.notes.length;
+      var k;
+      if (same) {
+        for (k = 0; k < state.notes.length; k++) {
+          if (list.childNodes[k].textContent !== state.notes[k]) { same = false; break; }
+        }
+      }
+      if (!same) {
+        list.textContent = "";
+        for (k = 0; k < state.notes.length; k++) {
+          var li = document.createElement("li");
+          li.textContent = state.notes[k];
+          list.appendChild(li);
+        }
+      }
+    }
+    box.error.hidden = state.phase !== "error";
+    box.error.textContent = tr("The update didn't finish.");
+    var primary = state.phase === "error" ? tr("Retry") : tr("Update now");
+    box.go.hidden = state.phase === "working" || state.phase === "done";
+    box.go.textContent = primary;
+    box.later.hidden = state.phase !== "offer";
+    box.later.textContent = tr("Later");
+    box.hard.hidden = state.phase !== "error";
+    box.hard.textContent = tr("Reload anyway");
+    box.overlay.setAttribute("aria-busy", state.phase === "working" ? "true" : "false");
+    if (shown === "overlay" && !box.go.hidden) {
+      var active = document.activeElement;
+      if (!active || active === box.pill || !box.root.contains(active)) {
+        try { box.go.focus(); } catch (err) { /* the button is still clickable */ }
+      }
+    }
+  }
+
+  function snooze() {
+    state.snoozeUntil = Date.now() + SNOOZE_MS;
+    state.forced = false;
+    if (state.phase !== "error") state.phase = "offer";
+    writeStore(localStorage, SNOOZE_KEY, String(state.snoozeUntil));
+    paint();
+  }
+
+  function offer() {
+    state.pending = true;
+    if (state.phase !== "working" && state.phase !== "done" && state.phase !== "error") state.phase = "offer";
+    paint();
+  }
+
+  function armStall() {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(function () {
+      if (state.phase === "working") {
+        state.phase = "error";
+        paint();
+      }
+    }, 25000);
+  }
+
+  function waitForWorker(reg) {
+    return new Promise(function (resolve) {
+      var startedAt = Date.now();
+      var timer = setInterval(function () {
+        if (!reg) { clearInterval(timer); resolve(null); return; }
+        if (reg.waiting) { clearInterval(timer); resolve(reg.waiting); return; }
+        if (Date.now() - startedAt > 8000) { clearInterval(timer); resolve(reg.waiting || null); }
+      }, 200);
+    });
+  }
+
+  function applyNow() {
+    state.pending = true;
+    state.phase = "working";
+    state.step = "download";
+    state.forced = true;
+    state.files = 0;
+    state.bytes = 0;
+    paint();
+    armStall();
+    var ready = state.reg ? Promise.resolve(state.reg) : navigator.serviceWorker.getRegistration();
+    ready.then(function (reg) {
+      state.reg = reg || null;
+      if (reg && reg.update) return reg.update().catch(function () { return null; }).then(function () { return reg; });
+      return reg;
+    }).then(function (reg) {
+      return waitForWorker(reg);
+    }).then(function (worker) {
+      if (!worker) throw new Error("waiting");
+      state.waiting = worker;
+      worker.postMessage({ type: "apply-update" });
+    }).catch(function () {
+      clearTimeout(stallTimer);
+      state.phase = "error";
+      paint();
+    });
+  }
+
+  function scheduleReload() {
+    if (reloadTimer) return;
+    reloadTimer = setTimeout(function () {
+      captureState();
+      location.reload();
+    }, reducedMotion() ? 350 : 900);
+  }
+
+  function onWorkerMessage(data) {
+    data = data || {};
+    if (data.type === "sw-version" && data.sha) {
+      state.currentSha = String(data.sha).toLowerCase();
+      if (state.remoteSha && state.remoteSha !== state.currentSha) state.pending = true;
+      paint();
+      return;
+    }
+    if (data.type === "reload-when-idle") {
+      offer();
+      return;
+    }
+    if (data.type === "update-ready") {
+      if (data.sha) state.currentSha = String(data.sha).toLowerCase();
+      if (state.phase === "working" || state.phase === "done") {
+        clearTimeout(stallTimer);
+        state.phase = "done";
+        state.step = "ready";
+        state.files = state.totalFiles || state.files;
+        paint();
+        scheduleReload();
+      }
+      return;
+    }
+    if (data.type !== "update-progress") return;
+    if (state.phase !== "working" && state.phase !== "error") return;
+    if (typeof data.files === "number") state.files = data.files;
+    if (typeof data.totalFiles === "number") state.totalFiles = data.totalFiles;
+    if (typeof data.bytes === "number") state.bytes = data.bytes;
+    if (typeof data.totalBytes === "number") state.totalBytes = data.totalBytes;
+    if (data.step === "error") {
+      clearTimeout(stallTimer);
+      state.phase = "error";
+    } else {
+      state.phase = "working";
+      state.step = data.step || state.step;
+      armStall();
+    }
+    paint();
+  }
+
+  function askVersion() {
+    var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!worker) return;
+    try { worker.postMessage({ type: "sw-version" }); } catch (err) { /* the worker is waking up */ }
+  }
+
+  function maybePrime(reg) {
+    if (!reg || (navigator.serviceWorker && navigator.serviceWorker.controller)) return;
+    var worker = reg.waiting || reg.installing;
+    if (!worker) return;
+    try { worker.postMessage({ type: "prime" }); } catch (err) { /* the first visit still loads from the network */ }
+  }
+
+  function track(worker) {
+    if (!worker || worker._updTracked) return;
+    worker._updTracked = true;
+    worker.addEventListener("statechange", function () {
+      if (worker.state !== "installed") return;
+      var controller = navigator.serviceWorker.controller;
+      if (controller && controller !== worker) {
+        state.waiting = worker;
+        state.pending = true;
+        paint();
+      } else if (!controller) maybePrime(state.reg);
+    });
+  }
+
+  function watch(reg) {
+    if (!reg) return;
+    state.reg = reg;
+    if (!reg._updWatch) {
+      reg._updWatch = true;
+      reg.addEventListener("updatefound", function () { track(reg.installing); });
+    }
+    if (reg.installing) track(reg.installing);
+    if (reg.waiting && navigator.serviceWorker.controller) {
+      state.waiting = reg.waiting;
+      state.pending = true;
+    }
+    maybePrime(reg);
+    askVersion();
+    paint();
+  }
+
+  function checkRemote() {
+    if (checking || typeof fetch !== "function") return;
+    checking = true;
+    fetch("version.json?t=" + Date.now(), { cache: "no-store", credentials: "same-origin" }).then(function (res) {
+      if (!res || !res.ok) throw new Error("version");
+      return res.json();
+    }).then(function (doc) {
+      var sha = String(doc && doc.sha || "").toLowerCase();
+      if (!/^[0-9a-f]{7,64}$/.test(sha)) return;
+      state.remoteSha = sha;
+      state.notes = notesOf(doc);
+      state.short = String((doc && doc.short) || sha.slice(0, 7));
+      if (state.currentSha && sha !== state.currentSha) state.pending = true;
+      paint();
+    }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
+      checking = false;
+      if (state.reg && state.reg.update) state.reg.update().catch(function () {});
+    });
+  }
+
+  function controlOf(el) {
+    if (!el || (el.closest && el.closest("#upd-root"))) return null;
+    var tag = el.tagName;
+    var type = String((el.getAttribute && el.getAttribute("type")) || "").toLowerCase();
+    var ce = !!el.isContentEditable;
+    if (tag !== "TEXTAREA" && tag !== "INPUT" && !ce) return null;
+    if (tag === "INPUT" && type && ["text", "search", "url", "email", "tel"].indexOf(type) < 0) return null;
+    return {
+      id: el.id || "",
+      name: (el.getAttribute && el.getAttribute("name")) || "",
+      field: (el.getAttribute && el.getAttribute("data-field")) || "",
+      ce: ce,
+      type: type,
+      value: ce ? String(el.innerText || "") : String(el.value || "")
+    };
+  }
+
+  function captureState() {
+    var nodes = document.querySelectorAll("textarea, input, [contenteditable='true']");
+    var plain = [];
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      var row = controlOf(nodes[i]);
+      if (row) plain.push(row);
+    }
+    var payload = {
+      hash: location.hash || "",
+      y: window.scrollY || document.documentElement.scrollTop || 0,
+      fields: fieldSnapshot(plain),
+      at: Date.now()
+    };
+    var raw = JSON.stringify(payload);
+    writeStore(sessionStorage, RESTORE_KEY, raw);
+    writeStore(localStorage, RESTORE_KEY, raw);
+    writeStore(sessionStorage, RELOAD_KEY, "1");
+    return payload;
+  }
+
+  function readRestore() {
+    var raw = readStore(sessionStorage, RESTORE_KEY) || readStore(localStorage, RESTORE_KEY);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch (err) { return null; }
+  }
+
+  function clearRestore() {
+    try { sessionStorage.removeItem(RESTORE_KEY); } catch (err) { /* already gone */ }
+    try { localStorage.removeItem(RESTORE_KEY); } catch (err) { /* already gone */ }
+  }
+
+  function stripReloadParam() {
+    try {
+      var url = new URL(location.href);
+      if (!url.searchParams.has("vapp")) return;
+      url.searchParams.delete("vapp");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    } catch (err) { /* the extra query expires with the next navigation */ }
+  }
+
+  function restoreRouteEarly() {
+    stripReloadParam();
+    var data = readRestore();
+    if (!restoreFresh(data, Date.now())) {
+      if (data) clearRestore();
+      return;
+    }
+    pendingRestore = data;
+    if (data.hash && data.hash !== location.hash) {
+      try { location.hash = data.hash; } catch (err) { /* the next paint still scrolls */ }
+    }
+  }
+
+  function findField(spec) {
+    if (spec.id) {
+      var byId = document.getElementById(spec.id);
+      if (byId) return byId;
+    }
+    if (spec.field) {
+      var marked = document.querySelectorAll("[data-field]");
+      var i;
+      for (i = 0; i < marked.length; i++) {
+        if (marked[i].getAttribute("data-field") === spec.field) return marked[i];
+      }
+    }
+    if (spec.name && document.getElementsByName) {
+      var named = document.getElementsByName(spec.name);
+      if (named && named[0]) return named[0];
+    }
+    return null;
+  }
+
+  function applyRestore(data) {
+    if (!data) return;
+    if (!userScrolled && typeof data.y === "number") window.scrollTo(0, data.y);
+    var fields = data.fields || [];
+    var i;
+    for (i = 0; i < fields.length; i++) {
+      var spec = fields[i];
+      var el = findField(spec);
+      if (!el) continue;
+      var current = spec.ce ? String(el.innerText || "") : String(el.value || "");
+      if (current) continue;
+      if (spec.ce) el.textContent = spec.value;
+      else el.value = spec.value;
+      try { el.dispatchEvent(new Event("input", { bubbles: true })); } catch (err) { /* the text is still in the field */ }
+    }
+  }
+
+  function hardReload() {
+    captureState();
+    try {
+      var url = new URL(location.href);
+      url.searchParams.set("vapp", String(Date.now()));
+      location.replace(url.toString());
+    } catch (err) {
+      location.reload();
+    }
+  }
+
+  function holdsReload() {
+    return state.phase === "working" || state.phase === "done" || !!reloadTimer;
+  }
+
+  function poke() {
+    if (document.visibilityState === "hidden") return;
+    checkRemote();
+    refreshBusy();
+  }
+
+  function start() {
+    if (started || typeof document === "undefined") return;
+    started = true;
+    restoreRouteEarly();
+    loadSnooze();
+    var saved = pendingRestore;
+    if (saved) {
+      var stops = ["wheel", "touchmove", "keydown"];
+      var stop = function () { userScrolled = true; };
+      stops.forEach(function (name) { window.addEventListener(name, stop, { passive: true, once: true }); });
+      [80, 300, 800, 1500, 2500].forEach(function (delay) {
+        setTimeout(function () { applyRestore(saved); }, delay);
+      });
+      setTimeout(clearRestore, 8000);
+    }
+    document.addEventListener("visibilitychange", poke);
+    document.addEventListener("focusin", refreshBusy);
+    document.addEventListener("focusout", function () { setTimeout(refreshBusy, 180); });
+    document.addEventListener("play", refreshBusy, true);
+    document.addEventListener("pause", refreshBusy, true);
+    document.addEventListener("ended", refreshBusy, true);
+    setInterval(refreshBusy, 1500);
+    setInterval(function () {
+      if (document.visibilityState !== "hidden") checkRemote();
+    }, CHECK_MS);
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.addEventListener("message", function (event) { onWorkerMessage(event.data || {}); });
+    navigator.serviceWorker.addEventListener("controllerchange", askVersion);
+    var attach = function (reg) { if (reg) watch(reg); };
+    navigator.serviceWorker.getRegistration().then(attach).catch(function () {});
+    navigator.serviceWorker.ready.then(attach).catch(function () {});
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", function () { paint(); poke(); });
+    } else {
+      paint();
+      poke();
+    }
+  }
+
+  return {
+    SNOOZE_MS: SNOOZE_MS,
+    CHECK_MS: CHECK_MS,
+    shaFromVersion: shaFromVersion,
+    notesOf: notesOf,
+    decide: decide,
+    progressRatio: progressRatio,
+    formatBytes: formatBytes,
+    fieldSnapshot: fieldSnapshot,
+    restoreFresh: restoreFresh,
+    start: start,
+    offer: offer,
+    watch: watch,
+    poke: poke,
+    holdsReload: holdsReload,
+    onWorkerMessage: onWorkerMessage
+  };
+});
