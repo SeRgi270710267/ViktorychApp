@@ -148,8 +148,9 @@ def owner_token_rejected(token: str, status: int) -> bool:
         return False
     if not using("telegram") or material("telegram") != token:
         return False
-    mark_attention("telegram", "unauthorized" if int(status) == 401 else "forbidden")
-    return True
+    code = "unauthorized" if int(status) == 401 else "forbidden"
+    mark_attention("telegram", code)
+    return code == "unauthorized"
 
 
 def get_bot_tokens() -> list[str]:

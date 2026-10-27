@@ -4,6 +4,8 @@
 (function () {
   var RETURN_KEY = "viktorychapp-return-v1";
   var PENDING_KEY = "viktorychapp-pending-v1";
+  var DELETED_KEY = "viktorychapp-deleted-v1";
+  var deleteState = { phase: "", error: "", step: -1, accountNumber: "", handle: "", busy: false };
   var DATA_KEY = /^(?:feeds|stories|people|suggestions|status|feeds\.config)\.json$|^data\/music\.json$|^(?:live|archive|comments|fallback)\/[A-Za-z0-9._-]{1,120}\.json$|^discord\/(?:index|state)\.json$|^discord\/(?:messages|pins)\/\d{1,22}\.json$|^data\/communities\/(?:index|[a-z0-9_]{2,21})\.json$|^data\/communities\/[a-z0-9_]{2,21}\/\d{1,20}\.json$/;
   var nativeFetch = window.fetch ? window.fetch.bind(window) : null;
   var profiles = {};
@@ -116,10 +118,10 @@
   function blocking() {
     return !!(config().gate && !readSession());
   }
-  function tellSW(on) {
+  function tellSW(on, wipe) {
     if (!navigator.serviceWorker) return;
     var session = on ? readSession() : null;
-    var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "" };
+    var msg = { type: "auth", on: !!on, token: session && session.token ? session.token : "", wipe: wipe || "" };
     try {
       if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage(msg);
     } catch (err) { /* the worker may still be installing */ }
@@ -223,6 +225,9 @@
     var headers = {};
     if (opts.body) headers["content-type"] = "application/json";
     if (opts.token) headers.Authorization = "Bearer " + opts.token;
+    if (opts.headers) {
+      Object.keys(opts.headers).forEach(function (key) { headers[key] = opts.headers[key]; });
+    }
 
     function attempt(endpointIndex) {
       if (endpointIndex >= list.length) {
@@ -265,6 +270,9 @@
     if (code === "invalid_claim") return tr("That claim code is not valid.");
     if (code === "rate_limited") return tr("Too many attempts. Try again later.");
     if (code === "invalid_credentials") return tr("Could not sign in.");
+    if (code === "handle_mismatch") return tr("The handle does not match.");
+    if (code === "owner_protected") return tr("This account cannot be deleted.");
+    if (code === "handle_held") return tr("That handle is not available yet.");
     if (code === "all_endpoints_failed" || code === "not_configured" || code === "unavailable") return tr("Sign-in is temporarily unavailable. Try again in a few minutes.");
     if (code === "invalid_name") return tr("What should we call you?");
     if (code === "invalid_location") return tr("That location is too long.");
@@ -450,9 +458,30 @@
   function legalBody() {
     return '<p class="acct-sub">' + esc(tr("Not affiliated with X.")) + "</p>";
   }
+  function deletedFlag() {
+    try { return sessionStorage.getItem(DELETED_KEY) === "1"; } catch (err) { return false; }
+  }
+  function showDeleted() {
+    var root = layer();
+    if (!root) return false;
+    document.documentElement.setAttribute("data-wall", "1");
+    try {
+      if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+    } catch (err) { /* the wall still covers the app */ }
+    root.innerHTML = '<div class="x-shell"><div class="x-land"><div class="x-land-copy"><h1>' + esc(tr("Your account was deleted")) + '</h1><p class="acct-sub">' + esc(tr("This account and the data tied to it are gone from this device.")) + '</p><button class="acct-fill" type="button" data-acct="deleted-done">' + esc(tr("Done")) + "</button></div></div></div>";
+    return true;
+  }
+  function showDeletedIfNeeded() {
+    if (!deletedFlag() || readSession()) return false;
+    return showDeleted();
+  }
   function paint() {
     var root = layer();
     if (!root) return;
+    if (deletedFlag() && !readSession()) {
+      showDeleted();
+      return;
+    }
     var html = "";
     if (blocking()) html += landing();
     if (view === "signup") html += modal(tr("Create your account"), signupBody());
@@ -1015,7 +1044,7 @@
     var session = readSession();
     var token = session && session.token;
     removeStored("account-v1");
-    tellSW(false);
+    tellSW(false, "signout");
     var done = function () { location.replace(location.pathname + location.search); location.reload(); };
     if (!token || !hasApi()) { done(); return; }
     api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
@@ -2004,6 +2033,167 @@
       (backupChannelNote ? '<p class="phandle">' + esc(backupChannelNote) + "</p>" : "") +
       "</div>";
   }
+  function isOwnerAccount(account) {
+    if (!account) return false;
+    if (account.owner) return true;
+    var handle = String(account.handle || "");
+    var id = String(account.publicId || "");
+    if (id === "emergency_owner" || handle === "SeRgi270710267" || id === "SeRgi270710267") return true;
+    var checked = window.HandleSkeleton && window.HandleSkeleton.inspectHandle ? window.HandleSkeleton.inspectHandle(handle) : null;
+    return !!(checked && checked.owner);
+  }
+  function deleteEntryHtml(account) {
+    if (isOwnerAccount(account)) return "";
+    return '<h2>' + esc(tr("Delete account")) + '</h2><p class="set-sub">' + esc(tr("Permanently delete this account and the data tied to it.")) + '</p><button class="outline acct-danger" type="button" data-acct="open-delete">' + esc(tr("Delete account")) + "</button>";
+  }
+  function deleteReady() {
+    var session = readSession();
+    var account = session && session.account;
+    if (!account || isOwnerAccount(account)) return false;
+    var typed = String(deleteState.handle || "").trim().replace(/^@/, "");
+    var digits = String(deleteState.accountNumber || "").replace(/\D/g, "");
+    return typed === String(account.handle || "") && /^\d{16}$/.test(digits);
+  }
+  function deleteAccountHtml() {
+    var session = readSession();
+    if (!session || !session.account) {
+      return '<div class="set-block acct-settings"><p class="phandle">' + esc(tr("Not signed in")) + "</p></div>";
+    }
+    if (isOwnerAccount(session.account)) {
+      return '<div class="set-block acct-settings"><p class="phandle">' + esc(tr("This account cannot be deleted.")) + "</p></div>";
+    }
+    if (deleteState.phase === "progress") {
+      var labels = [tr("Checking your account"), tr("Removing the account"), tr("Removing saved files"), tr("Updating the public copy"), tr("Clearing this device")];
+      var items = labels.map(function (label, index) {
+        return '<li class="' + (index <= deleteState.step ? "on" : "") + '">' + esc(label) + "</li>";
+      }).join("");
+      return '<div class="set-block acct-settings"><h2>' + esc(tr("Deleting your account")) + '</h2><ul class="acct-progress" aria-live="polite">' + items + "</ul></div>";
+    }
+    var ready = deleteReady();
+    return '<div class="set-block acct-settings" data-delete-form><p class="set-sub">' + esc(tr("This permanently deletes this account. Your profile, photos, sessions, follows, followers, friends, notification tabs, feed settings, groups, drafts, likes, bookmarks, watch history, community posts, vault, drive files, linked accounts, and uploads are removed. The handle can stay reserved so nobody else can take it. This cannot be undone.")) + '</p><div class="acct-field"><input id="acct-delete-number" name="accountNumber" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" placeholder=" " data-max="16" value="' + esc(grouped(deleteState.accountNumber || "")) + '"><label for="acct-delete-number">' + esc(tr("Enter your account number again.")) + '</label></div><div class="acct-field"><input id="acct-delete-handle" name="confirmHandle" type="text" autocomplete="off" spellcheck="false" maxlength="32" placeholder=" " value="' + esc(deleteState.handle || "") + '"><label for="acct-delete-handle">' + esc(tr("Confirm your handle")) + '</label></div><p class="acct-error">' + esc(deleteState.error || "") + '</p><button class="acct-next acct-danger" type="button" data-acct="delete-go"' + (ready && !deleteState.busy ? "" : " disabled") + ">" + esc(tr("Delete account")) + "</button></div>";
+  }
+  function wipeDevice() {
+    var prefixes = ["viktorychapp-", "superintelapp-", "rss-feeds-", "va_cm_"];
+    try {
+      var keys = [];
+      for (var i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i));
+      keys.forEach(function (key) {
+        if (!key) return;
+        for (var p = 0; p < prefixes.length; p++) {
+          if (key.indexOf(prefixes[p]) === 0) {
+            localStorage.removeItem(key);
+            return;
+          }
+        }
+      });
+      localStorage.removeItem("yt-ambient-mode");
+      localStorage.removeItem("viktorych_shorts_locked");
+    } catch (err) { /* private mode */ }
+    try {
+      sessionStorage.clear();
+      sessionStorage.setItem(DELETED_KEY, "1");
+    } catch (err) { /* the screen still replaces the page */ }
+    var databases = ["superintel-history", "viktorych-drive", "viktorychapp-live", "superintelapp-live", "sintel-music", "superintelapp-sw", "viktorych-discord"];
+    if (window.indexedDB && indexedDB.deleteDatabase) {
+      databases.forEach(function (name) {
+        try { indexedDB.deleteDatabase(name); } catch (err) { /* already gone */ }
+      });
+    }
+    try { window.dispatchEvent(new Event("viktorych-account-deleted")); } catch (err) { /* storage.js clears the same caches */ }
+    var msg = { type: "account-deleted" };
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage(msg);
+    } catch (err) { /* the worker may still be installing */ }
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then(function (reg) {
+        if (reg.active) reg.active.postMessage(msg);
+      }).catch(function () {});
+    }
+    tellSW(false, "signout");
+  }
+  function deletePause(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+  function deleteError(code) {
+    if (code === "invalid_credentials") return tr("The account number does not match.");
+    if (code === "handle_mismatch") return tr("The handle does not match.");
+    if (code === "owner_protected") return tr("This account cannot be deleted.");
+    if (code === "rate_limited") return tr("Too many attempts. Try again later.");
+    return tr("Deletion did not finish. Try again.");
+  }
+  function deletionAccepted(res) {
+    if (!res || res.status !== 200 || !res.ok) return false;
+    if (res.deletion === "complete") return true;
+    var steps = res.steps || {};
+    return res.deletion === "pending" && !!steps.database && !!steps.sessions;
+  }
+  function showDeleteStep(step) {
+    deleteState.phase = "progress";
+    deleteState.step = step;
+    if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+  }
+  function finishDelete(res) {
+    var failed = !res || res.status === 400 || res.status === 401 || res.status === 403 || res.status === 415 || res.status === 429 || res.status === 503 || !res.ok;
+    if (failed) {
+      deleteState.busy = false;
+      deleteState.phase = "";
+      deleteState.error = deleteError(res && res.error);
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      return Promise.resolve();
+    }
+    var next = Promise.resolve(res);
+    if (res.deletion === "pending" && res.resumeToken && !(res.steps && res.steps.database)) {
+      next = api("/v1/account/delete", {
+        method: "POST",
+        headers: { "X-Viktorych-Intent": "account-delete" },
+        body: { resumeToken: res.resumeToken }
+      });
+    }
+    return next.then(function (done) {
+      if (!deletionAccepted(done)) {
+        deleteState.busy = false;
+        deleteState.phase = "";
+        deleteState.error = tr("Deletion did not finish. Try again.");
+        if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+        return;
+      }
+      return deletePause(40).then(function () { showDeleteStep(1); return deletePause(40); })
+        .then(function () { showDeleteStep(2); return deletePause(40); })
+        .then(function () { showDeleteStep(3); return deletePause(40); })
+        .then(function () { showDeleteStep(4); return deletePause(40); })
+        .then(function () {
+          wipeDevice();
+          showDeleted();
+        });
+    });
+  }
+  function doDelete() {
+    if (deleteState.busy) return;
+    var session = readSession();
+    if (!session || !session.account || !session.token || isOwnerAccount(session.account)) return;
+    if (!deleteReady()) {
+      deleteState.error = tr("The handle does not match.");
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+      return;
+    }
+    deleteState.busy = true;
+    deleteState.error = "";
+    showDeleteStep(0);
+    api("/v1/account/delete", {
+      method: "POST",
+      token: session.token,
+      headers: { "X-Viktorych-Intent": "account-delete" },
+      body: {
+        handle: session.account.handle,
+        accountNumber: String(deleteState.accountNumber || "").replace(/\D/g, "")
+      }
+    }).then(finishDelete, function () {
+      deleteState.busy = false;
+      deleteState.phase = "";
+      deleteState.error = tr("Deletion did not finish. Try again.");
+      if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
+    });
+  }
   function settingsHtml() {
     var session = readSession();
     if (!session || !session.account) {
@@ -2027,7 +2217,7 @@
       health = healthHtml() + channelsHtml();
     }
     return '<div class="set-block acct-settings"><h2>' + esc(tr("Your account")) + "</h2><p class=\"phandle\">@" + esc(account.handle) + "</p><p class=\"phandle\">" + esc(tr("Account ID")) + " " + esc(grouped(account.publicId)) + '</p><button class="outline" type="button" data-acct="edit">' + esc(tr("Edit profile")) + '</button><h2>' + esc(tr("Hide my profile picture")) + '</h2><p class="set-sub">' + esc(tr("Other people see this instead of your photo.")) + '</p><div class="theme-row" role="group" aria-label="' + esc(tr("Hide my profile picture")) + '">' + hideBtn("", tr("Show my picture")) + hideBtn("default", tr("Default")) + hideBtn("none", tr("None")) + '</div><h2>' + esc(tr("Private followers and following")) + '</h2><p class="set-sub">' + esc(tr("Keep your followers and following list private. Only you will be able to see who you follow and who follows you.")) + '</p><button class="tab-switch' + (account.privateFollows ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.privateFollows ? "true" : "false") + '" data-acct="toggle-private-follows"><span>' + esc(tr("Keep lists private")) + '</span><i></i></button>' +
-      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + '</button><button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
+      '<h2>' + esc(tr("Profile-less account")) + '</h2><p class="set-sub">' + esc(tr("No public profile. Browse and comment anonymously.")) + '</p><button class="tab-switch' + (account.profileLess ? " on" : "") + '" type="button" role="switch" aria-checked="' + (account.profileLess ? "true" : "false") + '" data-acct="toggle-profileless"><span>' + esc(tr("Profile-less")) + '</span><i></i></button>' + (function () { if (!federationState.loaded && !federationState.loading) loadFederationSettings(); return '<h2>' + esc(tr("Federation (Fediverse & Nostr)")) + '</h2><p class="set-sub">' + esc(tr("Allow Mastodon, Fediverse, and Nostr to discover and follow your internal account. Default is off.")) + '</p><button class="tab-switch' + (federationState.enabled_ap ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_ap ? "true" : "false") + '" data-acct="toggle-fed-ap"><span>' + esc(tr("Fediverse (ActivityPub)")) + (federationState.enabled_ap && federationState.ap_handle ? " (" + esc(federationState.ap_handle) + ")" : "") + '</span><i></i></button><button class="tab-switch' + (federationState.enabled_nostr ? " on" : "") + '" type="button" role="switch" aria-checked="' + (federationState.enabled_nostr ? "true" : "false") + '" data-acct="toggle-fed-nostr"><span>' + esc(tr("Nostr (NIP-05)")) + (federationState.enabled_nostr && federationState.nostr_nip05 ? " (" + esc(federationState.nostr_nip05) + ")" : "") + '</span><i></i></button>'; })() + '<h2>' + esc(tr("Linked social accounts")) + '</h2><p class="set-sub">' + esc(tr("Link your X, Telegram, Instagram, and YouTube accounts so their posts appear on your profile. Requires identity verification.")) + '</p>' + identitiesSettingsHtml(account) + '<h2>' + esc(tr("Device sync")) + '</h2><p class="set-sub">' + esc(tr("Transfer your session to another browser or device.")) + '</p><button class="outline" type="button" data-acct="copy-session">' + esc(tr("Copy session code")) + "</button>" + deleteEntryHtml(account) + '<button class="outline" type="button" data-acct="logout">' + esc(tr("Log out")) + '</button><button class="outline" type="button" data-acct="logout-all">' + esc(tr("Log out of all devices")) + "</button></div>" + health;
   }
   function onClick(event) {
     var friendSub = event.target && event.target.closest ? event.target.closest("[data-friend-sub]") : null;
@@ -2234,6 +2424,17 @@
     else if (act === "hide-avatar") hideAvatar(acct.dataset.mode || "");
     else if (act === "crop-apply") applyCrop();
     else if (act === "logout") logout(false);
+    else if (act === "open-delete") {
+      deleteState = { phase: "", error: "", step: -1, accountNumber: "", handle: "", busy: false };
+      location.hash = "#/settings/delete-account";
+    }
+    else if (act === "delete-go") doDelete();
+    else if (act === "deleted-done") {
+      try { sessionStorage.removeItem(DELETED_KEY); } catch (err) { /* the next load shows sign-in */ }
+      document.documentElement.removeAttribute("data-wall");
+      location.replace(location.pathname + location.search);
+      location.reload();
+    }
     else if (act === "add-channel") addBackupChannel();
     else if (act === "remove-channel") removeBackupChannel(acct.dataset.index);
     else if (act === "logout-all") logout(true);
@@ -2384,6 +2585,21 @@
   document.addEventListener("click", onClick, true);
   document.addEventListener("input", function (event) {
     var el = event.target;
+    if (el && el.closest && el.closest("[data-delete-form]")) {
+      if (el.name === "accountNumber") {
+        var digits = String(el.value || "").replace(/\D/g, "").slice(0, 16);
+        el.value = grouped(digits);
+        deleteState.accountNumber = digits;
+      } else if (el.name === "confirmHandle") {
+        deleteState.handle = el.value;
+      }
+      deleteState.error = "";
+      var go = document.querySelector('[data-delete-form] [data-acct="delete-go"]');
+      if (go) go.disabled = !deleteReady() || deleteState.busy;
+      var err = el.closest("[data-delete-form]").querySelector(".acct-error");
+      if (err) err.textContent = "";
+      return;
+    }
     if (el && (el.dataset.friendsSearch || el.classList.contains("friends-search-input"))) {
       friendsSearchQuery = el.value;
       if (window.ViktorychAccounts && window.ViktorychAccounts.requestRender) window.ViktorychAccounts.requestRender();
@@ -2465,6 +2681,10 @@
     }
   }, true);
   window.addEventListener("hashchange", function () {
+    if (deletedFlag() && !readSession()) {
+      showDeleted();
+      return;
+    }
     if (checkUrlSession()) return;
     if (!blocking()) return;
     var hash = location.hash || "";
@@ -2519,6 +2739,8 @@
     pillInner: pillInner,
     drawerHead: drawerHead,
     settingsHtml: settingsHtml,
+    deleteAccountHtml: deleteAccountHtml,
+    showDeletedIfNeeded: showDeletedIfNeeded,
     onLocalChange: onLocalChange,
     onHistoryReady: onHistoryReady,
     requestRender: null,

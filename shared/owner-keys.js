@@ -27,7 +27,27 @@ const ERRORS = {
   expired: true,
   unreachable: true,
   unreadable: true,
-  bad_paste: true
+  bad_paste: true,
+  logged_out: true,
+  session_invalid: true,
+  auth_required: true,
+  rate_limit: true
+};
+
+const ADVANCE = {
+  unauthorized: true,
+  expired: true,
+  unreadable: true,
+  logged_out: true,
+  session_invalid: true,
+  auth_required: true
+};
+
+const HOLD = {
+  captcha: true,
+  challenge: true,
+  forbidden: true,
+  rate_limit: true
 };
 
 function slotById(id) {
@@ -78,8 +98,10 @@ function b64ToBytes(text) {
 function attentionReason(status, body) {
   const code = Number(status) || 0;
   const text = String(body || "").slice(0, 20000).toLowerCase();
+  if (code === 429 || text.indexOf("too many requests") >= 0 || text.indexOf("rate limit") >= 0) return "rate_limit";
   if (text.indexOf("captcha") >= 0) return "captcha";
   if (text.indexOf("cf-challenge") >= 0 || text.indexOf("just a moment") >= 0 || text.indexOf("attention required") >= 0 || text.indexOf("verify you are human") >= 0 || text.indexOf("challenge-platform") >= 0 || text.indexOf("captcha-verify") >= 0) return "challenge";
+  if (text.indexOf("logged out") >= 0 || text.indexOf("not logged in") >= 0 || text.indexOf("login required") >= 0 || text.indexOf("auth required") >= 0 || text.indexOf("authentication required") >= 0 || text.indexOf("session invalid") >= 0 || text.indexOf("invalid session") >= 0 || text.indexOf("session expired") >= 0) return "session_invalid";
   if (code === 401) return "unauthorized";
   if (code === 403) return "forbidden";
   return "";
@@ -87,7 +109,9 @@ function attentionReason(status, body) {
 
 function decideAttempt(status, body, usedKey) {
   const reason = attentionReason(status, body);
-  if (usedKey && reason) return { action: "fallback", reason: reason };
+  if (!usedKey || !reason) return { action: "keep", reason: "" };
+  if (ADVANCE[reason]) return { action: "advance", reason: reason };
+  if (HOLD[reason]) return { action: "hold", reason: reason };
   return { action: "keep", reason: "" };
 }
 
@@ -262,6 +286,8 @@ const api = {
   sanitizeError: sanitizeError,
   attentionReason: attentionReason,
   decideAttempt: decideAttempt,
+  ADVANCE: ADVANCE,
+  HOLD: HOLD,
   expiryState: expiryState,
   parseMaterial: parseMaterial,
   encryptMaterial: encryptMaterial,
@@ -276,6 +302,8 @@ export {
   sanitizeError,
   attentionReason,
   decideAttempt,
+  ADVANCE,
+  HOLD,
   expiryState,
   parseMaterial,
   encryptMaterial,

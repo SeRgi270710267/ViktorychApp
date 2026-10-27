@@ -16,7 +16,8 @@ import { admitRecord, fresh, needsUpload, shouldRememberLive, uploaderStale, wat
 import { mediaMime, streamFresh, shouldSniffMedia, livePartPlayable, stitchPlaylists, TG_DIRECT_MAX } from "../../shared/live-playback.js";
 import { thumbObjectKey } from "../../shared/live-preview.js";
 import { b2Configured, b2GetThumb } from "./b2-thumb.js";
-import { handleOwnerKeys, KEYS_SCHEMA } from "./owner-keys.js";
+import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
+import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
 
 const encoder = new TextEncoder();
@@ -69,7 +70,7 @@ function withCors(request, env, response) {
   const headers = new Headers(response.headers);
   headers.set("access-control-allow-origin", origin);
   headers.set("vary", "Origin");
-  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match");
+  headers.set("access-control-allow-headers", "Content-Type, Authorization, Range, X-Feed-Refresh, If-None-Match, X-Viktorych-Intent");
   headers.set("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type, ETag");
   headers.set("access-control-allow-methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS");
   headers.set("access-control-max-age", "86400");
@@ -170,7 +171,7 @@ function ensureSchema(env) {
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friend_requests_recv ON account_friend_requests(receiver_id, created_at DESC)"),
       env.DB.prepare("CREATE TABLE IF NOT EXISTS account_friends (user_id TEXT NOT NULL, friend_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, friend_id))"),
       env.DB.prepare("CREATE INDEX IF NOT EXISTS account_friends_user ON account_friends(user_id, created_at DESC)")
-    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).catch((err) => {
+    ].concat(DRIVE_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(COMMUNITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(FEDERATION_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(IDENTITY_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(VAULT_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(KEYS_SCHEMA.map((sql) => env.DB.prepare(sql))).concat(DELETION_SCHEMA.map((sql) => env.DB.prepare(sql)))).then(() => addProfileColumns(env)).then(() => migrateProfileMedia(env)).then(() => migrateOwnerKeys(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -457,6 +458,19 @@ async function sessionAccount(env, request) {
   return row || null;
 }
 
+async function verifyAccountNumber(env, row, accountNumber) {
+  const digits = String(accountNumber || "").replace(/\D/g, "");
+  const rounds = iterationsOf(env);
+  const dummySalt = new Uint8Array(16);
+  if (!/^\d{16}$/.test(digits)) {
+    await slowHash("0000000000000000", dummySalt, rounds);
+    return false;
+  }
+  const salt = row && row.salt ? b64ToBytes(row.salt) : dummySalt;
+  const hash = await slowHash(digits, salt, rounds);
+  return !!(row && timingEqual(hash, row.number_hash));
+}
+
 async function mintSession(env, publicId) {
   const token = "va1." + b64url(crypto.getRandomValues(new Uint8Array(32)));
   const hash = await sha256Hex(token);
@@ -565,6 +579,7 @@ async function handleSignup(request, env) {
   }
   const clash = await env.DB.prepare("SELECT public_id FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
   if (clash) return json(409, { error: "handle_taken" });
+  if (await handleHeld(env, checked.skeleton)) return json(409, { error: "handle_held" });
   const prior = await env.DB.prepare("SELECT hits, reset_at FROM rate_limits WHERE bucket = ?").bind("su-ok:" + ip).first();
   if (prior && Number(prior.reset_at) > Date.now() && Number(prior.hits) >= 4) {
     return limited({ retry: Math.max(1, Math.ceil((Number(prior.reset_at) - Date.now()) / 1000)) });
@@ -624,6 +639,7 @@ async function handleLogin(request, env) {
     }
     return json(401, { error: "invalid_credentials" });
   }
+  if (await blockDeletedLogin(env, row.public_id)) return json(410, { error: "account_deleted" });
   const token = await mintSession(env, row.public_id);
   return json(200, { token, account: await presentAccount(env, request, row, true) });
 }
@@ -1823,6 +1839,7 @@ async function handleHandle(env, url) {
   if (!checked.ok) return json(200, { ok: false, error: checked.error === "reserved" ? "handle_reserved" : "invalid_handle" });
   const clash = await env.DB.prepare("SELECT public_id FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
   if (clash) return json(200, { ok: false, error: "handle_taken" });
+  if (await handleHeld(env, checked.skeleton)) return json(200, { ok: false, error: "handle_held" });
   return json(200, { ok: true, owner: !!checked.owner });
 }
 
@@ -4341,6 +4358,15 @@ async function route(request, env, ctx) {
   if (ownerLive && request.method === "GET") return handleOwnerLive(request, env, ownerLive[1]);
   if (path === "/v1/signup" && request.method === "POST") return handleSignup(request, env);
   if (path === "/v1/login" && request.method === "POST") return handleLogin(request, env);
+  if (path === "/v1/account/delete" && request.method === "POST") {
+    return handleAccountDelete(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });
+  }
+  if (path === "/v1/account/reauth" && request.method === "POST") {
+    return handleAccountReauth(request, env, { json, readJson, rateHit, limited, sessionAccount, allowedOrigins, verifyAccountNumber });
+  }
+  if (path === "/v1/account/deletions" && request.method === "GET") {
+    return handleDeletionList(request, env, { json, rateHit, limited });
+  }
   if (path === "/v1/logout" && request.method === "POST") return handleLogout(request, env, false);
   if (path === "/v1/logout-all" && request.method === "POST") return handleLogout(request, env, true);
   if (path === "/v1/session" && request.method === "GET") return handleSession(request, env);
@@ -4405,7 +4431,7 @@ export default {
   },
   async scheduled(event, env, ctx) {
     const at = Number(event && event.scheduledTime) || Date.now();
-    const jobs = [watchTikTokLive(env, at)];
+    const jobs = [watchTikTokLive(env, at), resumeAccountDeletions(env)];
     // The cron runs every minute for TikTok. The Discord mirror keeps its
     // fifteen minute rhythm.
     if (new Date(at).getUTCMinutes() % 15 === 0) jobs.push(maybeDispatchDiscord(env));
