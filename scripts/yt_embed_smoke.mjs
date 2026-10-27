@@ -1,8 +1,12 @@
 #!/usr/bin/env node
-/* Muted YouTube embed smoke. Confirms the official player reaches
-   ready and playing on a desktop viewport and a phone viewport, then
-   confirms a failed direct file mounts that same player.
-   Records player states only. Does not read or print titles. */
+/* Muted YouTube embed smoke. The official player must report ready
+   on a desktop viewport and a phone viewport, with the iframe referrer
+   policy set before src, and with no request to /v1/yt/.
+   Playing (state 1) is required when YouTube allows the embed.
+   Error 100, 101, or 150 is a refusal from YouTube. The test then
+   requires the original watch link and does not try to get past it.
+   A missing direct file must mount that same player before the check.
+   Records player states and error codes only. Does not read titles. */
 import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { mkdtempSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -25,7 +29,9 @@ window.__ready = false;
 window.__playing = false;
 window.__fileFailed = false;
 window.__states = [];
+window.__errors = [];
 window.__policy = "";
+window.__fallback = "";
 var ID = ${JSON.stringify(VIDEO_ID)};
 var E = window.ViktorychEmbed;
 function mount(url) {
@@ -54,6 +60,16 @@ window.addEventListener("message", function (event) {
   }
   if (!data || typeof data !== "object") return;
   if (data.event === "onReady") window.__ready = true;
+  if (data.event === "onError") {
+    var code = data.info;
+    if (code && typeof code === "object") code = code.errorCode || code.code;
+    var num = Number(code);
+    if (isFinite(num)) window.__errors.push(num);
+    if (num === 100 || num === 101 || num === 150) {
+      var refused = E.nextAfterDirect({ code: num }, ID, { preview: true, origin: location.origin });
+      window.__fallback = refused && refused.kind ? refused.kind : "";
+    }
+  }
   var state = null;
   if (data.event === "onStateChange") state = data.info;
   else if (data.info && typeof data.info === "object" && data.info.playerState != null) state = data.info.playerState;
@@ -204,15 +220,18 @@ async function launch(width, height) {
     },
     async status() {
       const info = await send("Runtime.evaluate", {
-        expression: "({ ready: !!window.__ready, playing: !!window.__playing, fileFailed: !!window.__fileFailed, policy: window.__policy || '', states: (window.__states || []).slice(-8), helper: !!window.ViktorychEmbed })",
+        expression: "({ ready: !!window.__ready, playing: !!window.__playing, fileFailed: !!window.__fileFailed, policy: window.__policy || '', states: (window.__states || []).slice(-8), errors: (window.__errors || []).slice(-4), fallback: window.__fallback || '', relay: performance.getEntriesByType('resource').some(function (row) { return String(row.name || '').indexOf('/v1/yt/') >= 0; }), helper: !!window.ViktorychEmbed })",
         returnByValue: true
       });
       return info.result && info.result.value ? info.result.value : {};
     },
     async close() {
       try { ws.close(); } catch (err) { /* already closed */ }
-      chrome.kill();
-      rmSync(dir, { recursive: true, force: true });
+      try { chrome.kill(); } catch (err) { /* already closed */ }
+      await sleep(300);
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+      } catch (err) { /* profile files can linger after Chrome exits */ }
     }
   };
 }
@@ -231,19 +250,28 @@ async function waitUntil(session, label, pred, ms) {
     fileFailed: !!last.fileFailed,
     policy: last.policy || "",
     states: last.states || [],
+    errors: last.errors || [],
+    fallback: last.fallback || "",
     helper: !!last.helper
   }));
+}
+
+function accepted(row, needFile) {
+  if (!row.helper || !row.ready || row.policy !== "strict-origin-when-cross-origin" || row.relay) return false;
+  if (needFile && !row.fileFailed) return false;
+  if (row.playing) return true;
+  const errors = row.errors || [];
+  const refused = errors.indexOf(150) >= 0 || errors.indexOf(101) >= 0 || errors.indexOf(100) >= 0;
+  return refused && row.fallback === "link";
 }
 
 async function playCase(origin, path, width, height, label) {
   const session = await launch(width, height);
   try {
     await session.open(origin + path);
-    const result = await waitUntil(session, label, (row) => row.ready && row.playing, 45000);
-    if (result.policy !== "strict-origin-when-cross-origin") {
-      throw new Error(label + " referrer policy was " + result.policy);
-    }
-    console.log(label + " ready+playing states=" + (result.states || []).join(","));
+    const result = await waitUntil(session, label, (row) => accepted(row, false), 45000);
+    const outcome = result.playing ? "playing" : "refused";
+    console.log(label + " " + outcome + " states=" + (result.states || []).join(",") + " errors=" + (result.errors || []).join(","));
   } finally {
     await session.close();
   }
@@ -257,8 +285,9 @@ try {
   const session = await launch(1366, 768);
   try {
     await session.open(served.origin + "/fallback.html");
-    const result = await waitUntil(session, "fallback", (row) => row.fileFailed && row.ready && row.playing, 45000);
-    console.log("fallback file-error then ready+playing states=" + (result.states || []).join(","));
+    const result = await waitUntil(session, "fallback", (row) => accepted(row, true), 45000);
+    const outcome = result.playing ? "playing" : "refused";
+    console.log("fallback file-error then " + outcome + " states=" + (result.states || []).join(",") + " errors=" + (result.errors || []).join(","));
   } finally {
     await session.close();
   }
