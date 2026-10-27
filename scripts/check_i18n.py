@@ -27,11 +27,13 @@ UI_FILES = (
     "index.html",
     "404.html",
     "accounts.js",
+    "owner-keys.js",
     "shorts.js",
     "drive.js",
     "games.js",
     "communities.js",
     "yt-player.js",
+    "update.js",
     "scores.js",
     "weather.js",
 )

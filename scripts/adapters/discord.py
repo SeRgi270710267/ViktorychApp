@@ -1562,6 +1562,17 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
     if user_token is None:
         user_token = os.environ.get("DISCORD_USER_TOKEN") or ""
     user_token = user_token.strip()
+    owned = ""
+    try:
+        from owner_keys import blocked, material
+        if not blocked("discord"):
+            owned = material("discord")
+    except Exception:
+        owned = ""
+    if owned.startswith("Bot "):
+        token = owned[4:].strip() or token
+    elif owned:
+        user_token = owned
     secrets = [item for item in (token, user_token) if item]
     needs_user = any(server["auth"] == "user" for server in servers)
     if fetch_published is None and remote:
@@ -1761,6 +1772,13 @@ def merge_discord(doc: dict, config: dict, root: Path, previous_posts=None, *, t
             )
     except DiscordStop as stopped:
         print("[discord] " + stopped.text)
+        if owned and stopped.reason in ("unauthorized", "forbidden", "captcha", "verification"):
+            try:
+                from owner_keys import mark_attention
+                reason = "captcha" if stopped.reason in ("captcha", "verification") else ("forbidden" if stopped.reason == "forbidden" else "unauthorized")
+                mark_attention("discord", reason)
+            except Exception:
+                pass
         _note_health(doc, False, stopped.text, now)
         _write_paused_index(root, stopped, index_servers, servers, secrets, now)
         _apply_posts(doc, all_posts, previous_posts or [], feed_ids, cap)

@@ -987,7 +987,11 @@ def publish(
     if vk_totp is None:
         vk_totp = os.environ.get("VK_TOTP_SECRET") or ""
     if vk_session is None:
-        vk_session = os.environ.get("VK_SESSION") or ""
+        try:
+            from owner_keys import credential
+            vk_session = credential("vk", "VK_SESSION")
+        except Exception:
+            vk_session = os.environ.get("VK_SESSION") or ""
     if vk_session_key is None:
         vk_session_key = os.environ.get("VK_SESSION_KEY") or ""
     if vk_session_file is None:

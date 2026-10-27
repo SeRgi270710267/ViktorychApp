@@ -369,7 +369,11 @@ def fetch_instagram(post: dict):
                 count, count_source = got, "viewer:" + host
             if replies:
                 return replies, "viewer:" + host, got if got is not None else count
-    cookie = os.environ.get("INSTAGRAM_COOKIE") or ""
+    try:
+        from owner_keys import credential
+        cookie = credential("instagram", "INSTAGRAM_COOKIE")
+    except Exception:
+        cookie = os.environ.get("INSTAGRAM_COOKIE") or ""
     if cookie:
         status_id = str(post.get("statusId") or post.get("id") or "")
         header = cookie if "sessionid=" in cookie else f"sessionid={cookie}"
@@ -428,7 +432,11 @@ def fetch_threads(post: dict):
     if rss:
         replies, source = rss
         return replies, source, count
-    cookie = os.environ.get("THREADS_COOKIE") or ""
+    try:
+        from owner_keys import credential
+        cookie = credential("threads", "THREADS_COOKIE")
+    except Exception:
+        cookie = os.environ.get("THREADS_COOKIE") or ""
     if cookie and code:
         header = cookie if "=" in cookie else f"sessionid={cookie}"
         url = post.get("url") or f"https://www.threads.com/@{handle}/post/{code}"
@@ -667,10 +675,20 @@ def refresh(posts: list, use_fixtures: bool, fresh_ids: set | None = None) -> No
         elif count is not None:
             print(f"[replies] {platform}:{status_id} count only via {source}")
     if missed["instagram"]:
-        extra = "" if os.environ.get("INSTAGRAM_COOKIE") else " INSTAGRAM_COOKIE is not set."
+        try:
+            from owner_keys import credential as owner_credential
+            ig_set = bool(owner_credential("instagram", "INSTAGRAM_COOKIE"))
+        except Exception:
+            ig_set = bool(os.environ.get("INSTAGRAM_COOKIE"))
+        extra = "" if ig_set else " INSTAGRAM_COOKIE is not set."
         print(f"[replies] instagram: {missed['instagram']} posts had no public comments.{extra}", file=sys.stderr)
     if missed["threads"]:
-        extra = "" if os.environ.get("THREADS_COOKIE") else " THREADS_COOKIE is not set."
+        try:
+            from owner_keys import credential as owner_credential
+            threads_set = bool(owner_credential("threads", "THREADS_COOKIE"))
+        except Exception:
+            threads_set = bool(os.environ.get("THREADS_COOKIE"))
+        extra = "" if threads_set else " THREADS_COOKIE is not set."
         print(f"[replies] threads: {missed['threads']} posts had no public replies.{extra}", file=sys.stderr)
 
 

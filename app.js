@@ -10389,12 +10389,22 @@ const here = parseRoute();
         <p class="phandle">${esc(tr("{app}. Posts from accounts you follow stay in this browser. Not affiliated with X.", { app: productName("app") }))}</p>
       </div>`;
     }
+    if (section === "keys") {
+      const keys = window.OwnerKeys && window.OwnerKeys.sectionHtml
+        ? window.OwnerKeys.sectionHtml()
+        : `<div class="set-block"><p class="phandle">${esc(tr("Keys are available only to the owner."))}</p></div>`;
+      return settingsHead(tr("Connected keys"), "#/settings") + keys;
+    }
+    const keysRow = window.OwnerKeys && window.OwnerKeys.visible && window.OwnerKeys.visible()
+      ? settingsRow("#/settings/keys", tr("Connected keys"), tr("Keys from your own accounts stay encrypted."))
+      : "";
     return settingsHead(tr("Settings"), "") + `<div class="set-block"><p class="phandle">${esc(tr("Follows, Lists, custom tabs, likes, bookmarks, and history stay in this browser."))}</p></div><div class="set-list">
       ${settingsRow("#/settings/accessibility", tr("Accessibility, display and languages"), tr("Manage how {app} looks and which language it uses.", { app: productName("app") }))}
       ${settingsRow("#/settings/notifications", tr("Notifications"))}
       ${settingsRow("#/settings/privacy", tr("Privacy and safety"))}
       ${settingsRow("#/settings/content", tr("Custom tabs"), tr("Group accounts into tabs on Home and in Notifications."))}
       ${settingsRow("#/settings/network", tr("Digital Resistance & Proxy"), tr("Manage bypass proxy, Telegram relay, and unblocked media mode."))}
+      ${keysRow}
       ${settingsRow("#/settings/resources", tr("Additional resources"))}
     </div>` + (window.ViktorychAccounts && window.ViktorychAccounts.settingsHtml ? window.ViktorychAccounts.settingsHtml() : "");
   }
@@ -12631,6 +12641,7 @@ if (STATE.histClear) {
     const act = el.dataset.act;
     if (act === "stop") return;
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
+    if (act && act.indexOf("keys-") === 0 && window.OwnerKeys && window.OwnerKeys.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
     if (act === "set-network-mode") {
       const mode = el.dataset.mode || "auto";
@@ -13954,6 +13965,7 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
   document.addEventListener("input", (event) => {
     const el = event.target;
     if (el.id === "compose-text") {
+      STATE.composeSeed = el.value;
       const btn = document.getElementById("compose-post");
       if (btn) btn.disabled = !el.value.trim();
       return;
@@ -15263,6 +15275,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   }
 
   function showUpdate() {
+    if (window.ViktorychUpdate && window.ViktorychUpdate.offer) {
+      window.ViktorychUpdate.offer();
+      return;
+    }
     const el = document.getElementById("update");
     if (el) el.hidden = false;
     scheduleIdleReload();
@@ -15980,6 +15996,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
       if (reg && reg.update) reg.update().catch(() => {});
       syncWorkerState();
+      if (window.ViktorychUpdate && window.ViktorychUpdate.watch) window.ViktorychUpdate.watch(reg);
       if (STATE.settings && STATE.settings.notify && typeof Notification !== "undefined" && Notification.permission === "granted") registerPeriodic();
     }).catch(() => {});
     navigator.serviceWorker.addEventListener("message", (event) => {
@@ -16016,6 +16033,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         armServiceWorker();
         if (!hadController) { hadController = true; return; }
+        if (window.ViktorychUpdate && window.ViktorychUpdate.holdsReload && window.ViktorychUpdate.holdsReload()) return;
         if (readStored(sessionStorage, "sw-reload") === "1") return;
         writeStored(sessionStorage, "sw-reload", "1");
         location.reload();
@@ -16087,6 +16105,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         const worker = navigator.serviceWorker && navigator.serviceWorker.controller;
         if (worker) worker.postMessage({ type: "seen", ids: seenPostIds() });
         pullBellQueue();
+        if (window.ViktorychUpdate && window.ViktorychUpdate.poke) window.ViktorychUpdate.poke();
         refreshFeeds(false);
         refreshLiveTimeline(false);
         const route = parseRoute();
@@ -16424,6 +16443,22 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   if (window.ViktorychLazy && window.ViktorychLazy.preload) {
     window.ViktorychLazy.preload(["shorts", "communities", "games", "tv", "vault", "drive"]);
   }
+  window.addEventListener("viktorych-key-alert", function (event) {
+    const detail = event.detail || {};
+    if (!detail.id || !detail.text) return;
+    const note = {
+      id: String(detail.id),
+      at: Date.now(),
+      name: tr("Connected keys"),
+      text: String(detail.text),
+      hash: "#/settings/keys",
+      platform: "keys",
+      ids: [],
+      handles: []
+    };
+    commitBellNotes([note]);
+    showLocalNotification(note);
+  });
   if (window.ViktorychAccounts) {
     window.ViktorychAccounts.requestRender = function () { render(); };
     window.ViktorychAccounts.followButton = followButtonClean;

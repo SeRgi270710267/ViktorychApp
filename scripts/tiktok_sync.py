@@ -3,7 +3,9 @@
 
 Owner mode writes gitignored owner/tiktok.json and does not touch feeds.json.
 Audience "all" merges posts into feeds.json. One failed fetch exits 0.
-No cookies, no impersonation package, no captcha bypass.
+When the owner has saved a TikTok cookie, the first request sends it.
+A 401, 403, captcha, or challenge marks that key and the same request
+runs once without it. No impersonation package and no captcha bypass.
 """
 
 from __future__ import annotations
@@ -303,8 +305,8 @@ def node_json(cmd: str, payload: bytes) -> dict:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def http_get(url: str) -> tuple[int, bytes, str]:
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "text/html,application/json"})
+def _http_once(url: str, headers: dict) -> tuple[int, bytes, str]:
+    req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=15) as res:
             retry = res.headers.get("Retry-After") or ""
@@ -319,6 +321,36 @@ def http_get(url: str) -> tuple[int, bytes, str]:
         return err.code, body, retry or ""
     except (urllib.error.URLError, TimeoutError, OSError):
         return 0, b"", ""
+
+
+def http_get(url: str) -> tuple[int, bytes, str]:
+    headers = {"User-Agent": UA, "Accept": "text/html,application/json"}
+    slot = ""
+    cookie = ""
+    try:
+        from owner_keys import cookie_header, decide_attempt, drop_for_attention, slot_for_url
+        slot = slot_for_url(url) if "tiktok.com" in str(url) else ""
+        cookie = cookie_header(slot) if slot else ""
+    except Exception:
+        slot = ""
+        cookie = ""
+    if cookie:
+        headers["Cookie"] = cookie
+    status, body, retry = _http_once(url, headers)
+    if cookie:
+        try:
+            from owner_keys import decide_attempt, drop_for_attention
+            action, reason = decide_attempt(status, body, True)
+        except Exception:
+            action, reason = "keep", ""
+        if action == "fallback":
+            try:
+                drop_for_attention(slot, reason)
+            except Exception:
+                pass
+            headers.pop("Cookie", None)
+            return _http_once(url, headers)
+    return status, body, retry
 
 
 def backoff_seconds(step: int, retry_after: int) -> tuple[int, int]:
