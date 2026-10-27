@@ -547,8 +547,24 @@
     });
   }
 
+  function tryDeviceRelay(img) {
+    if (!img || img.dataset.deviceRelay === "1") return false;
+    const dev = window.ViktorychDevice;
+    if (!dev || !dev.featureOn(dev.read(), "media", dev.signals())) return false;
+    const src = img.dataset.source || img.getAttribute("src") || "";
+    if (!src || !/^https:\/\//i.test(src)) return false;
+    const api = accountsApi();
+    if (!api) return false;
+    dev.rememberFail("media", src, Date.now(), "source");
+    img.dataset.deviceRelay = "1";
+    img.removeAttribute("srcset");
+    img.src = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(src);
+    return true;
+  }
+
   function finishMediaError(img) {
     if (!img || !img.isConnected) return;
+    if (tryDeviceRelay(img)) return;
     if (tryRuProxyFallback(img)) return;
     if (img.dataset.fallback === "avatar") {
       const span = document.createElement("span");
@@ -1128,6 +1144,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         removeStored(localStorage, "settings-v1");
         return fresh();
       }
+      parsed.devicePerf = window.ViktorychDevice ? window.ViktorychDevice.normalize(parsed.devicePerf) : (parsed.devicePerf || null);
       return parsed;
     } catch (err) {
       removeStored(localStorage, "settings-v1");
@@ -1136,6 +1153,9 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function saveSettings() {
+    if (STATE.settings && STATE.settings.devicePerf && window.ViktorychDevice && window.ViktorychDevice.persist) {
+      STATE.settings.devicePerf = window.ViktorychDevice.persist(STATE.settings.devicePerf);
+    }
     writeStored(localStorage, "settings-v1", JSON.stringify(STATE.settings));
     syncWorkerState();
     applyPrivacyProtections();
@@ -2765,18 +2785,25 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function ruSafeImageUrl(url) {
-    if (!isRuVisitor()) return url;
     const raw = String(url || "");
-    if (!raw || !/^https:\/\//i.test(raw)) return url;
+    const dev = window.ViktorychDevice;
+    const failed = !!(dev && dev.sourceState && raw && dev.sourceState(raw) === "fail");
+    if (!isRuVisitor() && !failed) return url;
     const api = accountsApi();
-    if (!api) return url;
+    if (!raw || !/^https:\/\//i.test(raw) || !api) return url;
+    let relay = "";
+    let preferRelay = false;
     try {
       const parsed = new URL(raw);
-      if (BLOCKED_IN_RU.test(parsed.hostname)) {
-        return api + "/v1/media?url=" + encodeURIComponent(raw);
+      if (isRuVisitor() && BLOCKED_IN_RU.test(parsed.hostname)) {
+        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
+        preferRelay = true;
+      } else if (failed) {
+        relay = api.replace(/\/$/, "") + "/v1/media?url=" + encodeURIComponent(raw);
       }
-    } catch (err) {}
-    return url;
+    } catch (err) { return url; }
+    if (dev && dev.playbackUrl) return dev.playbackUrl(raw, relay, { preferRelay: preferRelay, settings: dev.read(), signals: dev.signals() }) || url;
+    return preferRelay ? relay : url;
   }
 
   function tryRuProxyFallback(img) {
@@ -3189,18 +3216,37 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   const DEVICE_PERF_KEY = "viktorychapp-device-performance-v1";
+  function alignDevicePerf(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const text = String(src.level || src.profile || "balanced").toLowerCase();
+    const level = text === "light" || text === "lite" || text === "low" || text === "saver" || text === "battery" ? "light" : (text === "max" || text === "high" || text === "full" ? "max" : "balanced");
+    const caps = [32768, 65536, 131072, 262144];
+    const next = Object.assign({}, src);
+    next.level = level;
+    next.profile = level === "light" ? "lite" : level;
+    next.peerMedia = src.peerMedia === "on" || src.peerMedia === "off" ? src.peerMedia : "auto";
+    next.peerUploadCap = caps.indexOf(Number(src.peerUploadCap)) >= 0 ? Number(src.peerUploadCap) : 65536;
+    next.peerShareWhileWatching = src.peerShareWhileWatching !== false;
+    return next;
+  }
   function readDevicePerf() {
+    let fromKey = {};
     try {
       const raw = JSON.parse(localStorage.getItem(DEVICE_PERF_KEY) || "{}");
-      return raw && typeof raw === "object" ? raw : {};
-    } catch (err) { return {}; }
+      if (raw && typeof raw === "object" && !Array.isArray(raw)) fromKey = raw;
+    } catch (err) { fromKey = {}; }
+    const fromSettings = STATE.settings && STATE.settings.devicePerf && typeof STATE.settings.devicePerf === "object" ? STATE.settings.devicePerf : {};
+    return Object.assign({}, fromSettings, fromKey);
   }
   function writeDevicePerf(patch) {
-    const raw = readDevicePerf();
-    Object.keys(patch || {}).forEach((key) => { raw[key] = patch[key]; });
-    try { localStorage.setItem(DEVICE_PERF_KEY, JSON.stringify(raw)); } catch (err) { /* the toggle still updates this view */ }
+    const current = readDevicePerf();
+    const dev = window.ViktorychDevice;
+    const next = dev && dev.patch ? dev.patch(current, patch || {}) : alignDevicePerf(Object.assign({}, current, patch || {}));
+    try { localStorage.setItem(DEVICE_PERF_KEY, JSON.stringify(next)); } catch (err) { /* the toggle still updates this view */ }
+    if (STATE.settings) STATE.settings.devicePerf = next;
+    saveSettings();
     if (window.ViktorychPeerMedia && window.ViktorychPeerMedia.configure) window.ViktorychPeerMedia.configure();
-    return raw;
+    return next;
   }
   function ensurePeerMedia() {
     if (window.ViktorychPeerMedia) return Promise.resolve(window.ViktorychPeerMedia);
@@ -3235,7 +3281,8 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     const share = perf.peerShareWhileWatching !== false;
     const caps = [[32768, tr("32 KB/s")], [65536, tr("64 KB/s")], [131072, tr("128 KB/s")], [262144, tr("256 KB/s")]];
     const above = window.ViktorychDevicePerformance && window.ViktorychDevicePerformance.settingsHtml ? window.ViktorychDevicePerformance.settingsHtml() : "";
-    return above + `<h2>${esc(tr("Peer-assisted media"))}</h2>
+    return above + `<p class="phandle">${esc(tr("Peer sharing follows the level on this device."))} <a href="#/settings/device">${esc(tr("Device performance"))}</a></p>
+      <h2>${esc(tr("Peer-assisted media"))}</h2>
       <p class="phandle">${esc(tr("Peers can see each other's IP address while sharing."))}</p>
       <div class="theme-row" role="group" aria-label="${esc(tr("Peer-assisted media"))}">
         ${["auto", "on", "off"].map((id) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="peer-media" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
@@ -4643,11 +4690,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     return pending;
   }
 
-  function fetchJson(url, opts) {
-    const fresh = !!(opts && opts.fresh);
-    if (window.ViktorychDirect && window.ViktorychDirect.allows(url)) {
-      return window.ViktorychDirect.json(url, null, fresh ? { fresh: true } : null);
-    }
+  function fetchJsonNow(url) {
     let signal;
     try {
       if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
@@ -4679,6 +4722,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       if (!next) throw err;
       return run(next);
     });
+  }
+
+  function fetchJson(url, opts) {
+    const direct = window.ViktorychDirect;
+    if (direct && direct.fetchSource && direct.allows && direct.allows(url)) {
+      return direct.fetchSource(url, function () { return fetchJsonNow(url); }, opts && opts.fresh ? { fresh: true } : null);
+    }
+    return fetchJsonNow(url);
   }
 
   function ivBases() {
@@ -8487,8 +8538,6 @@ const here = parseRoute();
   }
 
   function publicJson(url) {
-    const direct = window.ViktorychDirect;
-    if (direct && direct.allows(url)) return direct.json(url);
     return fetchJson(url);
   }
 
@@ -9197,10 +9246,32 @@ const here = parseRoute();
   }
 
   function exploreHits(q) {
+    const dev = window.ViktorychDevice;
+    const idx = window.ViktorychDeviceSearch;
+    if (dev && idx && dev.featureOn(dev.read(), "search", dev.signals()) && !dev.cooling("search")) {
+      try {
+        const found = idx.query(q, {
+          posts: posts(),
+          feeds: shownFeeds(feeds()),
+          hidden: hiddenPost,
+          mute: (feed) => matchesMute(STATE.settings.mutedAccounts, feed.handle, feed.platform, feed.id),
+          byStamp: byStamp,
+          heat: exploreHeat
+        });
+        if (found && found.complete && found.hits) {
+          dev.noteStat("local", "search", dev.measureBytes(found.hits), found.ms || 0);
+          return found.hits;
+        }
+      } catch (err) {
+        dev.rememberFail("search", "index", Date.now(), "feature");
+      }
+    }
     const lq = String(q || "").trim().toLowerCase();
+    const started = Date.now();
     const accounts = lq ? shownFeeds(feeds()).filter((f) => !matchesMute(STATE.settings.mutedAccounts, f.handle, f.platform, f.id) && ((f.name || "") + " " + (f.handle || "") + " " + (f.aliases || "") + " " + (f.bio || "")).toLowerCase().includes(lq)) : [];
     const found = lq ? posts().filter((p) => !hiddenPost(p) && postHay(p).toLowerCase().includes(lq)).sort(byStamp) : [];
     const top = found.slice().sort((a, b) => exploreHeat(b) - exploreHeat(a) || byStamp(a, b));
+    if (dev && dev.featureOn(dev.read(), "search", dev.signals())) dev.noteStat("local", "search", dev.measureBytes({ accounts: accounts, posts: found }), Math.max(0, Date.now() - started));
     return { accounts: accounts, posts: found, top: top };
   }
 
@@ -11014,6 +11085,7 @@ const here = parseRoute();
       if (sub === "display-language" || section === "display-language") key = tr("Display language");
       else if (section === "accessibility") key = tr("Accessibility, display and languages");
       else if (section === "display") key = tr("Display");
+      else if (section === "device") key = tr("Device performance");
       else if (section === "languages") key = tr("Languages");
       else if (section === "data") key = tr("Data usage");
       else if (section === "notifications") key = tr("Notifications");
@@ -11105,9 +11177,21 @@ const here = parseRoute();
       </div>`;
     }
     if (section === "display" && sub === "navigation") return bottomNavSettings();
+    if (section === "device") {
+      if (!window.ViktorychDevice) {
+        loadDeviceCore().then(() => {
+          if (parseRoute().section === "device") render();
+        });
+      }
+      const body = window.ViktorychDevice
+        ? window.ViktorychDevice.settingsHtml(STATE.settings && STATE.settings.devicePerf)
+        : `<div class="device-screen"><div class="set-block"><p class="phandle">${esc(tr("Choose how much this device does itself."))}</p></div></div>`;
+      return settingsHead(tr("Device performance"), "#/settings/display") + body;
+    }
     if (section === "display") {
       return settingsHead(tr("Display"), "#/settings/accessibility") + `<div class="set-block">
         ${settingsRow("#/settings/display/navigation", tr("Customize navigation"), tr("Reorder and choose the icons in the bottom bar."))}
+        ${settingsRow("#/settings/device", tr("Device performance"), tr("Choose how much this device does itself."))}
         <h2>${esc(tr("Appearance"))}</h2>
         <div class="theme-row">
           ${themeBtn("auto", tr("Auto"))}
@@ -13020,6 +13104,11 @@ if (STATE.histClear) {
       return pageHead(tr("Shorts")) + emptyBlock(tr("Shorts"), tr("Reload the page."));
     }
     if (route.name === "drive") {
+      loadDeviceCore().then((dev) => {
+        if (!dev) return;
+        dev.ensure("media");
+        dev.ensure("record");
+      });
       if (window.ViktorychDrive && window.ViktorychDrive.visible()) return window.ViktorychDrive.page(route);
       if (!window.ViktorychDrive) { ensureLazy("drive"); return lazySkeleton(tr("brand.storage")); }
       return pageHead(tr("brand.storage")) + emptyBlock(tr("brand.storage"), tr("Reload the page."));
@@ -13934,6 +14023,70 @@ if (STATE.histClear) {
     if (act && act.indexOf("music-") === 0 && window.SIntelMusic && window.SIntelMusic.onAct(act, el)) return;
     if (act && act.indexOf("keys-") === 0 && window.OwnerKeys && window.OwnerKeys.onAct(act, el)) return;
     if (act === "spoiler") { el.classList.toggle("open"); return; }
+    if (act && act.indexOf("device-") === 0 && !window.ViktorychDevice) {
+      const level = el.dataset.level || "";
+      const key = el.dataset.key || "";
+      loadDeviceCore().then((dev) => {
+        if (!dev) return;
+        el.dataset.level = level;
+        el.dataset.key = key;
+        onAct(el);
+      });
+      return;
+    }
+    if (act === "device-level" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.applyLevel(el.dataset.level || "balanced");
+      window.ViktorychDevice.setWarn(false);
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-toggle" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.toggle(STATE.settings.devicePerf, el.dataset.key || "");
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-webllm" && window.ViktorychDevice) {
+      const perf = window.ViktorychDevice.normalize(STATE.settings.devicePerf);
+      if (perf.webllmAccepted) {
+        STATE.settings.devicePerf = window.ViktorychDevice.confirmWebllm(perf, false);
+        window.ViktorychDevice.setWarn(false);
+      } else {
+        window.ViktorychDevice.setWarn(true);
+      }
+      saveSettings();
+      render();
+      return;
+    }
+    if (act === "device-webllm-yes" && window.ViktorychDevice) {
+      STATE.settings.devicePerf = window.ViktorychDevice.confirmWebllm(STATE.settings.devicePerf, true);
+      window.ViktorychDevice.setWarn(false);
+      saveSettings();
+      render();
+      if (window.ViktorychDeviceAi && window.ViktorychDeviceAi.loadWebllm) window.ViktorychDeviceAi.loadWebllm().catch(function () {});
+      else window.ViktorychDevice.ensure("ai").then(function () {
+        if (window.ViktorychDeviceAi && window.ViktorychDeviceAi.loadWebllm) window.ViktorychDeviceAi.loadWebllm().catch(function () {});
+      });
+      return;
+    }
+    if (act === "device-webllm-no" && window.ViktorychDevice) {
+      window.ViktorychDevice.setWarn(false);
+      render();
+      return;
+    }
+    if (act === "device-ai" && window.ViktorychDevice) {
+      window.ViktorychDevice.openAssistant();
+      return;
+    }
+    if (act === "device-ai-close" && window.ViktorychDevice) {
+      window.ViktorychDevice.closeAssistant();
+      return;
+    }
+    if (act === "device-ai-ask" && window.ViktorychDevice) {
+      window.ViktorychDevice.askAssistant();
+      return;
+    }
     if (act === "set-network-mode") {
       const mode = el.dataset.mode || "auto";
       STATE.settings.networkMode = mode;
@@ -16690,7 +16843,10 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const job = loadCatalog().then((config) => {
       const selected = timelineFeeds();
       liveDateScrubbed = false;
-      return mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => [])).then((lists) => {
+      const pending = mapLimit(selected, 3, (feed) => livePostsForFeed(feed, config).catch(() => []));
+      timelineUsesDevice = true;
+      releaseDeviceFeeds();
+      return pending.then((lists) => {
         let incoming = [];
         lists.forEach((list, index) => {
           const feed = selected[index];
@@ -18017,12 +18173,96 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     toast(STATE.settings.notify ? tr("Notifications on") : tr("Notifications stay off"));
   }
 
+  let deviceCoreTask = null;
+  let deviceScriptReady = false;
+  let timelineUsesDevice = false;
+
+  function holdDeviceFeeds() {
+    timelineUsesDevice = false;
+    if (window.ViktorychDirect && window.ViktorychDirect.holdDevice) window.ViktorychDirect.holdDevice(true);
+  }
+
+  function releaseDeviceFeeds() {
+    if (!deviceScriptReady || !timelineUsesDevice) return;
+    if (window.ViktorychDirect && window.ViktorychDirect.holdDevice) window.ViktorychDirect.holdDevice(false);
+  }
+
+  function loadDeviceCore() {
+    if (window.ViktorychDevice) return Promise.resolve(window.ViktorychDevice);
+    if (deviceCoreTask) return deviceCoreTask;
+    deviceCoreTask = new Promise((resolve) => {
+      const tag = document.createElement("script");
+      tag.src = "device.js";
+      tag.async = true;
+      tag.onload = () => {
+        const dev = window.ViktorychDevice || null;
+        if (dev) deviceScriptReady = true;
+        if (dev && window.ViktorychStorage && window.ViktorychStorage.applyDeviceCap) window.ViktorychStorage.applyDeviceCap();
+        releaseDeviceFeeds();
+        resolve(dev);
+      };
+      tag.onerror = () => resolve(null);
+      (document.body || document.documentElement).appendChild(tag);
+    });
+    return deviceCoreTask;
+  }
+
+  function scheduleDeviceCore() {
+    let started = false;
+    let idleId = 0;
+    let fallbackId = 0;
+    const names = ["pointerdown", "keydown", "scroll"];
+    const stop = () => {
+      names.forEach((name) => window.removeEventListener(name, onInteract, true));
+      window.removeEventListener("hashchange", onInteract);
+      window.removeEventListener("popstate", onInteract);
+      if (idleId && typeof cancelIdleCallback === "function") cancelIdleCallback(idleId);
+      if (fallbackId) clearTimeout(fallbackId);
+    };
+    const fire = () => {
+      if (started) return;
+      started = true;
+      stop();
+      loadDeviceCore().then(() => registerPeriodic());
+    };
+    function onInteract() { fire(); }
+    names.forEach((name) => window.addEventListener(name, onInteract, { capture: true, passive: true }));
+    window.addEventListener("hashchange", onInteract);
+    window.addEventListener("popstate", onInteract);
+    const armIdle = () => {
+      if (started) return;
+      if (typeof requestIdleCallback === "function") idleId = requestIdleCallback(fire, { timeout: 1200 });
+      else fallbackId = setTimeout(fire, 1200);
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(armIdle));
+    else armIdle();
+  }
+
   function registerPeriodic() {
     if (!("serviceWorker" in navigator)) return;
+    if (!window.ViktorychDevice) return;
     navigator.serviceWorker.ready.then((reg) => {
-      if (!reg.periodicSync) return;
-      return reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 });
+      const dev = window.ViktorychDevice;
+      if (dev && !dev.featureOn(dev.read(), "sync", dev.signals())) return;
+      const jobs = [];
+      if (reg.periodicSync) jobs.push(reg.periodicSync.register("feeds", { minInterval: 30 * 60 * 1000 }));
+      if (reg.sync && reg.sync.register) jobs.push(reg.sync.register("feeds"));
+      return Promise.all(jobs);
     }).catch(() => {});
+  }
+
+  function scheduleDeviceIndex() {
+    if (parseRoute().name !== "explore" && parseRoute().name !== "settings") return;
+    const run = () => {
+      loadDeviceCore().then((dev) => {
+        if (!dev || !dev.featureOn(dev.read(), "search", dev.signals())) return;
+        dev.ensure("search").then(() => {
+          if (window.ViktorychDeviceSearch) window.ViktorychDeviceSearch.indexPosts(posts(), feeds());
+        });
+      });
+    };
+    if (typeof requestIdleCallback === "function") requestIdleCallback(run, { timeout: 5000 });
+    else setTimeout(run, 4000);
   }
 
   function syncWorkerState() {
@@ -18590,6 +18830,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   window.addEventListener("pagehide", () => { try { rememberLocal(parseRoute()); } catch (err) { /* the next open still has the last good copy */ } });
 
   async function boot() {
+    holdDeviceFeeds();
     syncRuVisitorGeo();
     if (window.ViktorychLocal) {
       const savedScrolls = window.ViktorychLocal.readScrolls();
@@ -18611,6 +18852,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     consumeShareTarget();
     bindShell();
     registerSW();
+    scheduleDeviceCore();
     STATE.error = null;
     loadStatus();
     STATE.settings = loadSettings();
@@ -18631,6 +18873,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       if (window.ViktorychShorts && !window.ViktorychShorts.visible()) window.ViktorychShorts.hide();
       STATE.loading = false;
       render({ reset: true });
+      scheduleDeviceIndex();
       if (STATE.pendingFeed) showPill(pendingPillPosts());
       ensureVideoOwners();
     } else if (painted) {
@@ -18671,6 +18914,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
       }
       render({ reset: true });
+      scheduleDeviceIndex();
       loadNewestShard().then(() => {
         if (applyIaPreview(STATE.data)) render({ reset: true });
         revealArchive();

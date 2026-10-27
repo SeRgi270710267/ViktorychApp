@@ -38,6 +38,7 @@ UI_FILES = (
     "storage.js",
     "localfirst.js",
     "direct.js",
+    "device.js",
     "scores.js",
     "weather.js",
     "dock.js",
