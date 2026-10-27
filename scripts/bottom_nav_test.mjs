@@ -53,21 +53,88 @@ function startServer() {
 }
 
 function chromeBin() {
+  const named = [process.env.CHROME_PATH, process.env.CHROME_BIN].filter(Boolean);
+  for (const bin of named) {
+    if (fs.existsSync(bin)) return bin;
+  }
+  try {
+    const found = execFileSync("bash", ["-lc", "command -v google-chrome || command -v google-chrome-stable || command -v chrome || command -v chromium || command -v chromium-browser"], { encoding: "utf8" }).trim().split("\n")[0];
+    if (found) return found;
+  } catch (err) { /* fall through to known paths */ }
   const list = [
-    process.env.CHROME_PATH,
     "/usr/local/bin/google-chrome",
     "/usr/bin/google-chrome-stable",
     "/usr/bin/google-chrome",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser"
-  ].filter(Boolean);
-  const found = list.find((bin) => fs.existsSync(bin));
-  if (found) return found;
+  ];
+  return list.find((bin) => fs.existsSync(bin)) || "";
+}
+
+function logTail(logPath) {
   try {
-    return execFileSync("bash", ["-lc", "command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser"], { encoding: "utf8" }).trim().split("\n")[0];
+    return fs.readFileSync(logPath, "utf8").trim().slice(-500);
   } catch (err) {
     return "";
   }
+}
+
+async function readVersion(port) {
+  const res = await fetch("http://127.0.0.1:" + port + "/json/version");
+  if (!res.ok) return null;
+  const version = await res.json();
+  if (!version || !version.webSocketDebuggerUrl) return null;
+  return version;
+}
+
+// Headless Chrome can leave "DevTools listening on" buffered when stderr is a
+// pipe, so the port is chosen here and the debugger is discovered from
+// /json/version (and DevToolsActivePort if Chrome bound a different port).
+async function launchChrome(bin) {
+  let lastLog = "";
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const profile = fs.mkdtempSync(path.join(os.tmpdir(), "bnav-"));
+    const debugPort = 9400 + Math.floor(Math.random() * 500);
+    const logPath = path.join(profile, "chrome.log");
+    const logFd = fs.openSync(logPath, "a");
+    const chrome = spawn(bin, [
+      "--headless=new",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--remote-allow-origins=*",
+      "--remote-debugging-port=" + debugPort,
+      "--user-data-dir=" + profile,
+      "--no-first-run",
+      "--no-default-browser-check",
+      "about:blank"
+    ], { stdio: ["ignore", logFd, logFd] });
+    fs.closeSync(logFd);
+    const started = Date.now();
+    while (Date.now() - started < 20000) {
+      if (chrome.exitCode != null) break;
+      try {
+        const version = await readVersion(debugPort);
+        if (version) {
+          return { chrome, version, debugPort: String(new URL(version.webSocketDebuggerUrl).port) };
+        }
+      } catch (err) { /* debugger not up yet */ }
+      try {
+        const active = fs.readFileSync(path.join(profile, "DevToolsActivePort"), "utf8").split(/\r?\n/)[0].trim();
+        if (active && active !== String(debugPort)) {
+          const version = await readVersion(active);
+          if (version) {
+            return { chrome, version, debugPort: String(new URL(version.webSocketDebuggerUrl).port) };
+          }
+        }
+      } catch (err) { /* port file not written yet */ }
+      await sleep(100);
+    }
+    lastLog = logTail(logPath);
+    try { chrome.kill("SIGKILL"); } catch (err) { /* already gone */ }
+    if (chrome.exitCode == null) break;
+  }
+  fail("Chrome did not open a DevTools port\n" + lastLog);
 }
 
 function openCdp(wsUrl) {
@@ -162,43 +229,15 @@ async function main() {
   const server = await startServer();
   const port = server.address().port;
   const origin = "http://127.0.0.1:" + port;
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "bnav-"));
-  let chromeLog = "";
-  const chrome = spawn(bin, [
-    "--headless=new",
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu",
-    "--remote-debugging-port=0",
-    "--user-data-dir=" + profile,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "about:blank"
-  ], { stdio: ["ignore", "pipe", "pipe"] });
-  chrome.stdout.on("data", (buf) => { chromeLog += buf.toString(); });
-  chrome.stderr.on("data", (buf) => { chromeLog += buf.toString(); });
+  const launched = await launchChrome(bin);
+  const chrome = launched.chrome;
+  const debugPort = launched.debugPort;
+  const version = launched.version;
   const stop = () => {
     try { chrome.kill("SIGKILL"); } catch (err) { /* gone */ }
     try { server.close(); } catch (err) { /* gone */ }
   };
   process.on("exit", stop);
-
-  const started = Date.now();
-  let debugWs = "";
-  while (Date.now() - started < 15000) {
-    const match = chromeLog.match(/DevTools listening on (ws:\/\/\S+)/);
-    if (match) { debugWs = match[1]; break; }
-    if (chrome.exitCode != null) fail("Chrome exited early\n" + chromeLog);
-    await sleep(50);
-  }
-  if (!debugWs) fail("Chrome did not open a DevTools port\n" + chromeLog);
-  const debugPort = new URL(debugWs).port;
-  let version = null;
-  for (let i = 0; i < 40 && !version; i++) {
-    try {
-      version = await fetch("http://127.0.0.1:" + debugPort + "/json/version").then((res) => res.json());
-    } catch (err) { await sleep(50); }
-  }
   if (!version || !version.webSocketDebuggerUrl) fail("No browser debugger url");
   const browser = openCdp(version.webSocketDebuggerUrl);
   await browser.ready;
