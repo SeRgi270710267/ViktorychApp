@@ -1258,6 +1258,8 @@ def main() -> None:
     storage_workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     storage_flow = subprocess.run(["node", str(ROOT / "scripts" / "storage_test.js")], cwd=ROOT)
     check(storage_flow.returncode == 0, "the storage cache helpers pass")
+    native_flow = subprocess.run(["node", str(ROOT / "scripts" / "native_test.js")], cwd=ROOT)
+    check(native_flow.returncode == 0, "installed-app helpers pass")
     local_flow = subprocess.run(["node", str(ROOT / "scripts" / "localfirst_test.js")], cwd=ROOT)
     direct_flow = subprocess.run(["node", str(ROOT / "scripts" / "direct_test.js")], cwd=ROOT)
     device_flow = subprocess.run(["node", str(ROOT / "scripts" / "device_test.js")], cwd=ROOT)
@@ -1324,8 +1326,10 @@ def main() -> None:
     sizes = {icon.get("sizes") for icon in manifest["icons"]}
     check("192x192" in sizes and "512x512" in sizes and "any" in purposes and "maskable" in purposes and "monochrome" in purposes and all(" " not in (item or "") for item in purposes) and all("?v=7" in icon["src"] for icon in manifest["icons"]), "the manifest has separate any, maskable, and monochrome icons with a cache-busting query")
     shortcut_names = [item["name"] for item in manifest["shortcuts"]]
-    check(shortcut_names == ["Search", "Bookmarks", "Subscriptions", "Notifications", "ViktorychMusic"], "the manifest shortcuts are Search, Bookmarks, Subscriptions, Notifications, and ViktorychMusic")
-    check(manifest["share_target"]["method"] == "GET" and manifest["share_target"]["enctype"] == "application/x-www-form-urlencoded" and "url" in manifest["share_target"]["params"], "sharing a link into the app is a GET share target")
+    check(shortcut_names[:4] == ["Home", "Notifications", "Messages", "Post"] and set(["Search", "Bookmarks", "Subscriptions", "Notifications", "ViktorychMusic", "Home", "Messages", "Post"]).issubset(shortcut_names), "the manifest shortcuts lead with Home, Notifications, Messages, and Post and keep Search, Bookmarks, Subscriptions, and ViktorychMusic")
+    share_files = manifest["share_target"]["params"].get("files") or []
+    check(manifest["share_target"]["method"] == "POST" and manifest["share_target"]["enctype"] == "multipart/form-data" and manifest["share_target"]["params"].get("url") == "url" and any(item.get("name") == "media" for item in share_files), "sharing a link or a file into the app is a POST share target")
+    check(manifest.get("file_handlers") and manifest["launch_handler"]["client_mode"] == "focus-existing" and any(item.get("protocol") == "web+viktorych" for item in manifest.get("protocol_handlers") or []), "the installed app opens files, focuses the existing window, and handles web+viktorych")
     worker = (ROOT / "sw.js").read_text(encoding="utf-8")
     check("__SW_VERSION__" in worker and "150 * 1024 * 1024" in worker and "staleWhileRevalidate" in worker, "the service worker versions its cache and caps media")
     check("api.fxtwitter.com" in worker and "networkFirst" in worker and "networkFirstTimeout" in worker and "6000" in worker, "comment APIs are network-first with a short timeout")
