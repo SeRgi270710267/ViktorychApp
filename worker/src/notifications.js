@@ -10,8 +10,10 @@
    and does not send a second push. */
 
 import { inspectHandle } from "../../shared/handle-skeleton.js";
+import { tiktokNoteHidden, visibleNotes } from "../../shared/tiktok-lock.js";
 import { publishToAccount } from "./channel.js";
 import { visibleAvatarUrl } from "./profile-media.js";
+import { tiktokAudienceAll, unlockedHandles } from "./tiktok-unlock.js";
 
 const encoder = new TextEncoder();
 const KINDS = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
@@ -112,10 +114,24 @@ function httpsUrl(value) {
   return /^https:\/\//.test(text) ? text : "";
 }
 
+async function addLockColumns(env) {
+  const alters = [
+    "ALTER TABLE push_subscriptions ADD COLUMN shorts_locked INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE notification_state ADD COLUMN shorts_locked INTEGER NOT NULL DEFAULT 1"
+  ];
+  for (let i = 0; i < alters.length; i++) {
+    try { await env.DB.prepare(alters[i]).run(); }
+    catch (err) {
+      const msg = String(err && err.message || err);
+      if (!/duplicate column|already exists/i.test(msg)) throw err;
+    }
+  }
+}
+
 export function ensureNotificationSchema(env) {
   if (!env || !env.DB) return Promise.resolve();
   if (!schemaReady) {
-    schemaReady = env.DB.batch(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).catch((err) => {
+    schemaReady = env.DB.batch(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).then(() => addLockColumns(env)).catch((err) => {
       schemaReady = null;
       throw err;
     });
@@ -238,7 +254,10 @@ async function presentNote(env, request, viewer, item) {
     next.hash = String(next.hash || "").replace(/([A-Za-z0-9_\u0400-\u04FF]{1,32})\d{12}\b/g, "$1");
   }
   if (next.handle && request && viewer) {
-    next.avatar = await visibleAvatarUrl(env, request, viewer, next.handle) || "";
+    const shown = await visibleAvatarUrl(env, request, viewer, next.handle);
+    if (shown === null) {
+      if (legacyMedia(next.avatar)) next.avatar = "";
+    } else next.avatar = shown || "";
   }
   if (legacyMedia(next.avatar)) next.avatar = "";
   return next;
@@ -272,11 +291,51 @@ function itemFromRow(row, readUntil) {
   };
 }
 
-async function unreadCount(env, publicId, readUntil) {
-  const row = await env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM notifications WHERE public_id = ? AND read_at = 0 AND at > ?"
-  ).bind(publicId, readUntil).first();
-  return Number(row && row.n) || 0;
+function lockFlag(value) {
+  if (value === 0 || value === false || value === "0") return false;
+  if (value === 1 || value === true || value === "1") return true;
+  return null;
+}
+
+async function writeShortsLocked(env, publicId, locked) {
+  const flag = locked ? 1 : 0;
+  const now = Date.now();
+  await env.DB.prepare(
+    "INSERT INTO notification_state (public_id, read_until, tabs, bells_at, updated_at, shorts_locked) VALUES (?, 0, '', 0, ?, ?) ON CONFLICT(public_id) DO UPDATE SET shorts_locked = excluded.shorts_locked, updated_at = excluded.updated_at"
+  ).bind(publicId, now, flag).run();
+}
+
+/* The Shorts lock is per device. The account row remembers the last
+   report so a channel update can leave a locked item out. A missing
+   report stays locked, matching the Shorts default. */
+async function lockViewer(env, publicId, lockedOverride) {
+  const account = await accountRow(env, publicId);
+  const owner = !!(account && (account.owner === 1 || account.owner === true));
+  let locked = true;
+  const chosen = lockFlag(lockedOverride);
+  if (chosen === false) locked = false;
+  else if (chosen === true) locked = true;
+  else {
+    try {
+      const row = await env.DB.prepare("SELECT shorts_locked FROM notification_state WHERE public_id = ?").bind(publicId).first();
+      if (row && (row.shorts_locked === 0 || row.shorts_locked === false)) locked = false;
+      else if (row && (row.shorts_locked === 1 || row.shorts_locked === true)) locked = true;
+    } catch (err) { locked = true; }
+  }
+  let list = [];
+  try { list = await unlockedHandles(env); }
+  catch (err) { list = []; }
+  const unlocked = new Set((list || []).map((name) => String(name || "").toLowerCase()));
+  return { owner: owner, audienceAll: tiktokAudienceAll(env), locked: locked, unlocked: unlocked };
+}
+
+async function unreadCount(env, publicId, readUntil, viewer) {
+  const view = viewer || await lockViewer(env, publicId);
+  const listed = await env.DB.prepare(
+    "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? AND read_at = 0 AND at > ? ORDER BY at DESC LIMIT 200"
+  ).bind(publicId, readUntil).all();
+  const items = ((listed && listed.results) || []).map((row) => itemFromRow(row, readUntil));
+  return items.filter((item) => !tiktokNoteHidden(item, view)).length;
 }
 
 async function listBells(env, publicId) {
@@ -303,16 +362,20 @@ async function listBells(env, publicId) {
   return bells;
 }
 
-async function viewFor(env, publicId, request) {
+async function viewFor(env, publicId, lockedOverride, request) {
   const state = await readState(env, publicId);
+  const viewer = await lockViewer(env, publicId, lockedOverride);
   const listed = await env.DB.prepare(
-    "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? ORDER BY at DESC, note_id ASC LIMIT 80"
+    "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? ORDER BY at DESC, note_id ASC LIMIT 200"
   ).bind(publicId).all();
-  const viewer = { public_id: publicId };
+  const mediaViewer = { public_id: publicId };
   const items = [];
   const rows = (listed && listed.results) || [];
-  for (let i = 0; i < rows.length; i++) items.push(await presentNote(env, request, viewer, itemFromRow(rows[i], state.readUntil)));
-  const unread = await unreadCount(env, publicId, state.readUntil);
+  for (let i = 0; i < rows.length && items.length < 80; i++) {
+    const item = await presentNote(env, request, mediaViewer, itemFromRow(rows[i], state.readUntil));
+    if (!tiktokNoteHidden(item, viewer)) items.push(item);
+  }
+  const unread = await unreadCount(env, publicId, state.readUntil, viewer);
   const bells = await listBells(env, publicId);
   const push = await vapidPublic(env);
   return {
@@ -500,7 +563,7 @@ async function publishNotes(env, publicId, data) {
   catch (err) { /* D1 stays the source of truth if the channel is down */ }
 }
 
-async function sendPush(env, publicId, item) {
+async function sendPush(env, publicId, item, viewer) {
   const account = await accountRow(env, publicId) || {};
   try {
     const presence = await env.DB.prepare("SELECT preference FROM account_presence WHERE public_id = ?").bind(publicId).first();
@@ -510,9 +573,10 @@ async function sendPush(env, publicId, item) {
   const keys = await vapidPublic(env);
   if (!keys.publicKey || !keys.privateJwk) return;
   const subs = await env.DB.prepare(
-    "SELECT endpoint_hash, endpoint, p256dh, auth FROM push_subscriptions WHERE public_id = ? LIMIT 10"
+    "SELECT endpoint_hash, endpoint, p256dh, auth, shorts_locked FROM push_subscriptions WHERE public_id = ? LIMIT 10"
   ).bind(publicId).all();
   const rows = (subs && subs.results) || [];
+  const base = viewer || await lockViewer(env, publicId);
   const titleKey = titleKeyFor(item.kind);
   const payload = encoder.encode(JSON.stringify({
     titleKey,
@@ -520,11 +584,16 @@ async function sendPush(env, publicId, item) {
     body: item.text || "",
     hash: item.hash || "#/",
     id: item.id,
-    icon: legacyMedia(item.avatar) ? "" : (item.avatar || ""),
-    tag: "note-" + item.id
+icon: legacyMedia(item.avatar) ? "" : (item.avatar || ""),
+    tag: "note-" + item.id,
+    platform: item.platform || "",
+    handle: item.handle || "",
+    feedId: /^app:\d{12}$/.test(String(item.feedId || "")) ? "" : (item.feedId || "")
   }));
   for (let i = 0; i < rows.length; i++) {
     const sub = rows[i];
+    const deviceLocked = sub.shorts_locked == null || sub.shorts_locked === "" ? true : Number(sub.shorts_locked) !== 0;
+    if (tiktokNoteHidden(item, Object.assign({}, base, { locked: deviceLocked }))) continue;
     try {
       const jwt = await vapidJwt(sub.endpoint, keys.publicKey, keys.privateJwk);
       const body = await encryptPush(payload, sub.p256dh, sub.auth);
@@ -600,13 +669,15 @@ export async function emitNotification(env, input) {
     read_at: readAt,
     actor_id: clip(input.actorId, 16),
     payload
-  }, state.readUntil));
-  const unread = await unreadCount(env, publicId, state.readUntil);
+}, state.readUntil));
+  const viewer = await lockViewer(env, publicId);
+  const hidden = tiktokNoteHidden(item, viewer);
+  const unread = await unreadCount(env, publicId, state.readUntil, viewer);
   if (!readAt) {
     await env.DB.prepare("UPDATE notifications SET pushed_at = ? WHERE public_id = ? AND note_id = ?").bind(now, publicId, key).run();
-    await sendPush(env, publicId, item);
+    await sendPush(env, publicId, item, viewer);
   }
-  await publishNotes(env, publicId, { type: "upsert", items: [item], unread, readUntil: state.readUntil });
+  await publishNotes(env, publicId, { type: "upsert", items: hidden ? [] : [item], unread, readUntil: state.readUntil });
   return { created: true, id: key, unread };
 }
 
@@ -797,13 +868,16 @@ export async function handleNotificationRoutes(request, env, path, deps) {
   if (path === "/v1/notifications" && request.method === "GET") {
     const hit = await rateHit(env, "notes-read:" + row.public_id, 120, 10 * 60 * 1000);
     if (!hit.ok) return limited(hit);
-    return json(200, await viewFor(env, row.public_id, request));
+    const flag = new URL(request.url).searchParams.get("locked");
+    if (flag === "0" || flag === "1") await writeShortsLocked(env, row.public_id, flag === "1");
+    return json(200, await viewFor(env, row.public_id, flag, request));
   }
   if (path === "/v1/notifications" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
     if (!hit.ok) return limited(hit);
     const body = await readJson(request, 80000);
     if (body.error) return json(body.error === "too_large" ? 413 : 400, { error: body.error });
+    if (lockFlag(body.shortsLocked) !== null) await writeShortsLocked(env, row.public_id, lockFlag(body.shortsLocked) === true);
     const items = Array.isArray(body.items) ? body.items.slice(0, 40) : [];
     for (let i = 0; i < items.length; i++) {
       const cleaned = cleanClientItem(items[i], row);
@@ -817,7 +891,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     if (body.until || (Array.isArray(body.ids) && body.ids.length)) await markRead(env, row.public_id, body.until, body.ids);
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
     if (body.bells && typeof body.bells === "object") await saveBells(env, row.public_id, body.bells, body.bellsAt);
-    return json(200, await viewFor(env, row.public_id, request));
+    return json(200, await viewFor(env, row.public_id, body.shortsLocked, request));
   }
   if (path === "/v1/notifications/read" && request.method === "POST") {
     const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
@@ -826,7 +900,7 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     if (body.error) return json(400, { error: body.error });
     await markRead(env, row.public_id, body.until, body.ids);
     if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
-    return json(200, await viewFor(env, row.public_id, request));
+    return json(200, await viewFor(env, row.public_id, null, request));
   }
   if (path === "/v1/push/vapid" && request.method === "GET") {
     const keys = await vapidPublic(env);
@@ -843,9 +917,11 @@ export async function handleNotificationRoutes(request, env, path, deps) {
     const hash = await sha256Hex(endpoint);
     const exp = Number(body.expirationTime) > 0 ? Number(body.expirationTime) : 0;
     const now = Date.now();
+    const deviceLocked = lockFlag(body.locked != null ? body.locked : body.shortsLocked);
+    const shortsLocked = deviceLocked === false ? 0 : 1;
     await env.DB.prepare(
-      "INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, endpoint_hash) DO UPDATE SET endpoint = excluded.endpoint, p256dh = excluded.p256dh, auth = excluded.auth, ua = excluded.ua, updated_at = excluded.updated_at, expires_at = excluded.expires_at"
-    ).bind(row.public_id, hash, endpoint, clip(keys.p256dh, 200), clip(keys.auth, 200), clip(request.headers.get("user-agent"), 160), now, now, exp).run();
+      "INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at, shorts_locked) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, endpoint_hash) DO UPDATE SET endpoint = excluded.endpoint, p256dh = excluded.p256dh, auth = excluded.auth, ua = excluded.ua, updated_at = excluded.updated_at, expires_at = excluded.expires_at, shorts_locked = excluded.shorts_locked"
+    ).bind(row.public_id, hash, endpoint, clip(keys.p256dh, 200), clip(keys.auth, 200), clip(request.headers.get("user-agent"), 160), now, now, exp, shortsLocked).run();
     return json(200, { ok: true });
   }
   if (path === "/v1/push/subscribe" && request.method === "DELETE") {
@@ -977,6 +1053,17 @@ export async function notificationSelfTest() {
     if (!pushSuppressed({ dnd_until: 50 }, 10)) throw new Error("dnd until");
     if (pushSuppressed({ dnd_until: 5 }, 10)) throw new Error("dnd expired");
   } else throw new Error("dnd");
+  const ownerLocked = { owner: true, locked: true, unlocked: [] };
+  if (!tiktokNoteHidden({ platform: "tiktok", handle: "lockedacct", feedId: "tiktok:lockedacct" }, ownerLocked)) throw new Error("locked note");
+  if (tiktokNoteHidden({ platform: "tiktok", handle: "openacct", feedId: "tiktok:openacct" }, { owner: true, locked: true, unlocked: function (name) { return name === "openacct"; } })) throw new Error("unlocked note");
+  if (tiktokNoteHidden({ platform: "tiktok", handle: "lockedacct" }, { owner: true, locked: false, unlocked: [] })) throw new Error("lock off");
+  if (!tiktokNoteHidden({ platform: "tiktok", handle: "openacct" }, { owner: false, audienceAll: false, locked: false, unlocked: ["openacct"] })) throw new Error("audience");
+  if (tiktokNoteHidden({ platform: "app", handle: "readerlock" }, ownerLocked)) throw new Error("other platform");
+  const rows = visibleNotes([
+    { id: "a", platform: "tiktok", handle: "lockedacct", read: false },
+    { id: "b", platform: "app", handle: "readerlock", read: false }
+  ], ownerLocked);
+  if (rows.length !== 1 || rows[0].id !== "b") throw new Error("badge");
 }
 
 if (typeof process !== "undefined" && process.argv && process.argv.indexOf("--selftest") >= 0) {
