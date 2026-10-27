@@ -263,7 +263,7 @@ export async function handleBlockMuteRoutes(request, env, path, deps) {
   if (!hit.ok) return limited(hit);
   const body = await readJson(request, 2000);
   if (body.error) return json(400, { error: body.error });
-  const peer = cleanPeer(body.id || body.publicId);
+  const peer = cleanPeer(body.id || body.publicId || body.accountId);
   if (!peer || peer === row.public_id) return json(400, { error: "bad_account" });
   const known = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(peer).first();
   if (!known) return json(404, { error: "not_found" });
