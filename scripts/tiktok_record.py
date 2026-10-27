@@ -2,11 +2,11 @@
 """Record a public TikTok live and copy it to Telegram.
 
 One Actions job captures one live. The capture is a stream copy of the origin
-variant (ffmpeg -c copy). It is never re-encoded. Segments land in R2 first,
-so a slow Telegram channel cannot drop them. One uploader job per backup
-channel sends those segments, about 20 messages a minute, and honors
-retry_after. Extra channels are an owner-only list; the same bot posts to
-each of them.
+variant (ffmpeg -c copy). It is never re-encoded. Segments land in R2 first
+and the local file is removed, so a slow Telegram channel cannot drop them
+or fill the runner disk. The same job offers each segment to Telegram and
+checks its sha256. One uploader job drains anything that offer left behind.
+Extra channels are an owner-only list; the same bot posts to each of them.
 
 No cookies, no proxy, and no captcha bypass. A 403, 429, 503, or captcha
 page skips that live and the Live tab keeps Open on TikTok.
@@ -17,12 +17,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import queue
 import re
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -50,16 +52,21 @@ from tiktok_sync import (  # noqa: E402
 BUCKET = "viktorych-data"
 INDEX_KEY = "owner/tiktok-recordings.json"
 JOB_PREFIX = "owner/live-jobs/"
+PUBLIC_PREFIX = "owner/recording-public/"
+ACTIVE_PREFIX = "owner/live-active/"
 BUF_PREFIX = "live-buf/"
 CHANNELS_KEY = "owner/tiktok-backup-channels.json"
 UPLOAD_PREFIX = "owner/live-upload/"
 SMALL_BYTES = 19 * 1024 * 1024
 TARGET_BYTES = 18 * 1024 * 1024
-CAP_LIMIT = 12
+CAP_LIMIT = 16
 MESSAGES_PER_MINUTE = 20
 HIGH_SEGMENTS_PER_MINUTE = 3
 PART_SECONDS = 5 * 60 * 60 + 30 * 60
-HANDOFF_LEAD = 4 * 60
+# Stop this job before the Actions six-hour cap. The next part starts after
+# this job exits, because the per-handle queue will not run two at once.
+HANDOFF_LEAD = 15 * 60
+DISK_FLOOR = 2 * 1024 * 1024 * 1024
 HEARTBEAT_SECONDS = 8 * 60
 DISPATCH_SECONDS = 3 * 60
 BACKOFF_SECONDS = 15 * 60
@@ -99,7 +106,7 @@ def fresh_iso(value: str, now: str, seconds: int) -> bool:
 
 
 def cap_of() -> int:
-    raw = (os.environ.get("TIKTOK_RECORD_CAP") or "12").strip()
+    raw = (os.environ.get("TIKTOK_RECORD_CAP") or str(CAP_LIMIT)).strip()
     try:
         value = int(raw)
     except ValueError:
@@ -245,13 +252,10 @@ def channel_ok(value: str) -> bool:
 
 
 def sort_key(handle: str, added: list, started: str) -> tuple:
-    order = [str(item or "").lower() for item in added]
+    """Earliest start takes a free slot. The handle is only a tie break."""
+    del added
     name = str(handle or "").lower()
-    try:
-        index = order.index(name)
-    except ValueError:
-        index = len(order)
-    return (index, started or "9999-12-31T00:00:00Z", name)
+    return (started or "9999-12-31T00:00:00Z", name)
 
 
 def blank_job(handle: str) -> dict:
@@ -324,11 +328,11 @@ def occupies(active: dict, now: str) -> bool:
     return fresh_iso(str(active.get("heartbeat") or ""), now, HEARTBEAT_SECONDS) or fresh_iso(str(active.get("dispatchedAt") or ""), now, DISPATCH_SECONDS)
 
 
-def plan(lives: list, added: list, jobs: dict, now: str, cap: int = 12, channels: int = 1) -> dict:
+def plan(lives: list, added: list, jobs: dict, now: str, cap: int = CAP_LIMIT, channels: int = 1) -> dict:
     """Choose which lives capture now and which wait.
 
-    Added-account order is the priority. Start time breaks ties for handles
-    that are not in that list. A live already being captured is not started twice.
+    The earliest start time gets a slot. A live already being captured is not
+    started twice. Anything past the cap stays queued.
     """
     cap = max(1, min(int(cap or CAP_LIMIT), CAP_LIMIT))
     channels = max(1, int(channels or 1))
@@ -507,12 +511,33 @@ def load_job(handle: str) -> dict:
     return job
 
 
+def slot_held(active: dict | None) -> bool:
+    row = active if isinstance(active, dict) else {}
+    if row.get("state") != "recording":
+        return False
+    if row.get("captureDone") and not row.get("needsPart"):
+        return False
+    return True
+
+
 def save_job(job: dict) -> None:
+    """Write this live only. Parallel recorders never share a file."""
     handle = str(job.get("handle") or "").lower()
     job["handle"] = handle
-    job["public"] = public_view(job)
+    view = public_view(job)
+    job["public"] = view
     job["updatedAt"] = now_iso()
     r2_put(job_key(handle), json.dumps(job, ensure_ascii=False).encode("utf-8"))
+    if view.get("state"):
+        r2_put(PUBLIC_PREFIX + handle + ".json", json.dumps(view, ensure_ascii=False).encode("utf-8"))
+    else:
+        r2_delete(PUBLIC_PREFIX + handle + ".json")
+    active = job.get("active") if isinstance(job.get("active"), dict) else {}
+    if slot_held(active):
+        marker = {"handle": handle, "roomId": str(active.get("roomId") or ""), "at": job["updatedAt"]}
+        r2_put(ACTIVE_PREFIX + handle + ".json", json.dumps(marker).encode("utf-8"))
+    else:
+        r2_delete(ACTIVE_PREFIX + handle + ".json")
 
 
 def write_index(jobs: dict, cap: int) -> None:
@@ -647,7 +672,7 @@ def cmd_plan(dispatch: bool) -> int:
             save_job(job)
     write_index(decided["jobs"], cap)
     beats = upload_heartbeats(channels)
-    uploads = plan_uploads(decided["jobs"], beats, channels, moment)
+    uploads = plan_uploads(decided["jobs"], beats, channels, moment)[:1]
     numbers = capacity(channels, cap)
     log("cap %s active %s queued %s channels %s kept-up %s" % (
         cap, decided["active"], len(decided["queued"]), channels, numbers["highLivesKeptUp"]))
@@ -793,13 +818,91 @@ def durations_from_playlist(path: Path) -> dict:
     return found
 
 
+_OFFERS = None
+_OFFER_LOCK = threading.Lock()
+
+
+def queue_offer(buf_key: str, meta: dict) -> None:
+    """Hand a stored segment to Telegram without stopping the copy."""
+    bot = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    channel = (os.environ.get("TELEGRAM_CHANNEL_ID") or "").strip()
+    if not bot or not channel:
+        return
+    global _OFFERS
+    with _OFFER_LOCK:
+        if _OFFERS is None:
+            _OFFERS = queue.Queue()
+            threading.Thread(target=_offer_loop, name="tiktok-offer", daemon=True).start()
+    _OFFERS.put((buf_key, dict(meta)))
+
+
+def _offer_loop() -> None:
+    while True:
+        buf_key, meta = _OFFERS.get()
+        try:
+            offer_segment(buf_key, meta)
+        except Exception:
+            log("telegram offer failed")
+
+
+def offer_segment(buf_key: str, meta: dict) -> None:
+    """Upload one buffered piece and check its sha256. Leave R2 in place on failure."""
+    bot = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    channel = (os.environ.get("TELEGRAM_CHANNEL_ID") or "").strip()
+    token, account = cloudflare_env()
+    if not bot or not channel or not token or not account:
+        return
+    if meta.get("oversize") or int(meta.get("size") or 0) >= SMALL_BYTES:
+        return
+    blob = r2_get(buf_key)
+    if not blob or not piece_matches(blob, meta):
+        return
+    from telegram_backup import d1_id, d1_rows, remember_d1, send_document
+
+    database = d1_id(token, account)
+    object_key = str(meta.get("objectKey") or "")
+    role = "init" if meta.get("role") == "init" else "segment"
+    part_index = int(meta.get("index") or 0)
+    kind = "init" if role == "init" else "segment"
+    digest = hashlib.sha256(blob).hexdigest()
+    local = Path(tempfile.mkdtemp(prefix="tiktok-offer-")) / Path(buf_key).name
+    try:
+        local.write_bytes(blob)
+        existing = d1_rows(token, account, database, "SELECT file_id FROM telegram_files WHERE object_key = ? AND kind = ? AND part_index = ? LIMIT 1", [object_key, kind, part_index])
+        if not existing:
+            sent = send_document("https://api.telegram.org", bot, channel, local, object_key, {"last": 0.0})
+            remember_d1(token, account, database, {
+                "serve": True,
+                "bucket": BUCKET,
+                "key": object_key,
+                "encrypted": False,
+            }, {
+                "role": role,
+                "index": part_index,
+                "file_id": sent["file_id"],
+                "message_id": sent["message_id"],
+                "size": int(sent.get("file_size") or local.stat().st_size),
+                "sha256": digest,
+                "mime": "video/mp4",
+                "duration": float(meta.get("duration") or 0),
+            }, True, object_key)
+        r2_delete(buf_key)
+        r2_delete(buf_key + ".json")
+        log("offered %s #%s %s" % (object_key, part_index, digest[:12]))
+    finally:
+        shutil.rmtree(local.parent, ignore_errors=True)
+
+
 def store_piece(local: Path, buf_key: str, meta: dict) -> bool:
     sidecar = dict(meta)
     sidecar["size"] = local.stat().st_size
     sidecar["sha256"] = hashlib.sha256(local.read_bytes()).hexdigest()
     if not r2_put_file(buf_key, local, "video/mp4"):
         return False
-    return r2_put(buf_key + ".json", json.dumps(sidecar).encode("utf-8"))
+    if not r2_put(buf_key + ".json", json.dumps(sidecar).encode("utf-8")):
+        return False
+    queue_offer(buf_key, sidecar)
+    return True
 
 
 def split_oversize(local: Path, dest: Path) -> list:
@@ -825,7 +928,12 @@ def split_oversize(local: Path, dest: Path) -> list:
     return pieces
 
 
-def publish_local(dest: Path, sent: set, meta: dict) -> int:
+def publish_local(dest: Path, sent: set, meta: dict, closed: bool = False) -> int:
+    """Store finished segments and drop the local files.
+
+    The newest segment stays on disk while ffmpeg still has it open.
+    A segment is removed only after R2 has accepted every piece.
+    """
     stored = 0
     playlist = durations_from_playlist(dest / "index.m3u8")
     init = dest / "init.mp4"
@@ -841,7 +949,10 @@ def publish_local(dest: Path, sent: set, meta: dict) -> int:
         if store_piece(init, meta["buf"] + "/init.mp4", piece):
             sent.add("init.mp4")
             stored += 1
-    for path in sorted(dest.glob("seg*.m4s")):
+    paths = sorted(dest.glob("seg*.m4s"))
+    if not closed and paths:
+        paths = paths[:-1]
+    for path in paths:
         if path.name in sent:
             continue
         index = int(path.stem.replace("seg", "") or "0")
@@ -854,6 +965,7 @@ def publish_local(dest: Path, sent: set, meta: dict) -> int:
             else:
                 oversize = True
                 log("oversize %s" % path.name)
+        wrote = 0
         for offset, piece_path in enumerate(pieces):
             piece = {
                 "objectKey": meta["objectKey"],
@@ -865,8 +977,16 @@ def publish_local(dest: Path, sent: set, meta: dict) -> int:
             }
             buf_name = piece_path.name if len(pieces) == 1 else ("seg%05d.m4s" % piece["index"])
             if store_piece(piece_path, meta["buf"] + "/" + buf_name, piece):
-                stored += 1
+                wrote += 1
+        if wrote != len(pieces):
+            continue
+        stored += wrote
         sent.add(path.name)
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        shutil.rmtree(dest / ("split-" + path.stem), ignore_errors=True)
     return stored
 
 
@@ -887,11 +1007,9 @@ def pull_failure(tail: str) -> str:
 
 def record_decision(still_live: bool, gained: int, reason: str, failure: str) -> str:
     """What one ffmpeg attempt should do next. Pure, so the pipeline can be tested."""
-    if reason == "handoff":
-        return "handoff"
     if not still_live:
         return "save" if int(gained or 0) > 0 else "drop"
-    if reason == "deadline":
+    if reason in {"deadline", "chain", "handoff"}:
         return "chain"
     if failure == "blocked" and int(gained or 0) <= 0:
         return "backoff"
@@ -1066,11 +1184,10 @@ def cmd_record(handle: str, part: str, room: str) -> int:
         part_n = max(part_n, int(active.get("part") or 1))
     run_id = str(os.environ.get("GITHUB_RUN_ID") or "")
     if active.get("capturing") and str(active.get("runId") or "") not in {"", run_id} and fresh_iso(str(active.get("heartbeat") or ""), now_iso(), HEARTBEAT_SECONDS):
-        # The previous part asked this job to take over. It is still copying
-        # until this process heartbeats, which is the gapless handoff.
-        if not (active.get("needsPart") and int(part_n) == int(active.get("part") or 0)):
-            log("already recording %s" % name)
-            return 0
+        # The per-handle queue starts the next part only after this job
+        # exits. A second runner must not copy the same live.
+        log("already recording %s" % name)
+        return 0
     if not room_id:
         doc = load_json_bytes(r2_get("owner/tiktok.json"))
         live = (doc.get("live") or {}).get(name) if isinstance(doc.get("live"), dict) else {}
@@ -1205,7 +1322,6 @@ def cmd_record(handle: str, part: str, room: str) -> int:
     chain_at = deadline - HANDOFF_LEAD
     fails = 0
     tried_alt = False
-    handed = {"on": False}
 
     while True:
         dest = Path(tempfile.mkdtemp(prefix="tiktok-live-"))
@@ -1224,25 +1340,18 @@ def cmd_record(handle: str, part: str, room: str) -> int:
         def on_tick(dest=dest, sent=sent, meta=meta):
             nonlocal last_live, last_beat, seq
             now = time.time()
-            stored = publish_local(dest, sent, meta)
+            stored = publish_local(dest, sent, meta, closed=False)
             if stored:
                 active["segments"] = int(active.get("segments") or 0) + stored
-            if not handed["on"] and now >= chain_at:
-                handed["on"] = True
-                active["needsPart"] = True
-                active["part"] = part_n + 1
-                active["dispatchedAt"] = now_iso()
-                job["active"] = active
-                save_job(job)
-                github_dispatch("tiktok-record.yml", {"handle": name, "part": part_n + 1, "room": room_id})
-                log("handoff %s part %s" % (name, part_n + 1))
-            if handed["on"]:
-                remote = load_job(name)
-                remote_active = remote.get("active") if isinstance(remote.get("active"), dict) else {}
-                other = str(remote_active.get("runId") or "")
-                if other not in {"", run_id} and fresh_iso(str(remote_active.get("heartbeat") or ""), now_iso(), HEARTBEAT_SECONDS):
-                    return "handoff"
-                return ""
+            try:
+                free = shutil.disk_usage(str(dest)).free
+            except OSError:
+                free = DISK_FLOOR
+            if free < DISK_FLOOR:
+                log("disk low")
+                return "chain"
+            if now >= chain_at:
+                return "chain"
             if now - last_beat > 20:
                 last_beat = now
                 active["heartbeat"] = now_iso()
@@ -1269,7 +1378,7 @@ def cmd_record(handle: str, part: str, room: str) -> int:
         tail = ""
         try:
             reason, tail = run_ffmpeg(source["url"], dest, seconds, seq, deadline, on_tick)
-            stored = publish_local(dest, sent, meta)
+            stored = publish_local(dest, sent, meta, closed=True)
             if stored:
                 active["segments"] = int(active.get("segments") or 0) + stored
             for path in dest.glob("seg*.m4s"):
@@ -1282,14 +1391,11 @@ def cmd_record(handle: str, part: str, room: str) -> int:
             shutil.rmtree(dest, ignore_errors=True)
         gained = int(active.get("segments") or 0) - before
         failure = ""
-        if gained <= 0 and reason not in {"deadline", "ended", "handoff"}:
+        if gained <= 0 and reason not in {"deadline", "ended", "handoff", "chain"}:
             failure = pull_failure(tail)
             if tail.strip():
                 log("ffmpeg %s %s" % (name, tail.strip().splitlines()[-1][:180]))
         decision = record_decision(still["live"], gained, reason, failure)
-        if decision == "handoff":
-            log("handed %s" % name)
-            return 0
         if decision == "save":
             return finish_save()
         if decision == "drop":
@@ -1419,11 +1525,8 @@ def cmd_upload(slot: str) -> int:
             names_known = list((index_doc.get("items") or {}).keys())
             jobs.update(load_jobs(names_known))
             changed = False
-            busy = False
             for handle, job in jobs.items():
                 active = job.get("active") if isinstance(job.get("active"), dict) else {}
-                if active.get("capturing") or active.get("needsPart"):
-                    busy = True
                 prefixes = handle_prefixes(handle)
                 left = [key for key in names if any(key.startswith(prefix) for prefix in prefixes) and key not in dead]
                 if ready_to_save(active, len(left)):
@@ -1436,16 +1539,12 @@ def cmd_upload(slot: str) -> int:
                     changed = True
             if changed:
                 write_index(jobs, cap_of())
-            if busy:
-                idle_since = 0.0
-                time.sleep(5)
-                continue
             if not idle_since:
                 idle_since = time.time()
-            if time.time() - idle_since > 90:
+            if time.time() - idle_since > 30:
                 log("upload idle")
                 break
-            time.sleep(10)
+            time.sleep(5)
             continue
         idle_since = 0.0
         key, meta = pending[0]
@@ -1518,6 +1617,84 @@ def cmd_upload(slot: str) -> int:
     return 0
 
 
+def rehearse_parallel(count: int = 16) -> bool:
+    """Dry run. No streams. Parallel recorders must not share a key."""
+    store = {}
+    locks = {}
+    guard = threading.Lock()
+    errors = []
+
+    def lock_for(key: str) -> threading.Lock:
+        with guard:
+            found = locks.get(key)
+            if found is None:
+                found = threading.Lock()
+                locks[key] = found
+            return found
+
+    def put(key: str, blob: bytes) -> None:
+        with lock_for(key):
+            store[key] = blob
+
+    def merge(handle: str, view: dict) -> None:
+        with lock_for(INDEX_KEY):
+            current = json.loads(store.get(INDEX_KEY, b'{"items":{}}').decode("utf-8"))
+            current.setdefault("items", {})[handle] = view
+            store[INDEX_KEY] = json.dumps(current).encode("utf-8")
+
+    def work(index: int) -> None:
+        handle = "h%02d" % index
+        room = "7699647509498711%03d" % index
+        base = key_base(handle, room)
+        if not base:
+            errors.append("key " + handle)
+            return
+        body = ("bytes-" + handle).encode("utf-8")
+        seg = "%s0/%s/%s/1/seg00000.m4s" % (BUF_PREFIX, handle, room)
+        own = (
+            job_key(handle),
+            ACTIVE_PREFIX + handle + ".json",
+            PUBLIC_PREFIX + handle + ".json",
+            seg,
+        )
+        for key in own:
+            put(key, body)
+        merge(handle, {"state": "recording", "roomId": room, "key": base})
+        for key in own:
+            if store.get(key) != body or handle.encode("utf-8") not in store.get(key, b""):
+                errors.append(key)
+
+    threads = [threading.Thread(target=work, args=(index,)) for index in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    if errors:
+        return False
+    items = json.loads(store.get(INDEX_KEY, b"{}").decode("utf-8")).get("items") or {}
+    owned = [key for key in store if key != INDEX_KEY]
+    if len(items) != count or len(owned) != count * 4:
+        return False
+    for index in range(count):
+        handle = "h%02d" % index
+        body = ("bytes-" + handle).encode("utf-8")
+        room = "7699647509498711%03d" % index
+        seg = "%s0/%s/%s/1/seg00000.m4s" % (BUF_PREFIX, handle, room)
+        for key in (job_key(handle), ACTIVE_PREFIX + handle + ".json", PUBLIC_PREFIX + handle + ".json", seg):
+            if store.get(key) != body:
+                return False
+        view = items.get(handle) or {}
+        if view.get("roomId") != room or view.get("key") != key_base(handle, room):
+            return False
+        for other in range(count):
+            if other == index:
+                continue
+            foreign = ("h%02d" % other).encode("utf-8")
+            if foreign in body:
+                return False
+    return True
+
+
 def selftest() -> int:
     failed = 0
 
@@ -1530,11 +1707,17 @@ def selftest() -> int:
             print("ok " + message)
 
     numbers = capacity(1)
-    check(numbers["recordingJobs"] == 12, "twelve recording jobs is the cap")
+    check(numbers["recordingJobs"] == 16, "sixteen recording jobs is the cap")
     check(numbers["livesPerChannel"] == 6, "one channel keeps up with six high-bitrate lives")
     check(numbers["messagesPerMinute"] == 20 and numbers["highSegmentsPerMinute"] == 3, "the pace is twenty messages and three segments a minute")
     check(capacity(2)["highLivesKeptUp"] == 12, "two channels keep up with twelve high-bitrate lives")
-    check(cap_of() == 12 or cap_of() <= 12, "the cap cannot exceed twelve")
+    saved_cap = os.environ.get("TIKTOK_RECORD_CAP")
+    os.environ["TIKTOK_RECORD_CAP"] = "99"
+    check(cap_of() == 16, "the cap cannot exceed sixteen")
+    if saved_cap is None:
+        os.environ.pop("TIKTOK_RECORD_CAP", None)
+    else:
+        os.environ["TIKTOK_RECORD_CAP"] = saved_cap
 
     check(segment_seconds(0) == 6, "an unknown bitrate uses a short safe segment")
     check(segment_seconds(8_000_000) == 18, "eight megabits a second is an eighteen second copy")
@@ -1596,26 +1779,26 @@ def selftest() -> int:
             "qualityNote": "",
             "title": handle,
         })
-    # a started earlier, but b is first in the added list.
+    # a started a minute before b. The earlier start takes the only slot.
     first = plan(lives[:2], added, {}, now, cap=1, channels=1)
-    check(first["dispatch"][0]["handle"] == "b_name", "the added-account order starts before an earlier live")
-    check(first["queued"] == ["a_name"], "the next live waits")
+    check(first["dispatch"][0]["handle"] == "a_name", "the earlier live starts first")
+    check(first["queued"] == ["b_name"], "a later live waits")
     many = []
     order = []
-    for index in range(13):
+    for index in range(17):
         handle = "h%02d" % index
         order.append(handle)
         many.append({
             "handle": handle,
             "live": True,
             "roomId": "7699647509498711%03d" % index,
-            "startedAt": "2026-10-23T00:10:00Z",
+            "startedAt": "2026-10-23T00:10:%02dZ" % index,
             "quality": "origin",
         })
-    wide = plan(many, order, {}, now, cap=12, channels=2)
-    check(len(wide["dispatch"]) == 12 and wide["queued"] == ["h12"], "the thirteenth live queues and twelve capture")
+    wide = plan(many, order, {}, now, cap=16, channels=2)
+    check(len(wide["dispatch"]) == 16 and wide["queued"] == ["h16"], "the seventeenth live queues and sixteen capture")
     check(all(0 <= job["active"].get("channelSlot", 0) <= 1 for job in wide["jobs"].values() if job.get("active")), "recordings spread across the channels")
-    again = plan(many, order, wide["jobs"], "2026-10-23T01:01:00Z", cap=12, channels=2)
+    again = plan(many, order, wide["jobs"], "2026-10-23T01:01:00Z", cap=16, channels=2)
     check(not any(item["handle"] == "h00" and item["part"] == 1 for item in again["dispatch"]), "a fresh dispatch is not started twice")
 
     saved_job = blank_job("b_name")
@@ -1687,7 +1870,13 @@ def selftest() -> int:
     check(record_decision(True, 4, "deadline", "") == "chain", "the time cap chains the next part")
     check(record_decision(False, 4, "ended", "") == "save", "the end of the live saves what was copied")
     check(record_decision(False, 0, "ended", "") == "drop", "an empty ended live is not saved")
-    check(record_decision(True, 1, "handoff", "") == "handoff", "a successor heartbeat ends this part without a gap")
+    check(record_decision(True, 1, "handoff", "") == "chain", "a handoff chains the next part after this job stops")
+    check(record_decision(True, 1, "chain", "") == "chain", "the next part waits until this job exits")
+    check(rehearse_parallel(16), "sixteen recorders keep separate files, state, and the capture index")
+    record_yml = (ROOT / ".github/workflows/tiktok-record.yml").read_text(encoding="utf-8")
+    upload_yml = (ROOT / ".github/workflows/tiktok-live-upload.yml").read_text(encoding="utf-8")
+    check("tiktok-record-${{ inputs.handle }}" in record_yml and "cancel-in-progress: false" in record_yml, "one recorder waits per handle and is not cancelled")
+    check("group: tiktok-live-upload\n" in upload_yml and "tiktok-upload-${{" not in upload_yml, "one uploader runs at a time")
     blob = b"segment-bytes"
     matched = {"sha256": hashlib.sha256(blob).hexdigest(), "size": len(blob)}
     check(piece_matches(blob, matched), "a segment matches its sha256")
