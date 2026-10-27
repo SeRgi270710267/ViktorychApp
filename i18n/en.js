@@ -1598,5 +1598,16 @@ SI18n.addPack("en", {
   "{name}: {local} on this device, {server} on the server": "{name}: {local} on this device, {server} on the server",
   "{name} averages {localMs} here and {serverMs} on the server": "{name} averages {localMs} here and {serverMs} on the server",
   "Kept off the server {size}": "Kept off the server {size}",
-  "Faster by {time}": "Faster by {time}"
+  "Faster by {time}": "Faster by {time}",
+  "Peer-assisted media": "Peer-assisted media",
+  "Peers can see each other's IP address while sharing.": "Peers can see each other's IP address while sharing.",
+  "Upload cap": "Upload cap",
+  "Share only while watching": "Share only while watching",
+  "From peers {size}": "From peers {size}",
+  "From origin {size}": "From origin {size}",
+  "32 KB/s": "32 KB/s",
+  "64 KB/s": "64 KB/s",
+  "128 KB/s": "128 KB/s",
+  "256 KB/s": "256 KB/s",
+  "Peer sharing follows the level on this device.": "Peer sharing follows the level on this device."
 });

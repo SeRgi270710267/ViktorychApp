@@ -78,12 +78,29 @@
     return rootBase + rel;
   }
 
-  function failoverStatus(status) {
-    var code = Number(status);
-    if (!code) return true;
-    if (code === 404 || code === 429) return true;
-    return code >= 500;
-  }
+function failoverStatus(status) {
+  var code = Number(status);
+  if (!code) return true;
+  if (code === 404 || code === 429) return true;
+  return code >= 500;
+}
+
+function retryableStatus(status) {
+  var code = Number(status);
+  if (code === 429 || code === 401 || code === 403 || code === 404 || code === 451) return false;
+  if (!code || code === 408 || code === 500 || code === 502 || code === 503 || code === 504) return true;
+  return false;
+}
+
+function retryDelay(attempt, random) {
+  var n = Number(attempt) || 0;
+  if (n >= 2) return -1;
+  var roll = typeof random === "number" ? random : Math.random();
+  if (roll < 0) roll = 0;
+  if (roll > 1) roll = 1;
+  var base = Math.min(1600, 200 * Math.pow(2, n));
+  return Math.round(base + roll * base);
+}
 
   var api = {
     PAGES_HOST: PAGES_HOST,
@@ -96,7 +113,9 @@
     bases: bases,
     relativeTo: relativeTo,
     rewrite: rewrite,
-    failoverStatus: failoverStatus
+    failoverStatus: failoverStatus,
+    retryableStatus: retryableStatus,
+    retryDelay: retryDelay
   };
   var host = root;
   if (!host && typeof globalThis !== "undefined") host = globalThis;

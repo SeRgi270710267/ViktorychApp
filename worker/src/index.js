@@ -19,6 +19,7 @@ import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { handleMediaSwarm } from "./media-swarm.js";
 import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
@@ -927,23 +928,33 @@ function cleanBottomNavSync(raw) {
 }
 
 const DEVICE_FEATURES = ["direct", "search", "translate", "ai", "media", "record", "storage", "sync"];
+const PEER_UPLOAD_CAPS = [32768, 65536, 131072, 262144];
 
 function cleanDevicePerf(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const level = raw.level === "light" || raw.level === "max" ? raw.level : "balanced";
+  let level = raw.level === "light" || raw.level === "max" || raw.level === "balanced" ? raw.level : "";
+  if (!level) {
+    const profile = String(raw.profile || "").toLowerCase();
+    level = profile === "lite" || profile === "light" ? "light" : profile === "max" ? "max" : "balanced";
+  }
   const toggles = {};
   const src = raw.toggles && typeof raw.toggles === "object" ? raw.toggles : {};
   DEVICE_FEATURES.forEach((id) => {
     if (typeof src[id] === "boolean") toggles[id] = src[id];
   });
+  const cap = PEER_UPLOAD_CAPS.indexOf(Number(raw.peerUploadCap)) >= 0 ? Number(raw.peerUploadCap) : 65536;
   return {
     level,
+    profile: level === "light" ? "lite" : level,
     toggles,
     wifiOnly: raw.wifiOnly === true,
     pauseBattery: raw.pauseBattery !== false,
     autoLight: raw.autoLight !== false,
     webllm: raw.webllm === true && raw.webllmAccepted === true,
-    webllmAccepted: raw.webllmAccepted === true
+    webllmAccepted: raw.webllmAccepted === true,
+    peerMedia: raw.peerMedia === "on" || raw.peerMedia === "off" ? raw.peerMedia : "auto",
+    peerUploadCap: cap,
+    peerShareWhileWatching: raw.peerShareWhileWatching !== false
   };
 }
 
@@ -4619,6 +4630,9 @@ async function route(request, env, ctx) {
   }
   if (path === "/v1/channel" || path === "/v1/channel/ticket") {
     return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
+  }
+  if (path === "/v1/media/swarm" || path === "/v1/media/swarm/ticket") {
+    return handleMediaSwarm(request, env, url, { json, sessionAccount, rateHit, limited });
   }
   if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
 
