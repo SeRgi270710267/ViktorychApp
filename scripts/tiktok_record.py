@@ -434,9 +434,12 @@ def plan_uploads(jobs: dict, heartbeats: dict, slots: int, now: str) -> list:
         active = job.get("active") if isinstance(job, dict) and isinstance(job.get("active"), dict) else {}
         if not active:
             continue
-        if active.get("segments") or active.get("capturing") or active.get("captureDone") or active.get("state") == "recording":
-            if not active.get("settled"):
-                need = True
+        if active.get("settled"):
+            continue
+        segments = int(active.get("segments") or 0)
+        capturing = bool(active.get("capturing")) and fresh_iso(str(active.get("heartbeat") or ""), now, 8 * 60)
+        if segments > 0 or capturing:
+            need = True
     if not need:
         return []
     start = []
@@ -1340,6 +1343,16 @@ def selftest() -> int:
     check(ready_to_save(partial["active"], 0), "a finished capture with no buffer left can be marked saved")
     check(not ready_to_save(partial["active"], 2), "buffered segments are not dropped before they upload")
     check(not ready_to_save({"state": "recording", "capturing": True, "segments": 3}, 0), "an open capture is not marked saved")
+
+    moment = "2026-10-23T01:00:00Z"
+    quiet = {"a_name": {"active": {"state": "recording", "captureDone": True, "segments": 0, "capturing": False}}}
+    check(plan_uploads(quiet, {}, 1, moment) == [], "a finished capture with no segments does not start an uploader")
+    buffered = {"a_name": {"active": {"state": "recording", "captureDone": True, "segments": 4, "capturing": False}}}
+    check(plan_uploads(buffered, {}, 1, moment) == [0], "buffered segments start an uploader")
+    live_cap = {"a_name": {"active": {"capturing": True, "segments": 0, "heartbeat": "2026-10-23T00:56:00Z"}}}
+    check(plan_uploads(live_cap, {}, 1, moment) == [0], "an open capture with a fresh heartbeat starts an uploader")
+    stale_cap = {"a_name": {"active": {"capturing": True, "segments": 0, "heartbeat": "2026-10-23T00:00:00Z"}}}
+    check(plan_uploads(stale_cap, {}, 1, moment) == [], "a stale capture does not start an uploader")
 
     check(channel_slot("7699647509498710804", 2) == channel_slot("7699647509498710804", 2), "a room stays on the same channel")
     check(channel_ok("-1004242") and not channel_ok("4242"), "a backup channel id is a private -100 id")

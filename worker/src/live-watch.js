@@ -96,6 +96,15 @@ export function watchDecision(job, marker, roomId, nowMs) {
   return { action: "record", part, why: "retry" };
 }
 
+// An uploader is worth a runner only when bytes are waiting, or a capture
+// is still open and has checked in recently. A live flag or a finished
+// capture with no segments must not dispatch one.
+export function needsUpload(active, nowMs) {
+  if (!active || typeof active !== "object") return false;
+  if (Number(active.segments || 0) > 0) return true;
+  return !!active.capturing && fresh(active.heartbeat, nowMs, WATCH_HEARTBEAT_MS);
+}
+
 // The uploader writes owner/live-upload/<slot>.json on every pass.
 export function uploaderStale(beat, nowMs, ms = 5 * 60 * 1000) {
   if (!beat || !beat.at) return true;

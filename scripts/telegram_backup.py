@@ -2954,7 +2954,7 @@ def selftest() -> int:
     check("wrangler secret put TELEGRAM_BOT_TOKEN" in secret_workflow and "printf '%s'" in secret_workflow, "the Worker secret is copied from stdin")
     check('echo "$TELEGRAM' not in secret_workflow and "echo ${{ secrets" not in secret_workflow, "the Worker secret workflow does not print secrets")
     check(".github/telegram-worker-secret" in secret_workflow and ".github/telegram-worker-secret" in doc, "pushing the marker copies the Worker secret")
-    check('cron: "17 11 * * *"' in workflow and 'cron: "*/30 * * * *"' in workflow and "workflow_dispatch" in workflow and "actions/cache@v4" in workflow and "--local" in workflow, "the workflow is scheduled, manual, cached, and can start the local server")
+    check('cron: "17 11 * * *"' in workflow and 'cron: "*/30 * * * *"' not in workflow and "workflow_dispatch" in workflow and "actions/cache@v4" in workflow and "--local" in workflow, "the workflow is scheduled, manual, cached, and can start the local server")
     check("cancel-in-progress: false" in workflow, "an upload that is already running is not cancelled")
     sync_workflow = (ROOT / ".github" / "workflows" / "sync.yml").read_text(encoding="utf-8")
     check("telegram-backup.yml" in sync_workflow and "media-extract.yml" in sync_workflow and "loop_only" in sync_workflow, "a finished sync dispatches the backup and the extract")
