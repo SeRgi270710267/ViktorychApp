@@ -1,5 +1,6 @@
-/* Corner drawers docked to the page. Chat is this app's own messages.
-   The other square is a local AI chat. Nothing here embeds another site. */
+/* Corner drawers docked to the page. Chat reads the same conversations as
+   the Messages screen. The other square is a local AI chat. Nothing here
+   embeds another site. */
 (function (root) {
   var KEY = "viktorychapp-dock-v1";
   var AI_CONFIG = {
@@ -188,7 +189,8 @@
     var back = "";
     if (kind === "chat" && ui.chatView !== "list") {
       back = iconBtn("back", kind, "back", tr("Back"));
-      if (ui.chatView === "thread" && chatMem.peer) title = chatMem.peer.name || chatMem.peer.handle || title;
+      var open = currentThread();
+      if (ui.chatView === "thread" && open && open.name) title = open.name;
     }
     if (kind === "ai" && ui.aiView === "history") {
       back = iconBtn("ai-back", kind, "back", tr("Back to chat"));
@@ -196,8 +198,7 @@
     }
     var tools = "";
     if (kind === "chat") {
-      tools = iconBtn("new-message", kind, "plus", tr("New message")) +
-        iconBtn("menu", kind, "more", tr("Chat options"), ' aria-expanded="' + (ui.menu ? "true" : "false") + '"');
+      tools = iconBtn("menu", kind, "more", tr("Chat options"), ' aria-expanded="' + (ui.menu ? "true" : "false") + '"');
     } else {
       tools = iconBtn("ai-new", kind, "plus", tr("New chat")) + iconBtn("ai-history", kind, "history", tr("History"));
     }
@@ -209,80 +210,79 @@
       iconBtn("expand", kind, "expand", tr("Expand")) +
       iconBtn("collapse", kind, "caret", tr("Collapse")) + menu;
   }
-  function me() {
-    var accounts = root.ViktorychAccounts;
-    var account = accounts && accounts.account ? accounts.account() : null;
-    if (!account) return null;
-    return {
-      id: String(account.publicId || account.public_id || ""),
-      token: accounts.token ? accounts.token() : ""
-    };
-  }
-  function safeUrl(url) {
-    return /^https?:\/\//i.test(String(url || "")) ? String(url) : "";
-  }
-  function initial(name) {
-    var text = String(name || "").trim();
-    return text ? text.charAt(0).toUpperCase() : "?";
-  }
-  function face(person) {
-    var src = safeUrl(person && person.avatar);
-    var letter = initial((person && (person.name || person.handle)) || "");
-    if (src) return '<span class="xdock-ava"><img alt="" src="' + esc(src) + '"></span>';
-    return '<span class="xdock-ava">' + esc(letter) + "</span>";
-  }
   function logHtml(kind) {
     if (kind === "chat") return chatLog();
-    if (kind === "friends") return friendLog();
     return aiLog();
   }
-  function chatLog() {
-    if (!me()) {
-      return '<div class="xdock-empty"><p>' + esc(tr("Sign in to message friends.")) + '</p><button class="xdock-signin" type="button" data-acct="login">' + esc(tr("Sign in")) + "</button></div>";
-    }
-    if (ui.chatView === "new") return friendLog();
-    if (ui.chatView === "thread") return threadLog();
-    if (chatMem.loading && !chatMem.conversations.length) return '<div class="xdock-empty"><p>' + esc(tr("Loading messages…")) + "</p></div>";
-    if (chatMem.error && !chatMem.conversations.length) return '<p class="xdock-error">' + esc(chatMem.error) + "</p>";
-    var q = ui.query.trim().toLowerCase();
-    var rows = chatMem.conversations.filter(function (row) {
-      if (!q) return true;
-      var peer = row.peer || {};
-      return (peer.name + " " + peer.handle + " " + ((row.last && row.last.body) || "")).toLowerCase().indexOf(q) >= 0;
-    });
-    if (!rows.length) {
-      return '<div class="xdock-empty"><p>' + esc(tr("No messages yet")) + "</p><p>" + esc(tr("Message a friend to start.")) + "</p></div>";
-    }
-    return rows.map(function (row) {
-      var peer = row.peer || {};
-      var name = peer.name || peer.handle || tr("Chat");
-      return '<button class="xdock-row" type="button" data-dock="thread" data-id="' + esc(row.id) + '">' + face(peer) + '<span class="xdock-copy"><b>' + esc(name) + "</b><i>" + esc((row.last && row.last.body) || "") + "</i></span></button>";
-    }).join("");
+  function messagesApi() {
+    var api = root.FeedsDiscord;
+    if (!api || typeof api.inbox !== "function" || typeof api.thread !== "function") return null;
+    return api;
   }
-  function friendLog() {
-    var q = ui.friendQ.trim().toLowerCase();
-    var rows = chatMem.friends.filter(function (row) {
+  function readInbox() {
+    var api = messagesApi();
+    if (!api) return { missing: true, ready: true, channels: [] };
+    var data = api.inbox();
+    if (Array.isArray(data)) return { missing: false, ready: true, channels: data };
+    return {
+      missing: false,
+      ready: !data || data.ready !== false,
+      channels: (data && data.channels) || []
+    };
+  }
+  function readThread(id) {
+    var api = messagesApi();
+    if (!api) return { missing: true, found: false, loading: false, name: "", messages: [] };
+    var data = api.thread(id) || {};
+    return {
+      missing: false,
+      found: !!data.found,
+      loading: !!data.loading,
+      name: data.name || "",
+      messages: data.messages || []
+    };
+  }
+  function currentThread() {
+    var id = read().chatThread || "";
+    if (!id) return null;
+    return readThread(id);
+  }
+  function chatLog() {
+    if (ui.chatView === "thread") return threadLog();
+    var inbox = readInbox();
+    if (inbox.missing) {
+      return '<div class="xdock-empty"><p>' + esc(tr("Private conversations aren’t part of this reader.")) + "</p></div>";
+    }
+    if (!inbox.ready && !inbox.channels.length) return '<div class="xdock-empty"><p>' + esc(tr("Loading messages")) + "</p></div>";
+    var q = ui.query.trim().toLowerCase();
+    var rows = inbox.channels.filter(function (row) {
       if (!q) return true;
-      return ((row.name || "") + " " + (row.handle || "")).toLowerCase().indexOf(q) >= 0;
+      return ((row.name || "") + " " + (row.category || "") + " " + (row.preview || "") + " " + (row.author || "")).toLowerCase().indexOf(q) >= 0;
     });
     if (!rows.length) {
-      return '<div class="xdock-empty"><p>' + esc(tr("No friends yet")) + "</p><p>" + esc(tr("Add a friend, then message them.")) + "</p></div>";
+      return '<div class="xdock-empty"><p>' + esc(tr("No conversations yet")) + "</p><p>" + esc(tr("Channels set to messages show up here. None are configured yet.")) + "</p></div>";
     }
     return rows.map(function (row) {
-      var id = String(row.id || "");
-      var name = row.name || row.handle || id;
-      return '<button class="xdock-friend" type="button" data-dock="pick-friend" data-id="' + esc(id) + '" data-name="' + esc(name) + '" data-handle="' + esc(row.handle || "") + '">' + face(row) + "<span><b>" + esc(name) + "</b><span>@" + esc(row.handle || "") + "</span></span></button>";
+      var name = row.name || tr("Channel");
+      var preview = row.preview || row.author || "";
+      return '<button class="xdock-row" type="button" data-dock="thread" data-id="' + esc(row.id) + '"><span class="xdock-copy"><b>' + esc(name) + "</b><i>" + esc(preview) + "</i></span></button>";
     }).join("");
   }
   function threadLog() {
-    var mine = me();
-    var myId = mine ? mine.id : "";
-    if (chatMem.loading && !chatMem.messages.length) return '<div class="xdock-empty"><p>' + esc(tr("Loading messages…")) + "</p></div>";
-    var notes = chatMem.error ? '<p class="xdock-error">' + esc(chatMem.error) + "</p>" : "";
-    if (!chatMem.messages.length) return notes + '<div class="xdock-empty"><p>' + esc(tr("You can message friends on this app.")) + "</p></div>";
-    return notes + chatMem.messages.map(function (msg) {
-      var out = String(msg.senderId || "") === myId;
-      return '<div class="xdock-bubble ' + (out ? "out" : "in") + '">' + esc(msg.body || "") + "</div>";
+    var thread = currentThread();
+    if (!thread || thread.missing) {
+      return '<div class="xdock-empty"><p>' + esc(tr("Private conversations aren’t part of this reader.")) + "</p></div>";
+    }
+    if (!thread.found) {
+      return '<div class="xdock-empty"><p>' + esc(tr("This channel isn’t available")) + "</p><p>" + esc(tr("It isn’t in the Discord list.")) + "</p></div>";
+    }
+    if (thread.loading && !thread.messages.length) return '<div class="xdock-empty"><p>' + esc(tr("Loading messages")) + "</p></div>";
+    if (!thread.messages.length) {
+      return '<div class="xdock-empty"><p>' + esc(tr("No messages yet")) + "</p><p>" + esc(tr("The next sync reads the latest 50. This view keeps a rolling window of 300.")) + "</p></div>";
+    }
+    return thread.messages.map(function (msg) {
+      var name = msg.name || tr("Someone");
+      return '<div class="xdock-bubble in"><b>' + esc(name) + "</b>" + esc(msg.body || "") + "</div>";
     }).join("");
   }
   function aiLog() {
@@ -333,24 +333,23 @@
       chip("translate", tr("Translate")) +
       "</div>";
   }
-  function composeHtml(kind) {
-    var draft = kind === "chat" ? ui.chatDraft : ui.aiDraft;
-    var placeholder = kind === "chat" ? tr("New message") : tr("Ask anything");
+  function composeHtml() {
+    var draft = ui.aiDraft;
+    var placeholder = tr("Ask anything");
     return '<form class="xdock-compose" data-dock="compose">' +
-      (kind === "ai" ? '<button class="xdock-icon" type="button" data-dock="ai-attach" aria-label="' + esc(tr("Attach a file")) + '">' + svg("attach") + '</button><input class="vh" type="file" data-dock-file multiple>' : "") +
-      '<textarea rows="1" data-compose="' + kind + '" placeholder="' + esc(placeholder) + '" aria-label="' + esc(placeholder) + '">' + esc(draft) + "</textarea>" +
-      '<button class="xdock-send" type="button" data-dock="' + (kind === "chat" ? "send-chat" : "ai-send") + '" aria-label="' + esc(tr("Send")) + '"' + (draft.trim() ? "" : " disabled") + ">" + svg("send") + "</button></form>";
+      '<button class="xdock-icon" type="button" data-dock="ai-attach" aria-label="' + esc(tr("Attach a file")) + '">' + svg("attach") + '</button><input class="vh" type="file" data-dock-file multiple>' +
+      '<textarea rows="1" data-compose="ai" placeholder="' + esc(placeholder) + '" aria-label="' + esc(placeholder) + '">' + esc(draft) + "</textarea>" +
+      '<button class="xdock-send" type="button" data-dock="ai-send" aria-label="' + esc(tr("Send")) + '"' + (draft.trim() ? "" : " disabled") + ">" + svg("send") + "</button></form>";
+  }
+  function readonlyHtml() {
+    return '<div class="xdock-readonly" role="textbox" aria-disabled="true" aria-label="' + esc(tr("Read-only channel")) + '"><span>' + esc(tr("Read-only channel")) + "</span></div>";
   }
   function bodyHtml(kind) {
     if (kind === "chat") {
-      if (!me()) return '<div class="xdock-log">' + chatLog() + "</div>";
       if (ui.chatView === "list") {
-        return '<label class="xdock-search"><input data-dock-search="chat" type="search" placeholder="' + esc(tr("Search messages")) + '" aria-label="' + esc(tr("Search messages")) + '" value="' + esc(ui.query) + '"></label><div class="xdock-log">' + chatLog() + "</div>";
+        return '<label class="xdock-search"><input data-dock-search="chat" type="search" placeholder="' + esc(tr("Search Direct Messages")) + '" aria-label="' + esc(tr("Search Direct Messages")) + '" value="' + esc(ui.query) + '"></label><div class="xdock-log">' + chatLog() + "</div>";
       }
-      if (ui.chatView === "new") {
-        return '<p class="xdock-note">' + esc(tr("You can message friends on this app.")) + '</p><label class="xdock-search"><input data-dock-search="friends" type="search" placeholder="' + esc(tr("Search friends")) + '" aria-label="' + esc(tr("Search friends")) + '" value="' + esc(ui.friendQ) + '"></label><div class="xdock-log">' + friendLog() + "</div>";
-      }
-      return '<div class="xdock-log">' + threadLog() + "</div>" + composeHtml("chat");
+      return '<div class="xdock-log">' + threadLog() + "</div>" + readonlyHtml();
     }
     var provider = activeProvider();
     if (!provider || ui.aiView === "soon") {
@@ -360,13 +359,10 @@
       return '<label class="xdock-search"><input data-dock-search="ai" type="search" placeholder="' + esc(tr("Search")) + '" aria-label="' + esc(tr("Search")) + '" value="' + esc(ui.aiQuery) + '"></label><div class="xdock-log">' + historyLog() + "</div>";
     }
     var banner = provider.id === "echo" ? '<div class="xdock-banner">' + esc(tr("Local echo. No model is connected.")) + "</div>" : "";
-    return banner + '<div class="xdock-log" aria-live="polite">' + aiLog() + "</div>" + filesHtml() + chipsHtml() + composeHtml("ai");
+    return banner + '<div class="xdock-log" aria-live="polite">' + aiLog() + "</div>" + filesHtml() + chipsHtml() + composeHtml();
   }
   function viewName(kind) {
-    if (kind === "chat") {
-      if (!me()) return "signed-out";
-      return ui.chatView;
-    }
+    if (kind === "chat") return ui.chatView === "thread" ? "thread" : "list";
     if (!activeProvider()) return "soon";
     if (ui.aiView === "history") return "history";
     return activeProvider().id === "echo" ? "echo" : "talk";
@@ -406,7 +402,7 @@
       "</div><h2>" + esc(tr("Drawer side")) + "</h2><div class=\"theme-row\">" +
       opt("side", "left", prefs.side, tr("Left")) +
       opt("side", "right", prefs.side === "left" ? "left" : "right", tr("Right")) +
-      "</div><p class=\"phandle\">" + esc(tr("Chat and {name} stay in the corner of this page while you switch tabs. Chat messages friends on this app. {name} stays on this device until a model is connected.", { name: name })) +
+      "</div><p class=\"phandle\">" + esc(tr("Chat and {name} stay in the corner of this page while you switch tabs. Chat shows the same conversations as Messages. {name} stays on this device until a model is connected.", { name: name })) +
       "</p><p class=\"phandle\">" + esc(tr("Alt+Shift+C opens Chat. Alt+Shift+A opens {name}.", { name: name })) + "</p>";
   }
   function setPref(key, value) {
@@ -452,7 +448,7 @@
       return;
     }
     var log = body.querySelector(".xdock-log");
-    if (log) log.innerHTML = logHtml(kind === "chat" && ui.chatView === "new" ? "friends" : kind);
+    if (log) log.innerHTML = logHtml(kind);
   }
   function shell(kind) {
     var open = opened(kind);
@@ -599,122 +595,22 @@
     event.preventDefault();
     event.stopPropagation();
   }
-  function call(path, opts) {
-    var accounts = root.ViktorychAccounts;
-    opts = opts || {};
-    opts.token = accounts && accounts.token ? accounts.token() : "";
-    if (!accounts || !accounts.call) return Promise.resolve({ status: 0, error: "unavailable" });
-    return accounts.call(path, opts);
-  }
-  function chatError(res) {
-    var code = res && res.error;
-    if (code === "not_friends") return tr("You can only message friends.");
-    if (code === "too_long") return tr("That message is too long.");
-    if (!res || res.status === 401) return tr("Sign in to message friends.");
-    return tr("Could not send that message.");
-  }
-  function refreshChat(silent) {
-    var person = me();
-    if (!person) {
-      chatMem.error = "";
+  var chatPaint = 0;
+  function refreshChat() {
+    if (chatPaint) return Promise.resolve();
+    chatPaint += 1;
+    try {
       fill("chat");
-      return Promise.resolve();
+      if (ui.chatView === "thread") stickLog("chat");
+    } finally {
+      chatPaint -= 1;
     }
-    var prefs = read();
-    if (!silent) chatMem.loading = true;
-    if (prefs.chatThread && ui.chatView === "thread") {
-      return call("/v1/messages/" + encodeURIComponent(prefs.chatThread)).then(function (res) {
-        chatMem.loading = false;
-        if (!res || res.status !== 200) {
-          chatMem.error = tr("Could not load messages.");
-          if (res && res.status === 404) {
-            prefs.chatThread = "";
-            save(prefs);
-            ui.chatView = "list";
-          }
-        } else {
-          chatMem.error = "";
-          chatMem.messages = res.messages || [];
-          chatMem.peer = res.peer || null;
-        }
-        fill("chat");
-        stickLog("chat");
-      }).catch(function () {
-        chatMem.loading = false;
-        chatMem.error = tr("Could not load messages.");
-        fill("chat");
-      });
-    }
-    return call("/v1/messages").then(function (res) {
-      chatMem.loading = false;
-      if (!res || res.status !== 200) chatMem.error = tr("Could not load messages.");
-      else {
-        chatMem.error = "";
-        chatMem.conversations = res.conversations || [];
-      }
-      fill("chat");
-    }).catch(function () {
-      chatMem.loading = false;
-      chatMem.error = tr("Could not load messages.");
-      fill("chat");
-    });
-  }
-  function loadFriends() {
-    var person = me();
-    if (!person) return Promise.resolve();
-    return call("/v1/friends?id=" + encodeURIComponent("app:" + person.id) + "&tab=friends").then(function (res) {
-      chatMem.friends = (res && res.friends) || [];
-      fill("chat");
-    }).catch(function () { chatMem.friends = []; fill("chat"); });
+    return Promise.resolve();
   }
   function stickLog(kind) {
     var panel = panelEl(kind);
     var log = panel && panel.querySelector(".xdock-log");
     if (log) log.scrollTop = log.scrollHeight;
-  }
-  function sendChat() {
-    var text = ui.chatDraft.trim();
-    var person = me();
-    if (!text || !person || chatMem.sending) return;
-    var prefs = read();
-    var path = "/v1/messages";
-    var body = { text: text };
-    if (prefs.chatThread && ui.chatView === "thread") path = "/v1/messages/" + encodeURIComponent(prefs.chatThread);
-    else if (ui.peerId) body.targetId = ui.peerId;
-    else return;
-    var previous = ui.chatDraft;
-    ui.chatDraft = "";
-    chatMem.sending = true;
-    chatMem.messages = chatMem.messages.concat([{ id: "pending", senderId: person.id, body: text }]);
-    fill("chat");
-    var box = panelEl("chat") && panelEl("chat").querySelector("textarea");
-    if (box) box.value = "";
-    call(path, { method: "POST", body: body }).then(function (res) {
-      chatMem.sending = false;
-      if (!res || res.status !== 200) {
-        ui.chatDraft = previous;
-        chatMem.messages = chatMem.messages.filter(function (msg) { return msg.id !== "pending"; });
-        chatMem.error = chatError(res);
-        fill("chat");
-        var again = panelEl("chat") && panelEl("chat").querySelector("textarea");
-        if (again) again.value = previous;
-        return;
-      }
-      chatMem.error = "";
-      if (res.conversation && res.conversation.id) {
-        var next = read();
-        next.chatThread = res.conversation.id;
-        save(next);
-        ui.chatView = "thread";
-        chatMem.peer = res.conversation.peer || chatMem.peer;
-      }
-      refreshChat(true);
-    }).catch(function () {
-      chatMem.sending = false;
-      ui.chatDraft = previous;
-      chatMem.error = tr("Could not send that message.");
-      fill("chat");
-    });
   }
   function createMemoryStore() {
     var chats = [];
@@ -918,8 +814,7 @@
       if (event.shiftKey) return;
       event.preventDefault();
       event.stopPropagation();
-      if (event.target.getAttribute("data-compose") === "chat") sendChat();
-      else sendAi();
+      sendAi();
       return;
     }
     if (event.key !== "Escape") return;
@@ -942,13 +837,11 @@
     var search = el.getAttribute("data-dock-search");
     if (search) {
       if (search === "chat") ui.query = el.value;
-      else if (search === "friends") ui.friendQ = el.value;
       else ui.aiQuery = el.value;
       var log = el.closest(".xdock-body") && el.closest(".xdock-body").querySelector(".xdock-log");
-      if (log) log.innerHTML = logHtml(search === "friends" ? "friends" : search === "ai" ? "ai" : "chat");
+      if (log) log.innerHTML = logHtml(search === "ai" ? "ai" : "chat");
       return;
     }
-    if (el.getAttribute("data-compose") === "chat") ui.chatDraft = el.value;
     if (el.getAttribute("data-compose") === "ai") ui.aiDraft = el.value;
     var send = el.closest(".xdock-compose") && el.closest(".xdock-compose").querySelector(".xdock-send");
     if (send) send.disabled = !String(el.value || "").trim();
@@ -965,30 +858,15 @@
     else if (action === "collapse") setOpen(kind, false, true);
     else if (action === "expand") expand(kind);
     else if (action === "menu") { ui.menu = !ui.menu; fill("chat"); }
-    else if (action === "back") { ui.chatView = "list"; ui.menu = false; fill("chat"); refreshChat(true); }
-    else if (action === "new-message") { ui.chatView = "new"; ui.menu = false; loadFriends(); }
+    else if (action === "back") { ui.chatView = "list"; ui.menu = false; refreshChat(); }
     else if (action === "thread") {
       var prefs = read();
       prefs.chatThread = el.getAttribute("data-id") || "";
       save(prefs);
       ui.chatView = "thread";
       ui.menu = false;
-      refreshChat(false);
-    } else if (action === "pick-friend") {
-      ui.peerId = el.getAttribute("data-id") || "";
-      chatMem.peer = { name: el.getAttribute("data-name") || "", handle: el.getAttribute("data-handle") || "" };
-      chatMem.messages = [];
-      var known = chatMem.conversations.filter(function (row) {
-        return row.peer && ("app:" + row.peer.publicId === ui.peerId || row.peer.publicId === ui.peerId.replace(/^app:/, ""));
-      })[0];
-      var next = read();
-      next.chatThread = known ? known.id : "";
-      save(next);
-      ui.chatView = "thread";
-      if (known) refreshChat(false);
-      else fill("chat");
-    } else if (action === "send-chat") sendChat();
-    else if (action === "ai-new") newChat();
+      refreshChat();
+    } else if (action === "ai-new") newChat();
     else if (action === "ai-history") history();
     else if (action === "ai-back") { ui.aiView = "thread"; loadAi(); }
     else if (action === "ai-open") {
@@ -1099,10 +977,31 @@
     setPref: setPref,
     replaceState: function (next) { save(normalize(next)); paint(true); },
     seedChat: function (mem) {
-      if (mem.conversations) chatMem.conversations = mem.conversations;
-      if (mem.messages) chatMem.messages = mem.messages;
-      if (mem.peer) chatMem.peer = mem.peer;
-      if (mem.friends) chatMem.friends = mem.friends;
+      var channels = (mem.conversations || []).map(function (row) {
+        var peer = row.peer || {};
+        return {
+          id: row.id,
+          name: peer.name || peer.handle || "",
+          category: "",
+          preview: (row.last && row.last.body) || "",
+          author: ""
+        };
+      });
+      var thread = {
+        found: true,
+        loading: false,
+        name: mem.peer ? (mem.peer.name || mem.peer.handle || "") : "",
+        messages: (mem.messages || []).map(function (msg) {
+          return { id: msg.id, name: (mem.peer && (mem.peer.name || mem.peer.handle)) || "", body: msg.body || "" };
+        })
+      };
+      root.FeedsDiscord = {
+        inbox: function () { return { ready: true, channels: channels }; },
+        thread: function () { return thread; }
+      };
+    },
+    noteMessages: function () {
+      if (opened("chat")) refreshChat();
     },
     setUi: function (next) {
       Object.keys(next || {}).forEach(function (key) { ui[key] = next[key]; });

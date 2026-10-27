@@ -267,6 +267,16 @@ html[data-theme="default"] .xdock-panel {
   color: #e7e9ea;
   border-radius: 22px 22px 22px 4px;
 }
+.xdock-bubble b { display: block; margin-bottom: 2px; font-size: 13px; line-height: 16px; }
+.xdock-readonly {
+  margin: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 20px;
+}
 html[data-theme="dim"] .xdock-bubble.in { background: #3d5466; color: #f7f9f9; }
 html[data-theme="default"] .xdock-bubble.in { background: #eff3f4; color: #0f1419; }
 .xdock-log .xdock-bubble:first-child { margin-top: 12px; }

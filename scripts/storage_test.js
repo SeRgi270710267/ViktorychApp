@@ -31,6 +31,9 @@ assert.strictEqual(storage.categoryOf("https://accounts.example/v1/owner/play?id
 assert.strictEqual(storage.categoryOf("https://viktorych.example/owner-keys.js"), "");
 
 assert.strictEqual(storage.shouldCacheMedia("https://accounts.example/tg/clips/a.mp4"), true);
+assert.strictEqual(storage.categoryOf("https://cdn.example/v/seg0.cmfv"), "videos");
+assert.strictEqual(storage.shouldCacheMedia("https://cdn.example/v/seg0.m4s"), true);
+assert.strictEqual(storage.shouldCacheMedia("https://cdn.example/v/index.m3u8"), false);
 assert.strictEqual(storage.shouldCacheMedia("https://accounts.example/tg/loop/v1/a.mp4"), false);
 assert.strictEqual(storage.shouldCacheMedia("https://v16.tiktokcdn.com/a.mp4"), false);
 assert.strictEqual(storage.shouldCacheMedia("https://accounts.example/v1/login"), false);
@@ -40,7 +43,19 @@ assert.strictEqual(storage.shouldCacheMedia("https://viktorych.example/discord/s
 assert.strictEqual(storage.shouldCacheFeed("https://viktorych.example/feeds.json"), true);
 assert.strictEqual(storage.shouldCacheFeed("https://viktorych.example/discord/state.json"), true);
 assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/me"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/presence?ids=1"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/channel?ticket=1"), false);
 assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/version.json"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://api.open-meteo.com/v1/forecast?latitude=59"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://www.thesportsdb.com/api/v1/json/123/eventsnext.php?id=133739"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=59&lon=18"), false);
+assert.strictEqual(storage.shouldCacheFeed("https://accounts.example/v1/pills/weather?lat=59&lon=18"), false);
+assert.strictEqual(storage.categoryOf("https://api.open-meteo.com/v1/forecast.json"), "");
+assert.strictEqual(storage.categoryOf("https://site.api.espn.com/scoreboard.json"), "");
+assert.strictEqual(storage.categoryOf("https://www.thesportsdb.com/events.json"), "");
+assert.strictEqual(storage.categoryOf("https://api.met.no/compact.json"), "");
+assert.strictEqual(storage.categoryOf("https://accounts.example/v1/pills/sports"), "");
 
 assert.strictEqual(storage.revalidateAction(304), "keep");
 assert.strictEqual(storage.revalidateAction(200), "store");

@@ -142,6 +142,7 @@
     source: null,
     timer: 0,
     loadStarted: false,
+    catalogReady: false,
     started: false,
     bound: null,
     pinFiles: {},
@@ -213,6 +214,11 @@
   }
 
   function hooks() { return state.bound || {}; }
+
+  function noteShared() {
+    const dock = root.ViktorychDock;
+    if (dock && dock.noteMessages) dock.noteMessages();
+  }
 
   function esc(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (c) {
@@ -427,7 +433,8 @@
       embeds: Array.isArray(row.cards) ? row.cards : [],
       emojis: Array.isArray(row.emojis) ? row.emojis : [],
       reactions: reactions,
-      edited: !!row.edited
+      edited: !!row.edited,
+      publicId: /^\d{12}$/.test(String(row.publicId || row.public_id || "")) ? String(row.publicId || row.public_id) : ""
     };
   }
 
@@ -447,6 +454,7 @@
       embeds: m.emb || [],
       emojis: [],
       reactions: m.rx || [],
+      publicId: /^\d{12}$/.test(String((m.author && (m.author.publicId || m.author.public_id)) || m.publicId || "")) ? String((m.author && (m.author.publicId || m.author.public_id)) || m.publicId) : "",
       edited: !!m.edited
     };
   }
@@ -582,6 +590,7 @@
     else if (!quiet) updateDots();
     if (!quiet) paintNavBadge();
     restoreList();
+    noteShared();
   }
 
   function quote(text) {
@@ -608,9 +617,12 @@
 
   function avatarHtml(row) {
     const mode = faceMode(row.avatar);
-    if (mode === "none") return '<span class="ava-none"></span>';
-    if (mode === "default" || !row.avatar) return silhouetteHtml("dmsg-ava ava");
-    return '<img class="dmsg-ava" src="' + esc(row.avatar) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">';
+    let html = "";
+    if (mode === "none") html = '<span class="ava-none"></span>';
+    else if (mode === "default" || !row.avatar) html = silhouetteHtml("dmsg-ava ava");
+    else html = '<img class="dmsg-ava" src="' + esc(row.avatar) + '" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">';
+    if (row.publicId && window.ViktorychPresence) return window.ViktorychPresence.wrap(row.publicId, html);
+    return html;
   }
 
   function mediaHtml(row) {
@@ -1071,11 +1083,14 @@
     const server = serverById(ch.serverId);
     const who = messagesFor(id)[0];
     const headMode = faceMode(who && who.avatar);
-    const face = headMode === "none" ? "" : (headMode === "photo" ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>' : silhouetteHtml("dmsgs-head-face"));
+    let face = headMode === "none" ? "" : (headMode === "photo" ? '<span class="dmsgs-head-face"><img src="' + esc(who.avatar) + '" alt="" referrerpolicy="no-referrer"></span>' : silhouetteHtml("dmsgs-head-face"));
+    const whoId = who && /^\d{12}$/.test(String(who.publicId || "")) ? who.publicId : "";
+    if (whoId && face && window.ViktorychPresence) face = window.ViktorychPresence.wrap(whoId, face);
     const pinBtn = pinsBlocked(ch) ? "" : '<button type="button" class="dmsgs-iconbtn dmsgs-pins' + (state.pinsOpen === id ? " on" : "") + '" data-discord="pins" data-id="' + esc(id) + ("\" " + "aria-label=\"" + tr("Pinned messages") + "\"" + " aria-expanded=\"") + (state.pinsOpen === id ? "true" : "false") + '">' + iconSvg("pin") + "</button>";
     const place = (server && server.name) || ch.category || "Discord";
+    const sub = whoId && window.ViktorychPresence ? window.ViktorychPresence.dmSubHtml(whoId, place) : esc(place);
     return '<section class="dmsgs-conv">' +
-      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + esc(place) + "</span></div>" + pinBtn + "</header>" +
+      '<header class="dmsgs-conv-head"><a class="dmsgs-back" href="' + listHref() + ("\" " + "aria-label=\"" + tr("Back") + "\"" + ">‹</a>") + face + '<div class="dmsgs-conv-title"><b title="' + esc(ch.name) + '">' + esc(ch.name) + '</b><span title="' + esc(place) + '">' + sub + "</span></div>" + pinBtn + "</header>" +
       '<div class="dmsgs-log" tabindex="0">' + logInner(id) + "</div>" +
       pinPanelHtml(id) +
       ("<button type=\"button\" class=\"dmsgs-jump\" hidden" + ">" + tr("Jump to present") + "<" + "/button>") +
@@ -1482,6 +1497,7 @@
     restoreList();
     restoreWindow();
     state.holding = false;
+    noteShared();
   }
 
   function releaseHold() {
@@ -1620,6 +1636,8 @@
     state.channels.forEach(function (ch) { kept[ch.id] = !!ch.inaccessible; });
     if (!adoptServers(servers)) return;
     state.channels.forEach(function (ch) { if (kept[ch.id]) ch.inaccessible = true; });
+    rememberMessages();
+    noteShared();
   }
 
   function applyIndex(index) {
@@ -1646,6 +1664,7 @@
         channel.pinsForbidden = !!ch.pinsForbidden;
       });
     });
+    noteShared();
   }
 
   function docPathOk(path) {
@@ -1721,19 +1740,30 @@
   function fetchDoc(path, etag) {
     const headers = { Accept: "application/json" };
     if (etag) headers["If-None-Match"] = etag;
-    const same = function () {
-      return fetch(path, { cache: "no-cache", headers: headers });
-    };
     const api = accountsBase();
     const token = accountsToken();
-    if (!api || !token) return same();
-    return fetch(api + "/v1/data/" + path, {
-      cache: "no-store",
-      headers: Object.assign({ Authorization: "Bearer " + token }, headers)
-    }).then(function (res) {
+    const workerUrl = api && token ? api + "/v1/data/" + path : "";
+    const same = function () {
+      if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.fetch) {
+        return window.ViktorychDirect.fetch(path, "", { headers: headers });
+      }
+      return fetch(path, { cache: "no-cache", headers: headers });
+    };
+    const worker = function () {
+      if (typeof window !== "undefined" && window.ViktorychDirect && window.ViktorychDirect.noteServer) window.ViktorychDirect.noteServer();
+      return fetch(workerUrl, {
+        cache: "no-store",
+        headers: Object.assign({ Authorization: "Bearer " + token }, headers)
+      });
+    };
+    return same().then(function (res) {
       if (res && (res.status === 200 || res.status === 304)) return res;
-      return same();
-    }, function () { return same(); });
+      if (!workerUrl) return res;
+      if (res && res.status && res.status < 500 && res.status !== 404) return res;
+      return worker();
+    }, function () {
+      return workerUrl ? worker() : Promise.reject(new Error("network"));
+    });
   }
 
   function loadDoc(path, onBody) {
@@ -1809,6 +1839,7 @@
     messages.sort(function (a, b) { return cmpId(b.id, a.id); });
     state.files[id] = { messages: messages.slice(0, WINDOW), authors: authors, older: !!doc.older };
     state.olderNext[id] = doc.older ? (state.olderNext[id] || 1) : 0;
+    rememberMessages();
   }
 
   function mergeOlder(id, doc) {
@@ -1826,6 +1857,7 @@
     const messages = Array.from(bucket.values());
     messages.sort(function (a, b) { return cmpId(b.id, a.id); });
     state.files[id] = { messages: messages.slice(0, WINDOW), authors: authors, older: true };
+    rememberMessages();
   }
 
   function paintChannel(id) {
@@ -1844,6 +1876,7 @@
     state.olderGot[id] = state.olderGot[id] || {};
     state.olderGot[id][pageNo] = true;
     state.olderNext[id] = doc.older ? pageNo + 1 : 0;
+    noteShared();
     if (state.open !== id || !log) return;
     repaintLog("keep");
     const next = document.querySelector(".dmsgs-log");
@@ -1923,16 +1956,23 @@
       else if (fresh && !state.files[id]) state.files[id] = { messages: [], authors: {} };
       if (doc || fresh) state.loading[id] = false;
       if (state.open === id && (doc || fresh)) paintChannel(id);
+      if (doc || fresh) noteShared();
     });
   }
 
   function ensureLoad() {
     if (state.fixture || state.loadStarted) return;
     state.loadStarted = true;
-    if (typeof fetch !== "function") return;
+    if (typeof fetch !== "function") {
+      state.catalogReady = true;
+      return;
+    }
     let pending;
     try { pending = fetch("feeds.config.json", { cache: "no-cache" }); }
-    catch (err) { return; }
+    catch (err) {
+      state.catalogReady = true;
+      return;
+    }
     pending.then(function (res) { return res && res.ok ? res.json() : null; }).then(function (doc) {
       if (doc && Array.isArray(doc.discord)) applyConfig(doc.discord);
       return loadDoc("discord/index.json", function (index, fresh) {
@@ -1940,9 +1980,14 @@
           applyIndex(index);
           rememberIndex(index);
         }
+        state.catalogReady = true;
         if ((index || fresh) && onMessages()) refreshInbox();
+        noteShared();
       });
-    }).catch(function () {});
+    }).catch(function () {
+      state.catalogReady = true;
+      noteShared();
+    });
   }
 
   function onMessages() {
@@ -2282,11 +2327,63 @@
 
   function bind(next) { state.bound = next || null; }
 
+  function rememberMessages() {
+    const local = root.ViktorychLocal;
+    if (!local || !local.saveDoc) return;
+    const channels = (state.channels || []).filter(function (ch) { return ch && ch.mode === "messages"; }).slice(0, 40).map(function (ch) {
+      return { id: ch.id, name: ch.name || "", mode: "messages" };
+    });
+    local.saveDoc("messages", "channels", { channels: channels });
+    channels.forEach(function (ch) {
+      const rows = messagesFor(ch.id).slice(0, 30).map(function (row) {
+        return { id: row.id, text: row.body || "", name: row.name || "", date: row.date || "" };
+      });
+      if (rows.length) local.saveDoc("messages", "channel:" + ch.id, { id: ch.id, messages: rows });
+    });
+  }
+
+  function inbox() {
+    warmCache();
+    ensureLoad();
+    const channels = (state.channels || []).filter(function (ch) {
+      return ch && ch.mode === "messages" && !ch.inaccessible;
+    }).map(function (ch) {
+      const last = messagesFor(ch.id)[0] || null;
+      return {
+        id: ch.id,
+        name: ch.name || "",
+        category: ch.category || "",
+        preview: last ? String(last.body || "") : "",
+        author: last ? String(last.name || "") : ""
+      };
+    });
+    return { ready: !!(state.catalogReady || channels.length), channels: channels };
+  }
+
+  function sharedThread(id) {
+    const key = snowflake(id);
+    warmCache();
+    ensureLoad();
+    if (key) ensureChannel(key);
+    const ch = key ? channelById(key) : null;
+    const found = !!(ch && ch.mode === "messages" && !ch.inaccessible);
+    return {
+      id: key || "",
+      name: ch ? ch.name : "",
+      place: ch ? (ch.category || "") : "",
+      found: found,
+      loading: !!(key && state.loading[key]),
+      messages: found ? messagesFor(key).slice().reverse() : []
+    };
+  }
+
   root.FeedsDiscord = {
     bind: bind,
     start: start,
     page: page,
     titleFor: titleFor,
+    inbox: inbox,
+    thread: sharedThread,
     mount: mount,
     _validate: validate,
     _format: format,
@@ -2301,6 +2398,7 @@
     _openMenu: function (id, durations) { state.menu = { id: String(id || ""), durations: !!durations, x: 24, y: 72 }; },
     _openPins: function (id) { state.pinsOpen = String(id || ""); state.menu = null; },
     syncFromHash: syncFromHash,
-    _deliver: deliver
+    _deliver: deliver,
+    snapshot: rememberMessages
   };
 })(typeof window !== "undefined" ? window : globalThis);

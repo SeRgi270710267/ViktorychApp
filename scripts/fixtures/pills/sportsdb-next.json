@@ -1,0 +1,15 @@
+{
+  "events": [{
+    "idEvent": "901",
+    "strLeague": "Spanish La Liga 2",
+    "strStatus": "NS",
+    "dateEvent": "2026-10-31",
+    "strTime": "18:00:00",
+    "strTimestamp": "2026-10-31T18:00:00Z",
+    "strHomeTeam": "CE Sabadell",
+    "strAwayTeam": "Atletico Baleares",
+    "intHomeScore": null,
+    "intAwayScore": null,
+    "strVenue": "Nova Creu Alta"
+  }]
+}
