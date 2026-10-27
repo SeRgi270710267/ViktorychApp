@@ -338,6 +338,7 @@ test("live stats use user_count and keep the origin url", async () => {
   assert.equal(fresh.body.quality, "origin");
   assert.match(fresh.body.hls, /\/origin\/index\.m3u8/);
   assert.equal(liveHits.room, 3);
+  roomMode = "hd";
   const stats = await call("/v1/owner/live/canddeserrano_?stats=1&room=7699647509498710804", { ip: "203.0.113.96", token: ownerToken });
   assert.equal(stats.status, 200);
   assert.equal(stats.body.viewers, 9);
