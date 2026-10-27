@@ -474,6 +474,7 @@
       }
       return;
     }
+    if (root.ViktorychHScroll && root.ViktorychHScroll.remember) root.ViktorychHScroll.remember();
     var rowEl = document.querySelector(".sp-row");
     if (rowEl) {
       var spaceItems = rowEl.querySelectorAll(".sp-row-item:not(:has([data-sc-team]))");

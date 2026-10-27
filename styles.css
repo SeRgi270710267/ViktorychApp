@@ -636,6 +636,25 @@ html.is-split-drag * {
   white-space: nowrap;
 }
 .tabs::-webkit-scrollbar { display: none; }
+/* A height change from the mobile URL bar must not anchor these rows back to the start. */
+.tabs,
+.sp-row,
+.story-tray,
+.pills,
+.yt-chips,
+.yt-strip,
+.hist-chips,
+.cm-filter-bar,
+.games-row,
+.mu-hscroll,
+.shorts,
+.vault-nav-tabs,
+.tv-tabs-nav,
+.tv-streams-scroll,
+[data-hscroll] {
+  overflow-anchor: none;
+  touch-action: pan-x pan-y;
+}
 .tab {
   position: relative;
   flex: 1 0 auto;

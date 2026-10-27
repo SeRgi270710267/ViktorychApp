@@ -7321,7 +7321,7 @@ const here = parseRoute();
       </div>
       <div class="tabs-bar">
         <button class="tab-arrow left" type="button" data-act="tab-scroll" data-dir="-1" aria-label="${tr("Scroll tabs left")}" hidden>${icon("chevL")}</button>
-        <div class="tabs" role="tablist" aria-label="${tr("Home timeline")}">
+        <div class="tabs" role="tablist" data-hscroll="home-tabs" aria-label="${tr("Home timeline")}">
           ${tabWithMenu("foryou", tr("For you"))}
           ${tabWithMenu("following", tr("Following"))}
           ${cats.map((item) => tabWithMenu("cat:" + item.id, item.name, "", item.id)).join("")}
@@ -12735,6 +12735,7 @@ if (STATE.histClear) {
     }
     if (STATE.scrollKey) SCROLLS[STATE.scrollKey] = pageY();
     scrollFreeze = true;
+    hscrollNav = true;
     location.hash = wanted;
   }
 
@@ -12797,45 +12798,467 @@ if (STATE.histClear) {
 
   let tabScrollLeft = null;
   let tabScrollRoute = "";
+  let hscrollNav = false;
+  let hscrollTouching = false;
+  let hscrollHolding = false;
+  let hscrollHoldGen = 0;
+  let hscrollWidth = 0;
+  let hscrollMem = null;
+  let hscrollSaveTimer = 0;
+  let hscrollRestoreQueued = false;
+  const hscrollActiveMem = {};
+  const HSCROLL_SELECTOR = ".tabs, .sp-row, .story-tray, .pills, .yt-chips, .yt-strip, .hist-chips, .cm-filter-bar, .games-row, .mu-hscroll, .shorts, .vault-nav-tabs, .tv-tabs-nav, .tv-streams-scroll, [data-hscroll]";
+  const HSCROLL_KEEP_ATTR = { "data-arrows": 1, "data-hscroll-live": 1, "data-hscroll-key": 1, "data-mark": 1, "data-hscroll-revealed": 1, "data-seen": 1 };
 
-  function revealSelectedTab(scroller) {
-    const current = scroller.querySelector(".tab-pair.on") || scroller.querySelector(".tab.on");
-    if (!current) return;
-    const pad = 48;
-    const box = current.getBoundingClientRect();
-    const host = scroller.getBoundingClientRect();
-    if (box.right > host.right - pad) scroller.scrollLeft += box.right - (host.right - pad);
-    else if (box.left < host.left + pad) scroller.scrollLeft -= host.left + pad - box.left;
+  function hscrollStore() {
+    if (hscrollMem) return hscrollMem;
+    hscrollMem = {};
+    try {
+      const raw = readStored(sessionStorage, "hscroll-v1");
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) hscrollMem = parsed;
+    } catch (err) { hscrollMem = {}; }
+    return hscrollMem;
   }
 
-  function syncTabArrows() {
-    const scroller = document.querySelector(".tabs");
-    const bar = document.querySelector(".tabs-bar");
-    const left = document.querySelector(".tab-arrow.left");
-    const right = document.querySelector(".tab-arrow.right");
-    if (!scroller || !left || !right) return;
-    const route = routeScrollKey();
-    if (scroller.dataset.seen !== "1") {
-      scroller.dataset.seen = "1";
-      const sameTab = tabScrollRoute === route && tabScrollLeft != null;
-      tabScrollRoute = route;
-      if (sameTab) scroller.scrollLeft = tabScrollLeft;
-      else revealSelectedTab(scroller);
+  function hscrollSaveSoon() {
+    if (hscrollSaveTimer) return;
+    hscrollSaveTimer = setTimeout(() => {
+      hscrollSaveTimer = 0;
+      hscrollFlush();
+    }, 200);
+  }
+
+  function hscrollFlush() {
+    try { writeStored(sessionStorage, "hscroll-v1", JSON.stringify(hscrollStore())); } catch (err) { /* the in-memory copy still covers this visit */ }
+  }
+
+  function hscrollScreen() {
+    let route = { name: "home" };
+    try { route = parseRoute() || route; } catch (err) { /* the first paint still has a screen */ }
+    const name = route.name || "home";
+    if (name === "profile" || name === "user" || name === "connections") return name + ":" + (route.platform || "") + ":" + String(route.handle || "").toLowerCase();
+    if (name === "settings") return "settings:" + (route.section || "") + ":" + (route.sub || "");
+    if (name === "list") return "list:" + (route.id || "");
+    if (name === "history" || name === "bookmarks") return "history";
+    return name;
+  }
+
+  function hscrollClassKey(el) {
+    const known = ["tabs", "sp-row", "story-tray", "pills", "yt-chips", "yt-strip", "hist-chips", "cm-filter-bar", "games-row", "mu-hscroll", "shorts", "vault-nav-tabs", "tv-tabs-nav", "tv-streams-scroll"];
+    for (let i = 0; i < known.length; i++) if (el.classList.contains(known[i])) return known[i];
+    return el.classList.length ? el.classList[0] : el.tagName.toLowerCase();
+  }
+
+  function hscrollId(el, root) {
+    const explicit = el.getAttribute("data-hscroll");
+    const screen = hscrollScreen();
+    if (explicit) return screen + ":" + explicit;
+    const key = hscrollClassKey(el);
+    const label = el.getAttribute("aria-label") || "";
+    const selector = el.classList.contains(key) ? "." + key : (el.tagName.toLowerCase() + (el.classList.length ? "." + el.classList[0] : ""));
+    let index = 0;
+    if (root && root.querySelectorAll) {
+      const peers = [...root.querySelectorAll(selector)].filter((node) => !node.getAttribute("data-hscroll") && (node.getAttribute("aria-label") || "") === label);
+      const at = peers.indexOf(el);
+      index = at < 0 ? 0 : at;
     }
+    return screen + ":" + key + ":" + label + ":" + index;
+  }
+
+  function hscrollList(root) {
+    if (!root || !root.querySelectorAll) return [];
+    return [...root.querySelectorAll(HSCROLL_SELECTOR)];
+  }
+
+  function hscrollMatches(el) {
+    if (!el || el.nodeType !== 1 || !el.matches) return false;
+    if (el.matches(HSCROLL_SELECTOR)) return true;
+    if (el.id === "app" || el.classList.contains("center") || el.classList.contains("app")) return false;
+    if (el.scrollWidth <= el.clientWidth + 8) return false;
+    if (el.clientHeight > 180 && el.scrollHeight > el.clientHeight + 24) return false;
+    try {
+      const ox = getComputedStyle(el).overflowX;
+      return ox === "auto" || ox === "scroll" || ox === "overlay";
+    } catch (err) { return false; }
+  }
+
+  function hscrollListLive(root) {
+    const found = hscrollList(root);
+    const seen = new Set(found);
+    if (!root || !root.querySelectorAll) return found;
+    const nodes = root.querySelectorAll("div, ul, ol, nav");
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      if (seen.has(el) || !hscrollMatches(el)) continue;
+      seen.add(el);
+      found.push(el);
+    }
+    return found;
+  }
+
+  function hscrollFromTarget(node) {
+    const start = node && node.nodeType === 1 ? node : (node && node.parentElement);
+    if (start && start.closest) {
+      const bar = start.closest(".tabs-bar, .tabs, .sp-row, .sp-row-wrap, .story-tray, .yt-chips, .yt-strip, .hist-chips, .cm-filter-bar, .games-row, .mu-hscroll, .vault-nav-tabs, .tv-tabs-nav, .tv-streams-scroll");
+      if (bar) return bar;
+    }
+    let el = start;
+    while (el && el !== document.body && el !== document.documentElement) {
+      if (hscrollMatches(el)) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  function hscrollRememberEl(el) {
+    if (!el || el.nodeType !== 1) return;
+    const root = (el.closest && el.closest("#app")) || document.getElementById("app") || document.body;
+    const id = el.dataset.hscrollKey || hscrollId(el, root);
+    el.dataset.hscrollKey = id;
+    const left = el.scrollLeft || 0;
+    const max = el.scrollWidth - el.clientWidth;
+    const store = hscrollStore();
+    if (left <= 0 && store[id] > 1 && (max <= 1 || hscrollHolding)) return;
+    store[id] = left;
+    if (el.classList.contains("tabs")) {
+      tabScrollLeft = left;
+      tabScrollRoute = routeScrollKey();
+    }
+    hscrollSaveSoon();
+  }
+
+  function hscrollRemember(root) {
+    hscrollListLive(root || document.getElementById("app") || document.body).forEach(hscrollRememberEl);
+  }
+
+  function hscrollActive(el) {
+    const current = el.querySelector(".tab.on, [role='tab'][aria-selected='true']");
+    if (!current) return "";
+    return current.getAttribute("data-tab") || current.getAttribute("href") || "";
+  }
+
+  function isTabRow(el) {
+    return !!(el && (el.classList.contains("tabs") || el.getAttribute("role") === "tablist" || el.classList.contains("cm-filter-bar") || el.classList.contains("vault-nav-tabs") || el.classList.contains("tv-tabs-nav")));
+  }
+
+  function copyScrollerAttrs(from, to) {
+    [...from.attributes].forEach((attr) => {
+      if (HSCROLL_KEEP_ATTR[attr.name]) return;
+      if (to.getAttribute(attr.name) !== attr.value) to.setAttribute(attr.name, attr.value);
+    });
+  }
+
+  function tabSlotKey(slot) {
+    if (!slot || slot.nodeType !== 1) return "";
+    const tab = slot.matches(".tab, [role='tab']") ? slot : (slot.querySelector && slot.querySelector(".tab, [role='tab']"));
+    if (!tab) return "node:" + (slot.className || slot.tagName);
+    return (tab.getAttribute("data-tab") || tab.getAttribute("href") || (tab.textContent || "").replace(/\s+/g, " ").trim()).slice(0, 180);
+  }
+
+  function patchSubtree(live, fresh) {
+    if (!live || !fresh) return;
+    if (!live.children.length && !fresh.children.length) {
+      if (live.textContent !== fresh.textContent) live.textContent = fresh.textContent;
+      return;
+    }
+    if (live.childNodes.length !== fresh.childNodes.length) {
+      live.innerHTML = fresh.innerHTML;
+      return;
+    }
+    for (let i = 0; i < fresh.childNodes.length; i++) {
+      const have = live.childNodes[i];
+      const want = fresh.childNodes[i];
+      if (have.nodeType === 3 && want.nodeType === 3) {
+        if (have.nodeValue !== want.nodeValue) have.nodeValue = want.nodeValue;
+        continue;
+      }
+      if (have.nodeType !== 1 || want.nodeType !== 1 || have.tagName !== want.tagName) {
+        live.replaceChild(want.cloneNode(true), have);
+        continue;
+      }
+      copyScrollerAttrs(want, have);
+      patchSubtree(have, want);
+    }
+  }
+
+  function patchTabRow(live, fresh) {
+    copyScrollerAttrs(fresh, live);
+    const pool = new Map();
+    [...live.children].forEach((node) => {
+      const key = tabSlotKey(node);
+      if (!pool.has(key)) pool.set(key, []);
+      pool.get(key).push(node);
+    });
+    const ordered = [];
+    [...fresh.children].forEach((slot) => {
+      const key = tabSlotKey(slot);
+      const list = pool.get(key);
+      const old = list && list.shift();
+      if (!old || old.tagName !== slot.tagName) {
+        if (old) old.remove();
+        ordered.push(slot.cloneNode(true));
+        return;
+      }
+      copyScrollerAttrs(slot, old);
+      patchSubtree(old, slot);
+      ordered.push(old);
+    });
+    pool.forEach((list) => list.forEach((node) => node.remove()));
+    ordered.forEach((node, index) => {
+      if (live.children[index] !== node) live.insertBefore(node, live.children[index] || null);
+    });
+    while (live.children.length > ordered.length) live.removeChild(live.lastChild);
+  }
+
+  function hscrollReuse(liveRoot, frag) {
+    const liveRows = hscrollList(liveRoot);
+    const freshRows = hscrollList(frag);
+    const used = new Set();
+    freshRows.forEach((fresh) => {
+      const id = hscrollId(fresh, frag);
+      let live = null;
+      for (let i = 0; i < liveRows.length; i++) {
+        if (used.has(liveRows[i])) continue;
+        const liveId = liveRows[i].dataset.hscrollKey || hscrollId(liveRows[i], liveRoot);
+        if (liveId === id) { live = liveRows[i]; break; }
+      }
+      if (!live) return;
+      used.add(live);
+      const left = live.scrollLeft || 0;
+      try {
+        if (isTabRow(live) && isTabRow(fresh)) patchTabRow(live, fresh);
+        else if (live.innerHTML !== fresh.innerHTML || live.className !== fresh.className) return;
+      } catch (err) { return; }
+      live.dataset.hscrollLive = "1";
+      live.dataset.hscrollKey = id;
+      fresh.replaceWith(live);
+      if (left && Math.abs((live.scrollLeft || 0) - left) > 1) live.scrollLeft = left;
+    });
+  }
+
+  function commitApp(html) {
+    const app = document.getElementById("app");
+    if (!app) return;
+    hscrollHolding = true;
+    hscrollHoldGen = STATE.renderGen || 0;
+    hscrollRemember(app);
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
+    hscrollReuse(app, tpl.content);
+    while (app.firstChild) app.removeChild(app.firstChild);
+    app.appendChild(tpl.content);
+    hscrollSettle({ reveal: true });
+  }
+
+  function hscrollRestoreSaved(retry) {
+    const root = document.getElementById("app") || document.body;
+    const store = hscrollStore();
+    let pending = false;
+    hscrollListLive(root).forEach((el) => {
+      if (!el.isConnected || el.dataset.hscrollRevealed === "1") return;
+      const id = el.dataset.hscrollKey || hscrollId(el, root);
+      el.dataset.hscrollKey = id;
+      const saved = store[id];
+      if (typeof saved !== "number" || saved < 0) return;
+      if (Math.abs((el.scrollLeft || 0) - saved) <= 1) return;
+      if (hscrollTouching && el.scrollLeft > 1) return;
+      const max = el.scrollWidth - el.clientWidth;
+      if (saved > 1 && max <= 1) { pending = true; return; }
+      el.scrollLeft = saved;
+    });
+    if (pending && retry !== false) {
+      const left = typeof retry === "number" ? retry : 12;
+      if (left <= 0) return;
+      const schedule = window.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+      schedule(() => hscrollRestoreSaved(left - 1));
+    }
+  }
+
+  function hscrollSettle(opts) {
+    const reveal = !!(opts && opts.reveal && hscrollNav);
+    const root = document.getElementById("app") || document.body;
+    const store = hscrollStore();
+    hscrollListLive(root).forEach((el) => {
+      const id = el.dataset.hscrollKey || hscrollId(el, root);
+      el.dataset.hscrollKey = id;
+      const saved = store[id];
+      const active = hscrollActive(el);
+      const prev = hscrollActiveMem[id] || "";
+      const changed = !!(reveal && prev && active && prev !== active);
+      if (!changed && typeof saved === "number" && saved > 0 && Math.abs((el.scrollLeft || 0) - saved) > 1) {
+        const max = el.scrollWidth - el.clientWidth;
+        if (max > 1 || el.scrollWidth > el.clientWidth) el.scrollLeft = saved;
+      }
+      if (changed) {
+        const next = revealSelectedTab(el, true);
+        if (typeof next === "number") store[id] = next;
+        el.dataset.hscrollRevealed = "1";
+        setTimeout(() => {
+          try { delete el.dataset.hscrollRevealed; } catch (err) { /* already gone */ }
+          hscrollRememberEl(el);
+        }, 450);
+      } else if (!prev && !(saved > 0) && active) {
+        const next = revealSelectedTab(el, false);
+        if (typeof next === "number" && next > 0) store[id] = next;
+      }
+      if (active) hscrollActiveMem[id] = active;
+      if (el.dataset.hscrollBound !== "1") {
+        el.dataset.hscrollBound = "1";
+        el.addEventListener("scroll", () => hscrollRememberEl(el), { passive: true });
+      }
+    });
+    if (opts && opts.reveal) hscrollNav = false;
+    syncTabArrows();
+    const gen = STATE.renderGen || 0;
+    const release = () => {
+      if ((STATE.renderGen || 0) !== gen) return;
+      hscrollRestoreSaved();
+      if (hscrollHoldGen === gen) hscrollHolding = false;
+    };
+    if (window.requestAnimationFrame) window.requestAnimationFrame(release);
+    else release();
+  }
+
+  function hscrollQueueRestore() {
+    if (hscrollRestoreQueued) return;
+    hscrollRestoreQueued = true;
+    const schedule = window.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+    schedule(() => {
+      hscrollRestoreQueued = false;
+      hscrollRestoreSaved();
+      syncTabArrows();
+    });
+  }
+
+  function revealSelectedTab(scroller, smooth) {
+    if (!scroller) return 0;
+    const current = scroller.querySelector(".tab-pair.on") || scroller.querySelector(".tab.on") || scroller.querySelector("[role='tab'][aria-selected='true']");
+    if (!current) return scroller.scrollLeft || 0;
+    const pad = 8;
+    const box = current.getBoundingClientRect();
+    const host = scroller.getBoundingClientRect();
+    if (!host.width || !box.width) return scroller.scrollLeft || 0;
+    let delta = 0;
+    if (box.right > host.right - pad) delta = box.right - (host.right - pad);
+    else if (box.left < host.left + pad) delta = box.left - (host.left + pad);
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const next = Math.max(0, Math.min(max, (scroller.scrollLeft || 0) + delta));
+    if (Math.abs(next - (scroller.scrollLeft || 0)) < 2) return next;
+    const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (smooth && !reduced && scroller.scrollTo) scroller.scrollTo({ left: next, behavior: "smooth" });
+    else scroller.scrollLeft = next;
+    return next;
+  }
+
+  function syncOneTabArrows(bar, scroller) {
+    const left = bar.querySelector(".tab-arrow.left");
+    const right = bar.querySelector(".tab-arrow.right");
+    if (!left || !right) return;
     const max = scroller.scrollWidth - scroller.clientWidth;
     const canLeft = max > 2 && scroller.scrollLeft > 2;
     const canRight = max > 2 && scroller.scrollLeft < max - 2;
     left.hidden = !canLeft;
     right.hidden = !canRight;
-    if (bar) {
-      bar.classList.toggle("is-fade-left", canLeft);
-      bar.classList.toggle("is-fade-right", canRight);
+    bar.classList.toggle("is-fade-left", canLeft);
+    bar.classList.toggle("is-fade-right", canRight);
+    if (!(scroller.scrollLeft === 0 && max <= 1 && tabScrollLeft > 1)) {
+      tabScrollLeft = scroller.scrollLeft;
+      tabScrollRoute = routeScrollKey();
     }
-    tabScrollLeft = scroller.scrollLeft;
     if (scroller.dataset.arrows !== "1") {
       scroller.dataset.arrows = "1";
-      scroller.addEventListener("scroll", syncTabArrows, { passive: true });
+      scroller.addEventListener("scroll", () => {
+        hscrollRememberEl(scroller);
+        const host = scroller.closest(".tabs-bar");
+        if (host) syncOneTabArrows(host, scroller);
+      }, { passive: true });
     }
+  }
+
+  function syncTabArrows() {
+    document.querySelectorAll(".tabs-bar").forEach((bar) => {
+      const scroller = bar.querySelector(".tabs");
+      if (scroller) syncOneTabArrows(bar, scroller);
+    });
+  }
+
+  function hscrollOnResize() {
+    const width = window.innerWidth || 0;
+    const widthChanged = hscrollWidth && Math.abs(width - hscrollWidth) > 1;
+    hscrollWidth = width;
+    if (!widthChanged) {
+      hscrollRestoreSaved();
+      return;
+    }
+    syncTabArrows();
+    placeTabMenu();
+    placeBellMenu();
+    placeFloatMenu(".assign-menu");
+    placeFloatMenu(".tab-context");
+  }
+
+  function hscrollInstall() {
+    if (hscrollInstall.done) return;
+    hscrollInstall.done = true;
+    hscrollWidth = window.innerWidth || 0;
+    document.addEventListener("scroll", (event) => {
+      const target = event.target;
+      if (!target || target.nodeType !== 1 || target === document.documentElement) return;
+      if (!hscrollMatches(target)) return;
+      hscrollRememberEl(target);
+    }, true);
+    document.addEventListener("touchstart", (event) => {
+      if (hscrollFromTarget(event.target)) hscrollTouching = true;
+    }, { passive: true, capture: true });
+    document.addEventListener("touchend", () => { hscrollTouching = false; }, { passive: true, capture: true });
+    document.addEventListener("touchcancel", () => { hscrollTouching = false; }, { passive: true, capture: true });
+    window.addEventListener("pagehide", () => {
+      hscrollRemember(document.getElementById("app"));
+      hscrollFlush();
+    });
+    if (window.MutationObserver && document.body) {
+      const observer = new MutationObserver((records) => {
+        for (let i = 0; i < records.length; i++) {
+          if (records[i].addedNodes && records[i].addedNodes.length) {
+            hscrollQueueRestore();
+            return;
+          }
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", () => {
+        const width = window.visualViewport.width || window.innerWidth || 0;
+        if (hscrollWidth && Math.abs(width - hscrollWidth) <= 1) hscrollRestoreSaved();
+      }, { passive: true });
+    }
+    window.ViktorychHScroll = {
+      remember: () => { hscrollRemember(document.getElementById("app") || document.body); hscrollFlush(); },
+      refresh: async () => {
+        const before = STATE.renderGen || 0;
+        try { await refreshFeeds(true); } catch (err) { /* a failed fetch still has to prove the row survives a paint */ }
+        if ((STATE.renderGen || 0) === before) render();
+        return STATE.renderGen || 0;
+      },
+      badge: () => {
+        if (!STATE.settings) return;
+        const notes = Array.isArray(STATE.settings.bellNotes) ? STATE.settings.bellNotes.slice() : [];
+        notes.unshift({ id: "hscroll-badge-" + Date.now(), at: Date.now(), handle: "news", name: "News", text: "badge", hash: "#/" });
+        STATE.settings.bellNotes = cleanBellNotes(notes);
+        paintBellBadge();
+        render();
+      },
+      resizeHeight: () => hscrollOnResize(),
+      generation: () => STATE.renderGen || 0,
+      positions: () => hscrollListLive(document.getElementById("app") || document.body).map((el) => ({
+        id: el.dataset.hscrollKey || "",
+        left: el.scrollLeft || 0,
+        live: el.dataset.hscrollLive || "",
+        mark: el.dataset.mark || ""
+      }))
+    };
   }
 
   function bindNavSplit() {
@@ -12925,26 +13348,9 @@ if (STATE.histClear) {
       if (STATE.snapTop) y = 0;
       else if (STATE.holdY != null) y = STATE.holdY;
       else if (!(opts && Object.prototype.hasOwnProperty.call(opts, "y"))) y = window.scrollY;
-      /* A render rebuilds the whole shell, which would throw away the pill
-         row's horizontal position (hydration and shard loads re-render while
-         the user scrolls). Read it off the live row before the swap, then
-         paint it back on the new one so the row does not jump to its start. */
-      const pillsRow = document.querySelector(".sp-row");
-      const pillsLeft = pillsRow ? pillsRow.scrollLeft : 0;
-      document.getElementById("app").innerHTML = shell(view(route), route);
-      if (pillsLeft) {
-        const restorePills = () => {
-          const paintedRow = document.querySelector(".sp-row");
-          if (paintedRow && paintedRow.scrollLeft !== pillsLeft) paintedRow.scrollLeft = pillsLeft;
-        };
-        restorePills();
-        /* Layout is not necessarily final on the first frame. */
-        if (window.requestAnimationFrame) {
-          window.requestAnimationFrame(() => {
-            if (gen === STATE.renderGen) restorePills();
-          });
-        }
-      }
+      /* The shell swap used to throw away every horizontal row. Tab rows are
+         patched in place; every other row gets its scrollLeft written back. */
+      commitApp(shell(view(route), route));
       if (window.ViktorychShorts) {
         if (route.name === "shorts") window.ViktorychShorts.mount(route);
         else window.ViktorychShorts.unmount();
@@ -13469,7 +13875,8 @@ if (STATE.histClear) {
       return;
     }
     if (act === "tab-scroll") {
-      const scroller = document.querySelector(".tabs");
+      const bar = el.closest && el.closest(".tabs-bar");
+      const scroller = (bar && bar.querySelector(".tabs")) || document.querySelector(".tabs");
       if (!scroller) return;
       const dir = Number(el.dataset.dir) || 1;
       const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
@@ -13479,6 +13886,7 @@ if (STATE.histClear) {
       tabScrollLeft = next;
       tabScrollRoute = routeScrollKey();
       scroller.scrollTo({ left: next, behavior: reduced ? "auto" : "smooth" });
+      hscrollRememberEl(scroller);
       syncTabArrows();
       return;
     }
@@ -14980,7 +15388,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (motion.addEventListener) motion.addEventListener("change", () => schedulePreview());
   }
-  window.addEventListener("resize", () => { syncTabArrows(); placeTabMenu(); placeBellMenu(); placeFloatMenu(".assign-menu"); placeFloatMenu(".tab-context"); });
+  window.addEventListener("resize", () => hscrollOnResize());
   window.addEventListener("scroll", () => {
     if (window.innerWidth >= 500) {
       STATE.headerHidden = false;
@@ -15125,6 +15533,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
     STATE.headerHidden = false;
     const key = routeScrollKey();
     const y = SCROLLS[key] || 0;
+    hscrollNav = true;
     showPill(pendingPillPosts());
     STATE.repostMenu = null;
     STATE.quoteTarget = "";
@@ -16703,16 +17112,24 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       else render({ y: y, anchorId: anchorId, anchorTop: anchorTop });
     });
     let pullStart = 0;
+    let pullStartX = 0;
     let pulling = false;
     document.addEventListener("touchstart", (event) => {
-      if (STATE.viewer || window.scrollY > 2 || event.touches.length !== 1) { pulling = false; return; }
+      if (hscrollFromTarget(event.target) || STATE.viewer || window.scrollY > 2 || event.touches.length !== 1) { pulling = false; return; }
       pullStart = event.touches[0].clientY;
+      pullStartX = event.touches[0].clientX;
       pulling = true;
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {
-      if (!pulling) return;
+      if (!pulling || !event.touches || !event.touches[0]) return;
+      const dx = event.touches[0].clientX - pullStartX;
       const dy = event.touches[0].clientY - pullStart;
       const el = document.getElementById("pull");
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+        pulling = false;
+        if (el) el.classList.remove("on", "ready");
+        return;
+      }
       if (dy > 8 && window.scrollY <= 2) {
         el.classList.add("on");
         el.classList.toggle("ready", dy > 70);
@@ -16791,9 +17208,9 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
       }
       if (event.touches.length !== 1) return;
       if (event.target.closest && event.target.closest(".story-tray, #stories")) return;
-      /* Sideways drags on the pill row belong to the row's own scrolling, not
-         to the home tab swipe (swiping there switched tabs and re-rendered). */
-      if (event.target.closest && event.target.closest(".sp-row-wrap, .sp-row")) { swipe = null; return; }
+      /* A sideways drag on a tab row or pill row scrolls that row. It must
+         not switch Home tabs or refresh the feed. */
+      if (hscrollFromTarget(event.target) || (event.target.closest && event.target.closest(".sp-row-wrap, .sp-row, .tabs, .tabs-bar"))) { swipe = null; return; }
       swipe = { x: event.touches[0].clientX, y: event.touches[0].clientY, viewer: false };
     }, { passive: true });
     document.addEventListener("touchmove", (event) => {
@@ -17343,5 +17760,6 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   });
 
   initTooltipController();
+  hscrollInstall();
   boot();
 })();
