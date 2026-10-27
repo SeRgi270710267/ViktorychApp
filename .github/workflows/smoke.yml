@@ -20,7 +20,13 @@ jobs:
         with:
           node-version: "22"
 
-      - uses: browser-actions/setup-chrome@v1
+      - name: Chrome
+        run: |
+          if ! command -v google-chrome >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y google-chrome-stable
+          fi
+          google-chrome --version
 
       - name: Build the shell and fail if a referenced file is missing
         run: |
