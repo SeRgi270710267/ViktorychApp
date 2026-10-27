@@ -1649,12 +1649,15 @@ def main() -> None:
     import subprocess
     update_flow = subprocess.run(["node", str(ROOT / "scripts" / "update_flow_test.js")], cwd=ROOT)
     check(update_flow.returncode == 0, "the update flow helpers pass")
-    check("function posterList(" in app and "function posterOrder(" in app and "function feedFrame(" in app and "100cqw" in app and "function clipLoops(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.5" in app and "el._hold" in app and "lockHlsTop(" in app and "capLevelToPlayerSize: false" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 50 percent visible")
+    check("function posterList(" in app and "function posterOrder(" in app and "function feedFrame(" in app and "function frameSpec(" in app and "100cqw" in app and "function clipLoops(" in app and "data-falls" in app and "onStateChange" in app and "enablejsapi=1" in app and "ratio >= 0.5" in app and "el._hold" in app and "lockHlsTop(" in app and "capLevelToPlayerSize: false" in app and "i.ytimg.com/vi/" in app, "a video keeps a real thumbnail until playback and starts muted at about 50 percent visible")
+    check("function stripLeadMentions(" in app and "function threadPair(" in app and "parentShown" in app and 'class="thread"' in app and "function quoteCard(" in app, "a reply with its parent is a thread and a quote stays a quote card")
+    frame_test = subprocess.run(["node", str(ROOT / "scripts" / "media_frame_test.js")], cwd=ROOT)
+    check(frame_test.returncode == 0, "media frames keep each ratio and a reply thread strips only leading mentions")
     check('data-preview="subs"' in app and 'index, "feed"' in app and ".vmute" in css and ".vleft" in css and "function vkRefresh(" in app, "feed cards show mute and remaining time, and a dead file is resolved again")
     check("function followedFeeds()" in app and "LIVE_REFRESH_MS = 2 * 60 * 1000" in app and "function livePostsForFeed(" in app and "/community" in app and "feeds.config.json" in app, "near-live refresh walks every followed feed")
     follow_fn = app[app.index("function followedFeeds()"):app.index("function followedFeeds()") + 500]
     check("redacted_handle" not in follow_fn and "redacted_handle" not in follow_fn and "redacted_handle" not in follow_fn, "live refresh has no per-account special case")
-    check("return !isSelfReply(post);" in app and "replyParent" in app and "pill-faces" in css and "reply-context" in css, "home shows replies to other people and the new-posts pill can show avatars")
+    check("return !isSelfReply(post);" in app and "replyParent" in app and "pill-faces" in css and "reply-context" in css and ".thread > .post.continues" in css and "--thread:" in css, "home shows replies to other people and the new-posts pill can show avatars")
     config_text = (ROOT / "feeds.config.json").read_text(encoding="utf-8")
     community_src = (ROOT / "scripts" / "adapters" / "youtube_community.py").read_text(encoding="utf-8")
     check("rsshub.rssforever.com" not in config_text and "rsshub.pseudoyu.com" not in config_text and "hub.slarker.me" not in config_text, "public RSSHub mirrors are not feed sources")
