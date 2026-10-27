@@ -1693,6 +1693,7 @@ SI18n.addPack("ru", {
   "Continue without a passkey": "Продолжить без ключа доступа",
   "Sign in with a passkey": "Войти ключом доступа",
   "Could not verify that passkey.": "Не удалось проверить этот ключ доступа.",
+  "There is no password to reset. A passkey can sign in, and the account number from sign-up still works.": "Пароль сбрасывать не нужно. Войти можно ключом доступа, а номер счёта с регистрации тоже работает.",
   "On-device AI": "ИИ на устройстве",
   "Language detection and the spam filter are included. Larger downloads stay off until you turn them on. They wait for Wi-Fi, a battery that is not low, and data saver to be off.": "Определение языка и фильтр спама уже включены. Большие загрузки выключены, пока вы их не включите. Они ждут Wi-Fi, батарею не на низком заряде и выключенную экономию трафика.",
   "Detect language on this device": "Определять язык на этом устройстве",

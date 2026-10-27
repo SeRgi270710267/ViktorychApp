@@ -1693,6 +1693,7 @@ SI18n.addPack("es", {
   "Continue without a passkey": "Continuar sin llave de acceso",
   "Sign in with a passkey": "Entrar con una llave de acceso",
   "Could not verify that passkey.": "No se pudo comprobar esa llave de acceso.",
+  "There is no password to reset. A passkey can sign in, and the account number from sign-up still works.": "No hay contraseña que restablecer. Una llave de acceso puede entrar, y el número de cuenta del registro sigue sirviendo.",
   "On-device AI": "IA en el dispositivo",
   "Language detection and the spam filter are included. Larger downloads stay off until you turn them on. They wait for Wi-Fi, a battery that is not low, and data saver to be off.": "La detección de idioma y el filtro de spam vienen incluidos. Las descargas grandes siguen apagadas hasta que las actives. Esperan a Wi-Fi, a una batería que no esté baja y a que el ahorro de datos esté apagado.",
   "Detect language on this device": "Detectar el idioma en este dispositivo",

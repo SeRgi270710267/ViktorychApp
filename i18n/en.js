@@ -1693,6 +1693,7 @@ SI18n.addPack("en", {
   "Continue without a passkey": "Continue without a passkey",
   "Sign in with a passkey": "Sign in with a passkey",
   "Could not verify that passkey.": "Could not verify that passkey.",
+  "There is no password to reset. A passkey can sign in, and the account number from sign-up still works.": "There is no password to reset. A passkey can sign in, and the account number from sign-up still works.",
   "On-device AI": "On-device AI",
   "Language detection and the spam filter are included. Larger downloads stay off until you turn them on. They wait for Wi-Fi, a battery that is not low, and data saver to be off.": "Language detection and the spam filter are included. Larger downloads stay off until you turn them on. They wait for Wi-Fi, a battery that is not low, and data saver to be off.",
   "Detect language on this device": "Detect language on this device",
