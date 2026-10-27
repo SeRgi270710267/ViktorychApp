@@ -85,6 +85,7 @@
     try {
       localStorage.setItem(LOCKED_KEY, lockedMode ? "1" : "0");
     } catch (err) { /* private mode */ }
+    tellShortsLock();
     livePaintKey = "";
     pastPaintKey = "";
     if (onLiveRoute()) {
@@ -112,10 +113,18 @@
     });
     return next;
   }
+  function tellShortsLock() {
+    try {
+      var worker = navigator.serviceWorker && navigator.serviceWorker.controller;
+      if (!worker) return;
+      worker.postMessage({ type: "shorts-lock", locked: !!lockedMode, unlocked: unlockedAccounts.slice() });
+    } catch (err) { /* the page still filters its own list */ }
+  }
   function setUnlocked(list) {
     var next = foldList(list);
     var same = next.length === unlockedAccounts.length && next.every(function (name, i) { return name === unlockedAccounts[i]; });
     unlockedAccounts = next;
+    tellShortsLock();
     if (same) return;
     if (window.ViktorychNotes && window.ViktorychNotes.lockChanged) {
       try { window.ViktorychNotes.lockChanged(); } catch (err) {}
@@ -3606,6 +3615,7 @@
     isLocked: isLocked,
     isUnlocked: isUnlocked,
     unlockedList: unlockedList,
+    unlockedHandles: unlockedList,
     setUnlocked: setUnlocked,
     setAdded: setAdded,
     setLocked: setLocked,
