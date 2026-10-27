@@ -88,6 +88,7 @@ const MEASURE = `(() => {
     problems.push("missing header parts");
     return problems;
   }
+  if (!status.textContent) status.textContent = "Away";
   if (document.querySelector(".acct-id")) problems.push("account id row");
   const text = document.body.innerText || "";
   if (/\\d{12}/.test(text)) problems.push("visible account id");
@@ -99,7 +100,7 @@ const MEASURE = `(() => {
   const lockBox = lock.getBoundingClientRect();
   const statusToEdit = Math.abs(statusBox.top - editBox.top) + Math.abs(statusBox.left - editBox.right);
   const statusToBio = Math.abs(statusBox.top - bioBox.top);
-  if (statusToEdit >= statusToBio) problems.push("status is closer to the bio");
+  if (statusToEdit >= statusToBio) problems.push("status is closer to the bio (" + Math.round(statusToEdit) + " vs " + Math.round(statusToBio) + ")");
   if (lockBox.height < 16 || lockBox.height > 22 || lockBox.width < 16 || lockBox.width > 22) problems.push("lock size");
   if (lockBox.top < nameBox.top - 2 || lockBox.bottom > nameBox.bottom + 2) problems.push("lock alignment");
   return problems;
@@ -159,10 +160,6 @@ async function main() {
     await page.waitForSelector("h1.pname .protected-badge", { timeout: 15000 });
     for (const viewport of VIEWPORTS) {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      await page.evaluate(() => {
-        const line = document.querySelector(".pactions .presence-lines");
-        if (line && !line.textContent) line.textContent = "Away";
-      });
       const problems = await page.evaluate(MEASURE);
       if (problems.length) fail(viewport.name + ": " + problems.join(", "));
     }
