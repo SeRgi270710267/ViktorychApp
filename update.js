@@ -457,16 +457,12 @@
   function waitForWorker(reg) {
     return new Promise(function (resolve) {
       var startedAt = Date.now();
-      var lastUpdate = startedAt;
       var timer = setInterval(function () {
         if (!reg) { clearInterval(timer); resolve(null); return; }
         if (reg.waiting) { clearInterval(timer); resolve(reg.waiting); return; }
-        var now = Date.now();
-        if (now - startedAt > 20000) { clearInterval(timer); resolve(reg.waiting || null); return; }
-        if (!reg.installing && reg.update && now - lastUpdate > 4000) {
-          lastUpdate = now;
-          reg.update().catch(function () {});
-        }
+        var idle = !reg.installing && Date.now() - startedAt > 60000;
+        var cap = Date.now() - startedAt > 90000;
+        if (idle || cap) { clearInterval(timer); resolve(reg.waiting || null); }
       }, 200);
     });
   }
@@ -545,10 +541,10 @@
     state.expectingController = true;
     state.reloaded = false;
     paint();
-    armStall();
     var ready = state.reg ? Promise.resolve(state.reg) : navigator.serviceWorker.getRegistration();
     ready.then(function (reg) {
       state.reg = reg || null;
+      if (reg && (reg.installing || reg.waiting)) return reg;
       if (reg && reg.update) return reg.update().catch(function () { return null; }).then(function () { return reg; });
       return reg;
     }).then(function (reg) {
@@ -731,6 +727,8 @@
       paint();
     }).catch(function () { /* offline keeps the copy that is already open */ }).then(function () {
       checking = false;
+      if (applying) return;
+      if (state.reg && (state.reg.installing || state.reg.waiting)) return;
       if (state.reg && state.reg.update) state.reg.update().catch(function () {});
     });
   }

@@ -160,15 +160,21 @@ async function offerUpdate(page) {
 async function waitSha(page, expected) {
   const start = Date.now();
   let last = "";
+  let nudgedAt = 0;
   let nudged = 0;
-  while (Date.now() - start < 90000) {
+  while (Date.now() - start < 120000) {
     try { last = await shaOf(page); } catch (err) { last = ""; }
     if (last === expected) return;
-    if (nudged < 2 && Date.now() - start > 15000) {
-      const go = await page.$("#upd-go");
-      const visible = go ? await go.isVisible().catch(() => false) : false;
-      if (visible) {
+    if (nudged < 2 && Date.now() - start > 20000 && Date.now() - nudgedAt > 20000) {
+      const failed = await page.evaluate(() => {
+        const root = document.getElementById("upd-root");
+        const go = document.getElementById("upd-go");
+        if (!root || !go || root.hidden || go.hidden) return false;
+        return root.getAttribute("data-phase") === "error";
+      }).catch(() => false);
+      if (failed) {
         nudged += 1;
+        nudgedAt = Date.now();
         await page.click("#upd-go").catch(() => {});
       }
     }
