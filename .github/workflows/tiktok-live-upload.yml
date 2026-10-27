@@ -13,6 +13,8 @@ permissions:
   contents: read
 
 # One uploader for every channel. A second run waits, so recorders keep the runners.
+# The script stops itself at 15 minutes. This cap is the backstop when a
+# Telegram call never returns, so the waiting run is not pending for hours.
 concurrency:
   group: tiktok-live-upload
   cancel-in-progress: false
@@ -20,7 +22,7 @@ concurrency:
 jobs:
   upload:
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
