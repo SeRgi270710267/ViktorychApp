@@ -7957,6 +7957,156 @@ const here = parseRoute();
     return archiveSentinel();
   }
 
+  const WELCOME_KEY = "viktorychapp-welcome-v1";
+  let publicPosts = [];
+  let publicStamp = 0;
+  let welcomePhoto = "";
+  const welcomeFollows = {};
+
+  function readWelcome() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(WELCOME_KEY) || "null");
+      if (raw && typeof raw === "object") return { step: Number(raw.step) || 0, done: !!raw.done };
+    } catch (err) { /* start at the first step */ }
+    return { step: 0, done: false };
+  }
+
+  function writeWelcome(doc) {
+    try { localStorage.setItem(WELCOME_KEY, JSON.stringify({ step: doc.step || 0, done: !!doc.done })); } catch (err) { /* the sheet can still close */ }
+  }
+
+  function samePublicPosts(next) {
+    if (publicPosts.length !== next.length) return false;
+    for (let i = 0; i < next.length; i++) if (!publicPosts[i] || publicPosts[i].id !== next[i].id) return false;
+    return true;
+  }
+
+  function schedulePublicPosts() {
+    if (document.documentElement.getAttribute("data-wall") === "1") return;
+    if (!accountToken()) return;
+    const now = Date.now();
+    if (now - publicStamp < 20000) return;
+    publicStamp = now;
+    accountCall("/v1/posts").then((res) => {
+      if (!res || res.status !== 200 || !Array.isArray(res.posts)) return;
+      if (samePublicPosts(res.posts)) return;
+      publicPosts = res.posts;
+      render();
+    }).catch(() => {});
+  }
+
+  function hydratePublicMedia() {
+    const token = accountToken();
+    const root = accountsApi();
+    if (!token || !root) return;
+    document.querySelectorAll("[data-public-media]").forEach((el) => {
+      if (el.getAttribute("data-public-tried")) return;
+      const path = el.getAttribute("data-public-media") || "";
+      if (path.charAt(0) !== "/") return;
+      el.setAttribute("data-public-tried", "1");
+      fetch(root + path, { headers: { Authorization: "Bearer " + token }, credentials: "omit" }).then((res) => {
+        if (!res.ok) return null;
+        return res.blob();
+      }).then((blob) => {
+        if (blob) el.src = URL.createObjectURL(blob);
+      }).catch(() => {});
+    });
+  }
+
+  function publicPostSpam(post) {
+    const mine = signedAccount();
+    if (mine && mine.publicId && mine.publicId === post.authorId) return false;
+    const ai = window.ViktorychOnDeviceAi;
+    if (!ai) return false;
+    if (ai.likelySpam && ai.likelySpam(post.body || "", "post", { force: true })) return true;
+    if (typeof ai.spamScore === "function" && ai.spamScore(post.body || "") >= 0.45) return true;
+    return false;
+  }
+
+  function publicMediaHtml(item) {
+    const mime = String(item.mime || "");
+    const tag = mime.indexOf("video/") === 0 ? "video" : mime.indexOf("audio/") === 0 ? "audio" : mime.indexOf("image/") === 0 ? "img" : "";
+    if (!tag) return "";
+    const extra = tag === "img" ? ' alt=""' : " controls";
+    return `<${tag}${extra} data-public-media="${esc(item.url || "")}"></${tag}>`;
+  }
+
+  function publicPostHtml(post) {
+    if (!STATE.publicSpam) STATE.publicSpam = {};
+    if (publicPostSpam(post) && !STATE.publicSpam[post.id]) {
+      return `<article class="card public-post" data-post="${esc(post.id)}"><p>${esc(tr("This looks like spam"))}</p><button type="button" data-act="show-public-spam" data-id="${esc(post.id)}">${esc(tr("Show"))}</button></article>`;
+    }
+    const media = (post.media || []).map(publicMediaHtml).join("");
+    const quote = post.quote ? `<blockquote class="public-quote"><strong>${esc(post.quote.authorName || "")}</strong><p>${esc(post.quote.body || "")}</p></blockquote>` : "";
+    const mine = signedAccount();
+    const self = !!(mine && mine.publicId && mine.publicId === post.authorId);
+    const tools = self ? "" : `<button type="button" data-act="public-report" data-id="${esc(post.id)}">${esc(tr("Report this post"))}</button><button type="button" data-act="public-block" data-id="${esc(post.authorId)}">${esc(tr("Block this account"))}</button><button type="button" data-act="public-mute" data-id="${esc(post.authorId)}">${esc(tr("Mute this account"))}</button>`;
+    return `<article class="card public-post" data-post="${esc(post.id)}"><div class="name">${esc(post.authorName || "")}</div><div class="phandle">@${esc(post.authorHandle || "")}</div><p>${esc(post.body || "")}</p>${media}${quote}<div class="public-tools"><button type="button" data-act="public-reply" data-id="${esc(post.id)}">${esc(tr("Reply"))}</button><button type="button" data-act="public-quote" data-id="${esc(post.id)}">${esc(tr("Quote"))}</button>${tools}</div></article>`;
+  }
+
+  function welcomeHtml(route) {
+    if (!route || route.name !== "home") return "";
+    if (document.documentElement.getAttribute("data-wall") === "1") return "";
+    if (!accountToken()) return "";
+    const doc = readWelcome();
+    if (doc.done) return "";
+    const step = doc.step || 0;
+    let body = "";
+    if (step <= 0) {
+      body = `<h2>${esc(tr("Add a photo and a short bio"))}</h2><label class="field"><span>${esc(tr("Name"))}</span><input id="welcome-name" maxlength="50" value="${esc(STATE.welcomeName || "")}"></label><label class="field"><span>${esc(tr("Bio"))}</span><textarea id="welcome-bio" maxlength="160">${esc(STATE.welcomeBio || "")}</textarea></label><label class="field"><span>${esc(tr("Add media"))}</span><input id="welcome-photo" type="file" accept="image/*"></label>`;
+    } else if (step === 1) {
+      const picks = feeds().slice(0, 6).map((feed) => {
+        const on = !!welcomeFollows[feed.id];
+        const label = feed.name || feed.handle || "";
+        return `<button type="button" data-act="welcome-follow" data-id="${esc(feed.id)}" aria-pressed="${on ? "true" : "false"}">${esc(label)}</button>`;
+      }).join("");
+      body = `<h2>${esc(tr("Pick feeds to follow"))}</h2><div class="welcome-feeds">${picks}</div>`;
+    } else {
+      body = `<h2>${esc(tr("Notifications can wait until you ask"))}</h2><button class="save" type="button" data-act="welcome-notify">${esc(tr("Notify me about new posts"))}</button>`;
+    }
+    return `<section class="welcome-sheet" data-welcome>${body}<div class="welcome-actions"><button type="button" data-act="welcome-skip">${esc(tr("Not now"))}</button><button class="save" type="button" data-act="welcome-next">${esc(tr("Next"))}</button></div></section>`;
+  }
+
+  function publishPublicPost(text, parentId, quoteId, file) {
+    const token = accountToken();
+    const root = accountsApi();
+    const finishOk = (post) => {
+      if (window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: "" });
+      if (post && post.id) publicPosts = [post].concat(publicPosts.filter((item) => item.id !== post.id));
+      publicStamp = Date.now();
+      toast(tr("Your post was sent."));
+      render();
+    };
+    const finishFail = () => {
+      if (text && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: text });
+      toast(tr("Could not send that post. It is still saved on this device."));
+    };
+    if (file && token && root) {
+      const data = new FormData();
+      if (text) data.set("body", text);
+      if (parentId) data.set("parentId", parentId);
+      if (quoteId) data.set("quoteId", quoteId);
+      data.set("file", file, file.name || "upload");
+      fetch(root + "/v1/posts", { method: "POST", headers: { Authorization: "Bearer " + token }, body: data, credentials: "omit" }).then((res) => {
+        return res.json().catch(() => ({})).then((body) => {
+          body.status = res.status;
+          return body;
+        });
+      }).then((res) => {
+        if (res && res.status === 201 && res.post) finishOk(res.post);
+        else finishFail();
+      }).catch(finishFail);
+      return;
+    }
+    const body = { body: text };
+    if (parentId) body.parentId = parentId;
+    if (quoteId) body.quoteId = quoteId;
+    accountCall("/v1/posts", { method: "POST", body: body }).then((res) => {
+      if (res && res.status === 201 && res.post) finishOk(res.post);
+      else finishFail();
+    }).catch(finishFail);
+  }
+
   function homeView(route) {
     const tab = route.tab || "foryou";
     const sorted = homeSorted(route);
@@ -7966,10 +8116,11 @@ const here = parseRoute();
     const findAccounts = !list.length && (tab === "following" || tab === "foryou")
       ? `<p class="empty-action"><a class="save" href="#/feeds">${esc(tr("Find accounts to follow"))}</a></p>`
       : "";
-    const body = list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
+    const published = tab === "foryou" ? publicPosts.map(publicPostHtml).join("") : "";
+    const body = published + (list.length ? list.map((p, i) => card(p, null, { eager: i === 0 })).join("") : emptyBlock(
       repostsOnly ? tr("No reposts yet") : tab === "following" ? tr("Nothing to see here — yet") : catTab ? tr("No posts in this tab") : tab.startsWith("list:") ? tr("No posts in this List") : tr("No posts yet"),
       repostsOnly ? tr("Reposts and forwards on this tab show up here.") : tab === "following" ? tr("When you follow accounts, their posts show up here.") : catTab ? tr("Posts from accounts in this tab show up here.") : tab.startsWith("list:") ? tr("Posts from members of this List will show up here.") : tr("Posts from your feeds will show up here.")
-    ) + findAccounts;
+    ) + findAccounts);
     const spaceCard = window.Spaces && window.Spaces.homeCard ? window.Spaces.homeCard() : "";
     const bar = STATE.homeFreshBar ? `<div class="home-fresh" role="progressbar" aria-label="${esc(tr("Loading"))}"><span></span></div>` : "";
     return homeHeader(tab) + bar + spaceCard + body + timelineSentinel(list.length, sorted.length);
@@ -11755,7 +11906,8 @@ if (STATE.histClear) {
         <div class="modal-head"><button class="icon-btn" data-act="close-modal" aria-label="${tr("Close")}">${icon("close")}</button><div class="grow"></div></div>
         <div class="modal-body" style="display:flex;gap:12px">
           <span class="ava initials">Y</span>
-          <div style="flex:1"><p class="phandle" id="compose-note">${tr("This reader doesn’t publish. Posts come from your feeds.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <div style="flex:1"><p class="phandle" id="compose-note">${tr("Posts here are public inside the app. Offline notes stay on this device.")}</p><textarea id="compose-text" aria-describedby="compose-note" placeholder="${tr("What is happening?!")}" style="width:100%;min-height:120px;background:transparent;border:0;resize:vertical;font-size:20px;outline:none">${esc(STATE.composeSeed || "")}</textarea>
+          <label class="field"><span>${esc(tr("Add media"))}</span><input id="compose-file" type="file" accept="image/*,video/*,audio/*"></label>
           <div class="odai-chips"><button type="button" data-act="odai-suggest" data-field="compose-text" data-scope="post">${tr("Suggest replies")}</button><button type="button" data-act="odai-grammar" data-field="compose-text" data-scope="post">${tr("Fix grammar")}</button><button type="button" data-act="odai-tone" data-tone="clear" data-field="compose-text" data-scope="post">${tr("Tone")}</button></div>
           <div style="display:flex;justify-content:flex-end"><button id="compose-post" class="save" data-act="compose-post"${(STATE.composeSeed || "").trim() ? "" : " disabled"}>${tr("Post")}</button></div></div>
         </div></div></div>`;
@@ -11864,7 +12016,7 @@ if (STATE.histClear) {
     const top = (route.name === "tv" || route.name === "shorts") ? 0 : (route.name === "messages" ? 0 : route.name === "notifications" ? 159 : explore ? 0 : tall && !musicHome ? 106 : 53) + rowExtra + storyExtra;
     const sensitive = route.name === "messages" || route.name === "notifications" || (route.name === "settings" && route.section === "privacy");
     const mode = (wide ? " wide" : "") + (explore ? " explore-mode" : "");
-    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
+    return `<button class="skip" type="button" data-act="skip">${tr("Skip to content")}</button><div class="app${mode}">${nav(route)}<main class="center${route.name === "settings" ? " settings-flow" : ""}" tabindex="-1" style="--top:${top}px"${sensitive ? ' data-privacy="sensitive"' : ""}>${main}</main>${wide || explore ? "" : sidebar()}</div>${bottom(route)}${welcomeHtml(route)}${drawer()}${shareSheet()}${modal()}${groupMenu()}${tabMenu()}${bellMenu()}${tabAssignMenu()}${tabContextMenu()}`;
   }
 
   function toggleReaction(act, id) {
@@ -14134,6 +14286,8 @@ if (STATE.histClear) {
          patched in place; every other row, including the live pills, gets its
          scrollLeft written back. Presence then paints dots on the new shell. */
       commitApp(shell(view(route), route));
+      schedulePublicPosts();
+      hydratePublicMedia();
       if (window.ViktorychPrivacy && window.ViktorychPrivacy.paint) window.ViktorychPrivacy.paint();
       if (window.ViktorychPresence) window.ViktorychPresence.refresh(document.getElementById("app"));
       if (window.ViktorychShorts) {
@@ -14706,24 +14860,115 @@ if (STATE.histClear) {
       else render();
       return;
     }
+    if (act === "welcome-skip") {
+      writeWelcome({ step: 0, done: true });
+      render();
+      return;
+    }
+    if (act === "welcome-follow") {
+      const id = el.dataset.id || "";
+      if (id) welcomeFollows[id] = !welcomeFollows[id];
+      render();
+      return;
+    }
+    if (act === "welcome-notify") {
+      writeWelcome({ step: 2, done: true });
+      enableNotifications();
+      return;
+    }
+    if (act === "welcome-next") {
+      const doc = readWelcome();
+      const step = doc.step || 0;
+      if (step <= 0) {
+        const nameEl = document.getElementById("welcome-name");
+        const bioEl = document.getElementById("welcome-bio");
+        const name = nameEl ? nameEl.value : (STATE.welcomeName || "");
+        const bio = bioEl ? bioEl.value : (STATE.welcomeBio || "");
+        const body = {};
+        if (String(name).trim()) body.displayName = String(name).trim();
+        if (String(bio).trim()) body.bio = String(bio);
+        if (welcomePhoto) body.avatar = welcomePhoto;
+        const advance = () => { writeWelcome({ step: 1, done: false }); render(); };
+        if (Object.keys(body).length) accountCall("/v1/profile", { method: "PATCH", body: body }).then(advance, advance);
+        else advance();
+        return;
+      }
+      if (step === 1) {
+        const ids = Object.keys(welcomeFollows).filter((id) => welcomeFollows[id]);
+        if (ids.length) applyFollow(ids, true);
+        writeWelcome({ step: 2, done: false });
+        render();
+        return;
+      }
+      writeWelcome({ step: 2, done: true });
+      render();
+      return;
+    }
+    if (act === "show-public-spam") {
+      if (!STATE.publicSpam) STATE.publicSpam = {};
+      STATE.publicSpam[el.dataset.id || ""] = true;
+      render();
+      return;
+    }
+    if (act === "public-reply" || act === "public-quote") {
+      STATE.composeParent = act === "public-reply" ? (el.dataset.id || "") : "";
+      STATE.composeQuote = act === "public-quote" ? (el.dataset.id || "") : "";
+      STATE.modal = "compose";
+      STATE.composeSeed = "";
+      render();
+      return;
+    }
+    if (act === "public-report") {
+      const reason = tr("Report this post");
+      accountCall("/v1/posts/report", { method: "POST", body: { postId: el.dataset.id || "", reason: reason } }).then(() => {
+        toast(tr("Report this post"));
+      }).catch(() => {});
+      return;
+    }
+    if (act === "public-block" || act === "public-mute") {
+      const path = act === "public-block" ? "/v1/blocks" : "/v1/mutes";
+      accountCall(path, { method: "POST", body: { accountId: el.dataset.id || "" } }).then(() => {
+        publicStamp = 0;
+        schedulePublicPosts();
+      }).catch(() => {});
+      return;
+    }
     if (act === "compose-post") {
       const seed = STATE.composeSeed || "";
+      const parentId = STATE.composeParent || "";
+      const quoteId = STATE.composeQuote || "";
+      const fileEl = document.getElementById("compose-file");
+      const file = fileEl && fileEl.files && fileEl.files[0] ? fileEl.files[0] : null;
       STATE.modal = null;
       if (window.ViktorychCommunities && window.ViktorychCommunities.takeCompose && window.ViktorychCommunities.takeCompose(seed)) {
         STATE.composeSeed = "";
         render();
         return;
       }
-      if (seed.trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
-      if (!navigator.onLine && seed.trim()) {
-        queueOffline({ type: "reply", id: "compose", on: true, body: seed });
+      if (!seed.trim() && !file) {
         STATE.composeSeed = "";
+        STATE.composeParent = "";
+        STATE.composeQuote = "";
         render();
+        toast(tr("Posts come from your feeds"));
         return;
       }
+      if (!navigator.onLine || !accountToken()) {
+        if (seed.trim() && window.ViktorychLocal) window.ViktorychLocal.saveDoc("drafts", "compose", { text: seed });
+        if (!navigator.onLine && seed.trim()) queueOffline({ type: "reply", id: "compose", on: true, body: seed });
+        STATE.composeSeed = "";
+        STATE.composeParent = "";
+        STATE.composeQuote = "";
+        render();
+        if (navigator.onLine && !accountToken()) toast(tr("Saved on this device. This reader doesn’t publish."));
+        return;
+      }
+      const text = seed;
       STATE.composeSeed = "";
+      STATE.composeParent = "";
+      STATE.composeQuote = "";
       render();
-      toast(seed.trim() ? tr("Saved on this device. This reader doesn’t publish.") : tr("Posts come from your feeds"));
+      publishPublicPost(text, parentId, quoteId, file);
       return;
     }
     if (act === "close-tab-menu") {
@@ -15917,14 +16162,45 @@ const blob = new Blob([JSON.stringify({ version: 1, uiLang: window.SI18n ? windo
     if (event.target && event.target.closest && event.target.closest(".gsuggest")) event.preventDefault();
   });
 
+  document.addEventListener("change", (event) => {
+    const el = event.target;
+    if (!el) return;
+    if (el.id === "compose-file") {
+      const btn = document.getElementById("compose-post");
+      if (btn) btn.disabled = !(el.files && el.files[0]) && !(STATE.composeSeed || "").trim();
+      return;
+    }
+    if (el.id !== "welcome-photo" || !el.files || !el.files[0]) return;
+    const file = el.files[0];
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const edge = 512;
+      const scale = Math.min(1, edge / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      try { welcomePhoto = canvas.toDataURL("image/webp", 0.86); } catch (err) { welcomePhoto = ""; }
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  });
+
   document.addEventListener("input", (event) => {
     const el = event.target;
     if (el.id === "compose-text") {
       STATE.composeSeed = el.value;
       const btn = document.getElementById("compose-post");
-      if (btn) btn.disabled = !el.value.trim();
+      const fileEl = document.getElementById("compose-file");
+      const hasFile = !!(fileEl && fileEl.files && fileEl.files[0]);
+      if (btn) btn.disabled = !el.value.trim() && !hasFile;
       return;
     }
+    if (el.id === "welcome-name") { STATE.welcomeName = el.value; return; }
+    if (el.id === "welcome-bio") { STATE.welcomeBio = el.value; return; }
     if (el.id === "quote-text") {
       const btn = document.getElementById("quote-post");
       if (btn) btn.disabled = !String(el.value || "").trim();
