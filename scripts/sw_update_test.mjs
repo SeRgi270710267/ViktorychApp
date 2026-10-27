@@ -190,7 +190,7 @@ async function waitSha(page, expected) {
     if (last === expected) return;
     if (nudged < 5 && Date.now() - start > 12000 && Date.now() - nudgedAt > 12000) {
       detail = await registrationState(page);
-      if (detail && detail.failed) {
+      if (detail && (detail.failed || detail.waiting)) {
         nudged += 1;
         nudgedAt = Date.now();
         await page.click("#upd-go").catch(() => {});
