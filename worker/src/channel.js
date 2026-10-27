@@ -33,6 +33,7 @@
      POST https://channel.internal/wipe */
 
 import { isAccountId } from "../../shared/presence.js";
+import { isSwarmName, swarmFetch, swarmMessage, swarmClose } from "./media-swarm.js";
 
 const TOPIC_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const TOPIC_LIMIT = 8;
@@ -129,6 +130,7 @@ export class AccountChannel {
   }
 
   async fetch(request) {
+    if (isSwarmName(accountName(this.ctx))) return swarmFetch(this, request);
     const url = new URL(request.url);
     if (url.hostname === "channel.internal") return this.internal(request, url);
     const upgrade = String(request.headers.get("Upgrade") || "");
@@ -149,6 +151,7 @@ export class AccountChannel {
   }
 
   async webSocketMessage(ws, message) {
+    if (isSwarmName(accountName(this.ctx))) return swarmMessage(this, ws, message);
     const text = typeof message === "string" ? message : new TextDecoder().decode(message);
     if (!text || text.length > 4000) return;
     let msg = null;
@@ -177,6 +180,10 @@ export class AccountChannel {
   }
 
   async webSocketClose(ws) {
+    if (isSwarmName(accountName(this.ctx))) {
+      swarmClose(this, ws);
+      return;
+    }
     let att = { watches: {} };
     try { att = ws.deserializeAttachment() || att; }
     catch (err) { att = { watches: {} }; }

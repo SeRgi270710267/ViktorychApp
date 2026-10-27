@@ -3174,6 +3174,72 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     hls.currentLevel = top;
   }
 
+  const DEVICE_PERF_KEY = "viktorychapp-device-performance-v1";
+  function readDevicePerf() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(DEVICE_PERF_KEY) || "{}");
+      return raw && typeof raw === "object" ? raw : {};
+    } catch (err) { return {}; }
+  }
+  function writeDevicePerf(patch) {
+    const raw = readDevicePerf();
+    Object.keys(patch || {}).forEach((key) => { raw[key] = patch[key]; });
+    try { localStorage.setItem(DEVICE_PERF_KEY, JSON.stringify(raw)); } catch (err) { /* the toggle still updates this view */ }
+    if (window.ViktorychPeerMedia && window.ViktorychPeerMedia.configure) window.ViktorychPeerMedia.configure();
+    return raw;
+  }
+  function ensurePeerMedia() {
+    if (window.ViktorychPeerMedia) return Promise.resolve(window.ViktorychPeerMedia);
+    if (!ensurePeerMedia.pending) {
+      ensurePeerMedia.pending = import("./peer-media.js").then((mod) => window.ViktorychPeerMedia || mod).catch(() => null);
+    }
+    return ensurePeerMedia.pending;
+  }
+  function releasePeer(el) {
+    if (!el || !el._peerRelease) return;
+    try { el._peerRelease(); } catch (err) { /* the mesh can already be gone */ }
+    el._peerRelease = null;
+  }
+  function armPeer(el, hls, url) {
+    if (!el || !url) return;
+    releasePeer(el);
+    if (hls && window.ViktorychPeerMedia && window.ViktorychPeerMedia.applyHls) window.ViktorychPeerMedia.applyHls(hls, window.Hls);
+    ensurePeerMedia().then((mod) => {
+      if (!mod || !el.isConnected) return;
+      if (hls && el._hls === hls && mod.applyHls) mod.applyHls(hls, window.Hls);
+      if (mod.watch) el._peerRelease = mod.watch(url);
+    });
+  }
+  window.ViktorychPeer = {
+    ready: ensurePeerMedia,
+    applyHls: (hls, Hls) => ensurePeerMedia().then((mod) => mod && mod.applyHls && mod.applyHls(hls, Hls))
+  };
+  function peerMediaSettingsHtml() {
+    const perf = readDevicePerf();
+    const mode = perf.peerMedia === "on" || perf.peerMedia === "off" ? perf.peerMedia : "auto";
+    const cap = [32768, 65536, 131072, 262144].indexOf(Number(perf.peerUploadCap)) >= 0 ? Number(perf.peerUploadCap) : 65536;
+    const share = perf.peerShareWhileWatching !== false;
+    const caps = [[32768, tr("32 KB/s")], [65536, tr("64 KB/s")], [131072, tr("128 KB/s")], [262144, tr("256 KB/s")]];
+    const above = window.ViktorychDevicePerformance && window.ViktorychDevicePerformance.settingsHtml ? window.ViktorychDevicePerformance.settingsHtml() : "";
+    return above + `<h2>${esc(tr("Peer-assisted media"))}</h2>
+      <p class="phandle">${esc(tr("Peers can see each other's IP address while sharing."))}</p>
+      <div class="theme-row" role="group" aria-label="${esc(tr("Peer-assisted media"))}">
+        ${["auto", "on", "off"].map((id) => `<button class="outline${mode === id ? " on" : ""}" type="button" data-act="peer-media" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
+      </div>
+      <h2>${esc(tr("Upload cap"))}</h2>
+      <div class="theme-row" role="group" aria-label="${esc(tr("Upload cap"))}">
+        ${caps.map((row) => `<button class="outline${cap === row[0] ? " on" : ""}" type="button" data-act="peer-upload" data-cap="${row[0]}">${esc(row[1])}</button>`).join("")}
+      </div>
+      <button class="tab-switch${share ? " on" : ""}" type="button" role="switch" aria-checked="${share ? "true" : "false"}" data-act="peer-share"><span>${esc(tr("Share only while watching"))}</span><i></i></button>`;
+  }
+  function ensureDeviceModule() {
+    if (ensureDeviceModule.done) return;
+    ensureDeviceModule.done = true;
+    import("./shared/device-performance.js").then(() => {
+      if (window.ViktorychDevicePerformance && window.ViktorychDevicePerformance.settingsHtml) render();
+    }).catch(() => {});
+  }
+
   function loadHls() {
     if (window.Hls) return Promise.resolve(window.Hls);
     if (STATE.hlsP) return STATE.hlsP;
@@ -3200,6 +3266,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
   }
 
   function clearPlayer(el) {
+    releasePeer(el);
     if (el._stall) { clearTimeout(el._stall); el._stall = 0; }
     if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
     el.querySelectorAll("video, audio").forEach((m) => {
@@ -3532,6 +3599,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
       ready.then(() => {
         if (el._gen !== gen || el._src !== token) return;
         video.src = source.url;
+        armPeer(el, null, source.url);
         start();
       }).catch(() => fail());
       return;
@@ -3559,6 +3627,7 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
         }
         const hls = new Hls(hlsOpts);
         el._hls = hls;
+        armPeer(el, hls, source.url);
         const wait = setTimeout(() => fail(), 5000);
         hls.on(Hls.Events.ERROR, (_event, data) => {
           if (data && (data.fatal || /Codec|Incompatible|manifestLoad|fragLoad/i.test(String(data.details || "")) || (data.response && Number(data.response.code) >= 400))) { clearTimeout(wait); fail(); }
@@ -3576,12 +3645,14 @@ parsed.historyPause = cleanHistoryPause(parsed.historyPause);
     }
     video.referrerPolicy = "no-referrer";
     video.src = source.url;
+    armPeer(el, null, source.url);
     start();
   }
 
   function stopWatchPlayback() {
     STATE.playing = null;
     document.querySelectorAll(".vplay").forEach((el) => {
+      releasePeer(el);
       el._gen = (el._gen || 0) + 1;
       if (el._stall) { clearTimeout(el._stall); el._stall = 0; }
       if (el._hls && el._hls.destroy) { try { el._hls.destroy(); } catch (err) { /* already gone */ } el._hls = null; }
@@ -10972,6 +11043,7 @@ const here = parseRoute();
       return settingsHead(tr("Languages"), "#/settings/accessibility") + `<div class="set-list">${settingsRow("#/settings/display-language", tr("Display language"), endonym)}</div><div class="set-block">${window.FeedsTranslate ? window.FeedsTranslate.settingsHtml() : ""}</div>`;
     }
     if (section === "data") {
+      ensureDeviceModule();
       return settingsHead(tr("Data usage"), "#/settings/accessibility") + `<div class="set-block">
         <h2>${esc(tr("Autoplay videos"))}</h2>
         <div class="theme-row" role="group" aria-label="${esc(tr("Autoplay videos"))}">
@@ -10984,6 +11056,7 @@ const here = parseRoute();
         <div class="theme-row" role="group" aria-label="${esc(tr("Live previews"))}">
           ${["auto", "on", "off"].map((id) => `<button class="outline${((STATE.settings && STATE.settings.livePreview) || "auto") === id ? " on" : ""}" type="button" data-act="live-preview" data-mode="${id}">${esc(id === "on" ? tr("On") : id === "off" ? tr("Off") : tr("Auto"))}</button>`).join("")}
         </div>
+        ${peerMediaSettingsHtml()}
       </div>`;
     }
     if (section === "notifications") {
@@ -14401,6 +14474,24 @@ if (STATE.histClear) {
       render();
       return;
     }
+    if (act === "peer-media") {
+      const mode = el.dataset.mode === "on" || el.dataset.mode === "off" ? el.dataset.mode : "auto";
+      writeDevicePerf({ peerMedia: mode });
+      render();
+      return;
+    }
+    if (act === "peer-upload") {
+      const cap = Number(el.dataset.cap);
+      if (cap === 32768 || cap === 65536 || cap === 131072 || cap === 262144) writeDevicePerf({ peerUploadCap: cap });
+      render();
+      return;
+    }
+    if (act === "peer-share") {
+      const saved = readDevicePerf();
+      writeDevicePerf({ peerShareWhileWatching: saved.peerShareWhileWatching === false });
+      render();
+      return;
+    }
     if (act === "mute") {
       const tile = el.closest(".vplay");
       if (tile && tile.querySelector(".gif-badge")) return;
@@ -16781,6 +16872,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             if (!STATE.viewer || !STATE.viewer.video || !Hls || !(typeof Hls.isSupported === "function" ? Hls.isSupported() : Hls.isSupported)) return;
             const hls = new Hls(hlsAhead());
             box._hls = hls;
+            armPeer(box, hls, url);
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -16796,6 +16888,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
         }
         try { video.removeAttribute("crossorigin"); video.crossOrigin = null; } catch (e) {}
         video.src = url;
+        armPeer(box, null, url);
         if (video.readyState >= 1) go();
         else video.addEventListener("loadedmetadata", go, { once: true });
       };
@@ -16855,6 +16948,8 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
             }));
             hls.on(Hls.Events.ERROR, (_event, data) => { if (data && data.fatal) fail(); });
             hls.on(Hls.Events.MANIFEST_PARSED, () => { lockHlsTop(hls); seek(); video.play().catch(() => {}); });
+            box._hls = hls;
+            armPeer(box, hls, file.url);
             hls.loadSource(file.url);
             hls.attachMedia(video);
           }).catch(fail);
@@ -16929,6 +17024,7 @@ if (data.historyPause) STATE.settings.historyPause = cleanHistoryPause(data.hist
   function closeViewer() {
     const box = document.getElementById("viewer");
     if (box) {
+      releasePeer(box);
       if (box._hls && box._hls.destroy) {
         try { box._hls.destroy(); } catch (err) {}
         box._hls = null;

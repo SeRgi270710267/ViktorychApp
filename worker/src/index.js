@@ -19,6 +19,7 @@ import { b2Configured, b2GetThumb } from "./b2-thumb.js";
 import { handleOwnerKeys, KEYS_SCHEMA, migrateOwnerKeys } from "./owner-keys.js";
 import { DELETION_SCHEMA, blockDeletedLogin, handleAccountDelete, handleAccountReauth, handleDeletionList, handleHeld, resumeAccountDeletions } from "./account-delete.js";
 import { AccountChannel, CHANNEL_SCHEMA, handleChannel } from "./channel.js";
+import { handleMediaSwarm } from "./media-swarm.js";
 import { PRESENCE_SCHEMA, handlePresence, sweepExpiredStatuses } from "./presence.js";
 import { NOTIFICATION_SCHEMA, handleNotificationRoutes, notifyFollow, notifyRepost, notifyLiveStarted } from "./notifications.js";
 import { liveFetch, primeLiveCookies, releaseLiveCookies } from "./owner-key-net.js";
@@ -4592,6 +4593,9 @@ async function route(request, env, ctx) {
   }
   if (path === "/v1/channel" || path === "/v1/channel/ticket") {
     return handleChannel(request, env, url, { json, sessionAccount, rateHit, limited });
+  }
+  if (path === "/v1/media/swarm" || path === "/v1/media/swarm/ticket") {
+    return handleMediaSwarm(request, env, url, { json, sessionAccount, rateHit, limited });
   }
   if (path === "/v1/vault" || path.startsWith("/v1/vault/")) {
 
