@@ -700,6 +700,23 @@
     if (remote === "show" || remote === "default" || remote === "none") return remote;
     return "show";
   }
+  function mergeNoteTabs(local, remote) {
+    var map = {};
+    function take(tab) {
+      if (!tab || !tab.id) return;
+      var prev = map[tab.id];
+      if (!prev) { map[tab.id] = tab; return; }
+      var newer = (Number(tab.updatedAt) || 0) >= (Number(prev.updatedAt) || 0);
+      var next = newer ? Object.assign({}, prev, tab) : Object.assign({}, tab, prev);
+      next.readAt = Math.max(Number(tab.readAt) || 0, Number(prev.readAt) || 0);
+      next.deletedAt = Math.max(Number(tab.deletedAt) || 0, Number(prev.deletedAt) || 0);
+      next.updatedAt = Math.max(Number(tab.updatedAt) || 0, Number(prev.updatedAt) || 0);
+      map[tab.id] = next;
+    }
+    (remote || []).forEach(take);
+    (local || []).forEach(take);
+    return Object.keys(map).map(function (key) { return map[key]; });
+  }
   function mergePayload(local, remote) {
     remote = remote || {};
     var follows = uniq([].concat(local.follows || [], remote.follows || []));
@@ -724,7 +741,7 @@
       reposts: unionObjects(local.reposts, remote.reposts),
       savedPosts: unionObjects(local.savedPosts, remote.savedPosts),
       feedTabs: unionById(local.feedTabs, remote.feedTabs),
-      noteTabs: unionById(local.noteTabs, remote.noteTabs),
+      noteTabs: mergeNoteTabs(local.noteTabs, remote.noteTabs),
       noteTabsSame: local.noteTabsSame === true || local.noteTabsSame === false ? local.noteTabsSame !== false : remote.noteTabsSame !== false,
       lastNoteTab: local.lastNoteTab || remote.lastNoteTab || "all",
       mutedWords: uniq([].concat(local.mutedWords || [], remote.mutedWords || [])),
@@ -1043,11 +1060,19 @@
   function logout(all) {
     var session = readSession();
     var token = session && session.token;
-    removeStored("account-v1");
-    tellSW(false, "signout");
-    var done = function () { location.replace(location.pathname + location.search); location.reload(); };
-    if (!token || !hasApi()) { done(); return; }
-    api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
+    var prep = window.ViktorychNotes && window.ViktorychNotes.beforeSignOut ? window.ViktorychNotes.beforeSignOut(!!all, token) : null;
+    Promise.resolve(prep).then(function () {
+      removeStored("account-v1");
+      tellSW(false, "signout");
+      var done = function () { location.replace(location.pathname + location.search); location.reload(); };
+      if (!token || !hasApi()) { done(); return; }
+      api(all ? "/v1/logout-all" : "/v1/logout", { method: "POST", token: token }).then(done, done);
+    }, function () {
+      removeStored("account-v1");
+      tellSW(false, "signout");
+      location.replace(location.pathname + location.search);
+      location.reload();
+    });
   }
   function fitImage(file, edge, maxChars) {
     return new Promise(function (resolve) {

@@ -38,6 +38,16 @@ migrations_dir = "migrations"
 binding = "DATA"
 bucket_name = "viktorych-data"
 
+# One SQLite Durable Object per account. Topics share this class.
+# notifications is this worker. presence is reserved. Do not add a second class.
+[[durable_objects.bindings]]
+name = "ACCOUNT_HUB"
+class_name = "AccountHub"
+
+[[migrations]]
+tag = "v1-account-hub"
+new_sqlite_classes = ["AccountHub"]
+
 # Free cron. Every minute it watches the owner's TikTok handles and dispatches
 # tiktok-record.yml the moment a live starts. GitHub's own `*/5` schedule is
 # only a fallback: it often runs every two to six hours.

@@ -1,0 +1,969 @@
+/* Account notifications.
+   D1 is the source of truth: items, the read cursor, tab settings, bells,
+   and one push subscription per device. The account Durable Object only
+   wakes other open pages. A hidden page is not connected and is not polled.
+
+   Read state only moves forward. An item id is stable. A second write with
+   the same idempotency key does not change the time, does not clear read,
+   and does not send a second push. */
+
+import { inspectHandle } from "../../shared/handle-skeleton.js";
+import { hubPublish, hubUpgrade } from "./account-hub.js";
+
+const encoder = new TextEncoder();
+const KINDS = { post: 1, mention: 1, reply: 1, like: 1, repost: 1, follow: 1, live: 1 };
+const LIVE_WINDOW_MS = 6 * 60 * 60 * 1000;
+const NOTE_CAP = 200;
+
+export const NOTIFICATION_SCHEMA = [
+  `CREATE TABLE IF NOT EXISTS notifications (
+    public_id TEXT NOT NULL,
+    note_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    read_at INTEGER NOT NULL DEFAULT 0,
+    actor_id TEXT NOT NULL DEFAULT '',
+    subject TEXT NOT NULL DEFAULT '',
+    idempotency_key TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    pushed_at INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (public_id, note_id)
+  )`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS notifications_idem ON notifications(public_id, idempotency_key)",
+  "CREATE INDEX IF NOT EXISTS notifications_time ON notifications(public_id, at DESC)",
+  `CREATE TABLE IF NOT EXISTS notification_state (
+    public_id TEXT PRIMARY KEY,
+    read_until INTEGER NOT NULL DEFAULT 0,
+    tabs TEXT NOT NULL DEFAULT '',
+    bells_at INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS notification_bells (
+    public_id TEXT NOT NULL,
+    feed_key TEXT NOT NULL,
+    mode TEXT NOT NULL DEFAULT '',
+    since INTEGER NOT NULL DEFAULT 0,
+    handle TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    ids TEXT NOT NULL DEFAULT '',
+    handles TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL DEFAULT 0,
+    deleted_at INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (public_id, feed_key)
+  )`,
+  `CREATE TABLE IF NOT EXISTS push_subscriptions (
+    public_id TEXT NOT NULL,
+    endpoint_hash TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    ua TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (public_id, endpoint_hash)
+  )`,
+  "CREATE TABLE IF NOT EXISTS push_vapid (id INTEGER PRIMARY KEY CHECK (id = 1), public_key TEXT NOT NULL, private_jwk TEXT NOT NULL, created_at INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS hub_tickets (token_hash TEXT PRIMARY KEY, public_id TEXT NOT NULL, expires_at INTEGER NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS push_log (id INTEGER PRIMARY KEY AUTOINCREMENT, public_id TEXT NOT NULL, note_id TEXT NOT NULL, created_at INTEGER NOT NULL)"
+];
+
+let schemaReady = null;
+
+function bytesToB64(bytes) {
+  let text = "";
+  for (let i = 0; i < bytes.length; i++) text += String.fromCharCode(bytes[i]);
+  return btoa(text);
+}
+
+function b64url(bytes) {
+  return bytesToB64(bytes).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function b64urlToBytes(text) {
+  const pad = "=".repeat((4 - (text.length % 4)) % 4);
+  const b64 = (String(text || "") + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function hex(bytes) {
+  let out = "";
+  for (let i = 0; i < bytes.length; i++) out += bytes[i].toString(16).padStart(2, "0");
+  return out;
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(value));
+  return hex(new Uint8Array(digest));
+}
+
+function clip(value, max) {
+  return String(value == null ? "" : value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").slice(0, max);
+}
+
+function httpsUrl(value) {
+  const text = clip(value, 400);
+  return /^https:\/\//.test(text) ? text : "";
+}
+
+export function ensureNotificationSchema(env) {
+  if (!env || !env.DB) return Promise.resolve();
+  if (!schemaReady) {
+    schemaReady = env.DB.batch(NOTIFICATION_SCHEMA.map((sql) => env.DB.prepare(sql))).catch((err) => {
+      schemaReady = null;
+      throw err;
+    });
+  }
+  return schemaReady;
+}
+
+export function mergeNotificationItems(local, remote, readUntil) {
+  const map = new Map();
+  const until = Number(readUntil) || 0;
+  function take(item, fromServer) {
+    if (!item || !item.id) return;
+    const id = clip(item.id, 160);
+    if (!id) return;
+    const at = Number(item.at) || 0;
+    const read = item.read === true || !!(until && at > 0 && at <= until);
+    const prev = map.get(id);
+    if (!prev) {
+      map.set(id, Object.assign({}, item, { id, at, read, lockAt: !!fromServer }));
+      return;
+    }
+    const atKept = prev.lockAt ? prev.at : (fromServer ? at : (prev.at || at));
+    map.set(id, Object.assign({}, prev, item, {
+      id,
+      at: atKept,
+      read: !!(prev.read || read),
+      lockAt: !!(prev.lockAt || fromServer)
+    }));
+  }
+  (Array.isArray(remote) ? remote : []).forEach((item) => take(item, true));
+  (Array.isArray(local) ? local : []).forEach((item) => take(item, false));
+  return Array.from(map.values()).sort((a, b) => (b.at - a.at) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+export function mergeNoteTabs(local, remote) {
+  const map = new Map();
+  function take(tab) {
+    if (!tab || !tab.id) return;
+    const id = String(tab.id).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40);
+    if (!id) return;
+    const updatedAt = Number(tab.updatedAt) || 0;
+    const deletedAt = Number(tab.deletedAt) || 0;
+    const readAt = Number(tab.readAt) || 0;
+    const prev = map.get(id);
+    if (!prev) {
+      map.set(id, Object.assign({}, tab, { id, updatedAt, deletedAt, readAt }));
+      return;
+    }
+    const newer = updatedAt >= prev.updatedAt ? tab : prev;
+    map.set(id, Object.assign({}, prev, newer, {
+      id,
+      updatedAt: Math.max(updatedAt, prev.updatedAt),
+      deletedAt: Math.max(deletedAt, prev.deletedAt),
+      readAt: Math.max(readAt, prev.readAt)
+    }));
+  }
+  (Array.isArray(remote) ? remote : []).forEach(take);
+  (Array.isArray(local) ? local : []).forEach(take);
+  return Array.from(map.values());
+}
+
+function cleanKind(value) {
+  const kind = String(value || "");
+  return KINDS[kind] ? kind : "";
+}
+
+function cleanTabs(list) {
+  return mergeNoteTabs(Array.isArray(list) ? list : [], []).slice(0, 500);
+}
+
+function stateTabs(raw) {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      tabs: cleanTabs(parsed.tabs),
+      noteTabsSame: parsed.noteTabsSame === false ? false : true,
+      lastNoteTab: clip(parsed.lastNoteTab || "all", 40) || "all"
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+async function readState(env, publicId) {
+  const row = await env.DB.prepare("SELECT read_until, tabs, bells_at, updated_at FROM notification_state WHERE public_id = ?").bind(publicId).first();
+  return {
+    readUntil: Number(row && row.read_until) || 0,
+    tabs: stateTabs(row && row.tabs),
+    bellsAt: Number(row && row.bells_at) || 0,
+    updatedAt: Number(row && row.updated_at) || 0
+  };
+}
+
+async function writeReadUntil(env, publicId, until) {
+  const now = Date.now();
+  const next = Math.max(0, Number(until) || 0);
+  await env.DB.prepare(
+    "INSERT INTO notification_state (public_id, read_until, tabs, bells_at, updated_at) VALUES (?, ?, '', 0, ?) ON CONFLICT(public_id) DO UPDATE SET read_until = MAX(notification_state.read_until, excluded.read_until), updated_at = excluded.updated_at"
+  ).bind(publicId, next, now).run();
+}
+
+function itemFromRow(row, readUntil) {
+  let extra = {};
+  try { extra = JSON.parse(row.payload || "{}"); }
+  catch (err) { extra = {}; }
+  if (!extra || typeof extra !== "object") extra = {};
+  const at = Number(row.at) || 0;
+  const read = Number(row.read_at) > 0 || !!(readUntil && at > 0 && at <= readUntil);
+  return {
+    id: row.note_id,
+    kind: cleanKind(row.kind) || "post",
+    at,
+    read,
+    handle: clip(extra.handle, 80).replace(/^@/, ""),
+    name: clip(extra.name, 80),
+    text: clip(extra.text, 280),
+    avatar: httpsUrl(extra.avatar),
+    image: httpsUrl(extra.image),
+    hash: String(extra.hash || "#/").charAt(0) === "#" ? clip(extra.hash, 300) : "#/",
+    feedId: clip(extra.feedId, 120),
+    platform: clip(extra.platform, 24),
+    verified: extra.verified === true,
+    mention: extra.mention === true || row.kind === "mention",
+    ids: Array.isArray(extra.ids) ? extra.ids.map((id) => clip(id, 120)).filter(Boolean).slice(0, 12) : [],
+    handles: Array.isArray(extra.handles) ? extra.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : [],
+    actorId: clip(row.actor_id, 16)
+  };
+}
+
+async function unreadCount(env, publicId, readUntil) {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM notifications WHERE public_id = ? AND read_at = 0 AND at > ?"
+  ).bind(publicId, readUntil).first();
+  return Number(row && row.n) || 0;
+}
+
+async function listBells(env, publicId) {
+  const listed = await env.DB.prepare(
+    "SELECT feed_key, mode, since, handle, name, ids, handles, updated_at FROM notification_bells WHERE public_id = ? AND deleted_at = 0"
+  ).bind(publicId).all();
+  const bells = {};
+  ((listed && listed.results) || []).forEach((row) => {
+    if (!row || (row.mode !== "all" && row.mode !== "live")) return;
+    let ids = [];
+    let handles = [];
+    try { ids = JSON.parse(row.ids || "[]"); } catch (err) { ids = []; }
+    try { handles = JSON.parse(row.handles || "[]"); } catch (err) { handles = []; }
+    bells[row.feed_key] = {
+      mode: row.mode,
+      since: Number(row.since) || 0,
+      updatedAt: Number(row.updated_at) || 0,
+      handle: row.handle || "",
+      name: row.name || "",
+      ids: Array.isArray(ids) ? ids : [],
+      handles: Array.isArray(handles) ? handles : []
+    };
+  });
+  return bells;
+}
+
+async function viewFor(env, publicId) {
+  const state = await readState(env, publicId);
+  const listed = await env.DB.prepare(
+    "SELECT note_id, kind, at, read_at, actor_id, payload FROM notifications WHERE public_id = ? ORDER BY at DESC, note_id ASC LIMIT 80"
+  ).bind(publicId).all();
+  const items = ((listed && listed.results) || []).map((row) => itemFromRow(row, state.readUntil));
+  const unread = await unreadCount(env, publicId, state.readUntil);
+  const bells = await listBells(env, publicId);
+  const push = await vapidPublic(env);
+  return {
+    items,
+    unread,
+    readUntil: state.readUntil,
+    tabs: state.tabs ? state.tabs.tabs : null,
+    noteTabsSame: state.tabs ? state.tabs.noteTabsSame : null,
+    lastNoteTab: state.tabs ? state.tabs.lastNoteTab : null,
+    bells,
+    bellsAt: state.bellsAt,
+    updatedAt: state.updatedAt,
+    push: { configured: !!push.publicKey, publicKey: push.publicKey || "" }
+  };
+}
+
+async function trimNotes(env, publicId) {
+  const extra = await env.DB.prepare(
+    "SELECT note_id FROM notifications WHERE public_id = ? ORDER BY at DESC LIMIT 40 OFFSET ?"
+  ).bind(publicId, NOTE_CAP).all();
+  const rows = (extra && extra.results) || [];
+  for (let i = 0; i < rows.length; i++) {
+    await env.DB.prepare("DELETE FROM notifications WHERE public_id = ? AND note_id = ? AND read_at > 0").bind(publicId, rows[i].note_id).run();
+  }
+}
+
+function payloadOf(input) {
+  return JSON.stringify({
+    handle: clip(input.handle, 80).replace(/^@/, ""),
+    name: clip(input.name, 80),
+    text: clip(input.text, 280),
+    avatar: httpsUrl(input.avatar),
+    image: httpsUrl(input.image),
+    hash: String(input.hash || "#/").charAt(0) === "#" ? clip(input.hash, 300) : "#/",
+    feedId: clip(input.feedId, 120),
+    platform: clip(input.platform, 24),
+    verified: input.verified === true,
+    mention: input.mention === true,
+    ids: Array.isArray(input.ids) ? input.ids.map((id) => clip(id, 120)).filter(Boolean).slice(0, 12) : [],
+    handles: Array.isArray(input.handles) ? input.handles.map((id) => clip(id, 120).toLowerCase()).filter(Boolean).slice(0, 24) : []
+  });
+}
+
+/* Do not disturb. A parallel change may set presence on the account row
+   or a dndUntil on the notification state. Either one skips the buzz.
+   The in-app list and the other devices still update. */
+export function pushSuppressed(row, now) {
+  if (!row) return false;
+  const at = Number(now) || Date.now();
+  if (row.presence === "dnd" || row.dnd === 1 || row.do_not_disturb === 1) return true;
+  const until = Number(row.dnd_until || row.dndUntil || 0);
+  return !!(until && until > at);
+}
+
+async function accountRow(env, publicId) {
+  try {
+    return await env.DB.prepare("SELECT * FROM accounts WHERE public_id = ?").bind(publicId).first();
+  } catch (err) {
+    return null;
+  }
+}
+
+async function hkdf(salt, ikm, info, length) {
+  const key = await crypto.subtle.importKey("raw", ikm, "HKDF", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt, info }, key, length * 8);
+  return new Uint8Array(bits);
+}
+
+export async function encryptPush(payload, clientKeyB64, authB64) {
+  const clientPublic = b64urlToBytes(clientKeyB64);
+  const auth = b64urlToBytes(authB64);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const local = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const localPublic = new Uint8Array(await crypto.subtle.exportKey("raw", local.publicKey));
+  const remote = await crypto.subtle.importKey("raw", clientPublic, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: remote }, local.privateKey, 256));
+  const info = new Uint8Array(encoder.encode("WebPush: info\0").length + clientPublic.length + localPublic.length);
+  info.set(encoder.encode("WebPush: info\0"), 0);
+  info.set(clientPublic, encoder.encode("WebPush: info\0").length);
+  info.set(localPublic, encoder.encode("WebPush: info\0").length + clientPublic.length);
+  const ikm = await hkdf(auth, shared, info, 32);
+  const cekBytes = await hkdf(salt, ikm, encoder.encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdf(salt, ikm, encoder.encode("Content-Encoding: nonce\0"), 12);
+  const padded = new Uint8Array(payload.length + 1);
+  padded.set(payload, 0);
+  padded[payload.length] = 2;
+  const cek = await crypto.subtle.importKey("raw", cekBytes, "AES-GCM", false, ["encrypt"]);
+  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, cek, padded));
+  const header = new Uint8Array(21 + localPublic.length);
+  header.set(salt, 0);
+  new DataView(header.buffer).setUint32(16, 4096);
+  header[20] = localPublic.length;
+  header.set(localPublic, 21);
+  const body = new Uint8Array(header.length + cipher.length);
+  body.set(header, 0);
+  body.set(cipher, header.length);
+  return body;
+}
+
+export async function decryptPush(body, clientPrivate, authB64) {
+  const bytes = body instanceof Uint8Array ? body : new Uint8Array(body);
+  const salt = bytes.slice(0, 16);
+  const idlen = bytes[20];
+  const localPublic = bytes.slice(21, 21 + idlen);
+  const cipher = bytes.slice(21 + idlen);
+  const auth = b64urlToBytes(authB64);
+  const remote = await crypto.subtle.importKey("raw", localPublic, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: remote }, clientPrivate, 256));
+  const clientPublic = new Uint8Array(await crypto.subtle.exportKey("raw", clientPrivate instanceof CryptoKey ? (await crypto.subtle.exportKey("raw", (await clientPublicOf(clientPrivate)))) : clientPrivate));
+  return decryptWithKeys(salt, localPublic, cipher, auth, shared, clientPublic);
+}
+
+async function clientPublicOf(privateKey) {
+  const jwk = await crypto.subtle.exportKey("jwk", privateKey);
+  delete jwk.d;
+  jwk.key_ops = [];
+  return crypto.subtle.importKey("jwk", jwk, { name: "ECDH", namedCurve: "P-256" }, true, []);
+}
+
+async function decryptWithKeys(salt, localPublic, cipher, auth, shared, clientPublic) {
+  const info = new Uint8Array(encoder.encode("WebPush: info\0").length + clientPublic.length + localPublic.length);
+  info.set(encoder.encode("WebPush: info\0"), 0);
+  info.set(clientPublic, encoder.encode("WebPush: info\0").length);
+  info.set(localPublic, encoder.encode("WebPush: info\0").length + clientPublic.length);
+  const ikm = await hkdf(auth, shared, info, 32);
+  const cekBytes = await hkdf(salt, ikm, encoder.encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdf(salt, ikm, encoder.encode("Content-Encoding: nonce\0"), 12);
+  const cek = await crypto.subtle.importKey("raw", cekBytes, "AES-GCM", false, ["decrypt"]);
+  const plain = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, cek, cipher));
+  let end = plain.length;
+  while (end > 0 && plain[end - 1] === 0) end -= 1;
+  if (!end || plain[end - 1] !== 2) throw new Error("bad_padding");
+  return plain.slice(0, end - 1);
+}
+
+export async function pushRoundTrip(text) {
+  const local = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", local.publicKey));
+  const auth = crypto.getRandomValues(new Uint8Array(16));
+  const body = await encryptPush(encoder.encode(text), b64url(raw), b64url(auth));
+  const salt = body.slice(0, 16);
+  const idlen = body[20];
+  const serverPublic = body.slice(21, 21 + idlen);
+  const cipher = body.slice(21 + idlen);
+  const remote = await crypto.subtle.importKey("raw", serverPublic, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: remote }, local.privateKey, 256));
+  const plain = await decryptWithKeys(salt, serverPublic, cipher, auth, shared, raw);
+  return new TextDecoder().decode(plain);
+}
+
+async function vapidPublic(env) {
+  if (env && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_JWK) {
+    return { publicKey: String(env.VAPID_PUBLIC_KEY), privateJwk: String(env.VAPID_PRIVATE_JWK) };
+  }
+  const row = await env.DB.prepare("SELECT public_key, private_jwk FROM push_vapid WHERE id = 1").first();
+  if (row && row.public_key && row.private_jwk) return { publicKey: row.public_key, privateJwk: row.private_jwk };
+  const key = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
+  const privateJwk = JSON.stringify(await crypto.subtle.exportKey("jwk", key.privateKey));
+  const raw = new Uint8Array(await crypto.subtle.exportKey("raw", key.publicKey));
+  const publicKey = b64url(raw);
+  await env.DB.prepare(
+    "INSERT INTO push_vapid (id, public_key, private_jwk, created_at) VALUES (1, ?, ?, ?) ON CONFLICT(id) DO NOTHING"
+  ).bind(publicKey, privateJwk, Date.now()).run();
+  const saved = await env.DB.prepare("SELECT public_key, private_jwk FROM push_vapid WHERE id = 1").first();
+  return { publicKey: saved.public_key, privateJwk: saved.private_jwk };
+}
+
+async function vapidJwt(endpoint, publicKey, privateJwk) {
+  let jwk = null;
+  try { jwk = JSON.parse(privateJwk); }
+  catch (err) { return ""; }
+  const header = b64url(encoder.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+  const payload = b64url(encoder.encode(JSON.stringify({
+    aud: new URL(endpoint).origin,
+    exp: Math.floor(Date.now() / 1000) + 12 * 60 * 60,
+    sub: "mailto:notifications@viktorych.app"
+  })));
+  const key = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, encoder.encode(header + "." + payload)));
+  return header + "." + payload + "." + b64url(sig);
+}
+
+async function sendPush(env, publicId, item) {
+  const account = await accountRow(env, publicId);
+  if (pushSuppressed(account, Date.now())) return;
+  const keys = await vapidPublic(env);
+  if (!keys.publicKey || !keys.privateJwk) return;
+  const subs = await env.DB.prepare(
+    "SELECT endpoint_hash, endpoint, p256dh, auth FROM push_subscriptions WHERE public_id = ? LIMIT 10"
+  ).bind(publicId).all();
+  const rows = (subs && subs.results) || [];
+  const titleKey = titleKeyFor(item.kind);
+  const payload = encoder.encode(JSON.stringify({
+    titleKey,
+    titleVars: { name: item.name || (item.handle ? "@" + item.handle : "Someone"), handle: item.handle || "" },
+    body: item.text || "",
+    hash: item.hash || "#/",
+    id: item.id,
+    icon: item.avatar || "",
+    tag: "note-" + item.id
+  }));
+  for (let i = 0; i < rows.length; i++) {
+    const sub = rows[i];
+    try {
+      const jwt = await vapidJwt(sub.endpoint, keys.publicKey, keys.privateJwk);
+      const body = await encryptPush(payload, sub.p256dh, sub.auth);
+      const res = await fetch(sub.endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/octet-stream",
+          "content-encoding": "aes128gcm",
+          authorization: "vapid t=" + jwt + ", k=" + keys.publicKey,
+          ttl: "86400"
+        },
+        body
+      });
+      if (res && (res.status === 404 || res.status === 410)) {
+        await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ? AND endpoint_hash = ?").bind(publicId, sub.endpoint_hash).run();
+      }
+      if (env.PUSH_SINK === "d1") {
+        await env.DB.prepare("INSERT INTO push_log (public_id, note_id, created_at) VALUES (?, ?, ?)").bind(publicId, item.id, Date.now()).run();
+      }
+    } catch (err) {
+      if (env.PUSH_SINK === "d1") {
+        await env.DB.prepare("INSERT INTO push_log (public_id, note_id, created_at) VALUES (?, ?, ?)").bind(publicId, item.id, Date.now()).run();
+      }
+    }
+  }
+}
+
+function titleKeyFor(kind) {
+  if (kind === "like") return "{name} liked your post";
+  if (kind === "repost") return "{name} reposted your post";
+  if (kind === "reply") return "{name} replied to you";
+  if (kind === "mention") return "{name} mentioned you";
+  if (kind === "follow") return "{name} followed you";
+  if (kind === "live") return "{name} is live";
+  return "New post notifications for @{handle}";
+}
+
+export async function emitNotification(env, input) {
+  await ensureNotificationSchema(env);
+  const publicId = String(input && input.publicId || "");
+  const kind = cleanKind(input && input.kind);
+  const key = clip(input && input.idempotencyKey, 160);
+  if (!/^\d{12}$/.test(publicId) || !kind || !key) return { created: false };
+  const now = Date.now();
+  const at = Number(input.at) > 0 ? Number(input.at) : now;
+  const subject = clip(input.subject || input.handle || "", 80).replace(/^@/, "").toLowerCase();
+  if (kind === "live" && subject) {
+    const recent = await env.DB.prepare(
+      "SELECT note_id FROM notifications WHERE public_id = ? AND kind = 'live' AND subject = ? AND at > ?"
+    ).bind(publicId, subject, at - LIVE_WINDOW_MS).first();
+    if (recent) return { created: false, id: recent.note_id };
+  }
+  const existing = await env.DB.prepare(
+    "SELECT note_id FROM notifications WHERE public_id = ? AND idempotency_key = ?"
+  ).bind(publicId, key).first();
+  if (existing) return { created: false, id: existing.note_id };
+  const state = await readState(env, publicId);
+  const readAt = state.readUntil && at <= state.readUntil ? at : 0;
+  const payload = payloadOf(input);
+  try {
+    await env.DB.prepare(
+      "INSERT INTO notifications (public_id, note_id, kind, at, read_at, actor_id, subject, idempotency_key, payload, updated_at, pushed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).bind(publicId, key, kind, at, readAt, clip(input.actorId, 16), subject, key, payload, now, readAt ? now : 0).run();
+  } catch (err) {
+    if (/UNIQUE/i.test(String(err && err.message || err))) return { created: false, id: key };
+    throw err;
+  }
+  await trimNotes(env, publicId);
+  const item = itemFromRow({
+    note_id: key,
+    kind,
+    at,
+    read_at: readAt,
+    actor_id: clip(input.actorId, 16),
+    payload
+  }, state.readUntil);
+  const unread = await unreadCount(env, publicId, state.readUntil);
+  if (!readAt) {
+    await env.DB.prepare("UPDATE notifications SET pushed_at = ? WHERE public_id = ? AND note_id = ?").bind(now, publicId, key).run();
+    await sendPush(env, publicId, item);
+  }
+  await hubPublish(env, publicId, "notifications", { type: "upsert", items: [item], unread, readUntil: state.readUntil });
+  return { created: true, id: key, unread };
+}
+
+export async function notifyLiveStarted(env, info) {
+  await ensureNotificationSchema(env);
+  const handle = clip(info && info.handle, 80).replace(/^@/, "");
+  const platform = clip((info && info.platform) || "tiktok", 24) || "tiktok";
+  const room = clip((info && (info.roomId || info.id)) || "", 80);
+  if (!handle || !room) return { created: 0 };
+  const at = Number(info && info.at) || Date.now();
+  const targets = new Set();
+  if (platform === "tiktok") {
+    const owner = await env.DB.prepare("SELECT public_id FROM accounts WHERE owner = 1").first();
+    if (owner && owner.public_id) targets.add(owner.public_id);
+  } else {
+    const follows = await env.DB.prepare(
+      "SELECT follower_id FROM account_follows WHERE target_id = ? OR target_id = ? LIMIT 200"
+    ).bind(platform + ":" + handle, platform + ":" + handle.toLowerCase()).all();
+    ((follows && follows.results) || []).forEach((row) => { if (row && row.follower_id) targets.add(row.follower_id); });
+  }
+  const bells = await env.DB.prepare(
+    "SELECT public_id FROM notification_bells WHERE deleted_at = 0 AND (feed_key = ? OR feed_key = ?) AND (mode = 'all' OR mode = 'live') LIMIT 200"
+  ).bind(platform + ":" + handle, platform + ":" + handle.toLowerCase()).all();
+  ((bells && bells.results) || []).forEach((row) => { if (row && row.public_id) targets.add(row.public_id); });
+  let created = 0;
+  for (const publicId of targets) {
+    const result = await emitNotification(env, {
+      publicId,
+      kind: "live",
+      at,
+      subject: handle.toLowerCase(),
+      idempotencyKey: "live:" + platform + ":" + handle.toLowerCase() + ":" + room,
+      handle,
+      name: clip(info.name || handle, 80),
+      text: clip(info.title || "", 180),
+      hash: "#/" + encodeURIComponent(platform) + "/" + encodeURIComponent(handle),
+      platform,
+      feedId: platform + ":" + handle
+    });
+    if (result.created) created += 1;
+  }
+  return { created, targets: targets.size };
+}
+
+async function saveBells(env, publicId, bells, bellsAt) {
+  const at = Number(bellsAt) || 0;
+  if (!at || !bells || typeof bells !== "object" || Array.isArray(bells)) return;
+  const state = await readState(env, publicId);
+  const keys = Object.keys(bells).slice(0, 200);
+  for (let i = 0; i < keys.length; i++) {
+    const key = clip(keys[i], 120);
+    const row = bells[keys[i]];
+    if (!key || !row) continue;
+    const updatedAt = Number(row.updatedAt || row.since) || at;
+    const stored = await env.DB.prepare(
+      "SELECT updated_at, deleted_at FROM notification_bells WHERE public_id = ? AND feed_key = ?"
+    ).bind(publicId, key).first();
+    if (stored && updatedAt <= Number(stored.deleted_at || 0)) continue;
+    if (stored && updatedAt < Number(stored.updated_at || 0)) continue;
+    if (row.deleted === true || (row.mode !== "all" && row.mode !== "live")) {
+      await env.DB.prepare(
+        "INSERT INTO notification_bells (public_id, feed_key, mode, since, handle, name, ids, handles, updated_at, deleted_at) VALUES (?, ?, '', ?, '', '', '[]', '[]', ?, ?) ON CONFLICT(public_id, feed_key) DO UPDATE SET deleted_at = excluded.deleted_at, updated_at = excluded.updated_at"
+      ).bind(publicId, key, updatedAt, updatedAt, updatedAt).run();
+      continue;
+    }
+    await env.DB.prepare(
+      "INSERT INTO notification_bells (public_id, feed_key, mode, since, handle, name, ids, handles, updated_at, deleted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0) ON CONFLICT(public_id, feed_key) DO UPDATE SET mode = excluded.mode, since = excluded.since, handle = excluded.handle, name = excluded.name, ids = excluded.ids, handles = excluded.handles, updated_at = excluded.updated_at, deleted_at = 0"
+    ).bind(
+      publicId,
+      key,
+      row.mode,
+      Number(row.since) || updatedAt,
+      clip(row.handle, 80).replace(/^@/, ""),
+      clip(row.name, 80),
+      JSON.stringify(Array.isArray(row.ids) ? row.ids.slice(0, 12) : []),
+      JSON.stringify(Array.isArray(row.handles) ? row.handles.slice(0, 24) : []),
+      updatedAt
+    ).run();
+  }
+  if (at >= state.bellsAt) {
+    const have = await env.DB.prepare("SELECT feed_key, updated_at FROM notification_bells WHERE public_id = ? AND deleted_at = 0").bind(publicId).all();
+    const rows = (have && have.results) || [];
+    for (let i = 0; i < rows.length; i++) {
+      if (keys.indexOf(rows[i].feed_key) >= 0) continue;
+      if (at <= Number(rows[i].updated_at || 0)) continue;
+      await env.DB.prepare(
+        "UPDATE notification_bells SET deleted_at = ?, updated_at = ? WHERE public_id = ? AND feed_key = ?"
+      ).bind(at, at, publicId, rows[i].feed_key).run();
+    }
+    await env.DB.prepare(
+      "INSERT INTO notification_state (public_id, read_until, tabs, bells_at, updated_at) VALUES (?, 0, '', ?, ?) ON CONFLICT(public_id) DO UPDATE SET bells_at = MAX(notification_state.bells_at, excluded.bells_at), updated_at = excluded.updated_at"
+    ).bind(publicId, at, Date.now()).run();
+  }
+}
+
+async function saveTabs(env, publicId, body) {
+  if (!body || (!Array.isArray(body.tabs) && body.noteTabsSame == null && body.lastNoteTab == null)) return;
+  const state = await readState(env, publicId);
+  const prev = state.tabs || { tabs: [], noteTabsSame: true, lastNoteTab: "all" };
+  const merged = mergeNoteTabs(body.tabs || [], prev.tabs);
+  const noteTabsSame = body.noteTabsSame === false ? false : (body.noteTabsSame === true ? true : prev.noteTabsSame);
+  const lastNoteTab = body.lastNoteTab ? clip(body.lastNoteTab, 40) : prev.lastNoteTab;
+  const text = JSON.stringify({ tabs: merged, noteTabsSame, lastNoteTab });
+  if (text.length > 100000) return;
+  await env.DB.prepare(
+    "INSERT INTO notification_state (public_id, read_until, tabs, bells_at, updated_at) VALUES (?, 0, ?, 0, ?) ON CONFLICT(public_id) DO UPDATE SET tabs = excluded.tabs, updated_at = excluded.updated_at"
+  ).bind(publicId, text, Date.now()).run();
+  const unread = await unreadCount(env, publicId, (await readState(env, publicId)).readUntil);
+  await hubPublish(env, publicId, "notifications", {
+    type: "tabs",
+    tabs: merged,
+    noteTabsSame,
+    lastNoteTab,
+    unread
+  });
+}
+
+async function markRead(env, publicId, until, ids) {
+  const state = await readState(env, publicId);
+  const nextUntil = Math.max(state.readUntil, Number(until) || 0);
+  if (nextUntil > state.readUntil) await writeReadUntil(env, publicId, nextUntil);
+  const cleanIds = [];
+  (Array.isArray(ids) ? ids : []).slice(0, 80).forEach((id) => {
+    const text = clip(id, 160);
+    if (text) cleanIds.push(text);
+  });
+  const now = Date.now();
+  for (let i = 0; i < cleanIds.length; i++) {
+    await env.DB.prepare(
+      "UPDATE notifications SET read_at = ?, updated_at = ? WHERE public_id = ? AND note_id = ? AND read_at = 0"
+    ).bind(now, now, publicId, cleanIds[i]).run();
+  }
+  if (nextUntil > state.readUntil) {
+    await env.DB.prepare(
+      "UPDATE notifications SET read_at = ?, updated_at = ? WHERE public_id = ? AND read_at = 0 AND at <= ?"
+    ).bind(now, now, publicId, nextUntil).run();
+  }
+  const saved = await readState(env, publicId);
+  const unread = await unreadCount(env, publicId, saved.readUntil);
+  await hubPublish(env, publicId, "notifications", {
+    type: "read",
+    until: saved.readUntil,
+    ids: cleanIds,
+    unread,
+    readUntil: saved.readUntil
+  });
+  return unread;
+}
+
+function cleanClientItem(raw, actor) {
+  const kind = cleanKind(raw && raw.kind) || "post";
+  const key = clip((raw && (raw.idempotencyKey || raw.id)) || "", 160);
+  if (!key) return null;
+  let recipient = actor.public_id;
+  if (kind === "like" || kind === "repost") {
+    recipient = String(raw.recipientId || "");
+    if (!/^\d{12}$/.test(recipient) || recipient === actor.public_id) return null;
+  } else if (kind === "follow" || kind === "reply") {
+    return null;
+  }
+  return {
+    publicId: recipient,
+    kind,
+    at: Number(raw.at) || Date.now(),
+    actorId: kind === "like" || kind === "repost" ? actor.public_id : "",
+    idempotencyKey: key,
+    subject: clip(raw.handle || raw.subject || "", 80),
+    handle: raw.handle,
+    name: raw.name,
+    text: raw.text,
+    avatar: raw.avatar,
+    image: raw.image,
+    hash: raw.hash,
+    feedId: raw.feedId,
+    platform: raw.platform,
+    verified: raw.verified === true,
+    mention: raw.mention === true || kind === "mention",
+    ids: raw.ids,
+    handles: raw.handles
+  };
+}
+
+export async function handleNotificationRoutes(request, env, path, deps) {
+  await ensureNotificationSchema(env);
+  const { json, sessionAccount, readJson, rateHit, limited } = deps;
+  const row = await sessionAccount(env, request);
+  if (!row) return json(401, { error: "unauthorized" });
+  if (path === "/v1/notifications" && request.method === "GET") {
+    const hit = await rateHit(env, "notes-read:" + row.public_id, 120, 10 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    return json(200, await viewFor(env, row.public_id));
+  }
+  if (path === "/v1/notifications" && request.method === "POST") {
+    const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const body = await readJson(request, 80000);
+    if (body.error) return json(body.error === "too_large" ? 413 : 400, { error: body.error });
+    const items = Array.isArray(body.items) ? body.items.slice(0, 40) : [];
+    for (let i = 0; i < items.length; i++) {
+      const cleaned = cleanClientItem(items[i], row);
+      if (!cleaned) continue;
+      if (cleaned.publicId !== row.public_id) {
+        const target = await env.DB.prepare("SELECT public_id FROM accounts WHERE public_id = ?").bind(cleaned.publicId).first();
+        if (!target) continue;
+      }
+      await emitNotification(env, cleaned);
+    }
+    if (body.until || (Array.isArray(body.ids) && body.ids.length)) await markRead(env, row.public_id, body.until, body.ids);
+    if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
+    if (body.bells && typeof body.bells === "object") await saveBells(env, row.public_id, body.bells, body.bellsAt);
+    return json(200, await viewFor(env, row.public_id));
+  }
+  if (path === "/v1/notifications/read" && request.method === "POST") {
+    const hit = await rateHit(env, "notes-write:" + row.public_id, 60, 10 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const body = await readJson(request, 40000);
+    if (body.error) return json(400, { error: body.error });
+    await markRead(env, row.public_id, body.until, body.ids);
+    if (Array.isArray(body.tabs) || body.noteTabsSame != null || body.lastNoteTab) await saveTabs(env, row.public_id, body);
+    return json(200, await viewFor(env, row.public_id));
+  }
+  if (path === "/v1/push/vapid" && request.method === "GET") {
+    const keys = await vapidPublic(env);
+    return json(200, { publicKey: keys.publicKey || "" });
+  }
+  if (path === "/v1/push/subscribe" && request.method === "PUT") {
+    const hit = await rateHit(env, "push-sub:" + row.public_id, 30, 10 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const body = await readJson(request, 8000);
+    if (body.error) return json(400, { error: body.error });
+    const endpoint = String(body.endpoint || "");
+    const keys = body.keys || {};
+    if (!/^https:\/\//.test(endpoint) || endpoint.length > 500 || !keys.p256dh || !keys.auth) return json(400, { error: "bad_subscription" });
+    const hash = await sha256Hex(endpoint);
+    const exp = Number(body.expirationTime) > 0 ? Number(body.expirationTime) : 0;
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO push_subscriptions (public_id, endpoint_hash, endpoint, p256dh, auth, ua, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(public_id, endpoint_hash) DO UPDATE SET endpoint = excluded.endpoint, p256dh = excluded.p256dh, auth = excluded.auth, ua = excluded.ua, updated_at = excluded.updated_at, expires_at = excluded.expires_at"
+    ).bind(row.public_id, hash, endpoint, clip(keys.p256dh, 200), clip(keys.auth, 200), clip(request.headers.get("user-agent"), 160), now, now, exp).run();
+    return json(200, { ok: true });
+  }
+  if (path === "/v1/push/subscribe" && request.method === "DELETE") {
+    const body = await readJson(request, 4000);
+    if (body.error) return json(400, { error: body.error });
+    if (body.all === true) {
+      await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ?").bind(row.public_id).run();
+    } else if (body.endpoint) {
+      const hash = await sha256Hex(String(body.endpoint));
+      await env.DB.prepare("DELETE FROM push_subscriptions WHERE public_id = ? AND endpoint_hash = ?").bind(row.public_id, hash).run();
+    }
+    return json(200, { ok: true });
+  }
+  if (path === "/v1/hub/ticket" && request.method === "POST") {
+    const hit = await rateHit(env, "hub-ticket:" + row.public_id, 60, 10 * 60 * 1000);
+    if (!hit.ok) return limited(hit);
+    const ticket = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    const hash = await sha256Hex(ticket);
+    await env.DB.prepare("INSERT INTO hub_tickets (token_hash, public_id, expires_at) VALUES (?, ?, ?)").bind(hash, row.public_id, Date.now() + 60 * 1000).run();
+    return json(200, { ticket, expiresAt: Date.now() + 60 * 1000 });
+  }
+  return null;
+}
+
+export async function handleHubSocket(request, env, deps) {
+  await ensureNotificationSchema(env);
+  if (!env.ACCOUNT_HUB) return deps.json(503, { error: "not_configured" });
+  const url = new URL(request.url);
+  const ticket = String(url.searchParams.get("ticket") || "");
+  if (!ticket || ticket.length > 200) return deps.json(401, { error: "unauthorized" });
+  const hash = await sha256Hex(ticket);
+  const row = await env.DB.prepare("SELECT public_id, expires_at FROM hub_tickets WHERE token_hash = ?").bind(hash).first();
+  await env.DB.prepare("DELETE FROM hub_tickets WHERE token_hash = ?").bind(hash).run();
+  if (!row || Number(row.expires_at) < Date.now()) return deps.json(401, { error: "unauthorized" });
+  const hit = await deps.rateHit(env, "hub-socket:" + row.public_id, 60, 10 * 60 * 1000);
+  if (!hit.ok) return deps.limited(hit);
+  return hubUpgrade(env, row.public_id, request);
+}
+
+export async function notifyFollow(env, actor, targetId) {
+  if (!targetId || String(targetId).indexOf("app:") !== 0) return;
+  const publicId = String(targetId).slice(4);
+  if (!/^\d{12}$/.test(publicId) || publicId === actor.public_id) return;
+  const now = Date.now();
+  await emitNotification(env, {
+    publicId,
+    kind: "follow",
+    at: now,
+    actorId: actor.public_id,
+    idempotencyKey: "follow:" + actor.public_id + ":" + now,
+    handle: actor.handle,
+    name: actor.display_name,
+    text: "",
+    hash: "#/" + encodeURIComponent(actor.handle || ""),
+    platform: "app",
+    feedId: "app:" + actor.public_id
+  });
+}
+
+export async function notifyRepost(env, actor, cleaned) {
+  const post = cleaned && cleaned.post;
+  const handle = clip(post && post.handle, 80).replace(/^@/, "");
+  if (!handle) return;
+  const checked = inspectHandle(handle);
+  if (!checked.ok || !checked.skeleton) return;
+  const author = await env.DB.prepare("SELECT public_id FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
+  if (!author || author.public_id === actor.public_id) return;
+  await emitNotification(env, {
+    publicId: author.public_id,
+    kind: "repost",
+    at: Date.now(),
+    actorId: actor.public_id,
+    idempotencyKey: "repost:" + actor.public_id + ":" + cleaned.postKey,
+    handle: actor.handle,
+    name: actor.display_name,
+    text: clip(cleaned.comment || post.text || "", 180),
+    hash: "#/" + encodeURIComponent(actor.handle || ""),
+    platform: "app",
+    feedId: "app:" + actor.public_id
+  });
+}
+
+export async function notifyCommunity(env, input) {
+  await emitNotification(env, input);
+}
+
+const MENTION_RE = /(?:^|[^A-Za-z0-9_])@([A-Za-z0-9_\u0400-\u04FF]{2,32})/g;
+
+export async function notifyMentions(env, actor, text, except, idempotencyPrefix, hash) {
+  const seen = {};
+  (except || []).forEach((id) => { if (id) seen[id] = true; });
+  seen[actor.public_id] = true;
+  const found = String(text || "").match(MENTION_RE) || [];
+  for (let i = 0; i < found.length && i < 8; i++) {
+    const handle = String(found[i] || "").replace(/^.*@/, "");
+    const checked = inspectHandle(handle);
+    if (!checked.ok || !checked.skeleton) continue;
+    const author = await env.DB.prepare("SELECT public_id, handle FROM accounts WHERE skeleton = ?").bind(checked.skeleton).first();
+    if (!author || seen[author.public_id]) continue;
+    seen[author.public_id] = true;
+    await emitNotification(env, {
+      publicId: author.public_id,
+      kind: "mention",
+      at: Date.now(),
+      actorId: actor.public_id,
+      idempotencyKey: idempotencyPrefix + ":" + author.public_id,
+      handle: actor.handle,
+      name: actor.display_name,
+      text: clip(text, 180),
+      hash: hash || "#/",
+      platform: "app",
+      feedId: "app:" + actor.public_id,
+      mention: true
+    });
+  }
+}
+
+export async function notificationSelfTest() {
+  const read = mergeNotificationItems(
+    [{ id: "a", at: 20, read: true, text: "local" }, { id: "c", at: 5, read: false }],
+    [{ id: "a", at: 10, read: false, text: "server" }, { id: "b", at: 30, read: false }],
+    0
+  );
+  if (read.map((item) => item.id).join(",") !== "b,a,c") throw new Error("order");
+  if (!read.find((item) => item.id === "a").read) throw new Error("resurrect");
+  if (read.find((item) => item.id === "a").at !== 10) throw new Error("server time");
+  if (read.find((item) => item.id === "a").text !== "local") throw new Error("local fields");
+  const caught = mergeNotificationItems(
+    [{ id: "old", at: 40, read: false }],
+    [],
+    50
+  );
+  if (!caught[0].read) throw new Error("cursor");
+  const offline = mergeNotificationItems(
+    [{ id: "only-local", at: 2, read: true }],
+    [{ id: "only-server", at: 3, read: false }],
+    0
+  );
+  if (offline.length !== 2 || !offline.find((item) => item.id === "only-local").read) throw new Error("offline union");
+  const tabs = mergeNoteTabs(
+    [{ id: "t", name: "old", updatedAt: 5, readAt: 9, deletedAt: 0 }],
+    [{ id: "t", name: "new", updatedAt: 8, readAt: 4, deletedAt: 12 }]
+  );
+  if (tabs[0].name !== "new" || tabs[0].readAt !== 9 || tabs[0].deletedAt !== 12) throw new Error("tabs");
+  const round = await pushRoundTrip("hello");
+  if (round !== "hello") throw new Error("push");
+  if (pushSuppressed({ presence: "dnd" }, 10)) {
+    if (!pushSuppressed({ dnd_until: 50 }, 10)) throw new Error("dnd until");
+    if (pushSuppressed({ dnd_until: 5 }, 10)) throw new Error("dnd expired");
+  } else throw new Error("dnd");
+}
+
+if (typeof process !== "undefined" && process.argv && process.argv.indexOf("--selftest") >= 0) {
+  notificationSelfTest().then(() => {
+    console.log("ok notifications");
+  }).catch((err) => {
+    console.error(err && err.message ? err.message : "notifications selftest failed");
+    process.exit(1);
+  });
+}
