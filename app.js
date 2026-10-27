@@ -6691,6 +6691,8 @@ const here = parseRoute();
         return { id: "subscriptions", href: subsHash((STATE.settings && STATE.settings.subsGroup) || ""), icon: "subs", label: tr("Subscriptions"), active: (r) => r.name === "subscriptions" };
       case "vault":
         return { id: "vault", href: "#/vault", icon: "vault", label: tr("Vault"), active: (r) => r.name === "vault", visible: () => !!(window.ViktorychVault && window.ViktorychVault.visible()) };
+      case "storage":
+        return { id: "storage", href: "#/storage", icon: "storage", label: tr("brand.storage"), active: (r) => r.name === "drive", visible: () => !!(window.ViktorychDrive && window.ViktorychDrive.visible()) };
       case "settings":
         return { id: "settings", href: "#/settings", icon: "more", label: tr("More"), listLabel: tr("Settings"), active: (r) => r.name === "settings" };
       default:
@@ -6965,7 +6967,7 @@ const here = parseRoute();
   const BOTTOM_NAV_IDS = [
     "home", "explore", "tv", "communities", "notifications", "messages",
     "feeds", "lists", "history", "music", "shorts", "games",
-    "subscriptions", "vault", "settings"
+    "subscriptions", "vault", "storage", "settings"
   ];
   const BOTTOM_NAV_DEFAULT_ON = ["home", "explore", "tv", "communities", "notifications", "messages"];
 
@@ -11098,10 +11100,7 @@ const here = parseRoute();
     if (!STATE.drawer) return "";
     const music = parseRoute().name === "music" && window.SIntelMusic;
     const links = music ? window.SIntelMusic.drawerLinks(icon) : bottomHiddenItems().filter((def) => def.id !== "games" && def.id !== "music").map((def) => `<a href="${esc(def.href)}">${icon(def.icon)} ${esc(navChoiceLabel(def))}</a>`).join("");
-    const storageLink = window.ViktorychDrive && window.ViktorychDrive.visible && window.ViktorychDrive.visible()
-      ? `<a href="#/storage">${icon("storage")} ${esc(tr("brand.storage"))}</a>`
-      : "";
-    const menuLinks = `${storageLink}<a href="#/games">${icon("games")} ${esc(tr("Games"))}</a>${music ? "" : `<a href="#/music">${icon("muNote")} ${esc(tr("Music"))}</a>`}`;
+    const menuLinks = `<a href="#/games">${icon("games")} ${esc(tr("Games"))}</a>${music ? "" : `<a href="#/music">${icon("muNote")} ${esc(tr("Music"))}</a>`}`;
     return `<div class="drawer-back" data-act="close-drawer"><div class="drawer" data-act="stop">
       ${(window.ViktorychAccounts && window.ViktorychAccounts.drawerHead && window.ViktorychAccounts.drawerHead()) || `<div class="drawer-signin" data-acct="login" style="padding:16px 20px;display:flex;gap:12px;align-items:center;cursor:pointer"><span class="ava initials">?</span><div style="flex:1"><b>${tr("Sign in")}</b><div class="phandle">${tr("Not signed in")}</div></div><button class="outline" type="button" data-acct="login" style="padding:4px 12px;font-size:13px">${tr("Sign in")}</button></div>`}
       ${links}
