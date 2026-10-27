@@ -629,6 +629,15 @@
       bottomNavCustom: settings.bottomNavCustom === true
     };
     if (settings.bottomNav && typeof settings.bottomNav === "object") snap.bottomNav = settings.bottomNav;
+    if (settings.navLayoutSync === true) {
+      navLayoutUnsync = false;
+      snap.navLayoutSync = true;
+      snap.navLayout = settings.navLayout === "bar" ? "bar" : "auto";
+      snap.navLayoutLand = settings.navLayoutLand === true;
+    } else if (navLayoutUnsync) {
+      navLayoutUnsync = false;
+      snap.navLayoutSync = false;
+    }
     if (settings.noteTabsSame === true || settings.noteTabsSame === false) snap.noteTabsSame = settings.noteTabsSame !== false;
     var live = window.ViktorychAccounts && window.ViktorychAccounts.readHistory && window.ViktorychAccounts.readHistory();
     if (live) {
@@ -716,6 +725,22 @@
     }
     return { bottomNavCustom: false };
   }
+  var navLayoutUnsync = false;
+  function releaseNavLayout() {
+    navLayoutUnsync = true;
+  }
+  function pickNavLayout(local, remote) {
+    if (local && local.navLayoutSync === false) return { clear: true };
+    function choice(src) {
+      if (!src || src.navLayoutSync !== true) return null;
+      return {
+        navLayoutSync: true,
+        navLayout: src.navLayout === "bar" ? "bar" : "auto",
+        navLayoutLand: src.navLayoutLand === true
+      };
+    }
+    return choice(local) || choice(remote);
+  }
   function mergePayload(local, remote) {
     remote = remote || {};
     var follows = uniq([].concat(local.follows || [], remote.follows || []));
@@ -731,6 +756,7 @@
     }
     var history = mergeHistory(localHistory, remote.history, cut);
     var pickedNav = pickBottomNav(local, remote);
+    var pickedLayout = pickNavLayout(local, remote);
     var merged = {
       follows: follows,
       seenFeeds: uniq([].concat(local.seenFeeds || [], remote.seenFeeds || [], follows)),
@@ -767,6 +793,12 @@
       bottomNavCustom: pickedNav.bottomNavCustom
     };
     if (pickedNav.bottomNav) merged.bottomNav = pickedNav.bottomNav;
+    if (pickedLayout && pickedLayout.clear) merged.navLayoutSync = false;
+    else if (pickedLayout) {
+      merged.navLayoutSync = true;
+      merged.navLayout = pickedLayout.navLayout;
+      merged.navLayoutLand = pickedLayout.navLayoutLand;
+    }
     return merged;
   }
   function applySnapshot(payload) {
@@ -775,6 +807,7 @@
     try { settings = raw ? JSON.parse(raw) : {}; } catch (err) { settings = {}; }
     Object.keys(payload || {}).forEach(function (key) {
       if (key === "lang" || key === "history") return;
+      if ((key === "navLayout" || key === "navLayoutLand" || key === "navLayoutSync") && settings.navLayoutSync !== true) return;
       settings[key] = payload[key];
     });
     writeStored("settings-v1", JSON.stringify(settings));
@@ -2820,6 +2853,7 @@
     },
     snapshotFrom: snapshotFrom,
     mergePayload: mergePayload,
+    releaseNavLayout: releaseNavLayout,
     applySnapshot: applySnapshot,
     refreshToken: function () {
       var session = readSession();
