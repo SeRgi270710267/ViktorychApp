@@ -50,11 +50,6 @@ assert(!/grok\.com/i.test(html));
 assert(!html.includes("<iframe"));
 assert(!html.includes("window.open"));
 
-sandbox.ViktorychAccounts = {
-  account: function () { return { publicId: "999999999999" }; },
-  token: function () { return "token"; },
-  call: function () { return Promise.resolve({ status: 200, conversations: [], messages: [] }); }
-};
 dock.seedChat({
   conversations: [{ id: "abc", peer: { name: "<script>alert(1)</script>", handle: "ada", publicId: "1" }, last: { body: "<img src=x onerror=alert(1)>" } }],
   messages: [{ id: "m1", senderId: "1", body: "<script>alert(1)</script>" }],
@@ -67,7 +62,9 @@ assert(html.includes("&lt;script&gt;"));
 assert(!html.includes("<img"));
 dock.setUi({ chatView: "thread" });
 html = dock.renderHtml();
-assert(html.includes('data-compose="chat"'));
+assert(html.includes("Read-only channel"));
+assert(html.includes('aria-disabled="true"'));
+assert(!html.includes('data-compose="chat"'));
 assert(html.includes("&lt;script&gt;"));
 
 dock.setPref("side", "left");
@@ -126,10 +123,24 @@ const echo = dock.activeProvider();
 
   const page = fs.readFileSync("index.html", "utf8");
   const worker = fs.readFileSync("sw.js", "utf8");
+  const sync = fs.readFileSync(".github/workflows/sync.yml", "utf8");
+  const publish = fs.readFileSync("scripts/discord_publish.py", "utf8");
   assert(page.includes('href="dock.css"'));
+  assert(page.includes('href="presence.css"'));
+  assert(page.indexOf('src="discord-ui.js"') < page.indexOf('src="dock.js"'));
   assert(page.indexOf('src="dock.js"') < page.indexOf('src="app.js"'));
   assert(worker.includes("./dock.js") && worker.includes("./dock.css"));
+  assert(worker.includes("./presence.js") && worker.includes("./presence.css"));
+  assert(worker.includes("./localfirst.js") && worker.includes("./direct.js"));
+  assert(sync.includes("python3 scripts/assemble_site.py --site _site"));
+  assert(!sync.includes("cp index.html"));
+  assert(publish.includes("assemble_site"));
+  assert(!publish.includes("SITE_FILES"));
+  assert(!fs.existsSync("worker/src/messages.js"));
+  assert(!fs.existsSync("worker/migrations/0018_messages.sql"));
+  assert(!fs.existsSync("worker/test/messages.test.mjs"));
   const tree = fs.readFileSync("dock.js", "utf8") + fs.readFileSync("dock.css", "utf8");
+  assert(!tree.includes("/v1/messages"));
   assert(!/grok\.com/i.test(tree));
   assert(!tree.includes("window.open"));
   assert(!fs.existsSync("extension"));
